@@ -34,6 +34,13 @@ const PAGE_SIZE = 15;
 export default function DemurrageMonitor() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterArmador, setFilterArmador] = useState<string>("all");
+  const [filterCliente, setFilterCliente] = useState<string>("all");
+  const [filterTipoContainer, setFilterTipoContainer] = useState<string>("all");
+  const [filterPortoOrigem, setFilterPortoOrigem] = useState<string>("all");
+  const [filterPortoDestino, setFilterPortoDestino] = useState<string>("all");
+  const [filterCronosStatus, setFilterCronosStatus] = useState<string>("all");
+  const [filterFtSource, setFilterFtSource] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [isExporting, setIsExporting] = useState(false);
@@ -66,18 +73,61 @@ export default function DemurrageMonitor() {
   const syncMutation = useSyncDemurrage();
   const recalcMutation = useRecalcDemurrage();
 
-  // Filter for at_risk on client side (includes multiple statuses)
+  // Client-side filtering for quickFilter + additional filters
   const filteredContainers = useMemo(() => {
+    let result = containers;
+    
     if (quickFilter === "at_risk") {
-      return containers.filter(c => ["at_risk", "critical", "exceeded"].includes(c.risk_status));
+      result = result.filter(c => ["at_risk", "critical", "exceeded"].includes(c.risk_status));
     }
-    return containers;
-  }, [containers, quickFilter]);
+    if (filterArmador !== "all") {
+      result = result.filter(c => c.armador === filterArmador);
+    }
+    if (filterCliente !== "all") {
+      result = result.filter(c => c.cliente === filterCliente);
+    }
+    if (filterTipoContainer !== "all") {
+      result = result.filter(c => c.tipo_conteiner === filterTipoContainer);
+    }
+    if (filterPortoOrigem !== "all") {
+      result = result.filter(c => c.porto_origem === filterPortoOrigem);
+    }
+    if (filterPortoDestino !== "all") {
+      result = result.filter(c => c.porto_destino === filterPortoDestino);
+    }
+    if (filterCronosStatus !== "all") {
+      result = result.filter(c => c.cronos_status === filterCronosStatus);
+    }
+    if (filterFtSource !== "all") {
+      result = result.filter(c => c.ft_source === filterFtSource);
+    }
+    return result;
+  }, [containers, quickFilter, filterArmador, filterCliente, filterTipoContainer, filterPortoOrigem, filterPortoDestino, filterCronosStatus, filterFtSource]);
+
+  // Extract unique values for filter dropdowns
+  const uniqueArmadores = useMemo(() => [...new Set(containers.map(c => c.armador).filter(Boolean))].sort() as string[], [containers]);
+  const uniqueClientes = useMemo(() => [...new Set(containers.map(c => c.cliente).filter(Boolean))].sort() as string[], [containers]);
+  const uniquePortosOrigem = useMemo(() => [...new Set(containers.map(c => c.porto_origem).filter(Boolean))].sort() as string[], [containers]);
+  const uniquePortosDestino = useMemo(() => [...new Set(containers.map(c => c.porto_destino).filter(Boolean))].sort() as string[], [containers]);
+
+  const hasActiveFilters = filterArmador !== "all" || filterCliente !== "all" || filterTipoContainer !== "all" || filterPortoOrigem !== "all" || filterPortoDestino !== "all" || filterCronosStatus !== "all" || filterFtSource !== "all" || filterStatus !== "all";
+
+  const clearAllFilters = () => {
+    setFilterStatus("all");
+    setFilterArmador("all");
+    setFilterCliente("all");
+    setFilterTipoContainer("all");
+    setFilterPortoOrigem("all");
+    setFilterPortoDestino("all");
+    setFilterCronosStatus("all");
+    setFilterFtSource("all");
+    setSearchTerm("");
+  };
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterStatus, quickFilter]);
+  }, [searchTerm, filterStatus, quickFilter, filterArmador, filterCliente, filterTipoContainer, filterPortoOrigem, filterPortoDestino, filterCronosStatus, filterFtSource]);
 
   const totalPages = Math.ceil(filteredContainers.length / PAGE_SIZE);
   const paginatedContainers = useMemo(() => {
@@ -269,30 +319,116 @@ export default function DemurrageMonitor() {
         {/* Filters */}
         <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
           <CardContent className="pt-4 pb-4">
-            <div className="flex gap-4 items-center">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    placeholder="Buscar por container, MBL ou cliente..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
-                  />
+            <div className="space-y-3">
+              {/* Row 1: Search + Risk Status */}
+              <div className="flex gap-4 items-center">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Buscar por container, MBL ou cliente..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
+                    />
+                  </div>
                 </div>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-40 bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
+                    <SelectValue placeholder="Status Risco" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos Riscos</SelectItem>
+                    <SelectItem value="safe">OK</SelectItem>
+                    <SelectItem value="at_risk">Em Risco</SelectItem>
+                    <SelectItem value="critical">Crítico</SelectItem>
+                    <SelectItem value="exceeded">Excedido</SelectItem>
+                  </SelectContent>
+                </Select>
+                {hasActiveFilters && (
+                  <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-muted-foreground hover:text-white whitespace-nowrap">
+                    Limpar Filtros
+                  </Button>
+                )}
               </div>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-40 bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="safe">OK</SelectItem>
-                  <SelectItem value="at_risk">Em Risco</SelectItem>
-                  <SelectItem value="critical">Crítico</SelectItem>
-                  <SelectItem value="exceeded">Excedido</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* Row 2: Additional filters */}
+              <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
+                <Select value={filterArmador} onValueChange={setFilterArmador}>
+                  <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] text-sm">
+                    <SelectValue placeholder="Armador" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos Armadores</SelectItem>
+                    {uniqueArmadores.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={filterCliente} onValueChange={setFilterCliente}>
+                  <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] text-sm">
+                    <SelectValue placeholder="Cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos Clientes</SelectItem>
+                    {uniqueClientes.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={filterTipoContainer} onValueChange={setFilterTipoContainer}>
+                  <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] text-sm">
+                    <SelectValue placeholder="Tipo Container" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos Tipos</SelectItem>
+                    <SelectItem value="20DV">20DV</SelectItem>
+                    <SelectItem value="40DV">40DV</SelectItem>
+                    <SelectItem value="40HC">40HC</SelectItem>
+                    <SelectItem value="20RF">20RF</SelectItem>
+                    <SelectItem value="40RF">40RF</SelectItem>
+                    <SelectItem value="45HC">45HC</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filterPortoOrigem} onValueChange={setFilterPortoOrigem}>
+                  <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] text-sm">
+                    <SelectValue placeholder="Porto Origem" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos Origens</SelectItem>
+                    {uniquePortosOrigem.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={filterPortoDestino} onValueChange={setFilterPortoDestino}>
+                  <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] text-sm">
+                    <SelectValue placeholder="Porto Destino" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos Destinos</SelectItem>
+                    {uniquePortosDestino.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={filterCronosStatus} onValueChange={setFilterCronosStatus}>
+                  <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] text-sm">
+                    <SelectValue placeholder="Status Cronos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos Status</SelectItem>
+                    <SelectItem value="PENDING">PENDING</SelectItem>
+                    <SelectItem value="IN_TRANSIT">IN_TRANSIT</SelectItem>
+                    <SelectItem value="ARRIVED">ARRIVED</SelectItem>
+                    <SelectItem value="GATE_OUT">GATE_OUT</SelectItem>
+                    <SelectItem value="RETURNED">RETURNED</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filterFtSource} onValueChange={setFilterFtSource}>
+                  <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] text-sm">
+                    <SelectValue placeholder="Free Time Source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas Fontes</SelectItem>
+                    <SelectItem value="PROCESSO">PROCESSO</SelectItem>
+                    <SelectItem value="CONTRATO">CONTRATO</SelectItem>
+                    <SelectItem value="TARIFA">TARIFA</SelectItem>
+                    <SelectItem value="CONTAINER">CONTAINER</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardContent>
         </Card>

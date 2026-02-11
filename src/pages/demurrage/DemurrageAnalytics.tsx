@@ -20,7 +20,7 @@ import {
 } from "recharts";
 import { useDemurrageData, useDemurrageStats, useDemurrageClients, useDemurrageArmadores } from "@/hooks/useDemurrageData";
 
-type QuickFilter = "all" | "containers" | "demurrage" | "recovered" | "success" | "avg_days";
+type QuickFilter = "all" | "containers" | "demurrage" | "success" | "avg_days";
 
 export default function DemurrageAnalytics() {
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
@@ -37,11 +37,6 @@ export default function DemurrageAnalytics() {
     const totalContainers = stats?.total || containers.length;
     const totalDemurrage = stats?.totalDemurrageUsd || containers.reduce((sum, c) => sum + (c.expected_cost_usd || 0), 0);
     
-    // Calculate recovered from disputes won
-    const recovered = containers
-      .filter(c => c.dispute_status === 'won')
-      .reduce((sum, c) => sum + (c.recovered_amount_usd || 0), 0);
-    
     // Calculate success rate
     const disputesWon = containers.filter(c => c.dispute_status === 'won').length;
     const disputesLost = containers.filter(c => c.dispute_status === 'lost').length;
@@ -57,7 +52,6 @@ export default function DemurrageAnalytics() {
     return {
       totalContainers,
       totalDemurrage,
-      recovered,
       successRate,
       disputesWon,
       disputesLost,
@@ -164,7 +158,7 @@ export default function DemurrageAnalytics() {
   );
 
   const customCards = (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <KpiCard
         title="CONTAINERS"
         value={isLoading ? '...' : kpis.totalContainers}
@@ -182,15 +176,6 @@ export default function DemurrageAnalytics() {
         variant="default"
         isActive={quickFilter === "demurrage"}
         onClick={() => handleQuickFilterChange("demurrage")}
-      />
-      <KpiCard
-        title="RECUPERADO"
-        value={isLoading ? '...' : formatCurrency(kpis.recovered)}
-        subtitle="Em disputas ganhas"
-        icon={<TrendingUp className="h-6 w-6" />}
-        variant="success"
-        isActive={quickFilter === "recovered"}
-        onClick={() => handleQuickFilterChange("recovered")}
       />
       <KpiCard
         title="TAXA SUCESSO"
