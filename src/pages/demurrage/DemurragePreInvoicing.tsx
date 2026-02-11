@@ -393,7 +393,11 @@ export default function DemurragePreInvoicing() {
                       <TableHead>Navio</TableHead>
                       <TableHead>Data Emissão</TableHead>
                       <TableHead className="text-right">Total USD</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Workflow</TableHead>
+                      <TableHead>Status Info</TableHead>
+                      <TableHead>MISK</TableHead>
+                      <TableHead>Reg. Othello</TableHead>
+                      <TableHead>Observação</TableHead>
                       <TableHead>Financeiro</TableHead>
                       <TableHead className="w-[80px]"></TableHead>
                     </TableRow>
@@ -423,6 +427,12 @@ export default function DemurragePreInvoicing() {
                           {formatCurrency(invoice.total_usd)}
                         </TableCell>
                         <TableCell>{getWorkflowBadge(invoice.workflow_status)}</TableCell>
+                        <TableCell className="text-sm">{(invoice as any).status_info || '-'}</TableCell>
+                        <TableCell className="font-mono text-sm">{(invoice as any).misk || '-'}</TableCell>
+                        <TableCell className="text-sm">{(invoice as any).othello_registro || '-'}</TableCell>
+                        <TableCell className="text-sm max-w-[200px] truncate" title={(invoice as any).observacao || ''}>
+                          {(invoice as any).observacao || '-'}
+                        </TableCell>
                         <TableCell>{getFinancialBadge(invoice.financial_status)}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
