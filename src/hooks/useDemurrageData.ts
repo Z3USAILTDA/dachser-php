@@ -254,6 +254,32 @@ export function useDeleteDemurrageRate() {
   });
 }
 
+export function useBulkDeleteDemurrageRates() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (ids: number[]) => {
+      let deleted = 0;
+      const batchSize = 10;
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const batch = ids.slice(i, i + batchSize);
+        await Promise.all(batch.map(async (id) => {
+          const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+            body: { action: 'demurrage_delete_rate', rate_id: id }
+          });
+          if (error) throw error;
+          if (!data.success) throw new Error(data.error || 'Failed to delete rate');
+          deleted++;
+        }));
+      }
+      return { deleted };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['demurrage_rates'] });
+    },
+  });
+}
+
 export function useDemurrageSettings() {
   return useQuery({
     queryKey: ['demurrage_settings'],
