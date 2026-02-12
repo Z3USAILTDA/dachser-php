@@ -134,7 +134,7 @@ Por favor, extraia TODOS os itens e valores de ambos os documentos e realize a c
     // Call Gemini API directly for multimodal analysis
     console.log("Calling Gemini API directly with gemini-2.5-pro...");
     
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=${GEMINI_API_KEY}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -156,8 +156,8 @@ Por favor, extraia TODOS os itens e valores de ambos os documentos e realize a c
         ],
         generationConfig: {
           maxOutputTokens: 8000,
-          temperature: 0.1,
         },
+        thinkingConfig: { thinkingBudget: 8192 },
       }),
     });
 
