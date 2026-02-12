@@ -78,9 +78,12 @@ const lineIcons: Partial<Record<LineType, React.ReactNode>> = {
 function cleanResultText(text: string): string {
   return text
     .replace(/```json\s*\{[^`]*"hbl_shipping_data"[^`]*\}\s*```/g, '')
+    .replace(/```json\s*\{[^`]*"document_metadata"[^`]*\}\s*```/g, '')
     .replace(/===\s*NCM_EXTRACTION_START\s*===[\s\S]*?===\s*NCM_EXTRACTION_END\s*===/g, '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/\{"hbl_shipping_data"[\s\S]*?\}\s*$/g, '')
+    .replace(/\{"document_metadata"[\s\S]*?\}\s*$/g, '')
+    .replace(/^\s*\{"document_metadata"\s*:\s*\{[^}]*\}\s*\}\s*$/gm, '')
     .trim();
 }
 
