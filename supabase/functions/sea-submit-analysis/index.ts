@@ -282,7 +282,7 @@ async function extractTextViaVisionAPI(pdfBase64: string, fileName: string): Pro
   
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -996,7 +996,7 @@ async function analyzeWithGeminiPro(
     });
   }
   
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${geminiApiKey}`, {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=${geminiApiKey}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -1006,6 +1006,7 @@ async function analyzeWithGeminiPro(
       generationConfig: {
         maxOutputTokens: 32000,
       },
+      thinkingConfig: { thinkingBudget: 8192 },
     }),
   });
   

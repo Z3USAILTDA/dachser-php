@@ -198,7 +198,7 @@ async function callGemini(prompt: string, pdfBase64: string, fileName: string): 
   if (!apiKey) throw new Error('GEMINI_API_KEY not configured');
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -210,7 +210,8 @@ async function callGemini(prompt: string, pdfBase64: string, fileName: string): 
             { inline_data: { mime_type: 'application/pdf', data: pdfBase64 } },
           ],
         }],
-        generationConfig: { maxOutputTokens: 8000, temperature: 0 },
+        generationConfig: { maxOutputTokens: 8000 },
+        thinkingConfig: { thinkingBudget: 8192 },
       }),
     }
   );
