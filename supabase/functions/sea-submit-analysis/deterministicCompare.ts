@@ -133,6 +133,7 @@ function compareExact(label: string, sourceVal: string, targetVal: string, targe
   const normS = sourceVal.replace(/[\s\-\.]/g, '').toUpperCase();
   const normT = targetVal.replace(/[\s\-\.]/g, '').toUpperCase();
   const status: FieldStatus = !normS && !normT ? 'MATCH' : normS === normT ? 'MATCH' : !normT ? 'NOT_FOUND' : 'DIVERGENCE';
+  console.log(`[CompareExact] ${label}: source="${sourceVal}" → norm="${normS}" | target="${targetVal}" → norm="${normT}" | status=${status}`);
   return {
     field: label,
     source_value: sourceVal || '(empty)',

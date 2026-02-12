@@ -59,6 +59,7 @@ CRITICAL RULES:
 4. For NCM codes: extract ONLY from "NCM:", "NCM-CODES:", "NCM CODE:" labels. NEVER from "HS:", "HS Code:" labels
 5. Scan ALL pages of the document
 6. If a field cannot be found, use empty string "" for text or 0 for numbers
+7. For seal numbers, container numbers, and reference numbers: extract the EXACT character sequence as printed. NEVER add, remove, or modify any digit — even zeros. "200030614" (9 digits) is DIFFERENT from "2000030614" (10 digits).
 
 Return this exact JSON structure:
 {
@@ -108,6 +109,14 @@ NCM EXTRACTION:
 CONTAINER NUMBER:
 - Format: 4 uppercase letters + 7 digits (e.g., GLDU9941805)
 - Found in "Marks and Numbers", "Container No.", or header
+
+SEAL NUMBER EXTRACTION (CRITICAL - EXACT DIGITS):
+- Extract the seal number EXACTLY as printed in the document
+- DO NOT modify, correct, or "fix" any digits
+- Every zero matters: "200030614" is DIFFERENT from "2000030614"
+- Copy the exact sequence of characters — do not add or remove any digit
+- If unclear, prefer the value closest to what is visually printed
+- NEVER cross-reference with other documents — extract ONLY what THIS document shows
 
 EXPORTERS:
 - Each unique shipper/supplier = one exporter entry
