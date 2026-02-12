@@ -1887,6 +1887,9 @@ const Index = () => {
         "ARRT",
         "TDE",
         "ARR",
+        "ARR - DESTINO",
+        "ARR - CONEXAO",
+        "ARR - CONEXÃO",
         "RCF",
         // Status de alerta e críticos
         "DIS",
@@ -1913,7 +1916,7 @@ const Index = () => {
       // Se está em ARR:
       // - Se tem alerta, mantém na tabela
       // - Se não tem alerta, verifica se já passaram 48h desde arr_datetime
-      if (lastEventCode === "ARR" && !hasAlert) {
+      if ((lastEventCode === "ARR" || lastEventCode.startsWith("ARR - ")) && !hasAlert) {
         // Verificar se arr_datetime existe e se já passaram 48h
         const arrDatetime = (awb as any).arr_datetime;
         if (arrDatetime) {
