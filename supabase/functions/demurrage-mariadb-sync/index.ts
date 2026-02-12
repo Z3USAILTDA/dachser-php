@@ -89,6 +89,11 @@ serve(async (req) => {
         AND t.container IS NOT NULL
         AND t.container != ''
         AND UPPER(t.container) != 'PENDENTE'
+        AND UPPER(t.container) != 'NAO_ENCONTRADO'
+        AND (t.container_status IS NULL OR UPPER(t.container_status) NOT LIKE '%NOT FOUND%')
+        AND (t.container_status IS NULL OR UPPER(t.container_status) NOT LIKE '%NAO_ENCONTRADO%')
+        AND (t.last_event IS NULL OR UPPER(t.last_event) NOT LIKE '%PREFIX NOT FOUND%')
+        AND (t.last_event IS NULL OR UPPER(t.last_event) NOT LIKE '%NOT FOUND%')
       ORDER BY t.id DESC
       LIMIT 1000
     `;
