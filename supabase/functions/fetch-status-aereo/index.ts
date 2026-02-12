@@ -25,18 +25,69 @@ function extractPieces(text: string): number | null {
 }
 
 // Classify ARR status as connection or final destination
-function classifyArrival(lastStatusCode: string | null, timelineJson: string | null, destination: string | null): string | null {
+function classifyArrival(lastStatusCode: string | null, timelineJson: string | null, destination: string | null, origin: string | null, awbForDebug?: string): string | null {
   if (!lastStatusCode) return lastStatusCode;
   const code = lastStatusCode.trim().toUpperCase();
   if (code !== 'ARR') return lastStatusCode;
-  if (!timelineJson || !destination) return lastStatusCode;
+  if (!timelineJson || !destination) {
+    console.log(`[classifyARR] ${awbForDebug || '?'}: skipping - timeline=${!!timelineJson}, dest=${destination}`);
+    return lastStatusCode;
+  }
 
   const dest = destination.trim().toUpperCase();
   if (!dest) return lastStatusCode;
+  const orig = (origin || '').trim().toUpperCase();
 
   try {
     const events = JSON.parse(timelineJson);
-    if (!Array.isArray(events) || events.length === 0) return lastStatusCode;
+    if (!Array.isArray(events) || events.length === 0) {
+      console.log(`[classifyARR] ${awbForDebug || '?'}: no events array or empty`);
+      return lastStatusCode;
+    }
+
+    // Helper: try to extract airport code from any string
+    function extractAirport(text: string): string | null {
+      if (!text) return null;
+      const upper = text.trim().toUpperCase();
+      if (upper.length === 3 && /^[A-Z]{3}$/.test(upper)) return upper;
+      const paren = text.match(/\(([A-Z]{3})\)/i);
+      if (paren) return paren[1].toUpperCase();
+      const codes = upper.match(/\b([A-Z]{3})\b/g);
+      // Filter out common non-airport 3-letter words
+      const stopWords = new Set(['THE', 'AND', 'FOR', 'NOT', 'ARE', 'BUT', 'WAS', 'HAS', 'HAD', 'ALL', 'CAN', 'HER', 'HIS', 'HOW', 'ITS', 'MAY', 'NEW', 'NOW', 'OLD', 'OUR', 'OUT', 'OWN', 'SAY', 'TOO', 'TWO', 'WAY', 'WHO', 'BOY', 'DID', 'GET', 'HIM', 'LET', 'PUT', 'RUN', 'USE', 'DAY', 'END', 'KGS', 'PCS', 'QTY']);
+      if (codes) {
+        for (const c of codes) {
+          if (!stopWords.has(c)) return c;
+        }
+      }
+      return null;
+    }
+
+    // Helper: extract airport from event object (check all common fields)
+    function extractAirportFromEvent(ev: any): string | null {
+      // Structured fields first
+      const fields = ['station', 'Station', 'airport', 'Airport', 'location', 'Location', 'port', 'Port', 'city', 'City'];
+      for (const f of fields) {
+        if (ev[f]) {
+          const code = extractAirport(String(ev[f]));
+          if (code) return code;
+        }
+      }
+      // Description fields
+      const descFields = ['Description', 'description', 'title', 'details', 'Details'];
+      for (const f of descFields) {
+        if (ev[f]) {
+          const desc = String(ev[f]);
+          // "Arrived at GRU" / "Arrive in VCP"
+          const arrMatch = desc.match(/(?:arrived?\s+(?:at|in)\s+)([A-Z]{3})/i);
+          if (arrMatch) return arrMatch[1].toUpperCase();
+          // "ARR - GRU" or "ARR/GRU"
+          const dashMatch = desc.match(/ARR\s*[-\/]\s*([A-Z]{3})/i);
+          if (dashMatch) return dashMatch[1].toUpperCase();
+        }
+      }
+      return null;
+    }
 
     // Events come DESC (newest first) – find the first ARR event (most recent)
     for (const ev of events) {
@@ -44,52 +95,45 @@ function classifyArrival(lastStatusCode: string | null, timelineJson: string | n
       const evDesc = (ev.Description || ev.description || ev.title || '').toUpperCase();
       if (evStatus !== 'ARR' && !evDesc.includes('ARRIVED') && !evDesc.includes('ARR')) continue;
 
-      // Try to extract airport code from structured fields first (case-insensitive keys)
-      const locationRaw = (ev.station || ev.Station || ev.airport || ev.Airport || ev.location || ev.Location || '').trim();
-      const locationUpper = locationRaw.toUpperCase();
-      
-      // Exact 3-letter code
-      if (locationUpper && locationUpper.length === 3) {
-        return locationUpper === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
-      }
-      
-      // Extract code from parentheses: "Guarulhos (GRU)" or "Some Airport (GRU), City"
-      if (locationRaw) {
-        const parenMatch = locationRaw.match(/\(([A-Z]{3})\)/i);
-        if (parenMatch) {
-          return parenMatch[1].toUpperCase() === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
-        }
-        // Try first 3-letter code in the location string
-        const locCode = locationUpper.match(/\b([A-Z]{3})\b/);
-        if (locCode) {
-          return locCode[1] === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
-        }
+      const airport = extractAirportFromEvent(ev);
+      if (airport) {
+        const result = airport === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
+        console.log(`[classifyARR] ${awbForDebug || '?'}: airport=${airport} dest=${dest} => ${result}`);
+        return result;
       }
 
-      // Try regex on description
-      const desc = ev.Description || ev.description || ev.title || '';
-      // "Arrived at GRU" / "Arrive in GRU"
-      const arrMatch = desc.match(/(?:arrived?\s+(?:at|in)\s+)([A-Z]{3})/i);
-      if (arrMatch) {
-        return arrMatch[1].toUpperCase() === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
-      }
-      // "ARR - GRU" or "ARR/GRU"
-      const dashMatch = desc.match(/ARR\s*[-\/]\s*([A-Z]{3})/i);
-      if (dashMatch) {
-        return dashMatch[1].toUpperCase() === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
-      }
-      // Fallback: any standalone 3-letter uppercase code in the description
-      const allCodes = desc.match(/\b([A-Z]{3})\b/g);
-      if (allCodes && allCodes.length > 0) {
-        const candidate = allCodes[allCodes.length - 1].toUpperCase();
-        return candidate === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
+      // Fallback: check ALL values in the event object for airport codes
+      const evJson = JSON.stringify(ev).toUpperCase();
+      if (evJson.includes(dest)) {
+        console.log(`[classifyARR] ${awbForDebug || '?'}: dest ${dest} found in event JSON => ARR - DESTINO`);
+        return 'ARR - DESTINO';
       }
 
-      // Found ARR event but couldn't extract airport
-      return lastStatusCode;
+      // Found ARR event but couldn't extract airport - use position-based heuristic
+      // If this is the LAST status (most recent) and origin != destination, check if any
+      // previous event mentions an intermediate airport
+      console.log(`[classifyARR] ${awbForDebug || '?'}: ARR event with no airport data, checking heuristic`);
+      break; // fall through to heuristic below
     }
+
+    // HEURISTIC FALLBACK: Search entire timeline for destination airport mention
+    const fullTimeline = JSON.stringify(events).toUpperCase();
+    const destMentioned = fullTimeline.includes(`"${dest}"`) || fullTimeline.includes(` ${dest} `) || fullTimeline.includes(`${dest},`) || fullTimeline.includes(`/${dest}`) || fullTimeline.includes(`-${dest}`);
+    
+    if (destMentioned) {
+      console.log(`[classifyARR] ${awbForDebug || '?'}: dest ${dest} found in timeline => ARR - DESTINO`);
+      return 'ARR - DESTINO';
+    }
+
+    // If origin and destination are known and different, and dest not in timeline => CONEXAO
+    if (orig && orig !== dest) {
+      console.log(`[classifyARR] ${awbForDebug || '?'}: dest ${dest} NOT in timeline, orig=${orig} => ARR - CONEXAO`);
+      return 'ARR - CONEXAO';
+    }
+
+    console.log(`[classifyARR] ${awbForDebug || '?'}: could not classify, returning plain ARR`);
   } catch (_e) {
-    // parse error – return as-is
+    console.log(`[classifyARR] ${awbForDebug || '?'}: parse error: ${_e}`);
   }
   return lastStatusCode;
 }
@@ -364,7 +408,7 @@ serve(async (req) => {
 
       // Classify ARR as connection or final destination
       const rawStatus = ws.last_status_code ? String(ws.last_status_code).trim() : null;
-      const classifiedStatus = classifyArrival(rawStatus, timelineStr, ws.destination ? String(ws.destination).trim() : null);
+      const classifiedStatus = classifyArrival(rawStatus, timelineStr, ws.destination ? String(ws.destination).trim() : null, ws.origin ? String(ws.origin).trim() : null, awb);
 
       const baseRow = {
         id: ws.id,
