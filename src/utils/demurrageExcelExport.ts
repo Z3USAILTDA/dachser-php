@@ -164,7 +164,7 @@ export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
   const colWidths = [
     { wch: 14 }, // Container
     { wch: 18 }, // MBL
-    { wch: 35 }, // Cliente
+    { wch: 80 }, // Cliente
     { wch: 14 }, // Partner ID
     { wch: 14 }, // Armador
     { wch: 14 }, // Tipo Container
@@ -374,7 +374,7 @@ export const exportDiscrepancyReport = (data: DemurrageContainer[]) => {
   const colWidths = [
     { wch: 15 }, // Container
     { wch: 20 }, // MBL
-    { wch: 25 }, // Cliente
+    { wch: 70 }, // Cliente
     { wch: 15 }, // Partner ID
     { wch: 15 }, // Armador
     { wch: 18 }, // Nº Fatura
