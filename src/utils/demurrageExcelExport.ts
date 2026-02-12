@@ -88,6 +88,10 @@ export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
     "Porto Destino": c.porto_destino || "-",
     "ETA": formatDate(c.eta),
     "Data Gate Out": formatDate(c.data_gate_out),
+    "Status Info": c.pi_status_info || "-",
+    "MISK": c.pi_misk || "-",
+    "Reg. Othello": c.pi_othello_registro || "-",
+    "Observação": c.pi_observacao || "-",
     "Data Criação": formatDateTime(c.created_at),
     "Última Atualização": formatDateTime(c.updated_at),
   }));
@@ -176,6 +180,10 @@ export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
     { wch: 15 }, // Porto Destino
     { wch: 12 }, // ETA
     { wch: 14 }, // Data Gate Out
+    { wch: 18 }, // Status Info
+    { wch: 14 }, // MISK
+    { wch: 16 }, // Reg. Othello
+    { wch: 30 }, // Observação
     { wch: 16 }, // Data Criação
     { wch: 16 }, // Última Atualização
   ];
