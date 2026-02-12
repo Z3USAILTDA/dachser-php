@@ -1,37 +1,51 @@
 
+# Corrigir Comparacao de Numeros com Zeros Diferentes
 
-# Atualizar Gemini para versao 3 na Analise SEA
+## Problema
 
-## Objetivo
+Valores como `2000030614` e `200030614` estao retornando MATCH quando deveriam retornar DIVERGENCE. O problema pode estar em **dois caminhos** do sistema:
 
-Atualizar todas as chamadas Gemini nos arquivos de analise documental SEA para usar o **Gemini 3 Pro Preview**, a versao mais recente disponivel.
+1. **Pipeline Determinístico** (`deterministicCompare.ts`): A funcao `compareInvoices` usa `normSuffix` que extrai o ultimo grupo numerico e remove zeros a esquerda. Em tese, `2000030614` e `200030614` sao strings diferentes e nao deveriam dar match — mas o algoritmo de suffix pode causar confusao se os valores forem parcialmente iguais em contextos com prefixos.
 
-## Alteracoes
+2. **Pipeline Legacy LLM** (prompts.ts): O prompt instrui o modelo a "Strip ALL leading zeros from extracted numbers" e fazer matching por sufixo numerico. O Gemini pode interpretar `2000030614` e `200030614` como equivalentes por proximidade visual, especialmente com instrucoes agressivas de normalizacao.
 
-### 1. `supabase/functions/sea-submit-analysis/pdfExtractor.ts`
+## Solucao
 
-- Linha 201: Atualizar modelo de `gemini-2.5-flash-preview-05-20` para `gemini-3-pro-preview`
-- Adicionar `thinkingConfig` com `thinkingBudget: 8192`
-- Remover `temperature: 0` (incompativel com thinking mode)
+### 1. Reforcar `compareInvoices` em `deterministicCompare.ts` (Linha 173-199)
 
-### 2. `supabase/functions/sea-submit-analysis/index.ts`
+Adicionar comparacao completa **antes** da normalizacao por sufixo:
+- Primeiro comparar as strings originais (sem normalizacao agressiva, apenas removendo espacos/tracos)
+- Somente aplicar normalizacao por sufixo se as strings originais nao derem match direto
+- Garantir que numeros com quantidades diferentes de zeros nunca sejam tratados como iguais
 
-- Linha 285 (`extractTextViaVisionAPI`): Atualizar de `gemini-2.0-flash` para `gemini-3-pro-preview`
-- Linha 999 (`analyzeWithGeminiPro`): Atualizar de `gemini-2.5-pro-preview-06-05` para `gemini-3-pro-preview`
-- Adicionar `thinkingConfig` em ambas as funcoes
+### 2. Adicionar regra explicita nos prompts (LLM fallback)
 
-### 3. `supabase/functions/compare-documents-llm/index.ts`
+Em `prompts.ts`, adicionar instrucao clara nas secoes de normalizacao:
 
-- Atualizar de `gemini-2.5-pro-preview-06-05` para `gemini-3-pro-preview` (analise documental comparativa)
+```text
+CRITICAL: Different QUANTITIES of zeros WITHIN a number are REAL DIFFERENCES.
+- "2000030614" vs "200030614" → DIVERGENCE (different numbers!)
+- "20252930" vs "2025293" → DIVERGENCE (different numbers!)
+- Leading zeros at the START are formatting only: "0048" vs "48" → MATCH
+- Zeros in the MIDDLE or END of a number change its value: "2000" vs "200" → DIVERGENCE
+```
 
-## Resumo das versoes
+Adicionar esta instrucao em todas as secoes relevantes dos 3 prompts (manifest_hbl, hbl_mbl, invoices_hbl).
 
-| Arquivo | Funcao | Antes | Depois |
-|---------|--------|-------|--------|
-| `pdfExtractor.ts` | callGemini | gemini-2.5-flash-preview-05-20 | gemini-3-pro-preview |
-| `index.ts` | extractTextViaVisionAPI | gemini-2.0-flash | gemini-3-pro-preview |
-| `index.ts` | analyzeWithGeminiPro | gemini-2.5-pro-preview-06-05 | gemini-3-pro-preview |
-| `compare-documents-llm/index.ts` | comparacao | gemini-2.5-pro-preview-06-05 | gemini-3-pro-preview |
+### 3. Reforcar `compareExact` em `deterministicCompare.ts` (Linha 132)
 
-Todas as chamadas terao `thinkingConfig` habilitado para modo raciocinio.
+A funcao `compareExact` ja faz comparacao estrita de strings. Se o problema for no campo Seal, ela deveria funcionar corretamente. Mas vamos adicionar um log para debug:
+- Adicionar `console.log` temporario para rastrear quais campos estao retornando MATCH incorretamente
 
+## Arquivos Modificados
+
+| Arquivo | Mudanca |
+|---------|---------|
+| `supabase/functions/sea-submit-analysis/deterministicCompare.ts` | Reforcar `compareInvoices` com comparacao full-string antes do suffix matching |
+| `supabase/functions/sea-submit-analysis/prompts.ts` | Adicionar regra explicita sobre zeros diferentes em numeros |
+
+## Impacto
+
+- Corrige falsos positivos onde numeros com zeros diferentes sao tratados como iguais
+- Afeta tanto o pipeline deterministico quanto o fallback LLM
+- Nao quebra matches legitimos de invoice (prefixo + sufixo como "TD02025000002013" vs "2013")
