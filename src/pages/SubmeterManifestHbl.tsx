@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { extractDivergences } from "@/utils/extractDivergences";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { Send, FileText, AlertCircle, Copy, Check, Info, FileStack, Loader2, HelpCircle, ClipboardList } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
@@ -355,100 +356,8 @@ export default function SubmeterManifestHbl() {
     }
   };
 
-  // Extract only divergences from analysis result
-  const extractDivergences = (text: string): string => {
-    const lines = text.split('\n');
-    const divergentSections: string[] = [];
-    
-    // Patterns that indicate START of a divergence section
-    const divergenceSectionStartPatterns = [
-      /Status:\s*DIVERGENCE/i,
-      /Status:\s*DIFFERENT/i,
-      /Status:\s*MISMATCH/i,
-      /Extra in HBL:/i,
-      /Missing in HBL:/i,
-      /Update:/i,
-      /⚠️/,
-    ];
-    
-    // Patterns to EXCLUDE (these are matches, not divergences)
-    const excludePatterns = [
-      /Status:\s*MATCH/i,
-      /Missing in HBL:\s*none/i,
-      /Extra in HBL:\s*none/i,
-    ];
-    
-    // Section headers to capture context
-    const sectionHeaders = [
-      /^NCM CODES:/i,
-      /^TOTAL WEIGHT:/i,
-      /^TOTAL CBM:/i,
-      /^TOTAL VOLUMES:/i,
-      /^SEAL NUMBER:/i,
-      /^CONSIGNEE CNPJ:/i,
-      /^CONTAINER VERIFICATION:/i,
-      /^INVOICE REFERENCES:/i,
-      /^EXPORTER.*:/i,
-    ];
-    
-    let currentSection: string[] = [];
-    let currentHeader = '';
-    let hasDivergenceInSection = false;
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const trimmedLine = line.trim();
-      
-      // Check if this is a new section header
-      const isNewSection = sectionHeaders.some(p => p.test(trimmedLine));
-      
-      if (isNewSection) {
-        // Save previous section if it had divergence
-        if (hasDivergenceInSection && currentSection.length > 0) {
-          divergentSections.push(currentSection.join('\n'));
-        }
-        
-        // Start new section
-        currentSection = [line];
-        currentHeader = trimmedLine;
-        hasDivergenceInSection = false;
-        continue;
-      }
-      
-      // Add line to current section
-      if (currentHeader) {
-        currentSection.push(line);
-      }
-      
-      // Check if this line indicates a divergence (but exclude matches)
-      const hasExclude = excludePatterns.some(p => p.test(trimmedLine));
-      if (!hasExclude) {
-        const hasDivergence = divergenceSectionStartPatterns.some(p => p.test(trimmedLine));
-        if (hasDivergence) {
-          hasDivergenceInSection = true;
-        }
-      }
-      
-      // Also check for "Extra in HBL" that has actual values (not "none")
-      if (/Extra in HBL:/i.test(trimmedLine) && !/none/i.test(trimmedLine)) {
-        hasDivergenceInSection = true;
-      }
-      if (/Missing in HBL:/i.test(trimmedLine) && !/none/i.test(trimmedLine)) {
-        hasDivergenceInSection = true;
-      }
-    }
-    
-    // Don't forget the last section
-    if (hasDivergenceInSection && currentSection.length > 0) {
-      divergentSections.push(currentSection.join('\n'));
-    }
-    
-    if (divergentSections.length === 0) {
-      return "Nenhuma divergência encontrada - todos os documentos estão reconciliados.";
-    }
-    
-    return divergentSections.join('\n\n').trim();
-  };
+  // Uses shared utility
+
 
   const handleCopyDivergences = () => {
     if (!analysisResult?.result_text || analysisResult.result_text.trim().length === 0) {

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { extractDivergences } from "@/utils/extractDivergences";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Send, FileText, Copy, Check, Info, GitCompare, HelpCircle, ClipboardList } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
@@ -211,114 +212,8 @@ export default function SubmeterHblMbl() {
     });
     await handleAnalise();
   };
-  // Extract only divergences from analysis result
-  const extractDivergences = (text: string): string => {
-    const lines = text.split('\n');
-    
-    // Pattern to detect Delta: 0 (not a real divergence)
-    const zeroDeltaPattern = /Delta:\s*[+-]?0[.,]?0*\s*(kg|m³|m3)/i;
-    
-    // Expanded patterns to catch more divergence indicators
-    const divergencePatterns = [
-      /UPDATE REQUIRED/i,
-      /Status:\s*DIFFERENT/i,
-      /Status:\s*UPDATE/i,
-      /Status:\s*MISMATCH/i,
-      /Status:\s*NOT FOUND/i,
-      /Delta:\s*[+-]?[0-9,.]+\s*(kg|m³|m3)/i,
-      /Missing:/i,
-      /Extra:/i,
-      /→\s*Update:/i,
-      /Update:/i,
-      /DISCREPANCY/i,
-      /DISCREPANCIES FOUND/i,
-      /⚠️ WARNING/i,
-      /⚠️/,
-      /requires? update/i,
-      /needs? correction/i,
-      /adjust/i,
-      /differ/i,
-    ];
-    
-    // Patterns to explicitly EXCLUDE (matches, not divergences)
-    const matchPatterns = [
-      /Status:\s*MATCH/i,
-      /MATCH\s*✓/i,
-      /No changes required/i,
-      /No discrepancies/i,
-    ];
-    
-    const summaryStartPatterns = [
-      /SUMMARY FOR EXTERNAL COMMUNICATION/i,
-      /═══.*SUMMARY/i,
-      /ANALYSIS SUMMARY/i,
-      /Fields with discrepancies/i,
-    ];
-    
-    const divergentLines: string[] = [];
-    let inSummarySection = false;
-    let currentFile: string | null = null;
-    let fileAddedForSection = false;
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      
-      // Track current HBL/MBL context - expanded patterns
-      const fileMatch = line.match(/(?:DRAFT HBL|HBL|MBL|MASTER|File):\s*["']?(.+?\.pdf)["']?/i) ||
-                        line.match(/Comparing.*?["'](.+?\.pdf)["']/i);
-      if (fileMatch) {
-        currentFile = fileMatch[1];
-        fileAddedForSection = false;
-      }
-      
-      // Check if entering summary section
-      if (summaryStartPatterns.some(p => p.test(line))) {
-        inSummarySection = true;
-      }
-      
-      // Include summary section lines that contain discrepancy counts
-      if (inSummarySection && /discrepanc|update|differ/i.test(line)) {
-        divergentLines.push(line);
-        continue;
-      }
-      
-      // Skip lines that are explicit matches
-      if (matchPatterns.some(p => p.test(line))) {
-        continue;
-      }
-      
-      // Check for divergence patterns
-      const hasDivergence = divergencePatterns.some(pattern => pattern.test(line));
-      
-      if (hasDivergence) {
-        // Skip lines that are just "Delta: 0" (not real divergences)
-        if (zeroDeltaPattern.test(line) && !/UPDATE|DIFFERENT|Missing:|Extra:|DISCREPANCY|adjust/i.test(line)) {
-          continue;
-        }
-        
-        // Add file header context if not yet added
-        if (currentFile && !fileAddedForSection) {
-          divergentLines.push(`\n📄 Arquivo: ${currentFile}`);
-          fileAddedForSection = true;
-        }
-        
-        // Include context - add preceding line if it contains exporter/item info
-        if (i > 0) {
-          const prevLine = lines[i - 1];
-          if (/EXPORTER|Item \d+:|Subtotals|PARTIES|ROUTING|CONTAINER/i.test(prevLine) && !divergentLines.includes(prevLine)) {
-            divergentLines.push(prevLine);
-          }
-        }
-        divergentLines.push(line);
-      }
-    }
-    
-    if (divergentLines.length === 0) {
-      return "Nenhuma divergência encontrada - todos os documentos estão reconciliados.";
-    }
-    
-    return divergentLines.join('\n').trim();
-  };
+  // Uses shared utility
+
 
   const handleCopyResult = () => {
     if (!analysisResult?.result_text || analysisResult.result_text.trim().length === 0) {
