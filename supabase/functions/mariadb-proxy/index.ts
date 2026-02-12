@@ -11082,7 +11082,6 @@ serve(async (req) => {
             SELECT DISTINCT
               TRIM(m.hawb) as house,
               TRIM(m.mawb) as master,
-              m.dep_datetime,
               cct.peso_declarado,
               cct.cnpj_consignatario
             FROM ${database}.t_master_dados m
@@ -11142,7 +11141,6 @@ serve(async (req) => {
             SELECT DISTINCT
               TRIM(m.hawb) as house,
               TRIM(m.mawb) as master,
-              m.dep_datetime,
               cct.peso_declarado,
               cct.cnpj_consignatario
             FROM ${database}.t_master_dados m
@@ -11155,7 +11153,7 @@ serve(async (req) => {
             AND TRIM(m.hawb) != ''
             AND m.hawb != 'N/A'
             ${extraWhere}
-            ORDER BY m.dep_datetime DESC
+            ORDER BY m.data_insert DESC
             LIMIT ${limit}
           `);
         }
