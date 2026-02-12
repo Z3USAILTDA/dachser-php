@@ -165,7 +165,7 @@ export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
     { wch: 14 }, // Container
     { wch: 18 }, // MBL
     { wch: 70 }, // Cliente
-    { wch: 14 }, // Partner ID
+    { wch: 20 }, // Partner ID
     { wch: 14 }, // Armador
     { wch: 14 }, // Tipo Container
     { wch: 14 }, // Status Cronos
@@ -175,7 +175,7 @@ export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
     { wch: 13 }, // Fim FT
     { wch: 12 }, // Dias Restantes
     { wch: 12 }, // Dias Excedidos
-    { wch: 15 }, // Custo Estimado
+    { wch: 20 }, // Custo Estimado
     { wch: 12 }, // Status Risco
     { wch: 25 }, // Último Evento
     { wch: 14 }, // Porto Origem
