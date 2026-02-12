@@ -71,6 +71,7 @@ export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
     "Container": c.numero,
     "MBL": c.mbl,
     "Cliente": c.cliente || "-",
+    "Partner ID": c.partner_id || "-",
     "Armador": c.armador || "-",
     "Tipo Container": c.tipo_conteiner || "-",
     "Status Cronos": c.cronos_status || "-",
@@ -158,6 +159,7 @@ export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
     { wch: 15 }, // Container
     { wch: 20 }, // MBL
     { wch: 25 }, // Cliente
+    { wch: 15 }, // Partner ID
     { wch: 15 }, // Armador
     { wch: 12 }, // Tipo Container
     { wch: 12 }, // Status Cronos
@@ -277,6 +279,7 @@ export const exportDiscrepancyReport = (data: DemurrageContainer[]) => {
       "Container": c.numero,
       "MBL": c.mbl,
       "Cliente": c.cliente || "-",
+      "Partner ID": c.partner_id || "-",
       "Armador": c.armador || "-",
       "Nº Fatura Armador": c.armador_invoice_number || "-",
       "Dias Calculados": calculatedDays,
@@ -360,6 +363,7 @@ export const exportDiscrepancyReport = (data: DemurrageContainer[]) => {
     { wch: 15 }, // Container
     { wch: 20 }, // MBL
     { wch: 25 }, // Cliente
+    { wch: 15 }, // Partner ID
     { wch: 15 }, // Armador
     { wch: 18 }, // Nº Fatura
     { wch: 12 }, // Dias Calculados
