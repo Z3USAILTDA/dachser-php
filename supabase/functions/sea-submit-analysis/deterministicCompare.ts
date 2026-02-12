@@ -171,18 +171,46 @@ function compareNcmCodes(sourceNcms: string[], targetNcms: string[], sourceLabel
 }
 
 function compareInvoices(sourceInvs: string[], targetInvs: string[]): FieldComparison {
-  // Normalize: extract last numeric sequence for suffix matching
+  // Step 1: Try full-string matching first (only strip spaces/dashes)
+  const normFull = (ref: string): string => ref.replace(/[\s\-]/g, '').toUpperCase();
+  
+  const sourceFullNorms = sourceInvs.map(normFull);
+  const targetFullNorms = targetInvs.map(normFull);
+
+  // Check if full-string matching resolves everything
+  const missingFull = sourceInvs.filter((_, i) => !targetFullNorms.includes(sourceFullNorms[i]));
+  const extraFull = targetInvs.filter((_, i) => !sourceFullNorms.includes(targetFullNorms[i]));
+
+  if (missingFull.length === 0 && extraFull.length === 0) {
+    return {
+      field: 'Invoice References',
+      source_value: sourceInvs.join(', ') || 'none',
+      target_value: targetInvs.join(', ') || 'none',
+      missing: [],
+      extra: [],
+      status: 'MATCH',
+    };
+  }
+
+  // Step 2: For unmatched items only, try suffix matching
+  // CRITICAL: Suffix matching must preserve the full numeric value (different zeros = different numbers)
   const normSuffix = (ref: string): string => {
     const matches = ref.match(/\d{2,}$/);
-    return matches ? matches[0].replace(/^0+/, '') : ref.replace(/^0+/, '');
+    if (!matches) return ref.replace(/^0+/, '') || ref;
+    const num = matches[0];
+    // Only strip leading zeros — internal/trailing zeros are significant
+    return num.replace(/^0+/, '') || '0';
   };
 
-  const sourceSuffixes = sourceInvs.map(normSuffix);
-  const targetSuffixes = targetInvs.map(normSuffix);
-  
-  const missing = sourceInvs.filter((_, i) => !targetSuffixes.includes(sourceSuffixes[i]));
-  const extra = targetInvs.filter((_, i) => !sourceSuffixes.includes(targetSuffixes[i]));
-  
+  const unmatchedSourceIdxs = missingFull.map(inv => sourceInvs.indexOf(inv));
+  const unmatchedTargetIdxs = extraFull.map(inv => targetInvs.indexOf(inv));
+
+  const unmatchedSourceSuffixes = unmatchedSourceIdxs.map(i => normSuffix(sourceInvs[i]));
+  const unmatchedTargetSuffixes = unmatchedTargetIdxs.map(i => normSuffix(targetInvs[i]));
+
+  const missing = missingFull.filter((_, i) => !unmatchedTargetSuffixes.includes(unmatchedSourceSuffixes[i]));
+  const extra = extraFull.filter((_, i) => !unmatchedSourceSuffixes.includes(unmatchedTargetSuffixes[i]));
+
   const status: FieldStatus = missing.length === 0 && extra.length === 0 ? 'MATCH' : 'DIVERGENCE';
 
   return {
