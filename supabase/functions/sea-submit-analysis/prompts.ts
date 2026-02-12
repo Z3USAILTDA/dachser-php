@@ -271,9 +271,17 @@ FROM MANIFEST/XLSX (scan ALL columns, ALL rows):
 - Invoice numbers (ANY column containing invoice references - look for patterns like alphanumeric codes)
 - Package counts/quantities and descriptions
 - Container numbers
-- SEAL NUMBERS (lacre)
+- SEAL NUMBERS (lacre) — extract EXACTLY as printed, character by character
 - CNPJ numbers (14-digit Brazilian tax ID)
 - Exporter/Shipper names
+
+SEAL NUMBER EXTRACTION (ABSOLUTE FIDELITY):
+- Extract seal numbers CHARACTER BY CHARACTER as they appear in EACH document
+- Different quantities of zeros = DIFFERENT seal numbers
+- "200030614" (9 digits) ≠ "2000030614" (10 digits) → DIVERGENCE
+- NEVER assume a seal should match another document's seal
+- Extract INDEPENDENTLY from each document, then compare
+- NEVER "correct" or "fix" a seal number to match the other document
 
 FROM HBL/PDF (extract ALL text, scan entire document):
 - All supplier/shipper names mentioned
@@ -282,7 +290,7 @@ FROM HBL/PDF (extract ALL text, scan entire document):
 - All invoice references (look for "AS PER INVOICE", "INVOICE NO", "INV:", "COMMERCIAL INVOICE")
 - All CBM/measurement values
 - Container numbers
-- SEAL NUMBERS (must match manifest seal)
+- SEAL NUMBERS — extract EXACTLY as printed, INDEPENDENTLY from manifest seal
 - CNPJ numbers (in consignee or shipper fields)
 - Exporter/Shipper names
 - Package/volume counts
