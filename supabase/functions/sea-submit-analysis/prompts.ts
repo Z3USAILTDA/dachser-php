@@ -499,21 +499,38 @@ EXAMPLE OUTPUT STRUCTURE FOR LIMITED DATA:
    
    ALGORITHM:
    a) Extract the LAST numeric sequence (2+ digits) from each reference.
-   b) Strip ALL leading zeros from extracted numbers.
+   b) Strip ONLY leading zeros (zeros at the START of the extracted number).
    c) Compare these normalized numbers.
    d) If they match → EQUIVALENT, NOT a discrepancy.
+   
+   ████████████████████████████████████████████████████████████████████████████████
+   █ CRITICAL: ZEROS INSIDE OR AT THE END OF A NUMBER CHANGE ITS VALUE!           █
+   ████████████████████████████████████████████████████████████████████████████████
+   
+   Different QUANTITIES of zeros WITHIN a number are REAL DIFFERENCES:
+   • "2000030614" vs "200030614" → DIVERGENCE (different numbers! 10 digits vs 9 digits)
+   • "20252930" vs "2025293" → DIVERGENCE (different numbers!)
+   • "3000" vs "300" → DIVERGENCE (different values!)
+   • "10050" vs "1005" → DIVERGENCE (different values!)
+   
+   Leading zeros at the START are formatting only (safe to strip):
+   • "0048" vs "48" → MATCH (same value, leading zeros removed)
+   • "00123" vs "123" → MATCH (same value)
+   
+   ★★★ RULE: If two numbers have DIFFERENT LENGTHS after stripping leading zeros → DIVERGENCE ★★★
+   ★★★ If two numbers have the SAME LENGTH but different digits → DIVERGENCE ★★★
    
    CONCRETE EXAMPLES (NEVER flag as "Update: Add/remove"):
    • Manifest: "2013" vs HBL: "TD02025000002013" 
      → Extract suffix: "2013" vs "2013" → MATCH → NO UPDATE
    • Manifest: "5644" vs HBL: "NRI123456005644"
      → Extract suffix: "5644" vs "5644" → MATCH → NO UPDATE
-   • Manifest: "5790" vs HBL: "NRI123456005790"
-     → Extract suffix: "5790" vs "5790" → MATCH → NO UPDATE
    • Manifest: "48" vs HBL: "NEI...0048"
-     → Extract: "48" vs "0048" → Strip zeros: "48" vs "48" → MATCH → NO UPDATE
-   • Manifest: "49" vs HBL: "NEI...0049"
-     → Extract: "49" vs "0049" → Strip zeros: "49" vs "49" → MATCH → NO UPDATE
+     → Extract: "48" vs "0048" → Strip leading zeros: "48" vs "48" → MATCH → NO UPDATE
+   
+   CONCRETE EXAMPLES (MUST flag as DIVERGENCE):
+   • Manifest: "2000030614" vs HBL: "200030614" → DIVERGENCE (different numbers!)
+   • Manifest: "5006" vs HBL: "506" → DIVERGENCE (different numbers!)
    
    RULE: ONLY flag "Missing" or "Extra" when NO numeric suffix match exists.
    If ALL manifest references have matches in HBL (after normalization) → NO "Update: Add/remove"
@@ -853,6 +870,8 @@ CASE C: If unexplained_remainder > ±0.5 kg after applying all updates:
 ★★★ RULE 5: INVOICES - NORMALIZATION BEFORE COMPARING ★★★
 Use suffix matching algorithm: extract last 4-6 digits from both sides.
 If normalized suffixes match → NO "Update: Add/remove"
+CRITICAL: Only strip LEADING zeros. Zeros in the MIDDLE or END change the number's value.
+"2000030614" vs "200030614" → DIVERGENCE (different numbers, different digit count!)
 Example: "2013" matches "TD02025000002013" → NO UPDATE needed
 
 ★★★ RULE 6: NCM CODES - 100% LITERAL MATCH ★★★
@@ -1570,6 +1589,9 @@ COMPARE ALL FIELDS - report any differences found:
 7. PORT OF DISCHARGE - Destination port (e.g., "SANTOS")
 8. CONTAINER NUMBER - ISO 6346 format (e.g., "SEKU5762065")
 9. SEAL NUMBER - Container seal (e.g., "2000030906")
+   ★ CRITICAL: Seal numbers must match EXACTLY digit-by-digit. Different quantities of zeros = DIFFERENT seals.
+   "2000030614" vs "200030614" → DIVERGENCE (10 digits vs 9 digits = different seal numbers!)
+   Only leading zeros at the START may be stripped for comparison.
 10. TOTAL GROSS WEIGHT - Total cargo weight in KG
 11. TOTAL CBM/MEASUREMENT - Total volume in cubic meters
 12. PACKAGES - Total package count
@@ -2000,6 +2022,17 @@ EXTRACTION QUALITY REPORT (include in analysis):
 - For each file: [filename] — [pages extracted]/[total pages], [characters extracted], [OCR status: clean/degraded/failed]
 
 INVOICE TOKEN RECONCILIATION — CRITICAL MATCHING
+
+████████████████████████████████████████████████████████████████████████████████
+█ CRITICAL: ZERO COMPARISON RULE FOR ALL NUMERIC FIELDS                         █
+████████████████████████████████████████████████████████████████████████████████
+
+Different QUANTITIES of zeros WITHIN a number are REAL DIFFERENCES:
+• "2000030614" vs "200030614" → DIVERGENCE (different numbers!)
+• "20252930" vs "2025293" → DIVERGENCE (different numbers!)
+• "3000" vs "300" → DIVERGENCE (different values!)
+Leading zeros at the START are formatting only: "0048" vs "48" → MATCH
+Zeros in the MIDDLE or END of a number change its value: "2000" vs "200" → DIVERGENCE
 
 INVOICE TOKEN MATCHING RULES:
 
