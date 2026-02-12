@@ -54,6 +54,7 @@ export interface DemurrageContainer {
   notes: string | null;
   mariadb_id: number | null;
   last_sync_at: string | null;
+  partner_id: string | null;
   active: boolean;
   created_at: string;
   updated_at: string;

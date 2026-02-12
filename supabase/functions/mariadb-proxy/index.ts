@@ -8865,51 +8865,52 @@ serve(async (req) => {
         const { search, risk_status, cronos_status, cronos_status_list, cliente, armador, pre_invoice_status, dispute_status, audit_status, limit = 500 } = body as any;
         console.log('Fetching demurrage containers with filters:', { search, risk_status, cronos_status, cronos_status_list, cliente, armador });
 
-        let whereConditions = ['active = 1'];
+        let whereConditions = ['dc.active = 1'];
         let params: (string | number)[] = [];
 
         if (search) {
-          whereConditions.push('(numero LIKE ? OR mbl LIKE ? OR cliente LIKE ? OR armador LIKE ?)');
+          whereConditions.push('(dc.numero LIKE ? OR dc.mbl LIKE ? OR dc.cliente LIKE ? OR dc.armador LIKE ?)');
           params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
         }
         if (risk_status && risk_status !== 'all') {
-          whereConditions.push('risk_status = ?');
+          whereConditions.push('dc.risk_status = ?');
           params.push(risk_status);
         }
-        // Support for multiple cronos_status values
         if (cronos_status_list && Array.isArray(cronos_status_list) && cronos_status_list.length > 0) {
           const placeholders = cronos_status_list.map(() => '?').join(', ');
-          whereConditions.push(`cronos_status IN (${placeholders})`);
+          whereConditions.push(`dc.cronos_status IN (${placeholders})`);
           params.push(...cronos_status_list);
         } else if (cronos_status && cronos_status !== 'all') {
-          whereConditions.push('cronos_status = ?');
+          whereConditions.push('dc.cronos_status = ?');
           params.push(cronos_status);
         }
         if (cliente) {
-          whereConditions.push('cliente = ?');
+          whereConditions.push('dc.cliente = ?');
           params.push(cliente);
         }
         if (armador) {
-          whereConditions.push('armador = ?');
+          whereConditions.push('dc.armador = ?');
           params.push(armador);
         }
         if (pre_invoice_status && pre_invoice_status !== 'all') {
-          whereConditions.push('pre_invoice_status = ?');
+          whereConditions.push('dc.pre_invoice_status = ?');
           params.push(pre_invoice_status);
         }
         if (dispute_status && dispute_status !== 'all') {
-          whereConditions.push('dispute_status = ?');
+          whereConditions.push('dc.dispute_status = ?');
           params.push(dispute_status);
         }
         if (audit_status && audit_status !== 'all') {
-          whereConditions.push('audit_status = ?');
+          whereConditions.push('dc.audit_status = ?');
           params.push(audit_status);
         }
 
         const containers = await client.query(`
-          SELECT * FROM dados_dachser.t_dachser_demurrage_containers
+          SELECT dc.*, cb.dchr_customer_number as partner_id
+          FROM dados_dachser.t_dachser_demurrage_containers dc
+          LEFT JOIN dados_dachser.t_clientes_base cb ON dc.cliente = cb.nome_cliente COLLATE utf8mb4_general_ci
           WHERE ${whereConditions.join(' AND ')}
-          ORDER BY updated_at DESC
+          ORDER BY dc.updated_at DESC
           LIMIT ?
         `, [...params, limit]);
 
