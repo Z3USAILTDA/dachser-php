@@ -165,7 +165,7 @@ export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
     { wch: 14 }, // Container
     { wch: 18 }, // MBL
     { wch: 70 }, // Cliente
-    { wch: 20 }, // Partner ID
+    { wch: 28 }, // Partner ID
     { wch: 14 }, // Armador
     { wch: 14 }, // Tipo Container
     { wch: 14 }, // Status Cronos
@@ -375,7 +375,7 @@ export const exportDiscrepancyReport = (data: DemurrageContainer[]) => {
     { wch: 15 }, // Container
     { wch: 20 }, // MBL
     { wch: 70 }, // Cliente
-    { wch: 15 }, // Partner ID
+    { wch: 28 }, // Partner ID
     { wch: 15 }, // Armador
     { wch: 18 }, // Nº Fatura
     { wch: 12 }, // Dias Calculados
