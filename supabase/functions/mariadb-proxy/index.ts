@@ -2799,9 +2799,6 @@ serve(async (req) => {
             sub.nome_analista,
             sub.email_analista,
             sub.emails_cliente,
-            sub.aeroporto_origem,
-            sub.aeroporto_destino,
-            sub.dep_datetime,
             sub.tipo_servico,
             sub.airline_code
           FROM (
@@ -2809,26 +2806,21 @@ serve(async (req) => {
               m.id,
               TRIM(m.mawb) as master,
               TRIM(m.hawb) as house,
-              TRIM(m.\`destinatário\`) as cliente,
+              TRIM(m.cliente) as cliente,
               m.nome_analista,
               m.email_analista,
-              m.email_cliente as emails_cliente,
-              TRIM(m.origem) as aeroporto_origem,
-              TRIM(m.destino) as aeroporto_destino,
-              m.dep_datetime,
+              m.emails_cliente,
               COALESCE(m.tipo_servico, 'N/A') as tipo_servico,
               LEFT(TRIM(m.mawb), 3) as airline_code,
               ROW_NUMBER() OVER (PARTITION BY TRIM(m.hawb) ORDER BY m.data_insert DESC) as rn
             FROM ${database}.t_master_dados m
             WHERE m.mawb IN (${mawbFilter})
             AND m.tipo_processo = 'AIR IMPORT'
-            AND m.data_insert >= NOW() - INTERVAL 30 DAY
             AND m.hawb IS NOT NULL
             AND TRIM(m.hawb) != ''
             AND m.hawb != 'N/A'
           ) sub
           WHERE sub.rn = 1
-          ORDER BY sub.dep_datetime DESC
           LIMIT 500
         `);
         
@@ -2847,8 +2839,11 @@ serve(async (req) => {
           const statusCode = awbInfo?.last_status_code || '';
           return {
             ...row,
+            aeroporto_origem: (awbInfo?.origin || '').trim() || null,
+            aeroporto_destino: (awbInfo?.destination || '').trim() || null,
+            dep_datetime: awbInfo?.scraped_at || null,
             ultimo_status_raw: statusCode,
-            ultimo_evento_data: awbInfo?.scraped_at || row.dep_datetime || null,
+            ultimo_evento_data: awbInfo?.scraped_at || null,
             ultimo_evento_codigo: statusCode,
             status_cct_oficial: statusMapCCT[statusCode] || 'INFORMADA',
             data_atraso: null,
