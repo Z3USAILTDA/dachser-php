@@ -117,6 +117,7 @@ export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
       alignment: {
         horizontal: "center",
         vertical: "center",
+        wrapText: false,
       },
       border: COLORS.border,
     };
@@ -152,6 +153,7 @@ export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
         alignment: {
           horizontal: col <= 1 ? "left" : "center",
           vertical: "center",
+          wrapText: false,
         },
         border: COLORS.border,
       };
@@ -160,32 +162,32 @@ export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
 
   // Ajustar largura das colunas
   const colWidths = [
-    { wch: 15 }, // Container
-    { wch: 20 }, // MBL
-    { wch: 25 }, // Cliente
-    { wch: 15 }, // Partner ID
-    { wch: 15 }, // Armador
-    { wch: 12 }, // Tipo Container
-    { wch: 12 }, // Status Cronos
+    { wch: 14 }, // Container
+    { wch: 18 }, // MBL
+    { wch: 20 }, // Cliente
+    { wch: 14 }, // Partner ID
+    { wch: 14 }, // Armador
+    { wch: 14 }, // Tipo Container
+    { wch: 14 }, // Status Cronos
     { wch: 12 }, // Free Time (Dias)
-    { wch: 16 }, // Origem Free Time
-    { wch: 14 }, // Início FT
-    { wch: 14 }, // Fim FT
+    { wch: 15 }, // Origem Free Time
+    { wch: 13 }, // Início FT
+    { wch: 13 }, // Fim FT
     { wch: 12 }, // Dias Restantes
     { wch: 12 }, // Dias Excedidos
-    { wch: 16 }, // Custo Estimado
+    { wch: 15 }, // Custo Estimado
     { wch: 12 }, // Status Risco
-    { wch: 30 }, // Último Evento
-    { wch: 15 }, // Porto Origem
-    { wch: 15 }, // Porto Destino
+    { wch: 25 }, // Último Evento
+    { wch: 14 }, // Porto Origem
+    { wch: 14 }, // Porto Destino
     { wch: 12 }, // ETA
-    { wch: 14 }, // Data Gate Out
-    { wch: 18 }, // Status Info
-    { wch: 14 }, // MISK
-    { wch: 16 }, // Reg. Othello
-    { wch: 30 }, // Observação
-    { wch: 16 }, // Data Criação
-    { wch: 16 }, // Última Atualização
+    { wch: 13 }, // Data Gate Out
+    { wch: 16 }, // Status Info
+    { wch: 12 }, // MISK
+    { wch: 14 }, // Reg. Othello
+    { wch: 25 }, // Observação
+    { wch: 15 }, // Data Criação
+    { wch: 15 }, // Última Atualização
   ];
   ws["!cols"] = colWidths;
 
@@ -221,7 +223,7 @@ export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
     wsSummary[cellAddress].s = {
       fill: COLORS.header,
       font: { bold: true, sz: 12, color: COLORS.headerText.color },
-      alignment: { horizontal: "center", vertical: "center" },
+      alignment: { horizontal: "center", vertical: "center", wrapText: false },
       border: COLORS.border,
     };
   }
@@ -330,6 +332,7 @@ export const exportDiscrepancyReport = (data: DemurrageContainer[]) => {
       alignment: {
         horizontal: "center",
         vertical: "center",
+        wrapText: false,
       },
       border: COLORS.border,
     };
@@ -360,6 +363,7 @@ export const exportDiscrepancyReport = (data: DemurrageContainer[]) => {
         alignment: {
           horizontal: col <= 4 ? "left" : "center",
           vertical: "center",
+          wrapText: false,
         },
         border: COLORS.border,
       };
@@ -452,7 +456,7 @@ export const exportDiscrepancyReport = (data: DemurrageContainer[]) => {
           sz: isRecoveryRow ? 12 : 10,
           color: isRecoveryRow ? { rgb: "2E7D32" } : undefined,
         },
-        alignment: { horizontal: col === 0 ? "left" : "right", vertical: "center" },
+        alignment: { horizontal: col === 0 ? "left" : "right", vertical: "center", wrapText: false },
         border: COLORS.border,
       };
     }
@@ -496,7 +500,7 @@ export const exportDiscrepancyReport = (data: DemurrageContainer[]) => {
     wsCarrier[cellAddress].s = {
       fill: { fgColor: { rgb: "D32F2F" } },
       font: { bold: true, sz: 11, color: { rgb: "FFFFFF" } },
-      alignment: { horizontal: "center", vertical: "center" },
+      alignment: { horizontal: "center", vertical: "center", wrapText: false },
       border: COLORS.border,
     };
   }
