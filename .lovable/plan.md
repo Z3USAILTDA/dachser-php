@@ -1,75 +1,52 @@
 
-# Corrigir Extração de Seal Number no PDF Extractor
 
-## Problema Real
+## Visualizacao Clara de ARR Destino vs Conexao no Tracking Aereo
 
-O valor do seal no HBL e `200030614`, mas o extrator (Gemini/Claude) esta lendo como `2000030614` (o valor do manifest). Quando a comparacao acontece, ambos ja tem o mesmo valor, entao nunca detecta divergencia.
+### Problema Atual
 
-O problema esta na **etapa de extracao** (`pdfExtractor.ts`), nao na comparacao. O LLM esta "corrigindo" ou confundindo o seal number ao extrair do PDF.
+Quando uma AWB tem status "ARR", o sistema ja diferencia entre "ARR - DESTINO" (chegou no aeroporto final) e "ARR - CONEXAO" (parou em conexao), mas essa informacao so aparece como texto simples na coluna de status e em tooltips ao passar o mouse. Os usuarios nao percebem a diferenca.
 
-## Causa Raiz
+### Solucao
 
-1. O prompt de extracao em `pdfExtractor.ts` (linha 75) define seal apenas como `"seal": "string"` sem instrucoes especificas sobre preservacao exata de digitos
-2. O LLM (Gemini 3) pode estar "arredondando" ou "corrigindo" numeros visualmente similares durante a extracao
-3. Nao ha validacao pos-extracao que verifique se o valor extraido corresponde fielmente ao texto original do PDF
+Adicionar badges visuais coloridos e distintos para cada tipo de ARR, alem de ajustar a barra de progresso para refletir visualmente que conexao nao e o ponto final.
 
-## Solucao
+### Mudancas Visuais
 
-### 1. Reforcar o prompt de extracao em `pdfExtractor.ts`
+1. **Badge de Status diferenciado**
+   - "ARR - DESTINO": badge verde com icone de check, texto "Destino Final"
+   - "ARR - CONEXAO": badge laranja/amarelo com icone de escala (ArrowLeftRight), texto "Em Conexao"
+   - ARR generico (sem sufixo): mantém o badge azul atual
 
-Adicionar instrucoes explicitas no `EXTRACTION_PROMPT` sobre seal numbers e campos numericos criticos:
+2. **Barra de progresso ajustada**
+   - "ARR - CONEXAO": progresso em 85% (nao 100%), indicando que a carga ainda nao chegou ao destino final. Cor da barra muda para laranja.
+   - "ARR - DESTINO": progresso em 100%, cor verde.
 
-```text
-SEAL NUMBER EXTRACTION (CRITICAL - EXACT DIGITS):
-- Extract the seal number EXACTLY as printed in the document
-- DO NOT modify, correct, or "fix" any digits
-- Every zero matters: "200030614" is DIFFERENT from "2000030614"
-- Copy the exact sequence of characters - do not add or remove any digit
-- If unclear, prefer the value closest to what is visually printed
-```
+3. **Coluna "Situacao"**
+   - "ARR - DESTINO": exibe badge verde "Destino Final" com icone de pin/localizacao
+   - "ARR - CONEXAO": exibe badge laranja "Em Conexao" com icone de troca
 
-Tambem adicionar na regra 2 (CRITICAL RULES):
+### Detalhes Tecnicos
 
-```text
-7. For seal numbers, container numbers, and reference numbers: 
-   extract the EXACT character sequence as printed. 
-   NEVER add, remove, or modify any digit — even zeros.
-```
+**Arquivo:** `src/pages/Index.tsx`
 
-### 2. Adicionar instrucao no prompt de analise LLM (prompts.ts)
+**1. Funcao `getTimelineProgress`** (linha ~275):
+- Adicionar entrada `"ARR - CONEXÃO": 85` e `"ARR - DESTINO": 100` no `progressMap`
+- Verificar o statusCode com sufixo antes de buscar no mapa
 
-Reforcar nas secoes de extracao do manifest_hbl prompt que o seal deve ser extraido com fidelidade total, adicionando:
+**2. Coluna de Status** (linha ~2707):
+- Onde hoje exibe `getStatusCode(awb.last_event)` como texto verde simples, adicionar logica condicional:
+  - Se statusCode === "ARR - DESTINO": renderizar badge verde com icone MapPin e texto "Destino"
+  - Se statusCode === "ARR - CONEXAO": renderizar badge laranja com icone ArrowLeftRight e texto "Conexao"
+  - Demais: manter comportamento atual
 
-```text
-SEAL NUMBER EXTRACTION (ABSOLUTE FIDELITY):
-- Extract seal numbers CHARACTER BY CHARACTER as they appear
-- Different quantities of zeros = DIFFERENT seal numbers
-- "200030614" (9 digits) ≠ "2000030614" (10 digits)
-- NEVER assume a seal should match another document's seal
-- Extract INDEPENDENTLY from each document, then compare
-```
+**3. Coluna de Situacao** (linha ~2744):
+- Adicionar tratamento especifico para ARR - DESTINO (badge verde "No Destino") e ARR - CONEXAO (badge laranja "Em Trânsito") antes dos checks genericos
 
-### 3. Adicionar log de debug no `deterministicCompare.ts`
+**4. Cores da barra de progresso** (area ~2569):
+- Quando statusCode for "ARR - CONEXAO", usar gradiente laranja ao inves de verde
+- Quando "ARR - DESTINO", usar verde intenso
 
-Na funcao `compareExact` usada para comparar seals, adicionar um log temporario para rastrear os valores exatos sendo comparados:
+**5. Cor do aviao na barra**:
+- ARR - CONEXAO: aviao laranja
+- ARR - DESTINO: aviao verde
 
-```typescript
-console.log(`[CompareExact] ${label}: source="${sourceVal}" target="${targetVal}" status=${status}`);
-```
-
-Isso ajudara a confirmar se o problema e realmente na extracao ou se ha alguma normalizacao escondida.
-
-## Arquivos Modificados
-
-| Arquivo | Mudanca |
-|---------|---------|
-| `supabase/functions/sea-submit-analysis/pdfExtractor.ts` | Reforcar EXTRACTION_PROMPT com instrucoes de fidelidade exata para seal/container/reference numbers |
-| `supabase/functions/sea-submit-analysis/prompts.ts` | Adicionar regra de extracao independente e fiel de seal numbers em cada prompt |
-| `supabase/functions/sea-submit-analysis/deterministicCompare.ts` | Adicionar log de debug na funcao compareExact para rastrear valores |
-
-## Impacto
-
-- Corrige a raiz do problema: o LLM vai extrair o seal exatamente como aparece no PDF
-- Afeta tanto o pipeline deterministico (extracao via pdfExtractor) quanto o pipeline LLM legado (prompts)
-- Nao quebra nenhuma funcionalidade existente - apenas adiciona mais precisao na extracao
-- O log de debug permite validar rapidamente se a correcao funcionou
