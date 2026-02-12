@@ -1705,16 +1705,25 @@ serve(async (req) => {
                 WHERE transshipment_port IS NOT NULL AND transshipment_port != ''
                 GROUP BY mbl_id
               ),
-              -- CTE 4: Transshipment do histórico (fallback)
-              transship_history AS (
-                SELECT 
-                  mbl_id,
-                  GROUP_CONCAT(DISTINCT location ORDER BY location SEPARATOR ', ') as transshipment_port
-                FROM dados_dachser.t_tracking_sea_history
-                WHERE UPPER(event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED')
-                  AND location IS NOT NULL AND location != ''
-                GROUP BY mbl_id
-              ),
+               -- CTE 4: Transshipment do histórico (fallback) - EXPANDIDO para detectar via texto também
+               transship_history AS (
+                 SELECT 
+                   mbl_id,
+                   GROUP_CONCAT(DISTINCT location ORDER BY location SEPARATOR ', ') as transshipment_port
+                 FROM dados_dachser.t_tracking_sea_history
+                 WHERE (
+                   -- Via event_code (estruturado)
+                   UPPER(event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED')
+                   -- Via texto em event_description
+                   OR UPPER(event_description) LIKE '%TRANSSHIP%'
+                   OR UPPER(event_description) LIKE '%T/S%'
+                   -- Via texto em container_status
+                   OR UPPER(container_status) LIKE '%TRANSSHIP%'
+                   OR UPPER(container_status) LIKE '%T/S%'
+                 )
+                   AND location IS NOT NULL AND location != ''
+                 GROUP BY mbl_id
+               ),
               -- CTE 5: Free time cadastrado (simplificado)
               has_freetime AS (
                 SELECT DISTINCT
@@ -2837,13 +2846,37 @@ serve(async (req) => {
               }
             }
             
-            // Combinar todas as fontes não-nulas e deduplicar
-            const uniqueTransshipments = [...new Set(
-              transshipmentSources
-                .filter(p => p && typeof p === 'string' && p.trim() !== '')
-                .map(p => p.trim().toUpperCase())
-            )];
-            const transshipmentPort = uniqueTransshipments.length > 0 ? uniqueTransshipments.join(', ') : null;
+            // ===== FALLBACK: Detectar transbordo via texto do container_status =====
+            // Se a API não retornou dados estruturados de transshipment, tentar detectar via texto
+            let transshipmentPort = null;
+            if (uniqueTransshipments.length > 0) {
+              transshipmentPort = uniqueTransshipments.join(', ');
+            } else {
+              // Fallback: buscar por palavras-chave no container_status ou last_event
+              const statusText = (data.container_status || lastEventDescription || '').toUpperCase();
+              const transshipmentKeywords = ['TRANSSHIP', 'T/S', 'TRANSIT'];
+              const hasTransshipmentText = transshipmentKeywords.some(kw => statusText.includes(kw));
+              
+              if (hasTransshipmentText) {
+                // Marcar que existe transbordo detectado, mesmo sem nome específico do porto
+                // Tentar extrair nome do porto de outras fontes
+                let detectedPort = null;
+                
+                // Tentar encontrar porto intermediário via eventos
+                if (data.events && Array.isArray(data.events)) {
+                  for (const event of data.events) {
+                    const eventDesc = (event.description || event.event_type || '').toUpperCase();
+                    if (eventDesc.includes('TRANSSHIP') || eventDesc.includes('T/S')) {
+                      detectedPort = event.location || event.port || event.terminal || null;
+                      if (detectedPort) break;
+                    }
+                  }
+                }
+                
+                transshipmentPort = detectedPort || 'Transbordo detectado';
+                console.log(`[refresh_sea_tracking] Transshipment detected via text fallback for ${containerId}: ${transshipmentPort}`);
+              }
+            }
             
             if (transshipmentPort) {
               console.log(`[refresh_sea_tracking] Found transshipment port(s) for ${containerId}: ${transshipmentPort}`);
@@ -2921,24 +2954,29 @@ serve(async (req) => {
                     JSON.stringify(event)
                   ]);
                 }
-              } else {
-                // No events array - record current status as a single event
-                await client.execute(`
-                  INSERT IGNORE INTO dados_dachser.t_tracking_sea_history 
-                  (mbl_id, container, event_code, event_description, event_datetime, location, vessel_name, voyage, container_status, eta, source, raw_data)
-                  VALUES (?, ?, 'STATUS_UPDATE', ?, NOW(), ?, ?, ?, ?, ?, 'API', ?)
-                `, [
-                  mblId || 'UNKNOWN',
-                  containerId,
-                  lastEventDescription ? lastEventDescription.substring(0, 500) : 'Status atualizado',
-                  data.discharging_port || data.shipped_to || null,
-                  vesselName ? vesselName.substring(0, 100) : null,
-                  voyage ? voyage.substring(0, 50) : null,
-                  data.container_status || null,
-                  etaValue ? new Date(etaValue) : null,
-                  JSON.stringify({ container_status: data.container_status, eta: etaValue })
-                ]);
-              }
+               } else {
+                 // No events array - record current status as a single event
+                 // Classificar como TRANSSHIPMENT se o status indicar transbordo
+                 const statusText = (data.container_status || lastEventDescription || '').toUpperCase();
+                 const eventCodeForStatus = (statusText.includes('TRANSSHIP') || statusText.includes('T/S')) ? 'TRANSSHIPMENT' : 'STATUS_UPDATE';
+                 
+                 await client.execute(`
+                   INSERT IGNORE INTO dados_dachser.t_tracking_sea_history 
+                   (mbl_id, container, event_code, event_description, event_datetime, location, vessel_name, voyage, container_status, eta, source, raw_data)
+                   VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, 'API', ?)
+                 `, [
+                   mblId || 'UNKNOWN',
+                   containerId,
+                   eventCodeForStatus,
+                   lastEventDescription ? lastEventDescription.substring(0, 500) : 'Status atualizado',
+                   data.discharging_port || data.shipped_to || null,
+                   vesselName ? vesselName.substring(0, 100) : null,
+                   voyage ? voyage.substring(0, 50) : null,
+                   data.container_status || null,
+                   etaValue ? new Date(etaValue) : null,
+                   JSON.stringify({ container_status: data.container_status, eta: etaValue })
+                 ]);
+               }
             } catch (historyError: any) {
               // Don't fail the main update if history fails
               console.log(`[refresh_sea_tracking] History insert failed for ${containerId}: ${historyError.message}`);

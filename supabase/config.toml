@@ -299,6 +299,9 @@ verify_jwt = false
 [functions.sea-tracking-cron]
 verify_jwt = false
 
+[functions.sea-tracking-transship-backfill]
+verify_jwt = false
+
 [functions.db-status-report]
 verify_jwt = false
 
