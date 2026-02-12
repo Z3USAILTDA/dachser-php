@@ -31,6 +31,8 @@ import {
   Clock,
   Info,
   ArrowDownUp,
+  MapPin,
+  ArrowLeftRight,
 } from "lucide-react";
 import { EmailClienteRegrasDialog } from "@/components/air/EmailClienteRegrasDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -317,6 +319,9 @@ const getTimelineProgress = (lastEvent: string | null): number => {
     LOF: 62,
 
     // ARR e variações (100%)
+    "ARR - CONEXÃO": 85,
+    "ARR - CONEXAO": 85,
+    "ARR - DESTINO": 100,
     ARR: 100,
     ARRIVED: 100,
     ARRIVAL: 100,
@@ -347,8 +352,8 @@ const getTimelineProgress = (lastEvent: string | null): number => {
     TRM: 55,
   };
 
-  // Tenta encontrar por código exato
-  if (progressMap[statusCode]) {
+  // Tenta encontrar por código exato (incluindo ARR com sufixo)
+  if (progressMap[statusCode] !== undefined) {
     return progressMap[statusCode];
   }
 
@@ -2569,19 +2574,41 @@ const Index = () => {
                             <td className="px-4 py-3 min-w-[300px]">
                               {(() => {
                                 const statusCode = getStatusCode(awb.last_event).toUpperCase();
+                                const isArrConexao = statusCode === "ARR - CONEXÃO" || statusCode === "ARR - CONEXAO";
+                                const isArrDestino = statusCode === "ARR - DESTINO";
                                 // Use data_atraso from DB (persists even after status changes) or check current status
                                 const isAlertStatus =
                                   awb.data_atraso !== null || statusCode === "DIS" || statusCode === "OFLD";
                                 const progressGradient = isAlertStatus
                                   ? "linear-gradient(90deg, hsl(0 84% 60%), hsl(0 84% 70%))"
+                                  : isArrConexao
+                                  ? "linear-gradient(90deg, hsl(30 100% 50%), hsl(30 100% 60%))"
+                                  : isArrDestino
+                                  ? "linear-gradient(90deg, hsl(142 76% 36%), hsl(142 76% 46%))"
                                   : "linear-gradient(90deg, hsl(39 100% 50%), hsl(39 100% 60%))";
                                 const progressShadow = isAlertStatus
                                   ? "0 0 12px rgba(239, 68, 68, 0.6)"
+                                  : isArrConexao
+                                  ? "0 0 12px rgba(249, 115, 22, 0.5)"
+                                  : isArrDestino
+                                  ? "0 0 12px rgba(34, 197, 94, 0.5)"
                                   : "0 0 12px rgba(255, 165, 0, 0.4)";
                                 const dotColor = isAlertStatus ? "bg-red-400" : "bg-white/90";
                                 const dotColorMuted = isAlertStatus ? "bg-red-400/70" : "bg-white/70";
-                                const planeColor = isAlertStatus ? "rgb(239, 68, 68)" : "rgb(255, 165, 0)";
-                                const shadowColor = isAlertStatus ? "rgba(239, 68, 68, 1)" : "rgba(255, 165, 0, 1)";
+                                const planeColor = isAlertStatus
+                                  ? "rgb(239, 68, 68)"
+                                  : isArrConexao
+                                  ? "rgb(249, 115, 22)"
+                                  : isArrDestino
+                                  ? "rgb(34, 197, 94)"
+                                  : "rgb(255, 165, 0)";
+                                const shadowColor = isAlertStatus
+                                  ? "rgba(239, 68, 68, 1)"
+                                  : isArrConexao
+                                  ? "rgba(249, 115, 22, 1)"
+                                  : isArrDestino
+                                  ? "rgba(34, 197, 94, 1)"
+                                  : "rgba(255, 165, 0, 1)";
                                 const bgBarColor = isAlertStatus ? "bg-red-900/30" : "bg-gray-800/50";
 
                                 return (
@@ -2705,9 +2732,30 @@ const Index = () => {
                             </td>
                             <td className="px-3 py-3">
                               <div className="flex items-center gap-1.5">
-                                <span className="text-sm font-bold" style={{ color: "hsl(120 100% 35%)" }}>
-                                  {getStatusCode(awb.last_event)}
-                                </span>
+                                {(() => {
+                                  const sc = getStatusCode(awb.last_event).toUpperCase();
+                                  if (sc === "ARR - DESTINO") {
+                                    return (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-green-500/20 text-green-400 border border-green-500/40">
+                                        <MapPin className="h-3 w-3" />
+                                        Destino
+                                      </span>
+                                    );
+                                  }
+                                  if (sc === "ARR - CONEXÃO" || sc === "ARR - CONEXAO") {
+                                    return (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-500/20 text-orange-400 border border-orange-500/40">
+                                        <ArrowLeftRight className="h-3 w-3" />
+                                        Conexão
+                                      </span>
+                                    );
+                                  }
+                                  return (
+                                    <span className="text-sm font-bold" style={{ color: "hsl(120 100% 35%)" }}>
+                                      {getStatusCode(awb.last_event)}
+                                    </span>
+                                  );
+                                })()}
                                 {["083", "147", "160", "615", "865", "016", "996"].some((prefix) =>
                                   awb.awb?.startsWith(prefix),
                                 ) && (
@@ -2748,6 +2796,27 @@ const Index = () => {
                                   return <span className="text-muted-foreground">—</span>;
                                 }
                                 const statusCode = getStatusCode(awb.last_event).toUpperCase();
+
+                                // ARR - DESTINO: badge verde "No Destino"
+                                if (statusCode === "ARR - DESTINO") {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-green-500/20 text-green-400 border border-green-500/40">
+                                      <MapPin className="h-3 w-3" />
+                                      No Destino
+                                    </span>
+                                  );
+                                }
+
+                                // ARR - CONEXÃO: badge laranja "Em Trânsito"
+                                if (statusCode === "ARR - CONEXÃO" || statusCode === "ARR - CONEXAO") {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-orange-500/20 text-orange-400 border border-orange-500/40">
+                                      <ArrowLeftRight className="h-3 w-3" />
+                                      Em Trânsito
+                                    </span>
+                                  );
+                                }
+
                                 // Verificar se é crítico (NIL, NIF, OFLD, AWBs críticos específicos, ou discrepância de peças)
                                 const CRITICAL_AWBS = ["045-21167274"];
                                 const isCritical =
