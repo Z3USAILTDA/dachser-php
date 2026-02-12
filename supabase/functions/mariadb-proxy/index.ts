@@ -2761,7 +2761,7 @@ serve(async (req) => {
           INNER JOIN (
             SELECT awb, MAX(id) as max_id
             FROM ${database}.t_aereo_ws
-            WHERE data_insert >= NOW() - INTERVAL 30 DAY
+            WHERE scraped_at >= NOW() - INTERVAL 30 DAY
             AND last_status_code IN (${cctRelevantStatuses})
             AND last_status_code NOT IN (${errorStatusFilter})
             AND (${awbAirlineLike})
@@ -11105,7 +11105,7 @@ serve(async (req) => {
             INNER JOIN (
               SELECT awb, MAX(id) as max_id
               FROM ${database}.t_aereo_ws
-              WHERE data_insert >= NOW() - INTERVAL 30 DAY
+              WHERE scraped_at >= NOW() - INTERVAL 30 DAY
               AND last_status_code IN (${cctStatuses})
               AND last_status_code NOT IN (${errorStatusFilter})
               AND (${awbAirlineLike})
