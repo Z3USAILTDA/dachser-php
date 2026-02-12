@@ -864,6 +864,8 @@ serve(async (req) => {
           body: JSON.stringify({
             action: 'get_cct_pending_hawbs',
             limit: limit,
+            prioritize_pending: body.prioritize_pending || false,
+            process_all: body.process_all || false,
           }),
         });
         

@@ -2749,23 +2749,37 @@ serve(async (req) => {
         ];
         const errorStatusFilter = errorStatuses.map(s => `'${s}'`).join(',');
         
-        // POST-TRACKING QUERY: TWO-STEP OPTIMIZED APPROACH
-        // STEP 1: Get valid MAWBs from t_master_dados first (fast indexed query)
-        console.log('CCT Step 1: Fetching valid MAWBs from t_master_dados...');
-        const validMawbs = await client.query(`
-          SELECT DISTINCT mawb 
-          FROM ${database}.t_master_dados 
-          WHERE data_insert >= '2026-01-26 00:00:00'
-          AND data_insert < '2026-01-27 00:00:00'
-          AND tipo_processo = 'AIR IMPORT'
+        // POST-TRACKING QUERY: TWO-STEP OPTIMIZED APPROACH (source: t_aereo_ws + t_master_dados)
+        // STEP 1: Get valid AWBs from t_aereo_ws with CCT-relevant statuses (sliding window 30 days)
+        console.log('CCT Step 1: Fetching valid AWBs from t_aereo_ws (sliding 30-day window)...');
+        const cctRelevantStatuses = "'DEP','ARR','ATA','RCF','NFD','AWD','DLV','POD','FRO','DIS'";
+        const awbAirlineLike = registeredAirlineCodes.map(c => `awb LIKE '${c}-%'`).join(' OR ');
+        
+        const validAwbs = await client.query(`
+          SELECT ws.awb, ws.last_status_code, ws.origin, ws.destination, ws.scraped_at
+          FROM ${database}.t_aereo_ws ws
+          INNER JOIN (
+            SELECT awb, MAX(id) as max_id
+            FROM ${database}.t_aereo_ws
+            WHERE data_insert >= NOW() - INTERVAL 30 DAY
+            AND last_status_code IN (${cctRelevantStatuses})
+            AND last_status_code NOT IN (${errorStatusFilter})
+            AND (${awbAirlineLike})
+            GROUP BY awb
+          ) latest ON ws.awb = latest.awb AND ws.id = latest.max_id
           LIMIT 1000
         `);
         
-        const mawbList = (validMawbs || []).map((r: any) => r.mawb).filter((m: string) => m && m.trim() !== '');
-        console.log(`CCT Step 1: Found ${mawbList.length} valid MAWBs`);
+        const mawbList = (validAwbs || []).map((r: any) => r.awb).filter((m: string) => m && m.trim() !== '');
+        // Build status lookup from t_aereo_ws for JS-side merge
+        const awbStatusMap = new Map<string, any>();
+        for (const snap of (validAwbs || [])) {
+          awbStatusMap.set((snap.awb || '').trim(), snap);
+        }
+        console.log(`CCT Step 1: Found ${mawbList.length} valid AWBs from t_aereo_ws`);
         
         if (mawbList.length === 0) {
-          console.log('CCT: No valid MAWBs found for date range, returning empty');
+          console.log('CCT: No valid AWBs found in t_aereo_ws, returning empty');
           return new Response(JSON.stringify({ success: true, data: [] }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
@@ -2774,9 +2788,9 @@ serve(async (req) => {
         // Build WHERE IN clause with escaped values
         const mawbFilter = mawbList.map((m: string) => `'${m.replace(/'/g, "''")}'`).join(',');
         
-        // STEP 2: Query t_status_aereo with explicit MAWB list (no subquery = faster)
-        console.log('CCT Step 2: Fetching shipments from t_status_aereo...');
-        const shipments = await client.query(`
+        // STEP 2: Get HAWBs from t_master_dados enriched with t_aereo_ws status
+        console.log('CCT Step 2: Fetching HAWBs from t_master_dados...');
+        const rawShipments = await client.query(`
           SELECT 
             sub.id,
             sub.master,
@@ -2785,69 +2799,64 @@ serve(async (req) => {
             sub.nome_analista,
             sub.email_analista,
             sub.emails_cliente,
-            sub.status_cct_oficial,
-            sub.ultimo_evento_data,
-            sub.ultimo_evento_codigo,
             sub.aeroporto_origem,
             sub.aeroporto_destino,
-            sub.data_atraso,
-            sub.arr_datetime,
             sub.dep_datetime,
             sub.tipo_servico,
-            sub.airline_code,
-            sub.ultimo_status_raw
+            sub.airline_code
           FROM (
             SELECT 
-              s.id,
-              TRIM(s.awb) as master,
-              TRIM(s.hawb) as house,
-              TRIM(s.\`destinatário\`) as cliente,
-              s.nome_analista,
-              s.email_analista,
-              s.email_cliente as emails_cliente,
-              s.\`último_status\` as ultimo_status_raw,
-              s.\`última atualização\` as ultimo_evento_data,
-              s.\`último_status\` as ultimo_evento_codigo,
-              TRIM(s.origem) as aeroporto_origem,
-              TRIM(s.destino) as aeroporto_destino,
-              s.data_atraso,
-              s.arr_datetime,
-              s.dep_datetime,
-              COALESCE(s.tipo_servico, 'N/A') as tipo_servico,
-              LEFT(TRIM(s.awb), 3) as airline_code,
-              CASE 
-                WHEN s.\`último_status\` IN ('ARR', 'ATA') THEN 'INFORMADA'
-                WHEN s.\`último_status\` IN ('DEP', 'MAN', 'BKD') THEN 'MANIFESTADA'
-                WHEN s.\`último_status\` IN ('RCF', 'RCS') THEN 'EM_AREA_TRANSFERENCIA'
-                WHEN s.\`último_status\` IN ('NFD', 'AWD') THEN 'RECEPCIONADA'
-                WHEN s.\`último_status\` IN ('DLV', 'POD') THEN 'ENTREGUE'
-                WHEN s.\`último_status\` IN ('FRO', 'DIS', 'OFLD') THEN 'BLOQUEIO'
-                ELSE 'INFORMADA'
-              END as status_cct_oficial,
-              ROW_NUMBER() OVER (PARTITION BY TRIM(s.hawb) ORDER BY s.\`última atualização\` DESC) as rn
-            FROM ${database}.t_status_aereo s
-            WHERE s.awb IN (${mawbFilter})
-            AND (${airlineLikeConditions})
-            AND s.\`último_status\` NOT IN (${errorStatusFilter})
-            AND (s.origem IS NOT NULL AND LOWER(TRIM(s.origem)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
-            AND (s.destino IS NOT NULL AND LOWER(TRIM(s.destino)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
-            AND (
-              s.\`último_status\` = 'DEP'
-              OR
-              s.\`último_status\` IN ('ATA', 'NFD', 'AWD', 'DLV', 'POD')
-              OR 
-              (s.\`último_status\` IN ('ARR', 'RCF') 
-               AND s.arr_datetime IS NOT NULL 
-               AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR
-               AND s.data_atraso IS NULL)
-            )
+              m.id,
+              TRIM(m.mawb) as master,
+              TRIM(m.hawb) as house,
+              TRIM(m.\`destinatário\`) as cliente,
+              m.nome_analista,
+              m.email_analista,
+              m.email_cliente as emails_cliente,
+              TRIM(m.origem) as aeroporto_origem,
+              TRIM(m.destino) as aeroporto_destino,
+              m.dep_datetime,
+              COALESCE(m.tipo_servico, 'N/A') as tipo_servico,
+              LEFT(TRIM(m.mawb), 3) as airline_code,
+              ROW_NUMBER() OVER (PARTITION BY TRIM(m.hawb) ORDER BY m.data_insert DESC) as rn
+            FROM ${database}.t_master_dados m
+            WHERE m.mawb IN (${mawbFilter})
+            AND m.tipo_processo = 'AIR IMPORT'
+            AND m.data_insert >= NOW() - INTERVAL 30 DAY
+            AND m.hawb IS NOT NULL
+            AND TRIM(m.hawb) != ''
+            AND m.hawb != 'N/A'
           ) sub
           WHERE sub.rn = 1
-          ORDER BY sub.ultimo_evento_data DESC
+          ORDER BY sub.dep_datetime DESC
           LIMIT 500
         `);
         
-        console.log(`CCT Step 2: Found ${(shipments || []).length} shipments`);
+        // Merge t_aereo_ws status into shipments (JS-side merge for performance)
+        const statusMapCCT: Record<string, string> = {
+          'ARR': 'INFORMADA', 'ATA': 'INFORMADA',
+          'DEP': 'MANIFESTADA', 'MAN': 'MANIFESTADA', 'BKD': 'MANIFESTADA',
+          'RCF': 'EM_AREA_TRANSFERENCIA', 'RCS': 'EM_AREA_TRANSFERENCIA',
+          'NFD': 'RECEPCIONADA', 'AWD': 'RECEPCIONADA',
+          'DLV': 'ENTREGUE', 'POD': 'ENTREGUE',
+          'FRO': 'BLOQUEIO', 'DIS': 'BLOQUEIO', 'OFLD': 'BLOQUEIO',
+        };
+        
+        const shipments = (rawShipments || []).map((row: any) => {
+          const awbInfo = awbStatusMap.get((row.master || '').trim());
+          const statusCode = awbInfo?.last_status_code || '';
+          return {
+            ...row,
+            ultimo_status_raw: statusCode,
+            ultimo_evento_data: awbInfo?.scraped_at || row.dep_datetime || null,
+            ultimo_evento_codigo: statusCode,
+            status_cct_oficial: statusMapCCT[statusCode] || 'INFORMADA',
+            data_atraso: null,
+            arr_datetime: null,
+          };
+        });
+        
+        console.log(`CCT Step 2: Found ${shipments.length} shipments`);
 
         // STEP 2: Enrich with CCT data using a separate, optimized query
         // This avoids the heavy JOIN with TRIM/COLLATE in the main query
@@ -2870,8 +2879,8 @@ serve(async (req) => {
               SELECT TRIM(mawb) as mawb, TRIM(tratamento) as tratamento
               FROM ${database}.t_master_dados
               WHERE mawb IN (${masterFilter})
-              AND data_insert >= '2026-01-26 00:00:00'
-              AND data_insert < '2026-01-27 00:00:00'
+              AND data_insert >= NOW() - INTERVAL 30 DAY
+              AND tipo_processo = 'AIR IMPORT'
             `);
             for (const row of (tratamentoData || [])) {
               tratamentoMap.set((row.mawb || '').trim(), row.tratamento || '');
@@ -11044,13 +11053,14 @@ serve(async (req) => {
       }
 
       // ==================== CCT: Get Pending HAWBs for LeadComex Enrichment ====================
-      // ALIGNED WITH get_cct_shipments: Use exact same source table (t_status_aereo) and filters
+      // ALIGNED WITH get_cct_shipments: Use t_aereo_ws as primary source (same as tracking)
       case 'get_cct_pending_hawbs': {
         const limit = body.limit || 500;
         const hawbFilter = body.hawb_filter || null;
-        const processAll = body.process_all === true; // When true, process ALL HAWBs (not just pending)
+        const processAll = body.process_all === true;
+        const prioritizePending = body.prioritize_pending === true;
         
-        // SAME 45 airline codes as get_cct_shipments (CCT Dashboard)
+        // Same airline codes as get_cct_shipments
         const registeredAirlineCodes = [
           '001', '005', '006', '014', '016', '020', '023', '045', '047', '055',
           '057', '072', '074', '075', '081', '082', '086', '112', '118', '125',
@@ -11058,10 +11068,8 @@ serve(async (req) => {
           '263', '369', '399', '406', '416', '489', '549', '577', '615', '695',
           '724', '729', '881', '996', '999'
         ];
-        // Use LIKE 'CODE-%' pattern for index usage (same as dashboard)
-        const airlineLikeConditions = registeredAirlineCodes.map(c => `s.awb LIKE '${c}-%'`).join(' OR ');
         
-        // SAME error statuses to exclude as get_cct_shipments
+        const cctStatuses = "'DEP','ARR','ATA','RCF','NFD','AWD','DLV','POD','FRO','DIS'";
         const errorStatuses = [
           'COMPANY_NOT_REGISTERED', 'NOT_FOUND', 'ERRO', 'ERROR', 'INVALID_AWB',
           'API_ERROR', 'TIMEOUT', 'PARSE_ERROR', 'SIS', 'PENDING', 'PROCESSING',
@@ -11069,87 +11077,108 @@ serve(async (req) => {
         ];
         const errorStatusFilter = errorStatuses.map(s => `'${s}'`).join(',');
         
-        // Build WHERE clause based on context
-        let whereClause: string;
+        let rows;
         
         if (hawbFilter) {
-          // Specific HAWB reprocessing - minimal filters
+          // Specific HAWB reprocessing
           const sanitizedHawb = hawbFilter.replace(/'/g, "''");
-          whereClause = `TRIM(s.hawb) COLLATE utf8mb4_unicode_ci = '${sanitizedHawb}' COLLATE utf8mb4_unicode_ci`;
           console.log(`[get_cct_pending_hawbs] Filtering for specific HAWB: ${hawbFilter}`);
+          rows = await client.query(`
+            SELECT DISTINCT
+              TRIM(m.hawb) as house,
+              TRIM(m.mawb) as master,
+              m.dep_datetime,
+              cct.peso_declarado,
+              cct.cnpj_consignatario
+            FROM ${database}.t_master_dados m
+            LEFT JOIN ${database}.t_cct_shipments cct 
+              ON TRIM(m.hawb) COLLATE utf8mb4_unicode_ci = TRIM(cct.house) COLLATE utf8mb4_unicode_ci
+            WHERE TRIM(m.hawb) COLLATE utf8mb4_unicode_ci = '${sanitizedHawb}' COLLATE utf8mb4_unicode_ci
+            LIMIT ${limit}
+          `);
         } else {
-          // ALIGNED with get_cct_shipments filters:
-          // - Same airline codes
-          // - Same status filters (DEP OR post-departure OR ARR/RCF>120h)
-          // - Same date threshold
-          // - Same origin/destination checks
-          whereClause = `
-            (${airlineLikeConditions})
-            AND s.\`último_status\` NOT IN (${errorStatusFilter})
-            AND s.origem IS NOT NULL 
-            AND TRIM(s.origem) != ''
-            AND s.destino IS NOT NULL 
-            AND TRIM(s.destino) != ''
-            AND s.hawb IS NOT NULL 
-            AND TRIM(s.hawb) != ''
-            AND s.hawb != 'N/A'
-            AND (
-              s.\`último_status\` = 'DEP'
-              OR s.\`último_status\` IN ('ATA', 'NFD', 'AWD', 'DLV', 'POD')
-              OR (s.\`último_status\` IN ('ARR', 'RCF') 
-                  AND s.arr_datetime IS NOT NULL 
-                  AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR)
-            )
-            AND s.awb IN (
-              SELECT DISTINCT mawb FROM ${database}.t_master_dados 
-              WHERE data_insert >= '2026-01-26 00:00:00'
-              AND data_insert < '2026-01-27 00:00:00'
-              AND tipo_processo = 'AIR IMPORT'
-            )
-          `;
+          // Step 1: Get AWBs from t_aereo_ws with CCT-relevant statuses (sliding 30-day window)
+          const awbAirlineLike = registeredAirlineCodes.map(c => `awb LIKE '${c}-%'`).join(' OR ');
+          const awbsResult = await client.query(`
+            SELECT ws.awb
+            FROM ${database}.t_aereo_ws ws
+            INNER JOIN (
+              SELECT awb, MAX(id) as max_id
+              FROM ${database}.t_aereo_ws
+              WHERE data_insert >= NOW() - INTERVAL 30 DAY
+              AND last_status_code IN (${cctStatuses})
+              AND last_status_code NOT IN (${errorStatusFilter})
+              AND (${awbAirlineLike})
+              GROUP BY awb
+            ) latest ON ws.awb = latest.awb AND ws.id = latest.max_id
+          `);
           
-          if (!processAll) {
-            // Normal flow: only get records that need enrichment
-            whereClause += ` AND (cct.peso_declarado IS NULL OR cct.cnpj_consignatario IS NULL)`;
-            console.log(`[get_cct_pending_hawbs] Fetching CCT Dashboard HAWBs needing LeadComex enrichment`);
-          } else {
-            console.log(`[get_cct_pending_hawbs] PROCESS ALL: Fetching ALL CCT Dashboard HAWBs`);
+          const awbList = (awbsResult || []).map((r: any) => r.awb).filter((a: string) => a && a.trim() !== '');
+          
+          if (awbList.length === 0) {
+            result = { success: true, shipments: [], total: 0 };
+            break;
           }
+          
+          const awbFilterStr = awbList.map((a: string) => `'${a.replace(/'/g, "''")}'`).join(',');
+          
+          // Build extra WHERE conditions
+          let extraWhere = '';
+          if (prioritizePending) {
+            // Cooldown: skip HAWBs enriched successfully in last 4 hours
+            extraWhere = `AND (
+              cct.peso_declarado IS NULL 
+              OR cct.cnpj_consignatario IS NULL
+              OR NOT EXISTS (
+                SELECT 1 FROM ${database}.t_leadcomex_enrichment_logs lel
+                WHERE TRIM(lel.hawb) COLLATE utf8mb4_unicode_ci = TRIM(m.hawb) COLLATE utf8mb4_unicode_ci
+                AND lel.success = 1
+                AND lel.created_at >= NOW() - INTERVAL 4 HOUR
+              )
+            )`;
+          } else if (!processAll) {
+            extraWhere = 'AND (cct.peso_declarado IS NULL OR cct.cnpj_consignatario IS NULL)';
+          }
+          
+          console.log(`[get_cct_pending_hawbs] Fetching HAWBs from t_master_dados (${processAll ? 'ALL' : 'pending'}${prioritizePending ? ', with 4h cooldown' : ''})...`);
+          
+          // Step 2: Get HAWBs from t_master_dados for these AWBs
+          rows = await client.query(`
+            SELECT DISTINCT
+              TRIM(m.hawb) as house,
+              TRIM(m.mawb) as master,
+              m.dep_datetime,
+              cct.peso_declarado,
+              cct.cnpj_consignatario
+            FROM ${database}.t_master_dados m
+            LEFT JOIN ${database}.t_cct_shipments cct 
+              ON TRIM(m.hawb) COLLATE utf8mb4_unicode_ci = TRIM(cct.house) COLLATE utf8mb4_unicode_ci
+            WHERE m.mawb IN (${awbFilterStr})
+            AND m.tipo_processo = 'AIR IMPORT'
+            AND m.data_insert >= NOW() - INTERVAL 30 DAY
+            AND m.hawb IS NOT NULL
+            AND TRIM(m.hawb) != ''
+            AND m.hawb != 'N/A'
+            ${extraWhere}
+            ORDER BY m.dep_datetime DESC
+            LIMIT ${limit}
+          `);
         }
         
-        // Query from t_status_aereo (SAME as CCT Dashboard) with LEFT JOIN to t_cct_shipments
-        // JOIN on house (HAWB) not master (MAWB) - each HAWB has individual enrichment status
-        const rows = await client.query(`
-          SELECT DISTINCT
-            TRIM(s.hawb) as house,
-            TRIM(s.awb) as master,
-            s.dep_datetime,
-            s.arr_datetime,
-            s.\`último_status\` as status,
-            cct.peso_declarado,
-            cct.cnpj_consignatario
-          FROM ${database}.t_status_aereo s
-          LEFT JOIN ${database}.t_cct_shipments cct 
-            ON TRIM(s.hawb) COLLATE utf8mb4_unicode_ci = TRIM(cct.house) COLLATE utf8mb4_unicode_ci
-          WHERE ${whereClause}
-          ORDER BY s.dep_datetime DESC
-          LIMIT ${limit}
-        `);
-        
-        console.log(`[get_cct_pending_hawbs] Found ${rows.length} HAWBs from CCT Dashboard source`);
+        console.log(`[get_cct_pending_hawbs] Found ${(rows || []).length} HAWBs`);
         
         result = {
           success: true,
-          shipments: rows.map((row: any) => ({
+          shipments: (rows || []).map((row: any) => ({
             house: row.house,
             master: row.master,
             dep_datetime: row.dep_datetime,
-            arr_datetime: row.arr_datetime,
-            status: row.status,
+            arr_datetime: null,
+            status: row.status || null,
             peso_declarado: row.peso_declarado,
             cnpj_consignatario: row.cnpj_consignatario,
           })),
-          total: rows.length,
+          total: (rows || []).length,
         };
         break;
       }
