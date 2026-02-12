@@ -55,6 +55,10 @@ export interface DemurrageContainer {
   mariadb_id: number | null;
   last_sync_at: string | null;
   partner_id: string | null;
+  pi_status_info: string | null;
+  pi_misk: string | null;
+  pi_othello_registro: string | null;
+  pi_observacao: string | null;
   active: boolean;
   created_at: string;
   updated_at: string;

@@ -8906,9 +8906,19 @@ serve(async (req) => {
         }
 
         const containers = await client.query(`
-          SELECT dc.*, cb.dchr_customer_number as partner_id
+          SELECT dc.*, 
+            cb.dchr_customer_number as partner_id,
+            pi.status_info as pi_status_info,
+            pi.misk as pi_misk,
+            pi.othello_registro as pi_othello_registro,
+            pi.observacao as pi_observacao
           FROM dados_dachser.t_dachser_demurrage_containers dc
           LEFT JOIN dados_dachser.t_clientes_base cb ON dc.cliente = cb.nome_cliente COLLATE utf8mb4_general_ci
+          LEFT JOIN dados_dachser.t_dachser_demurrage_pre_invoices pi ON pi.id = (
+            SELECT id FROM dados_dachser.t_dachser_demurrage_pre_invoices 
+            WHERE shipment_mbl = dc.mbl COLLATE utf8mb4_unicode_ci 
+            ORDER BY created_at DESC LIMIT 1
+          )
           WHERE ${whereConditions.join(' AND ')}
           ORDER BY dc.updated_at DESC
           LIMIT ?
