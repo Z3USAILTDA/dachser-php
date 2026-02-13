@@ -1279,20 +1279,24 @@ const EsteiraIndex = () => {
       // Filtro de vencimento - data inicial e final
       if (filters.vencimentoInicio) {
         const inicio = new Date(filters.vencimentoInicio);
-        inicio.setHours(0, 0, 0, 0);
-        if (voucher.vencimento < inicio) return false;
-        // Se apenas data início (sem fim), filtrar exatamente esse dia
-        if (!filters.vencimentoFim) {
-          const fimDoDia = new Date(filters.vencimentoInicio);
-          fimDoDia.setHours(23, 59, 59, 999);
-          if (voucher.vencimento > fimDoDia) return false;
+        if (inicio.getFullYear() >= 1900) {
+          inicio.setHours(0, 0, 0, 0);
+          if (voucher.vencimento < inicio) return false;
+          // Se apenas data início (sem fim), filtrar exatamente esse dia
+          if (!filters.vencimentoFim) {
+            const fimDoDia = new Date(filters.vencimentoInicio);
+            fimDoDia.setHours(23, 59, 59, 999);
+            if (voucher.vencimento > fimDoDia) return false;
+          }
         }
       }
 
       if (filters.vencimentoFim) {
         const fim = new Date(filters.vencimentoFim);
-        fim.setHours(23, 59, 59, 999);
-        if (voucher.vencimento > fim) return false;
+        if (fim.getFullYear() >= 1900) {
+          fim.setHours(23, 59, 59, 999);
+          if (voucher.vencimento > fim) return false;
+        }
       }
 
       // Filtro de origem
@@ -1324,20 +1328,24 @@ const EsteiraIndex = () => {
       // Filtro de data de criação - início e fim
       if (filters.criadoEmInicio) {
         const inicio = new Date(filters.criadoEmInicio);
-        inicio.setHours(0, 0, 0, 0);
-        if (voucher.createdAt < inicio) return false;
-        // Se apenas data início (sem fim), filtrar exatamente esse dia
-        if (!filters.criadoEmFim) {
-          const fimDoDia = new Date(filters.criadoEmInicio);
-          fimDoDia.setHours(23, 59, 59, 999);
-          if (voucher.createdAt > fimDoDia) return false;
+        if (inicio.getFullYear() >= 1900) {
+          inicio.setHours(0, 0, 0, 0);
+          if (voucher.createdAt < inicio) return false;
+          // Se apenas data início (sem fim), filtrar exatamente esse dia
+          if (!filters.criadoEmFim) {
+            const fimDoDia = new Date(filters.criadoEmInicio);
+            fimDoDia.setHours(23, 59, 59, 999);
+            if (voucher.createdAt > fimDoDia) return false;
+          }
         }
       }
 
       if (filters.criadoEmFim) {
         const fim = new Date(filters.criadoEmFim);
-        fim.setHours(23, 59, 59, 999);
-        if (voucher.createdAt > fim) return false;
+        if (fim.getFullYear() >= 1900) {
+          fim.setHours(23, 59, 59, 999);
+          if (voucher.createdAt > fim) return false;
+        }
       }
 
       // Filtro de voucher master
