@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -28,14 +28,24 @@ interface ComprovanteItem {
   tipo_documento?: string;
 }
 
+interface VoucherGroup {
+  voucher_id: number;
+  numero_spo: string;
+  fornecedor?: string;
+  tipo_documento?: string;
+  valor?: number;
+  forma_pagamento?: string;
+  docs: ComprovanteItem[];
+  lastUpload: string;
+}
+
 export function ComprovantesTab() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [comprovantes, setComprovantes] = useState<ComprovanteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [docsDialogVoucherId, setDocsDialogVoucherId] = useState<string | null>(null);
-  const [docsForDialog, setDocsForDialog] = useState<ComprovanteItem[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<VoucherGroup | null>(null);
 
   const loadComprovantes = async () => {
     setLoading(true);
@@ -57,20 +67,37 @@ export function ComprovantesTab() {
 
   useEffect(() => { loadComprovantes(); }, []);
 
-  const filteredComprovantes = comprovantes.filter((c) => {
+  const grouped = useMemo<VoucherGroup[]>(() => {
+    const map = new Map<number, VoucherGroup>();
+    for (const c of comprovantes) {
+      const existing = map.get(c.voucher_id);
+      if (existing) {
+        existing.docs.push(c);
+        if (c.created_at > existing.lastUpload) existing.lastUpload = c.created_at;
+      } else {
+        map.set(c.voucher_id, {
+          voucher_id: c.voucher_id,
+          numero_spo: c.numero_spo,
+          fornecedor: c.fornecedor,
+          tipo_documento: c.tipo_documento,
+          valor: c.valor,
+          forma_pagamento: c.forma_pagamento,
+          docs: [c],
+          lastUpload: c.created_at,
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.lastUpload.localeCompare(a.lastUpload));
+  }, [comprovantes]);
+
+  const filteredGroups = grouped.filter((g) => {
     const term = searchTerm.toLowerCase();
     return (
-      c.numero_spo?.toLowerCase().includes(term) ||
-      c.file_name?.toLowerCase().includes(term) ||
-      c.fornecedor?.toLowerCase().includes(term)
+      g.numero_spo?.toLowerCase().includes(term) ||
+      g.fornecedor?.toLowerCase().includes(term) ||
+      g.docs.some(d => d.file_name?.toLowerCase().includes(term))
     );
   });
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  };
 
   const handleDownload = (url: string, name: string) => {
     const link = document.createElement("a");
@@ -80,12 +107,6 @@ export function ComprovantesTab() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
-
-  const handleShowDocs = (voucherId: string) => {
-    const docs = comprovantes.filter(c => String(c.voucher_id) === String(voucherId));
-    setDocsForDialog(docs);
-    setDocsDialogVoucherId(voucherId);
   };
 
   return (
@@ -98,9 +119,9 @@ export function ComprovantesTab() {
                 <FileText className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <CardTitle>Documentos Anexados</CardTitle>
+                <CardTitle>Comprovantes por Voucher</CardTitle>
                 <CardDescription>
-                  Visualize todos os documentos anexados aos vouchers
+                  Vouchers concluídos agrupados com seus comprovantes
                 </CardDescription>
               </div>
             </div>
@@ -116,7 +137,7 @@ export function ComprovantesTab() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por SPO, arquivo ou fornecedor..."
+                placeholder="Buscar por SPO, fornecedor ou arquivo..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 bg-input/50 border-border/50"
@@ -125,18 +146,18 @@ export function ComprovantesTab() {
           </div>
 
           <div className="flex gap-4 text-sm text-muted-foreground">
-            <span>Total: <strong className="text-foreground">{comprovantes.length}</strong></span>
-            <span>Exibindo: <strong className="text-foreground">{filteredComprovantes.length}</strong></span>
+            <span>Vouchers: <strong className="text-foreground">{filteredGroups.length}</strong></span>
+            <span>Documentos: <strong className="text-foreground">{comprovantes.length}</strong></span>
           </div>
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          ) : filteredComprovantes.length === 0 ? (
+          ) : filteredGroups.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Nenhum documento encontrado</p>
+              <p>Nenhum comprovante encontrado</p>
             </div>
           ) : (
             <div className="rounded-lg border border-border/50 overflow-hidden">
@@ -146,77 +167,57 @@ export function ComprovantesTab() {
                     <TableHead>SPO</TableHead>
                     <TableHead>Fornecedor</TableHead>
                     <TableHead>Tipo Doc</TableHead>
-                    <TableHead>Arquivo</TableHead>
-                    <TableHead>Tipo Anexo</TableHead>
-                    <TableHead>Data Upload</TableHead>
-                    <TableHead>Tamanho</TableHead>
                     <TableHead>Valor</TableHead>
+                    <TableHead>Documentos</TableHead>
+                    <TableHead>Último Upload</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredComprovantes.map((comp) => (
-                    <TableRow key={comp.id} className="hover:bg-muted/20">
+                  {filteredGroups.map((group) => (
+                    <TableRow key={group.voucher_id} className="hover:bg-muted/20">
                       <TableCell>
                         <Badge variant="outline" className="font-mono">
-                          {comp.numero_spo}
+                          {group.numero_spo}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm max-w-[150px] truncate" title={comp.fornecedor}>
-                        {comp.fornecedor || "-"}
+                      <TableCell className="text-sm max-w-[150px] truncate" title={group.fornecedor}>
+                        {group.fornecedor || "-"}
                       </TableCell>
                       <TableCell>
-                        {comp.tipo_documento ? (
+                        {group.tipo_documento ? (
                           <Badge variant="secondary" className="text-xs">
-                            {comp.tipo_documento}
+                            {group.tipo_documento}
                           </Badge>
                         ) : "-"}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 max-w-[200px]">
-                          <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                          <span className="truncate text-sm" title={comp.file_name}>
-                            {comp.file_name}
-                          </span>
-                        </div>
+                      <TableCell className="text-sm">
+                        {group.valor
+                          ? `R$ ${group.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                          : "-"}
                       </TableCell>
                       <TableCell>
-                        {comp.tipo_anexo ? (
-                          <Badge variant="outline" className="text-xs">
-                            {comp.tipo_anexo.replace(/_/g, " ")}
-                          </Badge>
-                        ) : "-"}
+                        <Badge variant="outline" className="gap-1">
+                          <Files className="h-3 w-3" />
+                          {group.docs.length}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
                           <Calendar className="h-3 w-3" />
-                          {comp.created_at
-                            ? format(new Date(comp.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })
+                          {group.lastUpload
+                            ? format(new Date(group.lastUpload), "dd/MM/yyyy HH:mm", { locale: ptBR })
                             : "-"}
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {comp.file_size ? formatFileSize(comp.file_size) : "-"}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {comp.valor
-                          ? `R$ ${comp.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
-                          : "-"}
-                      </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
-                          <FilePreview
-                            fileName={comp.file_name}
-                            fileUrl={comp.file_url}
-                            fileType="COMPROVANTE"
-                            onDownload={() => handleDownload(comp.file_url, comp.file_name)}
-                          />
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
-                            title="Ver todos os documentos do voucher"
-                            onClick={() => handleShowDocs(String(comp.voucher_id))}
+                            title="Ver documentos do voucher"
+                            onClick={() => setSelectedGroup(group)}
                           >
                             <Files className="h-4 w-4" />
                           </Button>
@@ -225,7 +226,7 @@ export function ComprovantesTab() {
                             size="icon"
                             className="h-8 w-8"
                             title="Ver detalhes do voucher"
-                            onClick={() => navigate(`/fin/esteira/voucher/${comp.voucher_id}`)}
+                            onClick={() => navigate(`/fin/esteira/voucher/${group.voucher_id}`)}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
@@ -240,34 +241,32 @@ export function ComprovantesTab() {
         </CardContent>
       </Card>
 
-      {/* Dialog: todos os documentos do voucher */}
-      <Dialog open={!!docsDialogVoucherId} onOpenChange={() => setDocsDialogVoucherId(null)}>
+      {/* Dialog: documentos do voucher */}
+      <Dialog open={!!selectedGroup} onOpenChange={() => setSelectedGroup(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Documentos do Voucher {docsForDialog[0]?.numero_spo}</DialogTitle>
+            <DialogTitle>Documentos — {selectedGroup?.numero_spo}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 max-h-[400px] overflow-y-auto">
-            {docsForDialog.length === 0 ? (
-              <p className="text-muted-foreground text-center py-4">Nenhum documento</p>
-            ) : (
-              docsForDialog.map((doc) => (
-                <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{doc.file_name}</p>
-                      <p className="text-xs text-muted-foreground">{doc.tipo_anexo?.replace(/_/g, " ")}</p>
-                    </div>
+            {selectedGroup?.docs.map((doc) => (
+              <div key={doc.id} className="flex items-center justify-between p-3 border border-border/50 rounded-lg">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{doc.file_name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {doc.tipo_anexo?.replace(/_/g, " ")} • {doc.created_at ? format(new Date(doc.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR }) : ""}
+                    </p>
                   </div>
-                  <FilePreview
-                    fileName={doc.file_name}
-                    fileUrl={doc.file_url}
-                    fileType={doc.tipo_anexo || "OUTROS"}
-                    onDownload={() => handleDownload(doc.file_url, doc.file_name)}
-                  />
                 </div>
-              ))
-            )}
+                <FilePreview
+                  fileName={doc.file_name}
+                  fileUrl={doc.file_url}
+                  fileType={doc.tipo_anexo || "OUTROS"}
+                  onDownload={() => handleDownload(doc.file_url, doc.file_name)}
+                />
+              </div>
+            ))}
           </div>
         </DialogContent>
       </Dialog>
