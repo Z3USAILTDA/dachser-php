@@ -301,6 +301,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                   <SortableHeader field="createdAt">Emissão</SortableHeader>
                 </TableHead>
                 <TableHead>Enviado por</TableHead>
+                <TableHead>Criado por</TableHead>
                 <TableHead>Classificação</TableHead>
                 <TableHead>
                   <SortableHeader field="etapaAtual">Etapa Atual</SortableHeader>
@@ -367,6 +368,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                   />
                 </TableHead>
                 <TableHead className="py-2"></TableHead>
+                <TableHead className="py-2"></TableHead>
                 <TableHead className="py-2">
                   <Select value={filters.urgente} onValueChange={(value) => handleFilterChange("urgente", value)}>
                     <SelectTrigger className="h-8 text-xs bg-card w-28">
@@ -432,7 +434,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
             <TableBody>
               {paginatedVouchers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={14} className="text-center text-muted-foreground py-8">
                     Nenhum voucher/SPO encontrado
                   </TableCell>
                 </TableRow>
@@ -549,6 +551,16 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                           </TooltipTrigger>
                           <TooltipContent>
                             Enviado por: {voucher.enviadoPorUserName || voucher.criadoPorUserName || "Não informado"}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TableCell>
+                      <TableCell className="text-sm max-w-[100px] truncate">
+                        <Tooltip>
+                          <TooltipTrigger onClick={(e) => e.stopPropagation()}>
+                            <span>{voucher.criadoPorDfv || "-"}</span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Criado por (DFV): {voucher.criadoPorDfv || "Não informado"}
                           </TooltipContent>
                         </Tooltip>
                       </TableCell>

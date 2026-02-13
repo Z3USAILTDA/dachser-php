@@ -435,7 +435,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
                       fileType={anexo.tipo}
                       onDownload={() => handleDownload(anexo.fileUrl, anexo.fileName)}
                     />
-                    {canEditAttachments && (
+                    {canEditAttachments && ['OPERACAO', 'RASCUNHO', 'AJUSTE_OPERACAO'].includes(voucher.etapaAtual) && (
                       <Button
                         variant="ghost"
                         size="icon"

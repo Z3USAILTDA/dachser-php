@@ -313,6 +313,7 @@ export interface Voucher {
   // ADF Status - tracks if document was attached after creation
   statusDocumentoFiscal?: StatusDocumentoFiscal;
   nomeMaster?: string; // Nome personalizado do voucher master
+  criadoPorDfv?: string; // created_by from t_dados_financeiro_voucher
 }
 
 export interface RemessaItem {

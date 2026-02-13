@@ -125,6 +125,10 @@ const menuItems: MenuItem[] = [
         href: "/fin/regua",
       },
       {
+        label: "Análise Documental",
+        href: "/fin/analise-documental",
+      },
+      {
         label: "Voucher/SPO",
         href: "/fin/esteira",
       },

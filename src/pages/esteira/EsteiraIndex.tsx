@@ -758,6 +758,7 @@ const EsteiraIndex = () => {
     linhaDigitavel: v.linha_digitavel || null,
     codigoBarras: v.codigo_barras || null,
     statusIntegracaoRm: v.status_integracao_rm || null,
+    criadoPorDfv: v.dfv_created_by || null,
     createdAt: parseMariaDBDate(v.created_at) || new Date(),
     updatedAt: parseMariaDBDate(v.updated_at || v.created_at) || new Date(),
     anexos: [],
@@ -1275,13 +1276,19 @@ const EsteiraIndex = () => {
         if (filters.slaStatus !== status) return false;
       }
 
-      // Filtro de vencimento - data inicial
+      // Filtro de vencimento - data inicial e final
       if (filters.vencimentoInicio) {
         const inicio = new Date(filters.vencimentoInicio);
+        inicio.setHours(0, 0, 0, 0);
         if (voucher.vencimento < inicio) return false;
+        // Se apenas data início (sem fim), filtrar exatamente esse dia
+        if (!filters.vencimentoFim) {
+          const fimDoDia = new Date(filters.vencimentoInicio);
+          fimDoDia.setHours(23, 59, 59, 999);
+          if (voucher.vencimento > fimDoDia) return false;
+        }
       }
 
-      // Filtro de vencimento - data final
       if (filters.vencimentoFim) {
         const fim = new Date(filters.vencimentoFim);
         fim.setHours(23, 59, 59, 999);
@@ -1314,13 +1321,19 @@ const EsteiraIndex = () => {
         return false;
       }
 
-      // Filtro de data de criação - início
+      // Filtro de data de criação - início e fim
       if (filters.criadoEmInicio) {
         const inicio = new Date(filters.criadoEmInicio);
+        inicio.setHours(0, 0, 0, 0);
         if (voucher.createdAt < inicio) return false;
+        // Se apenas data início (sem fim), filtrar exatamente esse dia
+        if (!filters.criadoEmFim) {
+          const fimDoDia = new Date(filters.criadoEmInicio);
+          fimDoDia.setHours(23, 59, 59, 999);
+          if (voucher.createdAt > fimDoDia) return false;
+        }
       }
 
-      // Filtro de data de criação - fim
       if (filters.criadoEmFim) {
         const fim = new Date(filters.criadoEmFim);
         fim.setHours(23, 59, 59, 999);
