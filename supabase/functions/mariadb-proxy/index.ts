@@ -11118,23 +11118,37 @@ serve(async (req) => {
           
           // Build extra WHERE conditions
           let extraWhere = '';
+          let orderBy = 'ORDER BY m.data_insert DESC';
+          
           if (prioritizePending) {
-            // Cooldown: skip HAWBs enriched successfully in last 4 hours
-            extraWhere = `AND (
-              cct.peso_declarado IS NULL 
-              OR cct.cnpj_consignatario IS NULL
-              OR NOT EXISTS (
-                SELECT 1 FROM ${database}.t_leadcomex_enrichment_logs lel
-                WHERE TRIM(lel.hawb) COLLATE utf8mb4_unicode_ci = TRIM(m.hawb) COLLATE utf8mb4_unicode_ci
-                AND lel.success = 1
-                AND lel.created_at >= NOW() - INTERVAL 4 HOUR
-              )
+            // Exclude HAWBs already delivered (ENTREGUE) - they don't need re-consultation
+            // Apply 4h cooldown for successful enrichments (avoid querying every minute)
+            // Keep failed HAWBs in queue but deprioritize them
+            extraWhere = `AND COALESCE(cct.status_cct_oficial, '') != 'ENTREGUE'
+            AND NOT EXISTS (
+              SELECT 1 FROM ${database}.t_leadcomex_enrichment_logs lel
+              WHERE TRIM(lel.hawb) COLLATE utf8mb4_unicode_ci = TRIM(m.hawb) COLLATE utf8mb4_unicode_ci
+              AND lel.success = 1
+              AND lel.created_at >= NOW() - INTERVAL 4 HOUR
             )`;
+            // Prioritize: never-tried first, then fewer recent failures first
+            orderBy = `ORDER BY COALESCE(fail_count.recent_failures, 0) ASC, m.data_insert DESC`;
           } else if (!processAll) {
             extraWhere = 'AND (cct.peso_declarado IS NULL OR cct.cnpj_consignatario IS NULL)';
           }
           
-          console.log(`[get_cct_pending_hawbs] Fetching HAWBs from t_master_dados (${processAll ? 'ALL' : 'pending'}${prioritizePending ? ', with 4h cooldown' : ''})...`);
+          const useFailCount = prioritizePending;
+          const failCountJoin = useFailCount ? `
+            LEFT JOIN (
+              SELECT TRIM(hawb) COLLATE utf8mb4_unicode_ci as hawb, COUNT(*) as recent_failures
+              FROM ${database}.t_leadcomex_enrichment_logs
+              WHERE success = 0
+              AND created_at >= NOW() - INTERVAL 4 HOUR
+              GROUP BY TRIM(hawb)
+            ) fail_count ON TRIM(fail_count.hawb) COLLATE utf8mb4_unicode_ci = TRIM(m.hawb) COLLATE utf8mb4_unicode_ci
+          ` : '';
+          
+          console.log(`[get_cct_pending_hawbs] Fetching HAWBs from t_master_dados (${processAll ? 'ALL' : 'pending'}${prioritizePending ? ', with 4h cooldown + failure priority' : ''})...`);
           
           // Step 2: Get HAWBs from t_master_dados for these AWBs
           rows = await client.query(`
@@ -11146,6 +11160,7 @@ serve(async (req) => {
             FROM ${database}.t_master_dados m
             LEFT JOIN ${database}.t_cct_shipments cct 
               ON TRIM(m.hawb) COLLATE utf8mb4_unicode_ci = TRIM(cct.house) COLLATE utf8mb4_unicode_ci
+            ${failCountJoin}
             WHERE m.mawb IN (${awbFilterStr})
             AND m.tipo_processo = 'AIR IMPORT'
             AND m.data_insert >= NOW() - INTERVAL 30 DAY
@@ -11153,7 +11168,7 @@ serve(async (req) => {
             AND TRIM(m.hawb) != ''
             AND m.hawb != 'N/A'
             ${extraWhere}
-            ORDER BY m.data_insert DESC
+            ${orderBy}
             LIMIT ${limit}
           `);
         }
