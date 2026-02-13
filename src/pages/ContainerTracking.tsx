@@ -281,6 +281,9 @@ interface MblTrackingData {
   is_critico: number; // 1 se atraso >= 7 dias
   dias_atraso: number; // Dias de atraso calculados
   transshipment_port: string | null; // Porto(s) de escala/transbordo
+  transshipment_vessel_from: string | null; // Navio antes do transbordo
+  transshipment_vessel_to: string | null; // Navio depois do transbordo
+  transshipment_date: string | null; // Data do transbordo
   has_free_time: number; // 1 se possui Free Time cadastrado
   nome_analista: string | null; // Coordenador do processo
   updated_at: string | null; // Data de sincronização do banco
@@ -2142,8 +2145,22 @@ const ContainerTracking = () => {
                                         {mbl.transshipment_port.length > 15 ? mbl.transshipment_port.substring(0, 15) + "..." : mbl.transshipment_port}
                                       </span>
                                     </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p className="text-xs">Porto de transbordo: {mbl.transshipment_port}</p>
+                                    <TooltipContent className="max-w-xs">
+                                      <div className="space-y-1">
+                                        <p className="text-xs font-semibold">Porto de transbordo: {mbl.transshipment_port}</p>
+                                        {mbl.transshipment_vessel_from && (
+                                          <p className="text-xs text-muted-foreground">🚢 De: <span className="text-foreground font-medium">{mbl.transshipment_vessel_from}</span></p>
+                                        )}
+                                        {mbl.transshipment_vessel_to && (
+                                          <p className="text-xs text-muted-foreground">🚢 Para: <span className="text-foreground font-medium">{mbl.transshipment_vessel_to}</span></p>
+                                        )}
+                                        {mbl.transshipment_date && (
+                                          <p className="text-xs text-muted-foreground">📅 Data: <span className="text-foreground font-medium">{new Date(mbl.transshipment_date).toLocaleDateString('pt-BR')}</span></p>
+                                        )}
+                                        {!mbl.transshipment_vessel_from && !mbl.transshipment_vessel_to && !mbl.transshipment_date && (
+                                          <p className="text-xs text-muted-foreground italic">Detalhes de navio não disponíveis</p>
+                                        )}
+                                      </div>
                                     </TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider> : <span className="text-[#666]">—</span>}
