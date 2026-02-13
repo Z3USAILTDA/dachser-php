@@ -1718,28 +1718,44 @@ serve(async (req) => {
                 GROUP BY ts_td.mbl_id
               ),
                -- CTE 4: Transshipment via troca de navio com detalhes (vessel_from, vessel_to, date)
-                -- Detecta vessels independente da location (pode ser igual ao destino)
-                -- O porto de transbordo só é preenchido se a location NÃO for destino/origem
+                -- Detecta vessels independente da location
+                -- Porto: prefere location diferente de destino/origem, senão usa loading_port do t_tracking_sea
                 transship_vessel_change AS (
                   SELECT 
                     ts.mbl_id,
-                    -- Porto: retorna a location do evento de transbordo (sem filtro de destino)
-                    -- A troca de navio confirma que é transbordo real
-                    GROUP_CONCAT(DISTINCT tsh.location
-                      ORDER BY CASE 
-                        WHEN UPPER(tsh.container_status) LIKE '%FULL TRANSSHIPMENT DISCHARGED%' THEN 0
-                        WHEN UPPER(tsh.container_status) LIKE '%FULL TRANSSHIPMENT LOADED%' THEN 1
-                        ELSE 2
-                      END SEPARATOR ', '
+                    -- Porto de transbordo: prioridade para location != destino, fallback para loading_port
+                    COALESCE(
+                      GROUP_CONCAT(DISTINCT 
+                        CASE 
+                          WHEN tsh.location IS NOT NULL AND tsh.location != ''
+                            AND NOT (
+                              UPPER(tsh.location) LIKE CONCAT('%', UPPER(TRIM(SUBSTRING_INDEX(ts.destino, ',', 1))), '%')
+                              OR UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts.destino, ',', 1)))
+                              OR UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts.destino, ' ', 1)))
+                              OR UPPER(ts.destino) LIKE CONCAT('%', UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))), '%')
+                            )
+                            AND NOT (
+                              UPPER(tsh.location) LIKE CONCAT('%', UPPER(TRIM(SUBSTRING_INDEX(ts.origem, ',', 1))), '%')
+                              OR UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts.origem, ',', 1)))
+                              OR UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts.origem, ' ', 1)))
+                              OR UPPER(ts.origem) LIKE CONCAT('%', UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))), '%')
+                            )
+                          THEN tsh.location
+                          ELSE NULL
+                        END
+                        SEPARATOR ', '
+                      ),
+                      -- Fallback: loading_port da tabela principal (onde o navio atual carregou = porto de transbordo)
+                      MAX(ts.loading_port)
                     ) as transshipment_port,
-                    -- Navio ANTES do transbordo (Discharged) - sem filtro de location
+                    -- Navio ANTES do transbordo (Discharged)
                     MAX(CASE 
                       WHEN UPPER(tsh.container_status) LIKE '%DISCHARGED%' 
                         OR UPPER(tsh.event_description) LIKE '%DISCHARGED%'
                         OR UPPER(tsh.event_code) IN ('TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT')
                       THEN tsh.vessel_name 
                     END) as transshipment_vessel_from,
-                    -- Navio DEPOIS do transbordo (Loaded) - sem filtro de location
+                    -- Navio DEPOIS do transbordo (Loaded)
                     MAX(CASE 
                       WHEN UPPER(tsh.container_status) LIKE '%LOADED%' 
                         OR UPPER(tsh.event_description) LIKE '%LOADED%'
@@ -2961,7 +2977,8 @@ serve(async (req) => {
             
             console.log(`[refresh_sea_tracking] Container ${containerId}: vessel=${vesselName}, imo=${vesselImo}`);
             
-            // Update main tracking table including vessel_imo and transshipment_port
+            // Update main tracking table including vessel_imo, transshipment_port and loading_port
+            const currentLoadingPort = data.loading_port || data.shipped_from || null;
             await client.execute(`
               UPDATE dados_dachser.t_tracking_sea 
               SET 
@@ -2974,12 +2991,13 @@ serve(async (req) => {
                 last_event = ?,
                 shipping_line = COALESCE(?, shipping_line),
                 transshipment_port = COALESCE(?, transshipment_port),
+                loading_port = ?,
                 last_check = NOW(),
                 last_error = NULL
               WHERE id = ?
             `, [
               data.container_status || null,
-              data.loading_port || data.shipped_from || null,
+              currentLoadingPort,
               data.discharging_port || data.shipped_to || null,
               data.eta_final_destination || data.eta ? new Date(data.eta_final_destination || data.eta) : null,
               vesselName,
@@ -2987,6 +3005,7 @@ serve(async (req) => {
               lastEventDescription,
               shippingLine ? normalizeShippingLine(shippingLine) : null,
               transshipmentPort,
+              currentLoadingPort,
               row.id
             ]);
             
@@ -3037,6 +3056,12 @@ serve(async (req) => {
                  const statusText = (data.container_status || lastEventDescription || '').toUpperCase();
                  const eventCodeForStatus = (statusText.includes('TRANSSHIP') || statusText.includes('T/S')) ? 'TRANSSHIPMENT' : 'STATUS_UPDATE';
                  
+                 // Para eventos de transbordo, usar loading_port como location (onde o navio atual carregou)
+                 // Em vez de discharging_port (que é o destino final)
+                 const eventLocation = eventCodeForStatus === 'TRANSSHIPMENT'
+                   ? (currentLoadingPort || data.discharging_port || data.shipped_to || null)
+                   : (data.discharging_port || data.shipped_to || null);
+                 
                  await client.execute(`
                    INSERT IGNORE INTO dados_dachser.t_tracking_sea_history 
                    (mbl_id, container, event_code, event_description, event_datetime, location, vessel_name, voyage, container_status, eta, source, raw_data)
@@ -3046,7 +3071,7 @@ serve(async (req) => {
                    containerId,
                    eventCodeForStatus,
                    lastEventDescription ? lastEventDescription.substring(0, 500) : 'Status atualizado',
-                   data.discharging_port || data.shipped_to || null,
+                   eventLocation,
                    vesselName ? vesselName.substring(0, 100) : null,
                    voyage ? voyage.substring(0, 50) : null,
                    data.container_status || null,
