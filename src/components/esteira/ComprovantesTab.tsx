@@ -91,6 +91,8 @@ export function ComprovantesTab() {
   }, [comprovantes]);
 
   const filteredGroups = grouped.filter((g) => {
+    // Ocultar linhas sem SPO válido
+    if (!g.numero_spo || g.numero_spo.trim() === "") return false;
     const term = searchTerm.toLowerCase();
     return (
       g.numero_spo?.toLowerCase().includes(term) ||
