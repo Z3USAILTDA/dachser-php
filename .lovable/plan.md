@@ -1,78 +1,95 @@
 
+# Alteracoes na Esteira de Vouchers - 8 Itens (Revisado)
 
-# Otimizar Rastreamento SEA: 1 Consulta API por MBL + Propagação por Irmandade
+## 1. Travar exclusao de arquivos fora da etapa operacional
 
-## Situacao Atual
+**Onde**: `src/components/esteira/VoucherDetailsView.tsx` e `src/components/esteira/VoucherOperacaoActions.tsx`
+- Na funcao de exclusao de anexos e no botao de delete (icone Trash2), verificar `voucher.etapaAtual`
+- Permitir exclusao apenas se `etapaAtual` for `OPERACAO`, `RASCUNHO` ou `AJUSTE_OPERACAO`
+- Ocultar o botao de delete quando fora dessas etapas
+- Na substituicao de anexo em `VoucherOperacaoActions.tsx`, aplicar a mesma restricao
 
-O sistema ja seleciona um container representante por MBL para consulta, mas:
-1. Containers de leasing ainda fazem consultas individuais (BOL-first strategy)
-2. A propagacao por irmandade so roda no final, em um passo separado, e apenas para MBLs com "status misto"
-3. Containers que falham individualmente nao se beneficiam imediatamente do sucesso de um irmao
+## 2. E-mail consolidado de SLA no final do dia (CORRIGIDO)
 
-## Mudanca Proposta
+O objetivo e enviar **um unico e-mail por dia** ao responsavel de cada etapa com a lista de vouchers que estao **vencendo ou ja venceram o SLA da etapa** (tempo parado na etapa, nao data de vencimento do pagamento).
 
-Alterar o fluxo do `refresh_sea_tracking` para:
-1. Consultar a API apenas para o container representante de cada MBL
-2. Imediatamente apos sucesso, propagar os dados para TODOS os irmaos daquele MBL (em vez de esperar o final)
-3. Marcar todos os irmaos como `last_check = NOW()` para que nao sejam reconsultados no proximo ciclo
-4. Remover a logica separada de BOL-first para leasing containers (ja que o representante cobre tudo)
+**Onde**: `supabase/functions/voucher-check-sla-alerts/index.ts`
+- Ja existe a logica de verificacao de SLA por etapa (Operacao 24h, Fiscal 48h, Financeiro vencimento)
+- Alterar para que em vez de enviar multiplos e-mails (um por tipo de alerta), agrupe TUDO em um unico e-mail por responsavel
+- O e-mail consolidado deve listar:
+  - Vouchers parados na etapa Operacao ha mais de 24h
+  - Vouchers parados na etapa Fiscal ha mais de 48h
+  - Vouchers no Financeiro perto de vencer o SLA
+- Usar a tabela `t_sla_config` (via `get_sla_configs`) para respeitar os limites de horas configurados por etapa, em vez de hardcoded 24h/48h
+- Deve ser disparado via cron uma vez por dia (ex: 17:00 BRT)
+- Criar template HTML unico com secoes separadas por tipo de alerta
+
+**Nao** criar nova edge function; reaproveitar `voucher-check-sla-alerts` com a logica de consolidacao.
+
+## 3. Adicionar coluna "nd" na t_dados_rm
+
+**Onde**: `supabase/functions/mariadb-proxy/index.ts`
+- Na acao `insert_dados_rm` ou equivalente, incluir campo `nd` com o valor do `numero_spo` do voucher
+- Adicionar `ALTER TABLE dados_dachser.t_dados_rm ADD COLUMN nd VARCHAR(60) DEFAULT NULL` (try/catch)
+- Atualizar CREATE TABLE para incluir a coluna
+
+## 4. Voucher concluido permanece 24h na tabela ativa
+
+**Onde**: `supabase/functions/mariadb-proxy/index.ts`
+- Nas queries `get_vouchers_ativos` e `get_vouchers_esteira`, alterar filtro de `etapa_atual != 'CONCLUIDO'` para:
+```text
+(etapa_atual != 'CONCLUIDO' 
+ OR (etapa_atual = 'CONCLUIDO' AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)))
+```
+- Na UI (`VoucherTable.tsx`), adicionar badge visual para vouchers concluidos mostrando que sairao da tabela em breve
+
+## 5. Aba Comprovantes: exibir dados adicionais
+
+**Onde**: `src/components/esteira/ComprovantesTab.tsx` e `supabase/functions/mariadb-proxy/index.ts`
+- Na query de comprovantes, fazer JOIN com `t_vouchers` para trazer: fornecedor, tipo_documento
+- Trazer todos os anexos do voucher (nao so comprovantes)
+- Adicionar na tabela: colunas "Nome Fornecedor" e "Tipo Documento"
+- Adicionar botao "Ver Documentos" para listar todos os anexos
+- Adicionar botao "Ver Detalhes" para navegar aos detalhes do voucher
+
+## 6. Mover Analise Documental para fora do Voucher
+
+**Onde**: `src/pages/Dashboard.tsx`
+- No menu FIN, reordenar para:
+  1. Regua de Cobranca
+  2. Analise Documental (item independente)
+  3. Voucher/SPO
+- Rotas ja existem, apenas reposicionar no menu
+
+## 7. Corrigir filtro de Emissao
+
+**Onde**: `src/pages/esteira/EsteiraIndex.tsx`
+- Quando o usuario seleciona apenas uma data (sem data fim), filtrar exatamente aquele dia (00:00 a 23:59:59)
+- Aplicar mesma logica para filtro de vencimento
+
+## 8. Adicionar coluna "Criado por" na tabela
+
+**Onde**: `supabase/functions/mariadb-proxy/index.ts`, `src/components/esteira/VoucherTable.tsx`, `src/types/voucher.ts`
+- Na query de vouchers, fazer JOIN ou subquery em `t_dados_financeiro_voucher` para trazer `created_by`
+- Adicionar campo `criadoPorDfv` ao tipo Voucher
+- Adicionar coluna "Criado por" na tabela de visualizacao
+
+---
 
 ## Detalhes Tecnicos
 
-### Arquivo: `supabase/functions/olimpo-proxy/index.ts`
+### Arquivos a serem modificados:
+1. `src/components/esteira/VoucherDetailsView.tsx` - restricao exclusao anexos
+2. `supabase/functions/voucher-check-sla-alerts/index.ts` - consolidar em e-mail unico diario baseado em SLA da etapa
+3. `supabase/functions/mariadb-proxy/index.ts` - coluna nd, query concluidos 24h, comprovantes JOIN, created_by
+4. `src/components/esteira/ComprovantesTab.tsx` - colunas adicionais
+5. `src/pages/Dashboard.tsx` - reordenar menu FIN
+6. `src/pages/esteira/EsteiraIndex.tsx` - corrigir filtros, mapear created_by
+7. `src/components/esteira/VoucherTable.tsx` - coluna "Criado por", badge concluido
+8. `src/types/voucher.ts` - campo criadoPorDfv
+9. `src/components/esteira/VoucherOperacaoActions.tsx` - restricao exclusao anexos
 
-**1. Query de selecao (ja existente, manter)**
-- A query atual ja seleciona 1 container por MBL com prioridade para nao-leasing -- manter como esta
-
-**2. Apos sucesso da API (dentro do loop de processamento)**
-- Adicionar propagacao imediata para irmaos:
-
-```text
-Para cada container processado com sucesso:
-  -> UPDATE t_tracking_sea 
-     SET container_status, navio, vessel_imo, eta, last_event, 
-         origem, destino, shipping_line, loading_port,
-         sibling_synced = 1, sibling_synced_at = NOW(),
-         last_check = NOW(), last_error = NULL
-     WHERE mbl_id = ? AND id != ? AND active = 1
-```
-
-- Isso garante que os irmaos:
-  - Recebam os mesmos dados de tracking
-  - Tenham `last_check` atualizado (nao serao reconsultados)
-  - Sejam marcados como `sibling_synced = 1`
-
-**3. Remover logica BOL-first para leasing (simplificacao)**
-- A secao "BOL-FIRST STRATEGY FOR LEASING CONTAINERS" (linhas ~2630-2850) sera simplificada
-- Em vez de tratar leasing separadamente, o container representante (ja preferindo nao-leasing) cobre o caso
-- Se o representante for leasing (todos do MBL sao leasing), usar shipping_line do banco como ja faz
-
-**4. Sibling sync final (manter como fallback)**
-- Manter a logica de sibling sync no final como rede de seguranca para casos edge
-- Mas agora sera muito mais rapido pois a maioria dos irmaos ja estara atualizada
-
-**5. Contadores de economia**
-- Adicionar log mostrando quantos containers foram atualizados via irmandade vs API direta
-- Formato: `[refresh_sea_tracking] Batch: X API calls, Y siblings propagated, Z total updated`
-
-### Fluxo Resumido
-
-```text
-1. SELECT 1 container por MBL (preferir nao-leasing)
-2. Para cada container:
-   a. Chamar API JSONCargo
-   b. Se sucesso:
-      - Atualizar o container consultado
-      - UPDATE SET ... WHERE mbl_id = X AND id != Y  (propagar irmaos)
-      - Contar irmaos propagados
-   c. Se falha:
-      - Registrar erro apenas no container consultado
-3. Log final com economia de API calls
-```
-
-### Impacto Esperado
-
-- Se um MBL tem 5 containers: 1 API call em vez de 5
-- Containers de leasing nao precisam de logica especial (herdam do irmao nao-leasing)
-- Reducao estimada de 60-80% nas chamadas API por ciclo de refresh
-
+### Dependencias:
+- Cron job para `voucher-check-sla-alerts` deve rodar 1x/dia (17:00 BRT) via pg_cron + pg_net
+- Coluna `nd` no MariaDB sera adicionada via ALTER TABLE com try/catch
+- SLA limits devem vir da tabela `t_sla_config` em vez de valores hardcoded
