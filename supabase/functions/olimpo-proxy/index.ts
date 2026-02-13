@@ -2011,9 +2011,10 @@ serve(async (req) => {
       try {
         // Retornar navio/vessel_imo mais recente via COALESCE com subquery
         const rows = await client.query(`
-          SELECT 
+           SELECT 
             ts.id, ts.mbl_id, ts.container, ts.shipping_line, 
             ts.container_status, ts.last_event, ts.last_check, 
+            ts.loading_port, ts.transshipment_port,
             -- ETA priorizado: usar t_master_dados.eta se disponível
             COALESCE(
               (
@@ -3631,6 +3632,65 @@ serve(async (req) => {
           reset: result.affectedRows || 0,
           mbl_id: mblId || 'ALL',
           message: `${result.affectedRows || 0} containers resetados para PENDENTE`
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING: Manually set transshipment_port for an MBL =====
+    if (action === 'set_transshipment_port') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const body = await req.json();
+      const { mbl_id, transshipment_port } = body;
+
+      if (!mbl_id || !transshipment_port) {
+        return new Response(JSON.stringify({ error: 'mbl_id e transshipment_port obrigatórios' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        const result = await client.execute(`
+          UPDATE dados_dachser.t_tracking_sea 
+          SET transshipment_port = ?
+          WHERE mbl_id = ? AND active = 1
+        `, [transshipment_port, mbl_id]);
+
+        await client.close();
+        console.log(`[set_transshipment_port] Set ${mbl_id} → ${transshipment_port}: ${result.affectedRows} rows`);
+
+        return new Response(JSON.stringify({
+          success: true,
+          mbl_id,
+          transshipment_port,
+          rows_updated: result.affectedRows || 0
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
