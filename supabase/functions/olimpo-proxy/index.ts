@@ -3380,6 +3380,16 @@ serve(async (req) => {
       const startTime = Date.now();
 
       try {
+        // Ensure enrich_timeout_count column exists
+        try {
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_tracking_sea 
+            ADD COLUMN IF NOT EXISTS enrich_timeout_count INT DEFAULT 0
+          `);
+        } catch (e) {
+          // Column may already exist, continue
+        }
+
         // Fetch MBLs with container = 'PENDENTE' or NAO_ENCONTRADO older than 24h (auto-retry)
         const forceRetry = url.searchParams.get('force_retry') === 'true';
         const pendingMbls = await client.query(`
@@ -3393,6 +3403,7 @@ serve(async (req) => {
               OR ${forceRetry ? '1=1' : '1=0'}
             ))
           )
+          AND COALESCE(enrich_timeout_count, 0) < 3
         `);
 
         console.log(`[enrich_sea_containers] Found ${pendingMbls.length} MBLs with pending containers (batch_size=${batchSize}, max_time=${maxTimeMs}ms)`);
@@ -3491,7 +3502,22 @@ serve(async (req) => {
               console.log(`[enrich_sea_containers] All variations failed for MBL ${mblId}: ${lastApiError}`);
               details.push({ mbl: mblId, status: 'api_error', error: lastApiError, variations_tried: mblVariations.length });
               errors++;
+              
+              // Auto-skip if timeout: increment enrich_timeout_count and mark as blocked
+              if (lastApiError.includes('signal has been aborted') || lastApiError.includes('timeout') || lastApiError.includes('timed out')) {
+                console.log(`[enrich_sea_containers] Timeout detected for MBL ${mblId}, incrementing timeout counter`);
+                try {
+                  await client.execute(`
+                    UPDATE dados_dachser.t_tracking_sea
+                    SET enrich_timeout_count = COALESCE(enrich_timeout_count, 0) + 1, last_error = ?
+                    WHERE mbl_id = ? AND active = 1
+                  `, [lastApiError, mblId]);
+                } catch (e) {
+                  console.error(`[enrich_sea_containers] Error incrementing timeout count: ${e}`);
+                }
+              }
               continue;
+            }
             }
 
             if (containers.length === 0) {
@@ -3643,6 +3669,61 @@ serve(async (req) => {
         });
       }
     }
+
+    // ===== SEA TRACKING: Reset timeout count for MBLs =====
+    if (action === 'reset_timeout_count') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPassword = Deno.env.get('MARIADB_PASSWORD');
+
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPassword,
+        db: 'dados_dachser',
+      });
+
+      try {
+        const mblId = url.searchParams.get('mbl_id');
+        
+        let result;
+        if (mblId) {
+          result = await client.execute(`
+            UPDATE dados_dachser.t_tracking_sea
+            SET enrich_timeout_count = 0
+            WHERE mbl_id = ? AND active = 1
+          `, [mblId]);
+          console.log(`[reset_timeout_count] Reset MBL ${mblId}: ${result.affectedRows} rows`);
+        } else {
+          result = await client.execute(`
+            UPDATE dados_dachser.t_tracking_sea
+            SET enrich_timeout_count = 0
+            WHERE active = 1
+          `);
+          console.log(`[reset_timeout_count] Reset ALL: ${result.affectedRows} rows`);
+        }
+        await client.close();
+        return new Response(JSON.stringify({
+          success: true,
+          mbl_id: mblId || 'ALL',
+          reset: result.affectedRows || 0,
+          message: `${result.affectedRows || 0} registros resetados`
+        }), {
+          headers: corsHeaders,
+          status: 200
+        });
+      } catch (e) {
+        console.error(`[reset_timeout_count] Error: ${e.message}`);
+        return new Response(JSON.stringify({ error: e.message }), {
+          headers: corsHeaders,
+          status: 400
+        });
+      }
+    }
+
+
 
     // ===== SEA TRACKING: Manually set transshipment_port for an MBL =====
     if (action === 'set_transshipment_port') {
