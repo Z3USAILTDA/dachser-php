@@ -11073,6 +11073,7 @@ serve(async (req) => {
         const errorStatusFilter = errorStatuses.map(s => `'${s}'`).join(',');
         
         let rows;
+        let awbDateMap: Record<string, string> = {};
         
         if (hawbFilter) {
           // Specific HAWB reprocessing
@@ -11094,7 +11095,7 @@ serve(async (req) => {
           // Step 1: Get AWBs from t_aereo_ws with CCT-relevant statuses (sliding 30-day window)
           const awbAirlineLike = registeredAirlineCodes.map(c => `awb LIKE '${c}-%'`).join(' OR ');
           const awbsResult = await client.query(`
-            SELECT ws.awb
+            SELECT ws.awb, ws.scraped_at
             FROM ${database}.t_aereo_ws ws
             INNER JOIN (
               SELECT awb, MAX(id) as max_id
@@ -11108,6 +11109,13 @@ serve(async (req) => {
           `);
           
           const awbList = (awbsResult || []).map((r: any) => r.awb).filter((a: string) => a && a.trim() !== '');
+          
+          // Populate AWB -> scraped_at map to use as dep_datetime
+          for (const r of (awbsResult || []) as any[]) {
+            if (r.awb && r.scraped_at) {
+              awbDateMap[r.awb] = r.scraped_at;
+            }
+          }
           
           if (awbList.length === 0) {
             result = { success: true, shipments: [], total: 0 };
@@ -11180,7 +11188,7 @@ serve(async (req) => {
           shipments: (rows || []).map((row: any) => ({
             house: row.house,
             master: row.master,
-            dep_datetime: row.dep_datetime,
+            dep_datetime: awbDateMap?.[row.master] || row.dep_datetime || null,
             arr_datetime: null,
             status: row.status || null,
             peso_declarado: row.peso_declarado,
