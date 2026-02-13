@@ -46,72 +46,95 @@ serve(async (req) => {
   });
 
   try {
-    // PASSO 1: Encontrar registros que precisam de correção
-    const needsFixQuery = `
-      SELECT 
-        id,
-        mbl_id,
-        container,
-        event_code,
-        event_description,
-        container_status,
-        location,
-        created_at
-      FROM dados_dachser.t_tracking_sea_history
-      WHERE event_code = 'STATUS_UPDATE'
-        AND (
-          UPPER(event_description) LIKE '%TRANSSHIP%'
-          OR UPPER(event_description) LIKE '%T/S%'
-          OR UPPER(container_status) LIKE '%TRANSSHIP%'
-          OR UPPER(container_status) LIKE '%T/S%'
-        )
-      ORDER BY created_at DESC
-      LIMIT 1000
-    `;
+     // PASSO 1: Encontrar registros que precisam de correção
+     // IMPORTANTE: Excluir localidades que correspondem ao destino final (discharging_port)
+     const needsFixQuery = `
+       SELECT 
+         h.id,
+         h.mbl_id,
+         h.container,
+         h.event_code,
+         h.event_description,
+         h.container_status,
+         h.location,
+         h.created_at,
+         ts.destino
+       FROM dados_dachser.t_tracking_sea_history h
+       LEFT JOIN dados_dachser.t_tracking_sea ts ON ts.mbl_id = h.mbl_id
+       WHERE h.event_code = 'STATUS_UPDATE'
+         AND (
+           UPPER(h.event_description) LIKE '%TRANSSHIP%'
+           OR UPPER(h.event_description) LIKE '%T/S%'
+           OR UPPER(h.container_status) LIKE '%TRANSSHIP%'
+           OR UPPER(h.container_status) LIKE '%T/S%'
+         )
+         -- CRÍTICO: Excluir location que seja o destino final
+         AND (
+           h.location IS NULL 
+           OR h.location = ''
+           OR (
+             NOT UPPER(h.location) LIKE CONCAT('%', UPPER(COALESCE(ts.destino, 'XXXXX')), '%')
+             AND NOT UPPER(REPLACE(h.location, ' ', '')) LIKE CONCAT('%', UPPER(REPLACE(COALESCE(ts.destino, 'XXXXX'), ' ', '')), '%')
+           )
+         )
+       ORDER BY h.created_at DESC
+       LIMIT 1000
+     `;
 
-    const needsFix = await client.query(needsFixQuery);
-    console.log(`[sea-tracking-transship-backfill] Found ${needsFix.length} records to fix`);
+     const needsFix = await client.query(needsFixQuery);
+     console.log(`[sea-tracking-transship-backfill] Found ${needsFix.length} records to fix`);
 
-    if (needsFix.length === 0) {
-      await client.close();
-      return new Response(JSON.stringify({
-        success: true,
-        mode: dryRun ? 'dry_run' : 'executed',
-        records_found: 0,
-        records_updated: 0,
-        message: 'No records need fixing'
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
+     if (needsFix.length === 0) {
+       await client.close();
+       return new Response(JSON.stringify({
+         success: true,
+         mode: dryRun ? 'dry_run' : 'executed',
+         records_found: 0,
+         records_updated: 0,
+         message: 'No records need fixing'
+       }), {
+         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+       });
+     }
 
-    // PASSO 2: Se dry_run, retornar apenas os registros encontrados
-    if (dryRun) {
-      await client.close();
-      return new Response(JSON.stringify({
-        success: true,
-        mode: 'dry_run',
-        records_found: needsFix.length,
-        records_updated: 0,
-        sample_records: needsFix.slice(0, 5),
-        message: `Would update ${needsFix.length} records (use dry_run=0 to execute)`
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
+     // PASSO 2: Se dry_run, retornar apenas os registros encontrados
+     if (dryRun) {
+       await client.close();
+       return new Response(JSON.stringify({
+         success: true,
+         mode: 'dry_run',
+         records_found: needsFix.length,
+         records_updated: 0,
+         sample_records: needsFix.slice(0, 5),
+         message: `Would update ${needsFix.length} records (use dry_run=0 to execute)`
+       }), {
+         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+       });
+     }
 
-    // PASSO 3: Fazer UPDATE dos event_code para TRANSSHIPMENT
-    const updateQuery = `
-      UPDATE dados_dachser.t_tracking_sea_history
-      SET event_code = 'TRANSSHIPMENT'
-      WHERE event_code = 'STATUS_UPDATE'
-        AND (
-          UPPER(event_description) LIKE '%TRANSSHIP%'
-          OR UPPER(event_description) LIKE '%T/S%'
-          OR UPPER(container_status) LIKE '%TRANSSHIP%'
-          OR UPPER(container_status) LIKE '%T/S%'
-        )
-    `;
+     // PASSO 3: Fazer UPDATE dos event_code para TRANSSHIPMENT
+     // Apenas para registros que não correspondem ao destino final
+     const updateQuery = `
+       UPDATE dados_dachser.t_tracking_sea_history h
+       LEFT JOIN dados_dachser.t_tracking_sea ts ON ts.mbl_id = h.mbl_id
+       SET h.event_code = 'TRANSSHIPMENT'
+       WHERE h.event_code = 'STATUS_UPDATE'
+         AND (
+           UPPER(h.event_description) LIKE '%TRANSSHIP%'
+           OR UPPER(h.event_description) LIKE '%T/S%'
+           OR UPPER(h.container_status) LIKE '%TRANSSHIP%'
+           OR UPPER(h.container_status) LIKE '%T/S%'
+         )
+         -- CRÍTICO: Excluir location que seja o destino final
+         AND (
+           h.location IS NULL 
+           OR h.location = ''
+           OR (
+             NOT UPPER(h.location) LIKE CONCAT('%', UPPER(COALESCE(ts.destino, 'XXXXX')), '%')
+             AND NOT UPPER(REPLACE(h.location, ' ', '')) LIKE CONCAT('%', UPPER(REPLACE(COALESCE(ts.destino, 'XXXXX'), ' ', '')), '%')
+           )
+         )
+     `;
 
     const result = await client.execute(updateQuery);
     console.log(`[sea-tracking-transship-backfill] Updated ${needsFix.length} records`);
