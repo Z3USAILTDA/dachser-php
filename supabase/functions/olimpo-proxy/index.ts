@@ -1698,98 +1698,112 @@ serve(async (req) => {
                 FROM dados_dachser.t_tracking_sea
                 WHERE active = 1 AND navio IS NOT NULL AND navio != ''
               ),
-              -- CTE 3: Transshipment direto do t_tracking_sea
+              -- CTE 3: Transshipment direto do t_tracking_sea (com filtro de destino/origem)
               transship_direct AS (
-                SELECT mbl_id, MAX(transshipment_port) as transshipment_port
-                FROM dados_dachser.t_tracking_sea
-                WHERE transshipment_port IS NOT NULL AND transshipment_port != ''
-                GROUP BY mbl_id
+                SELECT ts_td.mbl_id, MAX(ts_td.transshipment_port) as transshipment_port
+                FROM dados_dachser.t_tracking_sea ts_td
+                WHERE ts_td.transshipment_port IS NOT NULL AND ts_td.transshipment_port != ''
+                  -- Excluir se transshipment_port contém o nome da cidade de destino
+                  AND NOT EXISTS (
+                    SELECT 1 FROM dados_dachser.t_tracking_sea ts_ref
+                    WHERE ts_ref.mbl_id = ts_td.mbl_id
+                      AND ts_ref.destino IS NOT NULL
+                      AND (
+                        UPPER(ts_td.transshipment_port) LIKE CONCAT('%', UPPER(SUBSTRING_INDEX(ts_ref.destino, ',', 1)), '%')
+                        OR UPPER(SUBSTRING_INDEX(ts_td.transshipment_port, ',', 1)) = UPPER(SUBSTRING_INDEX(ts_ref.destino, ',', 1))
+                        OR UPPER(TRIM(SUBSTRING_INDEX(ts_td.transshipment_port, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts_ref.destino, ' ', 1)))
+                      )
+                    LIMIT 1
+                  )
+                GROUP BY ts_td.mbl_id
               ),
                -- CTE 4: Transshipment via troca de navio com detalhes (vessel_from, vessel_to, date)
-                -- Detecta por keywords de transbordo OU por "Full Transshipment Discharged/Loaded"
+                -- Detecta vessels independente da location (pode ser igual ao destino)
+                -- O porto de transbordo só é preenchido se a location NÃO for destino/origem
                 transship_vessel_change AS (
                   SELECT 
                     ts.mbl_id,
+                    -- Porto: só retorna se location != destino/origem
                     GROUP_CONCAT(DISTINCT 
                       CASE 
-                        WHEN UPPER(tsh.event_description) LIKE '%TRANSSHIP%' 
-                          OR UPPER(tsh.container_status) LIKE '%TRANSSHIP%'
-                          OR UPPER(tsh.container_status) LIKE '%FULL TRANSSHIPMENT%'
-                        THEN tsh.location
-                        WHEN tsh.location IS NULL OR tsh.location = ''
-                          THEN NULL
+                        WHEN (
+                          UPPER(tsh.location) LIKE CONCAT('%', UPPER(ts.destino), '%')
+                          OR UPPER(ts.destino) LIKE CONCAT('%', UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))), '%')
+                          OR UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts.destino, ',', 1)))
+                          OR UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts.destino, ' ', 1)))
+                          OR UPPER(tsh.location) LIKE CONCAT('%', UPPER(ts.origem), '%')
+                          OR UPPER(ts.origem) LIKE CONCAT('%', UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))), '%')
+                          OR UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts.origem, ',', 1)))
+                          OR UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts.origem, ' ', 1)))
+                        ) THEN NULL
                         ELSE tsh.location
                       END
-                      ORDER BY CASE 
-                        WHEN UPPER(tsh.container_status) LIKE '%FULL TRANSSHIPMENT DISCHARGED%' THEN 0
-                        WHEN UPPER(tsh.container_status) LIKE '%FULL TRANSSHIPMENT LOADED%' THEN 0
-                        WHEN UPPER(tsh.event_description) LIKE '%TRANSSHIP%' THEN 1
-                        WHEN UPPER(tsh.container_status) LIKE '%TRANSSHIP%' THEN 2
-                        ELSE 3
-                      END SEPARATOR ', '
+                      SEPARATOR ', '
                     ) as transshipment_port,
-                    -- Navio ANTES do transbordo: vessel_name do evento de descarga (Discharged)
+                    -- Navio ANTES do transbordo (Discharged) - sem filtro de location
                     MAX(CASE 
                       WHEN UPPER(tsh.container_status) LIKE '%DISCHARGED%' 
                         OR UPPER(tsh.event_description) LIKE '%DISCHARGED%'
                         OR UPPER(tsh.event_code) IN ('TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT')
                       THEN tsh.vessel_name 
                     END) as transshipment_vessel_from,
-                    -- Navio DEPOIS do transbordo: vessel_name do evento de carregamento (Loaded)
+                    -- Navio DEPOIS do transbordo (Loaded) - sem filtro de location
                     MAX(CASE 
                       WHEN UPPER(tsh.container_status) LIKE '%LOADED%' 
                         OR UPPER(tsh.event_description) LIKE '%LOADED%'
                         OR UPPER(tsh.event_code) IN ('TRANSSHIPMENT_LOADED')
                       THEN tsh.vessel_name 
                     END) as transshipment_vessel_to,
-                    -- Data do transbordo: data do evento mais relevante
+                    -- Data do transbordo
                     MAX(tsh.event_datetime) as transshipment_date
                   FROM dados_dachser.t_tracking_sea ts
                   LEFT JOIN dados_dachser.t_tracking_sea_history tsh ON tsh.mbl_id = ts.mbl_id
                   WHERE (
-                      -- Detecta evento de transbordo via event_code
                       UPPER(tsh.event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED')
-                      -- Ou via description/status com keywords
                       OR UPPER(tsh.event_description) LIKE '%TRANSSHIP%'
                       OR UPPER(tsh.event_description) LIKE '%T/S%'
                       OR UPPER(tsh.container_status) LIKE '%TRANSSHIP%'
                       OR UPPER(tsh.container_status) LIKE '%T/S%'
-                      -- Full Transshipment Discharged/Loaded (MSC, etc.)
                       OR UPPER(tsh.container_status) LIKE '%FULL TRANSSHIPMENT DISCHARGED%'
                       OR UPPER(tsh.container_status) LIKE '%FULL TRANSSHIPMENT LOADED%'
-                    )
-                    AND tsh.location IS NOT NULL 
-                    AND tsh.location != ''
-                    -- CRÍTICO: Excluir location que seja destino final
-                    AND NOT (
-                      UPPER(tsh.location) LIKE CONCAT('%', UPPER(ts.destino), '%')
-                      OR UPPER(REPLACE(tsh.location, ' ', '')) LIKE CONCAT('%', UPPER(REPLACE(ts.destino, ' ', '')), '%')
-                    )
-                    -- Excluir location que seja origem
-                    AND NOT (
-                      UPPER(tsh.location) LIKE CONCAT('%', UPPER(ts.origem), '%')
-                      OR UPPER(REPLACE(tsh.location, ' ', '')) LIKE CONCAT('%', UPPER(REPLACE(ts.origem, ' ', '')), '%')
                     )
                   GROUP BY ts.mbl_id
                 ),
                 -- CTE 4B: Transshipment fallback (histórico sem mudança de navio clara)
+                -- COM filtro de destino/origem para evitar falsos positivos
                 transship_history AS (
                   SELECT 
-                    mbl_id,
-                    GROUP_CONCAT(DISTINCT location ORDER BY location SEPARATOR ', ') as transshipment_port
-                  FROM dados_dachser.t_tracking_sea_history
+                    tsh2.mbl_id,
+                    GROUP_CONCAT(DISTINCT tsh2.location ORDER BY tsh2.location SEPARATOR ', ') as transshipment_port
+                  FROM dados_dachser.t_tracking_sea_history tsh2
+                  LEFT JOIN dados_dachser.t_tracking_sea ts2 ON ts2.mbl_id = tsh2.mbl_id
                   WHERE (
-                    -- Via event_code (estruturado)
-                    UPPER(event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED')
-                    -- Via texto em event_description
-                    OR UPPER(event_description) LIKE '%TRANSSHIP%'
-                    OR UPPER(event_description) LIKE '%T/S%'
-                    -- Via texto em container_status
-                    OR UPPER(container_status) LIKE '%TRANSSHIP%'
-                    OR UPPER(container_status) LIKE '%T/S%'
+                    UPPER(tsh2.event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED')
+                    OR UPPER(tsh2.event_description) LIKE '%TRANSSHIP%'
+                    OR UPPER(tsh2.event_description) LIKE '%T/S%'
+                    OR UPPER(tsh2.container_status) LIKE '%TRANSSHIP%'
+                    OR UPPER(tsh2.container_status) LIKE '%T/S%'
                   )
-                    AND location IS NOT NULL AND location != ''
-                  GROUP BY mbl_id
+                    AND tsh2.location IS NOT NULL AND tsh2.location != ''
+                    -- Excluir destino
+                    AND NOT (
+                      ts2.destino IS NOT NULL AND (
+                        UPPER(tsh2.location) LIKE CONCAT('%', UPPER(ts2.destino), '%')
+                        OR UPPER(ts2.destino) LIKE CONCAT('%', UPPER(TRIM(SUBSTRING_INDEX(tsh2.location, ',', 1))), '%')
+                        OR UPPER(TRIM(SUBSTRING_INDEX(tsh2.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts2.destino, ',', 1)))
+                        OR UPPER(TRIM(SUBSTRING_INDEX(tsh2.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts2.destino, ' ', 1)))
+                      )
+                    )
+                    -- Excluir origem
+                    AND NOT (
+                      ts2.origem IS NOT NULL AND (
+                        UPPER(tsh2.location) LIKE CONCAT('%', UPPER(ts2.origem), '%')
+                        OR UPPER(ts2.origem) LIKE CONCAT('%', UPPER(TRIM(SUBSTRING_INDEX(tsh2.location, ',', 1))), '%')
+                        OR UPPER(TRIM(SUBSTRING_INDEX(tsh2.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts2.origem, ',', 1)))
+                        OR UPPER(TRIM(SUBSTRING_INDEX(tsh2.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts2.origem, ' ', 1)))
+                      )
+                    )
+                  GROUP BY tsh2.mbl_id
                 ),
               -- CTE 5: Free time cadastrado (simplificado)
               has_freetime AS (
