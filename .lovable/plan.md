@@ -1,85 +1,67 @@
 
 
-# Corrigir Deteccao de Transbordo: Apenas "Full Transshipment Discharged/Loaded"
+# Diagnostico: Chamadas JsonCargo e Containers Pendentes
 
-## Problema
-O processo MEDUWA505645 mostra a origem "Qingdao China" como escala porque:
-1. Na linha 2694, eventos com `eventCode === 'DISCHARGED'` ou `eventCode === 'LOADED'` sao tratados como transbordo -- mas esses sao eventos normais de carga/descarga na origem/destino
-2. O filtro de exclusao na linha 2701 usa comparacao exata (`!==`), entao "Qingdao" vs "Qingdao China" nao sao reconhecidos como iguais
+## Problema 1: `enrich_sea_containers` retorna 0 -- nada para processar
 
-## Solucao
+A funcao `enrich_sea_containers` so processa containers com status `PENDENTE`. Porem, os containers problematicos (HLCUSS5260224404, HLCUSS5260224766, EGLV143664214950) ja foram tentados anteriormente e marcados como `NAO_ENCONTRADO`. Uma vez com esse status, eles **nunca mais sao reprocessados**.
 
-O usuario confirmou que transbordo so deve ser detectado quando o evento contiver explicitamente **"Full Transshipment Discharged"** ou **"Full Transshipment Loaded"**.
+Ou seja: o JsonCargo nao esta "falhando" agora -- ele falhou uma vez no passado para esses MBLs, e o sistema nao tenta novamente.
 
-### Mudancas no arquivo `supabase/functions/olimpo-proxy/index.ts`
+## Problema 2: Prefixo `EGLV` ausente no mapa de enriquecimento
 
-**1. Restringir event codes na deteccao de eventos (linhas ~2690-2706)**
+O MBL `EGLV143664214950` (FISCHER BRASIL) e da Evergreen. O mapa de prefixos no `refresh_sea_tracking` (linha 2566) reconhece `EGLV` como EVERGREEN, mas o mapa no `enrich_sea_containers` (linhas 3260-3278) **nao inclui `EGLV`**. Isso faz com que a chamada a API seja feita sem especificar o armador, o que pode causar falha na busca.
 
-Remover `eventCode === 'DISCHARGED'` e `eventCode === 'LOADED'` da condicao. Manter apenas:
-- `eventCode` contendo `TRANSSHIP`, `TSP`, ou `T/S`
-- Adicionar verificacao no `event.description` / `event.container_status` para "FULL TRANSSHIPMENT DISCHARGED" e "FULL TRANSSHIPMENT LOADED"
+## Problema 3: Containers com ID valido mas sem dados de rastreio
 
-Logica revisada:
-```
-const eventCode = (event.event_code || ...).toUpperCase();
-const eventDesc = (event.description || event.event_description || '').toUpperCase();
-const eventStatus = (event.container_status || '').toUpperCase();
-const allText = eventCode + ' ' + eventDesc + ' ' + eventStatus;
+O container BMOU6536163 (MBL HLCUHAM2512AVRE3, STIHL) tem um ID valido mas `container_status: null`, `last_event: null`. Ele foi verificado hoje as 12:44, mas a API nao retornou dados. Como o `last_check` e recente, o `refresh_sea_tracking` nao o reprocessa por respeitar o intervalo de `stale_hours=4`.
 
-if (allText.includes('FULL TRANSSHIPMENT') || 
-    eventCode.includes('TRANSSHIP') || 
-    eventCode.includes('TSP') || 
-    eventCode.includes('T/S')) {
-  // ... adicionar loc como transshipment
-}
-```
+## Solucao Proposta
 
-**2. Melhorar exclusao de origem/destino com fuzzy matching (linha ~2701)**
+### 1. Adicionar prefixo `EGLV` ao mapa de enriquecimento
+No `enrich_sea_containers`, adicionar `'EGLV': 'EVERGREEN'` ao dicionario `MBL_PREFIX_TO_SHIPPING_LINE`.
 
-Substituir comparacao exata por comparacao do primeiro token:
-```
-const locFirst = locUpper.split(/[\s,]+/)[0];
-const origemFirst = origemUpper.split(/[\s,]+/)[0];
-const destinoFirst = destinoUpper.split(/[\s,]+/)[0];
-const storedOrigemFirst = (row.origem || '').toUpperCase().trim().split(/[\s,]+/)[0];
-const storedDestinoFirst = (row.destino || '').toUpperCase().trim().split(/[\s,]+/)[0];
+### 2. Criar mecanismo de retry para `NAO_ENCONTRADO`
+Modificar a query do `enrich_sea_containers` para tambem incluir containers `NAO_ENCONTRADO` que foram marcados ha mais de 24 horas. Isso permite que MBLs que falharam sejam retentados periodicamente:
 
-if (locFirst && locFirst !== origemFirst && locFirst !== destinoFirst 
-    && locFirst !== storedOrigemFirst && locFirst !== storedDestinoFirst) {
-  transshipmentSources.push(loc);
-}
-```
-
-**3. Permitir limpeza de dados falsos (linha ~2763)**
-
-Mudar de:
 ```sql
-transshipment_port = COALESCE(?, transshipment_port)
+WHERE active = 1 AND (
+  container = 'PENDENTE' OR container IS NULL OR container = ''
+  OR (container = 'NAO_ENCONTRADO' AND updated_at < DATE_SUB(NOW(), INTERVAL 24 HOUR))
+)
 ```
-Para:
-```sql
-transshipment_port = CASE WHEN ? IS NOT NULL THEN ? ELSE transshipment_port END
-```
-Isso permite que quando a deteccao corrigida nao encontra transbordo, o valor anterior permanece (para nao perder dados legitimos de outras CTEs). Porem, adicionamos uma logica: se o valor atual for igual a origem, limpar para NULL.
 
-**4. Limpeza automatica pos-deploy**
+### 3. Adicionar botao "Retentar Enriquecimento" na UI
+Para MBLs com status `NAO_ENCONTRADO`, permitir que o usuario force uma nova tentativa manual, resetando o container para `PENDENTE` e chamando `enrich_sea_containers` em seguida.
 
-Adicionar no inicio do `refresh_sea_tracking` uma query de limpeza one-time:
+### 4. Correcao imediata dos MBLs atuais
+Executar um reset dos containers `NAO_ENCONTRADO` que o usuario quer retentar:
+- No `enrich_sea_containers`, adicionar parametro opcional `force_retry=true` que inclui `NAO_ENCONTRADO` na busca
+- Ou via nova acao `retry_nao_encontrado` que reseta esses containers para `PENDENTE`
+
+## Detalhes Tecnicos
+
+**Arquivo: `supabase/functions/olimpo-proxy/index.ts`**
+
+1. **Linha ~3261**: Adicionar `'EGLV': 'EVERGREEN'` ao `MBL_PREFIX_TO_SHIPPING_LINE`
+
+2. **Linhas ~3364-3368**: Alterar query para incluir retry de `NAO_ENCONTRADO`:
 ```sql
-UPDATE dados_dachser.t_tracking_sea ts
-SET transshipment_port = NULL
-WHERE transshipment_port IS NOT NULL
-  AND UPPER(TRIM(SUBSTRING_INDEX(transshipment_port, ' ', 1))) = 
-      UPPER(TRIM(SUBSTRING_INDEX(COALESCE(origem, ''), ' ', 1)))
-  AND UPPER(TRIM(SUBSTRING_INDEX(transshipment_port, ' ', 1))) != ''
+SELECT DISTINCT mbl_id, consignee, email_analista, email_cliente, tipo_processo
+FROM dados_dachser.t_tracking_sea
+WHERE active = 1 AND (
+  container = 'PENDENTE' OR container IS NULL OR container = ''
+  OR (container = 'NAO_ENCONTRADO' AND updated_at < DATE_SUB(NOW(), INTERVAL 24 HOUR))
+)
 ```
-Isso limpa todos os falsos positivos onde o transshipment_port e igual a origem.
+
+3. **Nova acao `reset_nao_encontrado`**: Permite forcar retry manual, resetando `NAO_ENCONTRADO` para `PENDENTE` em MBLs especificos ou em todos
+
+4. **Pagina ContainerTracking.tsx**: Adicionar botao de retry visivel quando o container esta com status `NAO_ENCONTRADO`, chamando a nova acao
 
 ## Resumo do Impacto
-- Eventos normais de DISCHARGED/LOADED nao serao mais confundidos com transbordo
-- Apenas eventos explicitamente contendo "Full Transshipment Discharged/Loaded" ou codes TRANSSHIP/TSP/T/S serao considerados
-- Fuzzy matching previne falsos positivos por variacoes de formatacao
-- MEDUWA505645 sera corrigido automaticamente no proximo refresh
+- Containers `NAO_ENCONTRADO` passam a ser retentados automaticamente a cada 24h
+- `EGLV` (Evergreen) sera reconhecido corretamente na busca de containers
+- Usuario pode forcar retry manual quando necessario
+- Sem breaking changes em funcionalidades existentes
 
-## Arquivo modificado
-- `supabase/functions/olimpo-proxy/index.ts`
