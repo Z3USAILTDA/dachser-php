@@ -1705,33 +1705,48 @@ serve(async (req) => {
                 WHERE transshipment_port IS NOT NULL AND transshipment_port != ''
                 GROUP BY mbl_id
               ),
-               -- CTE 4: Transshipment via troca de navio (last_vessel_name != current_vessel_name)
-                -- Prioridade 1: Detecta por mudança de navio com localização precisa
+               -- CTE 4: Transshipment via troca de navio com detalhes (vessel_from, vessel_to, date)
+                -- Detecta por keywords de transbordo OU por "Full Transshipment Discharged/Loaded"
                 transship_vessel_change AS (
                   SELECT 
                     ts.mbl_id,
                     GROUP_CONCAT(DISTINCT 
                       CASE 
-                        -- Se temos location do evento de descarga/transbordo, usar
                         WHEN UPPER(tsh.event_description) LIKE '%TRANSSHIP%' 
                           OR UPPER(tsh.container_status) LIKE '%TRANSSHIP%'
+                          OR UPPER(tsh.container_status) LIKE '%FULL TRANSSHIPMENT%'
                         THEN tsh.location
-                        -- Se location vazio/null, tentar extrair do container_status
                         WHEN tsh.location IS NULL OR tsh.location = ''
                           THEN NULL
                         ELSE tsh.location
                       END
                       ORDER BY CASE 
-                        WHEN UPPER(tsh.event_description) LIKE '%TRANSSHIP%' THEN 0
-                        WHEN UPPER(tsh.container_status) LIKE '%TRANSSHIP%' THEN 1
-                        ELSE 2
+                        WHEN UPPER(tsh.container_status) LIKE '%FULL TRANSSHIPMENT DISCHARGED%' THEN 0
+                        WHEN UPPER(tsh.container_status) LIKE '%FULL TRANSSHIPMENT LOADED%' THEN 0
+                        WHEN UPPER(tsh.event_description) LIKE '%TRANSSHIP%' THEN 1
+                        WHEN UPPER(tsh.container_status) LIKE '%TRANSSHIP%' THEN 2
+                        ELSE 3
                       END SEPARATOR ', '
-                    ) as transshipment_port
+                    ) as transshipment_port,
+                    -- Navio ANTES do transbordo: vessel_name do evento de descarga (Discharged)
+                    MAX(CASE 
+                      WHEN UPPER(tsh.container_status) LIKE '%DISCHARGED%' 
+                        OR UPPER(tsh.event_description) LIKE '%DISCHARGED%'
+                        OR UPPER(tsh.event_code) IN ('TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT')
+                      THEN tsh.vessel_name 
+                    END) as transshipment_vessel_from,
+                    -- Navio DEPOIS do transbordo: vessel_name do evento de carregamento (Loaded)
+                    MAX(CASE 
+                      WHEN UPPER(tsh.container_status) LIKE '%LOADED%' 
+                        OR UPPER(tsh.event_description) LIKE '%LOADED%'
+                        OR UPPER(tsh.event_code) IN ('TRANSSHIPMENT_LOADED')
+                      THEN tsh.vessel_name 
+                    END) as transshipment_vessel_to,
+                    -- Data do transbordo: data do evento mais relevante
+                    MAX(tsh.event_datetime) as transshipment_date
                   FROM dados_dachser.t_tracking_sea ts
                   LEFT JOIN dados_dachser.t_tracking_sea_history tsh ON tsh.mbl_id = ts.mbl_id
-                  WHERE ts.navio IS NOT NULL 
-                    AND ts.navio != ''
-                    AND (
+                  WHERE (
                       -- Detecta evento de transbordo via event_code
                       UPPER(tsh.event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED')
                       -- Ou via description/status com keywords
@@ -1739,13 +1754,21 @@ serve(async (req) => {
                       OR UPPER(tsh.event_description) LIKE '%T/S%'
                       OR UPPER(tsh.container_status) LIKE '%TRANSSHIP%'
                       OR UPPER(tsh.container_status) LIKE '%T/S%'
+                      -- Full Transshipment Discharged/Loaded (MSC, etc.)
+                      OR UPPER(tsh.container_status) LIKE '%FULL TRANSSHIPMENT DISCHARGED%'
+                      OR UPPER(tsh.container_status) LIKE '%FULL TRANSSHIPMENT LOADED%'
                     )
                     AND tsh.location IS NOT NULL 
                     AND tsh.location != ''
-                    -- CRÍTICO: Excluir location que seja destino final (discharging_port de t_tracking_sea)
+                    -- CRÍTICO: Excluir location que seja destino final
                     AND NOT (
                       UPPER(tsh.location) LIKE CONCAT('%', UPPER(ts.destino), '%')
                       OR UPPER(REPLACE(tsh.location, ' ', '')) LIKE CONCAT('%', UPPER(REPLACE(ts.destino, ' ', '')), '%')
+                    )
+                    -- Excluir location que seja origem
+                    AND NOT (
+                      UPPER(tsh.location) LIKE CONCAT('%', UPPER(ts.origem), '%')
+                      OR UPPER(REPLACE(tsh.location, ' ', '')) LIKE CONCAT('%', UPPER(REPLACE(ts.origem, ' ', '')), '%')
                     )
                   GROUP BY ts.mbl_id
                 ),
@@ -1825,6 +1848,9 @@ serve(async (req) => {
                 ELSE 0 
               END as dias_atraso,
               COALESCE(MAX(tvc.transshipment_port), MAX(td.transshipment_port), MAX(th.transshipment_port)) as transshipment_port,
+              MAX(tvc.transshipment_vessel_from) as transshipment_vessel_from,
+              MAX(tvc.transshipment_vessel_to) as transshipment_vessel_to,
+              MAX(tvc.transshipment_date) as transshipment_date,
               CASE
                 WHEN MAX(hf_proc.mbl_id) IS NOT NULL THEN 1
                 WHEN MAX(hf_cont.cliente_nome) IS NOT NULL THEN 1
