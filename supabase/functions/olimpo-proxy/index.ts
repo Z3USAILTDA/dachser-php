@@ -1723,22 +1723,14 @@ serve(async (req) => {
                 transship_vessel_change AS (
                   SELECT 
                     ts.mbl_id,
-                    -- Porto: só retorna se location != destino/origem
-                    GROUP_CONCAT(DISTINCT 
-                      CASE 
-                        WHEN (
-                          UPPER(tsh.location) LIKE CONCAT('%', UPPER(ts.destino), '%')
-                          OR UPPER(ts.destino) LIKE CONCAT('%', UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))), '%')
-                          OR UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts.destino, ',', 1)))
-                          OR UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts.destino, ' ', 1)))
-                          OR UPPER(tsh.location) LIKE CONCAT('%', UPPER(ts.origem), '%')
-                          OR UPPER(ts.origem) LIKE CONCAT('%', UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))), '%')
-                          OR UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts.origem, ',', 1)))
-                          OR UPPER(TRIM(SUBSTRING_INDEX(tsh.location, ',', 1))) = UPPER(TRIM(SUBSTRING_INDEX(ts.origem, ' ', 1)))
-                        ) THEN NULL
-                        ELSE tsh.location
-                      END
-                      SEPARATOR ', '
+                    -- Porto: retorna a location do evento de transbordo (sem filtro de destino)
+                    -- A troca de navio confirma que é transbordo real
+                    GROUP_CONCAT(DISTINCT tsh.location
+                      ORDER BY CASE 
+                        WHEN UPPER(tsh.container_status) LIKE '%FULL TRANSSHIPMENT DISCHARGED%' THEN 0
+                        WHEN UPPER(tsh.container_status) LIKE '%FULL TRANSSHIPMENT LOADED%' THEN 1
+                        ELSE 2
+                      END SEPARATOR ', '
                     ) as transshipment_port,
                     -- Navio ANTES do transbordo (Discharged) - sem filtro de location
                     MAX(CASE 
