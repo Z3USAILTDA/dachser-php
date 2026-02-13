@@ -2428,9 +2428,8 @@ serve(async (req) => {
         let errors = 0;
         let processed = 0;
         let leasingDetected = 0;
-        let bolFirstSuccess = 0;  // Containers de leasing rastreados via BOL-first strategy
-        let dbSiblingSuccess = 0; // Containers de leasing rastreados via sibling no banco (0 API calls)
         let imoLookups = 0;       // Buscas de IMO via vessel/finder
+        let siblingsPropagated = 0; // Containers atualizados via propagação de irmandade (0 API calls)
         
         // Limpa cache de IMO no início de cada execução
         vesselImoCache.clear();
@@ -2627,242 +2626,10 @@ serve(async (req) => {
           const apiShippingLine = toApiShippingLine(shippingLine);
           console.log(`[refresh_sea_tracking] Container ${containerId}: DB=${shippingLine}, API=${apiShippingLine}, isLeasing=${isLeasingContainer}`);
           
-          // ===== BOL-FIRST STRATEGY FOR LEASING CONTAINERS =====
-          // For leasing containers, try to get data via sibling or MBL BEFORE attempting direct tracking
-          // This reduces "Prefix not found" errors and improves success rate
-          if (isLeasingContainer && mblId && mblId.length >= 10) {
-            console.log(`[refresh_sea_tracking] BOL-first strategy for leasing container ${containerId} (MBL: ${mblId})`);
-            
-            // STEP A: Check if any sibling in DB already has data (ZERO API calls!)
-            const dbSiblingResult = await client.query(`
-              SELECT container_status, navio, vessel_imo, eta, origem, destino, last_event, shipping_line
-              FROM dados_dachser.t_tracking_sea
-              WHERE mbl_id = ?
-                AND container_status IS NOT NULL 
-                AND container_status != ''
-                AND container_status != 'PENDING'
-                AND id != ?
-                AND (last_error IS NULL OR last_error = '')
-              ORDER BY last_check DESC
-              LIMIT 1
-            `, [mblId, row.id]);
-            
-            if (dbSiblingResult.length > 0 && dbSiblingResult[0].container_status) {
-              const dbSib = dbSiblingResult[0];
-              console.log(`[refresh_sea_tracking] DB sibling found for ${containerId}: status=${dbSib.container_status}, vessel=${dbSib.navio}`);
-              
-              await client.execute(`
-                UPDATE dados_dachser.t_tracking_sea 
-                SET 
-                  container_status = ?,
-                  origem = COALESCE(?, origem),
-                  destino = COALESCE(?, destino),
-                  eta = COALESCE(?, eta),
-                  navio = COALESCE(?, navio),
-                  vessel_imo = COALESCE(?, vessel_imo),
-                  last_event = ?,
-                  shipping_line = COALESCE(?, shipping_line),
-                  last_check = NOW(),
-                  last_error = NULL,
-                  sibling_synced = 1,
-                  sibling_synced_at = NOW()
-                WHERE id = ?
-              `, [
-                dbSib.container_status,
-                dbSib.origem,
-                dbSib.destino,
-                dbSib.eta,
-                dbSib.navio,
-                dbSib.vessel_imo,
-                dbSib.last_event || dbSib.container_status,
-                dbSib.shipping_line,
-                row.id
-              ]);
-              
-              updated++;
-              processed++;
-              dbSiblingSuccess++;
-              console.log(`[refresh_sea_tracking] SUCCESS via DB sibling (0 API calls): ${containerId}`);
-              continue;
-            }
-            
-            // STEP B: Query MBL/BOL API to find sibling containers
-            console.log(`[refresh_sea_tracking] No DB sibling found, querying BOL API for MBL ${mblId}...`);
-            
-            const bolApiRes = await jcJsonWithRetry(
-              `http://api.jsoncargo.com/api/v1/containers/bol/${encodeURIComponent(mblId)}`,
-              { shipping_line: apiShippingLine },
-              25000,
-              2,  // max retries
-              2000 // backoff ms
-            );
-            
-            if (!bolApiRes.__curl_error && !bolApiRes.error && bolApiRes.data) {
-              const siblings = bolApiRes.data.associated_container_numbers || [];
-              
-              // Log full BOL response for debugging (important for understanding API structure)
-              console.log(`[refresh_sea_tracking] BOL API FULL RESPONSE for MBL ${mblId}:`, JSON.stringify(bolApiRes.data, null, 2).substring(0, 2000));
-              console.log(`[refresh_sea_tracking] BOL API returned ${siblings.length} containers for MBL ${mblId}: ${siblings.slice(0, 5).join(', ')}`);
-              
-              
-              // STEP C: Find a non-leasing sibling to track
-              const nonLeasingSibling = siblings.find((ctr: string) => {
-                const prefix = ctr.substring(0, 4).toUpperCase();
-                return !LEASING_CONTAINER_PREFIXES.has(prefix) && ctr !== containerId;
-              });
-              
-              if (nonLeasingSibling) {
-                console.log(`[refresh_sea_tracking] Found non-leasing sibling ${nonLeasingSibling}, tracking it...`);
-                
-                // STEP D: Track the non-leasing sibling
-                const siblingApiRes = await jcJsonWithRetry(
-                  `http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(nonLeasingSibling)}`,
-                  { shipping_line: apiShippingLine },
-                  25000,
-                  2,  // max retries
-                  2000 // backoff ms
-                );
-                
-                if (!siblingApiRes.__curl_error && !siblingApiRes.error && siblingApiRes.data) {
-                  const sibData = siblingApiRes.data;
-                  const vesselName = sibData.current_vessel_name || sibData.last_vessel_name || sibData.vessel?.name || null;
-                  let vesselImo = sibData.vessel?.imo || sibData.current_vessel_imo || null;
-                  const containerStatus = sibData.container_status || null;
-                  const lastEvent = sibData.last_movement?.description || containerStatus;
-                  
-                  // Se não obteve IMO mas tem nome do navio, buscar via vessel/finder
-                  if (!vesselImo && vesselName) {
-                    console.log(`[refresh_sea_tracking] No IMO from sibling ${nonLeasingSibling}, searching for vessel "${vesselName}"...`);
-                    const foundImo = await findVesselImo(vesselName);
-                    if (foundImo) {
-                      vesselImo = foundImo;
-                      imoLookups++;
-                      console.log(`[refresh_sea_tracking] Found IMO ${foundImo} via vessel/finder for sibling`);
-                    }
-                  }
-                  
-                  if (containerStatus) {
-                    console.log(`[refresh_sea_tracking] Sibling ${nonLeasingSibling} data: status=${containerStatus}, vessel=${vesselName}`);
-                    
-                    await client.execute(`
-                      UPDATE dados_dachser.t_tracking_sea 
-                      SET 
-                        container_status = ?,
-                        origem = COALESCE(?, origem),
-                        destino = COALESCE(?, destino),
-                        eta = ?,
-                        navio = COALESCE(?, navio),
-                        vessel_imo = COALESCE(?, vessel_imo),
-                        last_event = ?,
-                        shipping_line = COALESCE(?, shipping_line),
-                        last_check = NOW(),
-                        last_error = NULL,
-                        sibling_synced = 1,
-                        sibling_synced_at = NOW()
-                      WHERE id = ?
-                    `, [
-                      containerStatus,
-                      sibData.loading_port || sibData.shipped_from || null,
-                      sibData.discharging_port || sibData.shipped_to || null,
-                      sibData.eta_final_destination || sibData.eta ? new Date(sibData.eta_final_destination || sibData.eta) : null,
-                      vesselName,
-                      vesselImo,
-                      lastEvent || containerStatus,
-                      shippingLine ? normalizeShippingLine(shippingLine) : null,
-                      row.id
-                    ]);
-                    
-                    updated++;
-                    processed++;
-                    bolFirstSuccess++;
-                    console.log(`[refresh_sea_tracking] SUCCESS via BOL-first (sibling ${nonLeasingSibling}): ${containerId}`);
-                    await new Promise(r => setTimeout(r, 100));
-                    continue;
-                  }
-                } else {
-                  console.log(`[refresh_sea_tracking] Sibling ${nonLeasingSibling} tracking failed:`, siblingApiRes.error || siblingApiRes.__curl_error);
-                }
-              } else {
-                console.log(`[refresh_sea_tracking] No non-leasing sibling found in BOL response, checking for direct MBL data...`);
-                
-                // STEP E: Try to extract data directly from BOL response
-                const bolData = bolApiRes.data;
-                const bolContainerStatus = bolData.status || bolData.bol_status || bolData.shipment_status || null;
-                const bolVessel = bolData.vessel || bolData.vessel_name || bolData.current_vessel || null;
-                let bolVesselImo = bolData.vessel_imo || bolData.imo || null;
-                const bolEta = bolData.eta || bolData.eta_final || bolData.eta_destination || null;
-                const bolPol = bolData.pol || bolData.port_of_loading || bolData.origin || null;
-                const bolPod = bolData.pod || bolData.port_of_discharge || bolData.destination || null;
-                
-                // Se não obteve IMO mas tem nome do navio, buscar via vessel/finder
-                if (!bolVesselImo && bolVessel) {
-                  console.log(`[refresh_sea_tracking] No IMO from BOL data, searching for vessel "${bolVessel}"...`);
-                  const foundImo = await findVesselImo(bolVessel);
-                  if (foundImo) {
-                    bolVesselImo = foundImo;
-                    imoLookups++;
-                    console.log(`[refresh_sea_tracking] Found IMO ${foundImo} via vessel/finder for BOL data`);
-                  }
-                }
-                
-                if (bolContainerStatus || bolVessel || bolEta) {
-                  console.log(`[refresh_sea_tracking] Using BOL data directly: status=${bolContainerStatus}, vessel=${bolVessel}, eta=${bolEta}`);
-                  
-                  const lastEventFromBol = bolContainerStatus || (bolVessel ? `Em trânsito - ${bolVessel}` : 'Dados via MBL');
-                  
-                  // Extrair transshipment do BOL data
-                  const bolTransshipmentSources: string[] = [];
-                  if (bolData.transshipment_port) bolTransshipmentSources.push(bolData.transshipment_port);
-                  if (bolData.via_port) bolTransshipmentSources.push(bolData.via_port);
-                  if (bolData.transit_port) bolTransshipmentSources.push(bolData.transit_port);
-                  if (bolData.route?.via) bolTransshipmentSources.push(bolData.route.via);
-                  if (bolData.routing?.transshipment_port) bolTransshipmentSources.push(bolData.routing.transshipment_port);
-                  const bolTransshipment = [...new Set(bolTransshipmentSources.filter(p => p && p.trim()).map(p => p.trim().toUpperCase()))].join(', ') || null;
-                  
-                  await client.execute(`
-                    UPDATE dados_dachser.t_tracking_sea 
-                    SET 
-                      container_status = COALESCE(?, container_status, 'Via MBL'),
-                      origem = COALESCE(?, origem),
-                      destino = COALESCE(?, destino),
-                      eta = COALESCE(?, eta),
-                      navio = COALESCE(?, navio),
-                      vessel_imo = COALESCE(?, vessel_imo),
-                      last_event = ?,
-                      transshipment_port = COALESCE(?, transshipment_port),
-                      last_check = NOW(),
-                      last_error = NULL,
-                      sibling_synced = 1,
-                      sibling_synced_at = NOW()
-                    WHERE id = ?
-                  `, [
-                    bolContainerStatus,
-                    bolPol,
-                    bolPod,
-                    bolEta ? new Date(bolEta) : null,
-                    bolVessel,
-                    bolVesselImo,
-                    lastEventFromBol,
-                    bolTransshipment,
-                    row.id
-                  ]);
-                  
-                  updated++;
-                  processed++;
-                  bolFirstSuccess++;
-                  console.log(`[refresh_sea_tracking] SUCCESS via BOL data directly: ${containerId}`);
-                  await new Promise(r => setTimeout(r, 100));
-                  continue;
-                }
-              }
-            } else {
-              console.log(`[refresh_sea_tracking] BOL API failed for MBL ${mblId}:`, bolApiRes.error || bolApiRes.__curl_error);
-            }
-            
-            // If BOL-first fails, fall through to direct tracking (which will likely fail for leasing, but we try)
-            console.log(`[refresh_sea_tracking] BOL-first strategy exhausted for ${containerId}, trying direct tracking...`);
+          // ===== LEASING CONTAINERS: Log detection, tracking handled by representative container =====
+          if (isLeasingContainer) {
+            leasingDetected++;
           }
-          // ===== END BOL-FIRST STRATEGY =====
           
           const qs: Record<string, string> = {};
           if (apiShippingLine) qs['shipping_line'] = apiShippingLine;
@@ -3085,6 +2852,55 @@ serve(async (req) => {
             }
             
             updated++;
+            
+            // ===== IMMEDIATE SIBLING PROPAGATION =====
+            // Propagar dados para TODOS os irmãos do mesmo MBL (evita consultas API individuais)
+            if (mblId && mblId.length >= 4) {
+              try {
+                const sibPropResult = await client.execute(`
+                  UPDATE dados_dachser.t_tracking_sea 
+                  SET 
+                    container_status = ?,
+                    navio = COALESCE(?, navio),
+                    vessel_imo = COALESCE(?, vessel_imo),
+                    eta = COALESCE(?, eta),
+                    last_event = COALESCE(?, last_event),
+                    origem = COALESCE(?, origem),
+                    destino = COALESCE(?, destino),
+                    shipping_line = COALESCE(?, shipping_line),
+                    transshipment_port = COALESCE(?, transshipment_port),
+                    loading_port = COALESCE(?, loading_port),
+                    last_check = NOW(),
+                    last_error = NULL,
+                    sibling_synced = 1,
+                    sibling_synced_at = NOW()
+                  WHERE mbl_id = ?
+                    AND id != ?
+                    AND active = 1
+                `, [
+                  data.container_status || null,
+                  vesselName,
+                  vesselImo,
+                  data.eta_final_destination || data.eta ? new Date(data.eta_final_destination || data.eta) : null,
+                  lastEventDescription,
+                  currentLoadingPort,
+                  data.discharging_port || data.shipped_to || null,
+                  shippingLine ? normalizeShippingLine(shippingLine) : null,
+                  transshipmentPort,
+                  currentLoadingPort,
+                  mblId,
+                  row.id
+                ]);
+                
+                const propagatedCount = sibPropResult.affectedRows || 0;
+                siblingsPropagated += propagatedCount;
+                if (propagatedCount > 0) {
+                  console.log(`[refresh_sea_tracking] SIBLING PROPAGATION: ${containerId} → ${propagatedCount} siblings updated for MBL ${mblId}`);
+                }
+              } catch (sibErr: any) {
+                console.log(`[refresh_sea_tracking] Sibling propagation failed for MBL ${mblId}: ${sibErr.message}`);
+              }
+            }
           } else {
             // Categorize error type for better diagnostics
             let errorType = 'unknown';
@@ -3129,300 +2945,7 @@ serve(async (req) => {
               api_message: apiRes.message
             });
             
-            // ===== MBL SIBLING FALLBACK: Track via non-leasing sibling container =====
-            const isPrefixNotFoundError = errorDetail.includes('Prefix not found') || errorType === 'api_error';
-            
-            if (isLeasingContainer && isPrefixNotFoundError && mblId && mblId.length >= 10) {
-              console.log(`[refresh_sea_tracking] Trying sibling fallback for leasing container ${containerId} via MBL ${mblId}`);
-              
-              // Step 1: Get list of containers from MBL
-              const bolApiRes = await jcJsonWithRetry(
-                `http://api.jsoncargo.com/api/v1/containers/bol/${encodeURIComponent(mblId)}`,
-                { shipping_line: apiShippingLine },
-                25000,
-                2,  // max retries
-                2000 // backoff ms
-              );
-              
-              let siblingSuccess = false;
-              
-              if (!bolApiRes.__curl_error && !bolApiRes.error && bolApiRes.data?.associated_container_numbers?.length > 0) {
-                const siblings = bolApiRes.data.associated_container_numbers;
-                console.log(`[refresh_sea_tracking] Found ${siblings.length} sibling containers for MBL ${mblId}: ${siblings.slice(0, 5).join(', ')}...`);
-                
-                // Step 2: Find a non-leasing sibling to track
-                const nonLeasingSibling = siblings.find((ctr: string) => {
-                  const prefix = ctr.substring(0, 4).toUpperCase();
-                  return !LEASING_CONTAINER_PREFIXES.has(prefix) && ctr !== containerId;
-                });
-                
-                if (nonLeasingSibling) {
-                  console.log(`[refresh_sea_tracking] Tracking non-leasing sibling ${nonLeasingSibling} to get data for ${containerId}`);
-                  
-                  // Step 3: Track the sibling container
-                  const siblingApiRes = await jcJsonWithRetry(
-                    `http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(nonLeasingSibling)}`,
-                    { shipping_line: apiShippingLine },
-                    25000,
-                    2,  // max retries
-                    2000 // backoff ms
-                  );
-                  
-                  if (!siblingApiRes.__curl_error && !siblingApiRes.error && siblingApiRes.data) {
-                    const sibData = siblingApiRes.data;
-                    
-                    // Step 4: Apply sibling data to our leasing container
-                    const vesselName = sibData.current_vessel_name || sibData.last_vessel_name || sibData.vessel?.name || null;
-                    const containerStatus = sibData.container_status || null;
-                    const lastEvent = sibData.last_movement?.description || containerStatus;
-                    
-                    // Priorizar busca de IMO pelo nome do navio
-                    let vesselImo = null;
-                    if (vesselName) {
-                      vesselImo = await findVesselImo(vesselName);
-                    }
-                    if (!vesselImo) {
-                      vesselImo = sibData.vessel?.imo || sibData.current_vessel_imo || null;
-                    }
-                    
-                    // Extrair transshipment_port do sibling
-                    const sibTransshipmentSources: string[] = [];
-                    if (sibData.transshipment_port) sibTransshipmentSources.push(sibData.transshipment_port);
-                    if (sibData.via_port) sibTransshipmentSources.push(sibData.via_port);
-                    if (sibData.transit_port) sibTransshipmentSources.push(sibData.transit_port);
-                    if (sibData.route?.via) sibTransshipmentSources.push(sibData.route.via);
-                    if (sibData.routing?.transshipment_port) sibTransshipmentSources.push(sibData.routing.transshipment_port);
-                    const sibTransshipment = [...new Set(sibTransshipmentSources.filter(p => p && p.trim()).map(p => p.trim().toUpperCase()))].join(', ') || null;
-                    
-                    console.log(`[refresh_sea_tracking] Sibling ${nonLeasingSibling} data: status=${containerStatus}, vessel=${vesselName}, eta=${sibData.eta_final_destination || sibData.eta}, transshipment=${sibTransshipment}`);
-                    
-                    if (containerStatus) {
-                      await client.execute(`
-                        UPDATE dados_dachser.t_tracking_sea 
-                        SET 
-                          container_status = ?,
-                          origem = COALESCE(?, origem),
-                          destino = COALESCE(?, destino),
-                          eta = ?,
-                          navio = COALESCE(?, navio),
-                          vessel_imo = COALESCE(?, vessel_imo),
-                          last_event = ?,
-                          shipping_line = COALESCE(?, shipping_line),
-                          transshipment_port = COALESCE(?, transshipment_port),
-                          last_check = NOW(),
-                          last_error = NULL,
-                          sibling_synced = 1,
-                          sibling_synced_at = NOW()
-                        WHERE id = ?
-                      `, [
-                        containerStatus,
-                        sibData.loading_port || sibData.shipped_from || null,
-                        sibData.discharging_port || sibData.shipped_to || null,
-                        sibData.eta_final_destination || sibData.eta ? new Date(sibData.eta_final_destination || sibData.eta) : null,
-                        vesselName,
-                        vesselImo,
-                        lastEvent || containerStatus,
-                        shippingLine ? normalizeShippingLine(shippingLine) : null,
-                        sibTransshipment,
-                        row.id
-                      ]);
-                      
-                      updated++;
-                      processed++;
-                      siblingSuccess = true;
-                      await new Promise(r => setTimeout(r, 100));
-                      continue; // Success via sibling!
-                    }
-                  } else {
-                    console.log(`[refresh_sea_tracking] Sibling ${nonLeasingSibling} tracking failed:`, siblingApiRes.error || siblingApiRes.__curl_error);
-                  }
-                } else {
-                  // All siblings are also leasing - check if any already have data in DB
-                  console.log(`[refresh_sea_tracking] No non-leasing siblings found for ${containerId}, checking DB for existing data...`);
-                  
-                  const dbSibling = await client.query(`
-                    SELECT container_status, navio, vessel_imo, eta, origem, destino, last_event
-                    FROM dados_dachser.t_tracking_sea
-                    WHERE mbl_id = ?
-                      AND container_status IS NOT NULL
-                      AND container_status != ''
-                      AND id != ?
-                      AND (last_error IS NULL OR last_error = '' OR last_error LIKE '%success%')
-                    LIMIT 1
-                  `, [mblId, row.id]);
-                  
-                  if (dbSibling.length > 0 && dbSibling[0].container_status) {
-                    const sib = dbSibling[0];
-                    console.log(`[refresh_sea_tracking] Found DB sibling with data: status=${sib.container_status}, vessel=${sib.navio}`);
-                    
-                    await client.execute(`
-                      UPDATE dados_dachser.t_tracking_sea 
-                      SET 
-                        container_status = ?,
-                        origem = COALESCE(?, origem),
-                        destino = COALESCE(?, destino),
-                        eta = COALESCE(?, eta),
-                        navio = COALESCE(?, navio),
-                        vessel_imo = COALESCE(?, vessel_imo),
-                        last_event = ?,
-                        last_check = NOW(),
-                        last_error = NULL,
-                        sibling_synced = 1,
-                        sibling_synced_at = NOW()
-                      WHERE id = ?
-                    `, [
-                      sib.container_status,
-                      sib.origem,
-                      sib.destino,
-                      sib.eta,
-                      sib.navio,
-                      sib.vessel_imo,
-                      sib.last_event || sib.container_status,
-                      row.id
-                    ]);
-                    
-                    updated++;
-                    processed++;
-                    siblingSuccess = true;
-                    continue;
-                  } else {
-                    console.log(`[refresh_sea_tracking] No sibling with data found in DB for MBL ${mblId}`);
-                    
-                    // ===== NEW FALLBACK: Use MBL/BOL API data directly =====
-                    // When no siblings have data, extract what we can from the BOL response itself
-                    if (bolApiRes.data) {
-                      const bolData = bolApiRes.data;
-                      
-                      // Extract available data from BOL response
-                      const bolContainerStatus = bolData.status || bolData.bol_status || bolData.shipment_status || null;
-                      const bolVessel = bolData.vessel || bolData.vessel_name || bolData.current_vessel || null;
-                      const bolVesselImo = bolData.vessel_imo || bolData.imo || null;
-                      const bolEta = bolData.eta || bolData.eta_final || bolData.eta_destination || null;
-                      const bolPol = bolData.pol || bolData.port_of_loading || bolData.origin || null;
-                      const bolPod = bolData.pod || bolData.port_of_discharge || bolData.destination || null;
-                      const bolVoyage = bolData.voyage || bolData.voyage_number || null;
-                      
-                      // Check if we have useful data from BOL endpoint
-                      if (bolContainerStatus || bolVessel || bolEta) {
-                        console.log(`[refresh_sea_tracking] Using MBL data as fallback for ${containerId}: status=${bolContainerStatus}, vessel=${bolVessel}, eta=${bolEta}`);
-                        
-                        const lastEventFromBol = bolContainerStatus || (bolVessel ? `Em trânsito - ${bolVessel}` : 'Dados via MBL');
-                        
-                        await client.execute(`
-                          UPDATE dados_dachser.t_tracking_sea 
-                          SET 
-                            container_status = COALESCE(?, container_status, 'Via MBL'),
-                            origem = COALESCE(?, origem),
-                            destino = COALESCE(?, destino),
-                            eta = COALESCE(?, eta),
-                            navio = COALESCE(?, navio),
-                            vessel_imo = COALESCE(?, vessel_imo),
-                            last_event = ?,
-                            last_check = NOW(),
-                            last_error = NULL,
-                            sibling_synced = 1,
-                            sibling_synced_at = NOW()
-                          WHERE id = ?
-                        `, [
-                          bolContainerStatus,
-                          bolPol,
-                          bolPod,
-                          bolEta ? new Date(bolEta) : null,
-                          bolVessel,
-                          bolVesselImo,
-                          lastEventFromBol,
-                          row.id
-                        ]);
-                        
-                        // Record history event for MBL-based update
-                        try {
-                          await client.execute(`
-                            INSERT IGNORE INTO dados_dachser.t_tracking_sea_history 
-                            (mbl_id, container, event_code, event_description, event_datetime, location, vessel_name, voyage, container_status, eta, source, raw_data)
-                            VALUES (?, ?, 'MBL_SYNC', ?, NOW(), ?, ?, ?, ?, ?, 'MBL_API', ?)
-                          `, [
-                            mblId,
-                            containerId,
-                            lastEventFromBol ? lastEventFromBol.substring(0, 500) : 'Dados sincronizados via MBL',
-                            bolPod || bolPol || null,
-                            bolVessel ? bolVessel.substring(0, 100) : null,
-                            bolVoyage ? bolVoyage.substring(0, 50) : null,
-                            bolContainerStatus,
-                            bolEta ? new Date(bolEta) : null,
-                            JSON.stringify({ source: 'mbl_fallback', bol_data: bolData })
-                          ]);
-                        } catch (histErr: any) {
-                          console.log(`[refresh_sea_tracking] MBL history insert failed: ${histErr.message}`);
-                        }
-                        
-                        updated++;
-                        processed++;
-                        siblingSuccess = true;
-                        continue;
-                      } else {
-                        console.log(`[refresh_sea_tracking] MBL ${mblId} has no useful tracking data (status/vessel/eta all empty)`);
-                      }
-                    }
-                  }
-                }
-              } else {
-                // MBL lookup returned but no containers - still try to use BOL data directly
-                console.log(`[refresh_sea_tracking] MBL ${mblId} lookup returned no containers, trying BOL data as fallback...`);
-                
-                // Even without associated_container_numbers, the BOL response might have shipment data
-                if (bolApiRes.data) {
-                  const bolData = bolApiRes.data;
-                  
-                  const bolContainerStatus = bolData.status || bolData.bol_status || bolData.shipment_status || null;
-                  const bolVessel = bolData.vessel || bolData.vessel_name || bolData.current_vessel || null;
-                  const bolVesselImo = bolData.vessel_imo || bolData.imo || null;
-                  const bolEta = bolData.eta || bolData.eta_final || bolData.eta_destination || null;
-                  const bolPol = bolData.pol || bolData.port_of_loading || bolData.origin || null;
-                  const bolPod = bolData.pod || bolData.port_of_discharge || bolData.destination || null;
-                  
-                  if (bolContainerStatus || bolVessel || bolEta) {
-                    console.log(`[refresh_sea_tracking] Using MBL-only data for ${containerId}: status=${bolContainerStatus}, vessel=${bolVessel}, eta=${bolEta}`);
-                    
-                    const lastEventFromBol = bolContainerStatus || (bolVessel ? `Em trânsito - ${bolVessel}` : 'Dados via MBL');
-                    
-                    await client.execute(`
-                      UPDATE dados_dachser.t_tracking_sea 
-                      SET 
-                        container_status = COALESCE(?, container_status, 'Via MBL'),
-                        origem = COALESCE(?, origem),
-                        destino = COALESCE(?, destino),
-                        eta = COALESCE(?, eta),
-                        navio = COALESCE(?, navio),
-                        vessel_imo = COALESCE(?, vessel_imo),
-                        last_event = ?,
-                        last_check = NOW(),
-                        last_error = NULL,
-                        sibling_synced = 1,
-                        sibling_synced_at = NOW()
-                      WHERE id = ?
-                    `, [
-                      bolContainerStatus,
-                      bolPol,
-                      bolPod,
-                      bolEta ? new Date(bolEta) : null,
-                      bolVessel,
-                      bolVesselImo,
-                      lastEventFromBol,
-                      row.id
-                    ]);
-                    
-                    updated++;
-                    processed++;
-                    siblingSuccess = true;
-                    continue;
-                  }
-                }
-                
-                console.log(`[refresh_sea_tracking] MBL ${mblId} has no useful data in BOL response`);
-              }
-              
-              if (siblingSuccess) continue;
-            }
+            // Error handling simplified - sibling propagation happens on success path
             
             // Update last_check and save error to last_error column
             await client.execute(`
@@ -3535,23 +3058,22 @@ serve(async (req) => {
         const remaining = remainingResult[0]?.cnt || 0;
 
         await client.close();
-        console.log(`[refresh_sea_tracking] Batch done: ${updated} updated (bolFirst=${bolFirstSuccess}, dbSibling=${dbSiblingSuccess}), ${errors} errors, ${siblingSynced} sibling synced, ${leasingDetected} leasing, ${imoLookups} IMO lookups, ${remaining} remaining, ~${apiCallsSaved} API calls saved`);
+        console.log(`[refresh_sea_tracking] Batch: ${processed} API calls, ${siblingsPropagated} siblings propagated, ${updated + siblingsPropagated} total updated, ${errors} errors, ${siblingSynced} fallback synced, ${leasingDetected} leasing, ${imoLookups} IMO lookups, ${remaining} remaining`);
         
         return new Response(JSON.stringify({ 
           success: true, 
           updated, 
           errors, 
           processed,
-          siblingSynced,
+          siblingsPropagated,   // Containers updated via immediate sibling propagation (0 API calls)
+          siblingSynced,        // Containers updated via final fallback sync
           leasingDetected,
-          bolFirstSuccess,      // Leasing containers tracked via BOL-first strategy
-          dbSiblingSuccess,     // Leasing containers tracked via DB sibling (0 API calls)
-          imoLookups,           // IMO lookups via vessel/finder API
+          imoLookups,
           remaining,
           batchSize,
           apiCallsSaved,
           totalPending,
-          optimization: 'bol_first_for_leasing_with_imo_lookup',
+          optimization: 'one_per_mbl_immediate_sibling_propagation',
           elapsedMs: Date.now() - startTime
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
