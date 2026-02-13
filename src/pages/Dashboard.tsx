@@ -104,10 +104,10 @@ const menuItems: MenuItem[] = [
         href: "/sea/draft-exportacao",
         adminOnly: true,
       },
-      {
-        label: "Monitoramento FCL",
-        href: "/sea/tracking",
-      },
+       {
+         label: "Monitoramento FCL / LCL",
+         href: "/sea/tracking",
+       },
       {
         label: "Demurrage / Detention",
         href: "/sea/demurrage",
