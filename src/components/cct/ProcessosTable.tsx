@@ -15,6 +15,7 @@ import { TablePagination } from "@/components/layout/TablePagination";
 import { Search, Eye, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { parseDBDate } from "@/utils/timezone";
 import type { ProcessoCCT } from "@/types/cct";
 
 export type MetricFilterType = "total" | "alerta" | "critico" | "eventos24h" | null;
@@ -92,7 +93,9 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
 
   const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return "-";
-    return format(new Date(dateStr), "dd/MM HH:mm", { locale: ptBR });
+    const parsed = parseDBDate(dateStr);
+    if (!parsed) return "-";
+    return format(parsed, "dd/MM HH:mm", { locale: ptBR });
   };
 
   if (processos.length === 0) {
