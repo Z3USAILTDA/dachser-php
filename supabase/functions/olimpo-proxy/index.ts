@@ -246,7 +246,7 @@ async function logApiCall(
   }
 }
 
-async function curlJson(url: string, headers: Record<string, string> = {}, timeout = 25000): Promise<any> {
+async function curlJson(url: string, headers: Record<string, string> = {}, timeout = 55000): Promise<any> {
   try {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
@@ -265,7 +265,7 @@ async function curlJson(url: string, headers: Record<string, string> = {}, timeo
   }
 }
 
-async function jcJson(url: string, qs: Record<string, string> = {}, timeout = 25000): Promise<any> {
+async function jcJson(url: string, qs: Record<string, string> = {}, timeout = 55000): Promise<any> {
   // FLAG: JsonCargo REATIVADO
   const JSONCARGO_DISABLED = false;
   if (JSONCARGO_DISABLED) {
@@ -303,7 +303,7 @@ async function jcJson(url: string, qs: Record<string, string> = {}, timeout = 25
 async function jcJsonWithRetry(
   url: string, 
   qs: Record<string, string> = {}, 
-  timeout = 25000,
+  timeout = 55000,
   maxRetries = 2,
   backoffMs = 2000
 ): Promise<any> {
