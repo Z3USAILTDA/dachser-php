@@ -1705,25 +1705,69 @@ serve(async (req) => {
                 WHERE transshipment_port IS NOT NULL AND transshipment_port != ''
                 GROUP BY mbl_id
               ),
-               -- CTE 4: Transshipment do histórico (fallback) - EXPANDIDO para detectar via texto também
-               transship_history AS (
-                 SELECT 
-                   mbl_id,
-                   GROUP_CONCAT(DISTINCT location ORDER BY location SEPARATOR ', ') as transshipment_port
-                 FROM dados_dachser.t_tracking_sea_history
-                 WHERE (
-                   -- Via event_code (estruturado)
-                   UPPER(event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED')
-                   -- Via texto em event_description
-                   OR UPPER(event_description) LIKE '%TRANSSHIP%'
-                   OR UPPER(event_description) LIKE '%T/S%'
-                   -- Via texto em container_status
-                   OR UPPER(container_status) LIKE '%TRANSSHIP%'
-                   OR UPPER(container_status) LIKE '%T/S%'
-                 )
-                   AND location IS NOT NULL AND location != ''
-                 GROUP BY mbl_id
-               ),
+               -- CTE 4: Transshipment via troca de navio (last_vessel_name != current_vessel_name)
+                -- Prioridade 1: Detecta por mudança de navio com localização precisa
+                transship_vessel_change AS (
+                  SELECT 
+                    ts.mbl_id,
+                    GROUP_CONCAT(DISTINCT 
+                      CASE 
+                        -- Se temos location do evento de descarga/transbordo, usar
+                        WHEN UPPER(tsh.event_description) LIKE '%TRANSSHIP%' 
+                          OR UPPER(tsh.container_status) LIKE '%TRANSSHIP%'
+                        THEN tsh.location
+                        -- Se location vazio/null, tentar extrair do container_status
+                        WHEN tsh.location IS NULL OR tsh.location = ''
+                          THEN NULL
+                        ELSE tsh.location
+                      END
+                      ORDER BY CASE 
+                        WHEN UPPER(tsh.event_description) LIKE '%TRANSSHIP%' THEN 0
+                        WHEN UPPER(tsh.container_status) LIKE '%TRANSSHIP%' THEN 1
+                        ELSE 2
+                      END SEPARATOR ', '
+                    ) as transshipment_port
+                  FROM dados_dachser.t_tracking_sea ts
+                  LEFT JOIN dados_dachser.t_tracking_sea_history tsh ON tsh.mbl_id = ts.mbl_id
+                  WHERE ts.navio IS NOT NULL 
+                    AND ts.navio != ''
+                    AND (
+                      -- Detecta evento de transbordo via event_code
+                      UPPER(tsh.event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED')
+                      -- Ou via description/status com keywords
+                      OR UPPER(tsh.event_description) LIKE '%TRANSSHIP%'
+                      OR UPPER(tsh.event_description) LIKE '%T/S%'
+                      OR UPPER(tsh.container_status) LIKE '%TRANSSHIP%'
+                      OR UPPER(tsh.container_status) LIKE '%T/S%'
+                    )
+                    AND tsh.location IS NOT NULL 
+                    AND tsh.location != ''
+                    -- CRÍTICO: Excluir location que seja destino final (discharging_port de t_tracking_sea)
+                    AND NOT (
+                      UPPER(tsh.location) LIKE CONCAT('%', UPPER(ts.destino), '%')
+                      OR UPPER(REPLACE(tsh.location, ' ', '')) LIKE CONCAT('%', UPPER(REPLACE(ts.destino, ' ', '')), '%')
+                    )
+                  GROUP BY ts.mbl_id
+                ),
+                -- CTE 4B: Transshipment fallback (histórico sem mudança de navio clara)
+                transship_history AS (
+                  SELECT 
+                    mbl_id,
+                    GROUP_CONCAT(DISTINCT location ORDER BY location SEPARATOR ', ') as transshipment_port
+                  FROM dados_dachser.t_tracking_sea_history
+                  WHERE (
+                    -- Via event_code (estruturado)
+                    UPPER(event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED')
+                    -- Via texto em event_description
+                    OR UPPER(event_description) LIKE '%TRANSSHIP%'
+                    OR UPPER(event_description) LIKE '%T/S%'
+                    -- Via texto em container_status
+                    OR UPPER(container_status) LIKE '%TRANSSHIP%'
+                    OR UPPER(container_status) LIKE '%T/S%'
+                  )
+                    AND location IS NOT NULL AND location != ''
+                  GROUP BY mbl_id
+                ),
               -- CTE 5: Free time cadastrado (simplificado)
               has_freetime AS (
                 SELECT DISTINCT
@@ -1780,7 +1824,7 @@ serve(async (req) => {
                 THEN DATEDIFF(CURDATE(), COALESCE(MAX(md.eta), MAX(ts.eta)))
                 ELSE 0 
               END as dias_atraso,
-              COALESCE(MAX(td.transshipment_port), MAX(th.transshipment_port)) as transshipment_port,
+              COALESCE(MAX(tvc.transshipment_port), MAX(td.transshipment_port), MAX(th.transshipment_port)) as transshipment_port,
               CASE
                 WHEN MAX(hf_proc.mbl_id) IS NOT NULL THEN 1
                 WHEN MAX(hf_cont.cliente_nome) IS NOT NULL THEN 1
@@ -1790,6 +1834,7 @@ serve(async (req) => {
             LEFT JOIN master_data md ON md.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN master_dados_new mdn ON mdn.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN latest_vessel lv ON lv.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci AND lv.rn = 1
+            LEFT JOIN transship_vessel_change tvc ON tvc.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN transship_direct td ON td.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN transship_history th ON th.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN has_freetime hf_proc ON hf_proc.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci AND hf_proc.tipo_ft = 'PROCESSO'
