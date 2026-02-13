@@ -7113,14 +7113,19 @@ serve(async (req) => {
             v.fornecedor,
             v.tipo_documento
           FROM dados_dachser.t_voucher_anexos a
-          LEFT JOIN dados_dachser.t_vouchers v ON a.voucher_id = v.id
+          INNER JOIN dados_dachser.t_vouchers v ON a.voucher_id = v.id
+          WHERE v.etapa_atual = 'CONCLUIDO'
+            AND a.tipo = 'COMPROVANTE'
           ORDER BY a.created_at DESC
           LIMIT ? OFFSET ?
         `, [perPage, offset]);
         
         const countResult = await client.execute(`
           SELECT COUNT(*) as total 
-          FROM dados_dachser.t_voucher_anexos
+          FROM dados_dachser.t_voucher_anexos a
+          INNER JOIN dados_dachser.t_vouchers v ON a.voucher_id = v.id
+          WHERE v.etapa_atual = 'CONCLUIDO'
+            AND a.tipo = 'COMPROVANTE'
         `);
         
         const total = countResult.rows?.[0]?.total || 0;
