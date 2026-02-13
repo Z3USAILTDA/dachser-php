@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StatusBadge, SLAInfoBadge } from "./StatusBadge";
+import { LeadComexStatusBadge } from "./LeadComexStatusBadge";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { Search, Eye, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
@@ -135,6 +136,7 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Status</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">SLA</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Analista</TableHead>
+              <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">LeadComex</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Atualização</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium text-right">Ações</TableHead>
             </TableRow>
@@ -212,6 +214,12 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                     <div className="flex items-center gap-1.5 max-w-[120px] truncate">
                       <span>{processo.shipment.analista?.nome || processo.shipment.nome_analista_legado || "-"}</span>
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    <LeadComexStatusBadge 
+                      status={processo.shipment.leadcomex_status || 'pending'} 
+                      attempts={processo.shipment.leadcomex_attempts}
+                    />
                   </TableCell>
                   <TableCell className="text-[#888] text-[0.8rem]">
                     {formatDate(processo.status_atual?.updated_at)}
