@@ -136,7 +136,6 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Status</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">SLA</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Analista</TableHead>
-              <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">LeadComex</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Atualização</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium text-right">Ações</TableHead>
             </TableRow>
@@ -198,7 +197,15 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                     })()}
                   </TableCell>
                   <TableCell>
-                    <StatusBadge status={processo.status_atual?.status_cct_oficial || "AGUARDANDO_MANIFESTACAO"} />
+                    <div className="flex flex-col gap-1">
+                      <StatusBadge status={processo.status_atual?.status_cct_oficial || "AGUARDANDO_MANIFESTACAO"} />
+                      {processo.shipment.leadcomex_status !== 'success' && (
+                        <LeadComexStatusBadge 
+                          status={processo.shipment.leadcomex_status || 'pending'} 
+                          attempts={processo.shipment.leadcomex_attempts}
+                        />
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <SLAInfoBadge 
@@ -214,12 +221,6 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                     <div className="flex items-center gap-1.5 max-w-[120px] truncate">
                       <span>{processo.shipment.analista?.nome || processo.shipment.nome_analista_legado || "-"}</span>
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <LeadComexStatusBadge 
-                      status={processo.shipment.leadcomex_status || 'pending'} 
-                      attempts={processo.shipment.leadcomex_attempts}
-                    />
                   </TableCell>
                   <TableCell className="text-[#888] text-[0.8rem]">
                     {formatDate(processo.status_atual?.updated_at)}
