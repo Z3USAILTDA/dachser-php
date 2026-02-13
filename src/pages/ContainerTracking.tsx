@@ -2138,16 +2138,23 @@ const ContainerTracking = () => {
                             </td>
                             <td className="px-4 py-3 text-[#aaaaaa] text-sm">{mbl.origem || "-"}</td>
                             <td className="px-4 py-3 text-[#aaaaaa] text-sm">
-                              {mbl.transshipment_port ? <TooltipProvider>
+                              {(mbl.transshipment_port || mbl.transshipment_vessel_from) ? <TooltipProvider>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(249,115,22,.15)] text-orange-400 border border-[rgba(249,115,22,.3)] cursor-help">
-                                        {mbl.transshipment_port.length > 15 ? mbl.transshipment_port.substring(0, 15) + "..." : mbl.transshipment_port}
+                                        {mbl.transshipment_port 
+                                          ? (mbl.transshipment_port.length > 15 ? mbl.transshipment_port.substring(0, 15) + "..." : mbl.transshipment_port)
+                                          : "Escala"}
                                       </span>
                                     </TooltipTrigger>
                                     <TooltipContent className="max-w-xs">
                                       <div className="space-y-1">
-                                        <p className="text-xs font-semibold">Porto de transbordo: {mbl.transshipment_port}</p>
+                                        {mbl.transshipment_port && (
+                                          <p className="text-xs font-semibold">Porto de transbordo: {mbl.transshipment_port}</p>
+                                        )}
+                                        {!mbl.transshipment_port && mbl.transshipment_vessel_from && (
+                                          <p className="text-xs font-semibold">Transbordo detectado (troca de navio)</p>
+                                        )}
                                         {mbl.transshipment_vessel_from && (
                                           <p className="text-xs text-muted-foreground">🚢 De: <span className="text-foreground font-medium">{mbl.transshipment_vessel_from}</span></p>
                                         )}
@@ -2156,9 +2163,6 @@ const ContainerTracking = () => {
                                         )}
                                         {mbl.transshipment_date && (
                                           <p className="text-xs text-muted-foreground">📅 Data: <span className="text-foreground font-medium">{new Date(mbl.transshipment_date).toLocaleDateString('pt-BR')}</span></p>
-                                        )}
-                                        {!mbl.transshipment_vessel_from && !mbl.transshipment_vessel_to && !mbl.transshipment_date && (
-                                          <p className="text-xs text-muted-foreground italic">Detalhes de navio não disponíveis</p>
                                         )}
                                       </div>
                                     </TooltipContent>
