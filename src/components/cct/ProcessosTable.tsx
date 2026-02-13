@@ -197,15 +197,14 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                     })()}
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-col gap-1">
+                    {processo.shipment.leadcomex_status === 'success' ? (
                       <StatusBadge status={processo.status_atual?.status_cct_oficial || "AGUARDANDO_MANIFESTACAO"} />
-                      {processo.shipment.leadcomex_status !== 'success' && (
-                        <LeadComexStatusBadge 
-                          status={processo.shipment.leadcomex_status || 'pending'} 
-                          attempts={processo.shipment.leadcomex_attempts}
-                        />
-                      )}
-                    </div>
+                    ) : (
+                      <LeadComexStatusBadge 
+                        status={processo.shipment.leadcomex_status || 'pending'} 
+                        attempts={processo.shipment.leadcomex_attempts}
+                      />
+                    )}
                   </TableCell>
                   <TableCell>
                     <SLAInfoBadge 
