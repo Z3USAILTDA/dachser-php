@@ -2435,6 +2435,24 @@ serve(async (req) => {
         vesselImoCache.clear();
         console.log(`[refresh_sea_tracking] IMO cache cleared for new batch`);
 
+        // ONE-TIME CLEANUP: Limpar falsos positivos onde transshipment_port == origem
+        try {
+          const cleanupResult = await client.execute(`
+            UPDATE dados_dachser.t_tracking_sea
+            SET transshipment_port = NULL
+            WHERE transshipment_port IS NOT NULL
+              AND UPPER(TRIM(SUBSTRING_INDEX(transshipment_port, ' ', 1))) = 
+                  UPPER(TRIM(SUBSTRING_INDEX(COALESCE(origem, ''), ' ', 1)))
+              AND UPPER(TRIM(SUBSTRING_INDEX(transshipment_port, ' ', 1))) != ''
+          `);
+          const cleanedRows = cleanupResult?.affectedRows || 0;
+          if (cleanedRows > 0) {
+            console.log(`[refresh_sea_tracking] CLEANUP: Cleared ${cleanedRows} false positive transshipment_port entries (matched origin)`);
+          }
+        } catch (cleanupErr: any) {
+          console.warn(`[refresh_sea_tracking] Cleanup query failed (non-critical): ${cleanupErr.message}`);
+        }
+
         // Prefixes de containers de leasing (não pertencem a armadores específicos)
         // Estes containers precisam usar o MBL ou shipping_line do banco para identificar o armador
         const LEASING_CONTAINER_PREFIXES = new Set([
@@ -2688,17 +2706,27 @@ serve(async (req) => {
             if (data.events && Array.isArray(data.events)) {
               for (const event of data.events) {
                 const eventCode = (event.event_code || event.event_type || event.code || '').toUpperCase();
-                // Eventos de transbordo típicos
-                if (eventCode.includes('TRANSSHIP') || eventCode.includes('TSP') || 
-                    eventCode.includes('TRANSIT') || eventCode.includes('T/S') ||
-                    eventCode === 'DISCHARGED' || eventCode === 'LOADED') {
+                const eventDesc = (event.description || event.event_description || '').toUpperCase();
+                const eventStatus = (event.container_status || '').toUpperCase();
+                const allText = eventCode + ' ' + eventDesc + ' ' + eventStatus;
+                
+                // Apenas eventos explícitos de transbordo: "Full Transshipment Discharged/Loaded" ou codes TRANSSHIP/TSP/T/S
+                const isTransshipmentEvent = allText.includes('FULL TRANSSHIPMENT') ||
+                    eventCode.includes('TRANSSHIP') || eventCode.includes('TSP') || 
+                    eventCode.includes('T/S');
+                
+                if (isTransshipmentEvent) {
                   const loc = event.location || event.port || event.terminal || null;
                   if (loc && loc.trim() !== '') {
-                    // Evitar adicionar origem/destino como transbordo
-                    const locUpper = loc.toUpperCase().trim();
-                    const origemUpper = (data.loading_port || data.shipped_from || '').toUpperCase().trim();
-                    const destinoUpper = (data.discharging_port || data.shipped_to || '').toUpperCase().trim();
-                    if (locUpper !== origemUpper && locUpper !== destinoUpper) {
+                    // Fuzzy matching: comparar primeiro token para evitar variações de formatação
+                    const locFirst = loc.toUpperCase().trim().split(/[\s,]+/)[0];
+                    const origemFirst = (data.loading_port || data.shipped_from || '').toUpperCase().trim().split(/[\s,]+/)[0];
+                    const destinoFirst = (data.discharging_port || data.shipped_to || '').toUpperCase().trim().split(/[\s,]+/)[0];
+                    const storedOrigemFirst = (row.origem || '').toUpperCase().trim().split(/[\s,]+/)[0];
+                    const storedDestinoFirst = (row.destino || '').toUpperCase().trim().split(/[\s,]+/)[0];
+                    
+                    if (locFirst && locFirst !== origemFirst && locFirst !== destinoFirst 
+                        && locFirst !== storedOrigemFirst && locFirst !== storedDestinoFirst) {
                       transshipmentSources.push(loc);
                     }
                   }
@@ -2717,7 +2745,7 @@ serve(async (req) => {
             } else {
               // Fallback: buscar por palavras-chave no container_status ou last_event
               const statusText = (data.container_status || lastEventDescription || '').toUpperCase();
-              const transshipmentKeywords = ['TRANSSHIP', 'T/S', 'TRANSIT'];
+              const transshipmentKeywords = ['FULL TRANSSHIPMENT', 'TRANSSHIP', 'T/S', 'TSP'];
               const hasTransshipmentText = transshipmentKeywords.some(kw => statusText.includes(kw));
               
               if (hasTransshipmentText) {
@@ -2760,7 +2788,7 @@ serve(async (req) => {
                 vessel_imo = COALESCE(?, vessel_imo),
                 last_event = ?,
                 shipping_line = COALESCE(?, shipping_line),
-                transshipment_port = COALESCE(?, transshipment_port),
+                transshipment_port = ?,
                 loading_port = ?,
                 last_check = NOW(),
                 last_error = NULL
