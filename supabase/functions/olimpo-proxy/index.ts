@@ -2706,6 +2706,9 @@ serve(async (req) => {
               }
             }
             
+            // Deduplicate transshipment sources
+            const uniqueTransshipments = [...new Set(transshipmentSources.map(s => s.trim()).filter(Boolean))];
+            
             // ===== FALLBACK: Detectar transbordo via texto do container_status =====
             // Se a API não retornou dados estruturados de transshipment, tentar detectar via texto
             let transshipmentPort = null;
