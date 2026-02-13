@@ -1745,8 +1745,17 @@ serve(async (req) => {
                         END
                         SEPARATOR ', '
                       ),
-                      -- Fallback: loading_port da tabela principal (onde o navio atual carregou = porto de transbordo)
-                      MAX(ts.loading_port)
+                      -- Fallback: loading_port apenas se diferente de origem/destino (primeiro token)
+                      CASE 
+                        WHEN MAX(ts.loading_port) IS NOT NULL 
+                          AND MAX(ts.loading_port) != ''
+                          AND UPPER(TRIM(SUBSTRING_INDEX(MAX(ts.loading_port), ',', 1))) != UPPER(TRIM(SUBSTRING_INDEX(MAX(ts.destino), ' ', 1)))
+                          AND UPPER(TRIM(SUBSTRING_INDEX(MAX(ts.loading_port), ',', 1))) != UPPER(TRIM(SUBSTRING_INDEX(MAX(ts.origem), ' ', 1)))
+                          AND UPPER(TRIM(SUBSTRING_INDEX(MAX(ts.loading_port), ' ', 1))) != UPPER(TRIM(SUBSTRING_INDEX(MAX(ts.destino), ' ', 1)))
+                          AND UPPER(TRIM(SUBSTRING_INDEX(MAX(ts.loading_port), ' ', 1))) != UPPER(TRIM(SUBSTRING_INDEX(MAX(ts.origem), ' ', 1)))
+                        THEN MAX(ts.loading_port)
+                        ELSE MAX(ts.transshipment_port)
+                      END
                     ) as transshipment_port,
                     -- Navio ANTES do transbordo (Discharged)
                     MAX(CASE 
@@ -2753,13 +2762,22 @@ serve(async (req) => {
                 // Tentar extrair nome do porto de outras fontes
                 let detectedPort = null;
                 
-                // Tentar encontrar porto intermediário via eventos
+                // Tentar encontrar porto intermediário via eventos (com exclusão de destino/origem)
+                const storedOrigemFirstFb = (row.origem || '').toUpperCase().trim().split(/[\s,]+/)[0];
+                const storedDestinoFirstFb = (row.destino || '').toUpperCase().trim().split(/[\s,]+/)[0];
                 if (data.events && Array.isArray(data.events)) {
                   for (const event of data.events) {
                     const eventDesc = (event.description || event.event_type || '').toUpperCase();
                     if (eventDesc.includes('TRANSSHIP') || eventDesc.includes('T/S')) {
-                      detectedPort = event.location || event.port || event.terminal || null;
-                      if (detectedPort) break;
+                      const candidatePort = event.location || event.port || event.terminal || null;
+                      if (candidatePort) {
+                        const candidateFirst = candidatePort.toUpperCase().trim().split(/[\s,]+/)[0];
+                        // Excluir se for o destino ou a origem
+                        if (candidateFirst && candidateFirst !== storedOrigemFirstFb && candidateFirst !== storedDestinoFirstFb) {
+                          detectedPort = candidatePort;
+                          break;
+                        }
+                      }
                     }
                   }
                 }
@@ -2788,8 +2806,8 @@ serve(async (req) => {
                 vessel_imo = COALESCE(?, vessel_imo),
                 last_event = ?,
                 shipping_line = COALESCE(?, shipping_line),
-                transshipment_port = ?,
-                loading_port = ?,
+                transshipment_port = COALESCE(?, transshipment_port),
+                loading_port = COALESCE(?, loading_port),
                 last_check = NOW(),
                 last_error = NULL
               WHERE id = ?
