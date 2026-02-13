@@ -1329,29 +1329,33 @@ const EsteiraIndex = () => {
         return false;
       }
 
-      // Filtro de data de criação - início e fim
+      // Filtro de data de emissão - início e fim
       if (filters.criadoEmInicio) {
+        const emissao = voucher.dataEmissaoDocumento;
+        if (!emissao) return false;
         const parts = filters.criadoEmInicio.split('-');
         if (parts.length === 3) {
           const year = parseInt(parts[0], 10);
           if (year >= 1900) {
             const inicio = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0, 0);
-            if (voucher.createdAt < inicio) return false;
+            if (emissao < inicio) return false;
             if (!filters.criadoEmFim) {
               const fimDoDia = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
-              if (voucher.createdAt > fimDoDia) return false;
+              if (emissao > fimDoDia) return false;
             }
           }
         }
       }
 
       if (filters.criadoEmFim) {
+        const emissao = voucher.dataEmissaoDocumento;
+        if (!emissao) return false;
         const parts = filters.criadoEmFim.split('-');
         if (parts.length === 3) {
           const year = parseInt(parts[0], 10);
           if (year >= 1900) {
             const fim = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
-            if (voucher.createdAt > fim) return false;
+            if (emissao > fim) return false;
           }
         }
       }
