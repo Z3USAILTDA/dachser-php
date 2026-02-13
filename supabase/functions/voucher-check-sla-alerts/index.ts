@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 
 const corsHeaders = {
@@ -7,26 +6,25 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+
 interface Voucher {
   id: string;
   numero_spo: string;
   etapa_atual: string;
   vencimento: string;
   updated_at: string;
-  responsavel_operacao_user_id: string | null;
-  responsavel_fiscal_user_id: string | null;
-  responsavel_financeiro_user_id: string | null;
-  criado_por_user_id: string;
+  fornecedor: string;
+  valor: number;
 }
 
-interface Profile {
-  id: string;
-  email: string;
-  name: string;
+interface SlaConfig {
+  etapa: string;
+  horas_limite: number;
+  ativo: number;
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -34,15 +32,6 @@ serve(async (req) => {
   let mariaClient: Client | null = null;
 
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
-    const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
     // Connect to MariaDB
     mariaClient = await new Client().connect({
       hostname: Deno.env.get('MARIADB_HOST'),
@@ -52,280 +41,209 @@ serve(async (req) => {
       db: 'dados_dachser',
     });
 
-    // Buscar vouchers ativos do MariaDB (não baixados)
+    // Fetch SLA configs
+    let slaConfigs: SlaConfig[] = [];
+    try {
+      slaConfigs = await mariaClient.query(`SELECT etapa, horas_limite, ativo FROM dados_dachser.t_sla_config WHERE ativo = 1`);
+    } catch (e) {
+      console.log('[voucher-check-sla-alerts] Could not fetch SLA configs, using defaults');
+    }
+
+    const getSlaHours = (etapa: string): number => {
+      const config = slaConfigs.find(c => c.etapa === etapa);
+      if (config) return config.horas_limite;
+      // Defaults
+      const defaults: Record<string, number> = { OPERACAO: 24, FISCAL: 48, SUPERVISOR: 24, FINANCEIRO: 24, AJUSTE_OPERACAO: 24, AJUSTE_FISCAL: 24 };
+      return defaults[etapa] || 24;
+    };
+
+    const now = new Date();
+
+    // Fetch active vouchers (not concluded, not robo)
     const vouchers = await mariaClient.query(
-      `SELECT 
-        id, numero_spo, etapa_atual, vencimento, updated_at,
-        responsavel_operacao_user_id, responsavel_fiscal_user_id,
-        responsavel_financeiro_user_id, criado_por_user_id
+      `SELECT id, numero_spo, etapa_atual, vencimento, updated_at, fornecedor, valor
        FROM t_vouchers
-       WHERE etapa_atual != 'ROBO'
+       WHERE etapa_atual NOT IN ('ROBO', 'CONCLUIDO', 'CANCELADO', 'A_PROCESSAR', 'RASCUNHO')
          AND (status_baixa IS NULL OR (status_baixa != 'BAIXA_MANUAL' AND status_baixa != 'BAIXA_REMESSA'))`
     ) as Voucher[];
+
+    // Fetch esteira users with roles for email mapping
+    const users = await mariaClient.query(
+      `SELECT id, username, email, esteira_role FROM ai_agente.t_users_dachser WHERE esteira_active = 1 AND email IS NOT NULL AND email != ''`
+    );
 
     await mariaClient.close();
     mariaClient = null;
 
-    console.log(`[voucher-check-sla-alerts] Verificando ${vouchers?.length || 0} vouchers ativos`);
+    console.log(`[voucher-check-sla-alerts] Checking ${vouchers?.length || 0} active vouchers against SLA`);
 
-    // Agrupar vouchers por responsável e tipo de alerta
-    const vouchersByResponsible: Record<string, {
-      operacaoParados: Voucher[];
-      fiscalParados: Voucher[];
-      financeiroVencendo: Voucher[];
-      financeiroVencidos: Voucher[];
-    }> = {};
+    // Group vouchers by SLA breach type
+    const breachedByEtapa: Record<string, Voucher[]> = {};
 
     for (const voucher of vouchers || []) {
       const updatedAt = new Date(voucher.updated_at);
       const hoursStuck = (now.getTime() - updatedAt.getTime()) / (1000 * 60 * 60);
-      const vencimento = new Date(voucher.vencimento);
+      const slaHours = getSlaHours(voucher.etapa_atual);
 
-      let responsibleId: string | null = null;
-      let alertType: string | null = null;
-
-      // Verificar SLA de Operação (24h parado)
-      if (voucher.etapa_atual === 'OPERACAO' && hoursStuck >= 24) {
-        responsibleId = voucher.responsavel_operacao_user_id || voucher.criado_por_user_id;
-        alertType = 'operacaoParados';
-      }
-
-      // Verificar SLA de Fiscal (48h parado)
-      if (voucher.etapa_atual === 'FISCAL' && hoursStuck >= 48) {
-        responsibleId = voucher.responsavel_fiscal_user_id;
-        alertType = 'fiscalParados';
-      }
-
-      // Verificar vencimento próximo (24h) - Financeiro
-      if (voucher.etapa_atual === 'FINANCEIRO' && vencimento >= now && vencimento <= tomorrow) {
-        responsibleId = voucher.responsavel_financeiro_user_id;
-        alertType = 'financeiroVencendo';
-      }
-
-      // Verificar vencidos - Financeiro
-      if (voucher.etapa_atual === 'FINANCEIRO' && vencimento < now) {
-        responsibleId = voucher.responsavel_financeiro_user_id;
-        alertType = 'financeiroVencidos';
-      }
-
-      if (responsibleId && alertType) {
-        if (!vouchersByResponsible[responsibleId]) {
-          vouchersByResponsible[responsibleId] = {
-            operacaoParados: [],
-            fiscalParados: [],
-            financeiroVencendo: [],
-            financeiroVencidos: [],
-          };
-        }
-        vouchersByResponsible[responsibleId][alertType as keyof typeof vouchersByResponsible[string]].push(voucher);
+      if (hoursStuck >= slaHours) {
+        const etapa = voucher.etapa_atual;
+        if (!breachedByEtapa[etapa]) breachedByEtapa[etapa] = [];
+        breachedByEtapa[etapa].push(voucher);
       }
     }
 
-    // Buscar emails dos responsáveis e enviar alertas
-    const userIds = Object.keys(vouchersByResponsible);
+    const totalBreached = Object.values(breachedByEtapa).reduce((sum, arr) => sum + arr.length, 0);
     
-    if (userIds.length > 0) {
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, email, name')
-        .in('id', userIds);
+    if (totalBreached === 0) {
+      console.log('[voucher-check-sla-alerts] No SLA breaches found');
+      return new Response(
+        JSON.stringify({ success: true, vouchersChecked: vouchers?.length || 0, breached: 0 }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-      if (profilesError) throw profilesError;
+    // Map etapas to responsible roles
+    const etapaToRole: Record<string, string> = {
+      OPERACAO: 'OPERACAO',
+      AJUSTE_OPERACAO: 'OPERACAO',
+      FISCAL: 'FISCAL',
+      AJUSTE_FISCAL: 'FISCAL',
+      SUPERVISOR: 'SUPERVISOR',
+      FINANCEIRO: 'FINANCEIRO',
+    };
 
-      for (const profile of profiles || []) {
-        const userVouchers = vouchersByResponsible[profile.id];
+    // Group by role and collect recipient emails
+    const emailsByRole: Record<string, { emails: string[]; vouchers: Record<string, Voucher[]> }> = {};
 
-        // Enviar alerta de Operação parada
-        if (userVouchers.operacaoParados.length > 0) {
-          await sendAlert(supabase, {
-            email: profile.email || '',
-            name: profile.name || '',
-            type: 'operacao_parado',
-            vouchers: userVouchers.operacaoParados,
-          });
-        }
+    for (const [etapa, voucherList] of Object.entries(breachedByEtapa)) {
+      const role = etapaToRole[etapa] || etapa;
+      if (!emailsByRole[role]) {
+        emailsByRole[role] = { emails: [], vouchers: {} };
+      }
+      emailsByRole[role].vouchers[etapa] = voucherList;
 
-        // Enviar alerta de Fiscal parado
-        if (userVouchers.fiscalParados.length > 0) {
-          await sendAlert(supabase, {
-            email: profile.email || '',
-            name: profile.name || '',
-            type: 'fiscal_parado',
-            vouchers: userVouchers.fiscalParados,
-          });
-        }
+      // Find users with matching role
+      const roleUsers = users.filter((u: any) => {
+        const userRole = (u.esteira_role || '').toUpperCase();
+        return userRole === role || userRole === `GESTOR_${role}` || userRole === 'ADMIN';
+      });
 
-        // Enviar alerta de vencimento próximo
-        if (userVouchers.financeiroVencendo.length > 0) {
-          await sendAlert(supabase, {
-            email: profile.email || '',
-            name: profile.name || '',
-            type: 'vencimento_proximo',
-            vouchers: userVouchers.financeiroVencendo,
-          });
-        }
-
-        // Enviar alerta de vencidos
-        if (userVouchers.financeiroVencidos.length > 0) {
-          await sendAlert(supabase, {
-            email: profile.email || '',
-            name: profile.name || '',
-            type: 'vencido',
-            vouchers: userVouchers.financeiroVencidos,
-          });
+      for (const u of roleUsers) {
+        if (u.email && !emailsByRole[role].emails.includes(u.email)) {
+          emailsByRole[role].emails.push(u.email);
         }
       }
     }
 
-    console.log(`[voucher-check-sla-alerts] Alertas verificados e enviados para ${userIds.length} usuários`);
+    // Send one consolidated email per role
+    let emailsSent = 0;
+    const appUrl = 'https://dachser.z3us.app';
+
+    for (const [role, data] of Object.entries(emailsByRole)) {
+      if (data.emails.length === 0) continue;
+
+      // Build sections HTML
+      let sectionsHtml = '';
+      for (const [etapa, voucherList] of Object.entries(data.vouchers)) {
+        const slaHours = getSlaHours(etapa);
+        sectionsHtml += `
+          <div style="margin-bottom: 20px;">
+            <h3 style="color: #dc2626; margin-bottom: 10px;">
+              ${etapa.replace(/_/g, ' ')} — SLA ${slaHours}h excedido (${voucherList.length} voucher${voucherList.length > 1 ? 's' : ''})
+            </h3>
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+              <thead>
+                <tr style="background-color: #f3f4f6;">
+                  <th style="padding: 8px; text-align: left; border: 1px solid #e5e7eb;">Nº SPO</th>
+                  <th style="padding: 8px; text-align: left; border: 1px solid #e5e7eb;">Fornecedor</th>
+                  <th style="padding: 8px; text-align: right; border: 1px solid #e5e7eb;">Valor</th>
+                  <th style="padding: 8px; text-align: center; border: 1px solid #e5e7eb;">Tempo Parado</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${voucherList.map(v => {
+                  const hours = Math.round((now.getTime() - new Date(v.updated_at).getTime()) / (1000 * 60 * 60));
+                  const dias = Math.floor(hours / 24);
+                  const horas = hours % 24;
+                  const tempoStr = dias > 0 ? `${dias}d ${horas}h` : `${horas}h`;
+                  return `
+                    <tr>
+                      <td style="padding: 8px; border: 1px solid #e5e7eb;">
+                        <a href="${appUrl}/fin/esteira/voucher/${v.id}" style="color: #0066cc; text-decoration: none;">${v.numero_spo}</a>
+                      </td>
+                      <td style="padding: 8px; border: 1px solid #e5e7eb;">${v.fornecedor || '-'}</td>
+                      <td style="padding: 8px; text-align: right; border: 1px solid #e5e7eb;">R$ ${(v.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                      <td style="padding: 8px; text-align: center; border: 1px solid #e5e7eb; color: #dc2626; font-weight: 600;">${tempoStr}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      const totalForRole = Object.values(data.vouchers).reduce((s, arr) => s + arr.length, 0);
+
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto;">
+          <div style="background: linear-gradient(135deg, #ffc800, #ffe680); padding: 20px; border-radius: 8px 8px 0 0;">
+            <h1 style="color: #1a1a1a; margin: 0; font-size: 20px;">⚠️ Relatório Diário de SLA — Esteira de Vouchers</h1>
+            <p style="color: #333; margin: 8px 0 0; font-size: 14px;">${totalForRole} voucher(s) com SLA excedido na sua responsabilidade</p>
+          </div>
+          <div style="padding: 20px; background: #ffffff; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+            ${sectionsHtml}
+            <p style="color: #666; font-size: 13px; margin-top: 20px;">
+              Acesse a <a href="${appUrl}/fin/esteira" style="color: #0066cc;">Esteira de Vouchers</a> para tomar as ações necessárias.
+            </p>
+          </div>
+          <p style="color: #999; font-size: 11px; margin-top: 15px; text-align: center;">
+            E-mail automático • Sistema DACHSER Z3US Workflow • ${new Date().toLocaleDateString('pt-BR')}
+          </p>
+        </div>
+      `;
+
+      // Send via Resend with override to larissa@z3us.ai for testing
+      const overrideEmail = 'larissa@z3us.ai';
+      
+      try {
+        if (RESEND_API_KEY) {
+          const res = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from: 'DACHSER Workflow <onboarding@resend.dev>',
+              to: [overrideEmail],
+              subject: `⚠️ Relatório SLA Diário — ${totalForRole} voucher(s) com SLA excedido (${role})`,
+              html,
+            }),
+          });
+          
+          if (res.ok) {
+            emailsSent++;
+            console.log(`[voucher-check-sla-alerts] Consolidated email sent for role ${role} to ${overrideEmail} (original: ${data.emails.join(', ')})`);
+          } else {
+            const err = await res.text();
+            console.error(`[voucher-check-sla-alerts] Failed to send email for role ${role}: ${err}`);
+          }
+        }
+      } catch (emailErr) {
+        console.error(`[voucher-check-sla-alerts] Error sending email for role ${role}:`, emailErr);
+      }
+    }
+
+    console.log(`[voucher-check-sla-alerts] Done: ${totalBreached} breached vouchers, ${emailsSent} consolidated emails sent`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        vouchersChecked: vouchers?.length || 0,
-        usersAlerted: userIds.length 
-      }),
+      JSON.stringify({ success: true, vouchersChecked: vouchers?.length || 0, breached: totalBreached, emailsSent }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-
   } catch (error: any) {
-    console.error('[voucher-check-sla-alerts] Erro ao verificar SLA:', error);
+    console.error('[voucher-check-sla-alerts] Error:', error);
     if (mariaClient) await mariaClient.close();
     return new Response(
       JSON.stringify({ error: error.message }),
-      { 
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
-
-async function sendAlert(
-  supabase: any,
-  params: {
-    email: string;
-    name: string;
-    type: string;
-    vouchers: Voucher[];
-  }
-) {
-  const { email, name, type, vouchers } = params;
-
-  const appUrl = Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app') || '';
-  
-  const buildVoucherLinks = (vouchers: Voucher[]) => {
-    return vouchers.map(v => 
-      `<div style="margin: 8px 0;">
-        <a href="${appUrl}/voucher/${v.id}" style="color: #0066cc; text-decoration: none;">
-          ${v.numero_spo}
-        </a>
-      </div>`
-    ).join('');
-  };
-
-  const templates = {
-    operacao_parado: {
-      subject: '🚨 Vouchers parados na etapa Voucher há mais de 24h',
-      body: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #dc2626;">🚨 Vouchers parados na etapa Voucher</h2>
-          <p>Olá ${name},</p>
-          <p>Os seguintes vouchers estão parados na <strong>etapa Voucher há mais de 24 horas</strong>:</p>
-          <div style="background-color: #fee; padding: 15px; border-radius: 8px; margin: 20px 0;">
-            ${buildVoucherLinks(vouchers)}
-          </div>
-          <p style="color: #666;">Por favor, verifique e tome as ações necessárias clicando nos links acima.</p>
-          <p style="color: #999; font-size: 12px; margin-top: 30px;">Sistema Z3US Workflow</p>
-        </div>
-      `,
-    },
-    fiscal_parado: {
-      subject: '🚨 Vouchers parados no Fiscal há mais de 48h',
-      body: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #dc2626;">🚨 Vouchers parados no Fiscal</h2>
-          <p>Olá ${name},</p>
-          <p>Os seguintes vouchers estão parados no <strong>Fiscal há mais de 48 horas</strong>:</p>
-          <div style="background-color: #fee; padding: 15px; border-radius: 8px; margin: 20px 0;">
-            ${buildVoucherLinks(vouchers)}
-          </div>
-          <p style="color: #666;">Por favor, verifique e tome as ações necessárias clicando nos links acima.</p>
-          <p style="color: #999; font-size: 12px; margin-top: 30px;">Sistema Z3US Workflow</p>
-        </div>
-      `,
-    },
-    vencimento_proximo: {
-      subject: '⚠️ Vouchers vencendo nas próximas 24h',
-      body: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #f59e0b;">⚠️ Vouchers vencendo em breve</h2>
-          <p>Olá ${name},</p>
-          <p><strong>Atenção!</strong> Os seguintes vouchers vencem nas <strong>próximas 24 horas</strong>:</p>
-          <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;">
-            ${vouchers.map(v => 
-              `<div style="margin: 8px 0;">
-                <a href="${appUrl}/voucher/${v.id}" style="color: #0066cc; text-decoration: none;">
-                  ${v.numero_spo}
-                </a>
-                <span style="color: #666; font-size: 14px;"> - Vencimento: ${new Date(v.vencimento).toLocaleDateString('pt-BR')}</span>
-              </div>`
-            ).join('')}
-          </div>
-          <p style="color: #666;">Por favor, priorize o processamento clicando nos links acima.</p>
-          <p style="color: #999; font-size: 12px; margin-top: 30px;">Sistema Z3US Workflow</p>
-        </div>
-      `,
-    },
-    vencido: {
-      subject: '🔴 Vouchers VENCIDOS - Ação Urgente Necessária',
-      body: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #dc2626;">🔴 Vouchers VENCIDOS</h2>
-          <p>Olá ${name},</p>
-          <p><strong>ALERTA CRÍTICO:</strong> Os seguintes vouchers já estão <strong>VENCIDOS</strong>:</p>
-          <div style="background-color: #fee; padding: 15px; border-radius: 8px; border-left: 4px solid #dc2626; margin: 20px 0;">
-            ${vouchers.map(v => 
-              `<div style="margin: 8px 0;">
-                <a href="${appUrl}/voucher/${v.id}" style="color: #dc2626; text-decoration: none; font-weight: 600;">
-                  ${v.numero_spo}
-                </a>
-                <span style="color: #666; font-size: 14px;"> - Vencido em: ${new Date(v.vencimento).toLocaleDateString('pt-BR')}</span>
-              </div>`
-            ).join('')}
-          </div>
-          <p style="color: #dc2626; font-weight: 600;">Por favor, tome ação IMEDIATA clicando nos links acima.</p>
-          <p style="color: #999; font-size: 12px; margin-top: 30px;">Sistema Z3US Workflow</p>
-        </div>
-      `,
-    },
-  };
-
-  const template = templates[type as keyof typeof templates];
-
-  if (!template) {
-    console.error(`[voucher-check-sla-alerts] Template desconhecido: ${type}`);
-    return;
-  }
-
-  try {
-    const { error } = await supabase.functions.invoke('send-notification-email', {
-      body: {
-        to: email,
-        subject: template.subject,
-        body: template.body,
-        fromStage: 'SISTEMA',
-        toStage: 'ALERTA_SLA',
-        voucherNumber: `${vouchers.length} voucher(s)`,
-      },
-    });
-
-    if (error) {
-      console.error(`[voucher-check-sla-alerts] Erro ao enviar alerta para ${email}:`, error);
-    } else {
-      console.log(`[voucher-check-sla-alerts] Alerta ${type} enviado para ${email}`);
-    }
-  } catch (error) {
-    console.error(`[voucher-check-sla-alerts] Erro ao invocar função de email:`, error);
-  }
-}

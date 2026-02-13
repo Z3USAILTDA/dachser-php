@@ -5210,8 +5210,8 @@ serve(async (req) => {
         // CRITICAL: Exclude ADM modal vouchers via JOIN with t_dados_financeiro_voucher
         whereConditions.push('(dfv.modal IS NULL OR dfv.modal <> "ADM")');
         
-        // Exclude ALL CONCLUIDO vouchers - they go to baixas
-        whereConditions.push('v.etapa_atual != "CONCLUIDO"');
+        // Include CONCLUIDO vouchers updated in the last 24 hours
+        whereConditions.push('(v.etapa_atual != "CONCLUIDO" OR (v.etapa_atual = "CONCLUIDO" AND v.updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)))');
         
         // Exclude vouchers already paid/cancelled/negotiated in tbaixas (StatusLan 1=Finalizado, 2=Cancelado, 3=Negociado)
         whereConditions.push(`NOT EXISTS (
@@ -5233,7 +5233,7 @@ serve(async (req) => {
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
         
         const vouchers = await client.query(`
-           SELECT v.*, dfv.id_rm as dfv_id_rm,
+           SELECT v.*, dfv.id_rm as dfv_id_rm, dfv.created_by as dfv_created_by,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
              WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
              AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
@@ -6484,7 +6484,8 @@ serve(async (req) => {
           fornecedor: fornecedorRm,
           cnpj_fornecedor: cnpjFornecedorRm,
           chave_pix: chavePix,
-          pix_tipo_chave: pixTipoChave
+          pix_tipo_chave: pixTipoChave,
+          numero_spo: numeroSpoRm
         } = body as { 
           id_rm?: string; 
           voucher_boleto?: string; 
@@ -6493,6 +6494,7 @@ serve(async (req) => {
           cnpj_fornecedor?: string;
           chave_pix?: string;
           pix_tipo_chave?: string;
+          numero_spo?: string;
         };
         
         if (!idRm) {
@@ -6542,11 +6544,12 @@ serve(async (req) => {
           console.log('Table does not exist yet, will create');
         }
         
-        // Create table with proper structure (includes chave_pix and pix_tipo_chave columns)
+        // Create table with proper structure (includes chave_pix, pix_tipo_chave, and nd columns)
         await client.execute(`
           CREATE TABLE IF NOT EXISTS dados_dachser.t_dados_rm (
             id INT AUTO_INCREMENT PRIMARY KEY,
             id_rm VARCHAR(50) NOT NULL,
+            nd VARCHAR(60) DEFAULT NULL,
             nf_disputa TINYINT(1) DEFAULT 0,
             voucher_boleto VARCHAR(60) DEFAULT NULL,
             chave_pix VARCHAR(255) DEFAULT NULL,
@@ -6564,6 +6567,11 @@ serve(async (req) => {
 
         // Add columns if they don't exist (for existing tables)
         try {
+          await client.execute(`ALTER TABLE dados_dachser.t_dados_rm ADD COLUMN nd VARCHAR(60) DEFAULT NULL AFTER id_rm`);
+        } catch (alterErr) {
+          // Column might already exist
+        }
+        try {
           await client.execute(`ALTER TABLE dados_dachser.t_dados_rm ADD COLUMN chave_pix VARCHAR(255) DEFAULT NULL AFTER voucher_boleto`);
         } catch (alterErr) {
           // Column might already exist
@@ -6576,9 +6584,9 @@ serve(async (req) => {
 
         await client.execute(`
           INSERT INTO dados_dachser.t_dados_rm 
-          (id_rm, nf_disputa, voucher_boleto, chave_pix, pix_tipo_chave, forma_pag, fornecedor, regras_forma_pag)
-          VALUES (?, 0, ?, ?, ?, ?, ?, ?)
-        `, [idRm, voucherBoleto || null, chavePix || null, pixTipoChave || null, formaPag || null, fornecedorRm || null, regrasFormaPagFinal]);
+          (id_rm, nd, nf_disputa, voucher_boleto, chave_pix, pix_tipo_chave, forma_pag, fornecedor, regras_forma_pag)
+          VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)
+        `, [idRm, numeroSpoRm || null, voucherBoleto || null, chavePix || null, pixTipoChave || null, formaPag || null, fornecedorRm || null, regrasFormaPagFinal]);
 
         console.log('Inserted into t_dados_rm successfully');
         result = { success: true };
@@ -6635,10 +6643,11 @@ serve(async (req) => {
             // Insert into t_dados_rm - usar id_rm de t_dados_financeiro_voucher se disponível
             await client.execute(`
               INSERT INTO dados_dachser.t_dados_rm 
-              (id_rm, nf_disputa, voucher_boleto, chave_pix, pix_tipo_chave, forma_pag, fornecedor, regras_forma_pag)
-              VALUES (?, 0, ?, ?, ?, ?, ?, ?)
+              (id_rm, nd, nf_disputa, voucher_boleto, chave_pix, pix_tipo_chave, forma_pag, fornecedor, regras_forma_pag)
+              VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)
             `, [
-              v.id_rm || v.numero_spo, // Usar id_rm se disponível, senão numero_spo
+              v.id_rm || v.numero_spo,
+              v.numero_spo || null,
               v.linha_digitavel || v.codigo_barras || null, 
               v.chave_pix || null, 
               null, 
@@ -7098,19 +7107,20 @@ serve(async (req) => {
             a.file_url,
             a.file_size,
             a.created_at,
+            a.tipo as tipo_anexo,
             v.forma_pagamento,
-            v.valor
+            v.valor,
+            v.fornecedor,
+            v.tipo_documento
           FROM dados_dachser.t_voucher_anexos a
           LEFT JOIN dados_dachser.t_vouchers v ON a.voucher_id = v.id
-          WHERE a.tipo = 'COMPROVANTE'
           ORDER BY a.created_at DESC
           LIMIT ? OFFSET ?
         `, [perPage, offset]);
         
         const countResult = await client.execute(`
           SELECT COUNT(*) as total 
-          FROM dados_dachser.t_voucher_anexos 
-          WHERE tipo = 'COMPROVANTE'
+          FROM dados_dachser.t_voucher_anexos
         `);
         
         const total = countResult.rows?.[0]?.total || 0;
@@ -10886,8 +10896,8 @@ serve(async (req) => {
         // Exclude child vouchers (consolidated into a master)
         whereConditions.push('(voucher_master_id IS NULL OR voucher_master_id = "")');
         
-        // Exclude ALL CONCLUIDO vouchers - they go to baixas
-        whereConditions.push('etapa_atual != "CONCLUIDO"');
+        // Include CONCLUIDO vouchers updated in the last 24 hours
+        whereConditions.push('(etapa_atual != "CONCLUIDO" OR (etapa_atual = "CONCLUIDO" AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)))');
         
         if (search) {
           whereConditions.push('(numero_spo LIKE ? OR fornecedor LIKE ? OR cnpj_fornecedor LIKE ?)');
@@ -10902,7 +10912,7 @@ serve(async (req) => {
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
         
         const vouchers = await client.query(`
-           SELECT v.*, dfv.id_rm as dfv_id_rm,
+           SELECT v.*, dfv.id_rm as dfv_id_rm, dfv.created_by as dfv_created_by,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
              WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
              AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
