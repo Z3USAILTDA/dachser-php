@@ -1748,13 +1748,6 @@ const EsteiraIndex = () => {
         <div className="flex items-center gap-2.5 text-[0.85rem]">
           <FinDbStatsPanel stats={finDbStats} isLoading={isLoadingDbStats} onRefresh={fetchFinDbStats} />
 
-          <button 
-            onClick={() => navigate("/fin/analise-documental")} 
-            className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition text-[0.8rem]"
-          >
-            <FileSearch className="h-4 w-4" />
-            Análise Documental
-          </button>
 
           <button onClick={() => loadVouchers()} disabled={isRefetching} className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50 text-[0.8rem]">
             <RefreshCw className={`h-4 w-4 ${isRefetching ? "animate-spin" : ""}`} />

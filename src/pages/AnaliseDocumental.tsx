@@ -211,7 +211,7 @@ const AnaliseDocumental = () => {
       title="DACHSER" 
       subtitle="Análise Documental" 
       pageIcon={FileSearch} 
-      backTo="/fin/esteira"
+      backTo="/dashboard"
       rightContent={
         <button
           onClick={() => navigate("/fin/manual")}
