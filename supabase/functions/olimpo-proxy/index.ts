@@ -3268,6 +3268,7 @@ serve(async (req) => {
         'ONEY': 'ONE', 'ONEU': 'ONE', 'ONEYHAMA': 'ONE', 'ONEYHAM': 'ONE',
         'HDMU': 'HMM', 'HMMU': 'HMM',
         'EISU': 'EVERGREEN', 'EITU': 'EVERGREEN', 'EGSU': 'EVERGREEN', 'EGHU': 'EVERGREEN', 'EBKG': 'EVERGREEN',
+        'EGLV': 'EVERGREEN', // Evergreen booking prefix
         'YMLU': 'YANG_MING', 'YMMU': 'YANG_MING',
         'ZIMU': 'ZIM', 'ZCSU': 'ZIM',
         'GLNL': 'HAPAG_LLOYD', 'GLSL': 'CMA_CGM',
@@ -3360,11 +3361,19 @@ serve(async (req) => {
       const startTime = Date.now();
 
       try {
-        // Fetch MBLs with container = 'PENDENTE'
+        // Fetch MBLs with container = 'PENDENTE' or NAO_ENCONTRADO older than 24h (auto-retry)
+        const forceRetry = url.searchParams.get('force_retry') === 'true';
         const pendingMbls = await client.query(`
           SELECT DISTINCT mbl_id, consignee, email_analista, email_cliente, tipo_processo
           FROM dados_dachser.t_tracking_sea
-          WHERE active = 1 AND (container = 'PENDENTE' OR container IS NULL OR container = '')
+          WHERE active = 1 AND (
+            container = 'PENDENTE' OR container IS NULL OR container = ''
+            OR (container = 'NAO_ENCONTRADO' AND (
+              updated_at < DATE_SUB(NOW(), INTERVAL 24 HOUR) 
+              OR updated_at IS NULL
+              OR ${forceRetry ? '1=1' : '1=0'}
+            ))
+          )
         `);
 
         console.log(`[enrich_sea_containers] Found ${pendingMbls.length} MBLs with pending containers (batch_size=${batchSize}, max_time=${maxTimeMs}ms)`);
@@ -3468,11 +3477,11 @@ serve(async (req) => {
 
             if (containers.length === 0) {
               console.log(`[enrich_sea_containers] No containers found for MBL ${mblId} after trying ${mblVariations.length} variations`);
-              // Marcar como NAO_ENCONTRADO para não reprocessar
+              // Marcar como NAO_ENCONTRADO para não reprocessar (atualiza updated_at para controle de retry)
               await client.execute(`
                 UPDATE dados_dachser.t_tracking_sea 
-                SET container = 'NAO_ENCONTRADO'
-                WHERE mbl_id = ? AND (container = 'PENDENTE' OR container IS NULL OR container = '')
+                SET container = 'NAO_ENCONTRADO', updated_at = NOW()
+                WHERE mbl_id = ? AND (container = 'PENDENTE' OR container IS NULL OR container = '' OR container = 'NAO_ENCONTRADO')
               `, [mblId]);
               details.push({ mbl: mblId, status: 'no_containers' });
               noContainers++;
@@ -3481,10 +3490,10 @@ serve(async (req) => {
 
             console.log(`[enrich_sea_containers] Found ${containers.length} containers for MBL ${mblId}: ${containers.join(', ')}`);
 
-            // Delete the PENDENTE record for this MBL
+            // Delete the PENDENTE/NAO_ENCONTRADO record for this MBL
             await client.execute(`
               DELETE FROM dados_dachser.t_tracking_sea 
-              WHERE mbl_id = ? AND (container = 'PENDENTE' OR container IS NULL OR container = '')
+              WHERE mbl_id = ? AND (container = 'PENDENTE' OR container IS NULL OR container = '' OR container = 'NAO_ENCONTRADO')
             `, [mblId]);
 
             // Insert new records for each container found
@@ -3551,6 +3560,64 @@ serve(async (req) => {
       } catch (e: any) {
         await client.close();
         console.error('[enrich_sea_containers] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING: Reset NAO_ENCONTRADO containers for retry =====
+    if (action === 'reset_nao_encontrado') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const mblId = url.searchParams.get('mbl_id'); // Optional: specific MBL
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        let result;
+        if (mblId) {
+          result = await client.execute(`
+            UPDATE dados_dachser.t_tracking_sea 
+            SET container = 'PENDENTE', updated_at = NOW()
+            WHERE mbl_id = ? AND container = 'NAO_ENCONTRADO' AND active = 1
+          `, [mblId]);
+          console.log(`[reset_nao_encontrado] Reset MBL ${mblId}: ${result.affectedRows} rows`);
+        } else {
+          result = await client.execute(`
+            UPDATE dados_dachser.t_tracking_sea 
+            SET container = 'PENDENTE', updated_at = NOW()
+            WHERE container = 'NAO_ENCONTRADO' AND active = 1
+          `);
+          console.log(`[reset_nao_encontrado] Reset ALL: ${result.affectedRows} rows`);
+        }
+        await client.close();
+        return new Response(JSON.stringify({ 
+          success: true, 
+          reset: result.affectedRows || 0,
+          mbl_id: mblId || 'ALL',
+          message: `${result.affectedRows || 0} containers resetados para PENDENTE`
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
         return new Response(JSON.stringify({ error: e.message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }

@@ -352,6 +352,7 @@ const ContainerTracking = () => {
   const [isRunningRetrack, setIsRunningRetrack] = useState(false);
   const [isRunningImoRefresh, setIsRunningImoRefresh] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [isRunningRetryNaoEncontrado, setIsRunningRetryNaoEncontrado] = useState(false);
 
   // Expansion state
   const [expandedMbl, setExpandedMbl] = useState<string | null>(null);
@@ -1379,6 +1380,32 @@ const ContainerTracking = () => {
       });
     } finally {
       setIsRunningRetrack(false);
+    }
+  };
+
+  // Reset NAO_ENCONTRADO containers to PENDENTE for retry
+  const handleRetryNaoEncontrado = async (mblId?: string) => {
+    if (!isAdmin) return;
+    setIsRunningRetryNaoEncontrado(true);
+    try {
+      const params = mblId 
+        ? `action=reset_nao_encontrado&mbl_id=${encodeURIComponent(mblId)}`
+        : `action=reset_nao_encontrado`;
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?${params}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast({ title: "Retry iniciado", description: `${data.reset} containers resetados para PENDENTE. Execute o Enrich para reprocessar.` });
+        fetchMblData();
+      } else {
+        toast({ title: "Erro", description: data.error || "Erro ao resetar containers", variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setIsRunningRetryNaoEncontrado(false);
     }
   };
 
@@ -2570,6 +2597,23 @@ const ContainerTracking = () => {
                     </TooltipTrigger>
                     <TooltipContent>
                       <p className="text-xs">Corrigir IMOs buscando pelo nome do navio</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button onClick={() => {
+                      handleRetryNaoEncontrado();
+                      setShowAdminModal(false);
+                    }} disabled={isRunningRetryNaoEncontrado || !!autoSyncStatus} className="h-9 px-4 rounded-lg bg-[rgba(234,179,8,.2)] text-yellow-400 text-sm font-medium flex items-center gap-2 border border-yellow-500/30 hover:bg-[rgba(234,179,8,.3)] transition disabled:opacity-50">
+                        {isRunningRetryNaoEncontrado ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                        Retry NAO_ENCONTRADO
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Resetar containers NAO_ENCONTRADO para PENDENTE e reprocessar</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
