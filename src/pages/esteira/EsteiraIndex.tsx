@@ -1278,24 +1278,28 @@ const EsteiraIndex = () => {
 
       // Filtro de vencimento - data inicial e final
       if (filters.vencimentoInicio) {
-        const inicio = new Date(filters.vencimentoInicio);
-        if (inicio.getFullYear() >= 1900) {
-          inicio.setHours(0, 0, 0, 0);
-          if (voucher.vencimento < inicio) return false;
-          // Se apenas data início (sem fim), filtrar exatamente esse dia
-          if (!filters.vencimentoFim) {
-            const fimDoDia = new Date(filters.vencimentoInicio);
-            fimDoDia.setHours(23, 59, 59, 999);
-            if (voucher.vencimento > fimDoDia) return false;
+        const parts = filters.vencimentoInicio.split('-');
+        if (parts.length === 3) {
+          const year = parseInt(parts[0], 10);
+          if (year >= 1900) {
+            const inicio = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0, 0);
+            if (voucher.vencimento < inicio) return false;
+            if (!filters.vencimentoFim) {
+              const fimDoDia = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
+              if (voucher.vencimento > fimDoDia) return false;
+            }
           }
         }
       }
 
       if (filters.vencimentoFim) {
-        const fim = new Date(filters.vencimentoFim);
-        if (fim.getFullYear() >= 1900) {
-          fim.setHours(23, 59, 59, 999);
-          if (voucher.vencimento > fim) return false;
+        const parts = filters.vencimentoFim.split('-');
+        if (parts.length === 3) {
+          const year = parseInt(parts[0], 10);
+          if (year >= 1900) {
+            const fim = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
+            if (voucher.vencimento > fim) return false;
+          }
         }
       }
 
@@ -1327,24 +1331,28 @@ const EsteiraIndex = () => {
 
       // Filtro de data de criação - início e fim
       if (filters.criadoEmInicio) {
-        const inicio = new Date(filters.criadoEmInicio);
-        if (inicio.getFullYear() >= 1900) {
-          inicio.setHours(0, 0, 0, 0);
-          if (voucher.createdAt < inicio) return false;
-          // Se apenas data início (sem fim), filtrar exatamente esse dia
-          if (!filters.criadoEmFim) {
-            const fimDoDia = new Date(filters.criadoEmInicio);
-            fimDoDia.setHours(23, 59, 59, 999);
-            if (voucher.createdAt > fimDoDia) return false;
+        const parts = filters.criadoEmInicio.split('-');
+        if (parts.length === 3) {
+          const year = parseInt(parts[0], 10);
+          if (year >= 1900) {
+            const inicio = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0, 0);
+            if (voucher.createdAt < inicio) return false;
+            if (!filters.criadoEmFim) {
+              const fimDoDia = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
+              if (voucher.createdAt > fimDoDia) return false;
+            }
           }
         }
       }
 
       if (filters.criadoEmFim) {
-        const fim = new Date(filters.criadoEmFim);
-        if (fim.getFullYear() >= 1900) {
-          fim.setHours(23, 59, 59, 999);
-          if (voucher.createdAt > fim) return false;
+        const parts = filters.criadoEmFim.split('-');
+        if (parts.length === 3) {
+          const year = parseInt(parts[0], 10);
+          if (year >= 1900) {
+            const fim = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
+            if (voucher.createdAt > fim) return false;
+          }
         }
       }
 
