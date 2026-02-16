@@ -352,7 +352,7 @@ const CadastroNova = () => {
         </div>
 
         {/* Manual Fields: Consignee, Clerk, ETD, ETA */}
-        <div className="rounded-xl border border-border/50 bg-card/50 p-4 space-y-4">
+        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
           <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
             <User className="h-4 w-4" /> Campos Manuais
           </h3>
@@ -460,7 +460,7 @@ const CadastroNova = () => {
         </div>
 
         {/* Extracted Fields */}
-        <div className="rounded-xl border border-border/50 bg-card/50 p-4 space-y-4">
+        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
           <h3 className="text-sm font-semibold text-primary">AWB & Shipper</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Field label="MAWB Number *" field="awb_number" />
@@ -472,7 +472,7 @@ const CadastroNova = () => {
           </div>
         </div>
 
-        <div className="rounded-xl border border-border/50 bg-card/50 p-4 space-y-4">
+        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
           <h3 className="text-sm font-semibold text-primary">Agent & Routing</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Field label="Issuing Agent" field="issuing_agent" />
@@ -485,7 +485,7 @@ const CadastroNova = () => {
           </div>
         </div>
 
-        <div className="rounded-xl border border-border/50 bg-card/50 p-4 space-y-4">
+        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
           <h3 className="text-sm font-semibold text-primary">Charges & Values</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Field label="Currency" field="currency" />
@@ -505,7 +505,7 @@ const CadastroNova = () => {
           </div>
         </div>
 
-        <div className="rounded-xl border border-border/50 bg-card/50 p-4 space-y-4">
+        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
           <h3 className="text-sm font-semibold text-primary">Goods & Packaging</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Field label="Nature of Goods" field="nature_of_goods" span2 />
@@ -517,7 +517,7 @@ const CadastroNova = () => {
           </div>
         </div>
 
-        <div className="rounded-xl border border-border/50 bg-card/50 p-4 space-y-4">
+        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
           <h3 className="text-sm font-semibold text-primary">Handling & Signature</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Field label="Handling References" field="handling_references" span2 />
