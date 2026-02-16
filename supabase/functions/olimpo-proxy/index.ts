@@ -3538,6 +3538,185 @@ serve(async (req) => {
               continue;
             }
 
+            // === HAPAG FALLBACK: If JsonCargo returned no containers and this is a Hapag MBL, try Hapag API ===
+            if (containers.length === 0 && effectiveShippingLine === 'HAPAG_LLOYD') {
+              console.log(`[enrich_sea_containers] JsonCargo failed for Hapag MBL ${mblId}, trying Hapag API fallback via transportDocumentReference...`);
+              const hapagClientId = Deno.env.get('HAPAG_CLIENT_ID');
+              const hapagApiKey = Deno.env.get('HAPAG_API_KEY');
+              
+              if (hapagClientId && hapagApiKey) {
+                try {
+                  // Try all MBL variations against Hapag API
+                  let hapagResult: { containerNo: string; status: string | null; vessel: string | null; eta: string | null; etd: string | null; origem: string | null; destino: string | null; lastEvent: string | null; lastEventDate: string | null }[] = [];
+                  
+                  for (const mblVariation of mblVariations) {
+                    const hapagUrl = `https://api.hlag.com/hlag/external/v2/events/?transportDocumentReference=${encodeURIComponent(mblVariation)}`;
+                    const hapagController = new AbortController();
+                    const hapagTimeoutId = setTimeout(() => hapagController.abort(), 30000);
+                    
+                    try {
+                      const hapagRes = await fetch(hapagUrl, {
+                        method: 'GET',
+                        headers: {
+                          'X-IBM-Client-Id': hapagClientId,
+                          'X-IBM-Client-Secret': hapagApiKey,
+                          'Accept': 'application/json',
+                        },
+                        signal: hapagController.signal,
+                      });
+                      clearTimeout(hapagTimeoutId);
+                      
+                      if (hapagRes.status === 429) {
+                        console.log(`[enrich_sea_containers] Hapag API rate limited for ${mblVariation}`);
+                        break;
+                      }
+                      
+                      if (!hapagRes.ok || hapagRes.status === 204 || hapagRes.status === 404) {
+                        console.log(`[enrich_sea_containers] Hapag API returned ${hapagRes.status} for ${mblVariation}`);
+                        continue;
+                      }
+                      
+                      const hapagText = await hapagRes.text();
+                      if (!hapagText || hapagText.trim() === '') continue;
+                      
+                      const hapagData = JSON.parse(hapagText);
+                      const hapagEvents = Array.isArray(hapagData) ? hapagData : (hapagData.events || []);
+                      
+                      if (hapagEvents.length === 0) continue;
+                      
+                      // Extract unique containers from events
+                      const containerMap = new Map<string, any[]>();
+                      for (const evt of hapagEvents) {
+                        const eqRef = evt.equipmentReference;
+                        if (eqRef && /^[A-Z]{4}\d{7}$/i.test(eqRef)) {
+                          if (!containerMap.has(eqRef)) containerMap.set(eqRef, []);
+                          containerMap.get(eqRef)!.push(evt);
+                        }
+                      }
+                      
+                      if (containerMap.size === 0) continue;
+                      
+                      console.log(`[enrich_sea_containers] Hapag API found ${containerMap.size} containers for ${mblVariation}: ${[...containerMap.keys()].join(', ')}`);
+                      
+                      // For each container, extract tracking data
+                      for (const [ctrNo, ctrEvents] of containerMap.entries()) {
+                        const sorted = [...ctrEvents].sort((a: any, b: any) => new Date(b.eventDateTime || 0).getTime() - new Date(a.eventDateTime || 0).getTime());
+                        
+                        let vessel: string | null = null;
+                        let origem: string | null = null;
+                        let destino: string | null = null;
+                        let etd: string | null = null;
+                        let eta: string | null = null;
+                        let cStatus: string | null = null;
+                        let lastEvt: string | null = null;
+                        let lastEvtDate: string | null = null;
+                        
+                        for (const e of sorted) {
+                          if (!vessel && e.transportCall?.vessel?.vesselName) vessel = e.transportCall.vessel.vesselName;
+                          if (!origem && e.transportEventTypeCode === 'DEPA') {
+                            origem = e.transportCall?.location?.locationName || e.transportCall?.UNLocationCode || null;
+                            etd = e.eventDateTime?.split('T')[0] || null;
+                          }
+                          if (e.transportEventTypeCode === 'ARRI') {
+                            destino = e.transportCall?.location?.locationName || e.transportCall?.UNLocationCode || null;
+                            eta = e.eventDateTime?.split('T')[0] || null;
+                          }
+                        }
+                        
+                        const latestEquip = sorted.find((e: any) => e.eventType === 'EQUIPMENT');
+                        if (latestEquip) {
+                          const code = latestEquip.equipmentEventTypeCode || '';
+                          const statusMap: Record<string, string> = { 'LOAD': 'LOADED', 'DISC': 'DISCHARGED', 'GTIN': 'GATE_IN', 'GTOT': 'GATE_OUT', 'PICK': 'PICKED_UP', 'DROP': 'DROPPED_OFF' };
+                          cStatus = statusMap[code] || code || 'IN_TRANSIT';
+                          const loc = latestEquip.eventLocation?.locationName || latestEquip.transportCall?.location?.locationName || '';
+                          lastEvt = `${cStatus} - ${loc}`.trim();
+                          lastEvtDate = latestEquip.eventDateTime?.split('T')[0] || null;
+                        } else {
+                          const latestTransport = sorted.find((e: any) => e.eventType === 'TRANSPORT');
+                          if (latestTransport) {
+                            const code = latestTransport.transportEventTypeCode || '';
+                            cStatus = code === 'DEPA' ? 'DEPARTED' : code === 'ARRI' ? 'ARRIVED' : code;
+                            const loc = latestTransport.transportCall?.location?.locationName || '';
+                            lastEvt = `${cStatus} - ${loc}`.trim();
+                            lastEvtDate = latestTransport.eventDateTime?.split('T')[0] || null;
+                          }
+                        }
+                        
+                        if (!cStatus) cStatus = 'IN_TRANSIT';
+                        if (!lastEvt) lastEvt = cStatus;
+                        
+                        hapagResult.push({ containerNo: ctrNo.toUpperCase(), status: cStatus, vessel, eta, etd, origem, destino, lastEvent: lastEvt, lastEventDate: lastEvtDate });
+                      }
+                      
+                      if (hapagResult.length > 0) {
+                        containers = hapagResult.map(c => c.containerNo);
+                        successVariation = mblVariation;
+                        console.log(`[enrich_sea_containers] Hapag fallback success for ${mblVariation}: ${containers.length} containers with tracking data`);
+                        break;
+                      }
+                    } catch (hapagFetchErr: any) {
+                      clearTimeout(hapagTimeoutId);
+                      console.error(`[enrich_sea_containers] Hapag API error for ${mblVariation}: ${hapagFetchErr.message}`);
+                    }
+                    await new Promise(r => setTimeout(r, 300));
+                  }
+                  
+                  // If Hapag fallback found containers, insert them WITH tracking data
+                  if (hapagResult.length > 0) {
+                    console.log(`[enrich_sea_containers] Hapag enrichment: inserting ${hapagResult.length} containers with tracking for MBL ${mblId}`);
+                    
+                    for (const hc of hapagResult) {
+                      const cleanContainer = hc.containerNo.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+                      if (!cleanContainer || cleanContainer.length < 4) continue;
+                      
+                      const existing = await client.query(
+                        `SELECT id FROM dados_dachser.t_tracking_sea WHERE mbl_id = ? AND container = ? LIMIT 1`,
+                        [mblId, cleanContainer]
+                      );
+                      
+                      if (existing.length > 0) {
+                        // Container exists, update tracking data
+                        await client.execute(`
+                          UPDATE dados_dachser.t_tracking_sea
+                          SET container_status = ?, origem = COALESCE(?, origem), destino = COALESCE(?, destino),
+                              eta = ?, navio = COALESCE(?, navio), last_event = ?, shipping_line = 'HAPAG-LLOYD',
+                              last_check = NOW(), last_error = NULL, updated_at = NOW()
+                          WHERE mbl_id = ? AND container = ?
+                        `, [hc.status, hc.origem, hc.destino, hc.eta, hc.vessel, hc.lastEvent, mblId, cleanContainer]);
+                      } else {
+                        // Insert new container with tracking data
+                        await client.execute(`
+                          INSERT INTO dados_dachser.t_tracking_sea 
+                            (mbl_id, container, consignee, shipping_line, tipo_processo, email_analista, email_cliente,
+                             container_status, origem, destino, eta, navio, last_event, last_check, last_error, active, created_at, updated_at)
+                          SELECT 
+                            mbl_id, ?, consignee, 'HAPAG-LLOYD', tipo_processo, email_analista, email_cliente,
+                            ?, ?, ?, ?, ?, ?, NOW(), NULL, 1, NOW(), NOW()
+                          FROM dados_dachser.t_tracking_sea 
+                          WHERE mbl_id = ? 
+                          LIMIT 1
+                        `, [cleanContainer, hc.status, hc.origem, hc.destino, hc.eta, hc.vessel, hc.lastEvent, mblId]);
+                      }
+                    }
+                    
+                    // Remove PENDENTE placeholder
+                    await client.execute(`
+                      DELETE FROM dados_dachser.t_tracking_sea 
+                      WHERE mbl_id = ? AND container IN ('PENDENTE', '')
+                    `, [mblId]);
+                    
+                    details.push({ mbl: mblId, status: 'enriched_hapag', containers: hapagResult.length, variation: successVariation, source: 'hapag_api' });
+                    enriched++;
+                    continue; // Skip the normal flow below
+                  }
+                } catch (hapagErr: any) {
+                  console.error(`[enrich_sea_containers] Hapag fallback error for MBL ${mblId}: ${hapagErr.message}`);
+                }
+              } else {
+                console.log(`[enrich_sea_containers] Hapag API credentials not configured, skipping fallback for ${mblId}`);
+              }
+            }
+
             if (containers.length === 0) {
               console.log(`[enrich_sea_containers] No containers found for MBL ${mblId} after trying ${mblVariations.length} variations`);
               // Marcar como NAO_ENCONTRADO para não reprocessar (atualiza updated_at para controle de retry)
