@@ -310,3 +310,6 @@ verify_jwt = false
 
 [functions.parse-hawb-cadastro]
 verify_jwt = false
+
+[functions.parse-bl-cadastro]
+verify_jwt = false

@@ -79,6 +79,7 @@ import ManualSubmeterManifestHbl from "./pages/sea/ManualSubmeterManifestHbl";
 import ManualInvoicesDraft from "./pages/sea/ManualInvoicesDraft";
 import ManualDraftExportacao from "./pages/sea/ManualDraftExportacao";
 import SeaRegrasNotificacao from "./pages/sea/SeaRegrasNotificacao";
+import CadastroBl from "./pages/sea/CadastroBl";
 
 // CHB Module
 import ManualChb from "./pages/chb/ManualChb";
@@ -129,6 +130,7 @@ const App = () => (
           <Route path="/admin/z3us/upload-master" element={<UploadMaster />} />
           <Route path="/admin/logs" element={<Logs />} />
           <Route path="/air/check" element={<CheckAwb />} />
+          <Route path="/sea/cadastro-bl" element={<CadastroBl />} />
           <Route path="/sea/analysis" element={<SeaAnalysis />} />
           <Route path="/sea/analysis/manual" element={<ManualSeaAnalysis />} />
           <Route path="/sea/tracking/manual" element={<ManualContainerTracking />} />
