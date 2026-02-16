@@ -1,50 +1,51 @@
 
 
-# Historico de ETA nos E-mails de Follow-Up ao Cliente
+# Ajustes no CHB: Valor Mercadoria como Conforme + Melhoria na Deteccao de Frete
 
-## Objetivo
-Adicionar uma secao "Historico de Alteracoes de ETA" nos e-mails enviados ao cliente (`email_type === 'cliente'`), mostrando todas as variacoes de ETA registradas para aquele container/MBL. Isso atende ao pedido de maior visibilidade e transparencia sobre mudancas de programacao.
+## Problema Atual
 
-## Como funciona hoje
-- A edge function `send-container-status-email` recebe dados do container e envia e-mail via Resend
-- O e-mail do cliente mostra apenas o ETA atual, sem historico
-- A tabela `t_tracking_sea_history` no MariaDB ja armazena o campo `eta` em cada evento, junto com `event_datetime` e `created_at`
+### 1. Valor Mercadoria com alertas desnecessarios
+Atualmente, quando o "Valor Mercadoria" diverge entre documentos, o sistema marca como alerta amarelo. Porem, cada Invoice pode ter um valor diferente (varias invoices por processo), e o Draft DI confere o valor total consolidado. Portanto, divergencias entre invoices individuais sao esperadas e nao devem gerar alerta.
 
-## O que sera feito
+### 2. Deteccao de Frete incorreta
+A IA ainda confunde valores de frete com outros campos (ex: "Total net" sendo interpretado como frete, ou valores de mercadoria sendo colocados na linha de frete). Apesar de ja existirem regras extensas no prompt, a IA continua errando.
 
-### Modificacao unica: `supabase/functions/send-container-status-email/index.ts`
+## O que sera alterado
 
-1. **Adicionar import do MySQL client** (mesmo padrao de 80+ edge functions existentes):
-   ```
-   import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
-   ```
+### Arquivo unico: `supabase/functions/analyze-chb-documents/index.ts`
 
-2. **Criar funcao `fetchEtaHistory`** que conecta ao MariaDB e busca ETAs distintos:
-   ```
-   SELECT DISTINCT eta,
-          MIN(event_datetime) as first_seen
-   FROM dados_dachser.t_tracking_sea_history
-   WHERE (mbl_id = ? OR container = ?)
-     AND eta IS NOT NULL
-   GROUP BY eta
-   ORDER BY first_seen ASC
-   ```
+### Alteracao 1 — Valor Mercadoria: SEMPRE Conforme
 
-3. **Gerar HTML da secao de historico** - Uma mini-tabela inserida no template do e-mail cliente, entre os dados atuais e a mensagem customizada:
+Nas regras de status (secao 16), substituir a regra atual que marca "Valor Mercadoria" como alerta amarelo por uma regra que marca como **CONFORME** automaticamente:
 
-   | Data do Registro | ETA Previsto |
-   |---|---|
-   | 15/01/2026 | 20/02/2026 |
-   | 22/01/2026 | 25/02/2026 |
-   | **01/02/2026** | **28/02/2026 (atual)** |
+**Antes:**
+- "Valor Mercadoria" divergente entre documentos -> alerta amarelo
+- Mesmo com diferenca >20% -> alerta amarelo
 
-   - Ultima linha destacada em negrito com fundo `#fff5eb`
-   - Titulo "Historico de Alteracoes de ETA" com borda esquerda laranja (#FF9933)
-   - Se houver apenas 1 ETA (sem alteracoes), exibe "Sem alteracoes de ETA registradas"
-   - Se nao houver historico (falha na conexao ou sem dados), a secao nao aparece
+**Depois:**
+- "Valor Mercadoria" divergente entre documentos -> CONFORME (sem alerta)
+- Motivo documentado: cada Invoice pode ter valor diferente; o Draft DI confere o total consolidado
+- Na secao de Observacoes, registrar os valores encontrados de forma informativa (sem icone de alerta)
 
-4. **Tratamento de erro resiliente** - Se a consulta ao MariaDB falhar, o e-mail e enviado normalmente sem a secao de historico (nao bloqueia o envio)
+Locais de alteracao no prompt:
+- Secao 7A (definicao do campo "Valor Mercadoria") — adicionar nota de que divergencias sao normais
+- Secao 16 (regras de status) — remover a excecao especial de "alerta amarelo" e substituir por "CONFORME"
+- Secao 16 exemplos — atualizar os exemplos para refletir a nova regra
+- Secao 17 (verificacao final) — ajustar consistencia
 
-### Sem alteracoes no payload
-O campo `container` (que contem o MBL) e o `mbl` ja existem no request body e serao usados para a consulta.
+### Alteracao 2 — Reforco na Deteccao de Frete
+
+Adicionar regras mais explicitas e exemplos negativos no prompt para evitar confusao entre frete e outros valores:
+
+- Reforcar que "Total net" em Invoice NUNCA e frete (regra 7D ja existe, mas sera reescrita com mais enfase)
+- Adicionar exemplos concretos de erros comuns que a IA comete e instrucoes para evita-los
+- Adicionar regra explicita: se o documento e uma Invoice comercial e nao tem linha explicita de "Freight/Frete", o campo "Valor Total Frete" deve ser "ND" para essa Invoice
+- Reforcar que "Amount Due", "Total Amount", "Final Amount" em Invoice sao geralmente o total da fatura (mercadoria + frete), NAO o frete isolado
+- Adicionar regra de "checklist de validacao" antes de preencher o campo frete: "O valor que estou colocando como frete vem de uma linha EXPLICITAMENTE rotulada como freight/frete/charges?"
+
+## Resumo do impacto
+
+- Usuarios nao verao mais alertas amarelos desnecessarios para "Valor Mercadoria"
+- A deteccao de frete sera mais precisa, reduzindo falsos positivos e erros de classificacao
+- Nenhuma alteracao no frontend ou na estrutura de dados — apenas ajuste no prompt da IA
 
