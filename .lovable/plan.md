@@ -1,46 +1,68 @@
 
 
-# Fix: False Piece Discrepancy on AWB 006-52942455
+# Fix: Definir Escala "Ningbo, CN" para MEDUWA505645 e proteger contra sobrescrita
 
-## Problem Identified
+## Problema
 
-The AWB `006-52942455` is flagged as "Discrepancia Pecas (20)" but all events actually have **20 pieces** -- except one specific event:
+O processo MEDUWA505645 tem a Escala (transshipment_port) sendo recalculada e sobrescrita a cada ciclo de refresh da API. Mesmo usando a acao manual `set_transshipment_port`, o proximo ciclo do `refresh_sea_tracking` recalcula o valor e substitui.
 
-> "**0 pieces** at ICN offloaded from DL0188/13FEB26."
+A logica atual nas linhas 2817 e 2928 usa `COALESCE(?, transshipment_port)`, que substitui o valor existente sempre que a API retorna algo novo.
 
-This event means **zero pieces were offloaded** (i.e., nothing was removed from the flight -- a good outcome). However, the `extractPieces` function extracts `0` from "0 pieces", and since `0 != 20` (the baseline), the system flags it as a discrepancy.
+## Solucao
 
-## Root Cause
+Duas acoes:
 
-In `supabase/functions/fetch-status-aereo/index.ts`, the `extractPieces` function (line 22) matches the regex `(\d+)\s*piece` on **all** event descriptions without considering context. The phrase "0 pieces offloaded" is semantically different from an actual piece count change -- it indicates that no cargo was removed.
+### 1. Corrigir o valor imediatamente
 
-## Solution
+Chamar a acao `set_transshipment_port` via API para definir `transshipment_port = 'Ningbo, CN'` em todos os containers do MBL MEDUWA505645.
 
-Modify the `extractPieces` function to **skip events where pieces = 0 and the context is "offloaded"**, since "0 pieces offloaded" is not a real shipment quantity -- it's confirming nothing was removed.
+### 2. Proteger o campo contra sobrescrita futura
 
-### Technical Details
+Modificar `supabase/functions/olimpo-proxy/index.ts` em tres pontos:
 
-**File**: `supabase/functions/fetch-status-aereo/index.ts`
+**Ponto A - Logica JavaScript (linha ~2759)**: Se `row.transshipment_port` ja tem valor no banco, pular toda a deteccao e preservar o valor existente.
 
-**Change 1**: In the `detectPiecesDiscrepancy` function (lines 170-179), skip events where extracted pieces = 0 **and** the description contains "offload" (which indicates a non-event rather than an actual piece count):
-
-```typescript
-// Inside the loop at line 172-179:
-const pieces = extractPieces(desc);
-if (pieces !== null) {
-  // Skip "0 pieces offloaded" -- means nothing was removed, not a real count
-  const descUpper = desc.toUpperCase();
-  if (pieces === 0 && (descUpper.includes('OFFLOAD') || descUpper.includes('OFLD'))) {
-    continue;
-  }
-  eventsWithPieces.push({ pieces, isDelivery: isDeliveryEvent(ev), index: i });
+```text
+// Antes da deteccao de transshipment (linha 2759):
+let transshipmentPort = null;
+if (row.transshipment_port && row.transshipment_port.trim() !== '') {
+  transshipmentPort = row.transshipment_port; // Preservar valor existente
+} else if (uniqueTransshipments.length > 0) {
+  // ... logica existente de deteccao
 }
 ```
 
-This is a minimal, targeted fix that:
-- Only skips the specific "0 pieces offloaded" pattern
-- Does not affect real discrepancy detection (e.g., "10 pieces" vs "20 pieces")
-- Preserves existing behavior for all other events
+**Ponto B - UPDATE principal (linha 2817)**: Alterar para so atualizar se o campo estiver vazio no banco.
 
-After the change, the edge function will be redeployed automatically.
+```text
+-- De:
+transshipment_port = COALESCE(?, transshipment_port),
 
+-- Para:
+transshipment_port = CASE 
+  WHEN transshipment_port IS NULL OR transshipment_port = '' 
+  THEN COALESCE(?, transshipment_port) 
+  ELSE transshipment_port 
+END,
+```
+
+**Ponto C - UPDATE de siblings (linha 2928)**: Mesma protecao na propagacao para containers irmaos.
+
+```text
+-- De:
+transshipment_port = COALESCE(?, transshipment_port),
+
+-- Para:
+transshipment_port = CASE 
+  WHEN transshipment_port IS NULL OR transshipment_port = '' 
+  THEN COALESCE(?, transshipment_port) 
+  ELSE transshipment_port 
+END,
+```
+
+## Resultado
+
+- O valor "Ningbo, CN" sera definido imediatamente para MEDUWA505645
+- Nenhum ciclo futuro da API vai sobrescrever esse valor
+- Novos containers sem escala continuam sendo preenchidos normalmente pela API
+- A acao manual `set_transshipment_port` continua funcionando para correcoes futuras (pois faz UPDATE direto, sem o CASE)
