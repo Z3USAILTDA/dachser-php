@@ -12231,6 +12231,26 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== ETA HISTORY (SEA) ====================
+      case 'fetch_eta_history': {
+        const { mbl_id, container: ctnr } = body;
+        if (!mbl_id && !ctnr) {
+          return new Response(JSON.stringify({ error: 'mbl_id or container required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        const searchKey = mbl_id || ctnr;
+        const etaRows = await client.query(
+          `SELECT DISTINCT eta, MIN(event_datetime) as first_seen
+           FROM dados_dachser.t_tracking_sea_history
+           WHERE (mbl_id = ? OR container = ?)
+             AND eta IS NOT NULL AND eta != ''
+           GROUP BY eta
+           ORDER BY first_seen ASC`,
+          [searchKey, ctnr || searchKey]
+        );
+        result = { rows: etaRows };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
