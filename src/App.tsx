@@ -88,7 +88,7 @@ import ManualTracking from "./pages/air/ManualTracking";
 import ManualCheckAwb from "./pages/air/ManualCheckAwb";
 import ManualAwbList from "./pages/air/ManualAwbList";
 import ManualStatusAereo from "./pages/air/ManualStatusAereo";
-
+import CadastroNova from "./pages/air/CadastroNova";
 // FIN Module
 import ManualFinanceiro from "./pages/fin/ManualFinanceiro";
 
@@ -204,6 +204,7 @@ const App = () => (
           {/* AWB Tracking Pages */}
           <Route path="/air/awb-list" element={<AWBList />} />
           <Route path="/air/status-aereo" element={<StatusAereoList />} />
+          <Route path="/air/cadastro-nova" element={<CadastroNova />} />
           
           {/* CHB Module Manual */}
           <Route path="/chb/manual" element={<ManualChb />} />

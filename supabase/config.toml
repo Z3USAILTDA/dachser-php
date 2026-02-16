@@ -307,3 +307,6 @@ verify_jwt = false
 
 [functions.db-critical-alert]
 verify_jwt = false
+
+[functions.parse-hawb-cadastro]
+verify_jwt = false

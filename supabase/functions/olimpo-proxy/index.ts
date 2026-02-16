@@ -7425,6 +7425,296 @@ serve(async (req) => {
       }
     }
 
+    // ===== SEARCH ANALISTAS: Autocomplete for clerk =====
+    if (action === 'search_analistas') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado', analistas: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const searchTerm = url.searchParams.get('q') || '';
+      const modal = url.searchParams.get('modal') || '';
+      const limit = parseInt(url.searchParams.get('limit') || '15', 10);
+
+      if (searchTerm.length < 2) {
+        return new Response(JSON.stringify({ success: true, analistas: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: database,
+      });
+
+      try {
+        let query = `
+          SELECT nome_analista, email_analista, modal
+          FROM ${database}.t_dachser_analistas
+          WHERE ativo = 1 
+            AND nome_analista LIKE ?
+        `;
+        const params: any[] = [`%${searchTerm}%`];
+
+        if (modal) {
+          query += ` AND modal = ?`;
+          params.push(modal.toUpperCase());
+        }
+
+        query += ` ORDER BY nome_analista LIMIT ?`;
+        params.push(limit);
+
+        const rows = await client.query(query, params);
+
+        await client.close();
+        console.log(`[search_analistas] Found ${rows.length} analysts for term "${searchTerm}" modal="${modal}"`);
+        
+        return new Response(JSON.stringify({
+          success: true,
+          analistas: rows
+        }), { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[search_analistas] Error:', e);
+        return new Response(JSON.stringify({ error: e.message, analistas: [] }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SETUP T_CADASTRO_AEREO: Create table if not exists =====
+    if (action === 'setup_t_cadastro_aereo') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost!,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser!,
+        password: mariadbPass!,
+        db: database,
+      });
+
+      try {
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ${database}.t_cadastro_aereo (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            cadastro_id VARCHAR(50) NOT NULL,
+            awb_number VARCHAR(100),
+            airport_departure VARCHAR(255),
+            shipper_name VARCHAR(255),
+            shipper_address TEXT,
+            shipper_account VARCHAR(100),
+            consignee_nome VARCHAR(255),
+            consignee_cnpj VARCHAR(50),
+            consignee_customer_number VARCHAR(100),
+            issuing_agent VARCHAR(255),
+            agent_city VARCHAR(255),
+            agent_iata_code VARCHAR(100),
+            agent_account VARCHAR(100),
+            nie_code VARCHAR(100),
+            nif_code VARCHAR(100),
+            routing_destination VARCHAR(255),
+            currency VARCHAR(10),
+            chgs_wt_val VARCHAR(20),
+            declared_value_carriage VARCHAR(50),
+            declared_value_customs VARCHAR(50),
+            handling_references TEXT,
+            handling_info TEXT,
+            pieces INT,
+            gross_weight_kg DECIMAL(10,2),
+            rate_class VARCHAR(20),
+            chargeable_weight DECIMAL(10,2),
+            rate DECIMAL(10,4),
+            total_charge DECIMAL(12,2),
+            nature_of_goods TEXT,
+            itn_number VARCHAR(100),
+            packaging TEXT,
+            hs_code VARCHAR(50),
+            volume_cbm DECIMAL(10,4),
+            dimensions VARCHAR(255),
+            other_charges_agent DECIMAL(12,2),
+            other_charges_carrier TEXT,
+            signature_name VARCHAR(255),
+            signature_date VARCHAR(50),
+            signature_place VARCHAR(255),
+            total_prepaid DECIMAL(12,2),
+            total_collect DECIMAL(12,2),
+            clerk VARCHAR(255),
+            clerk_email VARCHAR(255),
+            etd DATETIME,
+            eta DATETIME,
+            created_by VARCHAR(100),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_cadastro_id (cadastro_id),
+            INDEX idx_awb (awb_number),
+            INDEX idx_clerk (clerk),
+            INDEX idx_consignee (consignee_nome),
+            INDEX idx_created (created_at)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+        `);
+        await client.close();
+        return new Response(JSON.stringify({ success: true, message: 't_cadastro_aereo created/verified' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== CREATE CADASTRO AEREO: Insert new record =====
+    if (action === 'create_cadastro_aereo') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+
+      if (!bodyData) {
+        try {
+          bodyData = await req.clone().json();
+        } catch { bodyData = {}; }
+      }
+
+      const d = bodyData;
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost!,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser!,
+        password: mariadbPass!,
+        db: database,
+      });
+
+      try {
+        // Ensure table exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ${database}.t_cadastro_aereo (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            cadastro_id VARCHAR(50) NOT NULL,
+            awb_number VARCHAR(100),
+            airport_departure VARCHAR(255),
+            shipper_name VARCHAR(255),
+            shipper_address TEXT,
+            shipper_account VARCHAR(100),
+            consignee_nome VARCHAR(255),
+            consignee_cnpj VARCHAR(50),
+            consignee_customer_number VARCHAR(100),
+            issuing_agent VARCHAR(255),
+            agent_city VARCHAR(255),
+            agent_iata_code VARCHAR(100),
+            agent_account VARCHAR(100),
+            nie_code VARCHAR(100),
+            nif_code VARCHAR(100),
+            routing_destination VARCHAR(255),
+            currency VARCHAR(10),
+            chgs_wt_val VARCHAR(20),
+            declared_value_carriage VARCHAR(50),
+            declared_value_customs VARCHAR(50),
+            handling_references TEXT,
+            handling_info TEXT,
+            pieces INT,
+            gross_weight_kg DECIMAL(10,2),
+            rate_class VARCHAR(20),
+            chargeable_weight DECIMAL(10,2),
+            rate DECIMAL(10,4),
+            total_charge DECIMAL(12,2),
+            nature_of_goods TEXT,
+            itn_number VARCHAR(100),
+            packaging TEXT,
+            hs_code VARCHAR(50),
+            volume_cbm DECIMAL(10,4),
+            dimensions VARCHAR(255),
+            other_charges_agent DECIMAL(12,2),
+            other_charges_carrier TEXT,
+            signature_name VARCHAR(255),
+            signature_date VARCHAR(50),
+            signature_place VARCHAR(255),
+            total_prepaid DECIMAL(12,2),
+            total_collect DECIMAL(12,2),
+            clerk VARCHAR(255),
+            clerk_email VARCHAR(255),
+            etd DATETIME,
+            eta DATETIME,
+            created_by VARCHAR(100),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_cadastro_id (cadastro_id),
+            INDEX idx_awb (awb_number),
+            INDEX idx_clerk (clerk),
+            INDEX idx_consignee (consignee_nome),
+            INDEX idx_created (created_at)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+        `);
+
+        const result = await client.execute(`
+          INSERT INTO ${database}.t_cadastro_aereo (
+            cadastro_id, awb_number, airport_departure, shipper_name, shipper_address, shipper_account,
+            consignee_nome, consignee_cnpj, consignee_customer_number,
+            issuing_agent, agent_city, agent_iata_code, agent_account,
+            nie_code, nif_code, routing_destination, currency, chgs_wt_val,
+            declared_value_carriage, declared_value_customs,
+            handling_references, handling_info,
+            pieces, gross_weight_kg, rate_class, chargeable_weight, rate, total_charge,
+            nature_of_goods, itn_number, packaging, hs_code, volume_cbm, dimensions,
+            other_charges_agent, other_charges_carrier,
+            signature_name, signature_date, signature_place,
+            total_prepaid, total_collect,
+            clerk, clerk_email, etd, eta, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          d.cadastro_id, d.awb_number, d.airport_departure, d.shipper_name, d.shipper_address, d.shipper_account,
+          d.consignee_nome, d.consignee_cnpj, d.consignee_customer_number,
+          d.issuing_agent, d.agent_city, d.agent_iata_code, d.agent_account,
+          d.nie_code, d.nif_code, d.routing_destination, d.currency, d.chgs_wt_val,
+          d.declared_value_carriage, d.declared_value_customs,
+          d.handling_references, d.handling_info,
+          d.pieces || null, d.gross_weight_kg || null, d.rate_class, d.chargeable_weight || null, d.rate || null, d.total_charge || null,
+          d.nature_of_goods, d.itn_number, d.packaging, d.hs_code, d.volume_cbm || null, d.dimensions,
+          d.other_charges_agent || null, d.other_charges_carrier,
+          d.signature_name, d.signature_date, d.signature_place,
+          d.total_prepaid || null, d.total_collect || null,
+          d.clerk, d.clerk_email, d.etd || null, d.eta || null, d.created_by,
+        ]);
+
+        await client.close();
+        console.log(`[create_cadastro_aereo] Inserted cadastro_id=${d.cadastro_id}`);
+
+        return new Response(JSON.stringify({ success: true, cadastro_id: d.cadastro_id, id: result.lastInsertId }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[create_cadastro_aereo] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     return new Response(JSON.stringify({ error: 'Ação não reconhecida' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

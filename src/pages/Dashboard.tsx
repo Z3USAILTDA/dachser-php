@@ -16,6 +16,7 @@ interface ChildItem {
   expandableId?: string;
   subChildren?: SubChild[];
   adminOnly?: boolean;
+  z3usOnly?: boolean;
 }
 interface MenuItem {
   id: string;
@@ -71,6 +72,11 @@ const menuItems: MenuItem[] = [
     label: "AIR",
     subtitle: "Operações Aéreas",
     children: [
+      {
+        label: "Cadastro NOVA",
+        href: "/air/cadastro-nova",
+        z3usOnly: true,
+      },
       {
         label: "Check AWB x CNPJ",
         href: "/air/check",
@@ -240,8 +246,16 @@ const Dashboard = () => {
       ];
     }
     
-    // Caso contrário, aplicar filtro padrão de adminOnly
-    return item.children.filter(child => !child.adminOnly || isAdmin);
+    // For non-admin menus, apply adminOnly and z3usOnly filters
+    return item.children.filter(child => {
+      if (child.adminOnly && !isAdmin) return false;
+      if (child.z3usOnly) {
+        if (!isAdmin || !user?.username) return false;
+        const adminType = getAdminUserType(user.username);
+        if (adminType !== "Z3US") return false;
+      }
+      return true;
+    });
   };
   return (
     <ScrollArea className="h-screen w-full">

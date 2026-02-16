@@ -396,6 +396,45 @@ serve(async (req) => {
           }
         }
 
+        // 6. t_dachser_analistas - Analyst autocomplete table
+        try {
+          await dadosDachserClient.execute(`
+            CREATE TABLE IF NOT EXISTS dados_dachser.t_dachser_analistas (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              nome_analista VARCHAR(255) NOT NULL,
+              email_analista VARCHAR(255),
+              modal VARCHAR(10) NOT NULL COMMENT 'AIR ou SEA',
+              ativo BOOLEAN DEFAULT TRUE,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              UNIQUE KEY uk_nome_email_modal (nome_analista, email_analista, modal),
+              INDEX idx_nome (nome_analista),
+              INDEX idx_modal (modal),
+              INDEX idx_ativo (ativo)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+          `);
+          results.push({ table: 't_dachser_analistas', database: 'dados_dachser', status: 'success' });
+
+          // Populate from t_master_dados
+          await dadosDachserClient.execute(`
+            INSERT IGNORE INTO dados_dachser.t_dachser_analistas (nome_analista, email_analista, modal)
+            SELECT DISTINCT
+              TRIM(nome_analista) as nome_analista,
+              TRIM(email_analista) as email_analista,
+              CASE
+                WHEN tipo_processo LIKE 'AIR%' THEN 'AIR'
+                WHEN tipo_processo LIKE 'SEA%' THEN 'SEA'
+                ELSE 'OTHER'
+              END as modal
+            FROM dados_dachser.t_master_dados
+            WHERE nome_analista IS NOT NULL
+              AND TRIM(nome_analista) != ''
+          `);
+          results.push({ table: 't_dachser_analistas (populate)', database: 'dados_dachser', status: 'success' });
+        } catch (e: unknown) {
+          results.push({ table: 't_dachser_analistas', database: 'dados_dachser', status: 'error', error: (e as Error).message });
+        }
+
         await dadosDachserClient.close();
       } catch (connError: unknown) {
         results.push({ table: 'connection', database: 'dados_dachser', status: 'error', error: (connError as Error).message });
