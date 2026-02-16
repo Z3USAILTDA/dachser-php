@@ -174,6 +174,11 @@ function detectPiecesDiscrepancy(timelineJson: string | null): { pieces_discrepa
       const desc = ev.Description || ev.description || ev.details || ev.title || '';
       const pieces = extractPieces(desc);
       if (pieces !== null) {
+        // Skip "0 pieces offloaded" -- means nothing was removed, not a real count
+        const descUpper = desc.toUpperCase();
+        if (pieces === 0 && (descUpper.includes('OFFLOAD') || descUpper.includes('OFLD'))) {
+          continue;
+        }
         eventsWithPieces.push({ pieces, isDelivery: isDeliveryEvent(ev), index: i });
       }
     }
