@@ -184,29 +184,13 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
  * Main hook to fetch CCT processes from MariaDB via mariadb-proxy
  * Source: t_master_dados (AIR IMPORT) LEFT JOIN t_status_aereo
  */
-// Lista de usuários autorizados a ver dados
-const ALLOWED_DATA_USERS = ["admin", "herbert.zacatei"];
-
-function canViewData(): boolean {
-  const storedUser = localStorage.getItem("user");
-  if (!storedUser) return false;
-  try {
-    const user = JSON.parse(storedUser);
-    return user && ALLOWED_DATA_USERS.includes(user.username);
-  } catch {
-    return false;
-  }
-}
+// Todos os usuários autenticados podem ver dados do CCT
 
 export function useProcessosCCT() {
   return useQuery({
     queryKey: ["cct-processos"],
     queryFn: async (): Promise<ProcessoCCT[]> => {
-      // Verificar se é usuário autorizado
-      if (!canViewData()) {
-        console.log("CCT: Dados restritos - usuário não autorizado");
-        return [];
-      }
+      // Todos os usuários autenticados podem ver dados
 
       console.log("CCT: Fetching shipments from MariaDB via mariadb-proxy...");
       
@@ -419,10 +403,7 @@ export function useProfiles() {
   return useQuery({
     queryKey: ["cct-profiles"],
     queryFn: async (): Promise<CCTProfile[]> => {
-      // Verificar se é usuário autorizado
-      if (!canViewData()) {
-        return [];
-      }
+      // Todos os usuários autenticados podem ver dados
 
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: { action: 'get_cct_profiles' }
