@@ -17,8 +17,12 @@ interface EmailRequest {
   origem?: string;
   destino?: string;
   custom_message?: string;
-  email_type?: 'interno' | 'cliente'; // Tipo de email
-  preserve_original_status?: boolean; // Se true, não traduz o status (usa exatamente como vem do rastreio)
+  email_type?: 'interno' | 'cliente';
+  preserve_original_status?: boolean;
+  hbl?: string;
+  mbl?: string;
+  etd_raw?: string;
+  cliente?: string;
 }
 
 // Tradução de status para português - status real traduzido
@@ -181,7 +185,7 @@ serve(async (req) => {
 
   try {
     const body: EmailRequest = await req.json();
-    const { to, container, vessel, shipping_line, status, eta, consignee, origem, destino, custom_message, email_type, preserve_original_status } = body;
+    const { to, container, vessel, shipping_line, status, eta, consignee, origem, destino, custom_message, email_type, preserve_original_status, hbl, mbl, etd_raw, cliente } = body;
 
     // Sempre enviar para devs@z3us.ai (hardcoded por enquanto)
     const recipient = 'devs@z3us.ai';
@@ -243,13 +247,47 @@ serve(async (req) => {
 
     console.log(`[send-container-status-email] Status: "${status}" -> "${friendlyStatus}" (preserve_original: ${preserve_original_status})`);
 
+    // Format ETD for Dachser subject (dd.MM.yyyy)
+    let formattedEtd = '';
+    if (etd_raw) {
+      try {
+        const etdDate = new Date(etd_raw);
+        if (!isNaN(etdDate.getTime())) {
+          formattedEtd = etdDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+      } catch (e) {
+        formattedEtd = etd_raw;
+      }
+    }
+
+    // Format ETA for Dachser subject (dd.MM.yyyy)
+    let formattedEtaDachser = '';
+    if (eta) {
+      try {
+        const etaDate2 = new Date(eta);
+        if (!isNaN(etaDate2.getTime())) {
+          formattedEtaDachser = etaDate2.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+      } catch (e) {
+        formattedEtaDachser = eta;
+      }
+    }
+
+    // Build Dachser Pre-Alert subject
+    // Format: Dachser Pre-Alert SE - PO:  - HBL: {hbl} - MBL: {mbl} - {cliente} - Consignee: {consignee} - {destino} - ETD: {etd} - ETA: {eta}
+    const subjectHbl = hbl || '';
+    const subjectMbl = mbl || container || '';
+    const subjectCliente = cliente || '';
+    const subjectConsignee = consignee || '';
+    const subjectDestino = destino || '';
+    const emailSubject = `Dachser Pre-Alert SE - PO:  - HBL: ${subjectHbl} - MBL: ${subjectMbl} - ${subjectCliente} - Consignee: ${subjectConsignee} - ${subjectDestino} - ETD: ${formattedEtd} - ETA: ${formattedEtaDachser}`;
+
+    console.log(`[send-container-status-email] Subject: "${emailSubject}"`);
+
     let htmlBody: string;
-    let emailSubject: string;
 
     if (email_type === 'cliente') {
-      // EMAIL PARA CLIENTE - Formato simplificado igual ao AWB
-      emailSubject = `${container} - ${friendlyStatus} | ETA: ${formattedEta}`;
-      
+      // EMAIL PARA CLIENTE - Formato simplificado
       htmlBody = `<!DOCTYPE html>
 <html>
 <head>
@@ -318,9 +356,8 @@ serve(async (req) => {
 </body>
 </html>`;
     } else {
-      // EMAIL INTERNO (ANALISTA) - Formato com tabela igual ao AWB
-      emailSubject = `${container} - ${friendlyStatus} | ETA: ${formattedEta}`;
-      
+      // EMAIL INTERNO (ANALISTA) - Formato com tabela
+
       const rowBg = isAlert ? 'rgba(255, 0, 0, 0.15)' : '#ffffff';
       const rowStyle = isAlert
         ? `background-color: ${rowBg}; border: 3px solid #ff0000; box-shadow: 0 0 15px rgba(255, 0, 0, 0.4);`
