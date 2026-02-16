@@ -661,23 +661,58 @@ REGRAS DE CONTEÚDO DA TABELA
 
    ⚠️ EXISTEM TRÊS VALORES DISTINTOS — NÃO CONFUNDA!
    
-   A) VALOR TOTAL DA MERCADORIA (Invoice Amount / Merchandise Value):
-      - É o valor TOTAL dos produtos na Invoice comercial
-      - Sinônimos: "Total Items", "Merchandise Total", "Subtotal", "Total Goods Value", "Commercial Value"
-      - Linha da tabela: "Valor Mercadoria"
-      - ⚠️ NÃO usar "Final Amount" ou "Total Amount" para mercadoria (podem incluir frete!)
+    A) VALOR TOTAL DA MERCADORIA (Invoice Amount / Merchandise Value):
+       - É o valor TOTAL dos produtos na Invoice comercial
+       - Sinônimos: "Total Items", "Merchandise Total", "Subtotal", "Total Goods Value", "Commercial Value"
+       - Linha da tabela: "Valor Mercadoria"
+       - ⚠️ NÃO usar "Final Amount" ou "Total Amount" para mercadoria (podem incluir frete!)
+       
+       ⚠️ REGRA ESPECIAL — DIVERGÊNCIAS SÃO NORMAIS E ESPERADAS:
+       - Cada Invoice pode ter um valor diferente (múltiplas invoices por processo)
+       - O Draft DI confere o VALOR TOTAL CONSOLIDADO de todas as invoices
+       - Portanto, divergências entre invoices individuais NÃO devem gerar alerta
+       - Status para "Valor Mercadoria": SEMPRE ✅ CONFORME (mesmo com valores diferentes)
+       - Registrar os valores encontrados na seção Observações de forma INFORMATIVA (sem ícone de alerta)
    
-   B) VALOR TOTAL FRETE (campo unificado — NÃO criar "Frete" isolado):
-      - Incluir frete + taxas acessórias em uma ÚNICA linha
-      - ONDE PROCURAR:
-        → CCT/BL/AWB: Linha "Total" na coluna "Prepaid" ou "Collect"
-        → Invoice: "Final Amount", "Total Amount", "Grand Total", "Amount Due"
-        → Packing List: geralmente não tem (ND é aceitável)
-      - Sinônimos: "Total Prepaid", "Total Collect", "Total Charges", "Grand Total",
-                   "Final Amount", "Total Amount", "Amount Due", "Total Invoice"
-      - Linha da tabela: "Valor Total Frete"
-      - ⚠️ Campo "Frete" isolado NÃO deve existir na tabela — usar SEMPRE "Valor Total Frete"
-      - ATENÇÃO: Frete pode ser "COLLECT" ou "PREPAID" — indicar na observação
+    B) VALOR TOTAL FRETE (campo unificado — NÃO criar "Frete" isolado):
+       - Incluir frete + taxas acessórias em uma ÚNICA linha
+       - ONDE PROCURAR:
+         → CCT/BL/AWB: Linha "Total" na coluna "Prepaid" ou "Collect"
+         → Packing List: geralmente não tem (ND é aceitável)
+       - Sinônimos VÁLIDOS para frete: "Total Prepaid", "Total Collect", "Total Charges",
+                    "Freight", "Frete", "Freight Charges", "Ocean Freight", "Air Freight"
+       - Linha da tabela: "Valor Total Frete"
+       - ⚠️ Campo "Frete" isolado NÃO deve existir na tabela — usar SEMPRE "Valor Total Frete"
+       - ATENÇÃO: Frete pode ser "COLLECT" ou "PREPAID" — indicar na observação
+       
+       🔴🔴🔴 REGRAS ANTI-CONFUSÃO DE FRETE (PRIORIDADE MÁXIMA):
+       
+       CHECKLIST OBRIGATÓRIO antes de preencher "Valor Total Frete":
+       1. O valor que estou colocando como frete vem de uma linha EXPLICITAMENTE rotulada 
+          como "Freight", "Frete", "Charges", "Ocean Freight", "Air Freight"?
+          → Se NÃO → NÃO é frete! Usar "ND" para esse documento.
+          → Se SIM → Pode usar como frete.
+       
+       ERROS COMUNS QUE VOCÊ NÃO DEVE COMETER:
+       ❌ "Total net" em Invoice → NÃO é frete (é total da fatura ou valor mercadoria)
+       ❌ "Amount Due" em Invoice → NÃO é frete (é total a pagar da fatura)
+       ❌ "Total Amount" em Invoice → NÃO é frete (é total da fatura)
+       ❌ "Final Amount" em Invoice → NÃO é frete (é total final da fatura)
+       ❌ "Grand Total" em Invoice → NÃO é frete (é total geral da fatura)
+       ❌ "Subtotal" em Invoice → NÃO é frete (é subtotal de mercadoria)
+       ❌ Valor de mercadoria sendo colocado na linha de frete → PROIBIDO!
+       
+       REGRA PARA INVOICES COMERCIAIS:
+       - Se a Invoice é uma fatura comercial e NÃO tem uma linha EXPLÍCITA de 
+         "Freight/Frete/Charges", o campo "Valor Total Frete" DEVE ser "ND" para essa Invoice
+       - "Amount Due", "Total Amount", "Final Amount", "Grand Total" em Invoice comercial 
+         são geralmente o TOTAL DA FATURA (mercadoria + eventuais taxas), NÃO o frete isolado!
+       
+       ONDE FRETE REALMENTE APARECE:
+       ✅ CCT/BL/AWB: Coluna "Prepaid" ou "Collect" → É frete
+       ✅ Invoice com linha "Freight: USD 500" → É frete
+       ✅ Documento de transporte com "Total Charges" → É frete
+       ✅ Draft DI campo "Valor Frete" em moeda estrangeira → É frete
    
    C) VALOR SEGURO (apenas para arquivos de seguro):
       - Apenas quando há arquivo de seguro (Insurance.pdf, Seguro.pdf, Apólice.pdf)
@@ -871,69 +906,77 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
 
 16) REGRAS DE STATUS — PRIORIDADE MÁXIMA (SEGUIR À RISCA!):
 
-   ⚠️ STATUS 🔴 CRÍTICO — USAR OBRIGATORIAMENTE QUANDO:
-   - Valores numéricos diferem em mais de 20% (ex.: 28.234 vs 508 → claramente diferentes!)
-     ⚠️ EXCEÇÃO: "Valor Mercadoria" / "Valor Total" → SEMPRE 🟨 ALERTA, mesmo >20%
-   - Moedas diferentes para o MESMO campo em documentos que DEVERIAM ter mesma moeda
-   - CNPJ divergente entre documentos
-   - NCM divergente na raiz (4 primeiros dígitos)
-   - Frete marcado COLLECT em um doc vs PREPAID em outro
-   - Incoterms diferentes (CFR vs FOB vs CIF)
-   - Valores de ordens de magnitude diferentes (ex.: 10.000 vs 100)
-     ⚠️ EXCEÇÃO: "Valor Mercadoria" / "Valor Total" → SEMPRE 🟨 ALERTA
+    ⚠️ STATUS 🔴 CRÍTICO — USAR OBRIGATORIAMENTE QUANDO:
+    - Valores numéricos diferem em mais de 20% (ex.: 28.234 vs 508 → claramente diferentes!)
+      ⚠️ EXCEÇÃO: "Valor Mercadoria" / "Valor Total" → SEMPRE ✅ CONFORME (ver regra abaixo)
+    - Moedas diferentes para o MESMO campo em documentos que DEVERIAM ter mesma moeda
+    - CNPJ divergente entre documentos
+    - NCM divergente na raiz (4 primeiros dígitos)
+    - Frete marcado COLLECT em um doc vs PREPAID em outro
+    - Incoterms diferentes (CFR vs FOB vs CIF)
+    - Valores de ordens de magnitude diferentes (ex.: 10.000 vs 100)
+      ⚠️ EXCEÇÃO: "Valor Mercadoria" / "Valor Total" → SEMPRE ✅ CONFORME
 
-   ⚠️ EXCEÇÃO ESPECIAL PARA VALOR MERCADORIA:
-   - Qualquer divergência em "Valor Mercadoria", "Valor Total Mercadoria", "Valor FOB", 
-     "Valor CIF", "Valor Total" → SEMPRE usar 🟨 ALERTA, NUNCA 🔴 CRÍTICO
-   - Motivo: valores de mercadoria variam naturalmente entre documentos (Invoice, PL, HBL, DI)
-   - Mesmo se diferença >20%, usar 🟨 e documentar na seção Observações
+    🔴🔴🔴 REGRA ABSOLUTA PARA VALOR MERCADORIA (PRIORIDADE MÁXIMA):
+    - Qualquer divergência em "Valor Mercadoria", "Valor Total Mercadoria", "Valor FOB", 
+      "Valor CIF", "Valor Total" → SEMPRE ✅ CONFORME, NUNCA 🟨 e NUNCA 🔴
+    - Motivo: cada Invoice pode ter um valor diferente (múltiplas invoices por processo);
+      o Draft DI confere o valor total consolidado de todas as invoices.
+    - Divergências entre invoices individuais são ESPERADAS e NORMAIS.
+    - Na seção Observações, registrar os valores encontrados de forma INFORMATIVA:
+      → Usar formato: "ℹ️ Valor Mercadoria: Invoice1 = EUR 28.234, Invoice2 = EUR 508 (valores individuais por invoice, conferência pelo total no Draft DI)"
+      → NÃO usar ícone 🟨 ou 🔴 na observação de Valor Mercadoria
+      → NÃO usar classe "obs-alerta" ou "obs-critico" para essa observação
 
-   ⚠️ STATUS 🟨 ALERTA — USAR OBRIGATORIAMENTE QUANDO:
-   - Valores numéricos diferem mais que a tolerância MAS menos que 20%
-   - Datas diferentes entre documentos (ex.: 19/12/2025 vs 17/12/2025)
-   - Moedas diferentes em campos DIFERENTES entre documentos (ex.: Invoice em EUR, Seguro em USD)
-   - Campo obrigatório ausente (ND) em algum documento mas presente em outros
-   - Razão social diferente (mesmo CNPJ)
-   - Diferença em Total Collect/Prepaid acima de EUR/USD 50
-   - Valores em moedas diferentes que não podem ser comparados diretamente
+    ⚠️ STATUS 🟨 ALERTA — USAR OBRIGATORIAMENTE QUANDO:
+    - Valores numéricos diferem mais que a tolerância MAS menos que 20%
+      (EXCETO "Valor Mercadoria" que é SEMPRE ✅)
+    - Datas diferentes entre documentos (ex.: 19/12/2025 vs 17/12/2025)
+    - Moedas diferentes em campos DIFERENTES entre documentos (ex.: Invoice em EUR, Seguro em USD)
+    - Campo obrigatório ausente (ND) em algum documento mas presente em outros
+    - Razão social diferente (mesmo CNPJ)
+    - Diferença em Total Collect/Prepaid acima de EUR/USD 50
+    - Valores em moedas diferentes que não podem ser comparados diretamente
 
-   ⚠️ STATUS ✅ CONFORME — USAR SOMENTE QUANDO:
-   - Valores são IDÊNTICOS após normalização numérica (vírgula vs ponto, zeros trailing)
-   - OU diferença está DENTRO da tolerância configurada E mesma moeda
-   - OU campo é "ND" em TODOS os documentos (nenhum documento tem o dado)
-   - NUNCA marcar ✅ se houver diferença significativa entre valores!
+    ⚠️ STATUS ✅ CONFORME — USAR SOMENTE QUANDO:
+    - Valores são IDÊNTICOS após normalização numérica (vírgula vs ponto, zeros trailing)
+    - OU diferença está DENTRO da tolerância configurada E mesma moeda
+    - OU campo é "ND" em TODOS os documentos (nenhum documento tem o dado)
+    - OU campo é "Valor Mercadoria" (SEMPRE ✅ conforme regra absoluta acima)
+    - NUNCA marcar ✅ se houver diferença significativa entre valores (exceto Valor Mercadoria)!
 
-   ⚠️ REGRA DE OURO — CONSISTÊNCIA TABELA × OBSERVAÇÕES:
-   Se você mencionar algo na seção "Observações" com 🟨 ou 🔴,
-   a LINHA CORRESPONDENTE na tabela DEVE ter o MESMO ícone!
-   
-   EXEMPLO ERRADO (NÃO FAZER!):
-   - Tabela: "Valor Mercadoria" → ✅
-   - Observações: "🟨 Valores diferentes nas faturas"
-   → INCONSISTÊNCIA! O status da linha DEVE ser 🟨
-   
-   EXEMPLO CORRETO:
-   - Tabela: "Valor Mercadoria" → 🟨
-   - Observações: "🟨 Valores diferentes nas faturas: EUR 28.234 vs EUR 508"
-   → CONSISTENTE!
+    ⚠️ REGRA DE OURO — CONSISTÊNCIA TABELA × OBSERVAÇÕES:
+    Se você mencionar algo na seção "Observações" com 🟨 ou 🔴,
+    a LINHA CORRESPONDENTE na tabela DEVE ter o MESMO ícone!
+    
+    EXCEÇÃO: "Valor Mercadoria" → tabela SEMPRE ✅, observações usam ℹ️ (informativo)
+    
+    EXEMPLO CORRETO PARA VALOR MERCADORIA:
+    - Tabela: "Valor Mercadoria" → ✅
+    - Observações: "ℹ️ Valores de mercadoria por invoice: EUR 28.234 (Invoice1), EUR 508 (Invoice2)"
+    → CONSISTENTE! (✅ na tabela, informativo nas observações)
 
-   ⚠️ REGRA CRÍTICA PARA COMPARAÇÃO MULTI-DOCUMENTO:
-   - Documentos DIFERENTES podem ter valores DIFERENTES — isso é NORMAL
-   - MAS se o MESMO campo (ex.: Peso Bruto) aparece em 2+ docs com valores MUITO diferentes:
-     → Se diferença >20% → 🔴 CRÍTICO (exceto Valor Mercadoria)
-   - LEMBRETE: "Valor Mercadoria" e variações → SEMPRE 🟨 ALERTA (nunca 🔴)
-   - Se valores estão em moedas diferentes e não podem ser comparados:
-     → Marcar como 🟨 e explicar que "moedas diferentes, comparação requer conversão"
+    ⚠️ REGRA CRÍTICA PARA COMPARAÇÃO MULTI-DOCUMENTO:
+    - Documentos DIFERENTES podem ter valores DIFERENTES — isso é NORMAL
+    - MAS se o MESMO campo (ex.: Peso Bruto) aparece em 2+ docs com valores MUITO diferentes:
+      → Se diferença >20% → 🔴 CRÍTICO (exceto Valor Mercadoria → SEMPRE ✅)
+    - LEMBRETE: "Valor Mercadoria" e variações → SEMPRE ✅ CONFORME (nunca 🟨, nunca 🔴)
+    - Se valores estão em moedas diferentes e não podem ser comparados:
+      → Marcar como 🟨 e explicar que "moedas diferentes, comparação requer conversão"
+      → EXCETO Valor Mercadoria → SEMPRE ✅
 
 17) VERIFICAÇÃO FINAL OBRIGATÓRIA:
-   Antes de gerar a saída, VERIFIQUE:
-   1. Para cada item listado em "Observações" com 🟨 ou 🔴
-   2. Encontre a linha correspondente na tabela
-   3. Confirme que o STATUS da linha CORRESPONDE ao ícone da observação
-   4. Se não corresponder, CORRIJA a tabela antes de gerar a saída
-   
-   Esta verificação é OBRIGATÓRIA. Inconsistências entre tabela e observações
-   indicam erro no processamento e devem ser corrigidas antes da saída final.
+    Antes de gerar a saída, VERIFIQUE:
+    1. Para cada item listado em "Observações" com 🟨 ou 🔴
+    2. Encontre a linha correspondente na tabela
+    3. Confirme que o STATUS da linha CORRESPONDE ao ícone da observação
+    4. Se não corresponder, CORRIJA a tabela antes de gerar a saída
+    5. CONFIRME que "Valor Mercadoria" está com ✅ na tabela (SEMPRE conforme!)
+    6. CONFIRME que observações sobre Valor Mercadoria usam ℹ️ (informativo), NUNCA 🟨 ou 🔴
+    7. CONFIRME que "Valor Total Frete" só contém valores de linhas EXPLICITAMENTE rotuladas como frete
+    
+    Esta verificação é OBRIGATÓRIA. Inconsistências entre tabela e observações
+    indicam erro no processamento e devem ser corrigidas antes da saída final.
 `;
 }
 
