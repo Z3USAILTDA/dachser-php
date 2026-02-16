@@ -139,8 +139,10 @@ Return ONLY valid JSON, no markdown, no explanation.`;
 
     let extracted: any;
     try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      extracted = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(content);
+      // Strip markdown code fences if present
+      const cleaned = content.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '');
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      extracted = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(cleaned);
     } catch {
       console.error('[parse-hawb-cadastro] Failed to parse:', content.substring(0, 500));
       throw new Error('Falha ao interpretar resposta da IA');
