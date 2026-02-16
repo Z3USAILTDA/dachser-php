@@ -289,6 +289,9 @@ interface MblTrackingData {
   updated_at: string | null; // Data de sincronização do banco
   tipo_carga: 'FCL' | 'LCL'; // Tipo de carga
   coloader: string | null; // Nome do coloader (para LCL)
+  hbl: string | null; // HBL do processo
+  etd: string | null; // ETD do t_sea_master
+  cliente: string | null; // Cliente do t_master_dados
 }
 
 // Container detail interface (expanded view)
@@ -1602,7 +1605,11 @@ const ContainerTracking = () => {
           destino: emailMbl.destino,
           custom_message: emailCustomMessage || undefined,
           email_type: emailType,
-          preserve_original_status: true // Sempre usar nomenclatura original do rastreio
+          preserve_original_status: true,
+          hbl: emailMbl.hbl || '',
+          mbl: emailMbl.mbl_id,
+          etd_raw: emailMbl.etd || '',
+          cliente: emailMbl.cliente || ''
         })
       });
       const result = await res.json();

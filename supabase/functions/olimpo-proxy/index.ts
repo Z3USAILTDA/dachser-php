@@ -1668,7 +1668,8 @@ serve(async (req) => {
                   TRIM(master) as mbl_id,
                   MAX(eta_ata) as eta,
                   MAX(etd) as etd,
-                  MAX(nome_analista) as nome_analista
+                  MAX(nome_analista) as nome_analista,
+                  MAX(hbl) as hbl
                 FROM dados_dachser.t_sea_master
                 WHERE master IS NOT NULL
                   AND TRIM(master) != ''
@@ -1680,7 +1681,9 @@ serve(async (req) => {
                   TRIM(mawb) as mbl_id,
                   MAX(tipo_processo) as tipo_processo,
                   MAX(eta) as eta,
-                  MAX(nome_analista) as nome_analista
+                  MAX(nome_analista) as nome_analista,
+                  MAX(hawb) as hawb,
+                  MAX(cliente) as cliente
                 FROM dados_dachser.t_master_dados
                 WHERE mawb IS NOT NULL
                   AND TRIM(mawb) != ''
@@ -1849,6 +1852,9 @@ serve(async (req) => {
               COALESCE(MAX(md.eta), MAX(mdn.eta)) as eta_master,
               COALESCE(MAX(md.nome_analista), MAX(mdn.nome_analista)) as nome_analista,
               MAX(ts.eta) as eta_api,
+              COALESCE(MAX(md.hbl), MAX(mdn.hawb)) as hbl,
+              MAX(md.etd) as etd,
+              COALESCE(MAX(mdn.cliente), MAX(ts.consignee)) as cliente,
               MAX(ts.email_analista) as email_analista,
               MAX(ts.email_cliente) as email_cliente,
               COUNT(DISTINCT CASE WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', '') AND ts.container IS NOT NULL THEN ts.container END) as container_count,
@@ -3518,7 +3524,6 @@ serve(async (req) => {
               }
               continue;
             }
-            }
 
             if (containers.length === 0) {
               console.log(`[enrich_sea_containers] No containers found for MBL ${mblId} after trying ${mblVariations.length} variations`);
@@ -3528,92 +3533,89 @@ serve(async (req) => {
                 SET container = 'NAO_ENCONTRADO', updated_at = NOW()
                 WHERE mbl_id = ? AND (container = 'PENDENTE' OR container IS NULL OR container = '' OR container = 'NAO_ENCONTRADO')
               `, [mblId]);
-              details.push({ mbl: mblId, status: 'no_containers' });
+              details.push({ mbl: mblId, status: 'no_containers', variations_tried: mblVariations.length });
               noContainers++;
               continue;
             }
 
-            console.log(`[enrich_sea_containers] Found ${containers.length} containers for MBL ${mblId}: ${containers.join(', ')}`);
-
-            // Delete the PENDENTE/NAO_ENCONTRADO record for this MBL
-            await client.execute(`
-              DELETE FROM dados_dachser.t_tracking_sea 
-              WHERE mbl_id = ? AND (container = 'PENDENTE' OR container IS NULL OR container = '' OR container = 'NAO_ENCONTRADO')
-            `, [mblId]);
-
-            // Insert new records for each container found
-            for (const container of containers) {
-              if (!container || container.trim() === '') continue;
+            // Found containers! Insert them into tracking
+            console.log(`[enrich_sea_containers] Inserting ${containers.length} containers for MBL ${mblId} (variation: ${successVariation})`);
+            
+            for (const containerId of containers) {
+              const cleanContainer = containerId.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+              if (!cleanContainer || cleanContainer.length < 4) continue;
               
+              // Check if container already exists for this MBL
+              const existing = await client.query(
+                `SELECT id FROM dados_dachser.t_tracking_sea WHERE mbl_id = ? AND container = ? LIMIT 1`,
+                [mblId, cleanContainer]
+              );
+              
+              if (existing.length > 0) {
+                console.log(`[enrich_sea_containers] Container ${cleanContainer} already exists for MBL ${mblId}, skipping`);
+                continue;
+              }
+
+              // Insert new container row (copy MBL metadata)
               await client.execute(`
                 INSERT INTO dados_dachser.t_tracking_sea 
-                  (mbl_id, container, tipo_processo, consignee, email_analista, email_cliente, active, shipping_line)
-                VALUES (?, ?, ?, ?, ?, ?, 1, ?)
-                ON DUPLICATE KEY UPDATE
-                  tipo_processo = VALUES(tipo_processo),
-                  consignee = VALUES(consignee),
-                  email_analista = VALUES(email_analista),
-                  email_cliente = VALUES(email_cliente),
-                  shipping_line = COALESCE(shipping_line, VALUES(shipping_line)),
-                  active = 1
-              `, [
-                mblId,
-                container.toUpperCase().trim(),
-                row.tipo_processo || 'SEA IMPORT',
-                row.consignee || null,
-                row.email_analista || null,
-                row.email_cliente || null,
-                normalizeShippingLine(effectiveShippingLine || 'UNKNOWN')
-              ]);
+                  (mbl_id, container, consignee, shipping_line, tipo_processo, email_analista, email_cliente, active, created_at, updated_at)
+                SELECT 
+                  mbl_id, ?, consignee, shipping_line, tipo_processo, email_analista, email_cliente, 1, NOW(), NOW()
+                FROM dados_dachser.t_tracking_sea 
+                WHERE mbl_id = ? 
+                LIMIT 1
+              `, [cleanContainer, mblId]);
             }
 
-            enriched++;
-            details.push({ mbl: mblId, status: 'enriched', containers: containers.length });
+            // Remove PENDENTE placeholder if real containers were added
+            await client.execute(`
+              DELETE FROM dados_dachser.t_tracking_sea 
+              WHERE mbl_id = ? AND container IN ('PENDENTE', '')
+            `, [mblId]);
 
-          } catch (apiError: any) {
-            console.error(`[enrich_sea_containers] Error processing MBL ${mblId}:`, apiError);
-            details.push({ mbl: mblId, status: 'error', error: apiError.message });
+            details.push({ mbl: mblId, status: 'enriched', containers: containers.length, variation: successVariation });
+            enriched++;
+
+          } catch (e: any) {
+            console.error(`[enrich_sea_containers] Error processing MBL ${mblId}:`, e);
+            details.push({ mbl: mblId, status: 'error', error: e.message });
             errors++;
           }
 
-          // Rate limiting - wait 500ms between API calls
+          // Wait between MBLs
           await new Promise(r => setTimeout(r, 500));
         }
 
         await client.close();
-        
-        const remaining = pendingMbls.length - processed;
-        const timeElapsed = Date.now() - startTime;
-        
-        console.log(`[enrich_sea_containers] Batch completed: enriched=${enriched}, skipped=${skipped}, noContainers=${noContainers}, errors=${errors}, remaining=${remaining}, time=${timeElapsed}ms`);
-        
-        return new Response(JSON.stringify({ 
-          success: true, 
+        const elapsed = Date.now() - startTime;
+        console.log(`[enrich_sea_containers] Done in ${elapsed}ms. Enriched: ${enriched}, Errors: ${errors}, No containers: ${noContainers}, Skipped: ${skipped}, Processed: ${processed}/${pendingMbls.length}`);
+
+        return new Response(JSON.stringify({
+          success: true,
           enriched,
-          skipped,
-          noContainers,
           errors,
+          noContainers,
+          skipped,
           processed,
-          total: pendingMbls.length,
-          remaining,
-          timeElapsed,
-          message: `${enriched} MBLs enriquecidos, ${skipped} ignorados. ${remaining} restantes.`,
+          total_pending: pendingMbls.length,
+          elapsed_ms: elapsed,
           details
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
+
       } catch (e: any) {
-        await client.close();
+        if (client) await client.close();
         console.error('[enrich_sea_containers] Error:', e);
         return new Response(JSON.stringify({ error: e.message }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
     }
 
-    // ===== SEA TRACKING: Reset NAO_ENCONTRADO containers for retry =====
-    if (action === 'reset_nao_encontrado') {
+    // ===== RESET TIMEOUT COUNT =====
+    if (action === 'reset_timeout_count') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');
       const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
       const mariadbUser = Deno.env.get('MARIADB_USER');
@@ -3625,7 +3627,6 @@ serve(async (req) => {
         });
       }
 
-      const mblId = url.searchParams.get('mbl_id'); // Optional: specific MBL
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
       const client = await new Client().connect({
         hostname: mariadbHost,
@@ -3636,94 +3637,42 @@ serve(async (req) => {
       });
 
       try {
+        const mblId = url.searchParams.get('mbl_id') || bodyData?.mbl_id;
         let result;
-        if (mblId) {
-          result = await client.execute(`
-            UPDATE dados_dachser.t_tracking_sea 
-            SET container = 'PENDENTE', updated_at = NOW()
-            WHERE mbl_id = ? AND container = 'NAO_ENCONTRADO' AND active = 1
-          `, [mblId]);
-          console.log(`[reset_nao_encontrado] Reset MBL ${mblId}: ${result.affectedRows} rows`);
-        } else {
-          result = await client.execute(`
-            UPDATE dados_dachser.t_tracking_sea 
-            SET container = 'PENDENTE', updated_at = NOW()
-            WHERE container = 'NAO_ENCONTRADO' AND active = 1
-          `);
-          console.log(`[reset_nao_encontrado] Reset ALL: ${result.affectedRows} rows`);
-        }
-        await client.close();
-        return new Response(JSON.stringify({ 
-          success: true, 
-          reset: result.affectedRows || 0,
-          mbl_id: mblId || 'ALL',
-          message: `${result.affectedRows || 0} containers resetados para PENDENTE`
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      } catch (e: any) {
-        await client.close();
-        return new Response(JSON.stringify({ error: e.message }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-    }
-
-    // ===== SEA TRACKING: Reset timeout count for MBLs =====
-    if (action === 'reset_timeout_count') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPassword = Deno.env.get('MARIADB_PASSWORD');
-
-      const client = await new Client().connect({
-        hostname: mariadbHost,
-        port: parseInt(mariadbPort, 10),
-        username: mariadbUser,
-        password: mariadbPassword,
-        db: 'dados_dachser',
-      });
-
-      try {
-        const mblId = url.searchParams.get('mbl_id');
         
-        let result;
         if (mblId) {
           result = await client.execute(`
             UPDATE dados_dachser.t_tracking_sea
             SET enrich_timeout_count = 0
             WHERE mbl_id = ? AND active = 1
           `, [mblId]);
-          console.log(`[reset_timeout_count] Reset MBL ${mblId}: ${result.affectedRows} rows`);
+          console.log(`[reset_timeout_count] Reset timeout count for MBL ${mblId}`);
         } else {
           result = await client.execute(`
             UPDATE dados_dachser.t_tracking_sea
             SET enrich_timeout_count = 0
             WHERE active = 1
           `);
-          console.log(`[reset_timeout_count] Reset ALL: ${result.affectedRows} rows`);
+          console.log(`[reset_timeout_count] Reset ALL timeout counts`);
         }
+
         await client.close();
         return new Response(JSON.stringify({
           success: true,
           mbl_id: mblId || 'ALL',
-          reset: result.affectedRows || 0,
-          message: `${result.affectedRows || 0} registros resetados`
+          affected_rows: result?.affectedRows || 0
         }), {
-          headers: corsHeaders,
-          status: 200
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
-      } catch (e) {
-        console.error(`[reset_timeout_count] Error: ${e.message}`);
+
+      } catch (e: any) {
+        await client.close();
+        console.error('[reset_timeout_count] Error:', e);
         return new Response(JSON.stringify({ error: e.message }), {
-          headers: corsHeaders,
-          status: 400
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
     }
-
-
 
     // ===== SEA TRACKING: Manually set transshipment_port for an MBL =====
     if (action === 'set_transshipment_port') {
@@ -7289,7 +7238,8 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
-  } catch (error: any) {
+  } catch (e) {
+    const error = e as any;
     console.error('[olimpo-proxy] Error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
