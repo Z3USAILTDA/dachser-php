@@ -7717,6 +7717,201 @@ serve(async (req) => {
       }
     }
 
+    // ===== SETUP T_CADASTRO_MARITIMO: Create table if not exists =====
+    if (action === 'setup_t_cadastro_maritimo') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost!,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser!,
+        password: mariadbPass!,
+        db: database,
+      });
+
+      try {
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ${database}.t_cadastro_maritimo (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            cadastro_id VARCHAR(50) NOT NULL,
+            bl_number VARCHAR(100),
+            shipper_name VARCHAR(255),
+            shipper_address TEXT,
+            consignee_nome VARCHAR(255),
+            consignee_cnpj VARCHAR(50),
+            consignee_customer_number VARCHAR(100),
+            notify_party TEXT,
+            delivery_agent TEXT,
+            port_loading VARCHAR(255),
+            port_discharge VARCHAR(255),
+            vessel_voyage VARCHAR(255),
+            place_receipt VARCHAR(255),
+            place_delivery VARCHAR(255),
+            container_numbers TEXT,
+            seal_numbers TEXT,
+            marks_numbers TEXT,
+            nature_of_goods TEXT,
+            hs_code VARCHAR(100),
+            gross_weight_kg DECIMAL(12,3),
+            volume_cbm DECIMAL(10,4),
+            pieces INT,
+            packaging TEXT,
+            freight_charges TEXT,
+            freight_payment VARCHAR(20),
+            service_type VARCHAR(20),
+            total_prepaid DECIMAL(12,2),
+            total_collect DECIMAL(12,2),
+            num_original_bls INT,
+            shipped_on_board_date VARCHAR(20),
+            place_date_issue VARCHAR(255),
+            issued_by VARCHAR(255),
+            clerk VARCHAR(255),
+            clerk_email VARCHAR(255),
+            etd DATETIME,
+            eta DATETIME,
+            created_by VARCHAR(100),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_cadastro_id (cadastro_id),
+            INDEX idx_bl (bl_number),
+            INDEX idx_clerk (clerk),
+            INDEX idx_consignee (consignee_nome),
+            INDEX idx_created (created_at)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+        `);
+        await client.close();
+        return new Response(JSON.stringify({ success: true, message: 't_cadastro_maritimo created/verified' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== CREATE CADASTRO MARITIMO: Insert new record =====
+    if (action === 'create_cadastro_maritimo') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+
+      if (!bodyData) {
+        try {
+          bodyData = await req.clone().json();
+        } catch { bodyData = {}; }
+      }
+
+      const d = bodyData;
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost!,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser!,
+        password: mariadbPass!,
+        db: database,
+      });
+
+      try {
+        // Ensure table exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ${database}.t_cadastro_maritimo (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            cadastro_id VARCHAR(50) NOT NULL,
+            bl_number VARCHAR(100),
+            shipper_name VARCHAR(255),
+            shipper_address TEXT,
+            consignee_nome VARCHAR(255),
+            consignee_cnpj VARCHAR(50),
+            consignee_customer_number VARCHAR(100),
+            notify_party TEXT,
+            delivery_agent TEXT,
+            port_loading VARCHAR(255),
+            port_discharge VARCHAR(255),
+            vessel_voyage VARCHAR(255),
+            place_receipt VARCHAR(255),
+            place_delivery VARCHAR(255),
+            container_numbers TEXT,
+            seal_numbers TEXT,
+            marks_numbers TEXT,
+            nature_of_goods TEXT,
+            hs_code VARCHAR(100),
+            gross_weight_kg DECIMAL(12,3),
+            volume_cbm DECIMAL(10,4),
+            pieces INT,
+            packaging TEXT,
+            freight_charges TEXT,
+            freight_payment VARCHAR(20),
+            service_type VARCHAR(20),
+            total_prepaid DECIMAL(12,2),
+            total_collect DECIMAL(12,2),
+            num_original_bls INT,
+            shipped_on_board_date VARCHAR(20),
+            place_date_issue VARCHAR(255),
+            issued_by VARCHAR(255),
+            clerk VARCHAR(255),
+            clerk_email VARCHAR(255),
+            etd DATETIME,
+            eta DATETIME,
+            created_by VARCHAR(100),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_cadastro_id (cadastro_id),
+            INDEX idx_bl (bl_number),
+            INDEX idx_clerk (clerk),
+            INDEX idx_consignee (consignee_nome),
+            INDEX idx_created (created_at)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+        `);
+
+        const result = await client.execute(`
+          INSERT INTO ${database}.t_cadastro_maritimo (
+            cadastro_id, bl_number, shipper_name, shipper_address,
+            consignee_nome, consignee_cnpj, consignee_customer_number,
+            notify_party, delivery_agent,
+            port_loading, port_discharge, vessel_voyage, place_receipt, place_delivery,
+            container_numbers, seal_numbers, marks_numbers,
+            nature_of_goods, hs_code, gross_weight_kg, volume_cbm, pieces, packaging,
+            freight_charges, freight_payment, service_type, total_prepaid, total_collect,
+            num_original_bls, shipped_on_board_date, place_date_issue, issued_by,
+            clerk, clerk_email, etd, eta, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          d.cadastro_id, d.bl_number, d.shipper_name, d.shipper_address,
+          d.consignee_nome, d.consignee_cnpj, d.consignee_customer_number,
+          d.notify_party, d.delivery_agent,
+          d.port_loading, d.port_discharge, d.vessel_voyage, d.place_receipt, d.place_delivery,
+          d.container_numbers, d.seal_numbers, d.marks_numbers,
+          d.nature_of_goods, d.hs_code, d.gross_weight_kg || null, d.volume_cbm || null, d.pieces || null, d.packaging,
+          d.freight_charges, d.freight_payment, d.service_type, d.total_prepaid || null, d.total_collect || null,
+          d.num_original_bls || null, d.shipped_on_board_date, d.place_date_issue, d.issued_by,
+          d.clerk, d.clerk_email, d.etd || null, d.eta || null, d.created_by,
+        ]);
+
+        await client.close();
+        console.log(`[create_cadastro_maritimo] Inserted cadastro_id=${d.cadastro_id}`);
+
+        return new Response(JSON.stringify({ success: true, cadastro_id: d.cadastro_id, id: result.lastInsertId }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[create_cadastro_maritimo] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     return new Response(JSON.stringify({ error: 'Ação não reconhecida' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
