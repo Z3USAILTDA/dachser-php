@@ -2757,7 +2757,11 @@ serve(async (req) => {
             // ===== FALLBACK: Detectar transbordo via texto do container_status =====
             // Se a API não retornou dados estruturados de transshipment, tentar detectar via texto
             let transshipmentPort = null;
-            if (uniqueTransshipments.length > 0) {
+            // Se já tem transshipment_port no banco, preservar e não recalcular
+            if (row.transshipment_port && row.transshipment_port.trim() !== '') {
+              transshipmentPort = row.transshipment_port; // Preservar valor existente
+              console.log(`[refresh_sea_tracking] Preserving existing transshipment_port for ${containerId}: ${transshipmentPort}`);
+            } else if (uniqueTransshipments.length > 0) {
               transshipmentPort = uniqueTransshipments.join(', ');
             } else {
               // Fallback: buscar por palavras-chave no container_status ou last_event
@@ -2814,7 +2818,11 @@ serve(async (req) => {
                 vessel_imo = COALESCE(?, vessel_imo),
                 last_event = ?,
                 shipping_line = COALESCE(?, shipping_line),
-                transshipment_port = COALESCE(?, transshipment_port),
+                transshipment_port = CASE 
+                  WHEN transshipment_port IS NULL OR transshipment_port = '' 
+                  THEN COALESCE(?, transshipment_port) 
+                  ELSE transshipment_port 
+                END,
                 loading_port = COALESCE(?, loading_port),
                 last_check = NOW(),
                 last_error = NULL
@@ -2925,7 +2933,11 @@ serve(async (req) => {
                     origem = COALESCE(?, origem),
                     destino = COALESCE(?, destino),
                     shipping_line = COALESCE(?, shipping_line),
-                    transshipment_port = COALESCE(?, transshipment_port),
+                    transshipment_port = CASE 
+                      WHEN transshipment_port IS NULL OR transshipment_port = '' 
+                      THEN COALESCE(?, transshipment_port) 
+                      ELSE transshipment_port 
+                    END,
                     loading_port = COALESCE(?, loading_port),
                     last_check = NOW(),
                     last_error = NULL,
