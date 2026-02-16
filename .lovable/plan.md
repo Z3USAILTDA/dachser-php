@@ -1,82 +1,50 @@
 
 
-# Cadastro BL (Bill of Lading) - Tela SEA
+# Historico de ETA nos E-mails de Follow-Up ao Cliente
 
 ## Objetivo
-Criar uma nova pagina `/sea/cadastro-bl` para cadastro de Bill of Lading (BL) maritimo, seguindo o mesmo padrao da tela AIR "Cadastro NOVA" (`/air/cadastro-nova`). A tela sera visivel apenas para admins Z3US no menu SEA, posicionada antes de "Analise Documental SEA".
+Adicionar uma secao "Historico de Alteracoes de ETA" nos e-mails enviados ao cliente (`email_type === 'cliente'`), mostrando todas as variacoes de ETA registradas para aquele container/MBL. Isso atende ao pedido de maior visibilidade e transparencia sobre mudancas de programacao.
 
-## O que sera criado
+## Como funciona hoje
+- A edge function `send-container-status-email` recebe dados do container e envia e-mail via Resend
+- O e-mail do cliente mostra apenas o ETA atual, sem historico
+- A tabela `t_tracking_sea_history` no MariaDB ja armazena o campo `eta` em cada evento, junto com `event_datetime` e `created_at`
 
-### 1. Edge Function: `parse-bl-cadastro`
-Nova edge function para extrair dados de PDFs de Bill of Lading usando Gemini Vision. Campos extraidos do BL:
+## O que sera feito
 
-- **BL Number** (numero do BL)
-- **Shipper** (nome e endereco)
-- **Consignee** (nome, endereco, CNPJ)
-- **Notify Party**
-- **Delivery Agent**
-- **Port of Loading**
-- **Port of Discharge**
-- **Vessel / Voyage Number**
-- **Place of Receipt**
-- **Place of Delivery**
-- **Container Numbers** (com seal numbers)
-- **Marks and Numbers**
-- **Goods Description / Nature of Goods**
-- **HS Code / NCM**
-- **Gross Weight (kg)**
-- **Volume (CBM)**
-- **Number of Packages**
-- **Packaging Type**
-- **Freight Charges** (ocean freight, origin charges, BAF, DTHC, etc.)
-- **Freight Payment** (Prepaid/Collect)
-- **Service Type** (LCL/FCL)
-- **Number of Original BLs**
-- **Shipped on Board Date**
-- **Place and Date of Issue**
-- **Issued By**
+### Modificacao unica: `supabase/functions/send-container-status-email/index.ts`
 
-### 2. Pagina Frontend: `src/pages/sea/CadastroBl.tsx`
-Pagina identica em layout ao `CadastroNova.tsx`, com:
+1. **Adicionar import do MySQL client** (mesmo padrao de 80+ edge functions existentes):
+   ```
+   import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
+   ```
 
-- **Upload Zone**: Drag & drop de PDF do BL
-- **Campos Manuais**: Consignee (autocomplete via olimpo-proxy), Clerk/Analista (autocomplete modal SEA), ETD, ETA
-- **Campos Extraidos** organizados em cards:
-  - BL & Shipper (bl_number, shipper_name, shipper_address, notify_party)
-  - Vessel & Routing (vessel_voyage, port_loading, port_discharge, place_receipt, place_delivery)
-  - Containers (container_numbers, seal_numbers)
-  - Charges & Freight (freight_charges, freight_payment, service_type, total_prepaid, total_collect)
-  - Goods & Packaging (nature_of_goods, hs_code, gross_weight_kg, volume_cbm, pieces, packaging)
-  - Issuance (shipped_on_board_date, place_date_issue, issued_by, num_original_bls)
-- **Botao Salvar**: Persiste no MariaDB via `olimpo-proxy`
+2. **Criar funcao `fetchEtaHistory`** que conecta ao MariaDB e busca ETAs distintos:
+   ```
+   SELECT DISTINCT eta,
+          MIN(event_datetime) as first_seen
+   FROM dados_dachser.t_tracking_sea_history
+   WHERE (mbl_id = ? OR container = ?)
+     AND eta IS NOT NULL
+   GROUP BY eta
+   ORDER BY first_seen ASC
+   ```
 
-### 3. Tabela MariaDB: `t_cadastro_maritimo`
-Criada via acao `setup_t_cadastro_maritimo` no `olimpo-proxy`, com todos os campos do BL.
+3. **Gerar HTML da secao de historico** - Uma mini-tabela inserida no template do e-mail cliente, entre os dados atuais e a mensagem customizada:
 
-### 4. Rota e Menu
-- Nova rota `/sea/cadastro-bl` no `App.tsx`
-- Novo item "Cadastro BL" no menu SEA do `Dashboard.tsx`, com `z3usOnly: true`, posicionado como primeiro item (antes de "Analise Documental SEA")
+   | Data do Registro | ETA Previsto |
+   |---|---|
+   | 15/01/2026 | 20/02/2026 |
+   | 22/01/2026 | 25/02/2026 |
+   | **01/02/2026** | **28/02/2026 (atual)** |
 
-## Detalhes Tecnicos
+   - Ultima linha destacada em negrito com fundo `#fff5eb`
+   - Titulo "Historico de Alteracoes de ETA" com borda esquerda laranja (#FF9933)
+   - Se houver apenas 1 ETA (sem alteracoes), exibe "Sem alteracoes de ETA registradas"
+   - Se nao houver historico (falha na conexao ou sem dados), a secao nao aparece
 
-### Arquivos a criar:
-- `supabase/functions/parse-bl-cadastro/index.ts` - Edge function de extracao com Gemini 3 Pro Preview
-- `src/pages/sea/CadastroBl.tsx` - Pagina frontend
+4. **Tratamento de erro resiliente** - Se a consulta ao MariaDB falhar, o e-mail e enviado normalmente sem a secao de historico (nao bloqueia o envio)
 
-### Arquivos a modificar:
-- `src/App.tsx` - Adicionar rota `/sea/cadastro-bl`
-- `src/pages/Dashboard.tsx` - Adicionar item de menu no grupo SEA
-- `supabase/functions/olimpo-proxy/index.ts` - Adicionar acoes `setup_t_cadastro_maritimo` e `create_cadastro_maritimo`
-- `supabase/config.toml` - Registrar nova edge function (verify_jwt = false)
-
-### Fluxo:
-1. Usuario faz upload do PDF do BL
-2. `parse-bl-cadastro` envia o PDF para Gemini Vision e extrai os campos
-3. Campos sao preenchidos automaticamente no formulario
-4. Usuario preenche/corrige campos manuais (Consignee, Clerk, ETD, ETA)
-5. Ao salvar, `olimpo-proxy` com acao `create_cadastro_maritimo` persiste no MariaDB
-
-### Autocomplete:
-- Consignee: `olimpo-proxy?action=search_clientes_base` (mesmo do AIR)
-- Clerk: `olimpo-proxy?action=search_analistas&modal=SEA` (filtro modal SEA)
+### Sem alteracoes no payload
+O campo `container` (que contem o MBL) e o `mbl` ja existem no request body e serao usados para a consulta.
 
