@@ -2539,13 +2539,13 @@ const Index = () => {
                           <tr
                             className={`border-b border-[rgba(255,255,255,.06)] transition-all duration-300 ${
                               isCriticalAwb
-                                ? "bg-red-500/15 border-red-400/50 border-2 animate-pulse shadow-[0_0_15px_rgba(255,0,0,0.2)]"
+                                ? "bg-red-500/15 border-red-400/50 border-2 shadow-[0_0_15px_rgba(255,0,0,0.2)]"
                                 : isCompanyNotRegistered
                                   ? "bg-slate-500/10 border-l-4 border-l-slate-400/50 opacity-70"
                                   : isErroStatus
                                     ? "bg-orange-500/20 border-l-4 border-l-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.2)]"
                                     : isNilStatus
-                                      ? "bg-red-500/20 border-red-500 border-2 animate-pulse shadow-[0_0_20px_rgba(255,0,0,0.3)]"
+                                      ? "bg-red-500/20 border-red-500 border-2 shadow-[0_0_20px_rgba(255,0,0,0.3)]"
                                       : "hover:bg-[rgba(255,255,255,.03)]"
                             } ${isDelivered && !isNilStatus && !isErroStatus && !isCompanyNotRegistered && !isCriticalAwb ? "bg-emerald-500/10" : ""} ${
                               isRetracking && !isNilStatus && !isErroStatus && !isCompanyNotRegistered && !isCriticalAwb
@@ -2616,7 +2616,7 @@ const Index = () => {
 
                                 return (
                                   <div
-                                    className={`relative h-1.5 w-full flex items-center ${isAlertStatus ? "animate-pulse" : ""}`}
+                                    className="relative h-1.5 w-full flex items-center"
                                   >
                                     {/* Barra de fundo */}
                                     <div className={`absolute inset-0 ${bgBarColor} rounded-full`} />
@@ -2833,7 +2833,7 @@ const Index = () => {
 
                                 if (isCritical) {
                                   return (
-                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50 animate-pulse">
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
                                       <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
                                       {awb.pieces_discrepancy ? `Discrepância Peças (${awb.baseline_pieces})` : awb.has_dis_event ? "DIS - Discrepância" : "Crítico"}
                                     </span>
@@ -2841,7 +2841,7 @@ const Index = () => {
                                 }
 
                                 return isDelayed ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse">
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
                                     <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
                                     Em Atraso
                                   </span>
