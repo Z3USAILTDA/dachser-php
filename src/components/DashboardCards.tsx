@@ -19,15 +19,15 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({
   emAlerta,
   criticos,
   activeFilter,
-  onFilterChange,
+  onFilterChange
 }) => {
   return (
     <section className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
       {/* Total Monitorados */}
-      <Card 
+      <Card
         className={`bg-card/90 border-border backdrop-blur-sm shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeFilter === "all" ? "ring-2 ring-primary" : ""}`}
-        onClick={() => onFilterChange("all")}
-      >
+        onClick={() => onFilterChange("all")}>
+
         <div className="p-4 flex flex-col h-full">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -47,10 +47,10 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({
       </Card>
 
       {/* Em Trânsito */}
-      <Card 
+      <Card
         className={`bg-gradient-to-br from-blue-900/40 via-blue-900/10 to-card border-blue-700/50 shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeFilter === "transito" ? "ring-2 ring-blue-400" : ""}`}
-        onClick={() => onFilterChange("transito")}
-      >
+        onClick={() => onFilterChange("transito")}>
+
         <div className="p-4 flex flex-col h-full">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs uppercase tracking-wide text-blue-200">
@@ -70,10 +70,10 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({
       </Card>
 
       {/* Em Alerta */}
-      <Card 
+      <Card
         className={`bg-gradient-to-br from-primary/30 via-primary/10 to-card border-primary/50 shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeFilter === "alerta" ? "ring-2 ring-primary" : ""}`}
-        onClick={() => onFilterChange("alerta")}
-      >
+        onClick={() => onFilterChange("alerta")}>
+
         <div className="p-4 flex flex-col h-full">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs uppercase tracking-wide text-primary">
@@ -87,16 +87,16 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({
             <span className="text-3xl font-semibold text-primary">
               {emAlerta}
             </span>
-            <span className="text-xs text-primary/80">DIS – Atrasos</span>
+            <span className="text-xs text-primary/80">Atrasos</span>
           </div>
         </div>
       </Card>
 
       {/* Críticos */}
-      <Card 
+      <Card
         className={`bg-gradient-to-br from-destructive/40 via-destructive/20 to-card border-destructive/50 shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeFilter === "criticos" ? "ring-2 ring-destructive" : ""}`}
-        onClick={() => onFilterChange("criticos")}
-      >
+        onClick={() => onFilterChange("criticos")}>
+
         <div className="p-4 flex flex-col h-full">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs uppercase tracking-wide text-destructive">
@@ -114,8 +114,8 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({
           </div>
         </div>
       </Card>
-    </section>
-  );
+    </section>);
+
 };
 
 export default DashboardCards;
