@@ -7519,6 +7519,7 @@ serve(async (req) => {
             id INT AUTO_INCREMENT PRIMARY KEY,
             cadastro_id VARCHAR(50) NOT NULL,
             awb_number VARCHAR(100),
+            hawb_number VARCHAR(100),
             airport_departure VARCHAR(255),
             shipper_name VARCHAR(255),
             shipper_address TEXT,
@@ -7616,6 +7617,7 @@ serve(async (req) => {
             id INT AUTO_INCREMENT PRIMARY KEY,
             cadastro_id VARCHAR(50) NOT NULL,
             awb_number VARCHAR(100),
+            hawb_number VARCHAR(100),
             airport_departure VARCHAR(255),
             shipper_name VARCHAR(255),
             shipper_address TEXT,
@@ -7672,7 +7674,7 @@ serve(async (req) => {
 
         const result = await client.execute(`
           INSERT INTO ${database}.t_cadastro_aereo (
-            cadastro_id, awb_number, airport_departure, shipper_name, shipper_address, shipper_account,
+            cadastro_id, awb_number, hawb_number, airport_departure, shipper_name, shipper_address, shipper_account,
             consignee_nome, consignee_cnpj, consignee_customer_number,
             issuing_agent, agent_city, agent_iata_code, agent_account,
             nie_code, nif_code, routing_destination, currency, chgs_wt_val,
@@ -7684,9 +7686,9 @@ serve(async (req) => {
             signature_name, signature_date, signature_place,
             total_prepaid, total_collect,
             clerk, clerk_email, etd, eta, created_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
-          d.cadastro_id, d.awb_number, d.airport_departure, d.shipper_name, d.shipper_address, d.shipper_account,
+          d.cadastro_id, d.awb_number, d.hawb_number, d.airport_departure, d.shipper_name, d.shipper_address, d.shipper_account,
           d.consignee_nome, d.consignee_cnpj, d.consignee_customer_number,
           d.issuing_agent, d.agent_city, d.agent_iata_code, d.agent_account,
           d.nie_code, d.nif_code, d.routing_destination, d.currency, d.chgs_wt_val,

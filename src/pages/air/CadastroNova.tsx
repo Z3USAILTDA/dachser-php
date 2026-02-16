@@ -24,6 +24,7 @@ interface AnalistaSuggestion {
 
 interface FormData {
   awb_number: string;
+  hawb_number: string;
   airport_departure: string;
   shipper_name: string;
   shipper_address: string;
@@ -70,7 +71,7 @@ interface FormData {
 }
 
 const emptyForm: FormData = {
-  awb_number: "", airport_departure: "", shipper_name: "", shipper_address: "", shipper_account: "",
+  awb_number: "", hawb_number: "", airport_departure: "", shipper_name: "", shipper_address: "", shipper_account: "",
   consignee_nome: "", consignee_cnpj: "", consignee_customer_number: "",
   issuing_agent: "", agent_city: "", agent_iata_code: "", agent_account: "",
   nie_code: "", nif_code: "", routing_destination: "", currency: "", chgs_wt_val: "",
@@ -199,6 +200,7 @@ const CadastroNova = () => {
       setForm(prev => ({
         ...prev,
         awb_number: d.awb_number || "",
+        hawb_number: d.hawb_number || "",
         airport_departure: d.airport_departure || "",
         shipper_name: d.shipper_name || "",
         shipper_address: d.shipper_address || "",
@@ -250,7 +252,7 @@ const CadastroNova = () => {
   };
 
   const handleSave = async () => {
-    if (!form.awb_number) { toast.error("AWB Number é obrigatório"); return; }
+    if (!form.awb_number) { toast.error("MAWB Number é obrigatório"); return; }
     if (!form.consignee_nome) { toast.error("Consignee é obrigatório"); return; }
     if (!form.clerk) { toast.error("Clerk é obrigatório"); return; }
 
@@ -461,7 +463,8 @@ const CadastroNova = () => {
         <div className="rounded-xl border border-border/50 bg-card/50 p-4 space-y-4">
           <h3 className="text-sm font-semibold text-primary">AWB & Shipper</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <Field label="AWB Number *" field="awb_number" />
+            <Field label="MAWB Number *" field="awb_number" />
+            <Field label="HAWB Number" field="hawb_number" />
             <Field label="Airport of Departure" field="airport_departure" />
             <Field label="Shipper Name" field="shipper_name" />
             <Field label="Shipper Address" field="shipper_address" span2 />
