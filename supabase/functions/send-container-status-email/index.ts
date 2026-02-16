@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -178,6 +179,94 @@ function getStatusColor(status: string): { bg: string; text: string; style?: str
   return { bg: '#e9ecef', text: '#495057' };
 }
 
+// Fetch ETA history from MariaDB
+async function fetchEtaHistory(mblId: string, container: string): Promise<{ eta: string; first_seen: string }[]> {
+  let client: Client | null = null;
+  try {
+    client = await new Client().connect({
+      hostname: Deno.env.get('MARIADB_HOST') || '',
+      username: Deno.env.get('MARIADB_USER') || '',
+      password: Deno.env.get('MARIADB_PASSWORD') || '',
+      db: Deno.env.get('MARIADB_DATABASE') || 'dados_dachser',
+      port: Number(Deno.env.get('MARIADB_PORT') || '3306'),
+    });
+
+    const rows = await client.query(
+      `SELECT DISTINCT eta, MIN(event_datetime) as first_seen
+       FROM t_tracking_sea_history
+       WHERE (mbl_id = ? OR container = ?)
+         AND eta IS NOT NULL AND eta != ''
+       GROUP BY eta
+       ORDER BY first_seen ASC`,
+      [mblId || container, container],
+    );
+
+    return (rows as any[]).map((r: any) => ({
+      eta: String(r.eta),
+      first_seen: String(r.first_seen),
+    }));
+  } catch (e) {
+    console.error('[fetchEtaHistory] Failed:', e);
+    return [];
+  } finally {
+    if (client) {
+      try { await client.close(); } catch (_) { /* ignore */ }
+    }
+  }
+}
+
+// Build ETA history HTML section
+function buildEtaHistoryHtml(history: { eta: string; first_seen: string }[]): string {
+  if (history.length === 0) return '';
+
+  if (history.length === 1) {
+    return `
+    <div style="margin: 24px 0; border-left: 4px solid #FF9933; padding: 12px 16px; background-color: #fff5eb; border-radius: 4px;">
+      <p style="margin: 0; color: #92400e; font-size: 14px;">&#128337; <strong>Histórico de ETA:</strong> Sem alterações de ETA registradas.</p>
+    </div>`;
+  }
+
+  const rows = history.map((item, idx) => {
+    const isLast = idx === history.length - 1;
+    let dateStr = '—';
+    try {
+      const d = new Date(item.first_seen);
+      if (!isNaN(d.getTime())) dateStr = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch (_) { /* keep dash */ }
+
+    let etaStr = item.eta;
+    try {
+      const d = new Date(item.eta);
+      if (!isNaN(d.getTime())) etaStr = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch (_) { /* keep raw */ }
+
+    const bgStyle = isLast ? 'background-color: #fff5eb;' : '';
+    const fontWeight = isLast ? 'font-weight: 700;' : '';
+    const suffix = isLast ? ' (atual)' : '';
+
+    return `<tr style="${bgStyle}">
+      <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-size: 14px; color: #374151; ${fontWeight}">${dateStr}</td>
+      <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-size: 14px; color: #374151; text-align: center; ${fontWeight}">${etaStr}${suffix}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <div style="margin: 24px 0;">
+    <div style="border-left: 4px solid #FF9933; padding: 12px 16px; margin-bottom: 12px;">
+      <p style="margin: 0; color: #1f2937; font-size: 15px; font-weight: 600;">&#128337; Histórico de Alterações de ETA</p>
+    </div>
+    <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: collapse; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;">
+      <thead>
+        <tr style="background-color: #f8f9fa;">
+          <th style="padding: 10px 12px; text-align: left; font-size: 13px; color: #6b7280; font-weight: 600; border-bottom: 2px solid #e5e7eb;">Data do Registro</th>
+          <th style="padding: 10px 12px; text-align: center; font-size: 13px; color: #6b7280; font-weight: 600; border-bottom: 2px solid #e5e7eb;">ETA Previsto</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -284,6 +373,16 @@ serve(async (req) => {
 
     console.log(`[send-container-status-email] Subject: "${emailSubject}"`);
 
+    // Fetch ETA history for client emails
+    let etaHistoryHtml = '';
+    if (email_type === 'cliente') {
+      const mblId = mbl || container;
+      console.log(`[send-container-status-email] Fetching ETA history for mbl="${mblId}", container="${container}"`);
+      const etaHistory = await fetchEtaHistory(mblId, container);
+      console.log(`[send-container-status-email] ETA history: ${etaHistory.length} distinct ETAs found`);
+      etaHistoryHtml = buildEtaHistoryHtml(etaHistory);
+    }
+
     let htmlBody: string;
 
     if (email_type === 'cliente') {
@@ -331,6 +430,8 @@ serve(async (req) => {
       <td style="padding: 8px 0 8px 16px; color: #1f2937; font-size: 14px; font-weight: 500;">${formattedEta}</td>
     </tr>
   </table>
+  
+  ${etaHistoryHtml}
   
   ${custom_message ? `
   <div style="margin: 24px 0; padding: 16px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 6px;">
