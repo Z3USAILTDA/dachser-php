@@ -46,8 +46,15 @@ serve(async (req) => {
 Extract ALL fields from this HAWB PDF and return a JSON object with the following structure.
 If a field is not found, use null.
 
+IMPORTANT DISTINCTION:
+- "awb_number" (also called MAWB - Master Air Waybill): This is the MASTER airway bill number, typically in format XXX-XXXXXXXX (3 digit airline prefix + dash + 8 digits). It is usually found in the "Accounting Information" section, or labeled as "MAWB", "Master AWB", or "Air Waybill No". It references the airline's master document.
+- "hawb_number" (House Air Waybill): This is the HOUSE airway bill number assigned by the freight forwarder. It may appear at the top of the document, in a header, or labeled as "HAWB", "House AWB", "House Airway Bill", or simply as the main document reference number. It is NOT the same as the MAWB.
+
+If the document is a HAWB, the main prominent number on the document is likely the HAWB number, while the MAWB may be referenced inside (e.g. in Accounting Information).
+
 {
-  "awb_number": "the AWB/MAWB number found in 'Accounting Information' or top of document (format: XXX-XXXXXXXX)",
+  "awb_number": "the MAWB/Master Air Waybill number (format: XXX-XXXXXXXX), found in Accounting Information or labeled as MAWB",
+  "hawb_number": "the HAWB/House Air Waybill number, typically the main document reference number",
   "airport_departure": "full name of airport of departure",
   "shipper_name": "shipper name",
   "shipper_address": "full shipper address",
