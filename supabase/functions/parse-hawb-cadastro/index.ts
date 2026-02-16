@@ -105,7 +105,6 @@ Return ONLY valid JSON, no markdown, no explanation.`;
             ],
           }],
           generationConfig: { maxOutputTokens: 4000 },
-          thinkingConfig: { thinkingBudget: 8192 },
         }),
       }
     );
