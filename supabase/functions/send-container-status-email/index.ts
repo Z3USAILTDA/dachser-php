@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -179,39 +178,42 @@ function getStatusColor(status: string): { bg: string; text: string; style?: str
   return { bg: '#e9ecef', text: '#495057' };
 }
 
-// Fetch ETA history from MariaDB
+// Fetch ETA history via mariadb-proxy (avoids MySQL import bundle timeout)
 async function fetchEtaHistory(mblId: string, container: string): Promise<{ eta: string; first_seen: string }[]> {
-  let client: Client | null = null;
   try {
-    client = await new Client().connect({
-      hostname: Deno.env.get('MARIADB_HOST') || '',
-      username: Deno.env.get('MARIADB_USER') || '',
-      password: Deno.env.get('MARIADB_PASSWORD') || '',
-      db: Deno.env.get('MARIADB_DATABASE') || 'dados_dachser',
-      port: Number(Deno.env.get('MARIADB_PORT') || '3306'),
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return [];
+
+    const res = await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'fetch_eta_history',
+        mbl_id: mblId || container,
+        container: container,
+      }),
     });
 
-    const rows = await client.query(
-      `SELECT DISTINCT eta, MIN(event_datetime) as first_seen
-       FROM t_tracking_sea_history
-       WHERE (mbl_id = ? OR container = ?)
-         AND eta IS NOT NULL AND eta != ''
-       GROUP BY eta
-       ORDER BY first_seen ASC`,
-      [mblId || container, container],
-    );
+    if (!res.ok) {
+      console.error('[fetchEtaHistory] mariadb-proxy returned', res.status);
+      return [];
+    }
 
-    return (rows as any[]).map((r: any) => ({
+    const data = await res.json();
+    const rows = data.rows || data.data || data || [];
+    if (!Array.isArray(rows)) return [];
+
+    return rows.map((r: any) => ({
       eta: String(r.eta),
       first_seen: String(r.first_seen),
     }));
   } catch (e) {
     console.error('[fetchEtaHistory] Failed:', e);
     return [];
-  } finally {
-    if (client) {
-      try { await client.close(); } catch (_) { /* ignore */ }
-    }
   }
 }
 
