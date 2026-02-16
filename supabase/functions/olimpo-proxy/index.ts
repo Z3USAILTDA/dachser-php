@@ -6215,8 +6215,8 @@ serve(async (req) => {
           SET ot.active = FALSE, ot.updated_at = NOW()
           WHERE ot.mode = 'sea'
             AND ot.active = TRUE
-            AND ot.asset NOT IN (
-              SELECT ts.mbl_id FROM dados_dachser.t_tracking_sea ts WHERE ts.active = 1
+            AND ot.asset COLLATE utf8mb4_unicode_ci NOT IN (
+              SELECT ts.mbl_id COLLATE utf8mb4_unicode_ci FROM dados_dachser.t_tracking_sea ts WHERE ts.active = 1
             )
         `);
 
