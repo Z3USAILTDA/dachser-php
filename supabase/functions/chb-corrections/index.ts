@@ -595,31 +595,98 @@ serve(async (req) => {
         let effectiveFileContent = file_content;
         
         if (!effectiveFileContent && item_id && filename) {
-          console.log(`[chb-corrections] file_content not provided, fetching from storage for ${filename}`);
+          console.log(`[chb-corrections] file_content not provided, fetching from storage for item=${item_id}, filename="${filename}"`);
           
           try {
-            // Query MariaDB to get the file URL
-            const docRows = await client.query(`
-              SELECT f.url as file_url
+            // Strategy 1: Exact filename match
+            let docRows = await client.query(`
+              SELECT f.url as file_url, f.filename as real_filename
               FROM ai_agente.t_dachser_chb_docs d
               JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
-              WHERE d.item_id = ? AND f.filename = ?
+              WHERE d.item_id = ? AND f.filename = ? AND d.is_active = 1
               LIMIT 1
             `, [item_id, filename]);
             
-            if (docRows && docRows.length > 0 && docRows[0].file_url) {
-              const fileUrl = docRows[0].file_url;
-              console.log(`[chb-corrections] Found file URL: ${fileUrl}`);
+            // Strategy 2: Partial match — the frontend sends the HTML column header 
+            // (e.g. "Invoice Proforma") which may differ from the stored filename (e.g. "invoice_proforma_123.pdf")
+            if (!docRows || docRows.length === 0) {
+              console.log(`[chb-corrections] Exact match failed, trying partial match for "${filename}"`);
+              // Normalize: remove extension, special chars, create search tokens
+              const searchTokens = filename
+                .replace(/\.[^.]+$/, '') // remove extension
+                .split(/[\s_\-\.]+/)     // split by separators
+                .filter(t => t.length > 2) // keep meaningful tokens
+                .map(t => t.toLowerCase());
               
-              const fileResponse = await fetch(fileUrl);
-              if (fileResponse.ok) {
-                effectiveFileContent = await fileResponse.text();
-                console.log(`[chb-corrections] Fetched file content, length: ${effectiveFileContent.length}`);
-              } else {
-                console.log(`[chb-corrections] Failed to fetch file: ${fileResponse.status}`);
+              if (searchTokens.length > 0) {
+                // Build LIKE conditions for each token
+                const likeConditions = searchTokens.map(() => `LOWER(f.filename) LIKE ?`).join(' AND ');
+                const likeParams = searchTokens.map(t => `%${t}%`);
+                
+                docRows = await client.query(`
+                  SELECT f.url as file_url, f.filename as real_filename
+                  FROM ai_agente.t_dachser_chb_docs d
+                  JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
+                  WHERE d.item_id = ? AND d.is_active = 1 AND (${likeConditions})
+                  LIMIT 1
+                `, [item_id, ...likeParams]);
               }
-            } else {
-              console.log(`[chb-corrections] No file URL found in database for item ${item_id}, file ${filename}`);
+            }
+            
+            // Strategy 3: Fetch ALL active files for this item and try each one
+            if (!docRows || docRows.length === 0) {
+              console.log(`[chb-corrections] Partial match failed, fetching all files for item ${item_id}`);
+              docRows = await client.query(`
+                SELECT f.url as file_url, f.filename as real_filename
+                FROM ai_agente.t_dachser_chb_docs d
+                JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
+                WHERE d.item_id = ? AND d.is_active = 1
+                ORDER BY d.created_at DESC
+              `, [item_id]);
+              
+              if (docRows && docRows.length > 0) {
+                console.log(`[chb-corrections] Found ${docRows.length} files for item, will try each until content loads`);
+              }
+            }
+            
+            // Try to fetch content from matched files
+            if (docRows && docRows.length > 0) {
+              for (const row of docRows) {
+                if (!row.file_url) continue;
+                console.log(`[chb-corrections] Trying file: "${row.real_filename}" URL: ${row.file_url.substring(0, 80)}...`);
+                
+                try {
+                  const fileResponse = await fetch(row.file_url);
+                  if (fileResponse.ok) {
+                    const contentType = fileResponse.headers.get('content-type') || '';
+                    // Only use text-based content (skip binary PDFs — they need OCR)
+                    if (contentType.includes('text') || contentType.includes('json') || contentType.includes('xml') || contentType.includes('csv')) {
+                      effectiveFileContent = await fileResponse.text();
+                      console.log(`[chb-corrections] Fetched text content from "${row.real_filename}", length: ${effectiveFileContent.length}`);
+                      break;
+                    } else {
+                      // For PDFs and other binary files, fetch as text anyway — the URL might point to extracted text
+                      const textContent = await fileResponse.text();
+                      // Check if it looks like extracted text (has readable content)
+                      if (textContent.length > 100 && /[a-zA-Z]{3,}/.test(textContent.substring(0, 500))) {
+                        effectiveFileContent = textContent;
+                        console.log(`[chb-corrections] Fetched content from "${row.real_filename}" (${contentType}), length: ${effectiveFileContent.length}`);
+                        break;
+                      } else {
+                        console.log(`[chb-corrections] File "${row.real_filename}" appears to be binary (${contentType}), skipping`);
+                      }
+                    }
+                  } else {
+                    console.log(`[chb-corrections] Failed to fetch "${row.real_filename}": HTTP ${fileResponse.status}`);
+                  }
+                } catch (fetchErr) {
+                  console.error(`[chb-corrections] Error fetching "${row.real_filename}":`, fetchErr);
+                }
+              }
+            }
+            
+            if (!effectiveFileContent) {
+              console.log(`[chb-corrections] No readable file content found for item ${item_id}, filename "${filename}"`);
             }
           } catch (fetchError) {
             console.error('[chb-corrections] Error fetching file content:', fetchError);
@@ -820,13 +887,24 @@ serve(async (req) => {
         for (const correction of (pendingCorrections || [])) {
           try {
             // Fetch file content from storage
-            const docRows = await client.query(`
-              SELECT f.url as file_url
+            // Try exact match first, then all files for item
+            let docRows = await client.query(`
+              SELECT f.url as file_url, f.filename as real_filename
               FROM ai_agente.t_dachser_chb_docs d
               JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
-              WHERE d.item_id = ? AND f.filename = ?
+              WHERE d.item_id = ? AND f.filename = ? AND d.is_active = 1
               LIMIT 1
             `, [correction.item_id, correction.filename]);
+            
+            if (!docRows || docRows.length === 0) {
+              docRows = await client.query(`
+                SELECT f.url as file_url, f.filename as real_filename
+                FROM ai_agente.t_dachser_chb_docs d
+                JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
+                WHERE d.item_id = ? AND d.is_active = 1
+                ORDER BY d.created_at DESC
+              `, [correction.item_id]);
+            }
             
             if (docRows && docRows.length > 0 && docRows[0].file_url) {
               console.log(`[chb-corrections] Fetching content for ${correction.filename}`);
