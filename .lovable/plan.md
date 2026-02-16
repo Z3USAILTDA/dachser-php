@@ -1,80 +1,88 @@
 
-# Hapag Fallback para Processos PENDENTE e Rastreamento
 
-## Problema
+# Cadastro NOVA -- Tabela `t_dachser_analistas` para Autocomplete de Clerk
 
-Processos maritimos da Hapag-Lloyd com container='PENDENTE' ficam presos em "Aguardando" porque:
-1. O `enrich_sea_containers` usa a API JsonCargo para descobrir containers a partir do MBL
-2. A JsonCargo frequentemente retorna "Prefix not found" para MBLs Hapag (prefixos HLCU, HLXU, SAHL, etc.)
-3. O `hapag_fallback_track` so processa containers que ja existem e tem erro "Prefix not found" -- nunca toca em PENDENTE
+## Resumo
 
-Resultado: MBLs Hapag com container='PENDENTE' nunca sao enriquecidos nem rastreados.
+Criar uma nova tabela `dados_dachser.t_dachser_analistas` populada a partir de `t_master_dados`, contendo analistas unicos com nome, email e modal (AIR/SEA). Essa tabela sera usada no campo Clerk do "Cadastro NOVA" com o mesmo padrao de autocomplete que `t_clientes_base` tem para Consignee.
 
-## Solucao
-
-Adicionar um fallback Hapag dentro do fluxo de `enrich_sea_containers` que, ao detectar um MBL Hapag cujo JsonCargo falhou, consulta a API Hapag-Lloyd (`api.hlag.com/hlag/external/v2/events/?transportDocumentReference=MBL`) para:
-- **Descobrir containers**: extrair `equipmentReference` dos eventos retornados
-- **Rastrear simultaneamente**: extrair status, vessel, ETA, ETD, portos, etc. dos mesmos eventos
-
-Isso elimina o gargalo de dois passos (enriquecer + rastrear) para Hapag, fazendo tudo em uma unica chamada API.
-
-## Detalhes Tecnicos
-
-**Arquivo**: `supabase/functions/olimpo-proxy/index.ts`
-
-### Mudanca 1 -- Detectar Hapag e chamar fallback no `enrich_sea_containers`
-
-No loop de `enrich_sea_containers` (apos a chamada JsonCargo falhar ou retornar vazio, linha ~3497-3550), adicionar:
+## Tabela `t_dachser_analistas`
 
 ```text
-// Apos JsonCargo falhar para MBL Hapag:
-if (containers.length === 0 && effectiveShippingLine === 'HAPAG_LLOYD') {
-  // Tentar API Hapag via transportDocumentReference
-  const hapagContainers = await hapagEnrichByMbl(mblId, hapagClientId, hapagApiKey);
-  if (hapagContainers.length > 0) {
-    containers = hapagContainers.map(c => c.containerNo);
-    // Bonus: atualizar tracking data diretamente
-    hapagTrackingData = hapagContainers;
-    successVariation = mblId;
-  }
-}
+CREATE TABLE IF NOT EXISTS dados_dachser.t_dachser_analistas (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nome_analista VARCHAR(255) NOT NULL,
+  email_analista VARCHAR(255),
+  modal VARCHAR(10) NOT NULL COMMENT 'AIR ou SEA',
+  ativo BOOLEAN DEFAULT TRUE,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_nome_email_modal (nome_analista, email_analista, modal),
+  INDEX idx_nome (nome_analista),
+  INDEX idx_modal (modal),
+  INDEX idx_ativo (ativo)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 ```
 
-### Mudanca 2 -- Funcao `hapagEnrichByMbl`
-
-Criar uma funcao auxiliar que:
-1. Chama `GET https://api.hlag.com/hlag/external/v2/events/?transportDocumentReference={mbl}`
-2. Extrai containers unicos (`equipmentReference`) dos eventos
-3. Para cada container, extrai o ultimo status, vessel, ETA, ETD, origem, destino
-4. Retorna um array com containers e seus dados de tracking
+### Populacao inicial (INSERT a partir de t_master_dados)
 
 ```text
-async function hapagEnrichByMbl(mbl, clientId, apiKey) {
-  const res = await fetch(
-    `https://api.hlag.com/hlag/external/v2/events/?transportDocumentReference=${mbl}`,
-    { headers: { 'X-IBM-Client-Id': clientId, 'X-IBM-Client-Secret': apiKey, 'Accept': 'application/json' } }
-  );
-  // Parse events, extract unique containers with tracking data
-  // Return [{ containerNo, status, vessel, eta, etd, origem, destino }]
-}
+INSERT IGNORE INTO dados_dachser.t_dachser_analistas (nome_analista, email_analista, modal)
+SELECT DISTINCT
+  TRIM(nome_analista) as nome_analista,
+  TRIM(email_analista) as email_analista,
+  CASE
+    WHEN tipo_processo LIKE 'AIR%' THEN 'AIR'
+    WHEN tipo_processo LIKE 'SEA%' THEN 'SEA'
+    ELSE 'OTHER'
+  END as modal
+FROM dados_dachser.t_master_dados
+WHERE nome_analista IS NOT NULL
+  AND TRIM(nome_analista) != ''
 ```
 
-### Mudanca 3 -- Atualizar t_tracking_sea com dados Hapag
+Isso extrai todos os analistas unicos, agrupa por modal (AIR/SEA baseado no prefixo de `tipo_processo`) e preserva o email correspondente.
 
-Quando o fallback Hapag retorna containers, alem de substituir 'PENDENTE' pelo numero do container (logica existente), tambem atualizar as colunas de tracking:
-- `container_status`, `last_event`, `vessel_name`, `eta`, `etd`, `origem`, `destino`, `shipping_line`
-- Marcar `last_check = NOW()` e `last_error = NULL`
-- Definir `shipping_line = 'HAPAG-LLOYD'`
+## Arquivos a criar/modificar
 
-Isso faz com que o container ja saia do status "Aguardando" imediatamente apos o enriquecimento.
+### 1. Modificar: `supabase/functions/mariadb-tables-setup/index.ts`
+- Adicionar criacao da tabela `t_dachser_analistas` na secao `dados_dachser`
+- Adicionar o INSERT IGNORE para popular com dados existentes de `t_master_dados`
 
-### Mudanca 4 -- Integrar no `sea-tracking-cron`
+### 2. Modificar: `supabase/functions/olimpo-proxy/index.ts`
+- Adicionar action `search_analistas` (mesmo padrao de `search_clientes_base`):
+  - Recebe `q` (termo de busca) e `modal` (filtro opcional, ex: "AIR")
+  - Query: busca em `t_dachser_analistas` onde `nome_analista LIKE %termo%`, `ativo = 1`, e opcionalmente filtrado por modal
+  - Retorna `{ success: true, analistas: [{ nome_analista, email_analista, modal }] }`
 
-O cron ja chama `enrich_sea_containers` indiretamente via `sea_seed_smart`. As mudancas acima serao ativadas automaticamente no proximo ciclo. Nenhuma mudanca adicional necessaria no cron.
+### 3. Modificar: `src/pages/air/CadastroNova.tsx` (no plano geral)
+- Campo Clerk usa autocomplete identico ao Consignee:
+  - Debounce 300ms, busca apos 2 caracteres
+  - Chama `olimpo-proxy?action=search_analistas&q=<termo>&modal=AIR&limit=15`
+  - Popover exibe nome + email do analista
+  - Ao selecionar, preenche o campo Clerk com `nome_analista` e armazena `email_analista` separadamente no formulario
 
-## Resultado Esperado
+### 4. Atualizar tabela `t_cadastro_aereo`
+- Adicionar coluna `clerk_email VARCHAR(255)` para armazenar o email do analista selecionado (alem do nome no campo `clerk`)
 
-- MBLs Hapag com container='PENDENTE' serao enriquecidos via API Hapag-Lloyd
-- Containers descobertos ja terao dados de tracking (status, vessel, ETA) preenchidos
-- Uma unica chamada API Hapag resolve tanto o enriquecimento quanto o rastreamento
-- Os demais armadores continuam usando JsonCargo normalmente (sem impacto)
+## Fluxo do autocomplete Clerk
+
+1. Usuario digita 2+ caracteres no campo Clerk
+2. Frontend chama `olimpo-proxy?action=search_analistas&q=termo&modal=AIR&limit=15`
+3. Backend busca em `t_dachser_analistas` (filtrado por `modal = 'AIR'` e `ativo = 1`)
+4. Popover exibe lista com nome e email
+5. Ao selecionar, preenche `clerk` (nome) e `clerk_email` (email) no formulario
+6. Ambos sao salvos em `t_cadastro_aereo`
+
+## Resumo de todos os arquivos do plano completo
+
+| Arquivo | Acao |
+|---------|------|
+| `supabase/functions/parse-hawb-cadastro/index.ts` | **Criar** -- Edge function de extracao via Gemini API direta |
+| `supabase/functions/olimpo-proxy/index.ts` | **Modificar** -- Adicionar actions `search_analistas`, `create_cadastro_aereo`, `setup_t_cadastro_aereo` |
+| `supabase/functions/mariadb-tables-setup/index.ts` | **Modificar** -- Adicionar criacao + populacao de `t_dachser_analistas` |
+| `src/pages/air/CadastroNova.tsx` | **Criar** -- Pagina completa com formulario, upload, autocompletes |
+| `src/App.tsx` | **Modificar** -- Adicionar rota `/air/cadastro-nova` |
+| `src/pages/Dashboard.tsx` | **Modificar** -- Adicionar item no menu AIR com `z3usOnly: true` |
+| `supabase/config.toml` | **Modificar** -- Registrar `parse-hawb-cadastro` com `verify_jwt = false` |
+
