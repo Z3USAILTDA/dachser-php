@@ -1683,7 +1683,8 @@ serve(async (req) => {
                   MAX(eta) as eta,
                   MAX(nome_analista) as nome_analista,
                   MAX(hawb) as hawb,
-                  MAX(cliente) as cliente
+                  MAX(cliente) as cliente,
+                  MAX(etd) as etd
                 FROM dados_dachser.t_master_dados
                 WHERE mawb IS NOT NULL
                   AND TRIM(mawb) != ''
@@ -1853,7 +1854,7 @@ serve(async (req) => {
               COALESCE(MAX(md.nome_analista), MAX(mdn.nome_analista)) as nome_analista,
               MAX(ts.eta) as eta_api,
               COALESCE(MAX(md.hbl), MAX(mdn.hawb)) as hbl,
-              MAX(md.etd) as etd,
+              COALESCE(MAX(md.etd), MAX(mdn.etd)) as etd,
               COALESCE(MAX(mdn.cliente), MAX(ts.consignee)) as cliente,
               MAX(ts.email_analista) as email_analista,
               MAX(ts.email_cliente) as email_cliente,
