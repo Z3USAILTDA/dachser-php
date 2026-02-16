@@ -1,67 +1,75 @@
 
+## Ajuste do Assunto do E-mail Maritimo - Formato Dachser
 
-# Diagnostico: Chamadas JsonCargo e Containers Pendentes
+### Objetivo
+Alterar o assunto dos e-mails de alerta do monitoramento maritimo para seguir o padrao Dachser, deixando em branco os campos que nao temos na base de dados.
 
-## Problema 1: `enrich_sea_containers` retorna 0 -- nada para processar
-
-A funcao `enrich_sea_containers` so processa containers com status `PENDENTE`. Porem, os containers problematicos (HLCUSS5260224404, HLCUSS5260224766, EGLV143664214950) ja foram tentados anteriormente e marcados como `NAO_ENCONTRADO`. Uma vez com esse status, eles **nunca mais sao reprocessados**.
-
-Ou seja: o JsonCargo nao esta "falhando" agora -- ele falhou uma vez no passado para esses MBLs, e o sistema nao tenta novamente.
-
-## Problema 2: Prefixo `EGLV` ausente no mapa de enriquecimento
-
-O MBL `EGLV143664214950` (FISCHER BRASIL) e da Evergreen. O mapa de prefixos no `refresh_sea_tracking` (linha 2566) reconhece `EGLV` como EVERGREEN, mas o mapa no `enrich_sea_containers` (linhas 3260-3278) **nao inclui `EGLV`**. Isso faz com que a chamada a API seja feita sem especificar o armador, o que pode causar falha na busca.
-
-## Problema 3: Containers com ID valido mas sem dados de rastreio
-
-O container BMOU6536163 (MBL HLCUHAM2512AVRE3, STIHL) tem um ID valido mas `container_status: null`, `last_event: null`. Ele foi verificado hoje as 12:44, mas a API nao retornou dados. Como o `last_check` e recente, o `refresh_sea_tracking` nao o reprocessa por respeitar o intervalo de `stale_hours=4`.
-
-## Solucao Proposta
-
-### 1. Adicionar prefixo `EGLV` ao mapa de enriquecimento
-No `enrich_sea_containers`, adicionar `'EGLV': 'EVERGREEN'` ao dicionario `MBL_PREFIX_TO_SHIPPING_LINE`.
-
-### 2. Criar mecanismo de retry para `NAO_ENCONTRADO`
-Modificar a query do `enrich_sea_containers` para tambem incluir containers `NAO_ENCONTRADO` que foram marcados ha mais de 24 horas. Isso permite que MBLs que falharam sejam retentados periodicamente:
-
-```sql
-WHERE active = 1 AND (
-  container = 'PENDENTE' OR container IS NULL OR container = ''
-  OR (container = 'NAO_ENCONTRADO' AND updated_at < DATE_SUB(NOW(), INTERVAL 24 HOUR))
-)
+### Formato alvo do assunto
+```
+Dachser Pre-Alert SE - PO:  - HBL: {hbl} - MBL: {mbl} - {cliente} - Consignee: {consignee} - {destino} - ETD: {etd} - ETA: {eta}
 ```
 
-### 3. Adicionar botao "Retentar Enriquecimento" na UI
-Para MBLs com status `NAO_ENCONTRADO`, permitir que o usuario force uma nova tentativa manual, resetando o container para `PENDENTE` e chamando `enrich_sea_containers` em seguida.
+Campos sem dados disponiveis (PO e numero interno) ficarao em branco no assunto, aparecendo como `PO:  -` conforme solicitado.
 
-### 4. Correcao imediata dos MBLs atuais
-Executar um reset dos containers `NAO_ENCONTRADO` que o usuario quer retentar:
-- No `enrich_sea_containers`, adicionar parametro opcional `force_retry=true` que inclui `NAO_ENCONTRADO` na busca
-- Ou via nova acao `retry_nao_encontrado` que reseta esses containers para `PENDENTE`
+### Alteracoes
 
-## Detalhes Tecnicos
+#### 1. Query `get_sea_tracking` no `olimpo-proxy/index.ts`
+Adicionar ao SELECT final os campos que ja existem nas CTEs mas nao sao expostos:
+- `MAX(md.etd) as etd` - ETD do t_sea_master (ja esta na CTE `master_data` mas nao no SELECT)
+- `MAX(sm_hbl.hbl) as hbl` - HBL do t_sea_master (adicionar na CTE `master_data`)
+- `COALESCE(MAX(mdn.cliente), MAX(ts.consignee)) as cliente` - Cliente do t_master_dados (adicionar na CTE `master_dados_new`), com fallback para consignee
 
-**Arquivo: `supabase/functions/olimpo-proxy/index.ts`**
-
-1. **Linha ~3261**: Adicionar `'EGLV': 'EVERGREEN'` ao `MBL_PREFIX_TO_SHIPPING_LINE`
-
-2. **Linhas ~3364-3368**: Alterar query para incluir retry de `NAO_ENCONTRADO`:
+Na CTE `master_data`, adicionar:
 ```sql
-SELECT DISTINCT mbl_id, consignee, email_analista, email_cliente, tipo_processo
-FROM dados_dachser.t_tracking_sea
-WHERE active = 1 AND (
-  container = 'PENDENTE' OR container IS NULL OR container = ''
-  OR (container = 'NAO_ENCONTRADO' AND updated_at < DATE_SUB(NOW(), INTERVAL 24 HOUR))
-)
+MAX(hbl) as hbl,
 ```
 
-3. **Nova acao `reset_nao_encontrado`**: Permite forcar retry manual, resetando `NAO_ENCONTRADO` para `PENDENTE` em MBLs especificos ou em todos
+Na CTE `master_dados_new`, adicionar:
+```sql
+MAX(hawb) as hawb,
+MAX(cliente) as cliente,
+```
 
-4. **Pagina ContainerTracking.tsx**: Adicionar botao de retry visivel quando o container esta com status `NAO_ENCONTRADO`, chamando a nova acao
+No SELECT final, adicionar:
+```sql
+COALESCE(MAX(md.hbl), MAX(mdn.hawb)) as hbl,
+MAX(md.etd) as etd,
+COALESCE(MAX(mdn.cliente), MAX(ts.consignee)) as cliente,
+```
 
-## Resumo do Impacto
-- Containers `NAO_ENCONTRADO` passam a ser retentados automaticamente a cada 24h
-- `EGLV` (Evergreen) sera reconhecido corretamente na busca de containers
-- Usuario pode forcar retry manual quando necessario
-- Sem breaking changes em funcionalidades existentes
+#### 2. Interface `MblTrackingData` no `ContainerTracking.tsx`
+Adicionar 3 campos opcionais:
+- `hbl: string | null`
+- `etd: string | null`
+- `cliente: string | null`
 
+#### 3. Interface `EmailRequest` no `send-container-status-email/index.ts`
+Adicionar campos opcionais:
+- `hbl?: string`
+- `mbl?: string`
+- `etd_raw?: string`
+- `cliente?: string`
+
+#### 4. Formato do assunto no `send-container-status-email/index.ts`
+Substituir a logica atual de assunto por:
+```
+Dachser Pre-Alert SE - PO:  - HBL: {hbl} - MBL: {mbl} - {cliente} - Consignee: {consignee} - {destino} - ETD: {etd_formatado} - ETA: {eta_formatado}
+```
+
+- Formato de datas: `dd.MM.yyyy` (padrao europeu Dachser)
+- Campos sem valor aparecem em branco (ex: `PO:  -`)
+- Aplicar para ambos os tipos de e-mail (interno e cliente)
+
+#### 5. Payload do `handleSendEmail` no `ContainerTracking.tsx`
+Adicionar ao body da requisicao:
+```typescript
+hbl: emailMbl.hbl || '',
+mbl: emailMbl.mbl_id,
+etd_raw: emailMbl.etd || '',
+cliente: emailMbl.cliente || '',
+```
+
+### Arquivos editados
+1. `supabase/functions/olimpo-proxy/index.ts` - CTEs e SELECT final (adicionar hbl, etd, cliente)
+2. `supabase/functions/send-container-status-email/index.ts` - Novo formato de assunto + novos campos
+3. `src/pages/ContainerTracking.tsx` - Interface MblTrackingData + payload do e-mail
