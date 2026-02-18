@@ -1,50 +1,103 @@
 
-# Corrigir filtro ETD: mostrar apenas eventos a partir do ETD
+# Corrigir parsing de datas em português na timeline do modal
 
-## Problema atual
+## Causa raiz identificada
 
-O filtro atual calcula `ETD - 5 dias` como cutoff e exclui tudo antes disso. Para o AWB `047-32913381`, o ETD era `2026-02-13`, então o cutoff ficou em `2026-02-08`. Mas eventos como BKD, RCS, MAN, DEP acontecem antes do ETD — e estavam sendo eliminados.
+Os timestamps na `timeline_json` de `t_aereo_ws` estão em formato de texto em português:
 
-A intenção original do filtro era evitar que eventos de **embarques muito antigos** do mesmo número de AWB aparecessem. A lógica correta é: mostrar apenas eventos a partir do **próprio ETD** em diante (DEP, ARR, RCF, DLV etc.), que são os eventos do embarque declarado.
-
-## Novo comportamento
-
-O cutoff passa a ser a **data do ETD** em si:
-
-- Eventos com `data_hora_evento >= ETD` → exibidos
-- Eventos com `data_hora_evento < ETD` → filtrados (eram de processos anteriores)
-
-Isso faz sentido logístico: o ETD é a data de partida declarada. Nenhum evento relevante do embarque acontece antes disso — eventos como BKD e RCS que ocorrem antes do ETD são do pré-embarque de outro voo anterior ao processo.
-
-## Alteração: `supabase/functions/mariadb-proxy/index.ts`
-
-### Linha ~6009 — apenas a linha do `candidateCutoff`
-
-```typescript
-// Antes (ETD - 5 dias):
-const candidateCutoff = new Date(etdDate.getTime() - 5 * 24 * 60 * 60 * 1000);
-
-// Depois (usar o próprio ETD como cutoff):
-const candidateCutoff = new Date(etdDate.getTime());
+```
+"Timestamp": "17 Fev 2026 13:13"
 ```
 
-E atualizar o log (linha ~6013) para refletir a nova lógica:
-
+O código atual faz:
 ```typescript
-console.log(`ETD cutoff for AWB ${queryAwb}: etd=${etdDate.toISOString()}, cutoff=${etdCutoff?.toISOString() ?? 'nullified (future ETD)'} (using ETD as cutoff)`);
+return new Date(e.data_hora_evento) >= etdCutoff!;
 ```
 
-A lógica de proteção existente (`candidateCutoff < now ? candidateCutoff : null`) continua funcionando: se o ETD for no futuro, o cutoff é nulificado e todos os eventos são exibidos.
+`new Date("17 Fev 2026 13:13")` retorna `Invalid Date` (NaN) em JavaScript. Como `NaN >= qualquer_data` é `false`, **todos os eventos com timestamp em português são descartados pelo filtro ETD**.
+
+Isso explica por que o AWB `047-32913462` retorna 0 eventos mesmo tendo uma timeline completa: o ETD é `2026-02-12`, todos os eventos são de `17 Fev 2026`, mas o parse falha → filtro exclui tudo.
+
+## Dados confirmados via query direta
+
+- `t_aereo_ws.timeline_json` contém eventos com `Timestamp: "17 Fev 2026 13:13"` (DLV, AWD, etc.)
+- `t_master_dados.etd` = `2026-02-12`
+- O filtro `new Date("17 Fev 2026 13:13") >= new Date("2026-02-12")` falha silenciosamente → evento descartado
+
+## Solução: parser de datas multilíngue no filtro ETD
+
+Adicionar uma função `parseFlexibleDate` no `get_awb_tracking_events` que converte meses abreviados em português e inglês para datas válidas antes de aplicar o filtro.
+
+### Arquivo a editar: `supabase/functions/mariadb-proxy/index.ts`
+
+**Localização**: logo antes do bloco de filtro ETD (linhas ~6019–6024)
+
+### Adicionar helper de parsing de data antes do filtro:
+
+```typescript
+// Helper para parsear datas em português e inglês
+const parseFlexibleDate = (dateStr: string | null): Date | null => {
+  if (!dateStr) return null;
+  
+  // Mapa de meses em português abreviados → número
+  const ptMonths: Record<string, string> = {
+    'jan': '01', 'fev': '02', 'mar': '03', 'abr': '04',
+    'mai': '05', 'jun': '06', 'jul': '07', 'ago': '08',
+    'set': '09', 'out': '10', 'nov': '11', 'dez': '12',
+  };
+
+  // Tentar parse direto primeiro (ISO, etc.)
+  const direct = new Date(dateStr);
+  if (!isNaN(direct.getTime())) return direct;
+  
+  // Formato: "17 Fev 2026 13:13" ou "17 Feb 2026 13:13"
+  const match = dateStr.match(/^(\d{1,2})\s+([A-Za-zçÇ]{3})\s+(\d{4})(?:\s+(\d{2}:\d{2}))?/);
+  if (match) {
+    const day = match[1].padStart(2, '0');
+    const monthStr = match[2].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const year = match[3];
+    const time = match[4] || '00:00';
+    const month = ptMonths[monthStr] || null;
+    if (month) {
+      return new Date(`${year}-${month}-${day}T${time}:00`);
+    }
+  }
+
+  return null;
+};
+```
+
+### Atualizar o filtro ETD (linhas 6019–6024) para usar o helper:
+
+```typescript
+// Antes:
+const filteredEvents = etdCutoff
+  ? validEvents.filter((e: any) => {
+      if (!e.data_hora_evento) return true;
+      return new Date(e.data_hora_evento) >= etdCutoff!;
+    })
+  : validEvents;
+
+// Depois:
+const filteredEvents = etdCutoff
+  ? validEvents.filter((e: any) => {
+      if (!e.data_hora_evento) return true; // sem data, mantém por segurança
+      const eventDate = parseFlexibleDate(e.data_hora_evento);
+      if (!eventDate) return true; // data inválida, mantém por segurança
+      return eventDate >= etdCutoff!;
+    })
+  : validEvents;
+```
 
 ## Impacto
 
-| Situação | Comportamento |
+| Formato de data | Comportamento |
 |---|---|
-| Eventos com data >= ETD (DEP, ARR, RCF, DLV) | Exibidos normalmente |
-| Eventos com data < ETD (BKD, RCS de embarque anterior) | Filtrados |
-| ETD no futuro | Sem filtro — todos os eventos exibidos |
-| AWB sem ETD em `t_master_dados` | Sem filtro — todos os eventos exibidos |
+| `"17 Fev 2026 13:13"` (português) | Parseado corretamente → exibido se >= ETD |
+| `"2026-02-17T13:13:00Z"` (ISO) | Continua funcionando normalmente |
+| `"17 Feb 2026 13:13"` (inglês) | Continua funcionando (new Date suporta nativamente) |
+| Data inválida / null | Evento mantido por segurança (sem descarte) |
 
-## Arquivo a editar
+## Arquivos a editar
 
-- `supabase/functions/mariadb-proxy/index.ts` — alteração de 1 linha + redeploy automático
+- `supabase/functions/mariadb-proxy/index.ts` — adicionar `parseFlexibleDate` e atualizar o filtro na action `get_awb_tracking_events`
