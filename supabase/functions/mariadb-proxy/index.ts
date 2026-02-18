@@ -605,7 +605,7 @@ serve(async (req) => {
         const offset = (page - 1) * perPage;
 
         // Constantes para controle de visibilidade de logs
-        const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
+        const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
         const HIDDEN_LOG_USERS = ["admin", "teste.test3"];
 
         let whereConditions = ["event_time BETWEEN ? AND ?"];
@@ -721,9 +721,22 @@ serve(async (req) => {
       }
 
       case 'get_metric_users': {
-        const usersResult = await client.query(
-          `SELECT DISTINCT username FROM ai_agente.t_dachser_usage_logs ORDER BY username ASC`
-        );
+        const { requesterUsername: metricRequester } = body;
+        const DACHSER_ADMIN_USERS_MU = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
+        const HIDDEN_LOG_USERS_MU = ["admin", "teste.test3"];
+        const isDachserUserMU = metricRequester && DACHSER_ADMIN_USERS_MU.includes(metricRequester);
+
+        let usersQuery = `SELECT DISTINCT username FROM ai_agente.t_dachser_usage_logs`;
+        let usersParams: string[] = [];
+
+        if (isDachserUserMU) {
+          usersQuery += ` WHERE username NOT IN (${HIDDEN_LOG_USERS_MU.map(() => '?').join(', ')})`;
+          usersParams = [...HIDDEN_LOG_USERS_MU];
+        }
+
+        usersQuery += ` ORDER BY username ASC`;
+
+        const usersResult = await client.query(usersQuery, usersParams);
         const users = usersResult.map((row: { username: string }) => row.username);
         result = { success: true, users };
         break;
