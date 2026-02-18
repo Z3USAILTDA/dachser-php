@@ -1,77 +1,99 @@
 
-# Classificar status UNK a partir dos eventos da timeline
+# Sempre preferir o status da timeline sobre o last_status_code
 
-## Entendimento do problema
+## Entendimento da solicitação
 
-Quando a `t_aereo_ws` retorna um `last_status_code` como `"UNK"` (ex.: Delta Airlines com código proprietário `"4 P"`), o sistema não sabe qual é o status real do processo. Mas a `timeline_json` desse mesmo AWB contém eventos com campos `status`, `Status`, `description`, `Description` — que trazem os códigos ou descrições reais dos eventos mais recentes (ex.: `"AWD"`, `"RCF"`, `"DLV"`, etc.).
+O usuário quer dois comportamentos:
 
-A solução é: **quando o `last_status_code` for `"UNK"`, percorrer a `timeline_json` em ordem decrescente (evento mais recente primeiro) e tentar mapear o status do primeiro evento válido para um código IATA reconhecido**.
+1. **Prefixo `014` (Air China Cargo):** Sempre usar o código IATA correspondente ao **último evento da timeline**, independentemente do `last_status_code` armazenado — porque a Air China usa códigos proprietários que nunca mapeiam corretamente.
 
-## Onde implementar
+2. **Todos os outros prefixos:** Fazer uma **validação cruzada**: se o `last_status_code` e o último evento da timeline divergem, **preferir o da timeline**. Isso corrige casos onde o scraper capturou um status desatualizado mas a timeline tem o evento mais recente correto.
 
-A lógica fica na **edge function `fetch-status-aereo/index.ts`**, no Passo 3 (Merge em memória), logo após o `classifyArrival`. Isso garante que o campo `último_status` já chega corrigido ao frontend — sem alterar nada no frontend.
+## Comportamento atual
 
-## Lógica de de-para (mapeamento)
+No Passo 3 do `fetch-status-aereo/index.ts`, o fluxo é:
 
-Será adicionada uma função `resolveUnkFromTimeline(timelineJson, awb)` que:
+```
+rawStatus (last_status_code)
+  → classifyArrival()  [só age se status = ARR]
+  → se UNK: resolveUnkFromTimeline()  [só age se UNK]
+  → finalStatus
+```
 
-1. Faz parse do `timeline_json`
-2. Itera pelos eventos (que chegam DESC — mais recente primeiro)
-3. Para cada evento, lê `status || Status` e `description || Description`
-4. Aplica um de-para (tabela abaixo) para mapear para código IATA
-5. Retorna o primeiro código IATA válido encontrado, ou `null` se nenhum mapear
+O problema: `resolveUnkFromTimeline()` só é chamada quando o status é `UNK` ou nulo. Para outros casos (ex.: `last_status_code = "DEP"` mas timeline mostra `DLV` como evento mais recente), a divergência é ignorada — o status desatualizado vence.
 
-### Tabela de de-para (de-para de status → IATA)
+## Solução
 
-| Valor bruto do evento | Código IATA |
-|---|---|
-| `DLV`, `DELIVERED` | `DLV` |
-| `DEP`, `DEPARTED` | `DEP` |
-| `ARR`, `ARRIVED` | `ARR` |
-| `RCF`, `RECEIVED FROM FLIGHT` | `RCF` |
-| `RCS`, `RECEIVED FROM SHIPPER` | `RCS` |
-| `MAN`, `MANIFESTED` | `MAN` |
-| `NFD`, `NOTIFIED FOR DELIVERY` | `NFD` |
-| `AWD`, `AWAITING DELIVERY`, `AVAILABLE FOR DELIVERY` | `AWD` |
-| `DIS`, `DISCREPANCY` | `DIS` |
-| `OFLD`, `OFFLOADED` | `OFLD` |
-| `NIL` | `NIL` |
-| `FOH`, `FREIGHT ON HAND` | `FOH` |
-| `BKD`, `BOOKED` | `BKD` |
-| `PRE`, `PRE-ADVISED` | `PRE` |
-| `TFD`, `TRANSFERRED` | `TFD` |
+### 1. Para prefixo `014` — sempre usar timeline
 
-A função também verifica a `description` do evento com regex simples (ex.: `description.includes('DELIVERED')` → `DLV`).
-
-## Alteração no Passo 3
+Adicionar lógica antes do `classifyArrival`:
 
 ```typescript
-// Antes — classifiedStatus pode permanecer "UNK"
-const classifiedStatus = classifyArrival(rawStatus, timelineStr, ...);
+const awbPrefix = awb.substring(0, 3);
 
-// Depois — se ainda for UNK, tenta resolver pela timeline
-let finalStatus = classifiedStatus;
-if (!finalStatus || finalStatus.toUpperCase() === 'UNK') {
+// Para prefixo 014 (Air China): sempre resolver status pela timeline
+if (awbPrefix === '014') {
   const resolvedFromTimeline = resolveUnkFromTimeline(timelineStr, awb);
   if (resolvedFromTimeline) {
     finalStatus = resolvedFromTimeline;
-    console.log(`[resolveUNK] ${awb}: UNK → ${resolvedFromTimeline} (via timeline)`);
+    console.log(`[prefix014] ${awb}: last_status_code="${rawStatus}" → ${resolvedFromTimeline} (forced timeline)`);
+  } else {
+    finalStatus = rawStatus ? classifyArrival(rawStatus, ...) : null;
   }
 }
+```
 
-const baseRow = {
-  ...
-  último_status: finalStatus || null,
-  ...
+### 2. Para todos os outros prefixos — validação cruzada
+
+Após calcular o `classifiedStatus`, verificar se a timeline tem um status diferente e mais recente:
+
+```typescript
+// Para prefixos não-014: validação cruzada entre last_status_code e timeline
+if (awbPrefix !== '014' && classifiedStatus && classifiedStatus.toUpperCase() !== 'UNK') {
+  const timelineStatus = resolveUnkFromTimeline(timelineStr, awb);
+  if (timelineStatus && timelineStatus !== classifiedStatus) {
+    // Timeline diverge — prefere o da timeline
+    finalStatus = timelineStatus;
+    console.log(`[crossCheck] ${awb}: last_status="${classifiedStatus}" vs timeline="${timelineStatus}" → prefer timeline`);
+  } else {
+    finalStatus = classifiedStatus;
+  }
+}
+```
+
+**Exceção importante**: se o `classifiedStatus` já for `ARR - DESTINO` ou `ARR - CONEXAO` (resultado do `classifyArrival`), a função `resolveUnkFromTimeline` pode retornar apenas `ARR` e regredir o status. Será adicionado um guard para não sobrescrever classificações mais específicas com classificações mais genéricas:
+
+```typescript
+// Não regredir de "ARR - DESTINO" para "ARR"
+const isMoreSpecific = (current: string, candidate: string): boolean => {
+  if (current === 'ARR - DESTINO' && candidate === 'ARR') return false;
+  if (current === 'ARR - CONEXAO' && candidate === 'ARR') return false;
+  return true;
 };
 ```
 
-## Benefício
+## Fluxo completo revisado (Passo 3)
 
-- O AWB `006-52943645` (Delta Airlines, código `"4 P"`) que tinha status `UNK` vai passar a exibir o código IATA real do seu último evento (ex.: `AWD`, `RCF`, `DLV`)
-- Todos os outros AWBs com `UNK` de companhias com códigos proprietários também se beneficiam
-- Nenhuma alteração no frontend — o badge `UNK` só aparecerá em casos onde genuinamente não há informação na timeline
+```
+rawStatus (last_status_code do t_aereo_ws)
+  ↓
+Se prefixo 014:
+  → resolveUnkFromTimeline() diretamente
+  → (fallback: classifyArrival se timeline vazia)
+
+Se outros prefixos:
+  → classifyArrival() [como hoje]
+  → crossCheck: resolveUnkFromTimeline()
+  → Se timeline diverge E não é regressão → prefere timeline
+  → Senão mantém classifiedStatus
+
+Se UNK (qualquer prefixo):
+  → resolveUnkFromTimeline() [lógica já existente, mantida como fallback final]
+```
 
 ## Arquivo a editar
 
-- `supabase/functions/fetch-status-aereo/index.ts` — adicionar função `resolveUnkFromTimeline` e chamá-la no Passo 3 quando `classifiedStatus === 'UNK'`
+- `supabase/functions/fetch-status-aereo/index.ts`
+  - Adicionar helper `isMoreSpecific()` (evita regressões de ARR - DESTINO → ARR)
+  - Refatorar bloco do Passo 3 (linhas 505–517) para separar o tratamento por prefixo
+  - Redeploy automático
