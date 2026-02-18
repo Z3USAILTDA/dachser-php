@@ -164,18 +164,6 @@ const StatusAereoList = () => {
                           }`}>
                             {item.último_status || 'N/A'}
                           </span>
-                          {['083', '147', '160', '615', '865', '016', '996'].some(prefix => item.awb?.startsWith(prefix)) && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Info className="h-4 w-4 text-amber-400 cursor-help" />
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-xs">
-                                  <p>Essa companhia está passando por ajustes, podendo apresentar inconsistência.</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
                           {item.awb?.startsWith('577') && (
                             <TooltipProvider>
                               <Tooltip>
