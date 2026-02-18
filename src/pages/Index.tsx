@@ -1906,6 +1906,11 @@ const Index = () => {
         // Outros status de rastreio
         "FFM",
         "AUD",
+        "NFD",
+        "AWD",
+        // UNK: companhias com códigos proprietários (ex: Delta); mostrado em badge amarelo
+        // O backend tenta resolver via timeline, mas caso não consiga, mantemos visível
+        "UNK",
         // DLV (Entregue): mantido por 5 dias após a entrega
         "DLV",
       ];
