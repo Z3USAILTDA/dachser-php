@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
+import { createConnection } from "npm:mysql2@3.11.3/promise";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -312,7 +312,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  let client: Client | null = null;
+  let client: Awaited<ReturnType<typeof createConnection>> | null = null;
 
   try {
     const body = await req.json();
@@ -334,11 +334,11 @@ serve(async (req) => {
 
     console.log(`Connecting to MariaDB at ${host}:${port}/${database} for fetch-status-aereo (t_aereo_ws primary)`);
     
-    client = await new Client().connect({
-      hostname: host,
+    client = await createConnection({
+      host: host,
       port: port,
-      db: database,
-      username: dbUser,
+      database: database,
+      user: dbUser,
       password: dbPassword,
     });
 
@@ -370,7 +370,7 @@ serve(async (req) => {
     }
 
     console.log('Fetching latest snapshots from t_aereo_ws...');
-    const wsRows = await client.query(wsQuery, wsParams);
+    const [wsRows] = await client.query(wsQuery, wsParams) as [any[], any];
     const wsList = Array.isArray(wsRows) ? wsRows : [];
     console.log(`Found ${wsList.length} AWBs from t_aereo_ws`);
 
@@ -424,7 +424,7 @@ serve(async (req) => {
         ORDER BY id DESC
       `;
       console.log(`Fallback: buscando ${uniqueSemDados.length} AWBs sem dados na t_aereo_api...`);
-      const apiRows = await client.query(apiQuery);
+      const [apiRows] = await client.query(apiQuery) as [any[], any];
       const apiList = Array.isArray(apiRows) ? apiRows : [];
       console.log(`Fallback: encontrados ${apiList.length} registros na t_aereo_api`);
 
@@ -472,7 +472,7 @@ serve(async (req) => {
     `;
 
     console.log(`Enriching with t_master_dados for ${uniqueAwbs.length} AWBs...`);
-    const masterRows = await client.query(masterQuery);
+    const [masterRows] = await client.query(masterQuery) as [any[], any];
     const masterList = Array.isArray(masterRows) ? masterRows : [];
     console.log(`Found ${masterList.length} enrichment records from t_master_dados`);
 
@@ -624,7 +624,7 @@ serve(async (req) => {
     );
   } finally {
     if (client) {
-      await client.close();
+      await client.end();
     }
   }
 });
