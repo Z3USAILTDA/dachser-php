@@ -89,12 +89,14 @@ const MetricsUsage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  // Fetch available users for the filter dropdown
+  // Fetch available users for the filter dropdown (runs after user is set)
   useEffect(() => {
     const fetchAvailableUsers = async () => {
       try {
+        const storedUser = localStorage.getItem("user");
+        const parsedUser = storedUser ? JSON.parse(storedUser) : null;
         const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "get_metric_users" },
+          body: { action: "get_metric_users", requesterUsername: parsedUser?.username || null },
         });
         if (!error && data?.users) {
           setAvailableUsers(data.users);
