@@ -220,6 +220,14 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
   return null;
 }
 
+// Guard: impede regressão de status mais específico para genérico
+// Ex.: "ARR - DESTINO" não deve ser sobrescrito por "ARR"
+function isMoreSpecific(current: string, candidate: string): boolean {
+  const specificStatuses = ['ARR - DESTINO', 'ARR - CONEXAO'];
+  if (specificStatuses.includes(current) && candidate === 'ARR') return false;
+  return true;
+}
+
 // Check if an event is a delivery event
 function isDeliveryEvent(event: any): boolean {
   const status = (event.status || '').toUpperCase();
@@ -504,11 +512,31 @@ serve(async (req) => {
 
       // Classify ARR as connection or final destination
       const rawStatus = ws.last_status_code ? String(ws.last_status_code).trim() : null;
+      const awbPrefix = awb.substring(0, 3);
       const classifiedStatus = classifyArrival(rawStatus, timelineStr, ws.destination ? String(ws.destination).trim() : null, ws.origin ? String(ws.origin).trim() : null, awb);
 
-      // Se ainda for UNK, tenta resolver via de-para dos eventos da timeline
-      let finalStatus = classifiedStatus;
-      if (!finalStatus || finalStatus.toUpperCase() === 'UNK') {
+      let finalStatus: string | null = classifiedStatus;
+
+      if (awbPrefix === '014') {
+        // Prefixo 014 (Air China Cargo): sempre usar o último evento da timeline,
+        // pois seus códigos proprietários nunca mapeiam corretamente
+        const resolvedFromTimeline = resolveUnkFromTimeline(timelineStr, awb);
+        if (resolvedFromTimeline) {
+          finalStatus = resolvedFromTimeline;
+          console.log(`[prefix014] ${awb}: last_status_code="${rawStatus}" → ${resolvedFromTimeline} (forced timeline)`);
+        } else {
+          // Fallback: usar classifiedStatus se timeline estiver vazia
+          finalStatus = classifiedStatus;
+        }
+      } else if (finalStatus && finalStatus.toUpperCase() !== 'UNK') {
+        // Demais prefixos: validação cruzada — se timeline diverge, prefere a timeline
+        const timelineStatus = resolveUnkFromTimeline(timelineStr, awb);
+        if (timelineStatus && timelineStatus !== finalStatus && isMoreSpecific(finalStatus, timelineStatus)) {
+          console.log(`[crossCheck] ${awb}: last_status="${finalStatus}" vs timeline="${timelineStatus}" → prefer timeline`);
+          finalStatus = timelineStatus;
+        }
+      } else {
+        // Status UNK ou nulo: tenta resolver via timeline (comportamento original)
         const resolvedFromTimeline = resolveUnkFromTimeline(timelineStr, awb);
         if (resolvedFromTimeline) {
           finalStatus = resolvedFromTimeline;
