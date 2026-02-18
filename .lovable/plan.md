@@ -1,95 +1,95 @@
 
-# Aplicar filtro de logs do "admin" para o usuário "metricas"
+# Manter AWBs com DLV visíveis por 5 dias após a entrega
 
 ## Contexto
 
-O filtro de visibilidade já existe e está implementado na action `get_metrics` do `mariadb-proxy`. Ele usa dois arrays:
+Atualmente, o status `DLV` (Entregue) **não consta** na lista `allowedStatuses` do `filteredAwbs` (linha 1877 de `Index.tsx`). Isso significa que qualquer AWB com `DLV` desaparece da tela imediatamente ao receber esse status.
 
-- `DACHSER_ADMIN_USERS` — usuários que **não** veem os logs dos usuários ocultos
-- `HIDDEN_LOG_USERS` — usuários cujos logs são ocultados (`["admin", "teste.test3"]`)
-
-Atualmente `DACHSER_ADMIN_USERS` contém apenas: `["ana.tozzo", "danilo.pedroso", "teste.test3"]`.
-
-O usuário `metricas` acessa a tela via flag `metrics_only = 1`, e já envia `requesterUsername` corretamente no body da chamada — só falta incluí-lo no array de filtro.
-
-Há também um segundo ponto de atenção: a action `get_metric_users` (que popula o dropdown de seleção de usuário nos filtros) **não aplica nenhum filtro** — ou seja, mesmo que os logs de `admin` sejam ocultados na tabela principal, o usuário `metricas` ainda veria `"admin"` como opção no dropdown. Isso precisa ser corrigido também.
+O comportamento desejado: AWBs com `DLV` devem permanecer visíveis por **5 dias** após a entrega, e só então sair da tela automaticamente — o mesmo padrão já existente para `ARR`.
 
 ---
 
-## Alterações necessárias
+## Referência: lógica já existente para ARR
 
-### `supabase/functions/mariadb-proxy/index.ts`
-
-**Ponto 1 — `get_metrics` (linha 608):**
-
-Adicionar `"metricas"` ao array `DACHSER_ADMIN_USERS`:
+O status `ARR` já segue exatamente esse padrão (linhas 1922–1934):
 
 ```typescript
-// Antes:
-const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
-
-// Depois:
-const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
-```
-
-**Ponto 2 — `get_metric_users` (linha 723):**
-
-A action atualmente faz um `SELECT DISTINCT username` sem nenhum filtro. Precisamos:
-
-1. Receber o `requesterUsername` do body
-2. Se o requester estiver em `DACHSER_ADMIN_USERS`, excluir `HIDDEN_LOG_USERS` da query
-
-```typescript
-case 'get_metric_users': {
-  const { requesterUsername } = body;
-  const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
-  const HIDDEN_LOG_USERS = ["admin", "teste.test3"];
-  
-  const isDachserUser = requesterUsername && DACHSER_ADMIN_USERS.includes(requesterUsername);
-  
-  let usersQuery = `SELECT DISTINCT username FROM ai_agente.t_dachser_usage_logs`;
-  let usersParams: string[] = [];
-  
-  if (isDachserUser) {
-    usersQuery += ` WHERE username NOT IN (${HIDDEN_LOG_USERS.map(() => '?').join(', ')})`;
-    usersParams = [...HIDDEN_LOG_USERS];
+if ((lastEventCode === "ARR" || lastEventCode.startsWith("ARR - ")) && !hasAlert) {
+  const arrDatetime = (awb as any).arr_datetime;
+  if (arrDatetime) {
+    const hoursElapsed = (now - new Date(arrDatetime).getTime()) / (1000 * 60 * 60);
+    if (hoursElapsed >= ARR_RETENTION_HOURS) {
+      return false;
+    }
   }
-  
-  usersQuery += ` ORDER BY username ASC`;
-  
-  const usersResult = await client.query(usersQuery, usersParams);
-  const users = usersResult.map((row: { username: string }) => row.username);
-  result = { success: true, users };
-  break;
 }
 ```
 
-### `src/pages/MetricsUsage.tsx`
-
-O `requesterUsername` já é enviado corretamente na chamada `get_metrics` (linha 143). Porém, a chamada `get_metric_users` (linha 96) ainda não envia o `requesterUsername`. Precisamos passá-lo:
-
-```typescript
-const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-  body: {
-    action: "get_metric_users",
-    requesterUsername: parsedUser?.username,  // NOVO
-  },
-});
-```
-
-Como o `fetchAvailableUsers` roda no primeiro `useEffect` (antes do `user` ser setado), a chamada precisa ser movida para dentro do segundo `useEffect` que depende de `user`, ou ler o username diretamente do `localStorage` dentro do fetch — tal como já é feito em outros hooks do projeto.
+Para `DLV`, o campo de referência de data será o `last_check` (que mapeia `scraped_at` de `t_aereo_ws`) — ou seja, a data/hora em que o sistema detectou o DLV pela última vez. É a referência mais confiável disponível no frontend sem precisar de alterações no backend.
 
 ---
 
-## Resumo do impacto
+## Alteração: `src/pages/Index.tsx` — única mudança necessária
 
-| Quem acessa | Vê logs de "admin"? | Vê "admin" no dropdown? |
-|---|---|---|
-| `ana.tozzo`, `danilo.pedroso`, `teste.test3` | Não (já existente) | Não (ponto 2 corrige) |
-| `metricas` | Não (ponto 1 corrige) | Não (ponto 2 corrige) |
-| Outros admins internos (ex: z3us) | Sim | Sim |
+### Passo 1 — Adicionar `DLV` em `allowedStatuses`
 
-## Arquivos a editar
+```typescript
+// Antes (linha ~1908, não contém DLV):
+const allowedStatuses = [
+  "BKD", "BKF", "AWB", "RCS", "MAN", "DEP", "FOH", "TFD", "RCT", "RCP", "PRE",
+  "LOF", "ARRT", "TDE", "ARR", "ARR - DESTINO", "ARR - CONEXAO", "ARR - CONEXÃO",
+  "RCF", "DIS", "OFLD", "NIL", "NIF", "ERRO", "COMPANY_NOT_REGISTERED", "AWB_INVALID",
+  "FFM", "AUD",
+];
 
-- `supabase/functions/mariadb-proxy/index.ts` — duas alterações cirúrgicas nas actions `get_metrics` e `get_metric_users`
-- `src/pages/MetricsUsage.tsx` — passar `requesterUsername` na chamada `get_metric_users`
+// Depois (adicionar DLV e POD):
+const allowedStatuses = [
+  "BKD", "BKF", "AWB", "RCS", "MAN", "DEP", "FOH", "TFD", "RCT", "RCP", "PRE",
+  "LOF", "ARRT", "TDE", "ARR", "ARR - DESTINO", "ARR - CONEXAO", "ARR - CONEXÃO",
+  "RCF", "DIS", "OFLD", "NIL", "NIF", "ERRO", "COMPANY_NOT_REGISTERED", "AWB_INVALID",
+  "FFM", "AUD",
+  "DLV",  // ← NOVO: mantido por 5 dias após entrega
+];
+```
+
+### Passo 2 — Adicionar regra de expiração para DLV (logo após o bloco de ARR)
+
+Inserir imediatamente após o bloco `if ((lastEventCode === "ARR" || ...)`:
+
+```typescript
+// DLV (Entregue): permanece na tabela por 5 dias após a entrega
+const DLV_RETENTION_DAYS = 5;
+if (lastEventCode === "DLV" || statusToCheck === "DLV") {
+  const dlvDate = awb.last_check ? new Date(awb.last_check).getTime() : null;
+  if (dlvDate) {
+    const daysElapsed = (Date.now() - dlvDate) / (1000 * 60 * 60 * 24);
+    if (daysElapsed >= DLV_RETENTION_DAYS) {
+      return false; // Mais de 5 dias desde o DLV → remove da tela
+    }
+  }
+  // Se não tem data de referência ou ainda dentro de 5 dias → mantém na tela
+}
+```
+
+---
+
+## Impacto nos DashboardCards
+
+Os `DashboardCards` (total monitorados, em trânsito, etc.) excluem `DLV` explicitamente no array `excludedStatuses`. Esse comportamento é **correto e deve ser mantido** — AWBs em DLV com menos de 5 dias aparecem na tabela principal, mas **não contam nos cards de métricas** (não são "ativos" do ponto de vista operacional).
+
+Nenhuma mudança nos DashboardCards é necessária.
+
+---
+
+## Resumo do comportamento
+
+| Situação | Resultado |
+|---|---|
+| AWB recebe DLV hoje | Aparece na tabela com fundo verde (estilo `isDelivered` já existente) |
+| AWB com DLV há 3 dias | Ainda visível na tabela |
+| AWB com DLV há 5+ dias | Removido automaticamente da tabela |
+| AWB com DLV sem `last_check` | Mantido por segurança (sem remoção) |
+
+## Arquivo a editar
+
+- `src/pages/Index.tsx` — duas alterações cirúrgicas dentro do `filteredAwbs` useMemo
