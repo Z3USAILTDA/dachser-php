@@ -138,11 +138,13 @@ function classifyArrival(lastStatusCode: string | null, timelineJson: string | n
   return lastStatusCode;
 }
 
-// De-para: resolve status UNK inspecionando a timeline_json
+// De-para: resolve status inspecionando a timeline_json
+// Sempre ordena eventos por data DESC antes de iterar (garante evento mais recente primeiro,
+// independentemente da ordem de armazenamento no JSON)
 function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: string): string | null {
   if (!timelineJson) return null;
 
-  // Mapeamento de valores brutos → código IATA
+  // Mapeamento de código de status bruto → código IATA
   const statusMap: Record<string, string> = {
     'DLV': 'DLV', 'DELIVERED': 'DLV',
     'DEP': 'DEP', 'DEPARTED': 'DEP',
@@ -151,7 +153,8 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     'RCS': 'RCS', 'RECEIVED FROM SHIPPER': 'RCS',
     'MAN': 'MAN', 'MANIFESTED': 'MAN',
     'NFD': 'NFD', 'NOTIFIED FOR DELIVERY': 'NFD',
-    'AWD': 'AWD', 'AWAITING DELIVERY': 'AWD', 'AVAILABLE FOR DELIVERY': 'AWD',
+    // AWD e variantes (incluindo AWA = Air China "Documents Available")
+    'AWD': 'AWD', 'AWA': 'AWD', 'AWAITING DELIVERY': 'AWD', 'AVAILABLE FOR DELIVERY': 'AWD',
     'DIS': 'DIS', 'DISCREPANCY': 'DIS',
     'OFLD': 'OFLD', 'OFFLOADED': 'OFLD',
     'NIL': 'NIL',
@@ -161,12 +164,16 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     'TFD': 'TFD', 'TRANSFERRED': 'TFD',
     'FFM': 'FFM',
     'AUD': 'AUD',
+    'RCT': 'RCT',
   };
 
   // Regex para extrair código IATA de descrições livres
+  // IMPORTANTE: a ordem importa — padrões mais específicos devem vir antes dos genéricos
   const descPatterns: Array<[RegExp, string]> = [
     [/\bdelivered\b/i, 'DLV'],
-    [/\bdeparted?\b/i, 'DEP'],
+    // Captura prefixo "(AWA)" em descrições da Air China antes de tentar "arrived"
+    [/^\(AWA\)/i, 'AWD'],
+    [/\bdocuments?\s+available\b/i, 'AWD'],
     [/\barrived?\b/i, 'ARR'],
     [/\breceived?\s+from\s+flight\b/i, 'RCF'],
     [/\breceived?\s+from\s+shipper\b/i, 'RCS'],
@@ -177,16 +184,28 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     [/\bdiscrepancy\b/i, 'DIS'],
     [/\boffloaded?\b/i, 'OFLD'],
     [/\bfreight\s+on\s+hand\b/i, 'FOH'],
-    [/\bbooked?\b/i, 'BKD'],
+    [/\bbookeds?\b|\bbooked\b/i, 'BKD'],
     [/\btransferred?\b/i, 'TFD'],
+    // DEP por último — evita falso positivo em descrições que mencionam "departed" de voos anteriores
+    [/\bdeparted?\b/i, 'DEP'],
   ];
 
   try {
     const events = JSON.parse(timelineJson);
     if (!Array.isArray(events) || events.length === 0) return null;
 
-    // Eventos chegam DESC (mais recente primeiro) — percorrer em ordem
-    for (const ev of events) {
+    // Ordenar eventos por data DESC (mais recente primeiro) para garantir que
+    // pegaremos sempre o evento mais atual, independente da ordem no JSON
+    const sorted = [...events].sort((a, b) => {
+      const dateA = a.date || a.Date || a.timestamp || a.time || a.datetime || '';
+      const dateB = b.date || b.Date || b.timestamp || b.time || b.datetime || '';
+      if (!dateA && !dateB) return 0;
+      if (!dateA) return 1;
+      if (!dateB) return -1;
+      return String(dateB).localeCompare(String(dateA));
+    });
+
+    for (const ev of sorted) {
       const rawStatus = (ev.status || ev.Status || '').trim().toUpperCase();
       const rawDesc = (ev.Description || ev.description || ev.title || ev.details || '').trim().toUpperCase();
 
@@ -204,7 +223,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
         return resolved;
       }
 
-      // 3. Checar descrição com regex
+      // 3. Checar descrição com regex (usa texto original para case-insensitive)
       const descRaw = ev.Description || ev.description || ev.title || ev.details || '';
       for (const [pattern, iata] of descPatterns) {
         if (pattern.test(descRaw)) {
@@ -219,6 +238,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
 
   return null;
 }
+
 
 // Guard: impede regressão de status mais específico para genérico
 // Ex.: "ARR - DESTINO" não deve ser sobrescrito por "ARR"
