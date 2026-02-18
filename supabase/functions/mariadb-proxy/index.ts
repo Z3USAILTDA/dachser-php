@@ -5981,8 +5981,34 @@ serve(async (req) => {
             return dateB - dateA;
           });
 
-          console.log(`Tracking: Parsed ${validEvents.length} valid events from ${timelineSource} for AWB ${queryAwb}`);
-          result = { success: true, data: validEvents };
+          // ---- ETD filter: buscar ETD de t_master_dados e filtrar eventos anteriores ao cutoff ----
+          let etdCutoff: Date | null = null;
+          try {
+            const etdRows = await client.query(`
+              SELECT etd FROM ${database}.t_master_dados
+              WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
+                AND etd IS NOT NULL
+              ORDER BY data_insert DESC LIMIT 1
+            `, [queryAwb]);
+
+            if (etdRows && etdRows.length > 0 && etdRows[0].etd) {
+              const etdDate = new Date(etdRows[0].etd);
+              etdCutoff = new Date(etdDate.getTime() - 5 * 24 * 60 * 60 * 1000); // ETD - 5 dias
+              console.log(`ETD cutoff for AWB ${queryAwb}: ${etdCutoff.toISOString()}`);
+            }
+          } catch (etdErr) {
+            console.log(`Could not fetch ETD for AWB ${queryAwb}:`, etdErr);
+          }
+
+          const filteredEvents = etdCutoff
+            ? validEvents.filter((e: any) => {
+                if (!e.data_hora_evento) return true; // sem data, manter por segurança
+                return new Date(e.data_hora_evento) >= etdCutoff!;
+              })
+            : validEvents;
+
+          console.log(`Tracking: ${validEvents.length} valid events, ${filteredEvents.length} after ETD filter (cutoff=${etdCutoff?.toISOString() ?? 'none'}) for AWB ${queryAwb}`);
+          result = { success: true, data: filteredEvents };
         } catch (tableErr) {
           console.log('Error fetching from t_aereo_ws:', tableErr);
           result = { success: true, data: [] };

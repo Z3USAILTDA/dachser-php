@@ -146,15 +146,23 @@ function isDeliveryEvent(event: any): boolean {
 }
 
 // Detect pieces discrepancy in timeline
-function detectPiecesDiscrepancy(timelineJson: string | null): { pieces_discrepancy: boolean; baseline_pieces: number | null; has_dis_event: boolean } {
+function detectPiecesDiscrepancy(timelineJson: string | null, etdStr?: string | null): { pieces_discrepancy: boolean; baseline_pieces: number | null; has_dis_event: boolean } {
   if (!timelineJson) return { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
 
   try {
     const events = JSON.parse(timelineJson);
     if (!Array.isArray(events) || events.length === 0) return { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
 
-    // Events come in DESC order (newest first), reverse for chronological
-    const chronological = [...events].reverse();
+    // Calculate ETD cutoff: only process events >= ETD - 5 days
+    const cutoff = etdStr ? new Date(new Date(etdStr).getTime() - 5 * 24 * 60 * 60 * 1000) : null;
+
+    // Events come in DESC order (newest first), reverse for chronological, then apply ETD filter
+    const chronological = [...events].reverse().filter(ev => {
+      if (!cutoff) return true;
+      const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || null;
+      if (!ts) return true; // sem data, manter por segurança
+      return new Date(ts) >= cutoff;
+    });
 
     // Check if any event has DIS status
     let has_dis_event = false;
@@ -366,7 +374,7 @@ serve(async (req) => {
     const masterQuery = `
       SELECT DISTINCT TRIM(mawb) as mawb, TRIM(hawb) as hawb, 
              cliente, nome_analista, email_analista, emails_cliente,
-             tipo_processo, tipo_servico
+             tipo_processo, tipo_servico, etd
       FROM ${database}.t_master_dados
       WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci IN (${awbInClause})
         AND tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
@@ -407,9 +415,10 @@ serve(async (req) => {
         scrapedAt = scrapedAt.replace(/Z$/, '').replace(/\.\d{3}Z$/, '');
       }
 
-      // Detect pieces discrepancy from timeline
+      // Detect pieces discrepancy from timeline (filtered by ETD cutoff)
       const timelineStr = ws.timeline_json ? String(ws.timeline_json) : null;
-      const { pieces_discrepancy, baseline_pieces, has_dis_event } = detectPiecesDiscrepancy(timelineStr);
+      const etdForDiscrepancy = masters && masters.length > 0 ? (masters[0].etd || null) : null;
+      const { pieces_discrepancy, baseline_pieces, has_dis_event } = detectPiecesDiscrepancy(timelineStr, etdForDiscrepancy);
 
       // Classify ARR as connection or final destination
       const rawStatus = ws.last_status_code ? String(ws.last_status_code).trim() : null;

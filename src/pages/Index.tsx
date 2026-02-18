@@ -394,6 +394,7 @@ interface AWBData {
   pieces_discrepancy?: boolean; // Discrepância de peças detectada na timeline
   baseline_pieces?: number | null; // Quantidade de peças de referência
   has_dis_event?: boolean; // Timeline contém evento DIS (discrepância)
+  etd?: string | null; // ETD do processo em t_master_dados
 }
 
 const STORAGE_KEY = "tracked-awbs";
@@ -431,10 +432,11 @@ const Index = () => {
   const [dbStats, setDbStats] = useState<DbStats | null>(null);
   const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
   const [regrasDialogOpen, setRegrasDialogOpen] = useState(false);
-  const [timelineModal, setTimelineModal] = useState<{ open: boolean; awb: string; consigneeName: string }>({
+  const [timelineModal, setTimelineModal] = useState<{ open: boolean; awb: string; consigneeName: string; etd?: string | null }>({
     open: false,
     awb: "",
     consigneeName: "",
+    etd: null,
   });
   const isPausedRef = useRef(false);
   const shouldSendEmailsRef = useRef(false); // Only send emails when user explicitly clicks button
@@ -539,6 +541,7 @@ const Index = () => {
           pieces_discrepancy: item.pieces_discrepancy || false,
           baseline_pieces: item.baseline_pieces || null,
           has_dis_event: item.has_dis_event || false,
+          etd: item.etd || null,
         }));
 
         const deduplicatedData = convertedData.reduce((acc: AWBData[], current: AWBData) => {
@@ -2869,6 +2872,7 @@ const Index = () => {
                                             open: true,
                                             awb: awb.awb,
                                             consigneeName: awb.consignee_name,
+                                            etd: awb.etd || null,
                                           })
                                         }
                                         className="text-[#ffc800] hover:text-[#ffc800] hover:bg-[#ffc800]/10 h-8 w-8 p-0"
