@@ -1,103 +1,77 @@
 
-# Corrigir parsing de datas em português na timeline do modal
+# Classificar status UNK a partir dos eventos da timeline
 
-## Causa raiz identificada
+## Entendimento do problema
 
-Os timestamps na `timeline_json` de `t_aereo_ws` estão em formato de texto em português:
+Quando a `t_aereo_ws` retorna um `last_status_code` como `"UNK"` (ex.: Delta Airlines com código proprietário `"4 P"`), o sistema não sabe qual é o status real do processo. Mas a `timeline_json` desse mesmo AWB contém eventos com campos `status`, `Status`, `description`, `Description` — que trazem os códigos ou descrições reais dos eventos mais recentes (ex.: `"AWD"`, `"RCF"`, `"DLV"`, etc.).
 
-```
-"Timestamp": "17 Fev 2026 13:13"
-```
+A solução é: **quando o `last_status_code` for `"UNK"`, percorrer a `timeline_json` em ordem decrescente (evento mais recente primeiro) e tentar mapear o status do primeiro evento válido para um código IATA reconhecido**.
 
-O código atual faz:
+## Onde implementar
+
+A lógica fica na **edge function `fetch-status-aereo/index.ts`**, no Passo 3 (Merge em memória), logo após o `classifyArrival`. Isso garante que o campo `último_status` já chega corrigido ao frontend — sem alterar nada no frontend.
+
+## Lógica de de-para (mapeamento)
+
+Será adicionada uma função `resolveUnkFromTimeline(timelineJson, awb)` que:
+
+1. Faz parse do `timeline_json`
+2. Itera pelos eventos (que chegam DESC — mais recente primeiro)
+3. Para cada evento, lê `status || Status` e `description || Description`
+4. Aplica um de-para (tabela abaixo) para mapear para código IATA
+5. Retorna o primeiro código IATA válido encontrado, ou `null` se nenhum mapear
+
+### Tabela de de-para (de-para de status → IATA)
+
+| Valor bruto do evento | Código IATA |
+|---|---|
+| `DLV`, `DELIVERED` | `DLV` |
+| `DEP`, `DEPARTED` | `DEP` |
+| `ARR`, `ARRIVED` | `ARR` |
+| `RCF`, `RECEIVED FROM FLIGHT` | `RCF` |
+| `RCS`, `RECEIVED FROM SHIPPER` | `RCS` |
+| `MAN`, `MANIFESTED` | `MAN` |
+| `NFD`, `NOTIFIED FOR DELIVERY` | `NFD` |
+| `AWD`, `AWAITING DELIVERY`, `AVAILABLE FOR DELIVERY` | `AWD` |
+| `DIS`, `DISCREPANCY` | `DIS` |
+| `OFLD`, `OFFLOADED` | `OFLD` |
+| `NIL` | `NIL` |
+| `FOH`, `FREIGHT ON HAND` | `FOH` |
+| `BKD`, `BOOKED` | `BKD` |
+| `PRE`, `PRE-ADVISED` | `PRE` |
+| `TFD`, `TRANSFERRED` | `TFD` |
+
+A função também verifica a `description` do evento com regex simples (ex.: `description.includes('DELIVERED')` → `DLV`).
+
+## Alteração no Passo 3
+
 ```typescript
-return new Date(e.data_hora_evento) >= etdCutoff!;
-```
+// Antes — classifiedStatus pode permanecer "UNK"
+const classifiedStatus = classifyArrival(rawStatus, timelineStr, ...);
 
-`new Date("17 Fev 2026 13:13")` retorna `Invalid Date` (NaN) em JavaScript. Como `NaN >= qualquer_data` é `false`, **todos os eventos com timestamp em português são descartados pelo filtro ETD**.
-
-Isso explica por que o AWB `047-32913462` retorna 0 eventos mesmo tendo uma timeline completa: o ETD é `2026-02-12`, todos os eventos são de `17 Fev 2026`, mas o parse falha → filtro exclui tudo.
-
-## Dados confirmados via query direta
-
-- `t_aereo_ws.timeline_json` contém eventos com `Timestamp: "17 Fev 2026 13:13"` (DLV, AWD, etc.)
-- `t_master_dados.etd` = `2026-02-12`
-- O filtro `new Date("17 Fev 2026 13:13") >= new Date("2026-02-12")` falha silenciosamente → evento descartado
-
-## Solução: parser de datas multilíngue no filtro ETD
-
-Adicionar uma função `parseFlexibleDate` no `get_awb_tracking_events` que converte meses abreviados em português e inglês para datas válidas antes de aplicar o filtro.
-
-### Arquivo a editar: `supabase/functions/mariadb-proxy/index.ts`
-
-**Localização**: logo antes do bloco de filtro ETD (linhas ~6019–6024)
-
-### Adicionar helper de parsing de data antes do filtro:
-
-```typescript
-// Helper para parsear datas em português e inglês
-const parseFlexibleDate = (dateStr: string | null): Date | null => {
-  if (!dateStr) return null;
-  
-  // Mapa de meses em português abreviados → número
-  const ptMonths: Record<string, string> = {
-    'jan': '01', 'fev': '02', 'mar': '03', 'abr': '04',
-    'mai': '05', 'jun': '06', 'jul': '07', 'ago': '08',
-    'set': '09', 'out': '10', 'nov': '11', 'dez': '12',
-  };
-
-  // Tentar parse direto primeiro (ISO, etc.)
-  const direct = new Date(dateStr);
-  if (!isNaN(direct.getTime())) return direct;
-  
-  // Formato: "17 Fev 2026 13:13" ou "17 Feb 2026 13:13"
-  const match = dateStr.match(/^(\d{1,2})\s+([A-Za-zçÇ]{3})\s+(\d{4})(?:\s+(\d{2}:\d{2}))?/);
-  if (match) {
-    const day = match[1].padStart(2, '0');
-    const monthStr = match[2].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const year = match[3];
-    const time = match[4] || '00:00';
-    const month = ptMonths[monthStr] || null;
-    if (month) {
-      return new Date(`${year}-${month}-${day}T${time}:00`);
-    }
+// Depois — se ainda for UNK, tenta resolver pela timeline
+let finalStatus = classifiedStatus;
+if (!finalStatus || finalStatus.toUpperCase() === 'UNK') {
+  const resolvedFromTimeline = resolveUnkFromTimeline(timelineStr, awb);
+  if (resolvedFromTimeline) {
+    finalStatus = resolvedFromTimeline;
+    console.log(`[resolveUNK] ${awb}: UNK → ${resolvedFromTimeline} (via timeline)`);
   }
+}
 
-  return null;
+const baseRow = {
+  ...
+  último_status: finalStatus || null,
+  ...
 };
 ```
 
-### Atualizar o filtro ETD (linhas 6019–6024) para usar o helper:
+## Benefício
 
-```typescript
-// Antes:
-const filteredEvents = etdCutoff
-  ? validEvents.filter((e: any) => {
-      if (!e.data_hora_evento) return true;
-      return new Date(e.data_hora_evento) >= etdCutoff!;
-    })
-  : validEvents;
+- O AWB `006-52943645` (Delta Airlines, código `"4 P"`) que tinha status `UNK` vai passar a exibir o código IATA real do seu último evento (ex.: `AWD`, `RCF`, `DLV`)
+- Todos os outros AWBs com `UNK` de companhias com códigos proprietários também se beneficiam
+- Nenhuma alteração no frontend — o badge `UNK` só aparecerá em casos onde genuinamente não há informação na timeline
 
-// Depois:
-const filteredEvents = etdCutoff
-  ? validEvents.filter((e: any) => {
-      if (!e.data_hora_evento) return true; // sem data, mantém por segurança
-      const eventDate = parseFlexibleDate(e.data_hora_evento);
-      if (!eventDate) return true; // data inválida, mantém por segurança
-      return eventDate >= etdCutoff!;
-    })
-  : validEvents;
-```
+## Arquivo a editar
 
-## Impacto
-
-| Formato de data | Comportamento |
-|---|---|
-| `"17 Fev 2026 13:13"` (português) | Parseado corretamente → exibido se >= ETD |
-| `"2026-02-17T13:13:00Z"` (ISO) | Continua funcionando normalmente |
-| `"17 Feb 2026 13:13"` (inglês) | Continua funcionando (new Date suporta nativamente) |
-| Data inválida / null | Evento mantido por segurança (sem descarte) |
-
-## Arquivos a editar
-
-- `supabase/functions/mariadb-proxy/index.ts` — adicionar `parseFlexibleDate` e atualizar o filtro na action `get_awb_tracking_events`
+- `supabase/functions/fetch-status-aereo/index.ts` — adicionar função `resolveUnkFromTimeline` e chamá-la no Passo 3 quando `classifiedStatus === 'UNK'`
