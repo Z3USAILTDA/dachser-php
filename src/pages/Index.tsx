@@ -2781,23 +2781,7 @@ const Index = () => {
                                       {getStatusCode(awb.last_event)}
                                     </span>
                                   );
-                                })()}
-                                {["083", "147", "160", "615", "865", "016", "996"].some((prefix) =>
-                                  awb.awb?.startsWith(prefix),
-                                ) && (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Info className="h-4 w-4 text-amber-400 cursor-help" />
-                                      </TooltipTrigger>
-                                      <TooltipContent side="top" className="max-w-xs">
-                                        <p>
-                                          Essa companhia está passando por ajustes, podendo apresentar inconsistência.
-                                        </p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                )}
+                              
                                 {awb.awb?.startsWith("577") && (
                                   <TooltipProvider>
                                     <Tooltip>
