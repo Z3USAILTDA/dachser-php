@@ -25,6 +25,7 @@ import {
   User as UserIcon,
   Loader2,
   AlertCircle,
+  AlertTriangle,
   X,
   HelpCircle,
   Settings,
@@ -395,6 +396,7 @@ interface AWBData {
   baseline_pieces?: number | null; // Quantidade de peças de referência
   has_dis_event?: boolean; // Timeline contém evento DIS (discrepância)
   etd?: string | null; // ETD do processo em t_master_dados
+  tracking_failed?: boolean; // Timeline vazia em todas as fontes (falha de rastreio)
 }
 
 const STORAGE_KEY = "tracked-awbs";
@@ -458,6 +460,16 @@ const Index = () => {
     console.log("Saving to storage, first AWB:", awbs[0]);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(awbs));
     setAwbsList(awbs);
+  }, []);
+
+  const handleTrackingResult = useCallback((awbNumber: string, failed: boolean) => {
+    setAwbsList(prev => {
+      const updated = prev.map(item =>
+        item.awb === awbNumber ? { ...item, tracking_failed: failed } : item
+      );
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
   }, []);
 
   // Check authentication (optional - just get user info if available)
@@ -2044,6 +2056,11 @@ const Index = () => {
         return 3;
       }
 
+      // Tracking failed (timeline vazia em todas as fontes) - priority 4 (very last)
+      if (awb.tracking_failed === true) {
+        return 4;
+      }
+
       return 2; // Default: middle
     };
 
@@ -2758,41 +2775,50 @@ const Index = () => {
                             </td>
                             <td className="px-3 py-3">
                               <div className="flex items-center gap-1.5">
-                                {(() => {
-                                  const sc = getStatusCode(awb.last_event).toUpperCase();
-                                  if (sc === "ARR - DESTINO") {
-                                    return (
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-green-500/20 text-green-400 border border-green-500/40">
-                                        <MapPin className="h-3 w-3" />
-                                        Destino
-                                      </span>
-                                    );
-                                  }
-                                  if (sc === "ARR - CONEXÃO" || sc === "ARR - CONEXAO") {
-                                    return (
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-500/20 text-orange-400 border border-orange-500/40">
-                                        <ArrowLeftRight className="h-3 w-3" />
-                                        Conexão
-                                      </span>
-                                    );
-                                  }
-                                   return (
-                                    <span className="text-sm font-bold" style={{ color: "hsl(120 100% 35%)" }}>
-                                      {getStatusCode(awb.last_event)}
-                                    </span>
-                                  );
-                                })()} 
-                                {awb.awb?.startsWith("577") && (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Info className="h-4 w-4 text-blue-400 cursor-help" />
-                                      </TooltipTrigger>
-                                      <TooltipContent side="top" className="max-w-xs">
-                                        <p>Rastreio feito por API direta com a companhia.</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
+                                {awb.tracking_failed ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-red-500/15 text-red-400 border border-red-500/30">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    Falha no Rastreio
+                                  </span>
+                                ) : (
+                                  <>
+                                    {(() => {
+                                      const sc = getStatusCode(awb.last_event).toUpperCase();
+                                      if (sc === "ARR - DESTINO") {
+                                        return (
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-green-500/20 text-green-400 border border-green-500/40">
+                                            <MapPin className="h-3 w-3" />
+                                            Destino
+                                          </span>
+                                        );
+                                      }
+                                      if (sc === "ARR - CONEXÃO" || sc === "ARR - CONEXAO") {
+                                        return (
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-500/20 text-orange-400 border border-orange-500/40">
+                                            <ArrowLeftRight className="h-3 w-3" />
+                                            Conexão
+                                          </span>
+                                        );
+                                      }
+                                      return (
+                                        <span className="text-sm font-bold" style={{ color: "hsl(120 100% 35%)" }}>
+                                          {getStatusCode(awb.last_event)}
+                                        </span>
+                                      );
+                                    })()}
+                                    {awb.awb?.startsWith("577") && (
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Info className="h-4 w-4 text-blue-400 cursor-help" />
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" className="max-w-xs">
+                                            <p>Rastreio feito por API direta com a companhia.</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             </td>
@@ -3143,6 +3169,7 @@ const Index = () => {
         onOpenChange={(open) => setTimelineModal((prev) => ({ ...prev, open }))}
         awb={timelineModal.awb}
         consigneeName={timelineModal.consigneeName}
+        onTrackingResult={handleTrackingResult}
       />
     </div>
   );

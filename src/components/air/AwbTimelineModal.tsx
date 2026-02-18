@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Clock, Plane, MapPin, AlertCircle, AlertTriangle, Loader2, X } from "lucide-react";
@@ -12,6 +12,7 @@ interface AwbTimelineModalProps {
   onOpenChange: (open: boolean) => void;
   awb: string;
   consigneeName?: string;
+  onTrackingResult?: (awb: string, failed: boolean) => void;
 }
 
 interface TimelineEvent {
@@ -60,6 +61,7 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
   onOpenChange,
   awb,
   consigneeName,
+  onTrackingResult,
 }) => {
   const { data, isLoading, error } = useQuery({
     queryKey: ["awb-timeline", awb],
@@ -98,6 +100,13 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
     },
     enabled: open && !!awb,
   });
+
+  // Notify parent when tracking result is known
+  useEffect(() => {
+    if (!isLoading && !error && data !== undefined && awb && onTrackingResult) {
+      onTrackingResult(awb, data.tracking_failed === true);
+    }
+  }, [data, isLoading, error, awb, onTrackingResult]);
 
   const events = data?.data || [];
   const trackingFailed = data?.tracking_failed || false;
