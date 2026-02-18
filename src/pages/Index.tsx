@@ -1906,6 +1906,8 @@ const Index = () => {
         // Outros status de rastreio
         "FFM",
         "AUD",
+        // DLV (Entregue): mantido por 5 dias após a entrega
+        "DLV",
       ];
       const statusToCheck = (awb.status || "").toUpperCase();
       const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
@@ -1932,6 +1934,19 @@ const Index = () => {
           }
         }
         // Se não tem arr_datetime ou ainda não passaram 48h, mantém na tabela
+      }
+
+      // DLV (Entregue): permanece na tabela por 5 dias após a entrega, depois sai automaticamente
+      const DLV_RETENTION_DAYS = 5;
+      if (lastEventCode === "DLV" || statusToCheck === "DLV") {
+        const dlvDate = awb.last_check ? new Date(awb.last_check).getTime() : null;
+        if (dlvDate) {
+          const daysElapsed = (Date.now() - dlvDate) / (1000 * 60 * 60 * 24);
+          if (daysElapsed >= DLV_RETENTION_DAYS) {
+            return false; // Mais de 5 dias desde o DLV → remove da tela
+          }
+        }
+        // Se não tem data de referência ou ainda dentro de 5 dias → mantém na tela
       }
 
       return matchesSearch && matchesAirline && matchesAnalyst && matchesService && matchesProcessType && isAllowed;
