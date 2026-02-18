@@ -6004,10 +6004,13 @@ serve(async (req) => {
               ORDER BY data_insert DESC LIMIT 1
             `, [queryAwb]);
 
-            if (etdRows && etdRows.length > 0 && etdRows[0].etd) {
+          if (etdRows && etdRows.length > 0 && etdRows[0].etd) {
               const etdDate = new Date(etdRows[0].etd);
-              etdCutoff = new Date(etdDate.getTime() - 5 * 24 * 60 * 60 * 1000); // ETD - 5 dias
-              console.log(`ETD cutoff for AWB ${queryAwb}: ${etdCutoff.toISOString()}`);
+              const candidateCutoff = new Date(etdDate.getTime() - 5 * 24 * 60 * 60 * 1000); // ETD - 5 dias
+              // Garante que o cutoff nunca seja no futuro (evita remover todos os eventos)
+              const now = new Date();
+              etdCutoff = candidateCutoff < now ? candidateCutoff : null;
+              console.log(`ETD cutoff for AWB ${queryAwb}: etd=${etdDate.toISOString()}, cutoff=${etdCutoff?.toISOString() ?? 'nullified (future ETD)'}`);
             }
           } catch (etdErr) {
             console.log(`Could not fetch ETD for AWB ${queryAwb}:`, etdErr);
