@@ -1,95 +1,50 @@
 
-# Manter AWBs com DLV visíveis por 5 dias após a entrega
+# Corrigir filtro ETD: mostrar apenas eventos a partir do ETD
 
-## Contexto
+## Problema atual
 
-Atualmente, o status `DLV` (Entregue) **não consta** na lista `allowedStatuses` do `filteredAwbs` (linha 1877 de `Index.tsx`). Isso significa que qualquer AWB com `DLV` desaparece da tela imediatamente ao receber esse status.
+O filtro atual calcula `ETD - 5 dias` como cutoff e exclui tudo antes disso. Para o AWB `047-32913381`, o ETD era `2026-02-13`, então o cutoff ficou em `2026-02-08`. Mas eventos como BKD, RCS, MAN, DEP acontecem antes do ETD — e estavam sendo eliminados.
 
-O comportamento desejado: AWBs com `DLV` devem permanecer visíveis por **5 dias** após a entrega, e só então sair da tela automaticamente — o mesmo padrão já existente para `ARR`.
+A intenção original do filtro era evitar que eventos de **embarques muito antigos** do mesmo número de AWB aparecessem. A lógica correta é: mostrar apenas eventos a partir do **próprio ETD** em diante (DEP, ARR, RCF, DLV etc.), que são os eventos do embarque declarado.
 
----
+## Novo comportamento
 
-## Referência: lógica já existente para ARR
+O cutoff passa a ser a **data do ETD** em si:
 
-O status `ARR` já segue exatamente esse padrão (linhas 1922–1934):
+- Eventos com `data_hora_evento >= ETD` → exibidos
+- Eventos com `data_hora_evento < ETD` → filtrados (eram de processos anteriores)
 
-```typescript
-if ((lastEventCode === "ARR" || lastEventCode.startsWith("ARR - ")) && !hasAlert) {
-  const arrDatetime = (awb as any).arr_datetime;
-  if (arrDatetime) {
-    const hoursElapsed = (now - new Date(arrDatetime).getTime()) / (1000 * 60 * 60);
-    if (hoursElapsed >= ARR_RETENTION_HOURS) {
-      return false;
-    }
-  }
-}
-```
+Isso faz sentido logístico: o ETD é a data de partida declarada. Nenhum evento relevante do embarque acontece antes disso — eventos como BKD e RCS que ocorrem antes do ETD são do pré-embarque de outro voo anterior ao processo.
 
-Para `DLV`, o campo de referência de data será o `last_check` (que mapeia `scraped_at` de `t_aereo_ws`) — ou seja, a data/hora em que o sistema detectou o DLV pela última vez. É a referência mais confiável disponível no frontend sem precisar de alterações no backend.
+## Alteração: `supabase/functions/mariadb-proxy/index.ts`
 
----
-
-## Alteração: `src/pages/Index.tsx` — única mudança necessária
-
-### Passo 1 — Adicionar `DLV` em `allowedStatuses`
+### Linha ~6009 — apenas a linha do `candidateCutoff`
 
 ```typescript
-// Antes (linha ~1908, não contém DLV):
-const allowedStatuses = [
-  "BKD", "BKF", "AWB", "RCS", "MAN", "DEP", "FOH", "TFD", "RCT", "RCP", "PRE",
-  "LOF", "ARRT", "TDE", "ARR", "ARR - DESTINO", "ARR - CONEXAO", "ARR - CONEXÃO",
-  "RCF", "DIS", "OFLD", "NIL", "NIF", "ERRO", "COMPANY_NOT_REGISTERED", "AWB_INVALID",
-  "FFM", "AUD",
-];
+// Antes (ETD - 5 dias):
+const candidateCutoff = new Date(etdDate.getTime() - 5 * 24 * 60 * 60 * 1000);
 
-// Depois (adicionar DLV e POD):
-const allowedStatuses = [
-  "BKD", "BKF", "AWB", "RCS", "MAN", "DEP", "FOH", "TFD", "RCT", "RCP", "PRE",
-  "LOF", "ARRT", "TDE", "ARR", "ARR - DESTINO", "ARR - CONEXAO", "ARR - CONEXÃO",
-  "RCF", "DIS", "OFLD", "NIL", "NIF", "ERRO", "COMPANY_NOT_REGISTERED", "AWB_INVALID",
-  "FFM", "AUD",
-  "DLV",  // ← NOVO: mantido por 5 dias após entrega
-];
+// Depois (usar o próprio ETD como cutoff):
+const candidateCutoff = new Date(etdDate.getTime());
 ```
 
-### Passo 2 — Adicionar regra de expiração para DLV (logo após o bloco de ARR)
-
-Inserir imediatamente após o bloco `if ((lastEventCode === "ARR" || ...)`:
+E atualizar o log (linha ~6013) para refletir a nova lógica:
 
 ```typescript
-// DLV (Entregue): permanece na tabela por 5 dias após a entrega
-const DLV_RETENTION_DAYS = 5;
-if (lastEventCode === "DLV" || statusToCheck === "DLV") {
-  const dlvDate = awb.last_check ? new Date(awb.last_check).getTime() : null;
-  if (dlvDate) {
-    const daysElapsed = (Date.now() - dlvDate) / (1000 * 60 * 60 * 24);
-    if (daysElapsed >= DLV_RETENTION_DAYS) {
-      return false; // Mais de 5 dias desde o DLV → remove da tela
-    }
-  }
-  // Se não tem data de referência ou ainda dentro de 5 dias → mantém na tela
-}
+console.log(`ETD cutoff for AWB ${queryAwb}: etd=${etdDate.toISOString()}, cutoff=${etdCutoff?.toISOString() ?? 'nullified (future ETD)'} (using ETD as cutoff)`);
 ```
 
----
+A lógica de proteção existente (`candidateCutoff < now ? candidateCutoff : null`) continua funcionando: se o ETD for no futuro, o cutoff é nulificado e todos os eventos são exibidos.
 
-## Impacto nos DashboardCards
+## Impacto
 
-Os `DashboardCards` (total monitorados, em trânsito, etc.) excluem `DLV` explicitamente no array `excludedStatuses`. Esse comportamento é **correto e deve ser mantido** — AWBs em DLV com menos de 5 dias aparecem na tabela principal, mas **não contam nos cards de métricas** (não são "ativos" do ponto de vista operacional).
-
-Nenhuma mudança nos DashboardCards é necessária.
-
----
-
-## Resumo do comportamento
-
-| Situação | Resultado |
+| Situação | Comportamento |
 |---|---|
-| AWB recebe DLV hoje | Aparece na tabela com fundo verde (estilo `isDelivered` já existente) |
-| AWB com DLV há 3 dias | Ainda visível na tabela |
-| AWB com DLV há 5+ dias | Removido automaticamente da tabela |
-| AWB com DLV sem `last_check` | Mantido por segurança (sem remoção) |
+| Eventos com data >= ETD (DEP, ARR, RCF, DLV) | Exibidos normalmente |
+| Eventos com data < ETD (BKD, RCS de embarque anterior) | Filtrados |
+| ETD no futuro | Sem filtro — todos os eventos exibidos |
+| AWB sem ETD em `t_master_dados` | Sem filtro — todos os eventos exibidos |
 
 ## Arquivo a editar
 
-- `src/pages/Index.tsx` — duas alterações cirúrgicas dentro do `filteredAwbs` useMemo
+- `supabase/functions/mariadb-proxy/index.ts` — alteração de 1 linha + redeploy automático
