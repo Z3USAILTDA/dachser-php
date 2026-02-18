@@ -1,150 +1,95 @@
 
-# Filtrar Timeline por ETD: Eventos a partir de 5 dias antes do ETD
+# Aplicar filtro de logs do "admin" para o usuário "metricas"
 
-## Resumo
+## Contexto
 
-A timeline do modal (`AwbTimelineModal`) exibe todos os eventos históricos do AWB, incluindo eventos muito antigos de voos anteriores. A solução usa o `etd` da `t_master_dados` como âncora temporal: apenas eventos a partir de `ETD - 5 dias` serão retornados e processados.
+O filtro de visibilidade já existe e está implementado na action `get_metrics` do `mariadb-proxy`. Ele usa dois arrays:
 
-Sem badge informativo no modal — o filtro é silencioso, apenas nos dados.
+- `DACHSER_ADMIN_USERS` — usuários que **não** veem os logs dos usuários ocultos
+- `HIDDEN_LOG_USERS` — usuários cujos logs são ocultados (`["admin", "teste.test3"]`)
+
+Atualmente `DACHSER_ADMIN_USERS` contém apenas: `["ana.tozzo", "danilo.pedroso", "teste.test3"]`.
+
+O usuário `metricas` acessa a tela via flag `metrics_only = 1`, e já envia `requesterUsername` corretamente no body da chamada — só falta incluí-lo no array de filtro.
+
+Há também um segundo ponto de atenção: a action `get_metric_users` (que popula o dropdown de seleção de usuário nos filtros) **não aplica nenhum filtro** — ou seja, mesmo que os logs de `admin` sejam ocultados na tabela principal, o usuário `metricas` ainda veria `"admin"` como opção no dropdown. Isso precisa ser corrigido também.
 
 ---
 
 ## Alterações necessárias
 
-### 1. `supabase/functions/fetch-status-aereo/index.ts`
+### `supabase/functions/mariadb-proxy/index.ts`
 
-**Query do `t_master_dados`** (linha 366): adicionar `etd` na seleção:
-```sql
-SELECT DISTINCT TRIM(mawb) as mawb, TRIM(hawb) as hawb,
-       cliente, nome_analista, email_analista, emails_cliente,
-       tipo_processo, tipo_servico,
-       etd   -- NOVO
-FROM t_master_dados ...
-```
+**Ponto 1 — `get_metrics` (linha 608):**
 
-**`detectPiecesDiscrepancy`** (linha 149): aceitar `etdStr: string | null` como segundo parâmetro. Antes de processar os eventos cronologicamente, calcular `cutoff = etd - 5 dias` e filtrar eventos anteriores:
+Adicionar `"metricas"` ao array `DACHSER_ADMIN_USERS`:
+
 ```typescript
-function detectPiecesDiscrepancy(timelineJson: string | null, etdStr?: string | null) {
-  ...
-  const cutoff = etdStr ? new Date(new Date(etdStr).getTime() - 5 * 24 * 60 * 60 * 1000) : null;
-  const chronological = [...events]
-    .reverse()
-    .filter(ev => {
-      if (!cutoff) return true;
-      const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || null;
-      if (!ts) return true;
-      return new Date(ts) >= cutoff;
-    });
-  ...
-}
+// Antes:
+const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
+
+// Depois:
+const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
 ```
 
-**`processedRows`** (linha 418): incluir `etd` no objeto de cada AWB processado:
+**Ponto 2 — `get_metric_users` (linha 723):**
+
+A action atualmente faz um `SELECT DISTINCT username` sem nenhum filtro. Precisamos:
+
+1. Receber o `requesterUsername` do body
+2. Se o requester estiver em `DACHSER_ADMIN_USERS`, excluir `HIDDEN_LOG_USERS` da query
+
 ```typescript
-const etdRaw = masters && masters.length > 0 ? (masters[0].etd || null) : null;
-const baseRow = {
-  ...
-  etd: etdRaw,  // NOVO
-};
-```
-
-Chamada do `detectPiecesDiscrepancy` (linha 412): passar o `etd` do master:
-```typescript
-const etdForDiscrepancy = masters && masters.length > 0 ? (masters[0].etd || null) : null;
-const { pieces_discrepancy, baseline_pieces, has_dis_event } = detectPiecesDiscrepancy(timelineStr, etdForDiscrepancy);
-```
-
----
-
-### 2. `supabase/functions/mariadb-proxy/index.ts` — action `get_awb_tracking_events` (linha 5770)
-
-Após buscar o registro de `t_aereo_ws`, fazer uma query adicional ao `t_master_dados` para obter o `etd`:
-```sql
-SELECT etd FROM t_master_dados
-WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
-  AND etd IS NOT NULL
-ORDER BY data_insert DESC LIMIT 1
-```
-
-Após construir `validEvents` e antes de retornar, aplicar o filtro temporal:
-```typescript
-// Buscar ETD do t_master_dados
-let etdCutoff: Date | null = null;
-try {
-  const etdRows = await client.query(`
-    SELECT etd FROM ${database}.t_master_dados
-    WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
-      AND etd IS NOT NULL
-    ORDER BY data_insert DESC LIMIT 1
-  `, [queryAwb]);
+case 'get_metric_users': {
+  const { requesterUsername } = body;
+  const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
+  const HIDDEN_LOG_USERS = ["admin", "teste.test3"];
   
-  if (etdRows && etdRows.length > 0 && etdRows[0].etd) {
-    const etdDate = new Date(etdRows[0].etd);
-    etdCutoff = new Date(etdDate.getTime() - 5 * 24 * 60 * 60 * 1000); // ETD - 5 dias
-    console.log(`ETD cutoff for AWB ${queryAwb}: ${etdCutoff.toISOString()}`);
+  const isDachserUser = requesterUsername && DACHSER_ADMIN_USERS.includes(requesterUsername);
+  
+  let usersQuery = `SELECT DISTINCT username FROM ai_agente.t_dachser_usage_logs`;
+  let usersParams: string[] = [];
+  
+  if (isDachserUser) {
+    usersQuery += ` WHERE username NOT IN (${HIDDEN_LOG_USERS.map(() => '?').join(', ')})`;
+    usersParams = [...HIDDEN_LOG_USERS];
   }
-} catch (etdErr) {
-  console.log(`Could not fetch ETD for AWB ${queryAwb}:`, etdErr);
+  
+  usersQuery += ` ORDER BY username ASC`;
+  
+  const usersResult = await client.query(usersQuery, usersParams);
+  const users = usersResult.map((row: { username: string }) => row.username);
+  result = { success: true, users };
+  break;
 }
-
-// Aplicar filtro temporal
-const filteredEvents = etdCutoff
-  ? validEvents.filter((e: any) => {
-      if (!e.data_hora_evento) return true; // sem data, manter por segurança
-      return new Date(e.data_hora_evento) >= etdCutoff!;
-    })
-  : validEvents;
 ```
 
-Retornar `filteredEvents` em vez de `validEvents`.
+### `src/pages/MetricsUsage.tsx`
+
+O `requesterUsername` já é enviado corretamente na chamada `get_metrics` (linha 143). Porém, a chamada `get_metric_users` (linha 96) ainda não envia o `requesterUsername`. Precisamos passá-lo:
+
+```typescript
+const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+  body: {
+    action: "get_metric_users",
+    requesterUsername: parsedUser?.username,  // NOVO
+  },
+});
+```
+
+Como o `fetchAvailableUsers` roda no primeiro `useEffect` (antes do `user` ser setado), a chamada precisa ser movida para dentro do segundo `useEffect` que depende de `user`, ou ler o username diretamente do `localStorage` dentro do fetch — tal como já é feito em outros hooks do projeto.
 
 ---
 
-### 3. `src/pages/Index.tsx`
+## Resumo do impacto
 
-**Interface `AWBData`** (linha 373): adicionar campo `etd`:
-```typescript
-etd?: string | null;
-```
+| Quem acessa | Vê logs de "admin"? | Vê "admin" no dropdown? |
+|---|---|---|
+| `ana.tozzo`, `danilo.pedroso`, `teste.test3` | Não (já existente) | Não (ponto 2 corrige) |
+| `metricas` | Não (ponto 1 corrige) | Não (ponto 2 corrige) |
+| Outros admins internos (ex: z3us) | Sim | Sim |
 
-**Conversão dos dados** (linha 517): mapear `etd` do item retornado:
-```typescript
-etd: item.etd || null,
-```
+## Arquivos a editar
 
-**`timelineModal` state** (linha 434): adicionar `etd`:
-```typescript
-const [timelineModal, setTimelineModal] = useState<{
-  open: boolean; awb: string; consigneeName: string; etd?: string | null;
-}>({ open: false, awb: "", consigneeName: "", etd: null });
-```
-
-**Botão Ver Timeline** (linha 2868): passar `etd`:
-```typescript
-setTimelineModal({
-  open: true,
-  awb: awb.awb,
-  consigneeName: awb.consignee_name,
-  etd: awb.etd || null,  // NOVO
-})
-```
-
-Nenhuma mudança no `<AwbTimelineModal>` renderizado — `etd` não é necessário no modal pois o filtro já vem pronto do backend.
-
----
-
-## Comportamento do fallback
-
-| Situação | Resultado |
-|---|---|
-| ETD presente na `t_master_dados` | Filtro aplicado: apenas eventos >= ETD - 5 dias |
-| ETD ausente ou nulo | Sem filtro — todos os eventos exibidos normalmente |
-| Evento sem data (`data_hora_evento` nulo) | Evento mantido (seguro) |
-| AWB não encontrado no `t_master_dados` | Sem filtro |
-
-## Impacto
-
-- Sem alteração visual no modal
-- Timeline exibe apenas eventos relevantes ao embarque atual
-- Discrepâncias de peças só consideram eventos do período correto, eliminando falsos positivos de embarques antigos
-- Dois arquivos de edge function + um arquivo frontend
+- `supabase/functions/mariadb-proxy/index.ts` — duas alterações cirúrgicas nas actions `get_metrics` e `get_metric_users`
+- `src/pages/MetricsUsage.tsx` — passar `requesterUsername` na chamada `get_metric_users`
