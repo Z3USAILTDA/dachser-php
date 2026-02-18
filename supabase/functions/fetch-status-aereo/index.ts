@@ -138,6 +138,88 @@ function classifyArrival(lastStatusCode: string | null, timelineJson: string | n
   return lastStatusCode;
 }
 
+// De-para: resolve status UNK inspecionando a timeline_json
+function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: string): string | null {
+  if (!timelineJson) return null;
+
+  // Mapeamento de valores brutos → código IATA
+  const statusMap: Record<string, string> = {
+    'DLV': 'DLV', 'DELIVERED': 'DLV',
+    'DEP': 'DEP', 'DEPARTED': 'DEP',
+    'ARR': 'ARR', 'ARRIVED': 'ARR',
+    'RCF': 'RCF', 'RECEIVED FROM FLIGHT': 'RCF',
+    'RCS': 'RCS', 'RECEIVED FROM SHIPPER': 'RCS',
+    'MAN': 'MAN', 'MANIFESTED': 'MAN',
+    'NFD': 'NFD', 'NOTIFIED FOR DELIVERY': 'NFD',
+    'AWD': 'AWD', 'AWAITING DELIVERY': 'AWD', 'AVAILABLE FOR DELIVERY': 'AWD',
+    'DIS': 'DIS', 'DISCREPANCY': 'DIS',
+    'OFLD': 'OFLD', 'OFFLOADED': 'OFLD',
+    'NIL': 'NIL',
+    'FOH': 'FOH', 'FREIGHT ON HAND': 'FOH',
+    'BKD': 'BKD', 'BOOKED': 'BKD',
+    'PRE': 'PRE', 'PRE-ADVISED': 'PRE',
+    'TFD': 'TFD', 'TRANSFERRED': 'TFD',
+    'FFM': 'FFM',
+    'AUD': 'AUD',
+  };
+
+  // Regex para extrair código IATA de descrições livres
+  const descPatterns: Array<[RegExp, string]> = [
+    [/\bdelivered\b/i, 'DLV'],
+    [/\bdeparted?\b/i, 'DEP'],
+    [/\barrived?\b/i, 'ARR'],
+    [/\breceived?\s+from\s+flight\b/i, 'RCF'],
+    [/\breceived?\s+from\s+shipper\b/i, 'RCS'],
+    [/\bmanifested?\b/i, 'MAN'],
+    [/\bnotified?\s+for\s+delivery\b/i, 'NFD'],
+    [/\bawaitin[g]?\s+delivery\b/i, 'AWD'],
+    [/\bavailable\s+for\s+delivery\b/i, 'AWD'],
+    [/\bdiscrepancy\b/i, 'DIS'],
+    [/\boffloaded?\b/i, 'OFLD'],
+    [/\bfreight\s+on\s+hand\b/i, 'FOH'],
+    [/\bbooked?\b/i, 'BKD'],
+    [/\btransferred?\b/i, 'TFD'],
+  ];
+
+  try {
+    const events = JSON.parse(timelineJson);
+    if (!Array.isArray(events) || events.length === 0) return null;
+
+    // Eventos chegam DESC (mais recente primeiro) — percorrer em ordem
+    for (const ev of events) {
+      const rawStatus = (ev.status || ev.Status || '').trim().toUpperCase();
+      const rawDesc = (ev.Description || ev.description || ev.title || ev.details || '').trim().toUpperCase();
+
+      // 1. Checar status direto no mapa
+      if (rawStatus && statusMap[rawStatus]) {
+        const resolved = statusMap[rawStatus];
+        console.log(`[resolveUNK] ${awbForDebug || '?'}: "${rawStatus}" → ${resolved} (status match)`);
+        return resolved;
+      }
+
+      // 2. Checar descrição no mapa (descrições longas)
+      if (rawDesc && statusMap[rawDesc]) {
+        const resolved = statusMap[rawDesc];
+        console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${rawDesc.substring(0, 30)}" → ${resolved} (desc map)`);
+        return resolved;
+      }
+
+      // 3. Checar descrição com regex
+      const descRaw = ev.Description || ev.description || ev.title || ev.details || '';
+      for (const [pattern, iata] of descPatterns) {
+        if (pattern.test(descRaw)) {
+          console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${descRaw.substring(0, 30)}" → ${iata} (regex)`);
+          return iata;
+        }
+      }
+    }
+  } catch (_e) {
+    console.log(`[resolveUNK] ${awbForDebug || '?'}: parse error: ${_e}`);
+  }
+
+  return null;
+}
+
 // Check if an event is a delivery event
 function isDeliveryEvent(event: any): boolean {
   const status = (event.status || '').toUpperCase();
@@ -424,12 +506,22 @@ serve(async (req) => {
       const rawStatus = ws.last_status_code ? String(ws.last_status_code).trim() : null;
       const classifiedStatus = classifyArrival(rawStatus, timelineStr, ws.destination ? String(ws.destination).trim() : null, ws.origin ? String(ws.origin).trim() : null, awb);
 
+      // Se ainda for UNK, tenta resolver via de-para dos eventos da timeline
+      let finalStatus = classifiedStatus;
+      if (!finalStatus || finalStatus.toUpperCase() === 'UNK') {
+        const resolvedFromTimeline = resolveUnkFromTimeline(timelineStr, awb);
+        if (resolvedFromTimeline) {
+          finalStatus = resolvedFromTimeline;
+          console.log(`[resolveUNK] ${awb}: UNK → ${resolvedFromTimeline} (via timeline de-para)`);
+        }
+      }
+
       const baseRow = {
         id: ws.id,
         awb: awb,
         origem: ws.origin || null,
         destino: ws.destination || null,
-        último_status: classifiedStatus || null,
+        último_status: finalStatus || null,
         status_info: ws.last_status_description || null,
         'última atualização': scrapedAt,
         last_flight: ws.last_flight || null,
