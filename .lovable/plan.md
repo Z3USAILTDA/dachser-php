@@ -1,51 +1,150 @@
 
+# Filtrar Timeline por ETD: Eventos a partir de 5 dias antes do ETD
 
-# Ajustes no CHB: Valor Mercadoria como Conforme + Melhoria na Deteccao de Frete
+## Resumo
 
-## Problema Atual
+A timeline do modal (`AwbTimelineModal`) exibe todos os eventos históricos do AWB, incluindo eventos muito antigos de voos anteriores. A solução usa o `etd` da `t_master_dados` como âncora temporal: apenas eventos a partir de `ETD - 5 dias` serão retornados e processados.
 
-### 1. Valor Mercadoria com alertas desnecessarios
-Atualmente, quando o "Valor Mercadoria" diverge entre documentos, o sistema marca como alerta amarelo. Porem, cada Invoice pode ter um valor diferente (varias invoices por processo), e o Draft DI confere o valor total consolidado. Portanto, divergencias entre invoices individuais sao esperadas e nao devem gerar alerta.
+Sem badge informativo no modal — o filtro é silencioso, apenas nos dados.
 
-### 2. Deteccao de Frete incorreta
-A IA ainda confunde valores de frete com outros campos (ex: "Total net" sendo interpretado como frete, ou valores de mercadoria sendo colocados na linha de frete). Apesar de ja existirem regras extensas no prompt, a IA continua errando.
+---
 
-## O que sera alterado
+## Alterações necessárias
 
-### Arquivo unico: `supabase/functions/analyze-chb-documents/index.ts`
+### 1. `supabase/functions/fetch-status-aereo/index.ts`
 
-### Alteracao 1 — Valor Mercadoria: SEMPRE Conforme
+**Query do `t_master_dados`** (linha 366): adicionar `etd` na seleção:
+```sql
+SELECT DISTINCT TRIM(mawb) as mawb, TRIM(hawb) as hawb,
+       cliente, nome_analista, email_analista, emails_cliente,
+       tipo_processo, tipo_servico,
+       etd   -- NOVO
+FROM t_master_dados ...
+```
 
-Nas regras de status (secao 16), substituir a regra atual que marca "Valor Mercadoria" como alerta amarelo por uma regra que marca como **CONFORME** automaticamente:
+**`detectPiecesDiscrepancy`** (linha 149): aceitar `etdStr: string | null` como segundo parâmetro. Antes de processar os eventos cronologicamente, calcular `cutoff = etd - 5 dias` e filtrar eventos anteriores:
+```typescript
+function detectPiecesDiscrepancy(timelineJson: string | null, etdStr?: string | null) {
+  ...
+  const cutoff = etdStr ? new Date(new Date(etdStr).getTime() - 5 * 24 * 60 * 60 * 1000) : null;
+  const chronological = [...events]
+    .reverse()
+    .filter(ev => {
+      if (!cutoff) return true;
+      const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || null;
+      if (!ts) return true;
+      return new Date(ts) >= cutoff;
+    });
+  ...
+}
+```
 
-**Antes:**
-- "Valor Mercadoria" divergente entre documentos -> alerta amarelo
-- Mesmo com diferenca >20% -> alerta amarelo
+**`processedRows`** (linha 418): incluir `etd` no objeto de cada AWB processado:
+```typescript
+const etdRaw = masters && masters.length > 0 ? (masters[0].etd || null) : null;
+const baseRow = {
+  ...
+  etd: etdRaw,  // NOVO
+};
+```
 
-**Depois:**
-- "Valor Mercadoria" divergente entre documentos -> CONFORME (sem alerta)
-- Motivo documentado: cada Invoice pode ter valor diferente; o Draft DI confere o total consolidado
-- Na secao de Observacoes, registrar os valores encontrados de forma informativa (sem icone de alerta)
+Chamada do `detectPiecesDiscrepancy` (linha 412): passar o `etd` do master:
+```typescript
+const etdForDiscrepancy = masters && masters.length > 0 ? (masters[0].etd || null) : null;
+const { pieces_discrepancy, baseline_pieces, has_dis_event } = detectPiecesDiscrepancy(timelineStr, etdForDiscrepancy);
+```
 
-Locais de alteracao no prompt:
-- Secao 7A (definicao do campo "Valor Mercadoria") — adicionar nota de que divergencias sao normais
-- Secao 16 (regras de status) — remover a excecao especial de "alerta amarelo" e substituir por "CONFORME"
-- Secao 16 exemplos — atualizar os exemplos para refletir a nova regra
-- Secao 17 (verificacao final) — ajustar consistencia
+---
 
-### Alteracao 2 — Reforco na Deteccao de Frete
+### 2. `supabase/functions/mariadb-proxy/index.ts` — action `get_awb_tracking_events` (linha 5770)
 
-Adicionar regras mais explicitas e exemplos negativos no prompt para evitar confusao entre frete e outros valores:
+Após buscar o registro de `t_aereo_ws`, fazer uma query adicional ao `t_master_dados` para obter o `etd`:
+```sql
+SELECT etd FROM t_master_dados
+WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
+  AND etd IS NOT NULL
+ORDER BY data_insert DESC LIMIT 1
+```
 
-- Reforcar que "Total net" em Invoice NUNCA e frete (regra 7D ja existe, mas sera reescrita com mais enfase)
-- Adicionar exemplos concretos de erros comuns que a IA comete e instrucoes para evita-los
-- Adicionar regra explicita: se o documento e uma Invoice comercial e nao tem linha explicita de "Freight/Frete", o campo "Valor Total Frete" deve ser "ND" para essa Invoice
-- Reforcar que "Amount Due", "Total Amount", "Final Amount" em Invoice sao geralmente o total da fatura (mercadoria + frete), NAO o frete isolado
-- Adicionar regra de "checklist de validacao" antes de preencher o campo frete: "O valor que estou colocando como frete vem de uma linha EXPLICITAMENTE rotulada como freight/frete/charges?"
+Após construir `validEvents` e antes de retornar, aplicar o filtro temporal:
+```typescript
+// Buscar ETD do t_master_dados
+let etdCutoff: Date | null = null;
+try {
+  const etdRows = await client.query(`
+    SELECT etd FROM ${database}.t_master_dados
+    WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
+      AND etd IS NOT NULL
+    ORDER BY data_insert DESC LIMIT 1
+  `, [queryAwb]);
+  
+  if (etdRows && etdRows.length > 0 && etdRows[0].etd) {
+    const etdDate = new Date(etdRows[0].etd);
+    etdCutoff = new Date(etdDate.getTime() - 5 * 24 * 60 * 60 * 1000); // ETD - 5 dias
+    console.log(`ETD cutoff for AWB ${queryAwb}: ${etdCutoff.toISOString()}`);
+  }
+} catch (etdErr) {
+  console.log(`Could not fetch ETD for AWB ${queryAwb}:`, etdErr);
+}
 
-## Resumo do impacto
+// Aplicar filtro temporal
+const filteredEvents = etdCutoff
+  ? validEvents.filter((e: any) => {
+      if (!e.data_hora_evento) return true; // sem data, manter por segurança
+      return new Date(e.data_hora_evento) >= etdCutoff!;
+    })
+  : validEvents;
+```
 
-- Usuarios nao verao mais alertas amarelos desnecessarios para "Valor Mercadoria"
-- A deteccao de frete sera mais precisa, reduzindo falsos positivos e erros de classificacao
-- Nenhuma alteracao no frontend ou na estrutura de dados — apenas ajuste no prompt da IA
+Retornar `filteredEvents` em vez de `validEvents`.
 
+---
+
+### 3. `src/pages/Index.tsx`
+
+**Interface `AWBData`** (linha 373): adicionar campo `etd`:
+```typescript
+etd?: string | null;
+```
+
+**Conversão dos dados** (linha 517): mapear `etd` do item retornado:
+```typescript
+etd: item.etd || null,
+```
+
+**`timelineModal` state** (linha 434): adicionar `etd`:
+```typescript
+const [timelineModal, setTimelineModal] = useState<{
+  open: boolean; awb: string; consigneeName: string; etd?: string | null;
+}>({ open: false, awb: "", consigneeName: "", etd: null });
+```
+
+**Botão Ver Timeline** (linha 2868): passar `etd`:
+```typescript
+setTimelineModal({
+  open: true,
+  awb: awb.awb,
+  consigneeName: awb.consignee_name,
+  etd: awb.etd || null,  // NOVO
+})
+```
+
+Nenhuma mudança no `<AwbTimelineModal>` renderizado — `etd` não é necessário no modal pois o filtro já vem pronto do backend.
+
+---
+
+## Comportamento do fallback
+
+| Situação | Resultado |
+|---|---|
+| ETD presente na `t_master_dados` | Filtro aplicado: apenas eventos >= ETD - 5 dias |
+| ETD ausente ou nulo | Sem filtro — todos os eventos exibidos normalmente |
+| Evento sem data (`data_hora_evento` nulo) | Evento mantido (seguro) |
+| AWB não encontrado no `t_master_dados` | Sem filtro |
+
+## Impacto
+
+- Sem alteração visual no modal
+- Timeline exibe apenas eventos relevantes ao embarque atual
+- Discrepâncias de peças só consideram eventos do período correto, eliminando falsos positivos de embarques antigos
+- Dois arquivos de edge function + um arquivo frontend
