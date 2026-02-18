@@ -6016,10 +6016,34 @@ serve(async (req) => {
             console.log(`Could not fetch ETD for AWB ${queryAwb}:`, etdErr);
           }
 
+          // Helper para parsear datas em português e inglês
+          const parseFlexibleDate = (dateStr: string | null): Date | null => {
+            if (!dateStr) return null;
+            const ptMonths: Record<string, string> = {
+              'jan': '01', 'fev': '02', 'mar': '03', 'abr': '04',
+              'mai': '05', 'jun': '06', 'jul': '07', 'ago': '08',
+              'set': '09', 'out': '10', 'nov': '11', 'dez': '12',
+            };
+            const direct = new Date(dateStr);
+            if (!isNaN(direct.getTime())) return direct;
+            const match = dateStr.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})(?:\s+(\d{2}:\d{2}))?/);
+            if (match) {
+              const day = match[1].padStart(2, '0');
+              const monthStr = match[2].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+              const year = match[3];
+              const time = match[4] || '00:00';
+              const month = ptMonths[monthStr] || null;
+              if (month) return new Date(`${year}-${month}-${day}T${time}:00`);
+            }
+            return null;
+          };
+
           const filteredEvents = etdCutoff
             ? validEvents.filter((e: any) => {
                 if (!e.data_hora_evento) return true; // sem data, manter por segurança
-                return new Date(e.data_hora_evento) >= etdCutoff!;
+                const eventDate = parseFlexibleDate(e.data_hora_evento);
+                if (!eventDate) return true; // data inválida, manter por segurança
+                return eventDate >= etdCutoff!;
               })
             : validEvents;
 
