@@ -2776,12 +2776,12 @@ const Index = () => {
                                       </span>
                                     );
                                   }
-                                  return (
+                                   return (
                                     <span className="text-sm font-bold" style={{ color: "hsl(120 100% 35%)" }}>
                                       {getStatusCode(awb.last_event)}
                                     </span>
                                   );
-                              
+                                })()} 
                                 {awb.awb?.startsWith("577") && (
                                   <TooltipProvider>
                                     <Tooltip>
