@@ -152,7 +152,7 @@ export default function SubmeterHblMbl() {
         result = await maritimoApi.pollAnalysisUntilComplete(response.analysisId, (percent, step) => {
           setAnalysisProgress(Math.min(percent, 95));
           setAnalysisStep(step);
-        }, 300000);
+        }, 600000);
       }
       setAnalysisProgress(100);
       await new Promise(resolve => setTimeout(resolve, 300));
