@@ -63,6 +63,9 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
   consigneeName,
   onTrackingResult,
 }) => {
+  // Keep a ref to the latest result so we can fire it even when modal closes
+  const latestResultRef = React.useRef<{ awb: string; failed: boolean } | null>(null);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["awb-timeline", awb],
     queryFn: async (): Promise<TimelineResponse> => {
@@ -99,20 +102,34 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
       return { success: true, data: deduped, tracking_failed: !!data.tracking_failed };
     },
     enabled: open && !!awb,
+    staleTime: 0, // Always re-fetch when opened
   });
 
-  // Notify parent when tracking result is known
+  // Whenever we have a result (loading done, no error), store it in the ref AND notify parent immediately
   useEffect(() => {
-    if (!isLoading && !error && data !== undefined && awb && onTrackingResult) {
-      onTrackingResult(awb, data.tracking_failed === true);
+    if (!isLoading && !error && data !== undefined && awb) {
+      const failed = data.tracking_failed === true;
+      latestResultRef.current = { awb, failed };
+      // Notify parent immediately when result is ready
+      if (onTrackingResult) {
+        onTrackingResult(awb, failed);
+      }
     }
-  }, [data, isLoading, error, awb, onTrackingResult]);
+  }, [data, isLoading, error, awb]); // intentionally omit onTrackingResult to avoid re-firing
+
+  // When modal closes, also fire the callback with the stored result (safety net)
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen && latestResultRef.current && onTrackingResult) {
+      onTrackingResult(latestResultRef.current.awb, latestResultRef.current.failed);
+    }
+    onOpenChange(newOpen);
+  };
 
   const events = data?.data || [];
   const trackingFailed = data?.tracking_failed || false;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-xl max-h-[80vh] overflow-hidden bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
         <DialogHeader className="pb-4 border-b border-[rgba(255,255,255,.08)]">
           <DialogTitle className="text-[#f5f5f5] flex items-center gap-2">
@@ -212,7 +229,7 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
         </div>
 
         <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,.08)] flex justify-end">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} className="gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => handleOpenChange(false)} className="gap-1.5">
             <X className="w-4 h-4" />
             Fechar
           </Button>
