@@ -1999,6 +1999,12 @@ const Index = () => {
       const lastEvent = (awb.last_event || "").toUpperCase(); // Raw value from database
       const lastEventCode = getStatusCode(awb.last_event).toUpperCase(); // Translated value for display
 
+      // Tracking failed (timeline vazia em todas as fontes) - priority 4 (very last)
+      // Must be checked FIRST before any status-based priority
+      if (awb.tracking_failed === true) {
+        return 4;
+      }
+
       // Success statuses (tracking working) - priority 1 (first)
       const successStatuses = [
         "BKD",
@@ -2054,11 +2060,6 @@ const Index = () => {
         lastEventCode === "FALHA NA CONSULTA"
       ) {
         return 3;
-      }
-
-      // Tracking failed (timeline vazia em todas as fontes) - priority 4 (very last)
-      if (awb.tracking_failed === true) {
-        return 4;
       }
 
       return 2; // Default: middle
