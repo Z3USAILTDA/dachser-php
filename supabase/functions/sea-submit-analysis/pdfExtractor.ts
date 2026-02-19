@@ -313,8 +313,8 @@ export async function extractPdfStructured(
 
   const prompt = `${EXTRACTION_PROMPT}\n\nThis document is a ${fileType.toUpperCase()} (${fileType === 'hbl' || fileType === 'base' ? 'House Bill of Lading' : fileType === 'mbl' ? 'Master Bill of Lading' : 'Commercial Invoice'}).`;
 
-  // Try Gemini first (cost-effective), then Claude fallback
-  for (const provider of ['gemini', 'claude'] as const) {
+  // Try Claude first, then Gemini fallback
+  for (const provider of ['claude', 'gemini'] as const) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         console.log(`📄 [PDF Extractor] ${provider} attempt ${attempt + 1} for ${fileName}`);
