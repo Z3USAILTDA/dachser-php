@@ -353,14 +353,41 @@ serve(async (req) => {
     }
 
     console.log(`Connecting to MariaDB at ${host}:${port}/${database} for fetch-status-aereo (t_aereo_ws primary)`);
-    
-    client = await createConnection({
-      host: host,
-      port: port,
-      database: database,
-      user: dbUser,
-      password: dbPassword,
-    });
+
+    // Retry logic for transient connection timeouts
+    const MAX_RETRIES = 2;
+    let lastConnError: unknown;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        client = await createConnection({
+          host: host,
+          port: port,
+          database: database,
+          user: dbUser,
+          password: dbPassword,
+          connectTimeout: 10000, // 10s timeout per attempt
+        });
+        console.log(`Connected to MariaDB on attempt ${attempt}`);
+        lastConnError = null;
+        break;
+      } catch (connErr) {
+        lastConnError = connErr;
+        const msg = connErr instanceof Error ? connErr.message : String(connErr);
+        console.warn(`Connection attempt ${attempt}/${MAX_RETRIES} failed: ${msg}`);
+        if (attempt < MAX_RETRIES) {
+          await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
+        }
+      }
+    }
+
+    if (!client) {
+      const errMsg = lastConnError instanceof Error ? lastConnError.message : String(lastConnError);
+      console.error(`All ${MAX_RETRIES} connection attempts failed: ${errMsg}`);
+      return new Response(
+        JSON.stringify({ success: false, error: `Database connection failed after ${MAX_RETRIES} attempts: ${errMsg}` }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // ========== PASSO 1: Buscar snapshots mais recentes de t_aereo_ws ==========
     let wsQuery: string;
