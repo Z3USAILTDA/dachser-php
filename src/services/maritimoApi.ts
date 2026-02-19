@@ -327,12 +327,12 @@ export const maritimoApi = {
   async pollAnalysisUntilComplete(
     analysisId: string, 
     onProgress?: (percent: number, step: string) => void,
-    timeoutMs: number = 10 * 60 * 1000 // 10 minutes (extended from 8)
+    timeoutMs: number = 12 * 60 * 1000 // 12 minutes
   ): Promise<any> {
     const startTime = Date.now();
     const pollInterval = 4000; // 4 seconds between polls
     let consecutiveErrors = 0;
-    const maxConsecutiveErrors = 5;
+    const maxConsecutiveErrors = 10;
     let lastProgress = 15;
     
     while (Date.now() - startTime < timeoutMs) {
@@ -386,7 +386,7 @@ export const maritimoApi = {
         console.warn(`Poll attempt failed (${consecutiveErrors}/${maxConsecutiveErrors}):`, pollError.message);
         
         if (consecutiveErrors >= maxConsecutiveErrors) {
-          throw new Error('Erro de conexão com a internet. Por favor, verifique sua conexão e tente novamente.');
+          throw new Error(`Servidor instável após ${maxConsecutiveErrors} tentativas consecutivas. A análise pode ainda estar em andamento — aguarde e verifique o histórico.`);
         }
         
         // Wait longer between retries on error
@@ -395,7 +395,7 @@ export const maritimoApi = {
     }
     
     console.error(`Analysis timeout after ${timeoutMs/1000/60} minutes.`);
-    throw new Error('Erro de conexão com a internet. Por favor, verifique sua conexão e tente novamente.');
+    throw new Error(`Tempo limite excedido (${Math.round(timeoutMs/1000/60)} min). A análise pode ainda estar processando — verifique o histórico em alguns minutos.`);
   },
 
   /**
