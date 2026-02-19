@@ -220,7 +220,6 @@ async function callGemini(prompt: string, pdfBase64: string, fileName: string): 
           ],
         }],
         generationConfig: { maxOutputTokens: 8000 },
-        thinkingConfig: { thinkingBudget: 8192 },
       }),
     }
   );
