@@ -1006,7 +1006,6 @@ async function analyzeWithGeminiPro(
       generationConfig: {
         maxOutputTokens: 32000,
       },
-      thinkingConfig: { thinkingBudget: 8192 },
     }),
   });
   
@@ -1792,8 +1791,7 @@ serve(async (req) => {
           await bgClient.execute(`
             UPDATE ai_agente.t_dachser_sea_runs 
             SET status = 'erro',
-                result_text = ?,
-                updated_at = NOW()
+                result_text = ?
             WHERE id = ?
           `, [err instanceof Error ? err.message : 'Unknown error', runId]);
           
