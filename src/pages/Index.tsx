@@ -463,13 +463,23 @@ const Index = () => {
   }, []);
 
   const handleTrackingResult = useCallback((awbNumber: string, failed: boolean) => {
-    setAwbsList(prev => {
-      const updated = prev.map(item =>
+    // Update statusAereoData (which is what the table actually renders)
+    setStatusAereoData(prev =>
+      prev.map(item =>
         item.awb === awbNumber ? { ...item, tracking_failed: failed } : item
-      );
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      return updated;
-    });
+      )
+    );
+    // Also persist to localStorage keyed by AWB for survival across refreshes
+    try {
+      const stored = localStorage.getItem("tracking-failed-flags") || "{}";
+      const flags = JSON.parse(stored);
+      if (failed) {
+        flags[awbNumber] = true;
+      } else {
+        delete flags[awbNumber];
+      }
+      localStorage.setItem("tracking-failed-flags", JSON.stringify(flags));
+    } catch (_) { /* ignore */ }
   }, []);
 
   // Check authentication (optional - just get user info if available)
@@ -576,7 +586,18 @@ const Index = () => {
         }, []);
 
         console.log(`AWB Deduplication: ${convertedData.length} -> ${deduplicatedData.length} records`);
-        setStatusAereoData(deduplicatedData);
+
+        // Restore tracking_failed flags from localStorage so they survive API refreshes
+        try {
+          const stored = localStorage.getItem("tracking-failed-flags") || "{}";
+          const flags: Record<string, boolean> = JSON.parse(stored);
+          const withFlags = deduplicatedData.map((item: AWBData) =>
+            flags[item.awb] ? { ...item, tracking_failed: true } : item
+          );
+          setStatusAereoData(withFlags);
+        } catch (_) {
+          setStatusAereoData(deduplicatedData);
+        }
       }
     } catch (error) {
       console.error("Error in fetchStatusAereoData:", error);
