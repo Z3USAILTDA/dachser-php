@@ -147,21 +147,40 @@ function mapColumns(headers: string[]): ColumnMap {
   };
 
   const normalizedHeaders = headers.map(normalizeHeader);
+  const usedColumns = new Set<number>();
 
+  // Pass 1: Exact matches only (highest priority)
   for (const [field, aliases] of Object.entries(COLUMN_ALIASES)) {
     for (let i = 0; i < normalizedHeaders.length; i++) {
+      if (usedColumns.has(i)) continue;
+      if (aliases.includes(normalizedHeaders[i])) {
+        (map as any)[field] = i;
+        usedColumns.add(i);
+        break;
+      }
+    }
+  }
+
+  // Pass 2: Best partial match for fields still unmapped
+  for (const [field, aliases] of Object.entries(COLUMN_ALIASES)) {
+    if ((map as any)[field] >= 0) continue; // already mapped in Pass 1
+    let bestCol = -1;
+    let bestAliasLen = 0;
+    for (let i = 0; i < normalizedHeaders.length; i++) {
+      if (usedColumns.has(i)) continue;
       const nh = normalizedHeaders[i];
-      // Exact match
-      if (aliases.includes(nh)) {
-        (map as any)[field] = i;
-        break;
+      // Find the longest alias that partial-matches this header
+      for (const a of aliases) {
+        const isMatch = (nh.includes(a) && a.length >= 3) || (a.includes(nh) && nh.length >= 4);
+        if (isMatch && a.length > bestAliasLen) {
+          bestAliasLen = a.length;
+          bestCol = i;
+        }
       }
-      // Partial match (header contains alias or alias contains header)
-      const found = aliases.find(a => (nh.includes(a) && a.length >= 3) || (a.includes(nh) && nh.length >= 4));
-      if (found) {
-        (map as any)[field] = i;
-        break;
-      }
+    }
+    if (bestCol >= 0) {
+      (map as any)[field] = bestCol;
+      usedColumns.add(bestCol);
     }
   }
 
