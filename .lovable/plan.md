@@ -1,49 +1,67 @@
-
-
-# Correcao: NCM extraido com 4 digitos no PDF (HBL)
+# Correcao: NCM — aceitar 4, 6 ou 8 digitos e ler de ambas as colunas
 
 ## Problema
 
-O prompt do `pdfExtractor.ts` diz "Preserve exact digit count (4-digit: '8481', 8-digit: '84812090')" -- isso PERMITE que o LLM retorne HS codes de 4 digitos. E o filtro de validacao aceita `/\d{4,10}/`.
+O extrator XLSX so le NCM da coluna "NCM Code" (que tem 4 digitos) e ignora a coluna "HS Code" (que tem 6 ou 8 digitos). Todos os tamanhos (4, 6 e 8 digitos) da coluna  "NCM Code" sao validos e devem ser aceitos.
 
-Resultado: HBL NCMs = [8708, 8481, 9032, ...] quando deveriam ser [87084090, 84812090, 90328929, ...]
+## Mudancas (2 arquivos)
 
-O Manifest XLSX ja extrai corretamente com 8 digitos. Somente o PDF precisa de correcao.
+### 1. `xlsxExtractor.ts`
 
-## Solucao (somente `pdfExtractor.ts`, sem mexer em nada mais)
+**Linha 227 — filtro da funcao `extractNcmCodes`:**
 
-### Mudanca 1: Atualizar o prompt (linha 107)
+```
+Antes:  .filter(p => /^\d{4,10}$/.test(p))
+Depois: .filter(p => /^\d{4}$/.test(p) || /^\d{6}$/.test(p) || /^\d{8}$/.test(p))
+```
 
-```text
+Aceita exatamente 4, 6 ou 8 digitos. Descarta 5, 7, 9, 10 digitos.
+
+**Linha 359-360 — extrair de ambas as colunas ncm + hs_code:**
+
+```
 Antes:
-  "Preserve exact digit count (4-digit: '8481', 8-digit: '84812090')"
+  // Extract NCM codes (ONLY from NCM column, NEVER from HS column)
+  const ncmCodes = colMap.ncm >= 0 ? extractNcmCodes(row[colMap.ncm]) : [];
 
 Depois:
-  "NCM codes MUST have EXACTLY 8 digits (e.g., 84812090, 87084090).
-   If the document shows 4-digit HS codes, you MUST expand them to their
-   full 8-digit NCM equivalent if possible, or exclude them.
-   ONLY include 8-digit codes in the ncm_codes arrays."
+  // Extract NCM from both NCM and HS Code columns, accept 4/6/8 digits
+  const ncmFromNcmCol = colMap.ncm >= 0 ? extractNcmCodes(row[colMap.ncm]) : [];
+  const ncmFromHsCol = colMap.hs_code >= 0 ? extractNcmCodes(row[colMap.hs_code]) : [];
+  const ncmCodes = [...new Set([...ncmFromNcmCol, ...ncmFromHsCol])];
 ```
 
-### Mudanca 2: Filtro de validacao (linhas 285 e 295)
+### 2. `pdfExtractor.ts`
 
-```text
+**Prompt (linha 107):** Aceitar 6 ou 8 digitos (PDF nao costuma ter 4 digitos uteis, mas se tiver sera aceito):
+
+```
 Antes:
-  .filter((c: string) => /^\d{4,10}$/.test(c))
+  NCM codes MUST have EXACTLY 8 digits...
+  ONLY include 8-digit codes in the ncm_codes arrays.
 
 Depois:
-  .filter((c: string) => /^\d{8}$/.test(c))
+  NCM codes can have 4, 6, or 8 digits (e.g., 8708, 848120, 84812090).
+  ONLY include codes with exactly 4, 6, or 8 digits in the ncm_codes arrays.
 ```
 
-Isso garante que mesmo que o LLM retorne codes de 4 digitos, eles serao descartados na validacao.
+**Filtros de validacao (linhas 285 e 295):**
 
-## Arquivo unico alterado
-
-```text
-Arquivo                                           Mudanca
-------------------------------------------------  -------------------------------------------
-supabase/functions/sea-submit-analysis/           1. Prompt: exigir NCMs de 8 digitos
-  pdfExtractor.ts                                 2. Validacao: filtro \d{8} (linhas 285, 295)
+```
+Antes:  .filter((c: string) => /^\d{8}$/.test(c))
+Depois: .filter((c: string) => /^\d{4}$/.test(c) || /^\d{6}$/.test(c) || /^\d{8}$/.test(c))
 ```
 
-Nenhum outro arquivo sera tocado. Deploy automatico do edge function apos a alteracao.
+## Resumo
+
+```
+Arquivo              Mudanca
+-------------------  --------------------------------------------------
+xlsxExtractor.ts     1. extractNcmCodes: filtro 4/6/8 digitos (linha 227)
+                     2. Ler de ncm + hs_code (linha 360)
+
+pdfExtractor.ts      1. Prompt: aceitar 4/6/8 digitos (linha 107)
+                     2. Filtros: regex 4/6/8 digitos (linhas 285, 295)
+```
+
+Deploy automatico do edge function apos as alteracoes.
