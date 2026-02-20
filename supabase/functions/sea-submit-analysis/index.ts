@@ -1213,7 +1213,7 @@ Produce the final consolidated analysis now. Start directly with the analysis co
       messages: [
         { role: 'user', content: arbitrationPrompt }
       ],
-      max_tokens: 64000,
+      max_tokens: 32000,
       temperature: 0,
     }),
   });
