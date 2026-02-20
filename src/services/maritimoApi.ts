@@ -327,7 +327,7 @@ export const maritimoApi = {
   async pollAnalysisUntilComplete(
     analysisId: string, 
     onProgress?: (percent: number, step: string) => void,
-    timeoutMs: number = 12 * 60 * 1000 // 12 minutes
+    timeoutMs: number = 20 * 60 * 1000 // 20 minutes
   ): Promise<any> {
     const startTime = Date.now();
     const pollInterval = 4000; // 4 seconds between polls
