@@ -1,6 +1,6 @@
 /**
- * xlsxExtractor.ts — Programmatic XLSX → Structured JSON extractor
- * Replaces the old extractXlsxText() that truncated data.
+ * xlsxExtractor.ts — XLSX → Structured JSON extractor
+ * Supports both programmatic extraction and LLM-based extraction via Claude.
  * Processes ALL rows without character limits.
  */
 
@@ -491,4 +491,292 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
     sheet_names: sheetsToProcess,
     total_rows: totalRowsProcessed,
   };
+}
+
+// ============ LLM-BASED EXTRACTION ============
+
+const LLM_EXTRACTION_PROMPT = `You will receive data from a maritime cargo manifest in CSV format.
+Extract the following structured data as JSON. Be extremely precise with field mapping — read the actual column headers carefully.
+
+For each unique exporter/supplier, return:
+- name: the supplier/exporter company name (look for columns like "Supplier Name", "Exporter", "Shipper" — NOT "Supplier Country" or "Supplier Code")
+- invoice_numbers: list of delivery note/invoice references
+- gross_weight_kg: total gross weight in kg (numeric, already converted)
+- net_weight_kg: total net weight in kg (numeric, already converted)
+- cbm: total volume in cubic meters (numeric)
+- packages: { qty: number of packages, type: packaging type string }
+- container: container number if present in the row
+- seal: seal number if present in the row
+- cnpj: VAT/tax ID if present
+- items: array of line items, each with:
+  - description: the product/goods description (look for columns like "Description", "Product Description", "Part Description" — NOT "QTY Material" or quantity columns)
+  - gross_weight_kg: item gross weight in kg
+  - net_weight_kg: item net weight in kg
+  - cbm: item volume in m3
+  - packages_qty: number of packages for this item
+  - packages_type: packaging type for this item
+  - invoice_ref: delivery note / invoice reference for this item
+
+Also extract global data:
+- container: container number in ISO format (4 letters + 7 digits, e.g., TCNU2673243)
+- seal: seal number
+
+IMPORTANT RULES:
+1. DO NOT extract NCM codes — they will be added separately via programmatic extraction.
+2. Aggregate numeric values (weight, cbm, packages) per supplier by summing all their rows.
+3. Weights are in KG. If a value looks like it's in grams (e.g., 965226 for a single carton), convert to KG by dividing by 1000.
+4. Skip summary/total rows (rows containing "Grand Total", "Subtotal", etc.).
+5. Return ONLY valid JSON, no markdown, no explanation.
+
+Return format:
+{
+  "exporters": [...],
+  "container": "XXXX1234567",
+  "seal": "seal_number"
+}`;
+
+export async function extractXlsxWithLLM(fileUrl: string, fileName: string): Promise<ManifestData> {
+  console.log(`🤖 [XLSX LLM Extractor] Starting LLM-based extraction: ${fileName}`);
+  const startTime = Date.now();
+
+  const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+  if (!ANTHROPIC_API_KEY) {
+    console.warn('⚠️ [XLSX LLM Extractor] No ANTHROPIC_API_KEY, falling back to programmatic extraction');
+    return extractXlsxStructured(fileUrl, fileName);
+  }
+
+  // Step 1: Fetch and parse XLSX
+  const response = await fetch(fileUrl);
+  if (!response.ok) throw new Error(`Failed to fetch XLSX: ${response.statusText}`);
+
+  let arrayBuffer: ArrayBuffer | null = await response.arrayBuffer();
+  const fileSizeKB = Math.round(arrayBuffer.byteLength / 1024);
+  console.log(`🤖 [XLSX LLM Extractor] File: ${fileSizeKB} KB`);
+
+  const XLSX = await import('https://esm.sh/xlsx@0.18.5');
+  const workbook = XLSX.read(arrayBuffer, {
+    type: 'array',
+    cellFormula: false,
+    cellStyles: false,
+    cellNF: false,
+    cellDates: false,
+    dense: true,
+  });
+
+  // @ts-ignore - free memory
+  arrayBuffer = null;
+
+  const skipPatterns = ['instruction', 'info', 'guide', 'readme', 'help', 'template'];
+  const sheetsToProcess = workbook.SheetNames.filter(
+    (name: string) => !skipPatterns.some(p => name.toLowerCase().includes(p))
+  );
+
+  // Step 2: Extract NCM codes programmatically (Pass 2 logic)
+  const ncmBySupplier = new Map<string, string[]>();
+  const allNcmCodes: string[] = [];
+  let allHeaders: string[] = [];
+  let totalRowsProcessed = 0;
+
+  for (const sheetName of sheetsToProcess) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+
+    const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '' });
+    if (rows.length < 2) continue;
+
+    // Find header row
+    let headerRowIdx = 0;
+    let bestScore = 0;
+    let fallbackIdx = -1;
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
+      const nonEmpty = rows[i].filter((c: any) => String(c || '').trim() !== '').length;
+      if (nonEmpty >= 3) {
+        if (fallbackIdx < 0) fallbackIdx = i;
+        const score = scoreHeaderRow(rows[i]);
+        if (score > bestScore) { bestScore = score; headerRowIdx = i; }
+      }
+    }
+    if (bestScore < 2 && fallbackIdx >= 0) headerRowIdx = fallbackIdx;
+
+    const headers = rows[headerRowIdx].map((h: any) => String(h || ''));
+    allHeaders = [...new Set([...allHeaders, ...headers.filter((h: string) => h.trim())])];
+    const colMap = mapColumns(headers);
+
+    // Extract NCM only from NCM column (not HS Code)
+    const ncmCol = colMap.ncm;
+    const supplierCol = colMap.supplier >= 0 ? colMap.supplier : -1;
+
+    if (ncmCol >= 0) {
+      for (let r = headerRowIdx + 1; r < rows.length; r++) {
+        const row = rows[r];
+        if (!row || row.length === 0 || isSkipRow(row)) continue;
+        totalRowsProcessed++;
+
+        const ncmCodes = extractNcmCodes(row[ncmCol]);
+        if (ncmCodes.length > 0) {
+          // Associate with supplier if possible
+          const supplier = supplierCol >= 0 ? parseString(row[supplierCol]).toUpperCase().trim() : 'ALL';
+          if (!ncmBySupplier.has(supplier)) ncmBySupplier.set(supplier, []);
+          for (const ncm of ncmCodes) {
+            if (!ncmBySupplier.get(supplier)!.includes(ncm)) ncmBySupplier.get(supplier)!.push(ncm);
+            if (!allNcmCodes.includes(ncm)) allNcmCodes.push(ncm);
+          }
+        }
+      }
+    } else {
+      for (let r = headerRowIdx + 1; r < rows.length; r++) {
+        const row = rows[r];
+        if (!row || row.length === 0 || isSkipRow(row)) continue;
+        totalRowsProcessed++;
+      }
+    }
+  }
+
+  console.log(`🤖 [XLSX LLM Extractor] NCM extracted programmatically: ${allNcmCodes.length} unique codes from ${totalRowsProcessed} rows`);
+
+  // Step 3: Convert sheets to CSV text for Claude
+  let csvText = '';
+  for (const sheetName of sheetsToProcess) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+    const csv = XLSX.utils.sheet_to_csv(sheet, { FS: '\t', RS: '\n', blankrows: false });
+    csvText += `=== Sheet: ${sheetName} ===\n${csv}\n\n`;
+  }
+
+  // Limit CSV size to avoid token limits (keep first ~80k chars)
+  const maxChars = 80000;
+  if (csvText.length > maxChars) {
+    console.warn(`⚠️ [XLSX LLM Extractor] CSV text truncated from ${csvText.length} to ${maxChars} chars`);
+    csvText = csvText.substring(0, maxChars) + '\n... [TRUNCATED]';
+  }
+
+  console.log(`🤖 [XLSX LLM Extractor] CSV text: ${csvText.length} chars, sending to Claude...`);
+
+  // Step 4: Call Claude for structured extraction
+  try {
+    const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 8192,
+        messages: [
+          {
+            role: 'user',
+            content: `${LLM_EXTRACTION_PROMPT}\n\n--- MANIFEST CSV DATA ---\n${csvText}`,
+          },
+        ],
+      }),
+    });
+
+    if (!claudeResponse.ok) {
+      const errText = await claudeResponse.text();
+      console.error(`❌ [XLSX LLM Extractor] Claude API error ${claudeResponse.status}: ${errText}`);
+      throw new Error(`Claude API error: ${claudeResponse.status}`);
+    }
+
+    const claudeResult = await claudeResponse.json();
+    const responseText = claudeResult.content?.[0]?.text || '';
+    console.log(`🤖 [XLSX LLM Extractor] Claude response: ${responseText.length} chars`);
+
+    // Parse JSON from response (handle potential markdown wrapping)
+    let jsonStr = responseText.trim();
+    const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) jsonStr = jsonMatch[1].trim();
+    // Also try to find raw JSON object
+    if (!jsonStr.startsWith('{')) {
+      const braceStart = jsonStr.indexOf('{');
+      if (braceStart >= 0) jsonStr = jsonStr.substring(braceStart);
+    }
+
+    const parsed = JSON.parse(jsonStr);
+    const llmExporters = parsed.exporters || [];
+    const llmContainer = parsed.container || '';
+    const llmSeal = parsed.seal || '';
+
+    console.log(`🤖 [XLSX LLM Extractor] Claude extracted: ${llmExporters.length} exporters, container=${llmContainer}, seal=${llmSeal}`);
+
+    // Step 5: Merge — add NCM codes to Claude's exporters
+    const exporters: ExporterData[] = llmExporters.map((exp: any) => {
+      const name = exp.name || 'UNKNOWN EXPORTER';
+      const key = name.toUpperCase().trim();
+
+      // Find NCM codes for this supplier
+      let ncmCodes = ncmBySupplier.get(key) || [];
+      if (ncmCodes.length === 0) {
+        // Try partial match
+        for (const [supplierKey, codes] of ncmBySupplier.entries()) {
+          if (key.includes(supplierKey) || supplierKey.includes(key)) {
+            ncmCodes = codes;
+            break;
+          }
+        }
+      }
+      // Fallback: assign all NCM codes if only one exporter or no match found
+      if (ncmCodes.length === 0 && (llmExporters.length === 1 || ncmBySupplier.size <= 1)) {
+        ncmCodes = allNcmCodes;
+      }
+
+      const items: ExporterItem[] = (exp.items || []).map((item: any) => ({
+        description: item.description || '',
+        gross_weight_kg: item.gross_weight_kg || 0,
+        net_weight_kg: item.net_weight_kg || 0,
+        cbm: item.cbm || 0,
+        packages_qty: item.packages_qty || 0,
+        packages_type: item.packages_type || '',
+        ncm_codes: [], // NCM at exporter level, not item level
+        invoice_ref: item.invoice_ref || '',
+        extra_columns: {},
+      }));
+
+      return {
+        name,
+        invoice_numbers: exp.invoice_numbers || [],
+        gross_weight_kg: exp.gross_weight_kg || 0,
+        net_weight_kg: exp.net_weight_kg || 0,
+        cbm: exp.cbm || 0,
+        packages: { qty: exp.packages?.qty || 0, type: exp.packages?.type || '' },
+        ncm_codes: ncmCodes,
+        container: exp.container || llmContainer,
+        seal: exp.seal || llmSeal,
+        cnpj: exp.cnpj || '',
+        items,
+      };
+    });
+
+    // Calculate totals
+    let totalGross = 0, totalNet = 0, totalCbm = 0, totalPkgs = 0;
+    for (const exp of exporters) {
+      totalGross += exp.gross_weight_kg;
+      totalNet += exp.net_weight_kg;
+      totalCbm += exp.cbm;
+      totalPkgs += exp.packages.qty;
+    }
+
+    const elapsed = Date.now() - startTime;
+    console.log(`🤖 [XLSX LLM Extractor] Done: ${exporters.length} exporters, ${allNcmCodes.length} NCMs, ${elapsed}ms`);
+
+    return {
+      exporters,
+      totals: {
+        gross_weight_kg: Math.round(totalGross * 1000) / 1000,
+        net_weight_kg: Math.round(totalNet * 1000) / 1000,
+        cbm: Math.round(totalCbm * 1000) / 1000,
+        packages: totalPkgs,
+        ncm_codes: allNcmCodes.sort(),
+      },
+      container: llmContainer,
+      seal: llmSeal,
+      raw_headers: allHeaders,
+      sheet_names: sheetsToProcess,
+      total_rows: totalRowsProcessed,
+    };
+  } catch (llmError) {
+    console.error(`❌ [XLSX LLM Extractor] LLM extraction failed, falling back to programmatic:`, llmError);
+    return extractXlsxStructured(fileUrl, fileName);
+  }
 }

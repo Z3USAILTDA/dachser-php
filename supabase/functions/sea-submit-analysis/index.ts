@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 import { getPromptForAnalysisType } from "./prompts.ts";
-import { extractXlsxStructured } from "./xlsxExtractor.ts";
+import { extractXlsxStructured, extractXlsxWithLLM } from "./xlsxExtractor.ts";
 import { extractPdfStructured } from "./pdfExtractor.ts";
 import { compareManifestHbl, compareHblMbl, compareInvoicesHbl } from "./deterministicCompare.ts";
 import { formatComparisonResult } from "./resultFormatter.ts";
@@ -1046,7 +1046,7 @@ async function analyzeWithStructuredPipeline(
   if (xlsxFiles.length > 0) {
     for (const xlsxFile of xlsxFiles) {
       try {
-        manifestData = await extractXlsxStructured(xlsxFile.file_url, xlsxFile.file_name);
+        manifestData = await extractXlsxWithLLM(xlsxFile.file_url, xlsxFile.file_name);
         console.log(`📊 [Structured Pipeline] XLSX extracted: ${manifestData.exporters.length} exporters, ${manifestData.total_rows} rows`);
         
         // VALIDATION GATE: If 0 exporters from a non-empty file, headers were not recognized
