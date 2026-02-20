@@ -1,22 +1,21 @@
 
 
-# Correção do Pipeline Multi-Modelo SEA
+# Aumentar Timeout do Polling SEA
 
-## Diagnóstico
+## Problema
 
-O pipeline multi-modelo **está funcionando corretamente** -- todas as 3 etapas foram executadas, a tabela `t_sea_analytics_extr` foi criada e os dados foram persistidos. O único problema é na **Etapa 3 (Arbitragem GPT)**, onde o parâmetro `max_tokens: 64000` excede o limite do modelo GPT-4.1 (máximo: 32768).
+O pipeline multi-modelo (3 etapas com Claude, Gemini e GPT) demora mais que o timeout atual de 12 minutos configurado no `maritimoApi.ts`. Quando excede, o usuario ve a mensagem de erro "Tempo limite excedido (10 min)".
 
-O sistema usou o fallback do Claude como resultado final, por isso a análise foi concluída com sucesso mas sem a arbitragem do GPT.
+## Solucao
 
-## Correção
+Aumentar o timeout do polling de 12 minutos para 20 minutos, permitindo tempo suficiente para as 3 etapas do pipeline completarem. A mensagem de timeout tambem sera atualizada para refletir o novo limite.
 
-Alterar `max_tokens` de `64000` para `32000` na chamada do GPT-4.1 dentro da função `runGptArbitration` no arquivo `supabase/functions/sea-submit-analysis/index.ts` (linha 1216).
+## Detalhes Tecnicos
 
-## Detalhes Técnicos
+**Arquivo**: `src/services/maritimoApi.ts`
 
-**Arquivo**: `supabase/functions/sea-submit-analysis/index.ts`
+1. **Linha 330**: Alterar o timeout padrao de `12 * 60 * 1000` (12 min) para `20 * 60 * 1000` (20 min)
+2. **Linha 398**: A mensagem de erro ja e dinamica (usa `Math.round(timeoutMs/1000/60)`), entao se ajustara automaticamente
 
-**Mudança**: Linha 1216, trocar `max_tokens: 64000` por `max_tokens: 32000`
-
-Isso é suficiente para que o GPT-4.1 processe a arbitragem corretamente na próxima execução. As outras duas ocorrências de `max_tokens: 64000` (linhas 893 e 1131) são chamadas ao Claude Sonnet 4.5, que suporta 64000 tokens -- essas não precisam mudar.
+Essa mudanca afeta todas as paginas que usam o polling: `SubmeterManifestHbl`, `SubmeterHblMbl` e `InvoicesDraftHbl`.
 
