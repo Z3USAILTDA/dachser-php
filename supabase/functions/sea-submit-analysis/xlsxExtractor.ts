@@ -320,9 +320,11 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
     const headers = rows[headerRowIdx].map((h: any) => String(h || ''));
     allHeaders = [...new Set([...allHeaders, ...headers.filter((h: string) => h.trim())])];
     const colMap = mapColumns(headers);
+    // Pass 2 map: NCM only from NCM column (no HS Code fallback)
+    const colMapNcmOnly = { ...colMap, hs_code: -1 };
 
     console.log(`📊 [XLSX Extractor] Sheet "${sheetName}" RAW HEADERS: [${headers.join(' | ')}]`);
-    console.log(`📊 [XLSX Extractor] Sheet "${sheetName}": ${rows.length - headerRowIdx - 1} data rows, supplier col: ${colMap.supplier}, weight col: ${colMap.gross_weight}, ncm col: ${colMap.ncm}, desc col: ${colMap.description}`);
+    console.log(`📊 [XLSX Extractor] Sheet "${sheetName}": ${rows.length - headerRowIdx - 1} data rows, supplier col: ${colMap.supplier}, weight col: ${colMap.gross_weight}, ncm col: ${colMap.ncm}, hs_code col: ${colMap.hs_code}, desc col: ${colMap.description}`);
 
     // Determine fallback grouping column when supplier is not found
     const useSupplierCol = colMap.supplier >= 0;
@@ -361,8 +363,9 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
       const seal = colMap.seal >= 0 ? parseString(row[colMap.seal]) : '';
       const cnpj = colMap.cnpj >= 0 ? parseString(row[colMap.cnpj]) : '';
 
-      // Extract NCM codes ONLY from NCM column, accept 4/6/8 digits
-      const ncmCodes = colMap.ncm >= 0 ? extractNcmCodes(row[colMap.ncm]) : [];
+      // PASS 1: All fields (supplier, weight, cbm, etc.) use colMap — already extracted above
+      // PASS 2: NCM codes ONLY from NCM column, ignoring HS Code (correct extraction)
+      const ncmCodes = colMapNcmOnly.ncm >= 0 ? extractNcmCodes(row[colMapNcmOnly.ncm]) : [];
 
       // Debug: log first 5 data rows
       if (totalRowsProcessed <= 5) {
