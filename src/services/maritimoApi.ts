@@ -340,22 +340,21 @@ export const maritimoApi = {
         const status = await this.pollAnalysis(analysisId);
         consecutiveErrors = 0; // Reset error counter on success
         
-        // Map step to progress with smoother progression
-        let progressPercent = 50;
-        let progressStep = 'Analisando documentos...';
+        // Use real progress from backend
+        let progressPercent = status.progress_percent || 10;
+        let progressStep = status.progress_message || 'Processando...';
         
-        if (status.status === 'pendente' || status.status === 'queued') {
-          progressPercent = Math.min(lastProgress + 2, 25);
-          progressStep = 'Preparando análise...';
-        } else if (status.status === 'analisando' || status.status === 'processing') {
-          // Smoother progress between 30-85%
+        // Only use time-based fallback if backend sends generic status
+        if (!status.progress_message || status.progress_message === 'Processando...') {
           const elapsed = Date.now() - startTime;
           const progressRatio = Math.min(elapsed / (timeoutMs * 0.8), 1);
-          progressPercent = Math.min(30 + Math.floor(progressRatio * 55), 85);
+          progressPercent = Math.min(10 + Math.floor(progressRatio * 75), 85);
           progressStep = 'Processando com IA...';
-        } else if (status.status === 'realizado' || status.status === 'completed') {
+        }
+
+        if (status.status === 'realizado' || status.status === 'completed') {
           progressPercent = 100;
-          progressStep = 'Concluído';
+          progressStep = 'Concluído!';
         }
         
         lastProgress = progressPercent;

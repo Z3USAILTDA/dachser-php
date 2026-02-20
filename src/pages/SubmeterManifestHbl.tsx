@@ -451,15 +451,35 @@ export default function SubmeterManifestHbl() {
               </div>}
 
             {isAnalyzing && <div className="mt-6">
-                <div className="bg-black/20 border border-white/5 rounded-xl p-4">
-                  <div className="flex items-center gap-3 mb-3">
+                <div className="bg-black/20 border border-white/5 rounded-xl p-5">
+                  <div className="flex items-center gap-3 mb-4">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-400"></div>
-                    <span className="text-sm text-white font-medium">{analysisStep}</span>
+                    <span className="text-sm text-white font-medium">{analysisStep || 'Processando...'}</span>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 mb-4">
                     <Progress value={analysisProgress} className="h-2 flex-1" />
                     <span className="text-xs text-neutral-400 font-mono min-w-[3rem] text-right">{analysisProgress}%</span>
                   </div>
+                  <div className="grid grid-cols-4 gap-1 mt-3">
+                    {[
+                      { label: 'Manifest', threshold: 15 },
+                      { label: 'HBL', threshold: 30 },
+                      { label: 'Análise IA', threshold: 50 },
+                      { label: 'Arbitragem', threshold: 75 },
+                    ].map((stage, i) => (
+                      <div key={i} className="text-center">
+                        <div className={`h-1 rounded-full mb-1 transition-colors duration-500 ${
+                          analysisProgress >= stage.threshold ? 'bg-amber-400' : 'bg-white/10'
+                        }`} />
+                        <span className={`text-[10px] ${
+                          analysisProgress >= stage.threshold ? 'text-amber-300' : 'text-neutral-600'
+                        }`}>{stage.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-neutral-500 mt-3 text-center">
+                    Pipeline multi-modelo: Claude → Gemini → GPT (pode levar até 10 min)
+                  </p>
                 </div>
               </div>}
 
