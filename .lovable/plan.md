@@ -1,36 +1,36 @@
 
-# Fix: Erro de Conexao na Analise SEA (HBL x MBL)
 
-## Diagnostico
+# Correcao: Nao extrair HS Code como NCM no xlsxExtractor
 
-A analise **completou com sucesso** no servidor (run 994, 354 segundos via Gemini Pro), porem o frontend mostrou "Erro de conexao com a internet" porque:
+## Problema
 
-1. **Timeout curto demais**: O polling esta configurado com 300s (5 min), mas a analise levou 354s (quase 6 min)
-2. **Tolerancia a erros baixa**: O limite de `maxConsecutiveErrors = 5` e muito restritivo -- erros transientes de conexao MariaDB (`Connection reset by peer`) no `sea-poll-analysis` consomem rapidamente as 5 tentativas
-3. **Mensagem de erro generica**: O timeout e erros de polling mostram "Erro de conexao com a internet", quando na verdade o problema e no backend
+No `xlsxExtractor.ts`, os aliases da coluna `ncm` incluem termos de HS Code (`'tariff code'`, `'tariff'`, `'taric'`, `'warentarifnummer'`, `'zolltarif'`). Quando o Manifest tem uma coluna com esses nomes, o extrator mapeia como NCM e extrai os valores -- gerando divergencias falsas.
 
-## Correcoes
+## Solucao
 
-### 1. Aumentar tolerancia no polling (`src/services/maritimoApi.ts`)
-- Subir `maxConsecutiveErrors` de **5 para 10** -- erros transientes de MariaDB sao comuns e nao devem abortar a analise
-- Aumentar o timeout padrao de **10 min para 12 min** para cobrir analises mais longas
-
-### 2. Aumentar timeout na pagina HBL x MBL (`src/pages/SubmeterHblMbl.tsx`)
-- Alterar o timeout de `300000` (5 min) para `600000` (10 min) na chamada `pollAnalysisUntilComplete`
-
-### 3. Melhorar mensagens de erro (`src/services/maritimoApi.ts`)
-- Diferenciar entre timeout real ("Tempo limite excedido") e erros de conexao consecutivos
-- Exibir mensagem mais informativa em vez do generico "Erro de conexao com a internet"
+Mover os 5 aliases genericos de tarifa da lista `ncm` para a lista `hs_code`. Como a extracao (linha 340) so usa `colMap.ncm` e ignora `colMap.hs_code`, os valores de HS Code deixam de ser extraidos.
 
 ## Detalhes Tecnicos
 
-```text
-Arquivo                            Mudanca
--------------------------------------  -----------------------------------------
-src/services/maritimoApi.ts        maxConsecutiveErrors: 5 -> 10
-                                   timeoutMs default: 10min -> 12min
-                                   Mensagens de erro diferenciadas
-src/pages/SubmeterHblMbl.tsx       pollAnalysisUntilComplete timeout: 300s -> 600s
+### Arquivo: `supabase/functions/sea-submit-analysis/xlsxExtractor.ts`
+
+**Aliases NCM -- remover:**
+```
+'tariff code', 'tariff', 'taric', 'warentarifnummer', 'zolltarif'
 ```
 
-Nenhuma mudanca em edge functions -- o `sea-poll-analysis` ja foi corrigido com retry logic na mensagem anterior.
+**Aliases NCM corrigidos (linhas 91-95):**
+```
+'ncm code', 'ncm', 'código ncm', 'codigo ncm', 'ncm-code',
+'ncm nr', 'ncm code 8 digits', 'ncm 8', 'codigo ncm 8',
+```
+
+**Aliases HS Code corrigidos (linhas 96-99):**
+```
+'hs code', 'hs', 'hs-code', 'h.s.', 'hs code 6 digits',
+'harmonized code', 'harmonized system',
+'tariff code', 'tariff', 'taric', 'warentarifnummer', 'zolltarif',
+```
+
+Deploy automatico do edge function `sea-submit-analysis` apos a alteracao.
+
