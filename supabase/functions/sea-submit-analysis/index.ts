@@ -1029,7 +1029,7 @@ async function analyzeWithGeminiPro(
  */
 async function ensureAnalyticsTable(dbClient: Client): Promise<void> {
   await dbClient.execute(`
-    CREATE TABLE IF NOT EXISTS ai_agente.t_sea_analytics_extr (
+    CREATE TABLE IF NOT EXISTS dados_dachser.t_sea_analytics_extr (
       id              INT AUTO_INCREMENT PRIMARY KEY,
       run_id          INT NULL,
       item_id         INT NULL,
@@ -1331,7 +1331,7 @@ async function analyzeWithMultiModelPipeline(
   if (analyticsDb) {
     try {
       const insertResult = await analyticsDb.execute(`
-        INSERT INTO ai_agente.t_sea_analytics_extr 
+        INSERT INTO dados_dachser.t_sea_analytics_extr 
         (run_id, item_id, base_file_name, json_xls_extraction, json_pdf_extraction, analysis_type, processed_at)
         VALUES (?, ?, ?, ?, ?, ?, NOW())
       `, [runId || null, itemId || null, baseFileName, jsonXls, jsonPdfs, analysisType]);
@@ -1353,7 +1353,7 @@ async function analyzeWithMultiModelPipeline(
   if (analyticsDb && analyticsRowId) {
     try {
       await analyticsDb.execute(`
-        UPDATE ai_agente.t_sea_analytics_extr 
+        UPDATE dados_dachser.t_sea_analytics_extr 
         SET result_gemini = ?, result_claude = ?
         WHERE id = ?
       `, [geminiResult || null, claudeResult || null, analyticsRowId]);
@@ -1401,7 +1401,7 @@ async function analyzeWithMultiModelPipeline(
   if (analyticsDb && analyticsRowId) {
     try {
       await analyticsDb.execute(`
-        UPDATE ai_agente.t_sea_analytics_extr 
+        UPDATE dados_dachser.t_sea_analytics_extr 
         SET result_gpt = ?, total_time_ms = ?
         WHERE id = ?
       `, [finalResult, totalTime, analyticsRowId]);
