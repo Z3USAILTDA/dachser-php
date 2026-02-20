@@ -1,74 +1,87 @@
 
 
-# Estrategia de dupla extracao: Pass 1 (tudo) + Pass 2 (NCM correto)
+# Fix: mapColumns picks wrong columns due to left-to-right first-match logic
 
-## Conceito
+## Root cause
 
-Fazer duas passadas de extracao no mesmo XLSX:
+The `mapColumns` function (lines 142-169) iterates headers left-to-right and stops at the **first** partial match. This causes:
 
-1. **Pass 1 (legado)**: Usa `mapColumns` como esta (incluindo HS Code para NCM). Extrai supplier, peso, cbm, volumes, description, invoices — tudo correto. O NCM desta passada sera DESCARTADO.
+| Field       | Mapped to (WRONG)         | Should be (CORRECT)        |
+|-------------|--------------------------|---------------------------|
+| supplier    | Col 2: "Supplier Country" | Col 3: "Supplier Name"    |
+| description | Col 17: "QTY Material"    | Col 18: "ZF Part Description" |
 
-2. **Pass 2 (NCM puro)**: Usa APENAS `colMap.ncm` para extrair NCM codes com filtro 4/6/8 digitos. Ignora `colMap.hs_code`.
-
-O resultado final combina: dados gerais do Pass 1 + NCM codes do Pass 2.
-
-## Mudanca (1 arquivo)
-
-### Arquivo: `supabase/functions/sea-submit-analysis/xlsxExtractor.ts`
-
-**Linha 364-365 — substituir a extracao de NCM por logica de dupla leitura:**
-
-```typescript
-// PASS 1: NCM from both ncm + hs_code columns (legacy — used for all fields EXCEPT ncm)
-const ncmFromLegacy = [
-  ...(colMap.ncm >= 0 ? extractNcmCodes(row[colMap.ncm]) : []),
-  ...(colMap.hs_code >= 0 ? extractNcmCodes(row[colMap.hs_code]) : []),
-];
-
-// PASS 2: NCM ONLY from NCM column, accept 4/6/8 digits (THIS is the correct one)
-const ncmCodes = colMap.ncm >= 0 ? extractNcmCodes(row[colMap.ncm]) : [];
+Evidence from logs:
+```
+supplier col: 2, weight col: 8, ncm col: 20, desc col: 17
+Row 12: supplier="PL", weight=965226
+Row 16: supplier="DE", weight=2482000
 ```
 
-Neste caso, `ncmFromLegacy` nao e usado em lugar nenhum — ele serve apenas para manter o pipeline do Pass 1 completo. Os `ncmCodes` que vao para o exporter e para os totais vem exclusivamente da coluna NCM.
+"PL" and "DE" are country codes, not supplier names. Weights are absurd because rows are grouped by country.
 
-**Porem**, analisando melhor: o problema real nao e o NCM em si. O problema e que o `mapColumns` atual mapeia `supplier` e `description` para colunas erradas (Supplier Country, QTY Material). O NCM ja esta correto.
+## Fix: Two-pass scoring in mapColumns
 
-## Abordagem mais simples e eficaz
+Replace the `mapColumns` function (lines 142-169) with a two-pass approach:
 
-Em vez de duas passadas completas, a solucao mais limpa e:
+**Pass 1 - Exact matches only (highest priority):**
+For each field, scan all headers. If the normalized header exactly equals an alias, map it and mark the column as used. "supplier name" exactly matches the alias "supplier name" in `COLUMN_ALIASES.supplier`, so col 3 wins immediately.
 
-Na linha 364-365, manter como esta (NCM apenas da coluna NCM). O problema dos outros campos (supplier, description) e resolvido melhorando o `mapColumns` com o sistema de 2 passes (exact match primeiro, depois best partial match).
+**Pass 2 - Best partial match (for unmapped fields):**
+For fields still unmapped after Pass 1, scan all remaining headers. Instead of stopping at the first partial match, evaluate ALL candidates and pick the one with the **longest** matching alias. This prevents "Supplier Country" (partial match on "supplier", 8 chars) from winning over better matches.
 
-**Mas o usuario pediu explicitamente duas chamadas.** Entao a implementacao sera:
+Additionally, mark columns as "used" so two fields cannot map to the same column.
 
-### Implementacao concreta
+```text
+function mapColumns(headers):
+  normalizedHeaders = headers.map(normalizeHeader)
+  usedColumns = Set()
 
-Na funcao `extractXlsxStructured`, apos o `mapColumns(headers)` na linha ~313:
+  // Pass 1: Exact matches
+  for each (field, aliases):
+    for each header[i]:
+      if not used AND aliases.includes(header[i]):
+        map[field] = i
+        usedColumns.add(i)
+        break
 
-1. Criar um segundo mapa de colunas `colMapNcmOnly` que copia o `colMap` mas zera o `hs_code`:
+  // Pass 2: Best partial match for unmapped fields
+  for each (field, aliases):
+    if already mapped, skip
+    bestCol = -1, bestLen = 0
+    for each header[i]:
+      if not used:
+        find longest alias that partial-matches
+        if found.length > bestLen:
+          bestCol = i, bestLen = found.length
+    if bestCol >= 0:
+      map[field] = bestCol
+      usedColumns.add(bestCol)
 
-```typescript
-const colMap = mapColumns(headers);
-// Second pass map: NCM only (no HS Code)
-const colMapNcmOnly = { ...colMap, hs_code: -1 };
+  return map
 ```
 
-2. Na linha 364-365, usar o mapa completo para tudo e o mapa NCM-only para NCM:
+## Expected result with manifest TCNU2673243 headers
 
-```typescript
-// Pass 1: All fields using full column map (supplier, weight, cbm, etc.)
-// (linhas 353-362 ficam como estao — usam colMap normal)
+| Field       | Before (wrong)           | After (correct)            |
+|-------------|-------------------------|---------------------------|
+| supplier    | Col 2: Supplier Country  | Col 3: Supplier Name      |
+| description | Col 17: QTY Material     | Col 18: ZF Part Description |
+| ncm         | Col 20: NCM Code         | Col 20: NCM Code (no change) |
+| gross_weight| Col 8: Total Gross Weight | Col 8 (no change)         |
+| hs_code     | Col 19: HS Code          | Col 19 (no change)        |
+| packages_qty| Col 6: QTY Packages      | Col 6 (no change)         |
+| packages_type| Col 7: Kind of Packaging | Col 7 (no change)         |
+| invoice_ref | Col 11 or 13             | Col 11: Delivery Note (no change) |
+| cnpj        | Col 24: VAT No.          | Col 24 (no change)        |
 
-// Pass 2: NCM codes ONLY from NCM column (not HS Code)
-const ncmCodes = colMapNcmOnly.ncm >= 0 ? extractNcmCodes(row[colMapNcmOnly.ncm]) : [];
-```
+Why it works:
+- "supplier name" is an exact alias for `supplier` -- maps in Pass 1
+- "supplier country" has no exact alias match, so col 2 stays free
+- "zf part description" contains "description" (11 chars) vs "qty material" contains "material" (8 chars) -- Pass 2 picks the longer match
 
-Como `colMapNcmOnly.ncm` e identico a `colMap.ncm`, o efeito pratico e o mesmo. Mas a separacao conceitual fica clara: Pass 1 = colMap completo para dados gerais, Pass 2 = colMapNcmOnly para NCM.
+## Files changed
 
-### Resultado
+1. `supabase/functions/sea-submit-analysis/xlsxExtractor.ts` -- rewrite `mapColumns` function (lines 142-169)
 
-- Supplier, description, peso, cbm, volumes: extraidos pelo colMap completo (Pass 1) — corretos como antes
-- NCM: extraido apenas da coluna NCM com filtro 4/6/8 digitos (Pass 2) — correto
-
-Nenhuma outra mudanca necessaria. Deploy automatico apos alteracao.
-
+No other changes needed. NCM dual-pass logic stays as-is. Automatic edge function deploy after the change.
