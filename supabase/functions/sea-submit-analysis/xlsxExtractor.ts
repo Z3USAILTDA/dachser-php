@@ -224,7 +224,7 @@ function extractNcmCodes(val: any): string[] {
   const s = parseString(val);
   if (!s) return [];
   // Split by comma, semicolon, space, or newline
-  const parts = s.split(/[,;\s\n]+/).map(p => normalizeNcm(p)).filter(p => /^\d{4,10}$/.test(p));
+  const parts = s.split(/[,;\s\n]+/).map(p => normalizeNcm(p)).filter(p => /^\d{4}$/.test(p) || /^\d{6}$/.test(p) || /^\d{8}$/.test(p));
   return parts;
 }
 
@@ -356,8 +356,10 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
       const seal = colMap.seal >= 0 ? parseString(row[colMap.seal]) : '';
       const cnpj = colMap.cnpj >= 0 ? parseString(row[colMap.cnpj]) : '';
 
-      // Extract NCM codes (ONLY from NCM column, NEVER from HS column)
-      const ncmCodes = colMap.ncm >= 0 ? extractNcmCodes(row[colMap.ncm]) : [];
+      // Extract NCM from both NCM and HS Code columns, accept 4/6/8 digits
+      const ncmFromNcmCol = colMap.ncm >= 0 ? extractNcmCodes(row[colMap.ncm]) : [];
+      const ncmFromHsCol = colMap.hs_code >= 0 ? extractNcmCodes(row[colMap.hs_code]) : [];
+      const ncmCodes = [...new Set([...ncmFromNcmCol, ...ncmFromHsCol])];
 
       // Debug: log first 5 data rows
       if (totalRowsProcessed <= 5) {

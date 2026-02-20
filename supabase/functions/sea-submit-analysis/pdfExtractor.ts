@@ -104,10 +104,9 @@ NCM EXTRACTION:
 - From "NCM-CODES:" section (often multi-page, check ALL pages)
 - From cargo descriptions labeled "NCM:"
 - NEVER from "HS:", "HS-CODE:" labels
-- NCM codes MUST have EXACTLY 8 digits (e.g., 84812090, 87084090).
-   If the document shows 4-digit HS codes, you MUST expand them to their
-   full 8-digit NCM equivalent if possible, or exclude them.
-   ONLY include 8-digit codes in the ncm_codes arrays.
+- NCM codes can have 4, 6, or 8 digits (e.g., 8708, 848120, 84812090).
+   ONLY include codes with exactly 4, 6, or 8 digits in the ncm_codes arrays.
+   If the document shows codes with 5, 7, 9, or 10 digits, exclude them.
 
 CONTAINER NUMBER:
 - Format: 4 uppercase letters + 7 digits (e.g., GLDU9941805)
@@ -285,7 +284,7 @@ function parseExtraction(raw: any): PdfExtractedData {
       type: String(raw.packages?.type || ''),
     },
     ncm_codes: Array.isArray(raw.ncm_codes)
-      ? raw.ncm_codes.map((c: any) => String(c).replace(/[\.\-\s]/g, '').trim()).filter((c: string) => /^\d{8}$/.test(c))
+      ? raw.ncm_codes.map((c: any) => String(c).replace(/[\.\-\s]/g, '').trim()).filter((c: string) => /^\d{4}$/.test(c) || /^\d{6}$/.test(c) || /^\d{8}$/.test(c))
       : [],
     invoice_numbers: Array.isArray(raw.invoice_numbers) ? raw.invoice_numbers.map((n: any) => String(n)) : [],
     exporters: Array.isArray(raw.exporters) ? raw.exporters.map((e: any) => ({
@@ -295,7 +294,7 @@ function parseExtraction(raw: any): PdfExtractedData {
       cbm: Number(e.cbm) || 0,
       packages_qty: Number(e.packages_qty) || 0,
       packages_type: String(e.packages_type || ''),
-      ncm_codes: Array.isArray(e.ncm_codes) ? e.ncm_codes.map((c: any) => String(c).replace(/[\.\-\s]/g, '').trim()).filter((c: string) => /^\d{8}$/.test(c)) : [],
+      ncm_codes: Array.isArray(e.ncm_codes) ? e.ncm_codes.map((c: any) => String(c).replace(/[\.\-\s]/g, '').trim()).filter((c: string) => /^\d{4}$/.test(c) || /^\d{6}$/.test(c) || /^\d{8}$/.test(c)) : [],
       invoice_ref: String(e.invoice_ref || ''),
     })) : [],
     raw_extraction: true,
