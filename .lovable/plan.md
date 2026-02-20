@@ -1,87 +1,100 @@
 
 
-# Fix: mapColumns picks wrong columns due to left-to-right first-match logic
+# Usar Claude para extrair dados do Manifest XLSX
 
-## Root cause
+## Problema
 
-The `mapColumns` function (lines 142-169) iterates headers left-to-right and stops at the **first** partial match. This causes:
+A funcao `mapColumns` programatica continua mapeando colunas erradas (supplier, description) apesar de multiplas tentativas de correcao. O segundo arquivo (PDF/HBL) ja e processado corretamente pelo LLM. A solucao e usar Claude tambem para extrair os dados estruturados do manifest XLSX.
 
-| Field       | Mapped to (WRONG)         | Should be (CORRECT)        |
-|-------------|--------------------------|---------------------------|
-| supplier    | Col 2: "Supplier Country" | Col 3: "Supplier Name"    |
-| description | Col 17: "QTY Material"    | Col 18: "ZF Part Description" |
+## Abordagem
 
-Evidence from logs:
-```
-supplier col: 2, weight col: 8, ncm col: 20, desc col: 17
-Row 12: supplier="PL", weight=965226
-Row 16: supplier="DE", weight=2482000
-```
+Criar uma funcao `extractXlsxWithLLM` que:
 
-"PL" and "DE" are country codes, not supplier names. Weights are absurd because rows are grouped by country.
+1. Le o XLSX como texto bruto (CSV) usando a funcao `extractXlsxText` que ja existe (linhas 427-530 do index.ts)
+2. Envia esse texto para Claude com um prompt focado em extracao estruturada
+3. Claude retorna JSON no formato `ManifestData` (mesma interface que `extractXlsxStructured` retorna)
+4. O NCM continua sendo extraido programaticamente da coluna NCM (Pass 2 isolado) para garantir precisao
 
-## Fix: Two-pass scoring in mapColumns
+## Mudancas
 
-Replace the `mapColumns` function (lines 142-169) with a two-pass approach:
+### Arquivo: `supabase/functions/sea-submit-analysis/xlsxExtractor.ts`
 
-**Pass 1 - Exact matches only (highest priority):**
-For each field, scan all headers. If the normalized header exactly equals an alias, map it and mark the column as used. "supplier name" exactly matches the alias "supplier name" in `COLUMN_ALIASES.supplier`, so col 3 wins immediately.
+**Adicionar nova funcao `extractXlsxWithLLM`:**
 
-**Pass 2 - Best partial match (for unmapped fields):**
-For fields still unmapped after Pass 1, scan all remaining headers. Instead of stopping at the first partial match, evaluate ALL candidates and pick the one with the **longest** matching alias. This prevents "Supplier Country" (partial match on "supplier", 8 chars) from winning over better matches.
+- Recebe `fileUrl`, `fileName` e a API key do Anthropic
+- Usa a biblioteca XLSX para converter o arquivo em texto CSV (similar ao `extractXlsxText` existente)
+- Envia o texto CSV para Claude Sonnet 4 com prompt de extracao estruturada
+- O prompt pede que Claude retorne JSON com: exporters (name, invoice_numbers, gross_weight_kg, net_weight_kg, cbm, packages, items com description), container, seal, totals
+- Claude NAO extrai NCM — os NCM codes sao extraidos programaticamente da coluna NCM usando a logica atual (Pass 2 com `colMapNcmOnly`)
+- A funcao faz merge: dados gerais do Claude + NCM codes do extrator programatico
 
-Additionally, mark columns as "used" so two fields cannot map to the same column.
+**Fluxo dentro da funcao:**
 
 ```text
-function mapColumns(headers):
-  normalizedHeaders = headers.map(normalizeHeader)
-  usedColumns = Set()
-
-  // Pass 1: Exact matches
-  for each (field, aliases):
-    for each header[i]:
-      if not used AND aliases.includes(header[i]):
-        map[field] = i
-        usedColumns.add(i)
-        break
-
-  // Pass 2: Best partial match for unmapped fields
-  for each (field, aliases):
-    if already mapped, skip
-    bestCol = -1, bestLen = 0
-    for each header[i]:
-      if not used:
-        find longest alias that partial-matches
-        if found.length > bestLen:
-          bestCol = i, bestLen = found.length
-    if bestCol >= 0:
-      map[field] = bestCol
-      usedColumns.add(bestCol)
-
-  return map
+1. Fetch XLSX -> parse com biblioteca xlsx
+2. Detectar header row (scoreHeaderRow existente)
+3. mapColumns existente -> pegar apenas colMap.ncm
+4. Loop nas linhas -> extrair NCM codes programaticamente (como hoje)
+5. Converter sheet inteira para CSV text
+6. Enviar CSV text para Claude com prompt de extracao
+7. Claude retorna JSON com exporters, weights, descriptions, invoices
+8. Merge: para cada exporter do Claude, associar os NCM codes extraidos programaticamente
+9. Retornar ManifestData completo
 ```
 
-## Expected result with manifest TCNU2673243 headers
+**Prompt para Claude (resumo):**
 
-| Field       | Before (wrong)           | After (correct)            |
-|-------------|-------------------------|---------------------------|
-| supplier    | Col 2: Supplier Country  | Col 3: Supplier Name      |
-| description | Col 17: QTY Material     | Col 18: ZF Part Description |
-| ncm         | Col 20: NCM Code         | Col 20: NCM Code (no change) |
-| gross_weight| Col 8: Total Gross Weight | Col 8 (no change)         |
-| hs_code     | Col 19: HS Code          | Col 19 (no change)        |
-| packages_qty| Col 6: QTY Packages      | Col 6 (no change)         |
-| packages_type| Col 7: Kind of Packaging | Col 7 (no change)         |
-| invoice_ref | Col 11 or 13             | Col 11: Delivery Note (no change) |
-| cnpj        | Col 24: VAT No.          | Col 24 (no change)        |
+```text
+Voce recebera dados de um manifest de carga maritima em formato CSV.
+Extraia os seguintes dados estruturados em JSON:
 
-Why it works:
-- "supplier name" is an exact alias for `supplier` -- maps in Pass 1
-- "supplier country" has no exact alias match, so col 2 stays free
-- "zf part description" contains "description" (11 chars) vs "qty material" contains "material" (8 chars) -- Pass 2 picks the longer match
+Para cada exportador/supplier unico:
+- name: nome do supplier/exportador
+- invoice_numbers: lista de referencias de notas/delivery notes
+- gross_weight_kg: peso bruto total em kg
+- net_weight_kg: peso liquido total em kg  
+- cbm: cubagem total em m3
+- packages: {qty: quantidade, type: tipo de embalagem}
+- items: lista de itens com description, gross_weight_kg, net_weight_kg, cbm, packages_qty, packages_type, invoice_ref
 
-## Files changed
+Dados globais:
+- container: numero do container (formato XXXX1234567)
+- seal: numero do lacre
 
-1. `supabase/functions/sea-submit-analysis/xlsxExtractor.ts` -- rewrite `mapColumns` function (lines 142-169)
+NAO extraia NCM codes — eles serao adicionados separadamente.
+```
 
-No other changes needed. NCM dual-pass logic stays as-is. Automatic edge function deploy after the change.
+### Arquivo: `supabase/functions/sea-submit-analysis/index.ts`
+
+**Na funcao `analyzeWithStructuredPipeline` (linha ~1044-1061):**
+
+Substituir a chamada a `extractXlsxStructured` por `extractXlsxWithLLM`:
+
+```text
+// Antes:
+manifestData = await extractXlsxStructured(xlsxFile.file_url, xlsxFile.file_name);
+
+// Depois:
+manifestData = await extractXlsxWithLLM(xlsxFile.file_url, xlsxFile.file_name);
+```
+
+Importar a nova funcao no topo do arquivo.
+
+### Resultado esperado
+
+- Supplier names: Claude le "Supplier Name" corretamente (nao confunde com "Supplier Country")
+- Descriptions: Claude le "ZF Part Description" corretamente (nao confunde com "QTY Material")
+- Weights: Claude interpreta valores numericos corretamente
+- NCM codes: continuam sendo extraidos programaticamente da coluna NCM com filtro 4/6/8 digitos (sem mudanca)
+- O segundo arquivo (PDF/HBL) continua sendo processado como antes (ja funciona)
+
+### Custo e performance
+
+- Uma chamada adicional ao Claude Sonnet 4 por analise (custo baixo pois e apenas texto CSV, sem PDFs)
+- Tempo adicional: ~5-10 segundos
+- Confiabilidade: muito superior ao mapeamento programatico de colunas
+
+### Fallback
+
+Se a chamada ao Claude falhar, a funcao faz fallback para `extractXlsxStructured` (logica programatica atual) para nao quebrar o fluxo.
+
