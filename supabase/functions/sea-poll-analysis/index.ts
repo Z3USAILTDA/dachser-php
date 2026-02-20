@@ -66,15 +66,29 @@ serve(async (req) => {
     const run = rows[0];
 
     const statusPercentMap: Record<string, number> = {
-      'queued': 10, 'extracting': 30, 'processing': 60,
-      'comparing': 80, 'completed': 100, 'pendente': 100, 'error': 0,
+      'queued': 5, 'analisando': 10,
+      'extracting_xlsx': 15, 'extracting_pdf': 30,
+      'analyzing_dual': 50, 'arbitrating_gpt': 75,
+      'extracting': 30, 'processing': 60, 'comparing': 80,
+      'completed': 100, 'realizado': 100, 'pendente': 100, 'error': 0,
+    };
+
+    const statusMessageMap: Record<string, string> = {
+      'queued': 'Na fila de processamento...',
+      'analisando': 'Iniciando análise...',
+      'extracting_xlsx': 'Etapa 1/4 — Extraindo dados do Manifest (XLSX)...',
+      'extracting_pdf': 'Etapa 2/4 — Extraindo dados do HBL (PDF)...',
+      'analyzing_dual': 'Etapa 3/4 — Análise comparativa (Claude + Gemini)...',
+      'arbitrating_gpt': 'Etapa 4/4 — Arbitragem final (GPT)...',
+      'completed': 'Análise concluída',
+      'realizado': 'Análise concluída',
+      'pendente': 'Análise concluída',
+      'error': 'Erro na análise',
     };
 
     const progress = {
       step: run.status || 'queued',
-      message: run.status === 'completed' || run.status === 'pendente' ? 'Análise concluída' :
-               run.status === 'error' ? 'Erro na análise' :
-               run.status === 'processing' ? 'Analisando documentos...' : 'Aguardando processamento',
+      message: statusMessageMap[run.status || 'queued'] || 'Processando...',
       percent: statusPercentMap[run.status || 'queued'] || 0,
     };
 

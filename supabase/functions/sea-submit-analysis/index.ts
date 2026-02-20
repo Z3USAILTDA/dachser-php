@@ -1235,6 +1235,23 @@ Produce the final consolidated analysis now. Start directly with the analysis co
  * Multi-Model Pipeline: Extract → Dual Analysis → GPT Arbitration
  * Replaces the old 2-stage structured pipeline
  */
+async function updateRunStatus(runId: number | undefined, status: string) {
+  if (!runId) return;
+  let statusDb: Client | null = null;
+  try {
+    statusDb = await getDbClient();
+    await statusDb.execute(
+      `UPDATE ai_agente.t_dachser_sea_runs SET status = ? WHERE id = ?`,
+      [status, runId]
+    );
+    console.log(`📡 [Status] Updated run ${runId} → ${status}`);
+  } catch (e) {
+    console.warn(`⚠️ [Status] Failed to update run ${runId}:`, e);
+  } finally {
+    if (statusDb) { try { await statusDb.close(); } catch { /* ignore */ } }
+  }
+}
+
 async function analyzeWithMultiModelPipeline(
   analysisType: string,
   files: FileInfo[],
@@ -1266,6 +1283,7 @@ async function analyzeWithMultiModelPipeline(
   });
 
   // ========= STAGE 1A: Extract XLSX structured data (Claude Sonnet 4) =========
+  await updateRunStatus(runId, 'extracting_xlsx');
   let manifestData = null;
   let jsonXls = '{}';
   if (xlsxFiles.length > 0) {
@@ -1287,6 +1305,7 @@ async function analyzeWithMultiModelPipeline(
   }
 
   // ========= STAGE 1B: Extract PDFs structured data (Gemini 3 Pro) =========
+  await updateRunStatus(runId, 'extracting_pdf');
   const pdfExtractions: any[] = [];
   for (const pdfFile of pdfFiles) {
     try {
@@ -1343,6 +1362,7 @@ async function analyzeWithMultiModelPipeline(
   }
 
   // ========= STAGE 2: Dual Analysis (Gemini + Claude in parallel) =========
+  await updateRunStatus(runId, 'analyzing_dual');
   const stage2Start = Date.now();
   const { geminiResult, claudeResult } = await runDualAnalysis(jsonXls, jsonPdfs, analysisType, metadata);
 
@@ -1363,6 +1383,7 @@ async function analyzeWithMultiModelPipeline(
   }
 
   // ========= STAGE 3: GPT Arbitration =========
+  await updateRunStatus(runId, 'arbitrating_gpt');
   let finalResult = '';
   let finalModel = 'multi-model-pipeline-v1';
 
