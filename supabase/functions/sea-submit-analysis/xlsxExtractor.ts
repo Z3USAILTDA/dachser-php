@@ -212,19 +212,8 @@ function isSkipRow(row: any[]): boolean {
   const skipPatterns = [
     'grand summary', 'grand total', 'total:', 'subtotal', 'sum:',
     'total gross', 'total net', 'total cbm',
-    'loading date', 'vessel name', 'voyage no', 'port of loading',
-    'port of discharge', 'container id', 'seal number',
-    'bill of lading', 'booking no', 'shipping mark',
   ];
-  if (skipPatterns.some(p => joined.includes(p))) return true;
-
-  // Skip metadata label rows (e.g. "Container ID:", "Vessel:")
-  const firstCell = String(row[0] || '').trim();
-  if (firstCell.endsWith(':') && row.filter(c => String(c || '').trim()).length <= 3) {
-    return true;
-  }
-
-  return false;
+  return skipPatterns.some(p => joined.includes(p));
 }
 
 function normalizeNcm(code: string): string {
@@ -292,41 +281,8 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
 
   console.log(`📊 [XLSX Extractor] ${sheetsToProcess.length} sheets: ${sheetsToProcess.join(', ')}`);
 
-  // === Sheet deduplication: if multiple sheets have identical headers, keep only the largest ===
-  const sheetDedup = new Map<string, { name: string; rowCount: number }>();
-  for (const sName of sheetsToProcess) {
-    const s = workbook.Sheets[sName];
-    if (!s) continue;
-    const sRows: any[][] = XLSX.utils.sheet_to_json(s, { header: 1, blankrows: false, defval: '' });
-    if (sRows.length < 2) continue;
-    // Find header row for dedup key
-    let bestS = 0, bestSIdx = 0;
-    for (let i = 0; i < Math.min(sRows.length, 20); i++) {
-      const ne = sRows[i].filter((c: any) => String(c || '').trim() !== '').length;
-      if (ne >= 3) {
-        const sc = scoreHeaderRow(sRows[i]);
-        if (sc > bestS) { bestS = sc; bestSIdx = i; }
-      }
-    }
-    const headerKey = sRows[bestSIdx].map((h: any) => normalizeHeader(String(h || ''))).filter((h: string) => h).join('|');
-    const existing = sheetDedup.get(headerKey);
-    if (!existing || sRows.length > existing.rowCount) {
-      sheetDedup.set(headerKey, { name: sName, rowCount: sRows.length });
-    }
-  }
-  const uniqueSheets = new Set(Array.from(sheetDedup.values()).map(v => v.name));
-  const dedupedSheets = sheetsToProcess.filter((n: string) => uniqueSheets.has(n));
-  if (dedupedSheets.length < sheetsToProcess.length) {
-    console.log(`📊 [XLSX Extractor] Deduplication: ${sheetsToProcess.length} → ${dedupedSheets.length} sheets`);
-  }
 
-  const exporterMap = new Map<string, ExporterData>();
-  let globalContainer = '';
-  let globalSeal = '';
-  let allHeaders: string[] = [];
-  let totalRowsProcessed = 0;
-
-  for (const sheetName of dedupedSheets) {
+  for (const sheetName of sheetsToProcess) {
     const sheet = workbook.Sheets[sheetName];
     if (!sheet) continue;
 
@@ -386,20 +342,7 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
         supplierName = parseString(row[colMap.description]);
       }
       if (!supplierName) {
-        // Smart filtering: only keep rows with meaningful data in mapped columns
-        const hasWeight = colMap.gross_weight >= 0 && parseNumber(row[colMap.gross_weight]) > 0;
-        const hasCbm = colMap.cbm >= 0 && parseNumber(row[colMap.cbm]) > 0;
-        const hasPkgs = colMap.packages_qty >= 0 && parseNumber(row[colMap.packages_qty]) > 0;
-        const hasNcm = colMap.ncm >= 0 && extractNcmCodes(row[colMap.ncm]).length > 0;
-        const hasDesc = colMap.description >= 0 && parseString(row[colMap.description]).length > 3;
-
-        const numericCols = [hasWeight, hasCbm, hasPkgs].filter(Boolean).length;
-
-        if (numericCols >= 2 || hasNcm || (numericCols >= 1 && hasDesc)) {
-          supplierName = 'UNKNOWN EXPORTER';
-        } else {
-          continue; // Not a real data row
-        }
+        supplierName = 'UNKNOWN EXPORTER';
       }
 
       const grossWeight = colMap.gross_weight >= 0 ? parseNumber(row[colMap.gross_weight]) : 0;
