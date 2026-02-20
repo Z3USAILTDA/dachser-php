@@ -29,6 +29,7 @@ export interface ExporterItem {
   packages_type: string;
   ncm_codes: string[];
   invoice_ref: string;
+  extra_columns: Record<string, string>;
 }
 
 export interface ManifestData {
@@ -224,6 +225,23 @@ function extractNcmCodes(val: any): string[] {
   return parts;
 }
 
+// ============ HEADER SCORING ============
+
+function scoreHeaderRow(row: any[]): number {
+  let score = 0;
+  const allAliases = Object.values(COLUMN_ALIASES).flat();
+  for (const cell of row) {
+    const nh = normalizeHeader(String(cell || ''));
+    if (!nh) continue;
+    // Exact match
+    if (allAliases.includes(nh)) { score++; continue; }
+    // Partial match
+    const found = allAliases.find(a => (nh.includes(a) && a.length >= 3) || (a.includes(nh) && nh.length >= 4));
+    if (found) { score++; }
+  }
+  return score;
+}
+
 // ============ MAIN EXTRACTOR ============
 
 export async function extractXlsxStructured(fileUrl: string, fileName: string): Promise<ManifestData> {
@@ -274,14 +292,26 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
     const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '' });
     if (rows.length < 2) continue;
 
-    // Find header row (first row with multiple non-empty cells)
+    // Find header row using intelligent scoring against known aliases
     let headerRowIdx = 0;
-    for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    let bestScore = 0;
+    let fallbackIdx = -1;
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
       const nonEmpty = rows[i].filter((c: any) => String(c || '').trim() !== '').length;
       if (nonEmpty >= 3) {
-        headerRowIdx = i;
-        break;
+        if (fallbackIdx < 0) fallbackIdx = i;
+        const score = scoreHeaderRow(rows[i]);
+        if (score > bestScore) {
+          bestScore = score;
+          headerRowIdx = i;
+        }
       }
+    }
+    if (bestScore < 2 && fallbackIdx >= 0) {
+      headerRowIdx = fallbackIdx;
+      console.log(`⚠️ [XLSX Extractor] Sheet "${sheetName}": Low header score (${bestScore}), using fallback row ${fallbackIdx}`);
+    } else {
+      console.log(`📊 [XLSX Extractor] Sheet "${sheetName}": Header row=${headerRowIdx}, score=${bestScore}`);
     }
 
     const headers = rows[headerRowIdx].map((h: any) => String(h || ''));
@@ -314,14 +344,12 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
         supplierName = parseString(row[colMap.description]);
       }
       if (!supplierName) {
-        // If still no name but we have numeric data, use fallback name
-        const hasAnyNumericData = (colMap.gross_weight >= 0 && parseNumber(row[colMap.gross_weight]) > 0)
-          || (colMap.cbm >= 0 && parseNumber(row[colMap.cbm]) > 0)
-          || (colMap.packages_qty >= 0 && parseNumber(row[colMap.packages_qty]) > 0);
-        if (hasAnyNumericData) {
+        // Keep ANY row that has at least one non-empty cell
+        const hasAnyCellData = row.some((cell: any) => String(cell || '').trim() !== '');
+        if (hasAnyCellData) {
           supplierName = 'UNKNOWN EXPORTER';
         } else {
-          continue; // Truly empty row
+          continue; // Only skip 100% empty rows
         }
       }
 
@@ -382,6 +410,16 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
       if (container && !exporter.container) exporter.container = container;
       if (seal && !exporter.seal) exporter.seal = seal;
 
+      // Capture unmapped columns
+      const mappedIndices = new Set(Object.values(colMap).filter(v => v >= 0));
+      const extraCols: Record<string, string> = {};
+      for (let c = 0; c < headers.length; c++) {
+        if (!mappedIndices.has(c) && headers[c].trim()) {
+          const val = parseString(row[c]);
+          if (val) extraCols[headers[c].trim()] = val;
+        }
+      }
+
       exporter.items.push({
         description,
         gross_weight_kg: grossWeight,
@@ -391,6 +429,7 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
         packages_type: packagesType,
         ncm_codes: ncmCodes,
         invoice_ref: invoiceRef,
+        extra_columns: extraCols,
       });
     }
   }
