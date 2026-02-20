@@ -90,12 +90,12 @@ const COLUMN_ALIASES: Record<keyof ColumnMap, string[]> = {
   ],
   ncm: [
     'ncm code', 'ncm', 'código ncm', 'codigo ncm', 'ncm-code',
-    'ncm nr', 'tariff code', 'tariff', 'taric', 'warentarifnummer', 'zolltarif',
-    'ncm code 8 digits', 'ncm 8', 'codigo ncm 8',
+    'ncm nr', 'ncm code 8 digits', 'ncm 8', 'codigo ncm 8',
   ],
   hs_code: [
     'hs code', 'hs', 'hs-code', 'h.s.', 'hs code 6 digits',
     'harmonized code', 'harmonized system',
+    'tariff code', 'tariff', 'taric', 'warentarifnummer', 'zolltarif',
   ],
   packages_qty: [
     'qty packages', 'packages', 'qty', 'quantity', 'volumes', 'no. of packages',
