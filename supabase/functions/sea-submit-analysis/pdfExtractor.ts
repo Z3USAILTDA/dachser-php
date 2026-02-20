@@ -104,7 +104,10 @@ NCM EXTRACTION:
 - From "NCM-CODES:" section (often multi-page, check ALL pages)
 - From cargo descriptions labeled "NCM:"
 - NEVER from "HS:", "HS-CODE:" labels
-- Preserve exact digit count (4-digit: "8481", 8-digit: "84812090")
+- NCM codes MUST have EXACTLY 8 digits (e.g., 84812090, 87084090).
+   If the document shows 4-digit HS codes, you MUST expand them to their
+   full 8-digit NCM equivalent if possible, or exclude them.
+   ONLY include 8-digit codes in the ncm_codes arrays.
 
 CONTAINER NUMBER:
 - Format: 4 uppercase letters + 7 digits (e.g., GLDU9941805)
@@ -282,7 +285,7 @@ function parseExtraction(raw: any): PdfExtractedData {
       type: String(raw.packages?.type || ''),
     },
     ncm_codes: Array.isArray(raw.ncm_codes)
-      ? raw.ncm_codes.map((c: any) => String(c).replace(/[\.\-\s]/g, '').trim()).filter((c: string) => /^\d{4,10}$/.test(c))
+      ? raw.ncm_codes.map((c: any) => String(c).replace(/[\.\-\s]/g, '').trim()).filter((c: string) => /^\d{8}$/.test(c))
       : [],
     invoice_numbers: Array.isArray(raw.invoice_numbers) ? raw.invoice_numbers.map((n: any) => String(n)) : [],
     exporters: Array.isArray(raw.exporters) ? raw.exporters.map((e: any) => ({
@@ -292,7 +295,7 @@ function parseExtraction(raw: any): PdfExtractedData {
       cbm: Number(e.cbm) || 0,
       packages_qty: Number(e.packages_qty) || 0,
       packages_type: String(e.packages_type || ''),
-      ncm_codes: Array.isArray(e.ncm_codes) ? e.ncm_codes.map((c: any) => String(c).replace(/[\.\-\s]/g, '').trim()).filter((c: string) => /^\d{4,10}$/.test(c)) : [],
+      ncm_codes: Array.isArray(e.ncm_codes) ? e.ncm_codes.map((c: any) => String(c).replace(/[\.\-\s]/g, '').trim()).filter((c: string) => /^\d{8}$/.test(c)) : [],
       invoice_ref: String(e.invoice_ref || ''),
     })) : [],
     raw_extraction: true,
