@@ -356,10 +356,8 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
       const seal = colMap.seal >= 0 ? parseString(row[colMap.seal]) : '';
       const cnpj = colMap.cnpj >= 0 ? parseString(row[colMap.cnpj]) : '';
 
-      // Extract NCM from both NCM and HS Code columns, accept 4/6/8 digits
-      const ncmFromNcmCol = colMap.ncm >= 0 ? extractNcmCodes(row[colMap.ncm]) : [];
-      const ncmFromHsCol = colMap.hs_code >= 0 ? extractNcmCodes(row[colMap.hs_code]) : [];
-      const ncmCodes = [...new Set([...ncmFromNcmCol, ...ncmFromHsCol])];
+      // Extract NCM codes ONLY from NCM column, accept 4/6/8 digits
+      const ncmCodes = colMap.ncm >= 0 ? extractNcmCodes(row[colMap.ncm]) : [];
 
       // Debug: log first 5 data rows
       if (totalRowsProcessed <= 5) {
