@@ -1,80 +1,49 @@
 
 
-# Reverter mudanças que quebraram a extração, manter apenas o fix de NCM
+# Correcao: NCM extraido com 4 digitos no PDF (HBL)
 
-## Diagnóstico
+## Problema
 
-Das 5 mudanças feitas ao `xlsxExtractor.ts`, apenas 1 corrigiu o NCM (o `scoreHeaderRow` para encontrar o header correto). As outras 4 mudanças introduziram problemas:
+O prompt do `pdfExtractor.ts` diz "Preserve exact digit count (4-digit: '8481', 8-digit: '84812090')" -- isso PERMITE que o LLM retorne HS codes de 4 digitos. E o filtro de validacao aceita `/\d{4,10}/`.
 
-| Mudança | Efeito | Ação |
-|---------|--------|------|
-| `scoreHeaderRow` | Corrigiu detecção do header e NCM | MANTER |
-| Sheet deduplication (linhas 295-321) | Pode remover sheets com dados válidos | REMOVER |
-| `isSkipRow` expandido (linhas 212-225) | Padrões como 'container id', 'vessel name' pulam linhas de dados | REVERTER ao original |
-| Smart row filtering `numericCols >= 2` (linhas 388-402) | Mais restritivo que o original, descarta linhas válidas | REVERTER ao original |
-| `extra_columns` no ExporterItem | Inofensivo, captura dados extras | MANTER |
+Resultado: HBL NCMs = [8708, 8481, 9032, ...] quando deveriam ser [87084090, 84812090, 90328929, ...]
 
-## Mudanças Específicas
+O Manifest XLSX ja extrai corretamente com 8 digitos. Somente o PDF precisa de correcao.
 
-### Arquivo: `supabase/functions/sea-submit-analysis/xlsxExtractor.ts`
+## Solucao (somente `pdfExtractor.ts`, sem mexer em nada mais)
 
-### 1. REMOVER sheet deduplication (linhas 295-321)
-
-Remover todo o bloco de deduplicação de sheets. Voltar a processar todos os sheets (exceto 'instruction', 'info', etc. que já eram filtrados). Usar `sheetsToProcess` diretamente no loop.
-
-### 2. REVERTER `isSkipRow` ao original (linhas 210-228)
-
-Reverter para apenas os padrões básicos de totalização que já existiam antes:
+### Mudanca 1: Atualizar o prompt (linha 107)
 
 ```text
-function isSkipRow(row): boolean
-  skipPatterns = ['grand summary', 'grand total', 'total:', 'subtotal', 'sum:',
-                  'total gross', 'total net', 'total cbm']
-  // SEM 'loading date', 'vessel name', 'container id', etc.
-  // SEM a lógica de firstCell.endsWith(':')
+Antes:
+  "Preserve exact digit count (4-digit: '8481', 8-digit: '84812090')"
+
+Depois:
+  "NCM codes MUST have EXACTLY 8 digits (e.g., 84812090, 87084090).
+   If the document shows 4-digit HS codes, you MUST expand them to their
+   full 8-digit NCM equivalent if possible, or exclude them.
+   ONLY include 8-digit codes in the ncm_codes arrays."
 ```
 
-### 3. REVERTER row filtering ao original simples (linhas 388-402)
-
-Voltar à lógica original: se não tem supplier e não tem description, simplesmente pular. Sem a lógica complexa de `numericCols >= 2`:
+### Mudanca 2: Filtro de validacao (linhas 285 e 295)
 
 ```text
-Antes (complexo):
-  if (!supplierName):
-    hasWeight, hasCbm, hasPkgs, hasNcm, hasDesc...
-    numericCols = count(...)
-    if (numericCols >= 2 || hasNcm || ...): 'UNKNOWN EXPORTER'
-    else: continue
+Antes:
+  .filter((c: string) => /^\d{4,10}$/.test(c))
 
-Depois (original simples):
-  if (!supplierName):
-    supplierName = 'UNKNOWN EXPORTER'
-    // Manter a linha, agrupada como UNKNOWN
+Depois:
+  .filter((c: string) => /^\d{8}$/.test(c))
 ```
 
-### 4. MANTER scoreHeaderRow (linhas 244-257) - Sem alterações
+Isso garante que mesmo que o LLM retorne codes de 4 digitos, eles serao descartados na validacao.
 
-Esta é a função que corrigiu a detecção do header e, consequentemente, o NCM.
-
-### 5. MANTER extra_columns (linha 32, linhas 467-475) - Sem alterações
-
-Captura dados de colunas não mapeadas sem afetar nenhuma outra funcionalidade.
-
-### 6. Ajuste no loop principal: usar `sheetsToProcess` em vez de `dedupedSheets`
-
-Na linha 329, trocar `dedupedSheets` por `sheetsToProcess` já que removemos a deduplicação.
-
-## Resumo
+## Arquivo unico alterado
 
 ```text
-Arquivo                                           Mudança
+Arquivo                                           Mudanca
 ------------------------------------------------  -------------------------------------------
-supabase/functions/sea-submit-analysis/           1. REMOVER bloco de sheet deduplication
-  xlsxExtractor.ts                                2. REVERTER isSkipRow (só padrões de totais)
-                                                  3. REVERTER row filtering (simples, sem numericCols)
-                                                  4. Trocar dedupedSheets → sheetsToProcess no loop
-                                                  MANTER: scoreHeaderRow, extra_columns
+supabase/functions/sea-submit-analysis/           1. Prompt: exigir NCMs de 8 digitos
+  pdfExtractor.ts                                 2. Validacao: filtro \d{8} (linhas 285, 295)
 ```
 
-Deploy automático do edge function `sea-submit-analysis` após as alterações.
-
+Nenhum outro arquivo sera tocado. Deploy automatico do edge function apos a alteracao.
