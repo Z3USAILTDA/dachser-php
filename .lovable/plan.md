@@ -1,134 +1,80 @@
 
-# Correcao: Peso/CBM/Volumes inflados por linhas nao-dados
 
-## Problema
+# Reverter mudanças que quebraram a extração, manter apenas o fix de NCM
 
-A mudanca anterior ("manter TODAS as linhas com qualquer celula nao-vazia") faz o extrator incluir linhas de metadados, notas, separadores e subtotais parciais nos calculos. Isso infla dramaticamente os totais:
+## Diagnóstico
 
-- Peso: 24.600.872 kg (deveria ser ~12.414 kg)
-- CBM: 5.152.186 m3 (deveria ser ~52 m3)
-- Packages: 190 (deveria ser 95 -- provavel double-counting de 2 sheets)
+Das 5 mudanças feitas ao `xlsxExtractor.ts`, apenas 1 corrigiu o NCM (o `scoreHeaderRow` para encontrar o header correto). As outras 4 mudanças introduziram problemas:
 
-## Causa Raiz
+| Mudança | Efeito | Ação |
+|---------|--------|------|
+| `scoreHeaderRow` | Corrigiu detecção do header e NCM | MANTER |
+| Sheet deduplication (linhas 295-321) | Pode remover sheets com dados válidos | REMOVER |
+| `isSkipRow` expandido (linhas 212-225) | Padrões como 'container id', 'vessel name' pulam linhas de dados | REVERTER ao original |
+| Smart row filtering `numericCols >= 2` (linhas 388-402) | Mais restritivo que o original, descarta linhas válidas | REVERTER ao original |
+| `extra_columns` no ExporterItem | Inofensivo, captura dados extras | MANTER |
 
-1. Linhas pos-header que nao sao dados reais (ex: "Loading Date: 46358" onde 46358 e um serial de data Excel) tem valores numericos em colunas de peso/CBM que sao somados
-2. Linhas de subtotal parcial (que nao contem as palavras exatas de `isSkipRow`) sao somadas ao total
-3. Possivelmente 2 sheets com os mesmos dados sendo processados (explica packages 2x)
-
-## Solucao
-
-### 1. Filtro inteligente de linhas de dados (substituir logica "keep ALL rows")
-
-Uma linha so deve ser considerada "dado real" se atender pelo menos UMA destas condicoes:
-- Tem um nome de supplier/exporter reconhecido (coluna supplier preenchida)
-- Tem um valor numerico > 0 em PELO MENOS 2 colunas numericas mapeadas (peso, cbm, packages)
-- Tem um NCM code valido na coluna NCM
-
-Linhas que so tem uma celula nao-vazia qualquer (como notas, separadores, datas) devem ser descartadas.
-
-### 2. Melhorar `isSkipRow` com mais padroes
-
-Adicionar padroes de skip para linhas comuns em manifests que nao sao dados:
-- 'loading date', 'vessel', 'voyage', 'port of', 'container id', 'seal no'
-- Linhas onde a primeira celula termina com ":" (indicador de label de metadado)
-
-### 3. Deduplicacao de sheets
-
-Se 2+ sheets tem os mesmos headers, processar apenas o que tiver mais linhas de dados (evita double-counting).
-
-### 4. Log detalhado para debug
-
-Adicionar log das primeiras 5 linhas de dados processadas (com valores) para facilitar identificacao de problemas futuros.
-
-## Detalhes Tecnicos
+## Mudanças Específicas
 
 ### Arquivo: `supabase/functions/sea-submit-analysis/xlsxExtractor.ts`
 
-**Mudanca 1 -- Substituir logica de retencao de linhas (linhas 346-354):**
+### 1. REMOVER sheet deduplication (linhas 295-321)
+
+Remover todo o bloco de deduplicação de sheets. Voltar a processar todos os sheets (exceto 'instruction', 'info', etc. que já eram filtrados). Usar `sheetsToProcess` diretamente no loop.
+
+### 2. REVERTER `isSkipRow` ao original (linhas 210-228)
+
+Reverter para apenas os padrões básicos de totalização que já existiam antes:
 
 ```text
-Antes:
+function isSkipRow(row): boolean
+  skipPatterns = ['grand summary', 'grand total', 'total:', 'subtotal', 'sum:',
+                  'total gross', 'total net', 'total cbm']
+  // SEM 'loading date', 'vessel name', 'container id', etc.
+  // SEM a lógica de firstCell.endsWith(':')
+```
+
+### 3. REVERTER row filtering ao original simples (linhas 388-402)
+
+Voltar à lógica original: se não tem supplier e não tem description, simplesmente pular. Sem a lógica complexa de `numericCols >= 2`:
+
+```text
+Antes (complexo):
   if (!supplierName):
-    hasAnyCellData = row.some(...)
-    if (hasAnyCellData): supplierName = 'UNKNOWN EXPORTER'
+    hasWeight, hasCbm, hasPkgs, hasNcm, hasDesc...
+    numericCols = count(...)
+    if (numericCols >= 2 || hasNcm || ...): 'UNKNOWN EXPORTER'
     else: continue
 
-Depois:
+Depois (original simples):
   if (!supplierName):
-    // Verificar se a linha tem dados NUMERICOS em colunas mapeadas
-    const hasWeight = colMap.gross_weight >= 0 && parseNumber(row[colMap.gross_weight]) > 0;
-    const hasCbm = colMap.cbm >= 0 && parseNumber(row[colMap.cbm]) > 0;
-    const hasPkgs = colMap.packages_qty >= 0 && parseNumber(row[colMap.packages_qty]) > 0;
-    const hasNcm = colMap.ncm >= 0 && extractNcmCodes(row[colMap.ncm]).length > 0;
-    const hasDesc = colMap.description >= 0 && parseString(row[colMap.description]).length > 3;
-    
-    const numericCols = [hasWeight, hasCbm, hasPkgs].filter(Boolean).length;
-    
-    if (numericCols >= 2 || hasNcm || (numericCols >= 1 && hasDesc)):
-      supplierName = 'UNKNOWN EXPORTER'
-    else:
-      continue  // Nao e uma linha de dados real
+    supplierName = 'UNKNOWN EXPORTER'
+    // Manter a linha, agrupada como UNKNOWN
 ```
 
-**Mudanca 2 -- Melhorar `isSkipRow` (linha 210-213):**
+### 4. MANTER scoreHeaderRow (linhas 244-257) - Sem alterações
 
-Adicionar padroes de metadados e subtotais comuns em manifests:
+Esta é a função que corrigiu a detecção do header e, consequentemente, o NCM.
 
-```text
-const skipPatterns = [
-  'grand summary', 'grand total', 'total:', 'subtotal', 'sum:',
-  'total gross', 'total net', 'total cbm',
-  'loading date', 'vessel name', 'voyage no', 'port of loading',
-  'port of discharge', 'container id', 'seal number',
-  'bill of lading', 'booking no', 'shipping mark',
-];
+### 5. MANTER extra_columns (linha 32, linhas 467-475) - Sem alterações
 
-// Tambem pular linhas onde a primeira celula termina com ":"
-// (indicador de label de metadado como "Container ID:", "Vessel:")
-const firstCell = String(row[0] || '').trim();
-if (firstCell.endsWith(':') && row.filter(c => String(c||'').trim()).length <= 3) {
-  return true;
-}
-```
+Captura dados de colunas não mapeadas sem afetar nenhuma outra funcionalidade.
 
-**Mudanca 3 -- Deduplicacao de sheets (antes do loop principal):**
+### 6. Ajuste no loop principal: usar `sheetsToProcess` em vez de `dedupedSheets`
+
+Na linha 329, trocar `dedupedSheets` por `sheetsToProcess` já que removemos a deduplicação.
+
+## Resumo
 
 ```text
-// Agrupar sheets por headers identicos
-// Se multiplos sheets tem mesmos headers, manter apenas o maior
-const sheetsByHeaders = new Map<string, { name: string; rowCount: number }>();
-for (const sheetName of sheetsToProcess) {
-  const rows = XLSX.utils.sheet_to_json(sheet, ...);
-  const headerKey = rows[headerRowIdx].map(normalizeHeader).join('|');
-  
-  const existing = sheetsByHeaders.get(headerKey);
-  if (!existing || rows.length > existing.rowCount) {
-    sheetsByHeaders.set(headerKey, { name: sheetName, rowCount: rows.length });
-  }
-}
-// Processar apenas sheets unicos
-```
-
-**Mudanca 4 -- Log de debug (dentro do loop de dados):**
-
-```text
-// Log primeiras 5 linhas para debug
-if (totalRowsProcessed <= 5) {
-  console.log(`📊 [XLSX Extractor] Row ${r}: supplier="${supplierName}", 
-    weight=${grossWeight}, cbm=${cbm}, pkgs=${packagesQty}, 
-    ncm=[${ncmCodes.join(',')}], desc="${description.substring(0,50)}"`);
-}
-```
-
-### Resumo
-
-```text
-Arquivo                                           Mudanca
+Arquivo                                           Mudança
 ------------------------------------------------  -------------------------------------------
-supabase/functions/sea-submit-analysis/           1. Filtro inteligente de linhas (numericCols >= 2)
-  xlsxExtractor.ts                                2. isSkipRow com mais padroes de metadados
-                                                  3. Deduplicacao de sheets com mesmos headers
-                                                  4. Log detalhado das primeiras 5 linhas
+supabase/functions/sea-submit-analysis/           1. REMOVER bloco de sheet deduplication
+  xlsxExtractor.ts                                2. REVERTER isSkipRow (só padrões de totais)
+                                                  3. REVERTER row filtering (simples, sem numericCols)
+                                                  4. Trocar dedupedSheets → sheetsToProcess no loop
+                                                  MANTER: scoreHeaderRow, extra_columns
 ```
 
-Deploy automatico do edge function `sea-submit-analysis` apos as alteracoes.
+Deploy automático do edge function `sea-submit-analysis` após as alterações.
+
