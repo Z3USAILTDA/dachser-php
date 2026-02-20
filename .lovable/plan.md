@@ -1,29 +1,38 @@
 
+# Correcao: `allHeaders` nao declarado causa fallback para extrator legado
 
-# Correcao: xlsxExtractor.ts — ler NCM apenas da coluna NCM
+## Causa raiz
 
-## Problema
+O `xlsxExtractor.ts` usa a variavel `allHeaders` nas linhas 316 e 463, mas ela nunca foi declarada com `let`. Isso causa um `ReferenceError: allHeaders is not defined` que faz o pipeline estruturado falhar silenciosamente.
 
-A ultima alteracao fez o extrator ler NCM de ambas as colunas (ncm + hs_code). O correto e ler APENAS da coluna NCM.
+O sistema entao cai no pipeline legado (que usa `simpleXlsxReader.ts` do `maritimo-analyze`), e esse extrator antigo ainda le da coluna HS Code. Por isso nenhuma das mudancas no `xlsxExtractor.ts` teve efeito.
 
-## Mudanca (1 arquivo, 1 local)
+Evidencia nos logs:
+```
+❌ [Structured Pipeline] XLSX extraction failed: ReferenceError: allHeaders is not defined
+    at extractXlsxStructured (xlsxExtractor.ts:407)
+⚠️ [Pipeline] Structured pipeline failed, falling back to legacy LLM
+```
+
+## Mudanca (1 arquivo, 1 linha)
 
 ### Arquivo: `supabase/functions/sea-submit-analysis/xlsxExtractor.ts`
 
-**Linhas 359-362 — reverter para ler apenas da coluna ncm:**
+Adicionar declaracao de `allHeaders` logo apos a linha 282 (antes do loop de sheets):
 
 ```
-Antes (atual):
-  const ncmFromNcmCol = colMap.ncm >= 0 ? extractNcmCodes(row[colMap.ncm]) : [];
-  const ncmFromHsCol = colMap.hs_code >= 0 ? extractNcmCodes(row[colMap.hs_code]) : [];
-  const ncmCodes = [...new Set([...ncmFromNcmCol, ...ncmFromHsCol])];
-
-Depois:
-  // Extract NCM codes ONLY from NCM column, accept 4/6/8 digits
-  const ncmCodes = colMap.ncm >= 0 ? extractNcmCodes(row[colMap.ncm]) : [];
+Adicionar entre as linhas 283-284:
+  let allHeaders: string[] = [];
 ```
 
-O filtro de 4/6/8 digitos na funcao `extractNcmCodes` (linha 227) permanece inalterado.
+Isso e suficiente: a variavel ja e populada na linha 316 e usada na linha 463. Com essa correcao, o pipeline estruturado vai funcionar e usar a logica correta (NCM apenas da coluna NCM, aceitar 4/6/8 digitos).
+
+## Nenhuma outra mudanca necessaria
+
+A logica de extracao ja esta correta:
+- Linha 227: filtro aceita 4/6/8 digitos
+- Linha 360: le apenas de `colMap.ncm`
+
+O unico problema era o crash que impedia essa logica de rodar.
 
 Deploy automatico do edge function apos a alteracao.
-
