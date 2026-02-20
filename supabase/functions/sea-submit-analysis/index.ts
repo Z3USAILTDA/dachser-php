@@ -1022,15 +1022,239 @@ async function analyzeWithGeminiPro(
   return { text: resultText, model: 'gemini-2.5-pro' };
 }
 
-// ============ 2-STAGE STRUCTURED PIPELINE ============
+// ============ MULTI-MODEL PIPELINE (Gemini + Claude + GPT) ============
 
-async function analyzeWithStructuredPipeline(
+/**
+ * Ensure the analytics tracking table exists in MariaDB
+ */
+async function ensureAnalyticsTable(dbClient: Client): Promise<void> {
+  await dbClient.execute(`
+    CREATE TABLE IF NOT EXISTS ai_agente.t_sea_analytics_extr (
+      id              INT AUTO_INCREMENT PRIMARY KEY,
+      run_id          INT NULL,
+      item_id         INT NULL,
+      processed_at    DATETIME DEFAULT NOW(),
+      base_file_name  VARCHAR(500),
+      json_xls_extraction  LONGTEXT,
+      json_pdf_extraction  LONGTEXT,
+      result_gemini        LONGTEXT,
+      result_claude        LONGTEXT,
+      result_gpt           LONGTEXT,
+      analysis_type        VARCHAR(50),
+      total_time_ms        INT NULL,
+      created_at           DATETIME DEFAULT NOW()
+    )
+  `);
+  console.log(`✅ [Analytics] t_sea_analytics_extr table ensured`);
+}
+
+/**
+ * Run dual analysis: Gemini 3 Pro + Claude Sonnet 4.5 in parallel
+ * Both receive the same prompt with the extracted JSONs as text context
+ */
+async function runDualAnalysis(
+  jsonXls: string,
+  jsonPdfs: string,
+  analysisType: string,
+  metadata: { consignee?: string; container?: string }
+): Promise<{ geminiResult: string; claudeResult: string }> {
+  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
+  
+  if (!geminiApiKey) throw new Error('GEMINI_API_KEY not configured');
+  if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY not configured');
+
+  const basePrompt = getPromptForAnalysisType(analysisType);
+  const shippingInstructions = getShippingDataExtractionInstructions(analysisType);
+  
+  const analysisPrompt = `${basePrompt}
+
+${metadata.consignee ? `Consignee: ${metadata.consignee}` : ''}
+${metadata.container ? `Container: ${metadata.container}` : ''}
+
+=== EXTRACTED DATA FROM XLSX (Manifest/Pack List) ===
+${jsonXls}
+=== END XLSX DATA ===
+
+=== EXTRACTED DATA FROM PDF(s) (HBL/MBL/Invoices) ===
+${jsonPdfs}
+=== END PDF DATA ===
+
+${shippingInstructions}
+
+IMPORTANT: You are analyzing pre-extracted structured JSON data from both documents. 
+Use this data to perform the comparison analysis as instructed above.
+The JSON contains all fields, weights, NCM codes, exporters, etc. already extracted from the original files.`;
+
+  console.log(`🔄 [Dual Analysis] Starting parallel Gemini + Claude analysis (prompt: ${analysisPrompt.length} chars)`);
+
+  const geminiPromise = (async (): Promise<string> => {
+    try {
+      console.log(`🤖 [Dual Analysis] Calling Gemini 3 Pro...`);
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: analysisPrompt }] }],
+            generationConfig: { maxOutputTokens: 32000 },
+          }),
+        }
+      );
+      if (!response.ok) {
+        const err = await response.text().catch(() => '');
+        throw new Error(`Gemini error: ${response.status} - ${err.substring(0, 200)}`);
+      }
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      console.log(`✅ [Dual Analysis] Gemini response: ${text.length} chars`);
+      return text;
+    } catch (e) {
+      console.error(`❌ [Dual Analysis] Gemini failed:`, e);
+      return '';
+    }
+  })();
+
+  const claudePromise = (async (): Promise<string> => {
+    try {
+      console.log(`🤖 [Dual Analysis] Calling Claude Sonnet 4.5...`);
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-5',
+          max_tokens: 64000,
+          temperature: 0,
+          messages: [{ role: 'user', content: analysisPrompt }],
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.text().catch(() => '');
+        throw new Error(`Claude error: ${response.status} - ${err.substring(0, 200)}`);
+      }
+      const data = await response.json();
+      const text = data.content?.[0]?.text || '';
+      console.log(`✅ [Dual Analysis] Claude response: ${text.length} chars`);
+      return text;
+    } catch (e) {
+      console.error(`❌ [Dual Analysis] Claude failed:`, e);
+      return '';
+    }
+  })();
+
+  const [geminiResult, claudeResult] = await Promise.all([geminiPromise, claudePromise]);
+  
+  console.log(`✅ [Dual Analysis] Complete - Gemini: ${geminiResult.length} chars, Claude: ${claudeResult.length} chars`);
+  return { geminiResult, claudeResult };
+}
+
+/**
+ * GPT Arbitration: Merge/consolidate two analyses into one final version
+ * Uses CHB_OPENAI_API_KEY to call OpenAI API directly
+ */
+async function runGptArbitration(
+  geminiResult: string,
+  claudeResult: string,
+  analysisType: string
+): Promise<string> {
+  const openaiKey = Deno.env.get('CHB_OPENAI_API_KEY');
+  if (!openaiKey) throw new Error('CHB_OPENAI_API_KEY not configured');
+
+  const shippingInstructions = getShippingDataExtractionInstructions(analysisType);
+
+  const arbitrationPrompt = `You are a senior logistics document auditor performing final arbitration.
+
+You received TWO independent analyses of the same pair of shipping documents (Manifest/HBL/MBL/Invoices).
+Both analyses were performed by different AI models using the same instructions.
+
+Your task is to produce the DEFINITIVE FINAL VERSION by:
+
+1. COMPARE both analyses side by side
+2. If BOTH agree on a finding → include it as-is (high confidence)
+3. If ONE found a discrepancy the other missed → INCLUDE IT (better to flag than to miss)
+4. If they CONTRADICT each other on a specific value → investigate the context and pick the most precise one
+5. If one analysis is more detailed/complete → prefer the more detailed version
+6. MERGE all unique findings from both into one consolidated output
+
+CRITICAL RULES:
+- Never OMIT a discrepancy that either analysis found - always err on the side of flagging
+- Keep the same output format as the individual analyses
+- Include ALL exporters mentioned by either analysis
+- For weight/CBM/volume comparisons, use the values that appear most precise (more decimal places)
+- For NCM codes, take the UNION of both lists (include all unique codes from both)
+
+${shippingInstructions}
+
+=== ANALYSIS #1 (Gemini) ===
+${geminiResult}
+=== END ANALYSIS #1 ===
+
+=== ANALYSIS #2 (Claude) ===
+${claudeResult}
+=== END ANALYSIS #2 ===
+
+Produce the final consolidated analysis now. Start directly with the analysis content (e.g., "Hello, team." or the first exporter section).`;
+
+  console.log(`🤖 [GPT Arbitration] Calling GPT-4.1 (prompt: ${arbitrationPrompt.length} chars)`);
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${openaiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4.1',
+      messages: [
+        { role: 'user', content: arbitrationPrompt }
+      ],
+      max_tokens: 64000,
+      temperature: 0,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    console.error(`❌ [GPT Arbitration] OpenAI error: ${response.status} - ${err.substring(0, 300)}`);
+    throw new Error(`OpenAI API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const resultText = data.choices?.[0]?.message?.content || '';
+  console.log(`✅ [GPT Arbitration] Response: ${resultText.length} chars, tokens: ${data.usage?.total_tokens || 'N/A'}`);
+  
+  return resultText;
+}
+
+/**
+ * Multi-Model Pipeline: Extract → Dual Analysis → GPT Arbitration
+ * Replaces the old 2-stage structured pipeline
+ */
+async function analyzeWithMultiModelPipeline(
   analysisType: string,
   files: FileInfo[],
-  metadata: { consignee?: string; container?: string }
+  metadata: { consignee?: string; container?: string },
+  runId?: number,
+  itemId?: number
 ): Promise<AnalysisResult> {
   const startTime = Date.now();
-  console.log(`🚀 [Structured Pipeline] Starting 2-stage analysis for ${files.length} files (type: ${analysisType})`);
+  console.log(`🚀 [Multi-Model Pipeline] Starting 3-stage analysis for ${files.length} files (type: ${analysisType})`);
+
+  // Get a DB client for analytics tracking
+  let analyticsDb: Client | null = null;
+  let analyticsRowId: number | null = null;
+
+  try {
+    analyticsDb = await getDbClient();
+    await ensureAnalyticsTable(analyticsDb);
+  } catch (e) {
+    console.warn(`⚠️ [Multi-Model Pipeline] Analytics DB unavailable, continuing without tracking:`, e);
+  }
 
   const xlsxFiles = files.filter(f => {
     const ext = f.file_name.toLowerCase().split('.').pop() || '';
@@ -1041,28 +1265,29 @@ async function analyzeWithStructuredPipeline(
     return !['xlsx', 'xls', 'xlsm', 'csv'].includes(ext);
   });
 
-  // ========= STAGE 1A: Extract XLSX structured data =========
+  // ========= STAGE 1A: Extract XLSX structured data (Claude Sonnet 4) =========
   let manifestData = null;
+  let jsonXls = '{}';
   if (xlsxFiles.length > 0) {
     for (const xlsxFile of xlsxFiles) {
       try {
         manifestData = await extractXlsxWithLLM(xlsxFile.file_url, xlsxFile.file_name);
-        console.log(`📊 [Structured Pipeline] XLSX extracted: ${manifestData.exporters.length} exporters, ${manifestData.total_rows} rows`);
+        jsonXls = JSON.stringify(manifestData, null, 2);
+        console.log(`📊 [Multi-Model] XLSX extracted: ${manifestData.exporters.length} exporters, ${manifestData.total_rows} rows`);
         
-        // VALIDATION GATE: If 0 exporters from a non-empty file, headers were not recognized
         if (manifestData.exporters.length === 0 && manifestData.total_rows > 5) {
-          console.warn(`⚠️ [Structured Pipeline] 0 exporters from ${manifestData.total_rows} rows - headers not recognized. Raw headers: [${manifestData.raw_headers.join(' | ')}]`);
-          throw new Error(`XLSX headers not recognized: 0 exporters from ${manifestData.total_rows} rows. Headers: ${manifestData.raw_headers.slice(0, 10).join(', ')}`);
+          console.warn(`⚠️ [Multi-Model] 0 exporters from ${manifestData.total_rows} rows - headers not recognized`);
+          throw new Error(`XLSX headers not recognized: 0 exporters from ${manifestData.total_rows} rows`);
         }
       } catch (e) {
-        console.error(`❌ [Structured Pipeline] XLSX extraction failed:`, e);
-        throw e; // Propagate to trigger fallback to legacy pipeline
+        console.error(`❌ [Multi-Model] XLSX extraction failed:`, e);
+        throw e;
       }
     }
   }
 
-  // ========= STAGE 1B: Extract PDFs structured data =========
-  const pdfExtractions = [];
+  // ========= STAGE 1B: Extract PDFs structured data (Gemini 3 Pro) =========
+  const pdfExtractions: any[] = [];
   for (const pdfFile of pdfFiles) {
     try {
       const fetchResp = await fetch(pdfFile.file_url);
@@ -1070,7 +1295,6 @@ async function analyzeWithStructuredPipeline(
       const buffer = await fetchResp.arrayBuffer();
       if (buffer.byteLength < 100) continue;
 
-      // Convert to base64
       const bytes = new Uint8Array(buffer);
       const chunkSize = 8192;
       let binaryStr = '';
@@ -1083,58 +1307,135 @@ async function analyzeWithStructuredPipeline(
       const extracted = await extractPdfStructured(base64, pdfFile.file_name, pdfFile.file_type);
       if (extracted.raw_extraction) {
         pdfExtractions.push({ data: extracted, file: pdfFile });
-        console.log(`📄 [Structured Pipeline] PDF extracted: ${pdfFile.file_name} (${extracted.exporters.length} exporters, weight=${extracted.gross_weight_kg}kg)`);
+        console.log(`📄 [Multi-Model] PDF extracted: ${pdfFile.file_name} (${extracted.exporters.length} exporters, weight=${extracted.gross_weight_kg}kg)`);
       } else {
-        console.warn(`⚠️ [Structured Pipeline] PDF extraction failed for ${pdfFile.file_name} - will fallback`);
         throw new Error(`PDF extraction failed for ${pdfFile.file_name}`);
       }
     } catch (e) {
-      console.error(`❌ [Structured Pipeline] PDF processing failed for ${pdfFile.file_name}:`, e);
-      throw e; // Propagate to trigger fallback
+      console.error(`❌ [Multi-Model] PDF processing failed for ${pdfFile.file_name}:`, e);
+      throw e;
     }
   }
 
-  // ========= STAGE 2: Deterministic comparison =========
-  let comparisonResult;
+  const jsonPdfs = JSON.stringify(pdfExtractions.map(p => ({
+    file_name: p.file.file_name,
+    file_type: p.file.file_type,
+    ...p.data
+  })), null, 2);
 
-  if (analysisType === 'manifest_hbl') {
-    if (!manifestData) throw new Error('No manifest data extracted');
-    const hblExtractions = pdfExtractions.map(p => p.data);
-    if (hblExtractions.length === 0) throw new Error('No HBL data extracted');
-    comparisonResult = compareManifestHbl(manifestData, hblExtractions);
-  } else if (analysisType === 'hbl_mbl') {
-    const baseFile = pdfExtractions.find(p => p.file.file_type === 'base');
-    const mblFile = pdfExtractions.find(p => p.file.file_type === 'mbl');
-    if (!baseFile || !mblFile) throw new Error('Missing HBL or MBL extraction');
-    comparisonResult = compareHblMbl(baseFile.data, mblFile.data);
-  } else if (analysisType === 'invoices_hbl') {
-    const hblFile = pdfExtractions.find(p => p.file.file_type === 'base' || p.file.file_type === 'hbl');
-    const invoiceFiles = pdfExtractions.filter(p => p.file.file_type === 'invoice' || p.file.file_type === 'outro');
-    if (!hblFile) throw new Error('Missing HBL extraction');
-    comparisonResult = compareInvoicesHbl(invoiceFiles.map(i => i.data), hblFile.data);
-  } else {
-    throw new Error(`Unsupported analysis type for structured pipeline: ${analysisType}`);
+  const stage1Time = Date.now() - startTime;
+  console.log(`✅ [Multi-Model] Stage 1 complete in ${Math.round(stage1Time / 1000)}s - XLS: ${jsonXls.length} chars, PDFs: ${jsonPdfs.length} chars`);
+
+  // ========= INSERT analytics row =========
+  const baseFileName = xlsxFiles[0]?.file_name || pdfFiles[0]?.file_name || 'unknown';
+  if (analyticsDb) {
+    try {
+      const insertResult = await analyticsDb.execute(`
+        INSERT INTO ai_agente.t_sea_analytics_extr 
+        (run_id, item_id, base_file_name, json_xls_extraction, json_pdf_extraction, analysis_type, processed_at)
+        VALUES (?, ?, ?, ?, ?, ?, NOW())
+      `, [runId || null, itemId || null, baseFileName, jsonXls, jsonPdfs, analysisType]);
+      analyticsRowId = Number(insertResult.lastInsertId);
+      console.log(`📊 [Analytics] Inserted row ${analyticsRowId}`);
+    } catch (e) {
+      console.warn(`⚠️ [Analytics] Insert failed:`, e);
+    }
   }
 
-  // ========= STAGE 3: Format result =========
-  const resultText = formatComparisonResult(comparisonResult);
+  // ========= STAGE 2: Dual Analysis (Gemini + Claude in parallel) =========
+  const stage2Start = Date.now();
+  const { geminiResult, claudeResult } = await runDualAnalysis(jsonXls, jsonPdfs, analysisType, metadata);
 
-  const elapsed = Math.round((Date.now() - startTime) / 1000);
-  console.log(`✅ [Structured Pipeline] Completed in ${elapsed}s - Status: ${comparisonResult.overall_status}`);
+  const stage2Time = Date.now() - stage2Start;
+  console.log(`✅ [Multi-Model] Stage 2 complete in ${Math.round(stage2Time / 1000)}s`);
+
+  // Update analytics with dual results
+  if (analyticsDb && analyticsRowId) {
+    try {
+      await analyticsDb.execute(`
+        UPDATE ai_agente.t_sea_analytics_extr 
+        SET result_gemini = ?, result_claude = ?
+        WHERE id = ?
+      `, [geminiResult || null, claudeResult || null, analyticsRowId]);
+    } catch (e) {
+      console.warn(`⚠️ [Analytics] Update stage 2 failed:`, e);
+    }
+  }
+
+  // ========= STAGE 3: GPT Arbitration =========
+  let finalResult = '';
+  let finalModel = 'multi-model-pipeline-v1';
+
+  // Determine what we have
+  const hasGemini = geminiResult && geminiResult.length > 200;
+  const hasClaude = claudeResult && claudeResult.length > 200;
+
+  if (hasGemini && hasClaude) {
+    // Both analyses available → run GPT arbitration
+    try {
+      const stage3Start = Date.now();
+      finalResult = await runGptArbitration(geminiResult, claudeResult, analysisType);
+      const stage3Time = Date.now() - stage3Start;
+      console.log(`✅ [Multi-Model] Stage 3 (GPT) complete in ${Math.round(stage3Time / 1000)}s`);
+      finalModel = 'multi-model-pipeline-v1 (gpt-4.1 arbitration)';
+    } catch (e) {
+      console.error(`❌ [Multi-Model] GPT arbitration failed, using Claude result as fallback:`, e);
+      finalResult = claudeResult;
+      finalModel = 'multi-model-pipeline-v1 (claude-fallback)';
+    }
+  } else if (hasClaude) {
+    console.warn(`⚠️ [Multi-Model] Only Claude available, skipping arbitration`);
+    finalResult = claudeResult;
+    finalModel = 'multi-model-pipeline-v1 (claude-only)';
+  } else if (hasGemini) {
+    console.warn(`⚠️ [Multi-Model] Only Gemini available, skipping arbitration`);
+    finalResult = geminiResult;
+    finalModel = 'multi-model-pipeline-v1 (gemini-only)';
+  } else {
+    throw new Error('Both Gemini and Claude analyses failed - no results to arbitrate');
+  }
+
+  const totalTime = Date.now() - startTime;
+
+  // Update analytics with final result
+  if (analyticsDb && analyticsRowId) {
+    try {
+      await analyticsDb.execute(`
+        UPDATE ai_agente.t_sea_analytics_extr 
+        SET result_gpt = ?, total_time_ms = ?
+        WHERE id = ?
+      `, [finalResult, totalTime, analyticsRowId]);
+      console.log(`📊 [Analytics] Final update for row ${analyticsRowId}`);
+    } catch (e) {
+      console.warn(`⚠️ [Analytics] Final update failed:`, e);
+    }
+  }
+
+  // Close analytics DB
+  if (analyticsDb) {
+    try { await analyticsDb.close(); } catch { /* ignore */ }
+  }
+
+  const elapsed = Math.round(totalTime / 1000);
+  console.log(`✅ [Multi-Model Pipeline] Completed in ${elapsed}s - Model: ${finalModel}`);
 
   return {
-    result_text: resultText,
+    result_text: finalResult,
     json_result: {
       status: 'completed',
-      model: 'structured-pipeline-v1',
-      pipeline: 'two-stage',
-      total_time_ms: Date.now() - startTime,
+      model: finalModel,
+      pipeline: 'multi-model-v1',
+      total_time_ms: totalTime,
+      stage1_time_ms: stage1Time,
+      stage2_time_ms: stage2Time,
+      stage3_time_ms: totalTime - stage1Time - stage2Time,
       file_count: files.length,
-      exporters_found: comparisonResult.exporters.length,
-      overall_status: comparisonResult.overall_status,
+      gemini_chars: geminiResult.length,
+      claude_chars: claudeResult.length,
+      gpt_chars: finalResult.length,
       used_examples: false,
     },
-    model: 'structured-pipeline-v1',
+    model: finalModel,
   };
 }
 
@@ -1146,20 +1447,20 @@ async function analyzeWithLLM(
   metadata: { consignee?: string; container?: string }
 ): Promise<AnalysisResult> {
   
-  // ========= TRY 2-STAGE STRUCTURED PIPELINE FIRST =========
+  // ========= TRY MULTI-MODEL PIPELINE FIRST (Gemini + Claude + GPT) =========
   try {
-    console.log(`🔄 [Pipeline] Attempting structured 2-stage pipeline...`);
-    const structuredResult = await analyzeWithStructuredPipeline(analysisType, files, metadata);
+    console.log(`🔄 [Pipeline] Attempting multi-model 3-stage pipeline...`);
+    const multiModelResult = await analyzeWithMultiModelPipeline(analysisType, files, metadata);
     
     // Validate the result has meaningful content
-    if (structuredResult.result_text && structuredResult.result_text.length > 200) {
-      console.log(`✅ [Pipeline] Structured pipeline succeeded (${structuredResult.result_text.length} chars)`);
-      return structuredResult;
+    if (multiModelResult.result_text && multiModelResult.result_text.length > 200) {
+      console.log(`✅ [Pipeline] Multi-model pipeline succeeded (${multiModelResult.result_text.length} chars)`);
+      return multiModelResult;
     }
     
-    console.warn(`⚠️ [Pipeline] Structured pipeline result too short (${structuredResult.result_text?.length || 0} chars), falling back to legacy`);
+    console.warn(`⚠️ [Pipeline] Multi-model pipeline result too short (${multiModelResult.result_text?.length || 0} chars), falling back to legacy`);
   } catch (pipelineError) {
-    console.error(`⚠️ [Pipeline] Structured pipeline failed, falling back to legacy LLM:`, pipelineError);
+    console.error(`⚠️ [Pipeline] Multi-model pipeline failed, falling back to legacy LLM:`, pipelineError);
   }
   
   // ========= LEGACY FALLBACK: Single-prompt LLM analysis =========
