@@ -281,6 +281,11 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
 
   console.log(`📊 [XLSX Extractor] ${sheetsToProcess.length} sheets: ${sheetsToProcess.join(', ')}`);
 
+  let allHeaders: string[] = [];
+  let totalRowsProcessed = 0;
+  const exporterMap = new Map<string, ExporterData>();
+  let globalContainer = '';
+  let globalSeal = '';
 
   for (const sheetName of sheetsToProcess) {
     const sheet = workbook.Sheets[sheetName];
