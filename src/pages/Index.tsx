@@ -2166,6 +2166,31 @@ const Index = () => {
     );
   }
 
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen relative overflow-x-hidden">
+        <div className="fixed inset-0 z-0">
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: `url(${dachserBg})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+            }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/70 to-black/90" />
+        </div>
+        <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4">
+          <Plane className="h-16 w-16 text-[#aaa] mb-6 opacity-40" />
+          <h1 className="text-2xl font-bold text-[#f5f5f5] mb-2">Rastreio Aéreo</h1>
+          <p className="text-[#aaa] text-center max-w-md">
+            Você não possui acesso a esta funcionalidade. Entre em contato com o administrador para solicitar permissão.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen relative overflow-x-hidden">
       {/* Background with image and gradient overlay */}
