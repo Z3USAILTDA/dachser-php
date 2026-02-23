@@ -7912,6 +7912,74 @@ serve(async (req) => {
       }
     }
 
+    // ===== FORCE MASTER SWAP LOG (manual insert for testing) =====
+    if (action === 'force_master_swap_log') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const d = bodyData || {};
+      const awb = d.awb; // current MAWB (will be new_mawb)
+      const oldMawb = d.old_mawb || '000-00000000';
+      const hawb = d.hawb || null;
+
+      if (!awb) {
+        return new Response(JSON.stringify({ error: 'awb é obrigatório' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // Ensure table exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS dados_dachser.t_master_swap_log (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            hawb_number VARCHAR(100),
+            old_mawb VARCHAR(100),
+            new_mawb VARCHAR(100),
+            swapped_by VARCHAR(100),
+            swapped_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_new_mawb (new_mawb),
+            INDEX idx_hawb (hawb_number)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+        `);
+
+        await client.execute(
+          `INSERT INTO dados_dachser.t_master_swap_log (hawb_number, old_mawb, new_mawb, swapped_by) VALUES (?, ?, ?, ?)`,
+          [hawb || '', oldMawb, awb, 'MANUAL']
+        );
+
+        await client.close();
+        console.log(`[force_master_swap_log] Inserted: old=${oldMawb} -> new=${awb}, hawb=${hawb}`);
+
+        return new Response(JSON.stringify({ success: true, old_mawb: oldMawb, new_mawb: awb }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[force_master_swap_log] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // ===== SWAP MASTER CADASTRO AEREO =====
     if (action === 'swap_master_cadastro_aereo') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');
