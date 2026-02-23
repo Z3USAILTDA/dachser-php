@@ -8609,7 +8609,6 @@ serve(async (req) => {
           SELECT id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento, etapa_atual, filial
           FROM dados_dachser.t_vouchers
           WHERE (numero_spo LIKE ? OR fornecedor LIKE ? OR CAST(id AS CHAR) = ? OR CAST(id_rm AS CHAR) = ?)
-            AND etapa_atual IN ('OPERACAO', 'A_PROCESSAR', 'FISCAL')
             AND (voucher_master_id IS NULL OR voucher_master_id = '')
             AND (is_master IS NULL OR is_master = 0)
           ORDER BY numero_spo ASC
