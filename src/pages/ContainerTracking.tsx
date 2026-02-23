@@ -741,7 +741,22 @@ const ContainerTracking = () => {
       });
       const result = await res.json();
       if (result.success && result.data) {
-        setMblList(result.data);
+        // Non-admin users only see processes from 2027 onwards
+        const isUserAdmin = (() => {
+          try {
+            const su = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+            if (su) { const p = JSON.parse(su); return p.is_admin === 1 || p.is_admin === "1" || p.is_admin === true; }
+          } catch { return false; }
+          return false;
+        })();
+        const filtered = isUserAdmin ? result.data : result.data.filter((item: MblTrackingData) => {
+          const etaDate = item.eta ? new Date(item.eta) : null;
+          const etdDate = item.etd ? new Date(item.etd) : null;
+          const checkDate = item.last_check ? new Date(item.last_check) : null;
+          const year = etdDate?.getFullYear() || etaDate?.getFullYear() || checkDate?.getFullYear() || 0;
+          return year >= 2027;
+        });
+        setMblList(filtered);
       } else if (result.error) {
         console.error("Error fetching MBL data:", result.error);
       }
