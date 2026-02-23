@@ -8605,6 +8605,15 @@ serve(async (req) => {
           break;
         }
         
+        // DEBUG: Check why a specific voucher might not appear
+        const debugRows = await client.query(`
+          SELECT id, numero_spo, voucher_master_id, is_master, etapa_atual
+          FROM dados_dachser.t_vouchers
+          WHERE numero_spo LIKE ? OR CAST(id AS CHAR) = ? OR CAST(id_rm AS CHAR) = ?
+          LIMIT 5
+        `, [`%${search}%`, search, search]);
+        console.log(`[DEBUG search_vouchers_for_master] Raw match for "${search}":`, JSON.stringify(debugRows));
+
         const vouchers = await client.query(`
           SELECT id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento, etapa_atual, filial
           FROM dados_dachser.t_vouchers
