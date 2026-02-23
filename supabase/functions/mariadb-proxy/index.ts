@@ -8606,20 +8606,25 @@ serve(async (req) => {
         }
         
         const vouchers = await client.query(`
-          SELECT id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento, etapa_atual, filial, voucher_master_id, is_master, processo_id
-          FROM dados_dachser.t_vouchers
+          SELECT v.id, v.numero_spo, v.fornecedor, v.cnpj_fornecedor, v.valor, v.moeda, 
+                 v.vencimento, v.etapa_atual, v.filial, v.voucher_master_id, v.is_master, 
+                 v.processo_id, dfv.nd as nd_rm
+          FROM dados_dachser.t_vouchers v
+          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
+            ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
           WHERE (
-            numero_spo LIKE ? 
-            OR fornecedor LIKE ? 
-            OR cnpj_fornecedor LIKE ?
-            OR processo_id LIKE ?
-            OR CAST(id AS CHAR) LIKE ?
-            OR CAST(id_rm AS CHAR) = ?
+            v.numero_spo LIKE ? 
+            OR v.fornecedor LIKE ? 
+            OR v.cnpj_fornecedor LIKE ?
+            OR v.processo_id LIKE ?
+            OR CAST(v.id AS CHAR) LIKE ?
+            OR CAST(v.id_rm AS CHAR) = ?
+            OR dfv.nd LIKE ?
           )
-          AND sync_status = 'ATIVO'
-          ORDER BY created_at DESC
+          AND v.sync_status = 'ATIVO'
+          ORDER BY v.created_at DESC
           LIMIT 20
-        `, [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, search]);
+        `, [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, search, `%${search}%`]);
         
         result = { success: true, data: vouchers || [] };
         break;
