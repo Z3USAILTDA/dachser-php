@@ -594,7 +594,21 @@ const Index = () => {
           const withFlags = deduplicatedData.map((item: AWBData) =>
             flags[item.awb] ? { ...item, tracking_failed: true } : item
           );
-          setStatusAereoData(withFlags);
+          // Non-admin users only see processes from 2027 onwards
+          const isUserAdmin = (() => {
+            try {
+              const su = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+              if (su) { const p = JSON.parse(su); return p.is_admin === 1 || p.is_admin === "1" || p.is_admin === true; }
+            } catch { return false; }
+            return false;
+          })();
+          const filtered = isUserAdmin ? withFlags : withFlags.filter((item: AWBData) => {
+            const etdDate = item.etd ? new Date(item.etd) : null;
+            const checkDate = item.last_check ? new Date(item.last_check) : null;
+            const year = etdDate?.getFullYear() || checkDate?.getFullYear() || 0;
+            return year >= 2027;
+          });
+          setStatusAereoData(filtered);
         } catch (_) {
           setStatusAereoData(deduplicatedData);
         }
@@ -2162,31 +2176,6 @@ const Index = () => {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <p className="text-white">Carregando...</p>
-      </div>
-    );
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen relative overflow-x-hidden">
-        <div className="fixed inset-0 z-0">
-          <div
-            className="absolute inset-0"
-            style={{
-              backgroundImage: `url(${dachserBg})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-            }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/70 to-black/90" />
-        </div>
-        <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4">
-          <Plane className="h-16 w-16 text-[#aaa] mb-6 opacity-40" />
-          <h1 className="text-2xl font-bold text-[#f5f5f5] mb-2">Rastreio Aéreo</h1>
-          <p className="text-[#aaa] text-center max-w-md">
-            Você não possui acesso a esta funcionalidade. Entre em contato com o administrador para solicitar permissão.
-          </p>
-        </div>
       </div>
     );
   }
