@@ -8605,13 +8605,14 @@ serve(async (req) => {
           break;
         }
         
+        const t0 = Date.now();
         const vouchers = await client.query(`
-          SELECT v.id, v.numero_spo, v.fornecedor, v.cnpj_fornecedor, v.valor, v.moeda, 
+          SELECT DISTINCT v.id, v.numero_spo, v.fornecedor, v.cnpj_fornecedor, v.valor, v.moeda, 
                  v.vencimento, v.etapa_atual, v.filial, v.voucher_master_id, v.is_master, 
-                 v.processo_id, dfv.nd as nd_rm
+                 v.processo_id
           FROM dados_dachser.t_vouchers v
           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
-            ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
+            ON dfv.nd = v.numero_spo
           WHERE (
             v.numero_spo LIKE ? 
             OR v.fornecedor LIKE ? 
@@ -8625,6 +8626,7 @@ serve(async (req) => {
           ORDER BY v.created_at DESC
           LIMIT 20
         `, [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, search, `%${search}%`]);
+        console.log(`[search_vouchers_for_master] query took ${Date.now() - t0}ms, results: ${(vouchers as any[])?.length ?? 0}`);
         
         result = { success: true, data: vouchers || [] };
         break;
