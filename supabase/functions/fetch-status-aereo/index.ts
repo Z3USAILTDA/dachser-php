@@ -582,15 +582,38 @@ serve(async (req) => {
         // Demais prefixos: validação cruzada — se timeline diverge, prefere a timeline
         const timelineStatus = resolveUnkFromTimeline(timelineStr, awb);
         if (timelineStatus && timelineStatus !== finalStatus && isMoreSpecific(finalStatus, timelineStatus)) {
-          console.log(`[crossCheck] ${awb}: last_status="${finalStatus}" vs timeline="${timelineStatus}" → prefer timeline`);
-          finalStatus = timelineStatus;
+          // Se crossCheck quer aplicar DLV, verificar se existe ARR classificável
+          if (timelineStatus === 'DLV') {
+            const arrCheck = classifyArrival('ARR', timelineStr, destForClassify, origForClassify, awb);
+            if (arrCheck && arrCheck !== 'ARR') {
+              console.log(`[crossCheck] ${awb}: DLV blocked, using ${arrCheck} instead`);
+              finalStatus = arrCheck;
+            } else {
+              finalStatus = timelineStatus;
+            }
+          } else {
+            console.log(`[crossCheck] ${awb}: last_status="${finalStatus}" vs timeline="${timelineStatus}" → prefer timeline`);
+            finalStatus = timelineStatus;
+          }
         }
       } else {
         // Status UNK ou nulo: tenta resolver via timeline (comportamento original)
         const resolvedFromTimeline = resolveUnkFromTimeline(timelineStr, awb);
         if (resolvedFromTimeline) {
-          finalStatus = resolvedFromTimeline;
-          console.log(`[resolveUNK] ${awb}: UNK → ${resolvedFromTimeline} (via timeline de-para)`);
+          // Se resolve para DLV, verificar se existe ARR classificável
+          if (resolvedFromTimeline === 'DLV') {
+            const arrCheck = classifyArrival('ARR', timelineStr, destForClassify, origForClassify, awb);
+            if (arrCheck && arrCheck !== 'ARR') {
+              console.log(`[resolveUNK] ${awb}: DLV blocked, using ${arrCheck} instead`);
+              finalStatus = arrCheck;
+            } else {
+              finalStatus = resolvedFromTimeline;
+              console.log(`[resolveUNK] ${awb}: UNK → ${resolvedFromTimeline} (via timeline de-para)`);
+            }
+          } else {
+            finalStatus = resolvedFromTimeline;
+            console.log(`[resolveUNK] ${awb}: UNK → ${resolvedFromTimeline} (via timeline de-para)`);
+          }
         }
       }
 
