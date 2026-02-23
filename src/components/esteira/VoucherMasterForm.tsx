@@ -79,7 +79,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
         setSearchResults([]);
         setShowDropdown(false);
       }
-    }, 300);
+    }, 500);
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
