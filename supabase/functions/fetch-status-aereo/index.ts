@@ -503,9 +503,32 @@ serve(async (req) => {
       console.log(`Fallback: ${apiFallbackMap.size} AWBs enriquecidos via t_aereo_api`);
     }
 
+    // ========== PASSO 1.8: Verificar master_changed via t_master_swap_log ==========
+    const allAwbsForSwapCheck = wsList.map((r: any) => String(r.awb || '').trim()).filter(Boolean);
+    const uniqueAwbsForSwap = [...new Set(allAwbsForSwapCheck)];
+    const swapChangedSet = new Set<string>();
+
+    if (uniqueAwbsForSwap.length > 0) {
+      try {
+        const swapInClause = uniqueAwbsForSwap.map(a => `'${a.replace(/'/g, "''")}'`).join(',');
+        const [swapRows] = await client.query(`
+          SELECT DISTINCT new_mawb FROM ${database}.t_master_swap_log
+          WHERE TRIM(new_mawb) COLLATE utf8mb4_unicode_ci IN (${swapInClause})
+        `) as [any[], any];
+        const swapList = Array.isArray(swapRows) ? swapRows : [];
+        for (const row of swapList) {
+          const mawb = String(row.new_mawb || '').trim();
+          if (mawb) swapChangedSet.add(mawb);
+        }
+        console.log(`Master swap check: ${swapChangedSet.size} AWBs have master_changed=true`);
+      } catch (swapErr) {
+        console.log('Note: t_master_swap_log query failed (table may not exist yet):', swapErr);
+      }
+    }
+
     // ========== PASSO 2: Enriquecer com dados de t_master_dados ==========
-    const awbsFromWs = wsList.map((r: any) => String(r.awb || '').trim()).filter(Boolean);
-    const uniqueAwbs = [...new Set(awbsFromWs)];
+    const awbsFromWs = allAwbsForSwapCheck;
+    const uniqueAwbs = uniqueAwbsForSwap;
     const awbInClause = uniqueAwbs.map(a => `'${a.replace(/'/g, "''")}'`).join(',');
 
     const masterQuery = `
@@ -659,6 +682,7 @@ serve(async (req) => {
         pieces_discrepancy,
         baseline_pieces,
         has_dis_event,
+        master_changed: swapChangedSet.has(awb),
       };
 
       // If this AWB was enriched via t_aereo_api fallback, use that data directly

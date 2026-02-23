@@ -397,6 +397,7 @@ interface AWBData {
   has_dis_event?: boolean; // Timeline contém evento DIS (discrepância)
   etd?: string | null; // ETD do processo em t_master_dados
   tracking_failed?: boolean; // Timeline vazia em todas as fontes (falha de rastreio)
+  master_changed?: boolean; // Master (MAWB) foi atualizado via troca de master
 }
 
 const STORAGE_KEY = "tracked-awbs";
@@ -564,6 +565,7 @@ const Index = () => {
           baseline_pieces: item.baseline_pieces || null,
           has_dis_event: item.has_dis_event || false,
           etd: item.etd || null,
+          master_changed: item.master_changed || false,
         }));
 
         const deduplicatedData = convertedData.reduce((acc: AWBData[], current: AWBData) => {
@@ -2632,6 +2634,12 @@ const Index = () => {
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center gap-2">
                                 <span className="font-semibold text-[#f5f5f5] text-[0.82rem]">{awb.awb}</span>
+                                {awb.master_changed && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.62rem] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                                    <RefreshCw className="w-2.5 h-2.5" />
+                                    Novo Master
+                                  </span>
+                                )}
                                 {isRetracking && (
                                   <span className="text-[0.68rem] text-blue-400 animate-pulse">Re-processando...</span>
                                 )}

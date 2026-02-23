@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Clock, Plane, MapPin, AlertCircle, AlertTriangle, Loader2, X } from "lucide-react";
+import { Clock, Plane, MapPin, AlertCircle, AlertTriangle, Loader2, X, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -32,6 +32,7 @@ interface TimelineResponse {
 
 const getEventIcon = (codigo: string) => {
   const upperCode = codigo?.toUpperCase() || "";
+  if (upperCode === "NOVO_MASTER") return <RefreshCw className="h-4 w-4" />;
   if (upperCode === "DEP" || upperCode === "DEPARTED") return <Plane className="h-4 w-4 rotate-45" />;
   if (upperCode === "ARR" || upperCode === "ARRIVED") return <Plane className="h-4 w-4 -rotate-45" />;
   if (upperCode === "DLV" || upperCode === "DELIVERED") return <MapPin className="h-4 w-4" />;
@@ -41,6 +42,7 @@ const getEventIcon = (codigo: string) => {
 
 const getEventColor = (codigo: string) => {
   const upperCode = codigo?.toUpperCase() || "";
+  if (upperCode === "NOVO_MASTER") return "bg-amber-500/20 text-amber-400 border-amber-500/30";
   if (upperCode === "ARR" || upperCode === "DLV") return "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
   if (upperCode === "DEP") return "bg-blue-500/20 text-blue-400 border-blue-500/30";
   if (upperCode === "DIS" || upperCode === "OFLD" || upperCode === "NIL") return "bg-red-500/20 text-red-400 border-red-500/30";

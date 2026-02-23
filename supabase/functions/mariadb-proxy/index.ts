@@ -6048,6 +6048,44 @@ serve(async (req) => {
             : validEvents;
 
           console.log(`Tracking: ${validEvents.length} valid events, ${filteredEvents.length} after ETD filter (cutoff=${etdCutoff?.toISOString() ?? 'none'}) for AWB ${queryAwb}`);
+
+          // ---- Inject synthetic NOVO_MASTER events from t_master_swap_log ----
+          try {
+            const swapLogRows = await client.query(`
+              SELECT hawb_number, old_mawb, new_mawb, swapped_at, swapped_by
+              FROM ${database}.t_master_swap_log
+              WHERE TRIM(new_mawb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
+              ORDER BY swapped_at DESC
+            `, [queryAwb]);
+
+            if (swapLogRows && swapLogRows.length > 0) {
+              console.log(`[NOVO_MASTER] Found ${swapLogRows.length} swap log entries for AWB ${queryAwb}`);
+              for (const swap of swapLogRows) {
+                const syntheticEvent = {
+                  id: `swap-${swap.old_mawb}-${swap.new_mawb}`,
+                  awb: queryAwb,
+                  hawb: swap.hawb_number || null,
+                  codigo_evento: 'NOVO_MASTER',
+                  descricao_evento: `Master atualizado: ${swap.old_mawb} → ${swap.new_mawb}`,
+                  data_hora_evento: swap.swapped_at || null,
+                  fonte: 'SISTEMA',
+                  aeroporto: '',
+                  nivel_confianca: 'PRIMARIA',
+                  created_at: swap.swapped_at || null,
+                };
+                filteredEvents.push(syntheticEvent);
+              }
+              // Re-sort after injection
+              filteredEvents.sort((a: any, b: any) => {
+                const dateA = a.data_hora_evento ? new Date(a.data_hora_evento).getTime() : 0;
+                const dateB = b.data_hora_evento ? new Date(b.data_hora_evento).getTime() : 0;
+                return dateB - dateA;
+              });
+            }
+          } catch (swapErr) {
+            console.log(`[NOVO_MASTER] Could not query t_master_swap_log for AWB ${queryAwb}:`, swapErr);
+          }
+
           result = { success: true, data: filteredEvents };
         } catch (tableErr) {
           console.log('Error fetching from t_aereo_ws:', tableErr);
