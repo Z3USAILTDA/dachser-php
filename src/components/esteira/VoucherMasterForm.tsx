@@ -73,8 +73,9 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
   // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (searchQuery.length >= 2) {
-        searchVouchers(searchQuery);
+      const trimmed = searchQuery.trim();
+      if (trimmed.length >= 2) {
+        searchVouchers(trimmed);
       } else {
         setSearchResults([]);
         setShowDropdown(false);
