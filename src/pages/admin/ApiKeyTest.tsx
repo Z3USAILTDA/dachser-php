@@ -3,7 +3,8 @@ import { PageLayout } from "@/components/layout/PageLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { KeyRound, Play, Loader2, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { KeyRound, Play, Loader2, CheckCircle2, XCircle, Clock, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface ApiConfig {
@@ -36,13 +37,17 @@ type Status = "idle" | "testing" | "ok" | "error";
 export default function ApiKeyTest() {
   const [results, setResults] = useState<Record<string, { status: Status; result?: TestResult }>>({});
   const [testingAll, setTestingAll] = useState(false);
+  const [customKeys, setCustomKeys] = useState<Record<string, string>>({});
+  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
 
   const testApi = async (apiKey: string) => {
     setResults((prev) => ({ ...prev, [apiKey]: { status: "testing" } }));
     try {
-      const { data, error } = await supabase.functions.invoke("test-api-key", {
-        body: { apiName: apiKey },
-      });
+      const body: Record<string, string> = { apiName: apiKey };
+      const custom = customKeys[apiKey]?.trim();
+      if (custom) body.customKey = custom;
+
+      const { data, error } = await supabase.functions.invoke("test-api-key", { body });
       if (error) throw error;
       const result = data as TestResult;
       setResults((prev) => ({
@@ -117,6 +122,28 @@ export default function ApiKeyTest() {
                 </div>
 
                 <p className="text-[11px] text-muted-foreground/60 font-mono">{api.secretName}</p>
+
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type={showKeys[api.key] ? "text" : "password"}
+                    placeholder="Colar chave para teste..."
+                    value={customKeys[api.key] || ""}
+                    onChange={(e) => setCustomKeys((prev) => ({ ...prev, [api.key]: e.target.value }))}
+                    className="h-8 text-xs rounded-md font-mono"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    onClick={() => setShowKeys((prev) => ({ ...prev, [api.key]: !prev[api.key] }))}
+                  >
+                    {showKeys[api.key] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </Button>
+                </div>
+
+                {customKeys[api.key]?.trim() && (
+                  <p className="text-[11px] text-amber-400/80">⚡ Usando chave temporária</p>
+                )}
 
                 {result && (
                   <div className="space-y-1">
