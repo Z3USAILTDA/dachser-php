@@ -6,8 +6,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-async function testGemini(): Promise<{ success: boolean; error?: string; details?: string }> {
-  const key = Deno.env.get("GEMINI_API_KEY");
+async function testGemini(customKey?: string): Promise<{ success: boolean; error?: string; details?: string }> {
+  const key = customKey || Deno.env.get("GEMINI_API_KEY");
   if (!key) return { success: false, error: "GEMINI_API_KEY not configured" };
 
   const res = await fetch(
@@ -23,11 +23,11 @@ async function testGemini(): Promise<{ success: boolean; error?: string; details
     return { success: false, error: `HTTP ${res.status}`, details: body.slice(0, 200) };
   }
   await res.text();
-  return { success: true };
+  return { success: true, details: customKey ? "custom key" : "env secret" };
 }
 
-async function testAnthropic(): Promise<{ success: boolean; error?: string; details?: string }> {
-  const key = Deno.env.get("ANTHROPIC_API_KEY");
+async function testAnthropic(customKey?: string): Promise<{ success: boolean; error?: string; details?: string }> {
+  const key = customKey || Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) return { success: false, error: "ANTHROPIC_API_KEY not configured" };
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -48,11 +48,11 @@ async function testAnthropic(): Promise<{ success: boolean; error?: string; deta
     return { success: false, error: `HTTP ${res.status}`, details: body.slice(0, 200) };
   }
   await res.text();
-  return { success: true };
+  return { success: true, details: customKey ? "custom key" : "env secret" };
 }
 
-async function testResend(): Promise<{ success: boolean; error?: string; details?: string }> {
-  const key = Deno.env.get("RESEND_API_KEY");
+async function testResend(customKey?: string): Promise<{ success: boolean; error?: string; details?: string }> {
+  const key = customKey || Deno.env.get("RESEND_API_KEY");
   if (!key) return { success: false, error: "RESEND_API_KEY not configured" };
 
   const res = await fetch("https://api.resend.com/api-keys", {
@@ -63,11 +63,11 @@ async function testResend(): Promise<{ success: boolean; error?: string; details
     return { success: false, error: `HTTP ${res.status}`, details: body.slice(0, 200) };
   }
   await res.text();
-  return { success: true };
+  return { success: true, details: customKey ? "custom key" : "env secret" };
 }
 
-async function testLeadcomex(): Promise<{ success: boolean; error?: string; details?: string }> {
-  const token = Deno.env.get("LEADCOMEX_API_TOKEN");
+async function testLeadcomex(customKey?: string): Promise<{ success: boolean; error?: string; details?: string }> {
+  const token = customKey || Deno.env.get("LEADCOMEX_API_TOKEN");
   if (!token) return { success: false, error: "LEADCOMEX_API_TOKEN not configured" };
 
   const res = await fetch("https://api.leadcomex.com/v1/consulta/di", {
@@ -78,17 +78,16 @@ async function testLeadcomex(): Promise<{ success: boolean; error?: string; deta
     },
     body: JSON.stringify({ numero_di: "0000000000" }),
   });
-  // 404 or 422 with valid auth = key works
   if (res.status === 401 || res.status === 403) {
     const body = await res.text();
     return { success: false, error: `HTTP ${res.status}`, details: body.slice(0, 200) };
   }
   await res.text();
-  return { success: true, details: `HTTP ${res.status} (auth OK)` };
+  return { success: true, details: `HTTP ${res.status} (auth OK)${customKey ? " – custom key" : ""}` };
 }
 
-async function testJsoncargo(): Promise<{ success: boolean; error?: string; details?: string }> {
-  const key = Deno.env.get("JSONCARGO_API_KEY");
+async function testJsoncargo(customKey?: string): Promise<{ success: boolean; error?: string; details?: string }> {
+  const key = customKey || Deno.env.get("JSONCARGO_API_KEY");
   if (!key) return { success: false, error: "JSONCARGO_API_KEY not configured" };
 
   const res = await fetch("https://api.jsoncargo.com/v1/tracking?bl=TEST0000000", {
@@ -99,11 +98,11 @@ async function testJsoncargo(): Promise<{ success: boolean; error?: string; deta
     return { success: false, error: `HTTP ${res.status}`, details: body.slice(0, 200) };
   }
   await res.text();
-  return { success: true, details: `HTTP ${res.status} (auth OK)` };
+  return { success: true, details: `HTTP ${res.status} (auth OK)${customKey ? " – custom key" : ""}` };
 }
 
-async function testFlightradar(): Promise<{ success: boolean; error?: string; details?: string }> {
-  const key = Deno.env.get("FLIGHTRADAR_API_KEY");
+async function testFlightradar(customKey?: string): Promise<{ success: boolean; error?: string; details?: string }> {
+  const key = customKey || Deno.env.get("FLIGHTRADAR_API_KEY");
   if (!key) return { success: false, error: "FLIGHTRADAR_API_KEY not configured" };
 
   const res = await fetch("https://fr24api.flightradar24.com/api/static/airlines/lite", {
@@ -114,12 +113,22 @@ async function testFlightradar(): Promise<{ success: boolean; error?: string; de
     return { success: false, error: `HTTP ${res.status}`, details: body.slice(0, 200) };
   }
   await res.text();
-  return { success: true, details: `HTTP ${res.status}` };
+  return { success: true, details: `HTTP ${res.status}${customKey ? " – custom key" : ""}` };
 }
 
-async function testHapag(): Promise<{ success: boolean; error?: string; details?: string }> {
-  const clientId = Deno.env.get("HAPAG_CLIENT_ID");
-  const apiKey = Deno.env.get("HAPAG_API_KEY");
+async function testHapag(customKey?: string): Promise<{ success: boolean; error?: string; details?: string }> {
+  // For Hapag, customKey format: "clientId:apiKey"
+  let clientId: string | undefined;
+  let apiKey: string | undefined;
+  if (customKey) {
+    const parts = customKey.split(":");
+    if (parts.length !== 2) return { success: false, error: "Formato: CLIENT_ID:API_KEY" };
+    clientId = parts[0];
+    apiKey = parts[1];
+  } else {
+    clientId = Deno.env.get("HAPAG_CLIENT_ID");
+    apiKey = Deno.env.get("HAPAG_API_KEY");
+  }
   if (!clientId || !apiKey) return { success: false, error: "HAPAG_CLIENT_ID or HAPAG_API_KEY not configured" };
 
   const res = await fetch("https://api.hlag.com/hlag/auth/oauth/anonymous/token", {
@@ -132,11 +141,11 @@ async function testHapag(): Promise<{ success: boolean; error?: string; details?
     return { success: false, error: `HTTP ${res.status}`, details: body.slice(0, 200) };
   }
   await res.text();
-  return { success: true };
+  return { success: true, details: customKey ? "custom key" : "env secret" };
 }
 
-async function testFirecrawl(): Promise<{ success: boolean; error?: string; details?: string }> {
-  const key = Deno.env.get("FIRECRAWL_API_KEY");
+async function testFirecrawl(customKey?: string): Promise<{ success: boolean; error?: string; details?: string }> {
+  const key = customKey || Deno.env.get("FIRECRAWL_API_KEY");
   if (!key) return { success: false, error: "FIRECRAWL_API_KEY not configured" };
 
   const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
@@ -152,10 +161,10 @@ async function testFirecrawl(): Promise<{ success: boolean; error?: string; deta
     return { success: false, error: `HTTP ${res.status}`, details: body.slice(0, 200) };
   }
   await res.text();
-  return { success: true, details: `HTTP ${res.status}` };
+  return { success: true, details: `HTTP ${res.status}${customKey ? " – custom key" : ""}` };
 }
 
-const testers: Record<string, () => Promise<{ success: boolean; error?: string; details?: string }>> = {
+const testers: Record<string, (customKey?: string) => Promise<{ success: boolean; error?: string; details?: string }>> = {
   gemini: testGemini,
   anthropic: testAnthropic,
   resend: testResend,
@@ -172,7 +181,7 @@ serve(async (req) => {
   }
 
   try {
-    const { apiName } = await req.json();
+    const { apiName, customKey } = await req.json();
     const tester = testers[apiName];
     if (!tester) {
       return new Response(JSON.stringify({ success: false, error: `Unknown API: ${apiName}` }), {
@@ -182,7 +191,7 @@ serve(async (req) => {
     }
 
     const start = Date.now();
-    const result = await tester();
+    const result = await tester(customKey || undefined);
     const responseTimeMs = Date.now() - start;
 
     return new Response(JSON.stringify({ ...result, responseTimeMs }), {
