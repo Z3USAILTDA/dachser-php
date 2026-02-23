@@ -316,3 +316,6 @@ verify_jwt = false
 
 [functions.test-api-key]
 verify_jwt = false
+
+[functions.parse-manifest-swap]
+verify_jwt = false
