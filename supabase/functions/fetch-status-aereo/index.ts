@@ -512,13 +512,16 @@ serve(async (req) => {
       try {
         const swapInClause = uniqueAwbsForSwap.map(a => `'${a.replace(/'/g, "''")}'`).join(',');
         const [swapRows] = await client.query(`
-          SELECT DISTINCT new_mawb FROM ${database}.t_master_swap_log
+          SELECT DISTINCT old_mawb, new_mawb FROM ${database}.t_master_swap_log
           WHERE TRIM(new_mawb) COLLATE utf8mb4_unicode_ci IN (${swapInClause})
+             OR TRIM(old_mawb) COLLATE utf8mb4_unicode_ci IN (${swapInClause})
         `) as [any[], any];
         const swapList = Array.isArray(swapRows) ? swapRows : [];
         for (const row of swapList) {
-          const mawb = String(row.new_mawb || '').trim();
-          if (mawb) swapChangedSet.add(mawb);
+          const oldM = String(row.old_mawb || '').trim();
+          const newM = String(row.new_mawb || '').trim();
+          if (oldM) swapChangedSet.add(oldM);
+          if (newM) swapChangedSet.add(newM);
         }
         console.log(`Master swap check: ${swapChangedSet.size} AWBs have master_changed=true`);
       } catch (swapErr) {
