@@ -1,33 +1,34 @@
 
 
-# Corrigir busca do modal Voucher Master -- garantir 100% de paridade com a tela principal
+# Otimizar busca do modal Voucher Master -- resolver possivel timeout
 
-## Diagnóstico
+## Diagnostico
 
-A busca do modal (`search_vouchers_for_master`) consulta **apenas** a tabela `t_vouchers`. Porém, a tela principal da Esteira mostra vouchers de **duas fontes**:
+A query `search_vouchers_for_master` esta potencialmente sofrendo timeout por dois motivos principais:
 
-1. **`t_vouchers`** (vouchers ativos) -- estes a busca do modal já cobre
-2. **`t_dados_financeiro_voucher`** (backlog/pendentes RM) -- estes a busca do modal **NÃO** cobre
+1. **LEFT JOIN com COLLATE em runtime** -- a clausula `ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci` forca conversao de charset em cada comparacao, impedindo uso de indices e causando full table scan na `t_dados_financeiro_voucher` (~5.795 registros).
 
-Vouchers que existem apenas no backlog (ainda não foram processados e inseridos em `t_vouchers`) simplesmente não existem na tabela consultada pelo modal.
+2. **7 condicoes OR com LIKE %...%** -- patterns com `%` no inicio nunca usam indice, resultando em scans completos.
 
-Além disso, na própria `t_vouchers`, o campo `nd` da tabela `t_dados_financeiro_voucher` pode ser diferente do `numero_spo`, e a busca atual não faz JOIN com essa tabela.
-
-## Solução
+## Solucao
 
 ### Arquivo: `supabase/functions/mariadb-proxy/index.ts`
 
-Expandir a query `search_vouchers_for_master` para incluir um LEFT JOIN com `t_dados_financeiro_voucher`, permitindo buscar também pelo campo `nd` (que é o identificador usado no backlog). Isso garante que qualquer voucher visível na tela principal possa ser encontrado no modal.
+Otimizar a query de busca:
 
-**Query atualizada:**
+1. **Remover o COLLATE do JOIN** -- usar comparacao direta (ambas as colunas ja devem usar o mesmo charset por padrao no MariaDB)
+2. **Adicionar GROUP BY ou DISTINCT** para evitar duplicatas causadas pelo LEFT JOIN (um voucher pode ter multiplos registros em `t_dados_financeiro_voucher`)
+3. **Adicionar log de tempo** para diagnosticar se a query esta de fato demorando
+
+**Query otimizada:**
 
 ```sql
-SELECT v.id, v.numero_spo, v.fornecedor, v.cnpj_fornecedor, v.valor, v.moeda, 
+SELECT DISTINCT v.id, v.numero_spo, v.fornecedor, v.cnpj_fornecedor, v.valor, v.moeda, 
        v.vencimento, v.etapa_atual, v.filial, v.voucher_master_id, v.is_master, 
-       v.processo_id, dfv.nd as nd_rm
+       v.processo_id
 FROM dados_dachser.t_vouchers v
 LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
-  ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
+  ON dfv.nd = v.numero_spo
 WHERE (
   v.numero_spo LIKE ? 
   OR v.fornecedor LIKE ? 
@@ -42,10 +43,14 @@ ORDER BY v.created_at DESC
 LIMIT 20
 ```
 
-Isso adiciona apenas:
-- Um LEFT JOIN com `t_dados_financeiro_voucher` (mesmo padrão usado na query `get_vouchers_ativos`)
-- Uma condição de busca adicional pelo campo `dfv.nd`
-- Um parâmetro extra nos bindings da query
+Mudancas:
+- Removido `COLLATE utf8mb4_general_ci` de ambos os lados do JOIN (causa principal de lentidao)
+- Adicionado `DISTINCT` para evitar linhas duplicadas
+- Removido `dfv.nd as nd_rm` do SELECT (nao era usado no frontend)
+- Adicionado log de tempo de execucao (`console.log` com `Date.now()` antes e depois da query)
 
-Nenhum outro arquivo precisa ser alterado.
+### Arquivo: `src/components/esteira/VoucherMasterForm.tsx`
 
+Aumentar o debounce de 300ms para 500ms para reduzir chamadas desnecessarias enquanto o usuario digita.
+
+Nenhuma outra alteracao necessaria.
