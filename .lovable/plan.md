@@ -1,33 +1,35 @@
 
 
-# Correção do Teste de API Key do Gemini
+# Correção: Busca por Número Inteiro no Modal de Voucher Master
 
-## Problema Identificado
+## Problema
 
-Na edge function `test-api-key/index.ts`, o teste do Gemini usa o modelo `gemini-2.0-flash`:
-
-```
-https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}
-```
-
-Este modelo pode estar indisponível ou depreciado, causando erro HTTP mesmo com uma chave válida. O projeto já usa `gemini-2.5-flash-preview-05-20` em outras funções (como `parse-invoice-pdf`), confirmando que a chave funciona com modelos mais recentes.
+No modal de criação de Voucher Master, ao buscar vouchers para consolidar, a query SQL só procura nos campos `numero_spo` e `fornecedor`. Quando o usuário digita o número inteiro do voucher (ex: o ID numérico), a busca não retorna resultados porque esse campo não está incluído na consulta.
 
 ## Solução
 
-Atualizar o modelo usado no teste para `gemini-2.5-flash`, que é estável e compatível com a chave configurada.
+Expandir a query SQL na action `search_vouchers_for_master` do `mariadb-proxy` para incluir também os campos `id` e `id_rm` na busca, permitindo encontrar vouchers pelo número inteiro.
 
 ## Detalhes Técnicos
 
-### Arquivo: `supabase/functions/test-api-key/index.ts`
+### Arquivo: `supabase/functions/mariadb-proxy/index.ts`
 
-Alterar a URL na função `testGemini` de:
+Na action `search_vouchers_for_master` (linha ~8608), alterar a query SQL de:
+
+```sql
+WHERE (numero_spo LIKE ? OR fornecedor LIKE ?)
 ```
-gemini-2.0-flash:generateContent
-```
+
 Para:
-```
-gemini-2.5-flash:generateContent
+
+```sql
+WHERE (numero_spo LIKE ? OR fornecedor LIKE ? OR CAST(id AS CHAR) = ? OR CAST(id_rm AS CHAR) = ?)
 ```
 
-Esta é uma alteração de uma única linha. Nenhum outro arquivo precisa ser modificado.
+Isso permite que o usuário encontre um voucher digitando:
+- O numero_spo parcial (ex: "SPO-123")
+- O nome do fornecedor
+- O ID numérico exato do voucher
+- O ID do RM
 
+Os parâmetros da query serão ajustados para passar o valor de busca também como match exato para os campos numéricos.
