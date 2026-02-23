@@ -1,52 +1,68 @@
 
 
-# Filtrar DLV e aplicar retencao de 5 dias para ARR - DESTINO
+# Corrigir AWB 016-05474254 sumindo da tela
 
 ## Problema
 
-Atualmente, a edge function `fetch-status-aereo` retorna **todos** os AWBs sem filtrar por status final. Isso causa:
+O AWB 016-05474254 desapareceu porque o fluxo atual faz o seguinte:
 
-1. AWBs com status **DLV** (entregues) continuam aparecendo na lista de tracking
-2. AWBs com status **ARR - DESTINO** nao somem apos 5 dias
+1. O `last_status_code` no banco e "RCF"
+2. `classifyArrival("RCF")` retorna "RCF" (so processa status "ARR")
+3. O `crossCheck` encontra "DELIVERED" na timeline e sobrescreve para "DLV"
+4. O novo filtro de visibilidade remove todos os DLV -- o AWB some
+
+O usuario espera ver "ARR - CONEXAO" porque a carga chegou em um ponto de conexao.
+
+## Causa Raiz
+
+O `resolveUnkFromTimeline` retorna o evento **mais recente** da timeline (ordenado por data DESC). Se o evento mais recente for "DELIVERED", ele sobrescreve qualquer status anterior. Mas para AWBs com conexao, o evento de ARR no ponto intermediario e o que importa operacionalmente.
 
 ## Solucao
 
-Aplicar dois filtros no backend (`supabase/functions/fetch-status-aereo/index.ts`) apos o processamento (PASSO 3), antes de retornar os dados:
+Adicionar uma verificacao **antes** de aceitar DLV como status final: se a timeline contem um evento ARR que classifica como `ARR - CONEXAO` ou `ARR - DESTINO`, esse status tem precedencia sobre DLV. Isso garante:
 
-1. **Remover DLV**: Excluir todos os registros cujo `finalStatus` seja `DLV` ou `DELIVERED`
-2. **Retencao ARR - DESTINO por 5 dias**: Para registros com status `ARR - DESTINO`, manter visivel apenas se a `ultima atualizacao` (scraped_at) for dos ultimos 5 dias. Apos 5 dias, o registro e removido da resposta.
+- AWBs em conexao mostram "ARR - CONEXAO" (barra laranja)
+- AWBs que chegaram no destino mostram "ARR - DESTINO" (retido 5 dias)
+- DLV so e aplicado quando nao ha evidencia de conexao/destino pendente
 
 ## Detalhes Tecnicos
 
 **Arquivo**: `supabase/functions/fetch-status-aereo/index.ts`
 
-Apos a construcao do array `processedRows` (linha ~650), adicionar um filtro antes de retornar:
+### Mudanca 1: Proteger contra override DLV quando ha ARR classificavel
+
+No bloco do crossCheck (linhas 581-587), apos determinar `timelineStatus`, verificar se aceitar DLV faria perder uma classificacao ARR - CONEXAO/DESTINO:
 
 ```typescript
-// Filtrar: remover DLV e ARR-DESTINO com mais de 5 dias
-const now = Date.now();
-const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
-
-const visibleRows = processedRows.filter((row: any) => {
-  const status = (row['último_status'] || '').toUpperCase().trim();
-
-  // 1. Nunca mostrar DLV
-  if (status === 'DLV' || status === 'DELIVERED') return false;
-
-  // 2. ARR - DESTINO: manter por 5 dias
-  if (status === 'ARR - DESTINO') {
-    const updatedAt = row['última atualização'];
-    if (!updatedAt) return true; // sem data, manter por seguranca
-    const updatedTime = new Date(updatedAt).getTime();
-    if (isNaN(updatedTime)) return true;
-    return (now - updatedTime) <= FIVE_DAYS_MS;
+} else if (finalStatus && finalStatus.toUpperCase() !== 'UNK') {
+  const timelineStatus = resolveUnkFromTimeline(timelineStr, awb);
+  if (timelineStatus && timelineStatus !== finalStatus && isMoreSpecific(finalStatus, timelineStatus)) {
+    // Se crossCheck quer aplicar DLV, verificar se existe ARR classificavel
+    if (timelineStatus === 'DLV') {
+      const arrCheck = classifyArrival('ARR', timelineStr, destForClassify, origForClassify, awb);
+      if (arrCheck && arrCheck !== 'ARR') {
+        // Ha ARR - CONEXAO ou ARR - DESTINO na timeline, preferir esse status
+        console.log(`[crossCheck] ${awb}: DLV blocked, using ${arrCheck} instead`);
+        finalStatus = arrCheck;
+      } else {
+        finalStatus = timelineStatus; // aceitar DLV normalmente
+      }
+    } else {
+      console.log(`[crossCheck] ${awb}: last_status="${finalStatus}" vs timeline="${timelineStatus}" -> prefer timeline`);
+      finalStatus = timelineStatus;
+    }
   }
-
-  return true;
-});
+}
 ```
 
-Alterar o `return` final para usar `visibleRows` em vez de `processedRows`.
+### Mudanca 2: Mesma protecao no bloco UNK (linhas 588-594)
+
+Aplicar a mesma logica quando `resolveUNK` retorna DLV para um AWB que tem ARR classificavel na timeline.
+
+### Resultado esperado
+
+- AWB 016-05474254: em vez de DLV (removido), mostrara "ARR - CONEXAO" (visivel)
+- AWBs que realmente sao DLV sem evento ARR intermediario continuam sendo filtrados
+- AWBs com ARR - DESTINO continuam retidos por 5 dias antes de sumir
 
 Apos a mudanca, redeploy da edge function `fetch-status-aereo`.
-
