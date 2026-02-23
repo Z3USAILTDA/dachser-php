@@ -7928,6 +7928,7 @@ serve(async (req) => {
       const d = bodyData || {};
       const newMawb = d.new_mawb;
       const hawbs: string[] = d.hawbs || [];
+      const swappedBy = d.swapped_by || 'SISTEMA';
 
       if (!newMawb || !hawbs.length) {
         return new Response(JSON.stringify({ error: 'new_mawb e hawbs são obrigatórios' }), {
@@ -7945,6 +7946,20 @@ serve(async (req) => {
       });
 
       try {
+        // Ensure t_master_swap_log table exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS dados_dachser.t_master_swap_log (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            hawb_number VARCHAR(100),
+            old_mawb VARCHAR(100),
+            new_mawb VARCHAR(100),
+            swapped_by VARCHAR(100),
+            swapped_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_new_mawb (new_mawb),
+            INDEX idx_hawb (hawb_number)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+        `);
+
         const updated: string[] = [];
         const notFound: string[] = [];
         const oldMawbs: Record<string, string> = {};
@@ -7957,14 +7972,20 @@ serve(async (req) => {
           );
 
           if (rows && rows.length > 0) {
-            oldMawbs[hawb] = rows[0].awb_number || '';
+            const oldMawb = rows[0].awb_number || '';
+            oldMawbs[hawb] = oldMawb;
             // Update to new MAWB
             await client.execute(
               `UPDATE dados_dachser.t_cadastro_aereo SET awb_number = ? WHERE hawb_number = ?`,
               [newMawb, hawb]
             );
+            // Log the swap
+            await client.execute(
+              `INSERT INTO dados_dachser.t_master_swap_log (hawb_number, old_mawb, new_mawb, swapped_by) VALUES (?, ?, ?, ?)`,
+              [hawb, oldMawb, newMawb, swappedBy]
+            );
             updated.push(hawb);
-            console.log(`[swap_master] Updated HAWB ${hawb}: ${oldMawbs[hawb]} -> ${newMawb}`);
+            console.log(`[swap_master] Updated HAWB ${hawb}: ${oldMawb} -> ${newMawb} (logged)`);
           } else {
             notFound.push(hawb);
             console.log(`[swap_master] HAWB ${hawb} not found in t_cadastro_aereo`);
