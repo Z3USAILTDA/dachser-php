@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { FilePlus, Upload, Loader2, Save, Search, User, Calendar } from "lucide-react";
+import { FilePlus, Upload, Loader2, Save, Search, User, Calendar, RefreshCw, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import { PageLayout } from "@/components/layout/PageLayout";
-
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 interface ConsigneeSuggestion {
   nome_cliente: string;
   cnpj: string;
@@ -85,12 +86,32 @@ const emptyForm: FormData = {
   clerk: "", clerk_email: "", etd: "", eta: "",
 };
 
+interface ManifestHawb {
+  hawb_number: string;
+  shipper: string;
+  consignee: string;
+  cnpj?: string;
+  dep_des?: string;
+  pieces?: number;
+  weight?: number;
+  old_mawb?: string; // filled after DB lookup
+}
+
 const CadastroNova = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState<FormData>({ ...emptyForm });
   const [isExtracting, setIsExtracting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [fileName, setFileName] = useState("");
+
+  // Swap Master state
+  const [swapFile, setSwapFile] = useState<string>("");
+  const [isExtractingSwap, setIsExtractingSwap] = useState(false);
+  const [swapMawb, setSwapMawb] = useState("");
+  const [swapHawbs, setSwapHawbs] = useState<ManifestHawb[]>([]);
+  const [isLoadingOldMawbs, setIsLoadingOldMawbs] = useState(false);
+  const [isSwapping, setIsSwapping] = useState(false);
+  const [swapResult, setSwapResult] = useState<{ updated: string[]; notFound: string[] } | null>(null);
 
   // Consignee autocomplete state
   const [consigneeSearch, setConsigneeSearch] = useState("");
@@ -303,6 +324,101 @@ const CadastroNova = () => {
       toast.error("Erro ao salvar", { description: e.message });
     }
     setIsSaving(false);
+  };
+
+  // === Swap Master Functions ===
+  const handleSwapFileUpload = async (file: File) => {
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      toast.error("Apenas arquivos PDF são aceitos.");
+      return;
+    }
+    setSwapFile(file.name);
+    setIsExtractingSwap(true);
+    setSwapResult(null);
+    setSwapHawbs([]);
+    setSwapMawb("");
+    try {
+      const fd = new window.FormData();
+      fd.append("file", file);
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-manifest-swap`,
+        { method: "POST", headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` }, body: fd }
+      );
+      const result = await res.json();
+      if (!res.ok || !result.success) throw new Error(result.error || "Erro na extração");
+
+      const data = result.data;
+      setSwapMawb(data.mawb || "");
+      const hawbList: ManifestHawb[] = (data.hawbs || []).map((h: any) => ({
+        hawb_number: h.hawb_number || "",
+        shipper: h.shipper || "",
+        consignee: h.consignee || "",
+        cnpj: h.cnpj || "",
+        dep_des: h.dep_des || "",
+        pieces: h.pieces || null,
+        weight: h.weight || null,
+        old_mawb: undefined,
+      }));
+      setSwapHawbs(hawbList);
+      toast.success(`Manifesto extraído: ${hawbList.length} HAWBs`, { description: `MAWB: ${data.mawb} (${result.processingTimeMs}ms)` });
+    } catch (e: any) {
+      toast.error("Erro ao extrair manifesto", { description: e.message });
+    }
+    setIsExtractingSwap(false);
+  };
+
+  const handleConfirmSwap = async () => {
+    if (!swapMawb || swapHawbs.length === 0) return;
+    setIsSwapping(true);
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy`,
+        {
+          method: "POST",
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: "swap_master_cadastro_aereo",
+            new_mawb: swapMawb,
+            hawbs: swapHawbs.map(h => h.hawb_number),
+            user: user.username || "unknown",
+          }),
+        }
+      );
+      const result = await res.json();
+      if (!res.ok || !result.success) throw new Error(result.error || "Erro na troca");
+
+      setSwapResult({ updated: result.updated || [], notFound: result.not_found || [] });
+
+      // Update old_mawbs in preview
+      if (result.old_mawbs) {
+        setSwapHawbs(prev => prev.map(h => ({
+          ...h,
+          old_mawb: result.old_mawbs[h.hawb_number] || undefined,
+        })));
+      }
+
+      if (result.updated_count > 0) {
+        toast.success(`${result.updated_count} HAWB(s) atualizados!`, {
+          description: result.not_found_count > 0 ? `${result.not_found_count} não encontrado(s)` : undefined,
+        });
+      } else {
+        toast.warning("Nenhum HAWB encontrado no banco.");
+      }
+    } catch (e: any) {
+      toast.error("Erro na troca de master", { description: e.message });
+    }
+    setIsSwapping(false);
+  };
+
+  const resetSwap = () => {
+    setSwapFile("");
+    setSwapMawb("");
+    setSwapHawbs([]);
+    setSwapResult(null);
   };
 
   const Field = ({ label, field, type = "text", span2 = false }: { label: string; field: keyof FormData; type?: string; span2?: boolean }) => (
@@ -534,6 +650,137 @@ const CadastroNova = () => {
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Salvar Cadastro
           </Button>
+        </div>
+
+        {/* ========= TROCA DE MASTER (MANIFESTO) ========= */}
+        <div className="border-t border-border/50 pt-6">
+          <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+            <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
+              <RefreshCw className="h-4 w-4" /> Troca de Master (Manifesto)
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Faça upload de um PDF de manifesto DACHSER para trocar o MAWB de processos existentes em t_cadastro_aereo.
+            </p>
+
+            {/* Upload zone for manifest */}
+            <div
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => {
+                e.preventDefault();
+                const file = e.dataTransfer.files[0];
+                if (file) handleSwapFileUpload(file);
+              }}
+              className="border-2 border-dashed border-accent/40 rounded-xl p-6 text-center hover:border-accent/70 transition-colors cursor-pointer"
+              onClick={() => {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = ".pdf";
+                input.onchange = e => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  if (file) handleSwapFileUpload(file);
+                };
+                input.click();
+              }}
+            >
+              {isExtractingSwap ? (
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="h-6 w-6 animate-spin text-accent" />
+                  <p className="text-sm text-muted-foreground">Extraindo dados do manifesto...</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2">
+                  <Upload className="h-6 w-6 text-accent/60" />
+                  <p className="text-sm text-muted-foreground">
+                    {swapFile ? `Arquivo: ${swapFile}` : "Arraste um PDF de Manifesto ou clique para selecionar"}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Preview table */}
+            {swapHawbs.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      Novo MAWB: {swapMawb}
+                    </Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      {swapHawbs.length} HAWB(s)
+                    </Badge>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={resetSwap} className="text-xs">
+                    Limpar
+                  </Button>
+                </div>
+
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>HAWB</TableHead>
+                        <TableHead>Shipper</TableHead>
+                        <TableHead>CNEE</TableHead>
+                        <TableHead>Dep/Des</TableHead>
+                        <TableHead className="text-right">Peso (kg)</TableHead>
+                        <TableHead>MAWB Novo</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {swapHawbs.map((h, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="font-mono text-xs">{h.hawb_number}</TableCell>
+                          <TableCell className="text-xs max-w-[200px] truncate">{h.shipper}</TableCell>
+                          <TableCell className="text-xs max-w-[200px] truncate">{h.consignee}</TableCell>
+                          <TableCell className="text-xs">{h.dep_des || "-"}</TableCell>
+                          <TableCell className="text-xs text-right">{h.weight || "-"}</TableCell>
+                          <TableCell className="font-mono text-xs text-primary">{swapMawb}</TableCell>
+                          <TableCell>
+                            {swapResult ? (
+                              swapResult.updated.includes(h.hawb_number) ? (
+                                <CheckCircle2 className="h-4 w-4 text-chart-2" />
+                              ) : (
+                                <AlertTriangle className="h-4 w-4 text-destructive" />
+                              )
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Swap result summary */}
+                {swapResult && (
+                  <div className="flex gap-3 text-xs">
+                    {swapResult.updated.length > 0 && (
+                      <span className="text-chart-2">✓ {swapResult.updated.length} atualizado(s)</span>
+                    )}
+                    {swapResult.notFound.length > 0 && (
+                      <span className="text-destructive">⚠ {swapResult.notFound.length} não encontrado(s): {swapResult.notFound.join(", ")}</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Confirm button */}
+                {!swapResult && (
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={handleConfirmSwap}
+                      disabled={isSwapping || !swapMawb}
+                      className="gap-2"
+                    >
+                      {isSwapping ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                      Confirmar Troca
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </PageLayout>

@@ -7912,6 +7912,87 @@ serve(async (req) => {
       }
     }
 
+    // ===== SWAP MASTER CADASTRO AEREO =====
+    if (action === 'swap_master_cadastro_aereo') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const d = bodyData || {};
+      const newMawb = d.new_mawb;
+      const hawbs: string[] = d.hawbs || [];
+
+      if (!newMawb || !hawbs.length) {
+        return new Response(JSON.stringify({ error: 'new_mawb e hawbs são obrigatórios' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        const updated: string[] = [];
+        const notFound: string[] = [];
+        const oldMawbs: Record<string, string> = {};
+
+        for (const hawb of hawbs) {
+          // Find current MAWB for this HAWB
+          const rows = await client.query(
+            `SELECT awb_number FROM dados_dachser.t_cadastro_aereo WHERE hawb_number = ? LIMIT 1`,
+            [hawb]
+          );
+
+          if (rows && rows.length > 0) {
+            oldMawbs[hawb] = rows[0].awb_number || '';
+            // Update to new MAWB
+            await client.execute(
+              `UPDATE dados_dachser.t_cadastro_aereo SET awb_number = ? WHERE hawb_number = ?`,
+              [newMawb, hawb]
+            );
+            updated.push(hawb);
+            console.log(`[swap_master] Updated HAWB ${hawb}: ${oldMawbs[hawb]} -> ${newMawb}`);
+          } else {
+            notFound.push(hawb);
+            console.log(`[swap_master] HAWB ${hawb} not found in t_cadastro_aereo`);
+          }
+        }
+
+        await client.close();
+
+        return new Response(JSON.stringify({
+          success: true,
+          new_mawb: newMawb,
+          updated_count: updated.length,
+          not_found_count: notFound.length,
+          updated,
+          not_found: notFound,
+          old_mawbs: oldMawbs,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[swap_master] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     return new Response(JSON.stringify({ error: 'Ação não reconhecida' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
