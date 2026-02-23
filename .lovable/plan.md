@@ -1,68 +1,55 @@
 
 
-# Corrigir AWB 016-05474254 sumindo da tela
+# Tela de Teste de API Keys (Admin Z3US)
 
-## Problema
+## Objetivo
+Criar uma nova pagina em `/admin/api-test` acessivel apenas para admins Z3US, onde e possivel testar se as chaves de API configuradas estao funcionando corretamente.
 
-O AWB 016-05474254 desapareceu porque o fluxo atual faz o seguinte:
+## O que a tela faz
 
-1. O `last_status_code` no banco e "RCF"
-2. `classifyArrival("RCF")` retorna "RCF" (so processa status "ARR")
-3. O `crossCheck` encontra "DELIVERED" na timeline e sobrescreve para "DLV"
-4. O novo filtro de visibilidade remove todos os DLV -- o AWB some
+A pagina exibe uma lista de APIs do sistema (Gemini, Anthropic, Resend, Leadcomex, Firecrawl, FlightRadar24, JSONCargo, Hapag-Lloyd) com um botao "Testar" para cada uma. Ao clicar, uma edge function faz uma chamada minima a cada API e retorna se a chave esta valida ou nao, junto com o tempo de resposta.
 
-O usuario espera ver "ARR - CONEXAO" porque a carga chegou em um ponto de conexao.
-
-## Causa Raiz
-
-O `resolveUnkFromTimeline` retorna o evento **mais recente** da timeline (ordenado por data DESC). Se o evento mais recente for "DELIVERED", ele sobrescreve qualquer status anterior. Mas para AWBs com conexao, o evento de ARR no ponto intermediario e o que importa operacionalmente.
-
-## Solucao
-
-Adicionar uma verificacao **antes** de aceitar DLV como status final: se a timeline contem um evento ARR que classifica como `ARR - CONEXAO` ou `ARR - DESTINO`, esse status tem precedencia sobre DLV. Isso garante:
-
-- AWBs em conexao mostram "ARR - CONEXAO" (barra laranja)
-- AWBs que chegaram no destino mostram "ARR - DESTINO" (retido 5 dias)
-- DLV so e aplicado quando nao ha evidencia de conexao/destino pendente
+### Layout
+- Header com titulo "Teste de API Keys"
+- Grid de cards, um para cada API, mostrando:
+  - Nome da API
+  - Status: "Nao testado", "Testando...", "OK" (verde), "Erro" (vermelho)
+  - Tempo de resposta (quando testado)
+  - Mensagem de erro (quando falhar)
+  - Botao "Testar"
+- Botao global "Testar Todas" no topo
 
 ## Detalhes Tecnicos
 
-**Arquivo**: `supabase/functions/fetch-status-aereo/index.ts`
+### Arquivo 1: `src/pages/admin/ApiKeyTest.tsx` (novo)
+- Pagina seguindo o padrao visual do projeto (fundo escuro, cards com borda gold)
+- Usa `PageLayout` e `PageCard` existentes
+- Lista de APIs hardcoded com nome e descricao
+- Cada card chama a edge function `test-api-key` passando o nome da API
+- Exibe resultado com badge de status (verde/vermelho/cinza)
 
-### Mudanca 1: Proteger contra override DLV quando ha ARR classificavel
+### Arquivo 2: `supabase/functions/test-api-key/index.ts` (novo)
+- Recebe `{ apiName: string }` no body
+- Faz uma chamada minima para cada API:
+  - **Gemini**: POST para `generativelanguage.googleapis.com` com prompt simples "ping"
+  - **Anthropic**: POST para `api.anthropic.com/v1/messages` com prompt minimo
+  - **Resend**: GET para `api.resend.com/api-keys` (lista chaves, nao envia email)
+  - **Leadcomex**: GET para endpoint de teste
+  - **JSONCargo**: GET para endpoint de status
+  - **FlightRadar24**: GET para endpoint de teste
+  - **Hapag-Lloyd**: GET para endpoint de autenticacao
+  - **Firecrawl**: GET para `api.firecrawl.dev/v1/crawl` (verifica autenticacao)
+- Retorna `{ success: boolean, responseTimeMs: number, error?: string, details?: string }`
+- CORS headers inclusos
 
-No bloco do crossCheck (linhas 581-587), apos determinar `timelineStatus`, verificar se aceitar DLV faria perder uma classificacao ARR - CONEXAO/DESTINO:
+### Arquivo 3: `src/pages/Dashboard.tsx` (modificar)
+- Adicionar novo item no menu ADMIN:
+  ```
+  { label: "Teste de API Keys", href: "/admin/api-test", z3usOnly: true }
+  ```
 
-```typescript
-} else if (finalStatus && finalStatus.toUpperCase() !== 'UNK') {
-  const timelineStatus = resolveUnkFromTimeline(timelineStr, awb);
-  if (timelineStatus && timelineStatus !== finalStatus && isMoreSpecific(finalStatus, timelineStatus)) {
-    // Se crossCheck quer aplicar DLV, verificar se existe ARR classificavel
-    if (timelineStatus === 'DLV') {
-      const arrCheck = classifyArrival('ARR', timelineStr, destForClassify, origForClassify, awb);
-      if (arrCheck && arrCheck !== 'ARR') {
-        // Ha ARR - CONEXAO ou ARR - DESTINO na timeline, preferir esse status
-        console.log(`[crossCheck] ${awb}: DLV blocked, using ${arrCheck} instead`);
-        finalStatus = arrCheck;
-      } else {
-        finalStatus = timelineStatus; // aceitar DLV normalmente
-      }
-    } else {
-      console.log(`[crossCheck] ${awb}: last_status="${finalStatus}" vs timeline="${timelineStatus}" -> prefer timeline`);
-      finalStatus = timelineStatus;
-    }
-  }
-}
-```
+### Arquivo 4: `src/App.tsx` (modificar)
+- Adicionar rota: `<Route path="/admin/api-test" element={<ApiKeyTest />} />`
 
-### Mudanca 2: Mesma protecao no bloco UNK (linhas 588-594)
-
-Aplicar a mesma logica quando `resolveUNK` retorna DLV para um AWB que tem ARR classificavel na timeline.
-
-### Resultado esperado
-
-- AWB 016-05474254: em vez de DLV (removido), mostrara "ARR - CONEXAO" (visivel)
-- AWBs que realmente sao DLV sem evento ARR intermediario continuam sendo filtrados
-- AWBs com ARR - DESTINO continuam retidos por 5 dias antes de sumir
-
-Apos a mudanca, redeploy da edge function `fetch-status-aereo`.
+### Arquivo 5: `supabase/config.toml` (modificar)
+- Adicionar configuracao para a nova edge function com `verify_jwt = false`
