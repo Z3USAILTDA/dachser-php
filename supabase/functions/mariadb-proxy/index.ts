@@ -8606,12 +8606,20 @@ serve(async (req) => {
         }
         
         const vouchers = await client.query(`
-          SELECT id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento, etapa_atual, filial, voucher_master_id, is_master
+          SELECT id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento, etapa_atual, filial, voucher_master_id, is_master, processo_id
           FROM dados_dachser.t_vouchers
-          WHERE (numero_spo LIKE ? OR fornecedor LIKE ? OR CAST(id AS CHAR) = ? OR CAST(id_rm AS CHAR) = ?)
-          ORDER BY numero_spo ASC
+          WHERE (
+            numero_spo LIKE ? 
+            OR fornecedor LIKE ? 
+            OR cnpj_fornecedor LIKE ?
+            OR processo_id LIKE ?
+            OR CAST(id AS CHAR) LIKE ?
+            OR CAST(id_rm AS CHAR) = ?
+          )
+          AND sync_status = 'ATIVO'
+          ORDER BY created_at DESC
           LIMIT 20
-        `, [`%${search}%`, `%${search}%`, search, search]);
+        `, [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, search]);
         
         result = { success: true, data: vouchers || [] };
         break;
