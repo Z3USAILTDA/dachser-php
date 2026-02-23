@@ -1,35 +1,40 @@
 
 
-# Correção: Busca por Número Inteiro no Modal de Voucher Master
+# Correção: Remover filtro de etapa na busca do Voucher Master
 
 ## Problema
 
-No modal de criação de Voucher Master, ao buscar vouchers para consolidar, a query SQL só procura nos campos `numero_spo` e `fornecedor`. Quando o usuário digita o número inteiro do voucher (ex: o ID numérico), a busca não retorna resultados porque esse campo não está incluído na consulta.
+A query `search_vouchers_for_master` no `mariadb-proxy` filtra vouchers por `etapa_atual IN ('OPERACAO', 'A_PROCESSAR', 'FISCAL')`. Vouchers em qualquer outra etapa (RASCUNHO, SUPERVISOR, FINANCEIRO, ROBO, etc.) não aparecem no modal, mesmo sendo visíveis na lista principal.
 
 ## Solução
 
-Expandir a query SQL na action `search_vouchers_for_master` do `mariadb-proxy` para incluir também os campos `id` e `id_rm` na busca, permitindo encontrar vouchers pelo número inteiro.
+Remover o filtro de etapa, permitindo que qualquer voucher (exceto os já consolidados em um master ou que já são master) apareça na busca.
 
 ## Detalhes Técnicos
 
 ### Arquivo: `supabase/functions/mariadb-proxy/index.ts`
 
-Na action `search_vouchers_for_master` (linha ~8608), alterar a query SQL de:
+Na action `search_vouchers_for_master` (linha ~8612), remover a linha:
 
 ```sql
-WHERE (numero_spo LIKE ? OR fornecedor LIKE ?)
+AND etapa_atual IN ('OPERACAO', 'A_PROCESSAR', 'FISCAL')
 ```
 
-Para:
+A query resultante ficará:
 
 ```sql
+SELECT id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento, etapa_atual, filial
+FROM dados_dachser.t_vouchers
 WHERE (numero_spo LIKE ? OR fornecedor LIKE ? OR CAST(id AS CHAR) = ? OR CAST(id_rm AS CHAR) = ?)
+  AND (voucher_master_id IS NULL OR voucher_master_id = '')
+  AND (is_master IS NULL OR is_master = 0)
+ORDER BY numero_spo ASC
+LIMIT 20
 ```
 
-Isso permite que o usuário encontre um voucher digitando:
-- O numero_spo parcial (ex: "SPO-123")
-- O nome do fornecedor
-- O ID numérico exato do voucher
-- O ID do RM
+Os filtros que permanecem garantem que:
+- O voucher ainda não pertence a outro master
+- O voucher não é ele próprio um master
 
-Os parâmetros da query serão ajustados para passar o valor de busca também como match exato para os campos numéricos.
+Esta é uma alteração de uma única linha. Nenhum outro arquivo precisa ser modificado.
+
