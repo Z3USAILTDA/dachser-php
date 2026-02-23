@@ -1,93 +1,58 @@
 
 
-## Melhoria: Badge e Timeline "Novo Master" no Rastreio Aereo
+## Adicionar opcao manual "Forcar Novo Master" na tabela de rastreio
 
-### Resumo
+### Objetivo
 
-Quando um processo tiver o master (MAWB) atualizado via "Troca de Master", duas coisas acontecerao:
-
-1. Na **tabela principal** de rastreio (/air/tracking), um badge amarelo "Novo Master" aparecera ao lado do AWB
-2. Na **timeline de eventos** (modal), um evento sintetico "NOVO MASTER" sera injetado com a data da troca e detalhes do master antigo/novo
+Permitir que o usuario force manualmente a marcacao de "Novo Master" em qualquer AWB da tabela de rastreio, inserindo um registro em `t_master_swap_log` via `olimpo-proxy`. Isso permite testar visualmente o badge e o evento sintetico na timeline sem precisar de uma troca real de master.
 
 ### Etapas
 
-**1. Criar tabela de log no MariaDB**
+**1. Nova acao no olimpo-proxy: `force_master_swap_log`**
 
-Adicionar uma nova tabela `dados_dachser.t_master_swap_log` para registrar cada troca de master, via olimpo-proxy:
+Criar uma acao simples que recebe `awb` (MAWB atual), `old_mawb` (valor ficticio ou informado), e `hawb` opcional. Ela insere diretamente em `t_master_swap_log` sem precisar atualizar `t_cadastro_aereo`.
 
-```text
-t_master_swap_log
-- id (INT AUTO_INCREMENT)
-- hawb_number (VARCHAR)
-- old_mawb (VARCHAR)
-- new_mawb (VARCHAR)
-- swapped_by (VARCHAR)
-- swapped_at (DATETIME, default NOW())
-```
+Parametros:
+- `awb` - o MAWB atual (sera gravado como `new_mawb`)
+- `old_mawb` - o master antigo (pode ser informado ou gerado como "000-00000000")
+- `hawb` - opcional
 
-**2. Atualizar olimpo-proxy (swap_master_cadastro_aereo)**
+**2. Atualizar Index.tsx**
 
-Apos atualizar o `t_cadastro_aereo`, inserir um registro em `t_master_swap_log` para cada HAWB atualizado com sucesso, gravando old_mawb, new_mawb, usuario e timestamp.
+Na coluna de acoes de cada linha (onde ja existem os botoes "Ver Timeline" e "Abrir Rastreio Externo"), adicionar um terceiro botao com icone `RefreshCw` e tooltip "Forcar Novo Master".
 
-**3. Atualizar fetch-status-aereo**
+Ao clicar:
+- Abre um pequeno dialog pedindo o "Master antigo" (com valor padrao "000-00000000")
+- Ao confirmar, chama `olimpo-proxy` com a acao `force_master_swap_log`
+- Exibe toast de sucesso
+- Recarrega os dados (`fetchStatusAereoData`) para o badge aparecer
 
-No retorno dos dados, fazer LEFT JOIN com `t_master_swap_log` para verificar se o AWB (MAWB atual) aparece como `new_mawb`. Se sim, adicionar `master_changed: true` no objeto retornado.
+**3. Recarregar dados apos a insercao**
 
-**4. Atualizar Index.tsx (tabela de rastreio)**
+Apos a insercao bem-sucedida, a funcao `fetchStatusAereoData` sera chamada novamente para que o `LEFT JOIN` com `t_master_swap_log` retorne `master_changed: true` e o badge "Novo Master" apareca imediatamente.
 
-- Adicionar campo `master_changed?: boolean` na interface `AWBData`
-- Mapear o campo no `fetchStatusAereoData`
-- Na coluna do AWB (linha ~2634), renderizar um badge "Novo Master" quando `master_changed === true`:
-
-```text
-  AWB: 020-12345678  [Novo Master]
-```
-
-Badge com estilo amarelo/dourado (bg-amber-500/15, text-amber-400) para destaque visual sem indicar erro.
-
-**5. Atualizar mariadb-proxy (get_awb_tracking_events)**
-
-Apos montar a timeline de eventos, consultar `t_master_swap_log` pelo AWB. Para cada registro encontrado, injetar um evento sintetico na timeline:
-
-```text
-codigo_evento: "NOVO_MASTER"
-descricao_evento: "Master atualizado: 020-OLD -> 020-NEW"
-data_hora_evento: swapped_at
-fonte: "SISTEMA"
-aeroporto: ""
-```
-
-**6. Atualizar AwbTimelineModal**
-
-Adicionar estilo visual para o codigo "NOVO_MASTER":
-- Icone: RefreshCw (troca/rotacao)
-- Cor: amber/dourado (bg-amber-500/20, text-amber-400)
-
-### Arquivos Modificados
+### Detalhes tecnicos
 
 | Arquivo | Alteracao |
 |---|---|
-| `supabase/functions/olimpo-proxy/index.ts` | Criar tabela + inserir log na acao swap_master |
-| `supabase/functions/fetch-status-aereo/index.ts` | LEFT JOIN com t_master_swap_log, retornar master_changed |
-| `supabase/functions/mariadb-proxy/index.ts` | Injetar evento sintetico NOVO_MASTER na timeline |
-| `src/pages/Index.tsx` | Badge "Novo Master" na coluna AWB |
-| `src/components/air/AwbTimelineModal.tsx` | Estilo visual para evento NOVO_MASTER |
+| `supabase/functions/olimpo-proxy/index.ts` | Nova acao `force_master_swap_log` que insere em `t_master_swap_log` |
+| `src/pages/Index.tsx` | Botao "Forcar Novo Master" na coluna de acoes + dialog simples + chamada ao olimpo-proxy + reload dos dados |
 
-### Fluxo Completo
+### Fluxo
 
 ```text
-Troca de Master (CadastroNova)
+Usuario clica "Forcar Novo Master" no AWB 020-12345678
     |
     v
-olimpo-proxy: UPDATE t_cadastro_aereo + INSERT t_master_swap_log
+Dialog: informa master antigo (default: 000-00000000)
     |
     v
-fetch-status-aereo: LEFT JOIN t_master_swap_log -> master_changed=true
+olimpo-proxy (force_master_swap_log): INSERT INTO t_master_swap_log
     |
     v
-Index.tsx: Badge [Novo Master] ao lado do AWB
+Reload fetchStatusAereoData -> master_changed = true
     |
     v
-AwbTimelineModal: Evento sintetico "NOVO_MASTER" na timeline
+Badge [Novo Master] aparece + evento sintetico na timeline
 ```
 
