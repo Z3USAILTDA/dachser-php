@@ -442,7 +442,7 @@ const Index = () => {
     etd: null,
   });
   const [forceSwapDialog, setForceSwapDialog] = useState<{ open: boolean; awb: string }>({ open: false, awb: "" });
-  const [forceSwapOldMawb, setForceSwapOldMawb] = useState("000-00000000");
+  const [forceSwapNewMawb, setForceSwapNewMawb] = useState("");
   const [forceSwapLoading, setForceSwapLoading] = useState(false);
   const isPausedRef = useRef(false);
   const shouldSendEmailsRef = useRef(false); // Only send emails when user explicitly clicks button
@@ -2993,7 +2993,7 @@ const Index = () => {
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => {
-                                          setForceSwapOldMawb("000-00000000");
+                                          setForceSwapNewMawb("");
                                           setForceSwapDialog({ open: true, awb: awb.awb });
                                         }}
                                         className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 h-8 w-8 p-0"
@@ -3254,11 +3254,11 @@ const Index = () => {
           </DialogHeader>
           <div className="mt-4 space-y-4">
             <div>
-              <Label className="text-[#aaaaaa] text-sm">Master Antigo</Label>
+              <Label className="text-[#aaaaaa] text-sm">Novo Master (AWB que substituirá)</Label>
               <Input
-                value={forceSwapOldMawb}
-                onChange={(e) => setForceSwapOldMawb(e.target.value)}
-                placeholder="000-00000000"
+                value={forceSwapNewMawb}
+                onChange={(e) => setForceSwapNewMawb(e.target.value)}
+                placeholder="Ex: 020-12345678"
                 className="mt-1 bg-[rgba(255,255,255,.05)] border-[rgba(255,255,255,.12)] text-[#f5f5f5]"
               />
             </div>
@@ -3280,12 +3280,12 @@ const Index = () => {
                     const { data, error } = await supabase.functions.invoke('olimpo-proxy', {
                       body: {
                         action: 'force_master_swap_log',
-                        awb: forceSwapDialog.awb,
-                        old_mawb: forceSwapOldMawb,
+                        awb: forceSwapNewMawb,
+                        old_mawb: forceSwapDialog.awb,
                       }
                     });
                     if (error) throw error;
-                    toast({ title: "Novo Master registrado", description: `${forceSwapOldMawb} → ${forceSwapDialog.awb}` });
+                    toast({ title: "Novo Master registrado", description: `${forceSwapDialog.awb} → ${forceSwapNewMawb}` });
                     setForceSwapDialog({ open: false, awb: "" });
                     await fetchStatusAereoData();
                   } catch (err: any) {
