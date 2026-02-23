@@ -509,9 +509,9 @@ serve(async (req) => {
     const awbInClause = uniqueAwbs.map(a => `'${a.replace(/'/g, "''")}'`).join(',');
 
     const masterQuery = `
-      SELECT DISTINCT TRIM(mawb) as mawb, TRIM(hawb) as hawb, 
+      SELECT TRIM(mawb) as mawb, TRIM(hawb) as hawb, 
              cliente, nome_analista, email_analista, emails_cliente,
-             tipo_processo, tipo_servico, etd
+             tipo_processo, tipo_servico, etd, id_olss, data_insert
       FROM ${database}.t_master_dados
       WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci IN (${awbInClause})
         AND tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
@@ -523,15 +523,35 @@ serve(async (req) => {
     const masterList = Array.isArray(masterRows) ? masterRows : [];
     console.log(`Found ${masterList.length} enrichment records from t_master_dados`);
 
+    // Deduplicate by id_olss (keep newest data_insert), fallback to mawb|hawb
+    const olssMap = new Map<string, any>();
+    const noOlssDeduped: any[] = [];
+    const seenNoOlss = new Set<string>();
+    for (const row of masterList) {
+      const idOlss = row.id_olss ? String(row.id_olss).trim() : null;
+      if (idOlss) {
+        const existing = olssMap.get(idOlss);
+        if (!existing || (row.data_insert && (!existing.data_insert || new Date(row.data_insert) > new Date(existing.data_insert)))) {
+          olssMap.set(idOlss, row);
+        }
+      } else {
+        const mawb = String(row.mawb || '').trim();
+        const hawb = String(row.hawb || '').trim();
+        const dedupeKey = `${mawb}|${hawb}`;
+        if (!seenNoOlss.has(dedupeKey)) {
+          seenNoOlss.add(dedupeKey);
+          noOlssDeduped.push(row);
+        }
+      }
+    }
+    const dedupedMasterList = [...olssMap.values(), ...noOlssDeduped];
+    console.log(`After id_olss dedup: ${dedupedMasterList.length} records (from ${masterList.length})`);
+
     // Build lookup map: MAWB -> array of master data rows (one per HAWB)
     const masterMultiMap = new Map<string, any[]>();
-    const seenHawbs = new Set<string>();
-    for (const row of masterList) {
+    for (const row of dedupedMasterList) {
       const mawb = String(row.mawb || '').trim();
-      const hawb = String(row.hawb || '').trim();
-      const dedupeKey = `${mawb}|${hawb}`;
-      if (mawb && !seenHawbs.has(dedupeKey)) {
-        seenHawbs.add(dedupeKey);
+      if (mawb) {
         if (!masterMultiMap.has(mawb)) {
           masterMultiMap.set(mawb, []);
         }
