@@ -564,6 +564,9 @@ serve(async (req) => {
 
       let finalStatus: string | null = classifiedStatus;
 
+      const destForClassify = ws.destination ? String(ws.destination).trim() : null;
+      const origForClassify = ws.origin ? String(ws.origin).trim() : null;
+
       if (awbPrefix === '014') {
         // Prefixo 014 (Air China Cargo): sempre usar o último evento da timeline,
         // pois seus códigos proprietários nunca mapeiam corretamente
@@ -588,6 +591,15 @@ serve(async (req) => {
         if (resolvedFromTimeline) {
           finalStatus = resolvedFromTimeline;
           console.log(`[resolveUNK] ${awb}: UNK → ${resolvedFromTimeline} (via timeline de-para)`);
+        }
+      }
+
+      // Re-classificar ARR genérico após crossCheck/resolve para determinar CONEXAO/DESTINO
+      if (finalStatus && finalStatus.toUpperCase() === 'ARR') {
+        const reclassified = classifyArrival(finalStatus, timelineStr, destForClassify, origForClassify, awb);
+        if (reclassified && reclassified !== finalStatus) {
+          console.log(`[reClassify] ${awb}: ARR → ${reclassified} (post-crossCheck)`);
+          finalStatus = reclassified;
         }
       }
 
@@ -657,8 +669,37 @@ serve(async (req) => {
     console.log(`tipo_processo distribution: IMPORT=${importCount}, EXPORT=${exportCount}, null=${nullCount}`);
     console.log(`Pieces discrepancy detected in ${discrepancyCount} AWBs`);
 
+    // ========== FILTRO DE VISIBILIDADE ==========
+    // 1. Remover DLV/DELIVERED
+    // 2. ARR - DESTINO: manter por 5 dias após última atualização, depois ocultar
+    const now = Date.now();
+    const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+
+    const visibleRows = processedRows.filter((row: any) => {
+      const status = (row['último_status'] || '').toUpperCase().trim();
+
+      // 1. Nunca mostrar DLV
+      if (status === 'DLV' || status === 'DELIVERED') return false;
+
+      // 2. ARR - DESTINO: manter por 5 dias
+      if (status === 'ARR - DESTINO') {
+        const updatedAt = row['última atualização'];
+        if (!updatedAt) return true; // sem data, manter por segurança
+        const updatedTime = new Date(updatedAt).getTime();
+        if (isNaN(updatedTime)) return true;
+        return (now - updatedTime) <= FIVE_DAYS_MS;
+      }
+
+      return true;
+    });
+
+    const filteredOut = processedRows.length - visibleRows.length;
+    if (filteredOut > 0) {
+      console.log(`Visibility filter: removed ${filteredOut} rows (DLV or expired ARR-DESTINO)`);
+    }
+
     return new Response(
-      JSON.stringify({ success: true, data: processedRows }),
+      JSON.stringify({ success: true, data: visibleRows }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
