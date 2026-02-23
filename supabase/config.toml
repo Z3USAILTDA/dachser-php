@@ -313,3 +313,6 @@ verify_jwt = false
 
 [functions.parse-bl-cadastro]
 verify_jwt = false
+
+[functions.test-api-key]
+verify_jwt = false

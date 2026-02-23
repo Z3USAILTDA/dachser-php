@@ -246,6 +246,7 @@ const Dashboard = () => {
             { label: "Gerenciamento de APIs", href: "/admin/apis" },
             { label: "Monitoramento de Dados", href: "/admin/database" },
             { label: "Upload Master", href: "/admin/z3us/upload-master" },
+            { label: "Teste de API Keys", href: "/admin/api-test" },
           ],
         },
       ];
