@@ -441,6 +441,9 @@ const Index = () => {
     consigneeName: "",
     etd: null,
   });
+  const [forceSwapDialog, setForceSwapDialog] = useState<{ open: boolean; awb: string }>({ open: false, awb: "" });
+  const [forceSwapOldMawb, setForceSwapOldMawb] = useState("000-00000000");
+  const [forceSwapLoading, setForceSwapLoading] = useState(false);
   const isPausedRef = useRef(false);
   const shouldSendEmailsRef = useRef(false); // Only send emails when user explicitly clicks button
   const emailEnableTimestampRef = useRef<number>(0); // Track when emails were enabled
@@ -2982,6 +2985,27 @@ const Index = () => {
                                     </TooltipProvider>
                                   ) : null;
                                 })()}
+                                {/* Botão Forçar Novo Master */}
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          setForceSwapOldMawb("000-00000000");
+                                          setForceSwapDialog({ open: true, awb: awb.awb });
+                                        }}
+                                        className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 h-8 w-8 p-0"
+                                      >
+                                        <RefreshCw className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p className="text-xs">Forçar Novo Master</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
                               </div>
                             </td>
                           </tr>
@@ -3215,6 +3239,69 @@ const Index = () => {
         consigneeName={timelineModal.consigneeName}
         onTrackingResult={handleTrackingResult}
       />
+
+      {/* Dialog Forçar Novo Master */}
+      <Dialog open={forceSwapDialog.open} onOpenChange={(open) => setForceSwapDialog(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
+          <DialogHeader>
+            <DialogTitle className="text-[#f5f5f5] flex items-center gap-2">
+              <RefreshCw className="w-5 h-5 text-amber-400" />
+              Forçar Novo Master
+            </DialogTitle>
+            <DialogDescription className="text-[#aaaaaa]">
+              Inserir registro manual de troca de master para o AWB <strong className="text-[#f5f5f5]">{forceSwapDialog.awb}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 space-y-4">
+            <div>
+              <Label className="text-[#aaaaaa] text-sm">Master Antigo</Label>
+              <Input
+                value={forceSwapOldMawb}
+                onChange={(e) => setForceSwapOldMawb(e.target.value)}
+                placeholder="000-00000000"
+                className="mt-1 bg-[rgba(255,255,255,.05)] border-[rgba(255,255,255,.12)] text-[#f5f5f5]"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setForceSwapDialog({ open: false, awb: "" })}
+                className="border-[rgba(255,255,255,.15)] text-[#aaaaaa]"
+              >
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                disabled={forceSwapLoading}
+                onClick={async () => {
+                  setForceSwapLoading(true);
+                  try {
+                    const { data, error } = await supabase.functions.invoke('olimpo-proxy', {
+                      body: {
+                        action: 'force_master_swap_log',
+                        awb: forceSwapDialog.awb,
+                        old_mawb: forceSwapOldMawb,
+                      }
+                    });
+                    if (error) throw error;
+                    toast({ title: "Novo Master registrado", description: `${forceSwapOldMawb} → ${forceSwapDialog.awb}` });
+                    setForceSwapDialog({ open: false, awb: "" });
+                    await fetchStatusAereoData();
+                  } catch (err: any) {
+                    toast({ title: "Erro", description: err.message, variant: "destructive" });
+                  } finally {
+                    setForceSwapLoading(false);
+                  }
+                }}
+                className="bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                {forceSwapLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirmar"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
