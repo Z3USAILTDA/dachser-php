@@ -96,6 +96,7 @@ import ManualFinanceiro from "./pages/fin/ManualFinanceiro";
 // Admin Module
 import ManualAdmin from "./pages/admin/ManualAdmin";
 import UploadMaster from "./pages/admin/UploadMaster";
+import ApiKeyTest from "./pages/admin/ApiKeyTest";
 
 // AWB Pages
 import AWBList from "./pages/AWBList";
@@ -216,6 +217,7 @@ const App = () => (
           
           {/* Admin Module Manual */}
           <Route path="/admin/manual" element={<ManualAdmin />} />
+          <Route path="/admin/api-test" element={<ApiKeyTest />} />
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
