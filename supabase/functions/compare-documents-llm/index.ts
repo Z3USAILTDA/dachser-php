@@ -5,45 +5,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Convert PDF to base64 for multimodal analysis
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
+  const chunkSize = 8192;
   let binary = "";
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  for (let i = 0; i < bytes.byteLength; i += chunkSize) {
+    const chunk = bytes.slice(i, Math.min(i + chunkSize, bytes.byteLength));
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
   }
   return btoa(binary);
 }
 
-serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  const startTime = Date.now();
-
-  try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY not configured");
-    }
-
-    // Parse JSON body (Excel content is pre-extracted on frontend)
-    const body = await req.json();
-    const { pdfBase64, pdfFileName, excelContent, excelFileName } = body;
-
-    if (!pdfBase64 || !excelContent) {
-      return new Response(
-        JSON.stringify({ error: "Both PDF (base64) and Excel content are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`Processing: PDF=${pdfFileName}, Excel=${excelFileName}, ExcelContent=${excelContent.length} chars`);
-
-    // Build the analysis prompt
-    const systemPrompt = `Você é um especialista em análise e conferência de documentos fiscais e financeiros brasileiros.
+const systemPrompt = `Você é um especialista em análise e conferência de documentos fiscais e financeiros brasileiros.
 Sua tarefa é analisar COMPLETAMENTE os documentos fornecidos e realizar uma comparação detalhada.
 
 INSTRUÇÕES IMPORTANTES:
@@ -63,7 +36,7 @@ INSTRUÇÕES IMPORTANTES:
 RETORNE OBRIGATORIAMENTE um JSON válido no seguinte formato:
 {
   "pdfSummary": {
-    "documentType": "tipo do documento (fatura, invoice, nota fiscal, etc)",
+    "documentType": "tipo do documento",
     "totalValue": número_total,
     "itemCount": quantidade_de_itens,
     "metadata": {
@@ -121,78 +94,98 @@ REGRAS DE STATUS:
 
 Responda APENAS com o JSON, sem markdown, sem explicações adicionais.`;
 
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  const startTime = Date.now();
+
+  try {
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY not configured");
+    }
+
+    const body = await req.json();
+    const { pdfBase64, pdfFileName, excelContent, excelFileName } = body;
+
+    if (!pdfBase64 || !excelContent) {
+      return new Response(
+        JSON.stringify({ error: "Both PDF (base64) and Excel content are required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`Processing: PDF=${pdfFileName}, Excel=${excelFileName}, ExcelContent=${excelContent.length} chars`);
+
     const userPrompt = `Analise os seguintes documentos:
 
 === CONTEÚDO DA PLANILHA EXCEL (${excelFileName}) ===
 ${excelContent}
 
 === DOCUMENTO PDF ===
-O PDF (${pdfFileName}) está anexado como imagem/arquivo para sua análise visual.
+O PDF (${pdfFileName}) está anexado para sua análise.
 
 Por favor, extraia TODOS os itens e valores de ambos os documentos e realize a comparação completa.`;
 
-    // Call via Lovable AI Gateway
-    console.log("Calling Lovable AI Gateway with google/gemini-3-pro-preview...");
-    
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    console.log("Calling Anthropic Claude Sonnet 4...");
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-pro-preview",
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 8000,
+        temperature: 0,
         messages: [
           {
             role: "user",
             content: [
               { type: "text", text: systemPrompt + "\n\n" + userPrompt },
               {
-                type: "image_url",
-                image_url: {
-                  url: `data:application/pdf;base64,${pdfBase64}`,
+                type: "document",
+                source: {
+                  type: "base64",
+                  media_type: "application/pdf",
+                  data: pdfBase64,
                 },
               },
             ],
           },
         ],
-        max_tokens: 8000,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Lovable AI Gateway error:", response.status, errorText);
-      
+      console.error("Anthropic error:", response.status, errorText);
+
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns minutos." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      throw new Error(`AI Gateway error: ${response.status}`);
+
+      throw new Error(`Anthropic error: ${response.status}`);
     }
 
     const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content;
+    const content = aiResponse.content?.[0]?.text;
 
     if (!content) {
       throw new Error("Empty response from AI");
     }
 
-    console.log("AI response received, parsing JSON...");
+    console.log("Claude response received, parsing JSON...");
 
-    // Parse the JSON response
     let analysisResult;
     try {
-      // Try to extract JSON from the response (in case there's markdown wrapper)
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         analysisResult = JSON.parse(jsonMatch[0]);
@@ -207,13 +200,12 @@ Por favor, extraia TODOS os itens e valores de ambos os documentos e realize a c
     const processingTime = Date.now() - startTime;
     console.log(`Analysis completed in ${processingTime}ms`);
 
-    // Add metadata
     analysisResult.metadata = {
-      model: "google/gemini-3-pro-preview",
+      model: "claude-sonnet-4",
       processingTimeMs: processingTime,
-      pdfFileName: pdfFileName,
-      excelFileName: excelFileName,
-      tokensUsed: aiResponse.usage?.total_tokens || null,
+      pdfFileName,
+      excelFileName,
+      tokensUsed: (aiResponse.usage?.input_tokens || 0) + (aiResponse.usage?.output_tokens || 0),
     };
 
     return new Response(
@@ -224,8 +216,8 @@ Por favor, extraia TODOS os itens e valores de ambos os documentos e realize a c
   } catch (error) {
     console.error("Error in compare-documents-llm:", error);
     return new Response(
-      JSON.stringify({ 
-        error: error instanceof Error ? error.message : "Erro desconhecido ao processar documentos" 
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Erro desconhecido ao processar documentos"
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
