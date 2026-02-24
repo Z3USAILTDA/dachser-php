@@ -239,12 +239,12 @@ export default function OlimpoCobranca() {
           />
         </div>
 
-        {/* Aging Distribution Header Card (matching reference image) */}
-        {agingSegments.length > 0 && (
-          <Card className="bg-card border-border">
-            <CardContent className="p-5">
-              <div className="flex items-start gap-4">
-                {/* Main area */}
+        {/* Aging Table */}
+        <Card className="bg-card border-border overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-foreground">Brazil Customer Aging Overview</CardTitle>
+            {agingSegments.length > 0 && (
+              <div className="flex items-start gap-4 mt-3">
                 <div className="flex-1 min-w-0">
                   {/* Segmented bar */}
                   <div className="flex rounded-lg overflow-hidden h-8">
@@ -259,33 +259,22 @@ export default function OlimpoCobranca() {
                       </div>
                     ))}
                   </div>
-
                   {/* Percentage row */}
                   <div className="flex mt-2">
                     {agingSegments.map((seg) => (
-                      <div
-                        key={seg.key}
-                        className="text-center text-[11px] font-semibold"
-                        style={{ width: `${Math.max(seg.pct, 1)}%`, color: seg.color }}
-                      >
+                      <div key={seg.key} className="text-center text-[11px] font-semibold" style={{ width: `${Math.max(seg.pct, 1)}%`, color: seg.color }}>
                         {seg.pct.toFixed(0)}%
                       </div>
                     ))}
                   </div>
-
                   {/* Value row */}
                   <div className="flex mt-0.5">
                     {agingSegments.map((seg) => (
-                      <div
-                        key={seg.key}
-                        className="text-center text-[10px] text-muted-foreground tabular-nums"
-                        style={{ width: `${Math.max(seg.pct, 1)}%` }}
-                      >
+                      <div key={seg.key} className="text-center text-[10px] text-muted-foreground tabular-nums" style={{ width: `${Math.max(seg.pct, 1)}%` }}>
                         {formatCompact(seg.value)}
                       </div>
                     ))}
                   </div>
-
                   {/* Legend row */}
                   <div className="flex flex-wrap gap-3 mt-3">
                     {agingSegments.map((seg) => (
@@ -296,8 +285,7 @@ export default function OlimpoCobranca() {
                     ))}
                   </div>
                 </div>
-
-                {/* Overdue badge on the right */}
+                {/* Overdue badge */}
                 <div className="flex flex-col items-center gap-1 pl-4 border-l border-border min-w-[80px]">
                   <span className="text-xs text-muted-foreground">Overdue</span>
                   <span className="text-2xl font-bold text-red-400">{pctOverdue}%</span>
@@ -305,14 +293,7 @@ export default function OlimpoCobranca() {
                   <span className="text-[10px] text-muted-foreground mt-1">of {formatCompact(totalReceivable)}</span>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Aging Table */}
-        <Card className="bg-card border-border overflow-hidden">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-foreground">Brazil Customer Aging Overview</CardTitle>
+            )}
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
