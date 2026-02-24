@@ -3,6 +3,7 @@ import { PageLayout } from "@/components/layout/PageLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DollarSign, TrendingUp, AlertTriangle, Clock, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -52,6 +53,19 @@ const AGING_LABELS: Record<string, string> = {
 
 const PIE_COLORS = ["#22c55e", "#ef4444"];
 
+const PRODUCT_MAP: Record<string, string> = {
+  SI: "Sea",
+  SE: "Sea",
+  AI: "Air",
+  AE: "Air",
+  DIM: "CHB",
+  DEX: "CHB",
+  ASO: "Miscellaneous",
+  TCK: "Trucking",
+};
+
+const agingKeys = ["not_due", "aging_90", "aging_180", "aging_240", "aging_360", "aging_360_plus"] as const;
+
 function formatBRL(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -67,16 +81,43 @@ function formatCompact(value: number): string {
   return formatBRL(value);
 }
 
+function mergeProductRows(rows: AgingRow[]): AgingRow[] {
+  const grouped: Record<string, AgingRow> = {};
+  for (const row of rows) {
+    const mapped = PRODUCT_MAP[row.product] || row.product;
+    if (!grouped[mapped]) {
+      grouped[mapped] = { ...row, product: mapped };
+    } else {
+      for (const k of agingKeys) {
+        (grouped[mapped][k] as number) += row[k] as number;
+      }
+      grouped[mapped].count_not_due += row.count_not_due;
+      grouped[mapped].count_90 += row.count_90;
+      grouped[mapped].count_180 += row.count_180;
+      grouped[mapped].count_240 += row.count_240;
+      grouped[mapped].count_360 += row.count_360;
+      grouped[mapped].count_360_plus += row.count_360_plus;
+    }
+  }
+  return Object.values(grouped).sort((a, b) => {
+    const totalA = a.not_due + a.aging_90 + a.aging_180 + a.aging_240 + a.aging_360 + a.aging_360_plus;
+    const totalB = b.not_due + b.aging_90 + b.aging_180 + b.aging_240 + b.aging_360 + b.aging_360_plus;
+    return totalB - totalA;
+  });
+}
+
 export default function OlimpoCobranca() {
   const [data, setData] = useState<AgingData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<"product" | "client">("product");
   const { toast } = useToast();
 
   const fetchData = async () => {
     setLoading(true);
     try {
+      const action = viewMode === "client" ? "get_aging_by_client" : "get_aging_overview";
       const { data: resp, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_aging_overview" },
+        body: { action },
       });
       if (error) throw error;
       if (!resp?.success) throw new Error(resp?.error || "Erro desconhecido");
@@ -89,9 +130,34 @@ export default function OlimpoCobranca() {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [viewMode]);
 
-  const totals = data?.totals;
+  // Apply product mapping only for product view
+  const displayRows = useMemo(() => {
+    if (!data?.data) return [];
+    return viewMode === "product" ? mergeProductRows(data.data) : data.data;
+  }, [data, viewMode]);
+
+  // Recalculate totals from displayRows
+  const totals = useMemo(() => {
+    if (displayRows.length === 0) return null;
+    const t: AgingRow = {
+      product: "Grand Total",
+      not_due: 0, aging_90: 0, aging_180: 0, aging_240: 0, aging_360: 0, aging_360_plus: 0,
+      count_not_due: 0, count_90: 0, count_180: 0, count_240: 0, count_360: 0, count_360_plus: 0,
+    };
+    for (const row of displayRows) {
+      for (const k of agingKeys) (t[k] as number) += row[k] as number;
+      t.count_not_due += row.count_not_due;
+      t.count_90 += row.count_90;
+      t.count_180 += row.count_180;
+      t.count_240 += row.count_240;
+      t.count_360 += row.count_360;
+      t.count_360_plus += row.count_360_plus;
+    }
+    return t;
+  }, [displayRows]);
+
   const totalReceivable = totals
     ? totals.not_due + totals.aging_90 + totals.aging_180 + totals.aging_240 + totals.aging_360 + totals.aging_360_plus
     : 0;
@@ -103,20 +169,18 @@ export default function OlimpoCobranca() {
   // Aging segmented bar
   const agingSegments = useMemo(() => {
     if (!totals || totalReceivable === 0) return [];
-    const keys: (keyof typeof AGING_COLORS)[] = ["not_due", "aging_90", "aging_180", "aging_240", "aging_360", "aging_360_plus"];
-    return keys.map((k) => ({
+    return agingKeys.map((k) => ({
       key: k,
       value: totals[k as keyof AgingRow] as number,
       pct: (((totals[k as keyof AgingRow] as number) / totalReceivable) * 100),
       color: AGING_COLORS[k],
       label: AGING_LABELS[k],
-    })).filter((s) => s.pct > 0);
+    })).filter((s) => s.pct >= 0);
   }, [totals, totalReceivable]);
 
   // Bar chart data
   const barData = useMemo(() => {
-    if (!data?.data) return [];
-    return data.data.map((r) => ({
+    return displayRows.map((r) => ({
       product: r.product,
       "Not Due": r.not_due,
       "< 90": r.aging_90,
@@ -125,7 +189,7 @@ export default function OlimpoCobranca() {
       "241-360": r.aging_360,
       "> 360": r.aging_360_plus,
     }));
-  }, [data]);
+  }, [displayRows]);
 
   // Pie chart data
   const pieData = useMemo(() => {
@@ -136,24 +200,31 @@ export default function OlimpoCobranca() {
     ];
   }, [totals, totalOverdue, totalReceivable]);
 
-  const agingKeys = ["not_due", "aging_90", "aging_180", "aging_240", "aging_360", "aging_360_plus"] as const;
+  const columnLabel = viewMode === "product" ? "Product" : "Client";
+
+  const refreshButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={fetchData}
+      disabled={loading}
+      className="border-border bg-card text-muted-foreground hover:text-foreground"
+    >
+      <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+      Atualizar
+    </Button>
+  );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Olimpo — Cobrança" pageIcon={DollarSign} backTo="/olimpo">
+    <PageLayout title="DACHSER" subtitle="Olimpo — Cobrança" pageIcon={DollarSign} backTo="/olimpo" rightContent={refreshButton}>
       <div className="space-y-6">
-        {/* Refresh */}
-        <div className="flex justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchData}
-            disabled={loading}
-            className="border-border bg-card text-muted-foreground hover:text-foreground"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            Atualizar
-          </Button>
-        </div>
+        {/* Tabs */}
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "product" | "client")}>
+          <TabsList>
+            <TabsTrigger value="product">Product</TabsTrigger>
+            <TabsTrigger value="client">Client</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {/* KPI Cards */}
         <div className="grid gap-4 md:grid-cols-4">
@@ -162,38 +233,77 @@ export default function OlimpoCobranca() {
           <KpiCard icon={TrendingUp} label="% Overdue" value={`${pctOverdue}%`} loading={loading} />
           <KpiCard
             icon={Clock}
-            label="Última Atualização"
+            label="Último Registro"
             value={data?.lastUpdate ? new Date(data.lastUpdate).toLocaleString("pt-BR") : "—"}
             loading={loading}
           />
         </div>
 
-        {/* Segmented Aging Bar */}
+        {/* Aging Distribution Header Card (matching reference image) */}
         {agingSegments.length > 0 && (
           <Card className="bg-card border-border">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground">Distribuição de Aging</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex rounded-lg overflow-hidden h-8">
-                {agingSegments.map((seg) => (
-                  <div
-                    key={seg.key}
-                    className="flex items-center justify-center text-[10px] font-bold text-white transition-all"
-                    style={{ width: `${seg.pct}%`, backgroundColor: seg.color, minWidth: seg.pct > 3 ? undefined : "24px" }}
-                    title={`${seg.label}: ${formatBRL(seg.value)} (${seg.pct.toFixed(1)}%)`}
-                  >
-                    {seg.pct > 5 && `${seg.pct.toFixed(0)}%`}
+            <CardContent className="p-5">
+              <div className="flex items-start gap-4">
+                {/* Main area */}
+                <div className="flex-1 min-w-0">
+                  {/* Segmented bar */}
+                  <div className="flex rounded-lg overflow-hidden h-8">
+                    {agingSegments.map((seg) => (
+                      <div
+                        key={seg.key}
+                        className="flex items-center justify-center text-[10px] font-bold text-white transition-all"
+                        style={{ width: `${Math.max(seg.pct, 1)}%`, backgroundColor: seg.color }}
+                        title={`${seg.label}: ${formatBRL(seg.value)} (${seg.pct.toFixed(1)}%)`}
+                      >
+                        {seg.pct > 4 && `${seg.pct.toFixed(0)}%`}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-3 mt-3">
-                {agingSegments.map((seg) => (
-                  <div key={seg.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: seg.color }} />
-                    {seg.label}
+
+                  {/* Percentage row */}
+                  <div className="flex mt-2">
+                    {agingSegments.map((seg) => (
+                      <div
+                        key={seg.key}
+                        className="text-center text-[11px] font-semibold"
+                        style={{ width: `${Math.max(seg.pct, 1)}%`, color: seg.color }}
+                      >
+                        {seg.pct.toFixed(0)}%
+                      </div>
+                    ))}
                   </div>
-                ))}
+
+                  {/* Value row */}
+                  <div className="flex mt-0.5">
+                    {agingSegments.map((seg) => (
+                      <div
+                        key={seg.key}
+                        className="text-center text-[10px] text-muted-foreground tabular-nums"
+                        style={{ width: `${Math.max(seg.pct, 1)}%` }}
+                      >
+                        {formatCompact(seg.value)}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Legend row */}
+                  <div className="flex flex-wrap gap-3 mt-3">
+                    {agingSegments.map((seg) => (
+                      <div key={seg.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: seg.color }} />
+                        {seg.label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Overdue badge on the right */}
+                <div className="flex flex-col items-center gap-1 pl-4 border-l border-border min-w-[80px]">
+                  <span className="text-xs text-muted-foreground">Overdue</span>
+                  <span className="text-2xl font-bold text-red-400">{pctOverdue}%</span>
+                  <span className="text-[10px] text-muted-foreground tabular-nums">{formatCompact(totalOverdue)}</span>
+                  <span className="text-[10px] text-muted-foreground mt-1">of {formatCompact(totalReceivable)}</span>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -208,14 +318,10 @@ export default function OlimpoCobranca() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-[rgba(255,255,255,0.1)]">
-                    <th className="text-left py-3 px-4 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Product</th>
+                  <tr className="border-b border-border/50">
+                    <th className="text-left py-3 px-4 text-xs uppercase tracking-wider text-muted-foreground font-semibold">{columnLabel}</th>
                     {agingKeys.map((k) => (
-                      <th
-                        key={k}
-                        className="text-right py-3 px-4 text-xs uppercase tracking-wider font-semibold"
-                        style={{ color: AGING_COLORS[k] }}
-                      >
+                      <th key={k} className="text-right py-3 px-4 text-xs uppercase tracking-wider font-semibold" style={{ color: AGING_COLORS[k] }}>
                         {AGING_LABELS[k]}
                       </th>
                     ))}
@@ -228,20 +334,20 @@ export default function OlimpoCobranca() {
                     <tr>
                       <td colSpan={9} className="text-center py-8 text-muted-foreground">Carregando dados...</td>
                     </tr>
-                  ) : data?.data?.length === 0 ? (
+                  ) : displayRows.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="text-center py-8 text-muted-foreground">Nenhum dado encontrado</td>
                     </tr>
                   ) : (
                     <>
-                      {data?.data?.map((row, idx) => {
+                      {displayRows.map((row, idx) => {
                         const rowOverdue = row.aging_90 + row.aging_180 + row.aging_240 + row.aging_360 + row.aging_360_plus;
                         const rowTotal = row.not_due + rowOverdue;
                         return (
-                          <tr key={idx} className="border-b border-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.03)]">
+                          <tr key={idx} className="border-b border-border/30 hover:bg-muted/10">
                             <td className="py-2.5 px-4 font-medium text-foreground">{row.product}</td>
                             {agingKeys.map((k) => (
-                              <td key={k} className="py-2.5 px-4 text-right tabular-nums" style={{ color: (row[k] as number) > 0 ? AGING_COLORS[k] : "rgba(255,255,255,0.25)" }}>
+                              <td key={k} className="py-2.5 px-4 text-right tabular-nums" style={{ color: (row[k] as number) > 0 ? AGING_COLORS[k] : "var(--muted-foreground)" }}>
                                 {formatBRL(row[k] as number)}
                               </td>
                             ))}
@@ -250,9 +356,8 @@ export default function OlimpoCobranca() {
                           </tr>
                         );
                       })}
-                      {/* Grand Total */}
                       {totals && (
-                        <tr className="border-t-2 border-primary/40 bg-[rgba(255,200,0,0.05)]">
+                        <tr className="border-t-2 border-primary/40 bg-primary/5">
                           <td className="py-3 px-4 font-bold text-primary">Grand Total</td>
                           {agingKeys.map((k) => (
                             <td key={k} className="py-3 px-4 text-right tabular-nums font-bold" style={{ color: AGING_COLORS[k] }}>
@@ -272,12 +377,11 @@ export default function OlimpoCobranca() {
         </Card>
 
         {/* Charts */}
-        {!loading && data?.data && data.data.length > 0 && (
+        {!loading && displayRows.length > 0 && (
           <div className="grid gap-6 lg:grid-cols-2">
-            {/* Stacked Bar Chart */}
             <Card className="bg-card border-border">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-foreground">Aging por Produto</CardTitle>
+                <CardTitle className="text-sm text-foreground">Aging por {columnLabel}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={320}>
@@ -305,7 +409,6 @@ export default function OlimpoCobranca() {
               </CardContent>
             </Card>
 
-            {/* Pie Chart */}
             <Card className="bg-card border-border">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-foreground">Not Due vs Overdue</CardTitle>

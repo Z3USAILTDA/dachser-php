@@ -2147,6 +2147,88 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== OLIMPO AGING BY CLIENT ====================
+      case 'get_aging_by_client': {
+        console.log('[get_aging_by_client] Fetching aging data by client...');
+        
+        const clientAgingSql = `
+          SELECT
+            COALESCE(t.nome_cliente, 'Sem Cliente') AS product,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS aging_240,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN t.valor_nf ELSE 0 END) AS aging_360,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 360 THEN t.valor_nf ELSE 0 END) AS aging_360_plus,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 1 ELSE 0 END) AS count_not_due,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 90 THEN 1 ELSE 0 END) AS count_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN 1 ELSE 0 END) AS count_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN 1 ELSE 0 END) AS count_240,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN 1 ELSE 0 END) AS count_360,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 360 THEN 1 ELSE 0 END) AS count_360_plus
+          FROM dados_dachser.t_dados_financeiro_nfs t
+          LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
+          WHERE COALESCE(sd.active, 1) = 1
+            AND NOT EXISTS (
+              SELECT 1 FROM dados_dachser.tbaixas b
+              WHERE b.IdLancamentoRM = t.id_rm
+                AND b.StatusLan IN (1, 2, 3)
+            )
+            AND (t.disputa IS NULL OR t.disputa = 0)
+          GROUP BY COALESCE(t.nome_cliente, 'Sem Cliente')
+          ORDER BY SUM(t.valor_nf) DESC
+        `;
+        
+        const clientAgingRows = await client.query(clientAgingSql);
+        
+        const clientTotals = {
+          product: 'Grand Total',
+          not_due: 0, aging_90: 0, aging_180: 0, aging_240: 0, aging_360: 0, aging_360_plus: 0,
+          count_not_due: 0, count_90: 0, count_180: 0, count_240: 0, count_360: 0, count_360_plus: 0,
+        };
+        
+        const clientRows = clientAgingRows.map((r: any) => {
+          const row = {
+            product: r.product || 'Sem Cliente',
+            not_due: Number(r.not_due) || 0,
+            aging_90: Number(r.aging_90) || 0,
+            aging_180: Number(r.aging_180) || 0,
+            aging_240: Number(r.aging_240) || 0,
+            aging_360: Number(r.aging_360) || 0,
+            aging_360_plus: Number(r.aging_360_plus) || 0,
+            count_not_due: Number(r.count_not_due) || 0,
+            count_90: Number(r.count_90) || 0,
+            count_180: Number(r.count_180) || 0,
+            count_240: Number(r.count_240) || 0,
+            count_360: Number(r.count_360) || 0,
+            count_360_plus: Number(r.count_360_plus) || 0,
+          };
+          clientTotals.not_due += row.not_due;
+          clientTotals.aging_90 += row.aging_90;
+          clientTotals.aging_180 += row.aging_180;
+          clientTotals.aging_240 += row.aging_240;
+          clientTotals.aging_360 += row.aging_360;
+          clientTotals.aging_360_plus += row.aging_360_plus;
+          clientTotals.count_not_due += row.count_not_due;
+          clientTotals.count_90 += row.count_90;
+          clientTotals.count_180 += row.count_180;
+          clientTotals.count_240 += row.count_240;
+          clientTotals.count_360 += row.count_360;
+          clientTotals.count_360_plus += row.count_360_plus;
+          return row;
+        });
+        
+        const clientLastUpdateResult = await client.query(`
+          SELECT MAX(data_insert) as last_update FROM dados_dachser.t_dados_financeiro_nfs
+        `);
+        const clientLastUpdate = clientLastUpdateResult?.[0]?.last_update || null;
+        
+        console.log(`[get_aging_by_client] Found ${clientRows.length} clients`);
+        
+        result = { success: true, data: clientRows, totals: clientTotals, lastUpdate: clientLastUpdate };
+        break;
+      }
+
       case 'get_regua_stage': {
         const { stage } = body as { stage?: string };
         if (!stage) {
