@@ -56,6 +56,8 @@ import AccrualManagement from "./pages/esteira/AccrualManagement";
 import VoucherRules from "./pages/esteira/VoucherRules";
 import EmailPreview from "./pages/esteira/EmailPreview";
 import Olimpo from "./pages/Olimpo";
+import OlimpoIndex from "./pages/olimpo/OlimpoIndex";
+import OlimpoCobranca from "./pages/olimpo/OlimpoCobranca";
 import ConferenciaChb from "./pages/ConferenciaChb";
 import ChbAnalises from "./pages/ChbAnalises";
 
@@ -184,7 +186,9 @@ const App = () => (
           <Route path="/fin/esteira/accrual" element={<AccrualManagement />} />
           <Route path="/fin/esteira/rules" element={<VoucherRules />} />
           <Route path="/fin/esteira/email-preview" element={<EmailPreview />} />
-          <Route path="/olimpo" element={<Olimpo />} />
+          <Route path="/olimpo" element={<OlimpoIndex />} />
+          <Route path="/olimpo/mapa" element={<Olimpo />} />
+          <Route path="/olimpo/cobranca" element={<OlimpoCobranca />} />
           <Route path="/chb/conferences" element={<ChbAnalises />} />
           <Route path="/chb/conferences/:id" element={<ConferenciaChb />} />
           
