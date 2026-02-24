@@ -2147,7 +2147,7 @@ serve(async (req) => {
         break;
       }
 
-      // ==================== OLIMPO AGING BY CLIENT ====================
+      // ==================== OLIMPO AGING BY CLIENT (v2) ====================
       case 'get_aging_by_client': {
         console.log('[get_aging_by_client] Fetching aging data by client...');
         
