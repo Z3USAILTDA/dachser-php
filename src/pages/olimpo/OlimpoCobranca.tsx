@@ -202,29 +202,30 @@ export default function OlimpoCobranca() {
 
   const columnLabel = viewMode === "product" ? "Product" : "Client";
 
-  const refreshButton = (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={fetchData}
-      disabled={loading}
-      className="border-border bg-card text-muted-foreground hover:text-foreground"
-    >
-      <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-      Atualizar
-    </Button>
+  const headerRight = (
+    <div className="flex items-center gap-3">
+      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "product" | "client")}>
+        <TabsList>
+          <TabsTrigger value="product">Product</TabsTrigger>
+          <TabsTrigger value="client">Client</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={fetchData}
+        disabled={loading}
+        className="border-border bg-card text-muted-foreground hover:text-foreground"
+      >
+        <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+        Atualizar
+      </Button>
+    </div>
   );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Olimpo — Cobrança" pageIcon={DollarSign} backTo="/olimpo" rightContent={refreshButton}>
+    <PageLayout title="DACHSER" subtitle="Olimpo — Cobrança" pageIcon={DollarSign} backTo="/olimpo" rightContent={headerRight}>
       <div className="space-y-6">
-        {/* Tabs */}
-        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "product" | "client")}>
-          <TabsList>
-            <TabsTrigger value="product">Product</TabsTrigger>
-            <TabsTrigger value="client">Client</TabsTrigger>
-          </TabsList>
-        </Tabs>
 
         {/* KPI Cards */}
         <div className="grid gap-4 md:grid-cols-4">
@@ -311,8 +312,42 @@ export default function OlimpoCobranca() {
 
         {/* Aging Table */}
         <Card className="bg-card border-border overflow-hidden">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-foreground">Brazil Customer Aging Overview</CardTitle>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between mb-4">
+              <CardTitle className="text-sm text-foreground">Brazil Customer Aging Overview</CardTitle>
+              <div className="bg-[#1e293b] text-foreground text-2xl font-bold px-6 py-3 rounded">{pctOverdue}%</div>
+            </div>
+            {agingSegments.length > 0 && (
+              <div>
+                {/* Segmented bar */}
+                <div className="flex rounded overflow-hidden h-6">
+                  {agingSegments.map((seg) => (
+                    <div
+                      key={seg.key}
+                      className="flex items-center justify-center text-[10px] font-bold text-white"
+                      style={{ width: `${Math.max(seg.pct, 1)}%`, backgroundColor: seg.color }}
+                    >
+                      {seg.pct > 4 && `${seg.pct.toFixed(0)}%`}
+                    </div>
+                  ))}
+                </div>
+                {/* Percentage + Value rows */}
+                <div className="flex mt-2">
+                  {agingSegments.map((seg) => (
+                    <div key={seg.key} className="text-center" style={{ width: `${Math.max(seg.pct, 1)}%` }}>
+                      <div className="text-xs font-semibold" style={{ color: seg.color }}>{seg.pct.toFixed(0)}%</div>
+                      <div className="text-[10px] text-muted-foreground tabular-nums">{formatCompact(seg.value)}</div>
+                    </div>
+                  ))}
+                  <div className="text-center min-w-[60px] pl-2">
+                    <div className="text-xs font-bold text-red-400">{formatCompact(totalOverdue)}</div>
+                  </div>
+                  <div className="text-center min-w-[60px] pl-2">
+                    <div className="text-xs font-bold text-foreground">{formatCompact(totalReceivable)}</div>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
