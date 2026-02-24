@@ -284,15 +284,18 @@ export default function OlimpoCobranca() {
                     {agingKeys.map((k) => {
                       const seg = agingSegments.find((s) => s.key === k);
                       return (
-                        <th key={k} className="text-right py-3 px-4 text-xs uppercase tracking-wider font-semibold" style={{ color: AGING_COLORS[k] }}>
-                          <div>{AGING_LABELS[k]}</div>
-                          {seg && <div className="text-[10px] font-normal mt-0.5">{seg.pct.toFixed(0)}%</div>}
+                        <th key={k} className="text-right py-3 px-4 font-semibold" style={{ color: AGING_COLORS[k] }}>
+                          {seg && <div className="text-sm font-bold mb-1">{seg.pct.toFixed(0)}%</div>}
+                          <div className="text-xs uppercase tracking-wider">{AGING_LABELS[k]}</div>
                         </th>
                       );
                     })}
-                    <th className="text-right py-3 px-4 text-xs uppercase tracking-wider text-red-400 font-semibold">Total Overdue</th>
-                    <th className="text-right py-3 px-4 text-xs uppercase tracking-wider text-foreground font-semibold">
-                      <div>Total Receivable</div>
+                    <th className="text-right py-3 px-4 font-semibold text-red-400">
+                      {totalReceivable > 0 && <div className="text-sm font-bold mb-1">{pctOverdue}%</div>}
+                      <div className="text-xs uppercase tracking-wider">Total Overdue</div>
+                    </th>
+                    <th className="text-right py-3 px-4 font-semibold text-foreground">
+                      <div className="text-xs uppercase tracking-wider">Total Receivable</div>
                       {totalReceivable > 0 && <div className="text-[10px] font-normal text-muted-foreground mt-0.5">{formatCompact(totalReceivable)}</div>}
                     </th>
                   </tr>
