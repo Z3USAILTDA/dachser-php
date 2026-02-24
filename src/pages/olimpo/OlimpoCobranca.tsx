@@ -203,11 +203,11 @@ export default function OlimpoCobranca() {
   const columnLabel = viewMode === "product" ? "Product" : "Client";
 
   const headerRight = (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2">
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "product" | "client")}>
-        <TabsList>
-          <TabsTrigger value="product">Product</TabsTrigger>
-          <TabsTrigger value="client">Client</TabsTrigger>
+        <TabsList className="h-8">
+          <TabsTrigger value="product" className="text-xs px-3 py-1">Product</TabsTrigger>
+          <TabsTrigger value="client" className="text-xs px-3 py-1">Client</TabsTrigger>
         </TabsList>
       </Tabs>
       <Button
@@ -215,9 +215,9 @@ export default function OlimpoCobranca() {
         size="sm"
         onClick={fetchData}
         disabled={loading}
-        className="border-border bg-card text-muted-foreground hover:text-foreground"
+        className="h-8 border-border bg-card text-muted-foreground hover:text-foreground text-xs"
       >
-        <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+        <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />
         Atualizar
       </Button>
     </div>
@@ -244,67 +244,27 @@ export default function OlimpoCobranca() {
         {agingSegments.length > 0 && (
           <Card className="bg-card border-border">
             <CardContent className="p-5">
-              <div className="flex items-start gap-4">
-                {/* Main area */}
-                <div className="flex-1 min-w-0">
-                  {/* Segmented bar */}
-                  <div className="flex rounded-lg overflow-hidden h-8">
-                    {agingSegments.map((seg) => (
-                      <div
-                        key={seg.key}
-                        className="flex items-center justify-center text-[10px] font-bold text-white transition-all"
-                        style={{ width: `${Math.max(seg.pct, 1)}%`, backgroundColor: seg.color }}
-                        title={`${seg.label}: ${formatBRL(seg.value)} (${seg.pct.toFixed(1)}%)`}
-                      >
-                        {seg.pct > 4 && `${seg.pct.toFixed(0)}%`}
-                      </div>
-                    ))}
+              {/* Segmented bar only */}
+              <div className="flex rounded-lg overflow-hidden h-8">
+                {agingSegments.map((seg) => (
+                  <div
+                    key={seg.key}
+                    className="flex items-center justify-center text-[10px] font-bold text-white transition-all"
+                    style={{ width: `${Math.max(seg.pct, 1)}%`, backgroundColor: seg.color }}
+                    title={`${seg.label}: ${formatBRL(seg.value)} (${seg.pct.toFixed(1)}%)`}
+                  >
+                    {seg.pct > 4 && `${seg.pct.toFixed(0)}%`}
                   </div>
-
-                  {/* Percentage row */}
-                  <div className="flex mt-2">
-                    {agingSegments.map((seg) => (
-                      <div
-                        key={seg.key}
-                        className="text-center text-[11px] font-semibold"
-                        style={{ width: `${Math.max(seg.pct, 1)}%`, color: seg.color }}
-                      >
-                        {seg.pct.toFixed(0)}%
-                      </div>
-                    ))}
+                ))}
+              </div>
+              {/* Legend row */}
+              <div className="flex flex-wrap gap-3 mt-3">
+                {agingSegments.map((seg) => (
+                  <div key={seg.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: seg.color }} />
+                    {seg.label}
                   </div>
-
-                  {/* Value row */}
-                  <div className="flex mt-0.5">
-                    {agingSegments.map((seg) => (
-                      <div
-                        key={seg.key}
-                        className="text-center text-[10px] text-muted-foreground tabular-nums"
-                        style={{ width: `${Math.max(seg.pct, 1)}%` }}
-                      >
-                        {formatCompact(seg.value)}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Legend row */}
-                  <div className="flex flex-wrap gap-3 mt-3">
-                    {agingSegments.map((seg) => (
-                      <div key={seg.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: seg.color }} />
-                        {seg.label}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Overdue badge on the right */}
-                <div className="flex flex-col items-center gap-1 pl-4 border-l border-border min-w-[80px]">
-                  <span className="text-xs text-muted-foreground">Overdue</span>
-                  <span className="text-2xl font-bold text-red-400">{pctOverdue}%</span>
-                  <span className="text-[10px] text-muted-foreground tabular-nums">{formatCompact(totalOverdue)}</span>
-                  <span className="text-[10px] text-muted-foreground mt-1">of {formatCompact(totalReceivable)}</span>
-                </div>
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -312,42 +272,8 @@ export default function OlimpoCobranca() {
 
         {/* Aging Table */}
         <Card className="bg-card border-border overflow-hidden">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between mb-4">
-              <CardTitle className="text-sm text-foreground">Brazil Customer Aging Overview</CardTitle>
-              <div className="bg-[#1e293b] text-foreground text-2xl font-bold px-6 py-3 rounded">{pctOverdue}%</div>
-            </div>
-            {agingSegments.length > 0 && (
-              <div>
-                {/* Segmented bar */}
-                <div className="flex rounded overflow-hidden h-6">
-                  {agingSegments.map((seg) => (
-                    <div
-                      key={seg.key}
-                      className="flex items-center justify-center text-[10px] font-bold text-white"
-                      style={{ width: `${Math.max(seg.pct, 1)}%`, backgroundColor: seg.color }}
-                    >
-                      {seg.pct > 4 && `${seg.pct.toFixed(0)}%`}
-                    </div>
-                  ))}
-                </div>
-                {/* Percentage + Value rows */}
-                <div className="flex mt-2">
-                  {agingSegments.map((seg) => (
-                    <div key={seg.key} className="text-center" style={{ width: `${Math.max(seg.pct, 1)}%` }}>
-                      <div className="text-xs font-semibold" style={{ color: seg.color }}>{seg.pct.toFixed(0)}%</div>
-                      <div className="text-[10px] text-muted-foreground tabular-nums">{formatCompact(seg.value)}</div>
-                    </div>
-                  ))}
-                  <div className="text-center min-w-[60px] pl-2">
-                    <div className="text-xs font-bold text-red-400">{formatCompact(totalOverdue)}</div>
-                  </div>
-                  <div className="text-center min-w-[60px] pl-2">
-                    <div className="text-xs font-bold text-foreground">{formatCompact(totalReceivable)}</div>
-                  </div>
-                </div>
-              </div>
-            )}
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-foreground">Brazil Customer Aging Overview</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -355,13 +281,20 @@ export default function OlimpoCobranca() {
                 <thead>
                   <tr className="border-b border-border/50">
                     <th className="text-left py-3 px-4 text-xs uppercase tracking-wider text-muted-foreground font-semibold">{columnLabel}</th>
-                    {agingKeys.map((k) => (
-                      <th key={k} className="text-right py-3 px-4 text-xs uppercase tracking-wider font-semibold" style={{ color: AGING_COLORS[k] }}>
-                        {AGING_LABELS[k]}
-                      </th>
-                    ))}
+                    {agingKeys.map((k) => {
+                      const seg = agingSegments.find((s) => s.key === k);
+                      return (
+                        <th key={k} className="text-right py-3 px-4 text-xs uppercase tracking-wider font-semibold" style={{ color: AGING_COLORS[k] }}>
+                          <div>{AGING_LABELS[k]}</div>
+                          {seg && <div className="text-[10px] font-normal mt-0.5">{seg.pct.toFixed(0)}%</div>}
+                        </th>
+                      );
+                    })}
                     <th className="text-right py-3 px-4 text-xs uppercase tracking-wider text-red-400 font-semibold">Total Overdue</th>
-                    <th className="text-right py-3 px-4 text-xs uppercase tracking-wider text-foreground font-semibold">Total Receivable</th>
+                    <th className="text-right py-3 px-4 text-xs uppercase tracking-wider text-foreground font-semibold">
+                      <div>Total Receivable</div>
+                      {totalReceivable > 0 && <div className="text-[10px] font-normal text-muted-foreground mt-0.5">{formatCompact(totalReceivable)}</div>}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
