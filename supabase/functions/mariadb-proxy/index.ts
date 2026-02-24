@@ -2147,6 +2147,7 @@ serve(async (req) => {
         break;
       }
 
+      case 'get_regua_stage': {
         const { stage } = body as { stage?: string };
         if (!stage) {
           return new Response(
