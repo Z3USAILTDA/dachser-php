@@ -148,7 +148,7 @@ export default function OlimpoCobranca() {
             size="sm"
             onClick={fetchData}
             disabled={loading}
-            className="border-[rgba(255,255,255,0.15)] bg-[rgba(0,0,0,0.4)] text-muted-foreground hover:text-foreground"
+            className="border-border bg-card text-muted-foreground hover:text-foreground"
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
             Atualizar
@@ -170,7 +170,7 @@ export default function OlimpoCobranca() {
 
         {/* Segmented Aging Bar */}
         {agingSegments.length > 0 && (
-          <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
+          <Card className="bg-card border-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground">Distribuição de Aging</CardTitle>
             </CardHeader>
@@ -200,7 +200,7 @@ export default function OlimpoCobranca() {
         )}
 
         {/* Aging Table */}
-        <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] overflow-hidden">
+        <Card className="bg-card border-border overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-foreground">Brazil Customer Aging Overview</CardTitle>
           </CardHeader>
@@ -275,7 +275,7 @@ export default function OlimpoCobranca() {
         {!loading && data?.data && data.data.length > 0 && (
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Stacked Bar Chart */}
-            <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
+            <Card className="bg-card border-border">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-foreground">Aging por Produto</CardTitle>
               </CardHeader>
@@ -306,7 +306,7 @@ export default function OlimpoCobranca() {
             </Card>
 
             {/* Pie Chart */}
-            <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
+            <Card className="bg-card border-border">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-foreground">Not Due vs Overdue</CardTitle>
               </CardHeader>
@@ -351,7 +351,7 @@ function KpiCard({ icon: Icon, label, value, loading, accent }: {
   accent?: boolean;
 }) {
   return (
-    <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
+    <Card className="bg-card border-border">
       <CardContent className="p-4 flex items-center gap-3">
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${accent ? "bg-red-500/10 border border-red-500/30" : "bg-primary/10 border border-primary/30"}`}>
           <Icon className={`h-5 w-5 ${accent ? "text-red-400" : "text-primary"}`} />

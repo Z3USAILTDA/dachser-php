@@ -31,7 +31,7 @@ export default function OlimpoIndex() {
     >
       <div className="space-y-6">
         {/* Header */}
-        <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
+        <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-foreground">
               <Building2 className="h-5 w-5 text-primary" />
@@ -50,7 +50,7 @@ export default function OlimpoIndex() {
             return (
               <Card
                 key={mod.id}
-                className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] hover:border-primary/50 hover:-translate-y-1 transition-all duration-200 cursor-pointer"
+                className="bg-card border-border hover:border-primary/50 hover:-translate-y-1 transition-all duration-200 cursor-pointer"
                 onClick={() => navigate(mod.href)}
               >
                 <CardHeader className="pb-3">
