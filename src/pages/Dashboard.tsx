@@ -162,7 +162,16 @@ const menuItems: MenuItem[] = [
     icon: <Building2 size={34} />,
     label: "OLIMPO",
     subtitle: "Visão Estratégica",
-    href: "/olimpo",
+    children: [
+      {
+        label: "Movimentação Global",
+        href: "/olimpo/mapa",
+      },
+      {
+        label: "Cobrança",
+        href: "/olimpo/cobranca",
+      },
+    ],
   },
 ];
 const Dashboard = () => {
@@ -184,7 +193,7 @@ const Dashboard = () => {
       const parsed = JSON.parse(storedUser);
       // Usuários olimpo_only não podem acessar o Dashboard
       if (parsed.olimpo_only === 1) {
-        navigate("/olimpo");
+        navigate("/olimpo/mapa");
         return;
       }
       // Usuários metrics_only não podem acessar o Dashboard
