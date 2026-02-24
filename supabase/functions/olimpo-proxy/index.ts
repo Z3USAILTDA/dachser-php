@@ -6179,8 +6179,8 @@ serve(async (req) => {
             ts.mbl_id AS asset,
             LEFT(ts.consignee, 255) AS cliente,
             ts.tipo_processo,
-            LEFT(ts.origem, 50) AS origem_code,
-            LEFT(ts.destino, 50) AS destino_code,
+            LEFT(ts.origem, 100) AS origem_code,
+            LEFT(ts.destino, 100) AS destino_code,
             CASE 
               WHEN ts.eta IS NOT NULL AND ts.eta < DATE_SUB(NOW(), INTERVAL 3 DAY) THEN 'Atraso'
               WHEN UPPER(ts.container_status) IN ('DELIVERED', 'DLV', 'GOD', 'EMPTY_RETURNED') THEN 'Entregue'
