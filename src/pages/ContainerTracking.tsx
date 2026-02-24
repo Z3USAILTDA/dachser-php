@@ -2069,6 +2069,22 @@ const ContainerTracking = () => {
                 {lastAutoSync && !autoSyncStatus && <div className="text-xs text-[#666]">
                     Última sincronização: {lastAutoSync.toLocaleTimeString('pt-BR')}
                   </div>}
+                
+                {/* Last Tracking Processing */}
+                {(() => {
+                  const maxLastCheck = mblList.reduce((max, m) => {
+                    if (!m.last_check) return max;
+                    const d = new Date(m.last_check).getTime();
+                    return d > max ? d : max;
+                  }, 0);
+                  if (maxLastCheck === 0) return null;
+                  return (
+                    <div className="flex items-center gap-1.5 text-xs text-[#666]">
+                      <Clock className="w-3.5 h-3.5" />
+                      Último rastreio: {format(new Date(maxLastCheck), 'dd/MM/yyyy HH:mm')}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
@@ -2351,7 +2367,7 @@ const ContainerTracking = () => {
                           
                           {/* Expanded containers row */}
                           {isExpanded && <tr className="bg-[rgba(0,0,0,.3)]">
-                              <td colSpan={9} className="px-4 py-4">
+                              <td colSpan={11} className="px-4 py-4">
                                 {loadingContainers ? <div className="flex items-center justify-center py-4">
                                     <Loader2 className="w-6 h-6 animate-spin text-[#ffc800]" />
                                     <span className="ml-2 text-[#aaaaaa]">Carregando containers...</span>
@@ -2376,7 +2392,9 @@ const ContainerTracking = () => {
                                             <th className="px-3 py-2 text-left">Armador</th>
                                             <th className="px-3 py-2 text-left">Status</th>
                                             <th className="px-3 py-2 text-left">Último Evento</th>
-                                            <th className="px-3 py-2 text-left">ETA</th>
+                                            <th className="px-3 py-2 text-left">ETA Tracking</th>
+                                            <th className="px-3 py-2 text-left">ETA Cadastrado</th>
+                                            <th className="px-3 py-2 text-left">Última Atualização</th>
                                           </tr>
                                         </thead>
                                         <tbody>
@@ -2397,7 +2415,13 @@ const ContainerTracking = () => {
                                                   {cnt.last_event || "Aguardando..."}
                                                 </td>
                                                 <td className="px-3 py-2 text-[#aaaaaa]">
-                                                  {cnt.eta ? new Date(cnt.eta).toLocaleDateString('pt-BR') : "-"}
+                                                  {mbl.eta_api ? new Date(mbl.eta_api).toLocaleDateString('pt-BR') : "—"}
+                                                </td>
+                                                <td className="px-3 py-2 text-[#aaaaaa]">
+                                                  {mbl.eta_master ? new Date(mbl.eta_master).toLocaleDateString('pt-BR') : "—"}
+                                                </td>
+                                                <td className="px-3 py-2 text-[#aaaaaa]">
+                                                  {mbl.last_check ? format(new Date(mbl.last_check), 'dd/MM/yyyy HH:mm') : "—"}
                                                 </td>
                                               </tr>;
                                 })}
