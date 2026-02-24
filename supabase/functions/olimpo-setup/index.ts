@@ -53,8 +53,8 @@ serve(async (req) => {
         cliente VARCHAR(255) DEFAULT NULL,
         
         -- Rota
-        origem_code VARCHAR(20) DEFAULT NULL,
-        destino_code VARCHAR(20) DEFAULT NULL,
+        origem_code VARCHAR(100) DEFAULT NULL,
+        destino_code VARCHAR(100) DEFAULT NULL,
         origem_lat DECIMAL(10,6) DEFAULT NULL,
         origem_lon DECIMAL(10,6) DEFAULT NULL,
         destino_lat DECIMAL(10,6) DEFAULT NULL,
@@ -92,7 +92,14 @@ serve(async (req) => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     `);
 
-    console.log('[olimpo-setup] Tabela criada com sucesso!');
+    // Expandir colunas caso tabela já exista com VARCHAR(20)
+    await client.execute(`
+      ALTER TABLE dados_dachser.t_olimpo_tracking 
+        MODIFY COLUMN origem_code VARCHAR(100) DEFAULT NULL,
+        MODIFY COLUMN destino_code VARCHAR(100) DEFAULT NULL
+    `);
+
+    console.log('[olimpo-setup] Tabela criada/atualizada com sucesso!');
 
     // Verificar estrutura
     const cols = await client.query(`
