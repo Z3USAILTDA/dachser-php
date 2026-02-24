@@ -507,14 +507,17 @@ serve(async (req) => {
     const allAwbsForSwapCheck = wsList.map((r: any) => String(r.awb || '').trim()).filter(Boolean);
     const uniqueAwbsForSwap = [...new Set(allAwbsForSwapCheck)];
     const swapChangedSet = new Set<string>();
+    // Mapa: old_mawb → new_mawb (para substituir o AWB antigo pelo novo na resposta)
+    const swapReplaceMap = new Map<string, string>();
 
     if (uniqueAwbsForSwap.length > 0) {
       try {
         const swapInClause = uniqueAwbsForSwap.map(a => `'${a.replace(/'/g, "''")}'`).join(',');
         const [swapRows] = await client.query(`
-          SELECT DISTINCT old_mawb, new_mawb FROM ${database}.t_master_swap_log
-          WHERE TRIM(new_mawb) COLLATE utf8mb4_unicode_ci IN (${swapInClause})
-             OR TRIM(old_mawb) COLLATE utf8mb4_unicode_ci IN (${swapInClause})
+          SELECT old_mawb, new_mawb, created_at FROM ${database}.t_master_swap_log
+          WHERE TRIM(old_mawb) COLLATE utf8mb4_unicode_ci IN (${swapInClause})
+             OR TRIM(new_mawb) COLLATE utf8mb4_unicode_ci IN (${swapInClause})
+          ORDER BY created_at DESC
         `) as [any[], any];
         const swapList = Array.isArray(swapRows) ? swapRows : [];
         for (const row of swapList) {
@@ -522,8 +525,12 @@ serve(async (req) => {
           const newM = String(row.new_mawb || '').trim();
           if (oldM) swapChangedSet.add(oldM);
           if (newM) swapChangedSet.add(newM);
+          // Mapear old → new para substituição (primeiro encontrado = mais recente)
+          if (oldM && newM && !swapReplaceMap.has(oldM)) {
+            swapReplaceMap.set(oldM, newM);
+          }
         }
-        console.log(`Master swap check: ${swapChangedSet.size} AWBs have master_changed=true`);
+        console.log(`Master swap check: ${swapChangedSet.size} AWBs marked, ${swapReplaceMap.size} AWBs to replace`);
       } catch (swapErr) {
         console.log('Note: t_master_swap_log query failed (table may not exist yet):', swapErr);
       }
@@ -672,9 +679,14 @@ serve(async (req) => {
         }
       }
 
+      // Se o AWB tem swap, substituir pelo novo master
+      const replacedAwb = swapReplaceMap.get(awb) || awb;
+      const wasSwapped = swapReplaceMap.has(awb);
+
       const baseRow = {
         id: ws.id,
-        awb: awb,
+        awb: replacedAwb,
+        awb_original: wasSwapped ? awb : null,
         origem: ws.origin || null,
         destino: ws.destination || null,
         último_status: finalStatus || null,
@@ -685,7 +697,7 @@ serve(async (req) => {
         pieces_discrepancy,
         baseline_pieces,
         has_dis_event,
-        master_changed: swapChangedSet.has(awb),
+        master_changed: swapChangedSet.has(awb) || wasSwapped,
       };
 
       // If this AWB was enriched via t_aereo_api fallback, use that data directly
