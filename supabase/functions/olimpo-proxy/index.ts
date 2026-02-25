@@ -8101,11 +8101,13 @@ serve(async (req) => {
         });
       }
 
-      const { default: mariadb } = await import('npm:mariadb@3.4.0');
-      const client = await mariadb.createConnection({
-        host: mariadbHost, port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
-        user: mariadbUser, password: mariadbPassword, database: 'dados_dachser',
-        connectTimeout: 15000,
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        username: mariadbUser,
+        password: mariadbPassword,
+        db: 'dados_dachser',
+        port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
       });
 
       try {
@@ -8122,7 +8124,7 @@ serve(async (req) => {
         console.log(`[hapag_batch_discover] Found ${pendingRows.length} Hapag MBLs with PENDENTE containers`);
 
         if (pendingRows.length === 0) {
-          await client.end();
+          await client.close();
           return new Response(JSON.stringify({ success: true, processed: 0, message: 'Nenhum MBL Hapag com container PENDENTE' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
@@ -8362,7 +8364,7 @@ serve(async (req) => {
           await new Promise(r => setTimeout(r, 300));
         }
 
-        await client.end();
+        await client.close();
 
         console.log(`[hapag_batch_discover] Done: ${discovered} discovered, ${failed} not found, rateLimited=${rateLimited}`);
 
@@ -8377,7 +8379,7 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       } catch (e: any) {
-        await client.end();
+        await client.close();
         console.error('[hapag_batch_discover] Error:', e);
         return new Response(JSON.stringify({ error: e.message }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
