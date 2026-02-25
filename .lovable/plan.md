@@ -1,68 +1,30 @@
 
 
-## Ajustes na Esteira do Financeiro
+## Fix: Client View in Olimpo Cobranca
 
-### 1. Filtro por Tipo de Execucao na aba Pagamentos
+**Problem**: The "Client" tab shows no data because the SQL query references a non-existent column `nome_cliente`. The correct column in `t_dados_financeiro_nfs` is `razao_social`. Additionally, client names should be truncated at the first "-" for cleaner display.
 
-**Arquivo**: `src/components/esteira/PagamentosTab.tsx`
+---
 
-O filtro `filterTipoExecucao` ja existe (linha 118), mas nao ha um Select visivel na UI para filtrar por valores granulares. Sera adicionado um `Select` na barra de filtros com as opcoes:
-- Todos
-- Manual
-- Remessa 10h
-- Remessa 15h
+### Changes
 
-### 2. Marcar Pronto em Lote
+**1. Update SQL query in `mariadb-proxy/index.ts` (line ~2156)**
 
-**Arquivo**: `src/components/esteira/PagamentosTab.tsx`
+Replace `t.nome_cliente` with `t.razao_social` and apply `SUBSTRING_INDEX` to truncate at the first "-":
 
-Adicionar botao "Marcar Pronto" na barra de acoes em lote (linhas 662-689), ao lado de "Definir Tipo Execucao". A funcao `handleBatchSetReady` vai:
-- Iterar sobre todos os IDs selecionados
-- Verificar se cada um tem `tipo_execucao_pagamento` definido
-- Chamar `handleSetReady` para cada um
-- Exibir toast com resultado (quantos marcados / quantos falharam)
-
-### 3. Visibilidade do usuario OPERACAO
-
-**Arquivo**: `src/pages/esteira/EsteiraIndex.tsx` (linhas 1180-1187)
-
-Atualmente o filtro de OPERACAO mostra vouchers criados pelo usuario, sob responsabilidade dele, ou em A_PROCESSAR. O usuario pediu que OPERACAO veja vouchers nas etapas `OPERACAO` **e** `A_PROCESSAR`.
-
-Alterar de:
-```text
-v.criadoPorUserId === currentUserId ||
-v.responsavelOperacaoUserId === currentUserId ||
-v.etapaAtual === "A_PROCESSAR"
+```sql
+SELECT
+  TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1)) AS product,
+  ...
+GROUP BY TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))
+ORDER BY SUM(t.valor_nf) DESC
 ```
 
-Para:
-```text
-v.etapaAtual === "OPERACAO" ||
-v.etapaAtual === "A_PROCESSAR"
-```
+This single change:
+- Fixes the column reference from `nome_cliente` to `razao_social`
+- Truncates names at the first "-" (e.g., "THYSSENKRUPP BRASIL - THYSSENKRUPP BRASIL LTDA." becomes "THYSSENKRUPP BRASIL")
+- Trims trailing whitespace after the split
+- Groups correctly by the truncated name so records for the same client are consolidated
 
-Isso garante que qualquer usuario com funcao OPERACAO veja todos os vouchers nessas duas etapas.
-
-### 4. Auto-filtro de etapa por funcao do usuario
-
-**Arquivo**: `src/pages/esteira/EsteiraIndex.tsx`
-
-Adicionar um `useEffect` que, apos `useUserRole()` carregar, define o filtro de "Etapa Atual" automaticamente:
-
-| Funcao | Filtro default |
-|---|---|
-| OPERACAO | OPERACAO |
-| FISCAL | FISCAL |
-| SUPERVISOR | SUPERVISOR |
-| FINANCEIRO | FINANCEIRO |
-| ADMIN / GESTOR | all (sem filtro) |
-
-O usuario pode alterar manualmente a qualquer momento.
-
-### Resumo de arquivos
-
-| Arquivo | Mudanca |
-|---|---|
-| `src/components/esteira/PagamentosTab.tsx` | Select para tipo execucao + botao batch "Marcar Pronto" |
-| `src/pages/esteira/EsteiraIndex.tsx` | Filtro OPERACAO mostra etapas OPERACAO+A_PROCESSAR; auto-filtro por funcao |
+**Files modified**: `supabase/functions/mariadb-proxy/index.ts` (2 lines in the SQL query)
 
