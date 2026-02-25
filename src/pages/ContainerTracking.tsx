@@ -356,6 +356,7 @@ const ContainerTracking = () => {
   const [isRunningImoRefresh, setIsRunningImoRefresh] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [isRunningRetryNaoEncontrado, setIsRunningRetryNaoEncontrado] = useState(false);
+  const [isRunningHapagDiscover, setIsRunningHapagDiscover] = useState(false);
 
   // Expansion state
   const [expandedMbl, setExpandedMbl] = useState<string | null>(null);
@@ -1427,7 +1428,53 @@ const ContainerTracking = () => {
     }
   };
 
-  // Refresh all vessel IMOs by searching via vessel name (vessel/finder)
+  // Hapag batch discover - process all Hapag MBLs with PENDENTE containers
+  const handleHapagBatchDiscover = async () => {
+    if (!isAdmin) return;
+    setIsRunningHapagDiscover(true);
+    setShowAdminModal(false);
+    Swal.fire({
+      title: 'Processando MBLs Hapag...',
+      html: '<p style="color:#aaa">Consultando API Hapag-Lloyd para descobrir containers e rastrear</p><p id="hapag-progress" style="color:#60a5fa;margin-top:8px">Aguarde...</p>',
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      background: '#0a0b14',
+      color: '#fff',
+      didOpen: () => Swal.showLoading(),
+    });
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'hapag_batch_discover' }),
+      });
+      const data = await res.json();
+      Swal.close();
+      if (data.success) {
+        const rl = data.rate_limited ? '<br><span style="color:#f59e0b">⚠ Rate limit atingido - execute novamente para continuar</span>' : '';
+        Swal.fire({
+          icon: 'success',
+          title: 'Hapag Discovery concluído',
+          html: `<p><b>${data.discovered}</b> MBLs com containers descobertos</p><p><b>${data.failed}</b> não encontrados</p><p>Total processado: ${data.total}</p>${rl}`,
+          background: '#0a0b14',
+          color: '#fff',
+        });
+        fetchMblData();
+      } else {
+        Swal.fire({ icon: 'error', title: 'Erro', text: data.error || 'Falha no processamento', background: '#0a0b14', color: '#fff' });
+      }
+    } catch (e: any) {
+      Swal.close();
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setIsRunningHapagDiscover(false);
+    }
+  };
+
+
   const handleAdminRefreshImos = async () => {
     if (!isAdmin) return;
     const confirmResult = await Swal.fire({
@@ -2590,6 +2637,19 @@ const ContainerTracking = () => {
             <div className="space-y-2">
               <h4 className="text-xs uppercase tracking-wide text-gray-500 font-medium">Rastreamento</h4>
               <div className="flex flex-wrap gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button onClick={handleHapagBatchDiscover} disabled={isRunningHapagDiscover || !!autoSyncStatus} className="h-9 px-4 rounded-lg bg-[rgba(245,158,11,.2)] text-amber-400 text-sm font-medium flex items-center gap-2 border border-amber-500/30 hover:bg-[rgba(245,158,11,.3)] transition disabled:opacity-50">
+                        {isRunningHapagDiscover ? <Loader2 className="w-4 h-4 animate-spin" /> : <Anchor className="w-4 h-4" />}
+                        Hapag Discover
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Descobrir containers de MBLs Hapag via API Hapag-Lloyd</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
