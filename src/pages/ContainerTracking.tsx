@@ -1443,13 +1443,12 @@ const ContainerTracking = () => {
       didOpen: () => Swal.showLoading(),
     });
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy`, {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hapag-batch-discover`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'hapag_batch_discover' }),
       });
       const data = await res.json();
       Swal.close();

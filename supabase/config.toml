@@ -319,3 +319,6 @@ verify_jwt = false
 
 [functions.parse-manifest-swap]
 verify_jwt = false
+
+[functions.hapag-batch-discover]
+verify_jwt = false
