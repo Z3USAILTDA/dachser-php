@@ -153,7 +153,15 @@ export const PagamentosTab = () => {
 
       if (error) throw error;
 
-      setPagamentos(data?.vouchers || []);
+      // Deduplicate by id (backend JOIN may produce duplicates)
+      const rawVouchers = data?.vouchers || [];
+      const seen = new Set<string>();
+      const uniqueVouchers = rawVouchers.filter((v: PagamentoItem) => {
+        if (seen.has(v.id)) return false;
+        seen.add(v.id);
+        return true;
+      });
+      setPagamentos(uniqueVouchers);
       setStats(data?.stats || null);
     } catch (error: unknown) {
       console.error("Erro ao carregar pagamentos:", error);

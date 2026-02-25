@@ -7157,18 +7157,18 @@ serve(async (req) => {
 
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-        // Count total
+        // Count total (use DISTINCT to avoid duplicate counts from JOIN)
         const countResult = await client.query(
-          `SELECT COUNT(*) as total FROM dados_dachser.t_vouchers v
+          `SELECT COUNT(DISTINCT v.id) as total FROM dados_dachser.t_vouchers v
            LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
            ${whereClause}`,
           params
         );
         const total = Number(countResult[0]?.total || 0);
 
-        // Get paginated data with enviado_por from logs
+        // Get paginated data with enviado_por from logs (DISTINCT to avoid duplicates)
         const vouchers = await client.query(
-          `SELECT 
+          `SELECT DISTINCT
             v.id, v.numero_spo, v.fornecedor, v.cnpj_fornecedor, v.valor, v.moeda,
             v.vencimento, v.forma_pagamento, v.tipo_documento, v.cobranca_em_nome_de,
             v.filial, v.linha_digitavel, v.codigo_barras, v.status_pagamento,
