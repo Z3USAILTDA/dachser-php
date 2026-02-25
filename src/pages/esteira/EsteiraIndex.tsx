@@ -647,6 +647,21 @@ const EsteiraIndex = () => {
   // Enable automatic sync of voucher updates to MariaDB
   useVoucherSync();
 
+  // Auto-filter etapa based on user role
+  useEffect(() => {
+    if (roleLoading || !role) return;
+    const roleEtapaMap: Record<string, string> = {
+      OPERACAO: "OPERACAO",
+      FISCAL: "FISCAL",
+      SUPERVISOR: "SUPERVISOR",
+      FINANCEIRO: "FINANCEIRO",
+    };
+    const defaultEtapa = roleEtapaMap[role] || "all";
+    if (defaultEtapa !== "all") {
+      setFilters(prev => ({ ...prev, etapa: defaultEtapa }));
+    }
+  }, [role, roleLoading]);
+
   // Get current user ID
   useEffect(() => {
     const getCurrentUser = async () => {
@@ -1178,11 +1193,10 @@ const EsteiraIndex = () => {
       return vouchers.filter(v => v.etapaAtual === "SUPERVISOR" || v.responsavelSupervisorUserId === currentUserId);
     }
     if (isOperacao) {
-      // OPERACAO users can see vouchers they created, are responsible for, AND pending A_PROCESSAR vouchers
+      // OPERACAO users see all vouchers in OPERACAO and A_PROCESSAR stages
       return vouchers.filter(v => 
-        v.criadoPorUserId === currentUserId || 
-        v.responsavelOperacaoUserId === currentUserId ||
-        v.etapaAtual === "A_PROCESSAR" // Allow seeing backlog to import
+        v.etapaAtual === "OPERACAO" ||
+        v.etapaAtual === "A_PROCESSAR"
       );
     }
     if (isFiscal) {
