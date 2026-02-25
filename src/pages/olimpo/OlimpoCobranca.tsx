@@ -134,7 +134,7 @@ export default function OlimpoCobranca() {
     }
   };
 
-  useEffect(() => { setCurrentPage(1); setClientFilter(""); }, [viewMode]);
+  useEffect(() => { fetchData(); setCurrentPage(1); setClientFilter(""); }, [viewMode]);
 
   // Apply product mapping only for product view
   const displayRows = useMemo(() => {
