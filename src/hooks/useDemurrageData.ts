@@ -326,8 +326,11 @@ export function useSyncDemurrage() {
 
   return useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('demurrage-mariadb-sync');
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'demurrage_sync_from_tracking' }
+      });
       if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Sync failed');
       return data;
     },
     onSuccess: () => {

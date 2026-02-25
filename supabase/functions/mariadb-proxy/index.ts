@@ -12533,6 +12533,193 @@ serve(async (req) => {
         break;
       }
 
+      case 'demurrage_sync_from_tracking': {
+        console.log('[DEMURRAGE-SYNC] Starting sync from t_tracking_sea...');
+        const syncResults = {
+          total_records: 0,
+          created: 0,
+          updated: 0,
+          errors: 0,
+          error_details: [] as string[],
+        };
+
+        // Query source data from t_tracking_sea + t_consulta_armador
+        const sourceRows = await client.query(`
+          SELECT 
+            t.id,
+            t.mbl_id,
+            t.tipo_processo,
+            t.container,
+            t.shipping_line,
+            t.consignee,
+            t.origem,
+            t.destino,
+            t.navio,
+            t.vessel_imo,
+            t.eta,
+            t.last_event,
+            t.container_status,
+            t.email_analista,
+            t.email_cliente,
+            t.active,
+            c.booking,
+            c.etd,
+            c.eta as eta_confirmado,
+            c.voyage,
+            c.status_armador
+          FROM dados_dachser.t_tracking_sea t
+          LEFT JOIN dados_dachser.t_consulta_armador c 
+            ON t.mbl_id COLLATE utf8mb4_general_ci = c.mbl_id COLLATE utf8mb4_general_ci
+          WHERE t.active = 1
+            AND t.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
+            AND t.container IS NOT NULL
+            AND t.container != ''
+            AND UPPER(t.container) != 'PENDENTE'
+            AND UPPER(t.container) != 'NAO_ENCONTRADO'
+            AND (t.container_status IS NULL OR UPPER(t.container_status) NOT LIKE '%NOT FOUND%')
+            AND (t.container_status IS NULL OR UPPER(t.container_status) NOT LIKE '%NAO_ENCONTRADO%')
+            AND (t.last_event IS NULL OR UPPER(t.last_event) NOT LIKE '%PREFIX NOT FOUND%')
+            AND (t.last_event IS NULL OR UPPER(t.last_event) NOT LIKE '%NOT FOUND%')
+          ORDER BY t.id DESC
+          LIMIT 1000
+        `);
+
+        syncResults.total_records = sourceRows.length;
+        console.log(`[DEMURRAGE-SYNC] Found ${sourceRows.length} source records`);
+
+        function mapCronosStatus(lastEvent: string | null, statusArmador: string | null, containerStatus: string | null): string {
+          const ev = (lastEvent || '').toLowerCase();
+          const st = (statusArmador || '').toLowerCase();
+          const cs = (containerStatus || '').toLowerCase();
+          if (ev.includes('return') || ev.includes('devol') || st.includes('return') || cs.includes('return') || ev.includes('empty') || cs.includes('empty')) return 'RETURNED';
+          if (ev.includes('gate out') || ev.includes('gateout') || ev.includes('saída') || ev.includes('saida') || st.includes('gate out') || cs.includes('gate-out')) return 'GATE_OUT';
+          if (ev.includes('arrived') || ev.includes('discharged') || ev.includes('atracado') || ev.includes('descarregado') || ev.includes('arrival') || cs.includes('discharged')) return 'ARRIVED';
+          if (ev.includes('transit') || ev.includes('departed') || ev.includes('em trânsito') || ev.includes('embarcado') || ev.includes('loaded') || ev.includes('sailing')) return 'IN_TRANSIT';
+          return 'PENDING';
+        }
+
+        function fmtDate(d: any): string | null {
+          if (!d) return null;
+          if (typeof d === 'string') return d.split('T')[0];
+          try { return d.toISOString().split('T')[0]; } catch { return null; }
+        }
+
+        for (const row of sourceRows) {
+          try {
+            if (!row.mbl_id || !row.container) continue;
+            const numero = row.container.trim();
+            const mbl = row.mbl_id.trim();
+            const cronosStatus = mapCronosStatus(row.last_event, row.status_armador, row.container_status);
+            const etd = fmtDate(row.etd);
+            const eta = row.eta_confirmado ? fmtDate(row.eta_confirmado) : fmtDate(row.eta);
+            const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+            // Fetch historical dates
+            let discharge_date: string | null = null;
+            let gate_out_date: string | null = null;
+            let return_date: string | null = null;
+            try {
+              const histRows = await client.query(`
+                SELECT event_type, MIN(event_datetime) as event_datetime FROM (
+                  SELECT 'discharge' as event_type, event_datetime FROM dados_dachser.t_tracking_sea_history 
+                  WHERE container = ? AND (event_description LIKE '%Discharged%' OR event_description = 'Discharge' OR event_description LIKE '%Unloaded from Vessel%' OR event_description LIKE '%Import Discharged%' OR event_description LIKE '%Descarga%')
+                  UNION ALL
+                  SELECT 'gate_out' as event_type, event_datetime FROM dados_dachser.t_tracking_sea_history 
+                  WHERE container = ? AND (event_description LIKE '%Gate out%' OR event_description LIKE '%Gate-out%' OR event_description = 'Import to consignee' OR event_description LIKE '%Saída%' OR event_description LIKE '%Saida%')
+                  UNION ALL
+                  SELECT 'return' as event_type, event_datetime FROM dados_dachser.t_tracking_sea_history 
+                  WHERE container = ? AND (event_description LIKE '%Empty%returned%' OR event_description LIKE '%Gate in%' OR event_description LIKE '%Devolução%' OR event_description LIKE '%Devolvido%' OR event_description LIKE '%Empty to shipper%')
+                ) AS events GROUP BY event_type
+              `, [numero, numero, numero]);
+              for (const hr of histRows) {
+                if (hr.event_datetime) {
+                  const ds = fmtDate(hr.event_datetime);
+                  if (hr.event_type === 'discharge') discharge_date = ds;
+                  if (hr.event_type === 'gate_out') gate_out_date = ds;
+                  if (hr.event_type === 'return') return_date = ds;
+                }
+              }
+            } catch { /* ignore history errors */ }
+
+            // Check existing
+            const existing = await client.query(`
+              SELECT id, ft_started_at, data_atracacao, data_gate_out, data_devolucao, ft_source
+              FROM dados_dachser.t_dachser_demurrage_containers WHERE numero = ? AND mbl = ? LIMIT 1
+            `, [numero, mbl]);
+
+            let ftStartedAt = existing?.[0]?.ft_started_at || null;
+            let dataAtracacao = existing?.[0]?.data_atracacao || null;
+            let dataGateOut = existing?.[0]?.data_gate_out || null;
+            let dataDevolucao = existing?.[0]?.data_devolucao || null;
+            let ftSource = existing?.[0]?.ft_source || null;
+
+            if (!dataAtracacao) dataAtracacao = discharge_date || (cronosStatus === 'ARRIVED' ? now.split(' ')[0] : null);
+            if (!ftStartedAt) {
+              if (discharge_date) { ftStartedAt = `${discharge_date} 00:00:00`; ftSource = 'HISTORICAL'; }
+              else if (cronosStatus === 'ARRIVED') { ftStartedAt = now; ftSource = 'SYNC'; }
+              else if (eta) { ftStartedAt = `${eta} 00:00:00`; ftSource = 'ETA'; }
+            }
+            if (!dataGateOut) dataGateOut = gate_out_date || (cronosStatus === 'GATE_OUT' ? now.split(' ')[0] : null);
+            if (!dataDevolucao) dataDevolucao = return_date || (cronosStatus === 'RETURNED' ? now.split(' ')[0] : null);
+
+            if (existing && existing.length > 0) {
+              await client.execute(`
+                UPDATE dados_dachser.t_dachser_demurrage_containers SET
+                  booking = ?, cliente = ?, armador = ?, tipo_processo = ?,
+                  porto_origem = ?, porto_destino = ?, navio = ?, vessel_imo = ?, voyage = ?,
+                  etd = ?, eta = ?, last_event = ?, container_status = ?, status_armador = ?, cronos_status = ?,
+                  email_analista = ?, email_cliente = ?,
+                  ft_started_at = CASE WHEN ? = 'HISTORICAL' THEN ? ELSE COALESCE(ft_started_at, ?) END,
+                  ft_source = COALESCE(?, ft_source),
+                  data_atracacao = CASE WHEN ? IS NOT NULL THEN ? ELSE COALESCE(data_atracacao, ?) END,
+                  data_gate_out = CASE WHEN ? IS NOT NULL THEN ? ELSE COALESCE(data_gate_out, ?) END,
+                  data_devolucao = CASE WHEN ? IS NOT NULL THEN ? ELSE COALESCE(data_devolucao, ?) END,
+                  mariadb_id = ?, last_sync_at = NOW(), updated_at = NOW()
+                WHERE id = ?
+              `, [
+                row.booking || null, row.consignee || null, row.shipping_line || null, row.tipo_processo || null,
+                row.origem || null, row.destino || null, row.navio || null, row.vessel_imo || null, row.voyage || null,
+                etd, eta, row.last_event || null, row.container_status || null, row.status_armador || null, cronosStatus,
+                row.email_analista || null, row.email_cliente || null,
+                ftSource, ftStartedAt, ftStartedAt,
+                ftSource,
+                discharge_date, dataAtracacao, dataAtracacao,
+                gate_out_date, dataGateOut, dataGateOut,
+                return_date, dataDevolucao, dataDevolucao,
+                row.id, existing[0].id
+              ]);
+              syncResults.updated++;
+            } else {
+              await client.execute(`
+                INSERT INTO dados_dachser.t_dachser_demurrage_containers (
+                  numero, mbl, booking, cliente, armador, tipo_processo,
+                  porto_origem, porto_destino, navio, vessel_imo, voyage,
+                  etd, eta, last_event, container_status, status_armador, cronos_status,
+                  email_analista, email_cliente,
+                  ft_started_at, ft_source, data_atracacao, data_gate_out, data_devolucao,
+                  mariadb_id, last_sync_at, active
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 1)
+              `, [
+                numero, mbl, row.booking || null, row.consignee || null, row.shipping_line || null, row.tipo_processo || null,
+                row.origem || null, row.destino || null, row.navio || null, row.vessel_imo || null, row.voyage || null,
+                etd, eta, row.last_event || null, row.container_status || null, row.status_armador || null, cronosStatus,
+                row.email_analista || null, row.email_cliente || null,
+                ftStartedAt, ftSource, dataAtracacao, dataGateOut, dataDevolucao,
+                row.id
+              ]);
+              syncResults.created++;
+            }
+          } catch (rowErr: any) {
+            syncResults.errors++;
+            syncResults.error_details.push(`${row.container}: ${rowErr.message}`);
+          }
+        }
+
+        console.log(`[DEMURRAGE-SYNC] Done: created=${syncResults.created}, updated=${syncResults.updated}, errors=${syncResults.errors}`);
+        result = { success: true, message: 'Demurrage sync completed', results: syncResults };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
