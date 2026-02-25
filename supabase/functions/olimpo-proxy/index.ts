@@ -4058,6 +4058,15 @@ serve(async (req) => {
           }
         }
 
+        // 4. Remove any duplicate container rows for this MBL (keep lowest id)
+        const dedupResult = await client.execute(`
+          DELETE t1 FROM dados_dachser.t_tracking_sea t1
+          INNER JOIN dados_dachser.t_tracking_sea t2
+          ON t1.mbl_id = t2.mbl_id AND t1.container = t2.container AND t1.id > t2.id
+          WHERE t1.mbl_id = ?
+        `, [mblId]);
+        console.log(`[manual_add_containers] Deduped ${dedupResult.affectedRows || 0} duplicate rows for MBL ${mblId}`);
+
         await client.close();
 
         console.log(`[manual_add_containers] Completed for MBL ${mblId}: inserted=${inserted}, updated=${updated}`);
