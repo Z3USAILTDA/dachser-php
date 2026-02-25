@@ -398,7 +398,7 @@ export default function OlimpoCobranca() {
                 <CardTitle className="text-sm text-foreground">Aging por {columnLabel}</CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={320}>
+                <ResponsiveContainer width="100%" height={480}>
                   <BarChart data={barData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
                     <XAxis dataKey="product" tick={{ fill: "#aaa", fontSize: 11 }} />
