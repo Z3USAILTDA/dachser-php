@@ -8084,8 +8084,10 @@ serve(async (req) => {
 
     // ===== HAPAG BATCH DISCOVER: Process all Hapag MBLs with PENDENTE containers =====
     if (action === 'hapag_batch_discover') {
+      console.log('[hapag_batch_discover] Action matched, checking credentials...');
       const hapagClientId = Deno.env.get('HAPAG_CLIENT_ID');
       const hapagApiKey = Deno.env.get('HAPAG_API_KEY');
+      console.log(`[hapag_batch_discover] Credentials: clientId=${!!hapagClientId}, apiKey=${!!hapagApiKey}`);
       if (!hapagClientId || !hapagApiKey) {
         return new Response(JSON.stringify({ error: 'HAPAG_CLIENT_ID ou HAPAG_API_KEY não configurados' }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -8101,7 +8103,9 @@ serve(async (req) => {
         });
       }
 
+      console.log('[hapag_batch_discover] Importing MySQL client...');
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      console.log('[hapag_batch_discover] Connecting to MariaDB...');
       const client = await new Client().connect({
         hostname: mariadbHost,
         username: mariadbUser,
@@ -8109,6 +8113,7 @@ serve(async (req) => {
         db: 'dados_dachser',
         port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
       });
+      console.log('[hapag_batch_discover] Connected to MariaDB');
 
       try {
         // Find all Hapag MBLs with PENDENTE containers
