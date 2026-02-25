@@ -1,4 +1,6 @@
+// v1.1 - hapag-batch-discover standalone
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createPool } from "npm:mysql2@3.11.3/promise";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,36 +25,43 @@ serve(async (req) => {
     const mariadbHost = Deno.env.get('MARIADB_HOST');
     const mariadbUser = Deno.env.get('MARIADB_USER');
     const mariadbPassword = Deno.env.get('MARIADB_PASSWORD');
+    const mariadbPort = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
     if (!mariadbHost || !mariadbUser || !mariadbPassword) {
       return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
-    const client = await new Client().connect({
-      hostname: mariadbHost,
-      username: mariadbUser,
+    const pool = createPool({
+      host: mariadbHost,
+      user: mariadbUser,
       password: mariadbPassword,
-      db: 'dados_dachser',
-      port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
+      database: 'dados_dachser',
+      port: mariadbPort,
+      connectTimeout: 10000,
+      waitForConnections: true,
+      connectionLimit: 2,
     });
-    console.log('[hapag_batch_discover] Connected to MariaDB');
 
+    let conn;
     try {
-      const pendingRows = await client.query(`
+      conn = await pool.getConnection();
+      console.log('[hapag_batch_discover] Connected to MariaDB');
+
+      const [pendingRows] = await conn.query(`
         SELECT DISTINCT t.mbl_id, t.consignee, t.tipo_processo, t.email_analista, t.email_cliente
         FROM dados_dachser.t_tracking_sea t
         WHERE t.active = 1
           AND t.container IN ('PENDENTE', '')
           AND (t.mbl_id LIKE 'HLCU%' OR t.mbl_id LIKE 'HLXU%' OR t.mbl_id LIKE 'HLBU%' OR t.mbl_id LIKE 'SAHL%' OR t.mbl_id LIKE 'GLNL%')
         ORDER BY t.created_at ASC
-      `);
+      `) as any[];
 
       console.log(`[hapag_batch_discover] Found ${pendingRows.length} Hapag MBLs with PENDENTE containers`);
 
       if (pendingRows.length === 0) {
-        await client.close();
+        conn.release();
+        await pool.end();
         return new Response(JSON.stringify({ success: true, processed: 0, discovered: 0, failed: 0, message: 'Nenhum MBL Hapag com container PENDENTE' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -150,7 +159,6 @@ serve(async (req) => {
               let vesselImo: string | null = null;
               let origem: string | null = null;
               let destino: string | null = null;
-              let etd: string | null = null;
               let eta: string | null = null;
               let cStatus: string | null = null;
               let lastEvt: string | null = null;
@@ -162,7 +170,6 @@ serve(async (req) => {
                 }
                 if (!origem && e.transportEventTypeCode === 'DEPA') {
                   origem = e.transportCall?.location?.locationName || e.transportCall?.UNLocationCode || null;
-                  etd = e.eventDateTime?.split('T')[0] || null;
                 }
                 if (e.transportEventTypeCode === 'ARRI') {
                   destino = e.transportCall?.location?.locationName || e.transportCall?.UNLocationCode || null;
@@ -191,13 +198,13 @@ serve(async (req) => {
 
               const cleanContainer = ctrNo.replace(/[^A-Z0-9]/gi, '').toUpperCase();
 
-              const existing = await client.query(
+              const [existing] = await conn.query(
                 `SELECT id FROM dados_dachser.t_tracking_sea WHERE mbl_id = ? AND container = ? LIMIT 1`,
                 [mblId, cleanContainer]
-              );
+              ) as any[];
 
               if (existing.length > 0) {
-                await client.execute(`
+                await conn.execute(`
                   UPDATE dados_dachser.t_tracking_sea
                   SET container_status = ?, origem = COALESCE(?, origem), destino = COALESCE(?, destino),
                       eta = ?, navio = COALESCE(?, navio), vessel_imo = COALESCE(?, vessel_imo),
@@ -206,7 +213,7 @@ serve(async (req) => {
                   WHERE mbl_id = ? AND container = ?
                 `, [cStatus, origem, destino, eta, vessel, vesselImo, lastEvt, mblId, cleanContainer]);
               } else {
-                await client.execute(`
+                await conn.execute(`
                   INSERT INTO dados_dachser.t_tracking_sea 
                     (mbl_id, container, consignee, shipping_line, tipo_processo, email_analista, email_cliente,
                      container_status, origem, destino, eta, navio, vessel_imo, last_event, last_check, active, created_at, updated_at)
@@ -221,7 +228,7 @@ serve(async (req) => {
                   const evtType = evt.equipmentEventTypeCode || evt.transportEventTypeCode || evt.shipmentEventTypeCode || 'UNKNOWN';
                   const evtLoc = evt.eventLocation?.locationName || evt.transportCall?.location?.locationName || '';
                   const evtVessel = evt.transportCall?.vessel?.vesselName || null;
-                  await client.execute(`
+                  await conn.execute(`
                     INSERT IGNORE INTO dados_dachser.t_tracking_sea_history 
                       (mbl_id, container, event_date, event_code, event_description, location, vessel, source, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, 'HAPAG_API', NOW())
@@ -233,26 +240,26 @@ serve(async (req) => {
             }
 
             // Remove PENDENTE placeholder
-            await client.execute(`
+            await conn.execute(`
               DELETE FROM dados_dachser.t_tracking_sea 
               WHERE mbl_id = ? AND container IN ('PENDENTE', '')
             `, [mblId]);
 
             // Update parent MBL summary
-            const containerCountResult = await client.query(
+            const [containerCountResult] = await conn.query(
               `SELECT COUNT(*) as cnt FROM dados_dachser.t_tracking_sea WHERE mbl_id = ? AND container NOT IN ('PENDENTE', '') AND active = 1`,
               [mblId]
-            );
+            ) as any[];
             const containerCount = containerCountResult[0]?.cnt || 0;
-            const latestContainer = await client.query(
+            const [latestContainer] = await conn.query(
               `SELECT container_status, last_event, last_check, navio, vessel_imo, eta, origem, destino 
                FROM dados_dachser.t_tracking_sea WHERE mbl_id = ? AND container NOT IN ('PENDENTE', '') AND active = 1 
                ORDER BY last_check DESC LIMIT 1`,
               [mblId]
-            );
+            ) as any[];
             if (latestContainer.length > 0) {
               const lc = latestContainer[0];
-              await client.execute(`
+              await conn.execute(`
                 UPDATE dados_dachser.t_sea_master
                 SET container_count = ?, container_status = ?, last_event = ?, last_check = NOW(),
                     navio = COALESCE(?, navio), vessel_imo = COALESCE(?, vessel_imo),
@@ -282,7 +289,8 @@ serve(async (req) => {
         await new Promise(r => setTimeout(r, 300));
       }
 
-      await client.close();
+      conn.release();
+      await pool.end();
 
       console.log(`[hapag_batch_discover] Done: ${discovered} discovered, ${failed} not found, rateLimited=${rateLimited}`);
 
@@ -297,7 +305,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     } catch (e: any) {
-      await client.close();
+      if (conn) conn.release();
+      await pool.end();
       console.error('[hapag_batch_discover] Error:', e);
       return new Response(JSON.stringify({ error: e.message }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
