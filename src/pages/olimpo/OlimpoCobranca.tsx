@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, TrendingUp, AlertTriangle, Clock, RefreshCw } from "lucide-react";
+import { DollarSign, TrendingUp, AlertTriangle, Clock, RefreshCw, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -110,6 +111,9 @@ export default function OlimpoCobranca() {
   const [data, setData] = useState<AgingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"product" | "client">("product");
+  const [clientFilter, setClientFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 15;
   const { toast } = useToast();
 
   const fetchData = async () => {
@@ -130,13 +134,26 @@ export default function OlimpoCobranca() {
     }
   };
 
-  useEffect(() => { fetchData(); }, [viewMode]);
+  useEffect(() => { setCurrentPage(1); setClientFilter(""); }, [viewMode]);
 
   // Apply product mapping only for product view
   const displayRows = useMemo(() => {
     if (!data?.data) return [];
-    return viewMode === "product" ? mergeProductRows(data.data) : data.data;
-  }, [data, viewMode]);
+    const rows = viewMode === "product" ? mergeProductRows(data.data) : data.data;
+    if (viewMode === "client" && clientFilter.trim()) {
+      const q = clientFilter.trim().toLowerCase();
+      return rows.filter((r) => r.product.toLowerCase().includes(q));
+    }
+    return rows;
+  }, [data, viewMode, clientFilter]);
+
+  // Reset page when filter changes
+  useEffect(() => { setCurrentPage(1); }, [clientFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(displayRows.length / PAGE_SIZE));
+  const paginatedRows = viewMode === "client"
+    ? displayRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+    : displayRows;
 
   // Recalculate totals from displayRows
   const totals = useMemo(() => {
@@ -272,8 +289,19 @@ export default function OlimpoCobranca() {
 
         {/* Aging Table */}
         <Card className="bg-card border-border overflow-hidden">
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
             <CardTitle className="text-sm text-foreground">Brazil Customer Aging Overview</CardTitle>
+            {viewMode === "client" && (
+              <div className="relative w-64">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Filtrar cliente..."
+                  value={clientFilter}
+                  onChange={(e) => setClientFilter(e.target.value)}
+                  className="h-8 pl-8 text-xs bg-background border-border"
+                />
+              </div>
+            )}
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -305,13 +333,13 @@ export default function OlimpoCobranca() {
                     <tr>
                       <td colSpan={9} className="text-center py-8 text-muted-foreground">Carregando dados...</td>
                     </tr>
-                  ) : displayRows.length === 0 ? (
+                  ) : paginatedRows.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="text-center py-8 text-muted-foreground">Nenhum dado encontrado</td>
                     </tr>
                   ) : (
                     <>
-                      {displayRows.map((row, idx) => {
+                      {paginatedRows.map((row, idx) => {
                         const rowOverdue = row.aging_90 + row.aging_180 + row.aging_240 + row.aging_360 + row.aging_360_plus;
                         const rowTotal = row.not_due + rowOverdue;
                         return (
@@ -344,6 +372,21 @@ export default function OlimpoCobranca() {
                 </tbody>
               </table>
             </div>
+            {viewMode === "client" && totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-border/50">
+                <span className="text-xs text-muted-foreground">
+                  {displayRows.length} clientes • Página {currentPage} de {totalPages}
+                </span>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
