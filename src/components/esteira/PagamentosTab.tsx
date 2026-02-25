@@ -484,6 +484,18 @@ export const PagamentosTab = () => {
             </SelectContent>
           </Select>
 
+          <Select value={filterTipoExecucao} onValueChange={setFilterTipoExecucao}>
+            <SelectTrigger className="w-[150px] bg-card border-border rounded-full">
+              <SelectValue placeholder="Tipo Exec." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos Tipo Exec.</SelectItem>
+              <SelectItem value="MANUAL">Manual</SelectItem>
+              <SelectItem value="REMESSA_10H">Remessa 10h</SelectItem>
+              <SelectItem value="REMESSA_15H">Remessa 15h</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Select value={filterStatusIntegracaoRm} onValueChange={setFilterStatusIntegracaoRm}>
             <SelectTrigger className="w-[140px] bg-card border-border rounded-full">
               <SelectValue placeholder="Status RM" />
@@ -683,6 +695,40 @@ export const PagamentosTab = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button 
+            size="sm" 
+            variant="default"
+            onClick={async () => {
+              if (selectedIds.size === 0) return;
+              const selected = pagamentos.filter(p => selectedIds.has(p.id));
+              const semTipo = selected.filter(p => !p.tipo_execucao_pagamento);
+              if (semTipo.length > 0) {
+                toast({
+                  title: "Tipo de execução obrigatório",
+                  description: `${semTipo.length} voucher(s) sem tipo de execução definido. Defina antes de marcar como pronto.`,
+                  variant: "destructive"
+                });
+                return;
+              }
+              let sucesso = 0;
+              let falha = 0;
+              for (const pag of selected) {
+                if (pag.is_pronto_para_robo) { sucesso++; continue; }
+                try {
+                  await handleSetReady(pag.id, true, pag.tipo_execucao_pagamento);
+                  sucesso++;
+                } catch {
+                  falha++;
+                }
+              }
+              toast({ title: `Marcar Pronto em lote`, description: `${sucesso} marcado(s) com sucesso${falha > 0 ? `, ${falha} falha(s)` : ""}` });
+              setSelectedIds(new Set());
+              loadPagamentos();
+            }}
+          >
+            <Check className="h-4 w-4 mr-2" />
+            Marcar Pronto ({selectedIds.size})
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
             Limpar Seleção
           </Button>
