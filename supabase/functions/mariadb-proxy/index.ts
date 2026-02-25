@@ -2153,7 +2153,7 @@ serve(async (req) => {
         
         const clientAgingSql = `
           SELECT
-            COALESCE(t.nome_cliente, 'Sem Cliente') AS product,
+            TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1)) AS product,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
@@ -2175,7 +2175,7 @@ serve(async (req) => {
                 AND b.StatusLan IN (1, 2, 3)
             )
             AND (t.disputa IS NULL OR t.disputa = 0)
-          GROUP BY COALESCE(t.nome_cliente, 'Sem Cliente')
+          GROUP BY TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))
           ORDER BY SUM(t.valor_nf) DESC
         `;
         
