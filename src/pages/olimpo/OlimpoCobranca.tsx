@@ -279,7 +279,7 @@ export default function OlimpoCobranca() {
     </div>
   );
   return (
-    <PageLayout title="DACHSER" subtitle="Cobrança" pageIcon={DollarSign} backTo="/" rightContent={headerRight}>
+    <PageLayout title="DACHSER" subtitle="Cobrança" pageIcon={DollarSign} backTo="/dashboard" rightContent={headerRight}>
       <div className="space-y-6">
         {/* KPI Cards */}
         <div className="grid gap-4 md:grid-cols-4">
