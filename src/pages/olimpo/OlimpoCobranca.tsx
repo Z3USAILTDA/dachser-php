@@ -241,7 +241,7 @@ export default function OlimpoCobranca() {
   );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Olimpo — Cobrança" pageIcon={DollarSign} backTo="/olimpo" rightContent={headerRight}>
+    <PageLayout title="DACHSER" subtitle="Cobrança" pageIcon={DollarSign} backTo="/olimpo" rightContent={headerRight}>
       <div className="space-y-6">
 
         {/* KPI Cards */}
