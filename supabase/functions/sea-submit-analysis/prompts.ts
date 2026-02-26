@@ -1333,13 +1333,14 @@ The HBL NEVER breaks down weight/CBM per individual invoice within an exporter.
 Always use the AGGREGATE format: list manifest items as REFERENCE ONLY (no numeric
 comparison per item), then compare Weight/CBM/Volume at the SUBTOTALS level.
 
-CRITICAL — HBL JSON HAS PER-EXPORTER DATA:
-The extracted HBL JSON contains an "exporters" array where each entry has:
-  - "name": supplier name
-  - "gross_weight_kg": weight for that supplier
-  - "cbm": cubic meters for that supplier
-  - "packages_qty": number of packages for that supplier
-You MUST use these values in the Subtotals section for each exporter.
+CRITICAL — PRE-MATCHED HBL DATA IN MANIFEST JSON:
+Each manifest exporter already has pre-matched HBL values injected programmatically:
+  - "hbl_gross_weight_kg": HBL weight for this exporter (or null if not matched)
+  - "hbl_cbm": HBL cubic meters for this exporter (or null if not matched)
+  - "hbl_packages_qty": HBL packages for this exporter (or null if not matched)
+  - "hbl_matched_name": the HBL name that was matched (or null)
+You MUST use these pre-matched values directly in the Subtotals section.
+Do NOT try to search the HBL JSON "exporters" array by name yourself.
 
 CRITICAL — INVOICE REFERENCE MAPPING:
 - The field "invoice_ref" in manifest ITEMS is the DELIVERY NOTE, NOT the invoice number.
@@ -1403,8 +1404,8 @@ ADDITIONAL RULES:
 - NCM Codes and Container Number sections are MANDATORY.
 - If an HBL weight differs from the manifest by ~×1000 (within ±0.5%), down-scale the HBL value.
 - NEVER output "HBL: not individually specified" — this phrase is BANNED.
-- For Subtotals, you MUST find the matching exporter in the HBL JSON "exporters" array by name and use its gross_weight_kg, cbm, and packages_qty values.
-- If you cannot find a matching exporter in the HBL JSON, output "HBL: exporter not found in HBL JSON" with Status: NOT FOUND.
+- For Subtotals, use the pre-matched fields hbl_gross_weight_kg, hbl_cbm, hbl_packages_qty from each manifest exporter.
+- If hbl_gross_weight_kg is null (no match found), output "HBL: exporter not matched" with Status: NOT FOUND.
 - Do NOT output per-item comparisons like "Item 1: ... | HBL: not individually specified". Items are REFERENCE ONLY.`;
 
 
