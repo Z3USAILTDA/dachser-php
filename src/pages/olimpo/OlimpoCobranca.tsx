@@ -257,8 +257,8 @@ export default function OlimpoCobranca() {
   const headerRight = (
     <div className="flex items-center gap-2">
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "product" | "client")}>
-        <TabsList className="h-8">
-          <TabsTrigger value="product" className="text-xs px-3 py-1">
+        <TabsList className="h-8 gap-0 p-1">
+          <TabsTrigger value="product" className="text-xs px-3 py-1 mr-1.5">
             Product
           </TabsTrigger>
           <TabsTrigger value="client" className="text-xs px-3 py-1">
@@ -266,6 +266,7 @@ export default function OlimpoCobranca() {
           </TabsTrigger>
         </TabsList>
       </Tabs>
+
       <Button
         size="sm"
         onClick={fetchData}
