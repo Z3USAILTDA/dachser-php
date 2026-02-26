@@ -29,86 +29,6 @@ interface FileInfo {
   file_url: string;
 }
 
-// ============ PROGRAMMATIC EXPORTER MATCHING ============
-
-/**
- * Normalize a company name for fuzzy matching:
- * uppercase, remove punctuation, collapse whitespace
- */
-function normalizeName(name: string): string {
-  return name
-    .toUpperCase()
-    .replace(/[^A-Z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/**
- * Calculate word-level similarity between two normalized names.
- * Uses Jaccard index + substring containment bonus.
- */
-function nameSimilarity(a: string, b: string): number {
-  if (a === b) return 1.0;
-  
-  // Substring containment — if one name contains the other
-  if (a.includes(b) || b.includes(a)) return 0.85;
-  
-  // Word-level Jaccard
-  const wordsA = new Set(a.split(' ').filter(w => w.length > 1));
-  const wordsB = new Set(b.split(' ').filter(w => w.length > 1));
-  if (wordsA.size === 0 || wordsB.size === 0) return 0;
-  
-  const intersection = [...wordsA].filter(w => wordsB.has(w)).length;
-  const union = new Set([...wordsA, ...wordsB]).size;
-  
-  return intersection / union;
-}
-
-/**
- * Match manifest exporters to HBL exporters programmatically,
- * injecting hbl_gross_weight_kg, hbl_cbm, hbl_packages_qty into each manifest exporter.
- */
-function matchExportersToHbl(manifestExporters: any[], hblExporters: any[]): void {
-  const usedHblIndices = new Set<number>();
-  
-  // Pre-normalize HBL names
-  const hblNormalized = hblExporters.map(e => normalizeName(e.name || ''));
-  
-  for (const mExp of manifestExporters) {
-    const mNorm = normalizeName(mExp.name || '');
-    let bestIdx = -1;
-    let bestScore = 0;
-    
-    for (let i = 0; i < hblExporters.length; i++) {
-      if (usedHblIndices.has(i)) continue;
-      const score = nameSimilarity(mNorm, hblNormalized[i]);
-      if (score > bestScore) {
-        bestScore = score;
-        bestIdx = i;
-      }
-    }
-    
-    // Require at least 0.4 similarity to accept match
-    if (bestIdx >= 0 && bestScore >= 0.4) {
-      usedHblIndices.add(bestIdx);
-      const hblExp = hblExporters[bestIdx];
-      mExp.hbl_gross_weight_kg = hblExp.gross_weight_kg ?? null;
-      mExp.hbl_cbm = hblExp.cbm ?? null;
-      mExp.hbl_packages_qty = hblExp.packages_qty ?? null;
-      mExp.hbl_matched_name = hblExp.name;
-      console.log(`  ✅ Matched "${mExp.name}" → "${hblExp.name}" (score: ${bestScore.toFixed(2)})`);
-    } else {
-      mExp.hbl_gross_weight_kg = null;
-      mExp.hbl_cbm = null;
-      mExp.hbl_packages_qty = null;
-      mExp.hbl_matched_name = null;
-      console.log(`  ❌ No match for "${mExp.name}" (best score: ${bestScore.toFixed(2)})`);
-    }
-  }
-  
-  const matched = manifestExporters.filter(e => e.hbl_matched_name).length;
-  console.log(`🔗 [Matching] Result: ${matched}/${manifestExporters.length} exporters matched`);
-}
 
 // ============ SHIPPING DATA EXTRACTION HELPER ============
 
@@ -1175,15 +1095,13 @@ Compare "reference_weight_kg" from Manifest against "gross_weight_kg" from HBL.
 DO NOT use "gross_weight_kg" from the Manifest — use "reference_weight_kg" instead.
 ████████████████████████████████████████████████
 
-████ PRE-MATCHED HBL DATA PER EXPORTER ████
-Each manifest exporter already contains pre-matched HBL data in these fields:
-- hbl_gross_weight_kg: the HBL gross weight for this exporter (or null if not matched)
-- hbl_cbm: the HBL CBM for this exporter (or null if not matched)
-- hbl_packages_qty: the HBL package count for this exporter (or null if not matched)
-- hbl_matched_name: the HBL exporter name that was matched (or null)
-
-USE THESE VALUES DIRECTLY for Subtotals comparison. Do NOT try to match exporter names yourself.
-If hbl_gross_weight_kg is null, output "HBL: exporter not matched" with Status: NOT FOUND.
+████ HBL EXPORTER DATA ████
+For Subtotals comparison, you MUST search the HBL data (rider pages / cargo description
+in the PDF JSON "exporters" array) for each supplier. Look for matching names (the HBL may
+use abbreviated names like "BOLLHOFF GMBH" for "Bollhoff GmbH"). Extract their
+gross_weight_kg, cbm, and packages_qty from the HBL data.
+If you cannot find a matching exporter in the HBL data, output
+"HBL: exporter not found in HBL" with Status: NOT FOUND.
 ████████████████████████████████████████████████`;
 
   console.log(`🔄 [Dual Analysis] Starting parallel Gemini + Claude analysis (prompt: ${analysisPrompt.length} chars)`);
@@ -1416,12 +1334,15 @@ async function analyzeWithMultiModelPipeline(
               }
             }
           }
-          // Calculate total as SUM of all exporter reference_weight_kg values
-          // This ensures the total reflects the correct per-exporter fallback logic
+          // Use header totals for reference_weight_kg (more reliable than summing individual items)
           if (manifestData.totals) {
-            const sumRefWeight = manifestData.exporters.reduce((sum: number, exp: any) => sum + (exp.reference_weight_kg || 0), 0);
-            (manifestData.totals as any).reference_weight_kg = sumRefWeight;
-            console.log(`📊 [Multi-Model] Total reference_weight_kg = ${sumRefWeight} (sum of ${manifestData.exporters.length} exporters)`);
+            if (weighingComplete && manifestData.totals.weighed_weight_kg > 0) {
+              (manifestData.totals as any).reference_weight_kg = manifestData.totals.weighed_weight_kg;
+              console.log(`📊 [Multi-Model] Total reference_weight_kg = ${manifestData.totals.weighed_weight_kg} (from header weighed_weight_kg)`);
+            } else {
+              (manifestData.totals as any).reference_weight_kg = manifestData.totals.gross_weight_kg;
+              console.log(`📊 [Multi-Model] Total reference_weight_kg = ${manifestData.totals.gross_weight_kg} (from header gross_weight_kg)`);
+            }
           }
         }
         
@@ -1476,19 +1397,6 @@ async function analyzeWithMultiModelPipeline(
     file_type: p.file.file_type,
     ...p.data
   }));
-
-  // ========= PROGRAMMATIC EXPORTER MATCHING (Manifest ↔ HBL) =========
-  if (manifestData && manifestData.exporters && analysisType === 'manifest_hbl') {
-    const hblData = pdfDataArray.find((p: any) => p.file_type === 'hbl' || p.file_type === 'comparison');
-    if (hblData && hblData.exporters && hblData.exporters.length > 0) {
-      console.log(`🔗 [Matching] Starting programmatic exporter matching: ${manifestData.exporters.length} manifest × ${hblData.exporters.length} HBL exporters`);
-      matchExportersToHbl(manifestData.exporters, hblData.exporters);
-      // Re-serialize manifest with the injected hbl_ fields
-      jsonXls = JSON.stringify(manifestData, null, 2);
-    } else {
-      console.warn(`⚠️ [Matching] No HBL exporters found in PDF extraction — LLM will not have per-exporter HBL data`);
-    }
-  }
 
   const jsonPdfs = JSON.stringify(pdfDataArray, null, 2);
 
