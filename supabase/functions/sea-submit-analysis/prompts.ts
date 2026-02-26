@@ -1323,6 +1323,26 @@ THE FOLLOWING OUTPUT PATTERNS ARE ABSOLUTELY FORBIDDEN:
 ❌ "[Continuing with remaining exporters...]"
 ❌ Grouping multiple exporters in a summary list
 ❌ Any placeholder text like "[...]" or "etc."
+❌ "HBL: not individually specified" — NEVER USE THIS PHRASE
+
+████████████████████████████████████████████████████████████████████████████████
+█ PER-ITEM vs AGGREGATE DETECTION RULE (CRITICAL)                              █
+████████████████████████████████████████████████████████████████████████████████
+
+BEFORE outputting each exporter section, determine whether the HBL provides
+weight/CBM/volume data PER INDIVIDUAL ITEM/INVOICE or only as an AGGREGATE
+total for the entire exporter/supplier.
+
+HOW TO DETECT:
+- If the HBL shows ONE line of weight/CBM covering MULTIPLE invoices listed
+  under "AS PER INVOICE:", "INV.", or similar — it is AGGREGATE.
+- If the HBL lists separate weight/CBM for each invoice number — it is PER-ITEM.
+
+RULE:
+- If AGGREGATE (most common case): Do NOT attempt per-item numeric comparisons.
+  List manifest items for reference only, then compare Weight/CBM/Volume
+  at the SUBTOTALS level for that exporter.
+- If PER-ITEM: Use the full per-item comparison format below.
 
 YOU MUST USE THIS FORMAT - ONE COMPLETE SECTION PER EXPORTER:
 
@@ -1332,6 +1352,13 @@ EXPORTER #N: <COMPANY_NAME>
 - CNPJ: Manifest: <value> | HBL: <value> | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
 - Seal: Manifest: <value> | HBL: <value> | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
 
+Invoice References:
+- Manifest invoices: [INV1, INV2, INV3]
+- HBL invoices: [INV1, INV2, INV3]
+- Status: MATCH | Missing: [list] | Extra: [list]
+
+=== IF HBL HAS PER-ITEM BREAKDOWN (rare) ===
+
 Item 1: <DESCRIPTION>
 - Gross Weight: Manifest: X kg | HBL: Y kg | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
   [If UPDATE REQUIRED: → Update: Set weight to X kg]
@@ -1340,19 +1367,53 @@ Item 1: <DESCRIPTION>
 - Volume Type: Manifest: TYPE | HBL: TYPE | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
 - Invoice Ref: Manifest: REF | HBL: REF | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
 
+=== IF HBL AGGREGATES BY SUPPLIER (common case) ===
+
+Manifest Items (reference — HBL aggregates by supplier, no per-invoice breakdown):
+  - Invoice INV1: 1,200.000 kg / 5.500 m3 / 2 PALLETS
+  - Invoice INV2: 800.000 kg / 3.200 m3 / 1 PALLET
+  (HBL does not break down per invoice — verified at subtotal level below)
+
+=== ALWAYS OUTPUT SUBTOTALS ===
+
 Subtotals EXPORTER #N:
-- Total Weight: Manifest: X kg | HBL: Y kg | Delta: Z kg
-- Total CBM: Manifest: X m³ | HBL: Y m³ | Delta: Z m³
-- Total Volumes: Manifest: N | HBL: N | Delta: N
+- Total Weight: Manifest: X kg | HBL: Y kg | Delta: Z kg | Status: <MATCH|UPDATE REQUIRED>
+- Total CBM: Manifest: X m³ | HBL: Y m³ | Delta: Z m³ | Status: <MATCH|UPDATE REQUIRED>
+- Total Volumes: Manifest: N | HBL: N | Delta: N | Status: <MATCH|UPDATE REQUIRED>
 
 REPEAT THIS COMPLETE STRUCTURE FOR EVERY SINGLE EXPORTER (EXPORTER #1, #2, #3... #N)
+
+████████████████████████████████████████████████████████████████████████████████
+█ CONCRETE EXAMPLE — AGGREGATE HBL (most common scenario)                      █
+████████████████████████████████████████████████████████████████████████████████
+
+EXPORTER #1: ZF POLSKA SP. Z O.O.
+- CNPJ: Manifest: 60.857.349/0029-77 | HBL: 60.857.349/0029-77 | Status: MATCH
+- Seal: Manifest: 2000030908 | HBL: 2000030908 | Status: MATCH
+
+Invoice References:
+- Manifest invoices: [7500714130, 7500714767, 7500716058]
+- HBL invoices: [7500714130, 7500714767, 7500716058]
+- Status: MATCH
+
+Manifest Items (reference — HBL aggregates by supplier, no per-invoice breakdown):
+  - Invoice 7500714130: 1,200.000 kg / 5.500 m3 / 2 PALLETS
+  - Invoice 7500714767: 800.000 kg / 3.200 m3 / 1 PALLET
+  - Invoice 7500716058: 1,522.000 kg / 12.486 m3 / 4 PALLETS
+  (HBL does not break down per invoice — verified at subtotal level below)
+
+Subtotals EXPORTER #1:
+- Total Weight: Manifest: 3,522.000 kg | HBL: 3,522.000 kg | Delta: 0.000 kg | Status: MATCH
+- Total CBM: Manifest: 21.186 m3 | HBL: 21.186 m3 | Delta: 0.000 m3 | Status: MATCH
+- Total Volumes: Manifest: 7 | HBL: 7 | Delta: 0 | Status: MATCH
 
 ADDITIONAL RULES:
 - Do NOT print any "(Note: ...)" lines anywhere.
 - Always use square brackets for lists.
 - In weight comparisons, ONLY print lines whose absolute Delta > tolerance.
 - NCM Codes and Container Number sections are MANDATORY.
-- If an HBL weight differs from the manifest by ~×1000 (within ±0.5%), down-scale the HBL value.`;
+- If an HBL weight differs from the manifest by ~×1000 (within ±0.5%), down-scale the HBL value.
+- NEVER output "HBL: not individually specified" — this phrase is BANNED.`;
 
 
 
