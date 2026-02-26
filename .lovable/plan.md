@@ -1,77 +1,70 @@
 
 
-## Fix: Gross Weight coletado incorretamente do Manifest
+## Correcao: Remover "HBL not individually specified" por item
 
-### Causa Raiz
+### Problema
 
-O pipeline de analise SEA **nao usa** as funcoes deterministicas (`compareManifestHbl`, `formatComparisonResult`). Elas estao importadas mas **nunca sao chamadas**. A analise e feita 100% por LLMs (Claude + Gemini) no Stage 2, que recebem o JSON extraido como texto.
+O prompt atual (linhas 1335-1341 de `prompts.ts`) obriga o LLM a comparar Gross Weight, CBM e Volume **por item/invoice** entre Manifest e HBL. Porem, os documentos HBL quase nunca detalham dados no nivel de invoice individual — eles mostram apenas **totais agregados por fornecedor/exportador**.
 
-O JSON extraido pelo `xlsxExtractor.ts` ja contem ambos os campos `gross_weight_kg` e `weighed_weight_kg`, mas o **prompt enviado aos LLMs** (em `prompts.ts`) nao instrui explicitamente para usar `weighed_weight_kg` do Manifest na comparacao de peso. Os modelos acabam usando `gross_weight_kg` por padrao.
+Por exemplo, o HBL mostra:
+```text
+ZF POLSKA  9 X WOODEN PALLET  AUTOPARTS  1,296.000 KG  7.598 CBM
+  AS PER INVOICE: 7500744709, 7500744712, ... (multiplas invoices)
+```
 
-### Diagnostico
+Enquanto o Manifest lista cada invoice como um item separado com peso/CBM proprio. O LLM nao consegue encontrar detalhamento por invoice no HBL, entao preenche com "HBL: not individually specified" para cada item — gerando ruido massivo no relatorio.
 
-1. **`prompts.ts` linha 268**: Diz vagamente "Weights (Gross Weight, Net Weight, Weight after Weighting - use the authoritative one)" -- sem instrucao clara de prioridade
-2. **`runDualAnalysis` (index.ts ~1070)**: Envia o JSON bruto para os LLMs com ambos os campos, sem destaque
-3. **Funcoes deterministicas**: `compareManifestHbl`, `compareHblMbl`, etc. estao importadas mas **nunca sao chamadas** -- sao codigo morto
+### Solucao
 
-### Plano de Correcao
+Atualizar o formato de saida por exportador em `prompts.ts` (linhas 1327-1355) para lidar com o caso comum onde HBLs fornecem **agregados por fornecedor** ao inves de detalhamento por invoice.
 
-#### 1. Atualizar prompt `PROMPT_MANIFEST_HBL` em `prompts.ts`
+### Alteracoes
 
-Adicionar instrucao explicita e destacada na secao de extracao de dados do Manifest:
+**Arquivo: `supabase/functions/sea-submit-analysis/prompts.ts`** (linhas ~1327-1355)
+
+Substituir o formato obrigatorio por item por uma abordagem de dois niveis:
+
+1. **Nivel por exportador**: Comparar Weight, CBM e Volume no nivel de subtotal do fornecedor (o HBL sempre tem esses dados)
+2. **Referencias de invoices**: Continuar verificando que TODOS os numeros de invoice do Manifest aparecem no texto do HBL
+3. **Nivel por item (condicional)**: So detalhar comparacoes por item de Weight/CBM/Volume se o HBL realmente tiver detalhamento por invoice. Se o HBL agregar multiplas invoices em uma unica linha, listar os itens do manifest apenas como referencia e comparar numericos somente no nivel de subtotais
+
+O formato atualizado sera:
 
 ```text
-WEIGHT COMPARISON RULE FOR MANIFEST x HBL:
-- FROM MANIFEST: Use "weighed_weight_kg" field (Peso Aferido / Weighed Weight). 
-  If weighed_weight_kg is 0 or absent, fallback to "gross_weight_kg".
-- FROM HBL: Always use "gross_weight_kg" (Gross Weight).
-- The JSON data you receive contains BOTH fields. You MUST prioritize weighed_weight_kg.
+EXPORTER #N: <NOME_EMPRESA>
+- CNPJ: Manifest: <valor> | HBL: <valor> | Status: MATCH|UPDATE REQUIRED|NOT FOUND
+- Seal: Manifest: <valor> | HBL: <valor> | Status: MATCH|UPDATE REQUIRED|NOT FOUND
+
+Invoice References:
+- Manifest invoices: [INV1, INV2, INV3]
+- HBL invoices: [INV1, INV2, INV3]
+- Status: MATCH | Missing: [lista] | Extra: [lista]
+
+Manifest Items (referencia — HBL agrega por fornecedor, sem detalhamento por invoice):
+  - Invoice INV1: 1,200.000 kg / 5.500 m3 / 2 PALLETS
+  - Invoice INV2: 800.000 kg / 3.200 m3 / 1 PALLET
+
+Subtotals EXPORTER #N:
+- Total Weight: Manifest: X kg | HBL: Y kg | Delta: Z kg | Status: MATCH|UPDATE REQUIRED
+- Total CBM: Manifest: X m3 | HBL: Y m3 | Delta: Z m3 | Status: MATCH|UPDATE REQUIRED
+- Total Volumes: Manifest: N | HBL: N | Delta: N | Status: MATCH|UPDATE REQUIRED
 ```
 
-Locais especificos no prompt que precisam de ajuste:
-- Secao "FROM MANIFEST/XLSX" (~linha 266-268): Tornar explicito que `weighed_weight_kg` e o campo prioritario
-- Secao "WEIGHT VERIFICATION" (~linha 318-328): Adicionar regra de que no Manifest o peso de referencia e `weighed_weight_kg`
-- Secao do `runDualAnalysis` prompt (~index.ts linha 1085): Adicionar nota sobre prioridade do campo
-
-#### 2. Enriquecer o JSON do Manifest antes de enviar aos LLMs
-
-No `index.ts`, apos a extracao XLSX (~linha 1293), adicionar um campo computado `reference_weight_kg` em cada exporter e nos totals, que ja resolve a prioridade:
-
-```typescript
-// After extracting manifest data, compute reference weights for LLM clarity
-if (manifestData) {
-  for (const exp of manifestData.exporters) {
-    exp.reference_weight_kg = exp.weighed_weight_kg > 0 ? exp.weighed_weight_kg : exp.gross_weight_kg;
-    for (const item of exp.items) {
-      item.reference_weight_kg = item.weighed_weight_kg > 0 ? item.weighed_weight_kg : item.gross_weight_kg;
-    }
-  }
-  manifestData.totals.reference_weight_kg = manifestData.totals.weighed_weight_kg > 0 
-    ? manifestData.totals.weighed_weight_kg : manifestData.totals.gross_weight_kg;
-}
-```
-
-#### 3. Atualizar instrucao no `runDualAnalysis`
-
-Na funcao `runDualAnalysis` (index.ts ~linha 1085), adicionar instrucao explicita apos o bloco "EXTRACTED DATA FROM XLSX":
-
-```text
-IMPORTANT: In the Manifest JSON, each exporter has a "reference_weight_kg" field. 
-This is the weight you MUST use for comparison (it prioritizes Weighed Weight over Gross Weight).
-Compare this "reference_weight_kg" from Manifest against "gross_weight_kg" from HBL.
-```
-
-### Arquivos Modificados
-
-1. **`supabase/functions/sea-submit-analysis/prompts.ts`** -- Instrucoes explicitas de prioridade de peso
-2. **`supabase/functions/sea-submit-analysis/index.ts`** -- Campo `reference_weight_kg` computado + instrucao no `runDualAnalysis`
+Regras-chave adicionadas:
+- "Se o HBL mostrar UMA unica linha de peso/CBM cobrindo multiplas invoices de um fornecedor, NAO gerar 'HBL: not individually specified' para cada item de invoice"
+- "Comparar Weight, CBM e Volumes no nivel de Subtotais por exportador"
+- "Continuar verificando que TODAS as referencias de invoices estao presentes no texto do HBL"
+- Padrao explicitamente proibido: `"HBL: not individually specified"`
 
 ### O que NAO sera alterado
+- Regra de fonte de peso (prioridade do reference_weight_kg) — inalterada
+- Logica de comparacao de NCM — inalterada
+- Logica de soma de multi-HBL — inalterada
+- Comparacao HBL x MBL — inalterada
+- Comparacao Invoice x HBL — inalterada
+- Toda logica de extracao (xlsxExtractor, pdfExtractor) — inalterada
+- UI frontend — inalterada
 
-- `xlsxExtractor.ts` (extracao ja funciona corretamente)
-- `deterministicCompare.ts` (codigo morto no pipeline atual, mas correto)
-- `pdfExtractor.ts` (inalterado)
-- `resultFormatter.ts` (inalterado)
-- Toda a UI frontend
-- Comparacoes HBL x MBL e Invoices x HBL (intactas)
+### Arquivos Modificados
+1. **`supabase/functions/sea-submit-analysis/prompts.ts`** — Adicionar regra de deteccao per-item vs agregado, atualizar formato obrigatorio de saida, adicionar exemplo concreto
 
