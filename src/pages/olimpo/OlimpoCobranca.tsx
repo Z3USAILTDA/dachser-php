@@ -222,7 +222,7 @@ export default function OlimpoCobranca() {
   const headerRight = (
     <div className="flex items-center gap-2">
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "product" | "client")}>
-        <TabsList className="h-8 gap-0">
+        <TabsList className="h-8">
           <TabsTrigger value="product" className="text-xs px-3 py-1">Product</TabsTrigger>
           <TabsTrigger value="client" className="text-xs px-3 py-1">Client</TabsTrigger>
         </TabsList>
