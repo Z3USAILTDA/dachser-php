@@ -265,7 +265,7 @@ Before comparing, you MUST thoroughly extract ALL data from BOTH Manifest and HB
 
 FROM MANIFEST/XLSX (scan ALL columns, ALL rows):
 - Supplier names (all variations and spellings)
-- Weights (Gross Weight, Net Weight, Weight after Weighting - use the authoritative one)
+- Weights: USE "reference_weight_kg" field (this is the Weighed Weight / Peso Aferido, which takes priority over Gross Weight). If "reference_weight_kg" is not present, use "weighed_weight_kg". Only fallback to "gross_weight_kg" if neither is available.
 - CBM/Measurement values
 - NCM codes ONLY from "NCM Code" or "Código NCM" columns (8-digit codes - NEVER from "HS Code" columns)
 - Invoice numbers (ANY column containing invoice references - look for patterns like alphanumeric codes)
@@ -316,13 +316,23 @@ MANDATORY PRE-ANALYSIS VERIFICATION (EXECUTE FOR EACH HBL INDIVIDUALLY):
 Before you can conclude "no changes required" for ANY HBL, you MUST explicitly verify ALL of these:
 
 1. ★★★ WEIGHT VERIFICATION (MANDATORY FOR EACH HBL) ★★★
+
+   ████ WEIGHT SOURCE RULE FOR MANIFEST x HBL ████
+   - FROM MANIFEST: Use "reference_weight_kg" field (Weighed Weight / Peso Aferido).
+     If "reference_weight_kg" is absent, use "weighed_weight_kg".
+     Only fallback to "gross_weight_kg" if NEITHER is available or both are 0.
+   - FROM HBL: Always use "gross_weight_kg" (Gross Weight).
+   - The Manifest JSON contains BOTH "gross_weight_kg" and "weighed_weight_kg"/"reference_weight_kg".
+     You MUST prioritize weighed/reference weight from Manifest. DO NOT use "gross_weight_kg" from Manifest.
+   ████████████████████████████████████████████████
+
    - For EACH line in the Manifest that corresponds to this HBL:
-     • Extract the EXACT weight from Manifest (e.g., Manifest shows 121.3 kg for supplier X)
-     • Extract the EXACT weight from THIS specific HBL
+     • Extract the EXACT weight from Manifest using "reference_weight_kg" (or "weighed_weight_kg")
+     • Extract the EXACT weight from THIS specific HBL using "gross_weight_kg"
    - COMPARISON RULE: If weights differ by MORE than 1 kg or 0.1%, THIS IS A DISCREPANCY
-   - CONCRETE EXAMPLE: Manifest shows 121.3 kg but HBL 14630138391 shows 106 kg
+   - CONCRETE EXAMPLE: Manifest reference_weight_kg shows 121.3 kg but HBL gross_weight_kg shows 106 kg
      → Delta = 15.3 kg → THIS IS A DISCREPANCY, YOU MUST REPORT:
-       "Update: Set BL total Gross Weight to 121.300 kg to match the manifest (currently shows 106.000 kg)."
+       "Update: Set BL total Gross Weight to 121.300 kg to match the manifest weighed weight (currently shows 106.000 kg)."
    - ★ NEVER assume weights match without explicit numeric comparison
    - ★ NEVER skip weight comparison for any HBL
    - ★ Report EACH HBL's weight discrepancy separately, even if other HBLs are correct

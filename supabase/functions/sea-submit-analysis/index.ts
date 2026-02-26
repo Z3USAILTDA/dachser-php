@@ -1084,7 +1084,15 @@ ${shippingInstructions}
 
 IMPORTANT: You are analyzing pre-extracted structured JSON data from both documents. 
 Use this data to perform the comparison analysis as instructed above.
-The JSON contains all fields, weights, NCM codes, exporters, etc. already extracted from the original files.`;
+The JSON contains all fields, weights, NCM codes, exporters, etc. already extracted from the original files.
+
+████ WEIGHT COMPARISON RULE (MANIFEST x HBL) ████
+In the Manifest JSON, each exporter and the totals section has a "reference_weight_kg" field.
+This field prioritizes Weighed Weight (Peso Aferido) over Gross Weight.
+You MUST use "reference_weight_kg" from Manifest for weight comparison.
+Compare "reference_weight_kg" from Manifest against "gross_weight_kg" from HBL.
+DO NOT use "gross_weight_kg" from the Manifest — use "reference_weight_kg" instead.
+████████████████████████████████████████████████`;
 
   console.log(`🔄 [Dual Analysis] Starting parallel Gemini + Claude analysis (prompt: ${analysisPrompt.length} chars)`);
 
@@ -1290,6 +1298,24 @@ async function analyzeWithMultiModelPipeline(
     for (const xlsxFile of xlsxFiles) {
       try {
         manifestData = await extractXlsxWithLLM(xlsxFile.file_url, xlsxFile.file_name);
+        
+        // Compute reference_weight_kg for LLM clarity (prioritizes Weighed Weight over Gross Weight)
+        if (manifestData && manifestData.exporters) {
+          for (const exp of manifestData.exporters) {
+            (exp as any).reference_weight_kg = (exp.weighed_weight_kg > 0) ? exp.weighed_weight_kg : exp.gross_weight_kg;
+            if (exp.items) {
+              for (const item of exp.items) {
+                (item as any).reference_weight_kg = (item.weighed_weight_kg > 0) ? item.weighed_weight_kg : item.gross_weight_kg;
+              }
+            }
+          }
+          if (manifestData.totals) {
+            (manifestData.totals as any).reference_weight_kg = (manifestData.totals.weighed_weight_kg > 0) 
+              ? manifestData.totals.weighed_weight_kg : manifestData.totals.gross_weight_kg;
+          }
+          console.log(`📊 [Multi-Model] reference_weight_kg computed for ${manifestData.exporters.length} exporters (weighed_weight prioritized)`);
+        }
+        
         jsonXls = JSON.stringify(manifestData, null, 2);
         console.log(`📊 [Multi-Model] XLSX extracted: ${manifestData.exporters.length} exporters, ${manifestData.total_rows} rows`);
         
