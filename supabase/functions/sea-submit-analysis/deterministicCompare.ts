@@ -293,13 +293,59 @@ export function compareManifestHbl(manifest: ManifestData, hbls: PdfExtractedDat
         usedManifestIndices.add(match.index);
         const mExp = manifest.exporters[match.index];
         
+        // Use weighed_weight if available, fallback to gross_weight
+        const mExpWeight = mExp.weighed_weight_kg > 0 ? mExp.weighed_weight_kg : mExp.gross_weight_kg;
+        const weightLabel = mExp.weighed_weight_kg > 0 ? 'Gross Weight (Weighed)' : 'Gross Weight';
+        
         const fields: FieldComparison[] = [
           compareExact('CNPJ', mExp.cnpj, '', 'HBL'),
           compareExact('Seal', mExp.seal || manifest.seal, hbl.seal, 'HBL'),
         ];
 
+        // Item-level comparisons
+        const items: ItemComparison[] = [];
+        if (mExp.items && mExp.items.length > 0) {
+          for (const mItem of mExp.items) {
+            const itemWeight = mItem.weighed_weight_kg > 0 ? mItem.weighed_weight_kg : mItem.gross_weight_kg;
+            const itemWeightLabel = mItem.weighed_weight_kg > 0 ? 'Gross Weight (Weighed)' : 'Gross Weight';
+            const itemFields: FieldComparison[] = [];
+            
+            if (itemWeight > 0) {
+              itemFields.push({
+                field: itemWeightLabel,
+                source_value: `${itemWeight.toFixed(3)} kg`,
+                target_value: '(per-item HBL data N/A)',
+                status: 'MATCH',
+              });
+            }
+            if (mItem.cbm > 0) {
+              itemFields.push({
+                field: 'CBM',
+                source_value: `${mItem.cbm.toFixed(3)} m³`,
+                target_value: '(per-item HBL data N/A)',
+                status: 'MATCH',
+              });
+            }
+            if (mItem.packages_qty > 0) {
+              itemFields.push({
+                field: 'Packages',
+                source_value: String(mItem.packages_qty),
+                target_value: '(per-item HBL data N/A)',
+                status: 'MATCH',
+              });
+            }
+            
+            if (itemFields.length > 0) {
+              items.push({
+                description: mItem.invoice_ref || mItem.description || `Item`,
+                fields: itemFields,
+              });
+            }
+          }
+        }
+
         const subtotals: FieldComparison[] = [
-          compareWeight('Gross Weight', mExp.gross_weight_kg, hblExp.gross_weight_kg, 'Manifest', 'HBL'),
+          compareWeight(weightLabel, mExpWeight, hblExp.gross_weight_kg, 'Manifest', 'HBL'),
           compareCbm('CBM', mExp.cbm, hblExp.cbm, 'HBL'),
           comparePackages(mExp.packages.qty, hblExp.packages_qty, 'HBL'),
           compareNcmCodes(mExp.ncm_codes, hblExp.ncm_codes, 'Manifest', 'HBL'),
@@ -311,7 +357,7 @@ export function compareManifestHbl(manifest: ManifestData, hbls: PdfExtractedDat
           manifest_exporter: mExp.name,
           match_similarity: match.similarity,
           fields,
-          items: [],
+          items,
           subtotals,
         });
       } else {
@@ -332,14 +378,16 @@ export function compareManifestHbl(manifest: ManifestData, hbls: PdfExtractedDat
     }
   }
 
-  // Total comparisons
+  // Total comparisons — use weighed_weight if available
   const totalFields: FieldComparison[] = [];
+  const manifestTotalWeight = manifest.totals.weighed_weight_kg > 0 ? manifest.totals.weighed_weight_kg : manifest.totals.gross_weight_kg;
+  const totalWeightLabel = manifest.totals.weighed_weight_kg > 0 ? 'Total Weight (Weighed)' : 'Total Weight';
+  
   if (hbls.length > 1) {
-    // Multi-HBL: compare sum
-    totalFields.push(compareWeight('Total Weight (Sum of HBLs)', manifest.totals.gross_weight_kg, hblTotalWeight, 'Manifest', 'HBL'));
+    totalFields.push(compareWeight(`${totalWeightLabel} (Sum of HBLs)`, manifestTotalWeight, hblTotalWeight, 'Manifest', 'HBL'));
     totalFields.push(compareCbm('Total CBM (Sum of HBLs)', manifest.totals.cbm, hblTotalCbm, 'HBL'));
   } else {
-    totalFields.push(compareWeight('Total Weight', manifest.totals.gross_weight_kg, hblTotalWeight, 'Manifest', 'HBL'));
+    totalFields.push(compareWeight(totalWeightLabel, manifestTotalWeight, hblTotalWeight, 'Manifest', 'HBL'));
     totalFields.push(compareCbm('Total CBM', manifest.totals.cbm, hblTotalCbm, 'HBL'));
   }
   totalFields.push(comparePackages(manifest.totals.packages, hblTotalPkgs, 'HBL'));
@@ -348,7 +396,7 @@ export function compareManifestHbl(manifest: ManifestData, hbls: PdfExtractedDat
 
   const hasDivergence = [
     containerCheck,
-    ...exporterComparisons.flatMap(e => [...e.fields, ...e.subtotals]),
+    ...exporterComparisons.flatMap(e => [...e.fields, ...e.subtotals, ...e.items.flatMap(it => it.fields)]),
     ...totalFields,
     ncmSummary,
   ].some(f => f && f.status === 'DIVERGENCE');

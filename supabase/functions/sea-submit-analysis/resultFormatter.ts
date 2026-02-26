@@ -134,7 +134,7 @@ export function formatComparisonResult(result: ComparisonResult): string {
 
   // Analysis Summary
   const divergences = [
-    ...result.exporters.flatMap(e => [...e.fields, ...e.subtotals]),
+    ...result.exporters.flatMap(e => [...e.fields, ...e.subtotals, ...e.items.flatMap(it => it.fields)]),
     ...result.totals,
     result.ncm_summary,
     result.container_check,

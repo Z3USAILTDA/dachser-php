@@ -10,6 +10,7 @@ export interface ExporterData {
   name: string;
   invoice_numbers: string[];
   gross_weight_kg: number;
+  weighed_weight_kg: number;
   net_weight_kg: number;
   cbm: number;
   packages: { qty: number; type: string };
@@ -23,6 +24,7 @@ export interface ExporterData {
 export interface ExporterItem {
   description: string;
   gross_weight_kg: number;
+  weighed_weight_kg: number;
   net_weight_kg: number;
   cbm: number;
   packages_qty: number;
@@ -36,6 +38,7 @@ export interface ManifestData {
   exporters: ExporterData[];
   totals: {
     gross_weight_kg: number;
+    weighed_weight_kg: number;
     net_weight_kg: number;
     cbm: number;
     packages: number;
@@ -53,6 +56,7 @@ export interface ManifestData {
 interface ColumnMap {
   supplier: number;
   gross_weight: number;
+  weighed_weight: number;
   net_weight: number;
   cbm: number;
   ncm: number;
@@ -74,10 +78,15 @@ const COLUMN_ALIASES: Record<keyof ColumnMap, string[]> = {
     'remetente', 'expedidor', 'consignor',
   ],
   gross_weight: [
-    'total gross weight', 'gross weight', 'weight after weighting', 'gross wt', 'gw',
+    'total gross weight', 'gross weight', 'gross wt', 'gw',
     'peso bruto', 'peso bruto total', 'bruttogewicht', 'brutto', 'brutto gewicht',
     'brutto kg', 'total weight', 'weight kg', 'gesamtgewicht', 'weight',
     'gross weight kg', 'gross weight kgs', 'g.w.', 'g.w', 'peso bruto kg',
+  ],
+  weighed_weight: [
+    'weighed weight', 'weight after weighting', 'weighted weight', 'peso aferido',
+    'peso pesado', 'peso balanca', 'peso balança', 'verified weight', 'actual weight',
+    'peso conferido', 'peso real',
   ],
   net_weight: [
     'net weight', 'nett weight', 'net wt', 'nw', 'peso liquido',
@@ -141,7 +150,7 @@ function normalizeHeader(h: string): string {
 
 function mapColumns(headers: string[]): ColumnMap {
   const map: ColumnMap = {
-    supplier: -1, gross_weight: -1, net_weight: -1, cbm: -1,
+    supplier: -1, gross_weight: -1, weighed_weight: -1, net_weight: -1, cbm: -1,
     ncm: -1, hs_code: -1, packages_qty: -1, packages_type: -1,
     invoice_ref: -1, description: -1, container: -1, seal: -1, cnpj: -1,
   };
@@ -343,7 +352,7 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
     const colMapNcmOnly = { ...colMap, hs_code: -1 };
 
     console.log(`📊 [XLSX Extractor] Sheet "${sheetName}" RAW HEADERS: [${headers.join(' | ')}]`);
-    console.log(`📊 [XLSX Extractor] Sheet "${sheetName}": ${rows.length - headerRowIdx - 1} data rows, supplier col: ${colMap.supplier}, weight col: ${colMap.gross_weight}, ncm col: ${colMap.ncm}, hs_code col: ${colMap.hs_code}, desc col: ${colMap.description}`);
+    console.log(`📊 [XLSX Extractor] Sheet "${sheetName}": ${rows.length - headerRowIdx - 1} data rows, supplier col: ${colMap.supplier}, weight col: ${colMap.gross_weight}, weighed_weight col: ${colMap.weighed_weight}, cbm col: ${colMap.cbm}, ncm col: ${colMap.ncm}, hs_code col: ${colMap.hs_code}, desc col: ${colMap.description}`);
 
     // Determine fallback grouping column when supplier is not found
     const useSupplierCol = colMap.supplier >= 0;
@@ -372,6 +381,7 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
       }
 
       const grossWeight = colMap.gross_weight >= 0 ? parseNumber(row[colMap.gross_weight]) : 0;
+      const weighedWeight = colMap.weighed_weight >= 0 ? parseNumber(row[colMap.weighed_weight]) : 0;
       const netWeight = colMap.net_weight >= 0 ? parseNumber(row[colMap.net_weight]) : 0;
       const cbm = colMap.cbm >= 0 ? parseNumber(row[colMap.cbm]) : 0;
       const packagesQty = colMap.packages_qty >= 0 ? parseNumber(row[colMap.packages_qty]) : 0;
@@ -388,7 +398,7 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
 
       // Debug: log first 5 data rows
       if (totalRowsProcessed <= 5) {
-        console.log(`📊 [XLSX Extractor] Row ${r}: supplier="${supplierName}", weight=${grossWeight}, cbm=${cbm}, pkgs=${packagesQty}, ncm=[${ncmCodes.join(',')}], desc="${description.substring(0, 50)}"`);
+        console.log(`📊 [XLSX Extractor] Row ${r}: supplier="${supplierName}", weight=${grossWeight}, weighedWeight=${weighedWeight}, cbm=${cbm}, pkgs=${packagesQty}, ncm=[${ncmCodes.join(',')}], desc="${description.substring(0, 50)}"`);
       }
 
       // Capture global container/seal
@@ -405,6 +415,7 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
           name: supplierName,
           invoice_numbers: [],
           gross_weight_kg: 0,
+          weighed_weight_kg: 0,
           net_weight_kg: 0,
           cbm: 0,
           packages: { qty: 0, type: '' },
@@ -418,6 +429,7 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
 
       const exporter = exporterMap.get(key)!;
       exporter.gross_weight_kg += grossWeight;
+      exporter.weighed_weight_kg += weighedWeight;
       exporter.net_weight_kg += netWeight;
       exporter.cbm += cbm;
       exporter.packages.qty += packagesQty;
@@ -447,6 +459,7 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
       exporter.items.push({
         description,
         gross_weight_kg: grossWeight,
+        weighed_weight_kg: weighedWeight,
         net_weight_kg: netWeight,
         cbm,
         packages_qty: packagesQty,
@@ -462,9 +475,10 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
 
   // Calculate totals
   const allNcms: string[] = [];
-  let totalGross = 0, totalNet = 0, totalCbm = 0, totalPkgs = 0;
+  let totalGross = 0, totalWeighed = 0, totalNet = 0, totalCbm = 0, totalPkgs = 0;
   for (const exp of exporters) {
     totalGross += exp.gross_weight_kg;
+    totalWeighed += exp.weighed_weight_kg;
     totalNet += exp.net_weight_kg;
     totalCbm += exp.cbm;
     totalPkgs += exp.packages.qty;
@@ -480,6 +494,7 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
     exporters,
     totals: {
       gross_weight_kg: Math.round(totalGross * 1000) / 1000,
+      weighed_weight_kg: Math.round(totalWeighed * 1000) / 1000,
       net_weight_kg: Math.round(totalNet * 1000) / 1000,
       cbm: Math.round(totalCbm * 1000) / 1000,
       packages: totalPkgs,
@@ -502,8 +517,9 @@ For each unique exporter/supplier, return:
 - name: the supplier/exporter company name (look for columns like "Supplier Name", "Exporter", "Shipper" — NOT "Supplier Country" or "Supplier Code")
 - invoice_numbers: list of delivery note/invoice references
 - gross_weight_kg: total gross weight in kg (numeric, already converted)
+- weighed_weight_kg: total weighed/verified weight in kg (look for columns like "Weighed Weight", "Weight After Weighting", "Verified Weight", "Actual Weight"). If no such column exists, set to 0.
 - net_weight_kg: total net weight in kg (numeric, already converted)
-- cbm: total volume in cubic meters (numeric)
+- cbm: total volume in cubic meters (numeric). This is the VOLUME measurement (m³), NOT weight. Look for columns labeled "CBM", "CBM [m³]", "Measurement", "Volume m3", "Cubagem". Do NOT confuse with weight or quantity columns.
 - packages: { qty: number of packages, type: packaging type string }
 - container: container number if present in the row
 - seal: seal number if present in the row
@@ -511,8 +527,9 @@ For each unique exporter/supplier, return:
 - items: array of line items, each with:
   - description: the product/goods description (look for columns like "Description", "Product Description", "Part Description" — NOT "QTY Material" or quantity columns)
   - gross_weight_kg: item gross weight in kg
+  - weighed_weight_kg: item weighed/verified weight in kg (look for columns like "Weighed Weight", "Weight After Weighting", "Verified Weight", "Actual Weight"). If no such column exists, set to 0.
   - net_weight_kg: item net weight in kg
-  - cbm: item volume in m3
+  - cbm: item volume in cubic meters (m³). This is the VOLUME measurement, NOT weight. Look for columns labeled "CBM", "CBM [m³]", "Measurement", "Volume m3", "Cubagem". Do NOT confuse with weight or quantity columns.
   - packages_qty: number of packages for this item
   - packages_type: packaging type for this item
   - invoice_ref: delivery note / invoice reference for this item
@@ -721,9 +738,10 @@ export async function extractXlsxWithLLM(fileUrl: string, fileName: string): Pro
         ncmCodes = allNcmCodes;
       }
 
-      const items: ExporterItem[] = (exp.items || []).map((item: any) => ({
+    const items: ExporterItem[] = (exp.items || []).map((item: any) => ({
         description: item.description || '',
         gross_weight_kg: item.gross_weight_kg || 0,
+        weighed_weight_kg: item.weighed_weight_kg || 0,
         net_weight_kg: item.net_weight_kg || 0,
         cbm: item.cbm || 0,
         packages_qty: item.packages_qty || 0,
@@ -737,6 +755,7 @@ export async function extractXlsxWithLLM(fileUrl: string, fileName: string): Pro
         name,
         invoice_numbers: exp.invoice_numbers || [],
         gross_weight_kg: exp.gross_weight_kg || 0,
+        weighed_weight_kg: exp.weighed_weight_kg || 0,
         net_weight_kg: exp.net_weight_kg || 0,
         cbm: exp.cbm || 0,
         packages: { qty: exp.packages?.qty || 0, type: exp.packages?.type || '' },
@@ -749,9 +768,10 @@ export async function extractXlsxWithLLM(fileUrl: string, fileName: string): Pro
     });
 
     // Calculate totals
-    let totalGross = 0, totalNet = 0, totalCbm = 0, totalPkgs = 0;
+    let totalGross = 0, totalWeighed = 0, totalNet = 0, totalCbm = 0, totalPkgs = 0;
     for (const exp of exporters) {
       totalGross += exp.gross_weight_kg;
+      totalWeighed += exp.weighed_weight_kg;
       totalNet += exp.net_weight_kg;
       totalCbm += exp.cbm;
       totalPkgs += exp.packages.qty;
@@ -764,6 +784,7 @@ export async function extractXlsxWithLLM(fileUrl: string, fileName: string): Pro
       exporters,
       totals: {
         gross_weight_kg: Math.round(totalGross * 1000) / 1000,
+        weighed_weight_kg: Math.round(totalWeighed * 1000) / 1000,
         net_weight_kg: Math.round(totalNet * 1000) / 1000,
         cbm: Math.round(totalCbm * 1000) / 1000,
         packages: totalPkgs,
