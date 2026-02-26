@@ -257,8 +257,8 @@ export default function OlimpoCobranca() {
   const headerRight = (
     <div className="flex items-center gap-2">
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "product" | "client")}>
-        <TabsList className="h-8 gap-0 p-1">
-          <TabsTrigger value="product" className="text-xs px-3 py-1 mr-1.5">
+        <TabsList className="h-8 overflow-hidden">
+          <TabsTrigger value="product" className="text-xs px-3 py-1">
             Product
           </TabsTrigger>
           <TabsTrigger value="client" className="text-xs px-3 py-1">
@@ -278,7 +278,6 @@ export default function OlimpoCobranca() {
       </Button>
     </div>
   );
-
   return (
     <PageLayout title="DACHSER" subtitle="Cobrança" pageIcon={DollarSign} backTo="/olimpo" rightContent={headerRight}>
       <div className="space-y-6">
