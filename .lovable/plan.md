@@ -1,72 +1,69 @@
 
-## Correcao: Subtotais mostrando "not individually specified" em vez de valores reais do HBL
 
-### Diagnostico
+## Correcao: 4 Problemas no Resultado da Analise Manifest x HBL
 
-Analisei o resultado da analise e confirmei o problema com a imagem do HBL que voce enviou:
+### Problemas Identificados
 
-**O que o HBL mostra por exporter (confirmado pela imagem):**
-- ZF DE10: 15 X WOODEN PALLET, AUTOPARTS, **4 190,000 KG**, **7,988 CBM**
-- Lista de invoices: 7500745428, 7500745429, ... 7500745441
+Analisei o resultado que voce compartilhou e identifiquei 4 problemas distintos:
 
-**O que o pdfExtractor ja extrai corretamente:**
-O JSON enviado aos LLMs contem um array `exporters[]` com campos `gross_weight_kg`, `cbm`, `packages_qty` para CADA fornecedor. Esses dados estao disponiveis.
+**Problema 1: Peso total errado (4,038 kg em vez de 11,291 kg)**
 
-**O que acontece no resultado:**
+O codigo em `index.ts` (linha 1305) calcula `reference_weight_kg` assim:
+```text
+weighed_weight > 0 ? weighed_weight : gross_weight
 ```
-Subtotals EXPORTER #22 (ZF DE10):
-- Total Weight: Manifest: 3,943.967 kg | HBL: not individually specified | Status: VERIFY
-```
+Muitos itens tem `weighed_weight_kg = 0` (nao foram pesados ainda), mas o total somado (4,038 kg) e maior que 0, entao o sistema usa esse valor parcial. O correto seria usar `gross_weight_kg` (11,291 kg) quando a pesagem esta incompleta.
 
-### Causa Raiz
+**Correcao**: Verificar se a maioria dos exportadores tem `weighed_weight_kg = 0`. Se mais de 30% dos itens tem peso aferido = 0, usar `gross_weight_kg` para todos (total e por exportador). So usar `weighed_weight_kg` quando a pesagem esta substancialmente completa.
 
-O prompt (linhas 1370-1375 de `prompts.ts`) diz:
-> "HBL aggregates by supplier, no per-invoice breakdown"
+**Problema 2: Comparacoes por item ainda aparecendo com "not individually specified"**
 
-Isso faz os LLMs (Gemini e Claude) acharem que **nao ha dados nenhuns por fornecedor no HBL**, quando na verdade o JSON extraido TEM peso, CBM e volumes por exporter. O problema esta na instrucao ambigua — ela quer dizer "sem detalhamento por invoice" mas os LLMs entendem "sem detalhamento nenhum".
+O LLM ignora a instrucao de usar formato AGGREGATE e continua gerando comparacoes por item (Item 1, Item 2...) com "HBL: not individually specified". O prompt tem dois caminhos (PER-ITEM e AGGREGATE) que confundem o modelo.
 
-Alem disso, o prompt nao instrui explicitamente os LLMs a **buscar o exporter correspondente no JSON do HBL** para preencher os subtotais.
+**Correcao**: Remover completamente o caminho PER-ITEM do prompt. Forcar SEMPRE o formato AGGREGATE — listar itens do Manifest apenas como referencia, comparar numericos SOMENTE nos Subtotais. O caso PER-ITEM e tao raro que nao justifica a complexidade.
 
-### Solucao
+**Problema 3: Subtotais CBM/Volumes sem valores do HBL**
 
-Alterar a secao PER-ITEM vs AGGREGATE em `prompts.ts` (linhas 1328-1416) para:
+O LLM conseguiu preencher peso nos subtotais (parcialmente funcionou), mas CBM e Volumes continuam "not individually specified". O HBL JSON tem esses dados no array `exporters`.
 
-1. **Esclarecer que o HBL JSON TEM dados por exporter**: Adicionar instrucao explicita:
-   - "O JSON extraido do HBL contem um array `exporters` com `gross_weight_kg`, `cbm`, `packages_qty` para CADA fornecedor. Para os Subtotais, voce DEVE localizar o exporter correspondente pelo nome e usar esses valores."
+**Correcao**: Ja coberta pela simplificacao do Problema 2. Com formato unico e claro, o LLM vai buscar TODOS os campos do JSON do HBL (peso, cbm, packages_qty).
 
-2. **Diferenciar "per-invoice" de "per-exporter"**:
-   - Per-invoice = o HBL nao detalha peso/CBM por invoice individual (correto, nao tentar)
-   - Per-exporter = o HBL TEM peso/CBM/volumes por fornecedor no JSON (USAR esses valores nos subtotais)
+**Problema 4: Invoice References com DIVERGENCE falso**
 
-3. **Atualizar o texto do template** (linhas 1370-1375): Mudar de:
-   ```
-   Manifest Items (reference — HBL aggregates by supplier, no per-invoice breakdown):
-   ```
-   Para:
-   ```
-   Manifest Items (reference — no per-invoice breakdown in HBL, totals verified at exporter level):
-   ```
+O campo `invoice_ref` no item do Manifest e na verdade o **delivery note** (ex: 78069472), enquanto `invoice_numbers` no exporter e a lista real de invoices (ex: 7500744709). O LLM compara delivery_note com invoice numbers do HBL, gerando divergencias falsas.
 
-4. **Atualizar o template de subtotais** (linhas 1379-1382): Reforcar que os valores do HBL vem do JSON:
-   ```
-   Subtotals EXPORTER #N:
-   - Total Weight: Manifest: X kg | HBL: Y kg (from exporters JSON) | Delta: Z kg | Status: MATCH|UPDATE REQUIRED
-   ```
+**Correcao**: Adicionar instrucao no prompt esclarecendo que `invoice_ref` nos items do Manifest e o delivery note, NAO o numero de invoice. A comparacao de invoices deve ser feita entre `invoice_numbers` do exporter (Manifest) e as invoices listadas no HBL, NAO entre `invoice_ref` de items individuais.
 
-5. **Atualizar o exemplo concreto** (linhas 1405-1408): Ja mostra valores reais, mas adicionar comentario de onde vem:
-   ```
-   (Values above come from the HBL JSON "exporters" array for this supplier)
-   ```
+---
 
-6. **Adicionar regra final** (linha 1416): 
-   - "Para Subtotais, NUNCA output 'not individually specified'. O HBL JSON SEMPRE contem dados por exportador. Encontre o exporter correspondente pelo nome e use seus valores. Se nao encontrar, output 'HBL: exporter not found in HBL JSON' com Status: NOT FOUND."
+### Alteracoes Tecnicas
 
-### Arquivo Modificado
-- `supabase/functions/sea-submit-analysis/prompts.ts` — Corrigir instrucoes de subtotais para usar dados reais do HBL JSON
+**Arquivo 1: `supabase/functions/sea-submit-analysis/index.ts`** (linhas 1302-1315)
+
+Substituir logica de `reference_weight_kg`:
+- Contar quantos exportadores tem `weighed_weight_kg > 0`
+- Se menos de 70% dos exportadores tem peso aferido, usar `gross_weight_kg` para todos
+- Adicionar log indicando qual peso foi escolhido
+
+**Arquivo 2: `supabase/functions/sea-submit-analysis/prompts.ts`** (linhas 1328-1434)
+
+1. Remover bloco PER-ITEM vs AGGREGATE inteiro (linhas 1328-1358)
+2. Remover caminho "IF HBL HAS PER-ITEM BREAKDOWN" (linhas 1373-1381)
+3. Manter apenas formato AGGREGATE:
+   - Items do Manifest listados como referencia (sem comparacao numerica)
+   - Subtotais obrigatorios com valores do HBL JSON
+4. Adicionar regra sobre `invoice_ref`: "O campo `invoice_ref` nos items do Manifest e o delivery note, NAO o numero de invoice. Para comparacao de Invoice References por exporter, use o campo `invoice_numbers` do exporter no Manifest, NAO o `invoice_ref` dos items individuais."
+5. Manter proibicao de "not individually specified"
+6. Manter todas as outras regras (NCM, seal, container, peso x1000)
 
 ### O que NAO sera alterado
-- pdfExtractor.ts (ja extrai corretamente)
-- xlsxExtractor.ts
-- index.ts (ja passa o JSON correto)
+- pdfExtractor.ts (extrai corretamente)
+- xlsxExtractor.ts (extrai corretamente)
+- resultFormatter.ts
+- deterministicCompare.ts
 - UI frontend
-- Logica de NCM, peso referencia, multi-HBL
+- Comparacao HBL x MBL e Invoice x HBL
+
+### Arquivos Modificados
+1. `supabase/functions/sea-submit-analysis/index.ts` -- Corrigir logica reference_weight_kg para pesagem incompleta
+2. `supabase/functions/sea-submit-analysis/prompts.ts` -- Simplificar formato, remover PER-ITEM, corrigir invoice_ref vs invoice_numbers
