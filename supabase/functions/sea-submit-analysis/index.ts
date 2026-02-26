@@ -1299,21 +1299,39 @@ async function analyzeWithMultiModelPipeline(
       try {
         manifestData = await extractXlsxWithLLM(xlsxFile.file_url, xlsxFile.file_name);
         
-        // Compute reference_weight_kg for LLM clarity (prioritizes Weighed Weight over Gross Weight)
+        // Compute reference_weight_kg for LLM clarity
+        // If weighing is incomplete (>30% exporters have weighed=0), use gross_weight for ALL
         if (manifestData && manifestData.exporters) {
+          const totalExporters = manifestData.exporters.length;
+          const weighedCount = manifestData.exporters.filter((exp: any) => exp.weighed_weight_kg > 0).length;
+          const weighingComplete = totalExporters > 0 && weighedCount >= totalExporters * 0.7;
+          
+          console.log(`📊 [Multi-Model] Weighing status: ${weighedCount}/${totalExporters} exporters weighed (${weighingComplete ? 'COMPLETE — using weighed_weight' : 'INCOMPLETE — using gross_weight for all'})`);
+          
           for (const exp of manifestData.exporters) {
-            (exp as any).reference_weight_kg = (exp.weighed_weight_kg > 0) ? exp.weighed_weight_kg : exp.gross_weight_kg;
+            if (weighingComplete) {
+              (exp as any).reference_weight_kg = (exp.weighed_weight_kg > 0) ? exp.weighed_weight_kg : exp.gross_weight_kg;
+            } else {
+              (exp as any).reference_weight_kg = exp.gross_weight_kg;
+            }
             if (exp.items) {
               for (const item of exp.items) {
-                (item as any).reference_weight_kg = (item.weighed_weight_kg > 0) ? item.weighed_weight_kg : item.gross_weight_kg;
+                if (weighingComplete) {
+                  (item as any).reference_weight_kg = (item.weighed_weight_kg > 0) ? item.weighed_weight_kg : item.gross_weight_kg;
+                } else {
+                  (item as any).reference_weight_kg = item.gross_weight_kg;
+                }
               }
             }
           }
           if (manifestData.totals) {
-            (manifestData.totals as any).reference_weight_kg = (manifestData.totals.weighed_weight_kg > 0) 
-              ? manifestData.totals.weighed_weight_kg : manifestData.totals.gross_weight_kg;
+            if (weighingComplete) {
+              (manifestData.totals as any).reference_weight_kg = (manifestData.totals.weighed_weight_kg > 0) 
+                ? manifestData.totals.weighed_weight_kg : manifestData.totals.gross_weight_kg;
+            } else {
+              (manifestData.totals as any).reference_weight_kg = manifestData.totals.gross_weight_kg;
+            }
           }
-          console.log(`📊 [Multi-Model] reference_weight_kg computed for ${manifestData.exporters.length} exporters (weighed_weight prioritized)`);
         }
         
         jsonXls = JSON.stringify(manifestData, null, 2);

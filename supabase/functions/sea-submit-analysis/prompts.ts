@@ -1326,36 +1326,27 @@ THE FOLLOWING OUTPUT PATTERNS ARE ABSOLUTELY FORBIDDEN:
 ❌ "HBL: not individually specified" — NEVER USE THIS PHRASE
 
 ████████████████████████████████████████████████████████████████████████████████
-█ PER-ITEM vs AGGREGATE DETECTION RULE (CRITICAL)                              █
+█ OUTPUT FORMAT — ALWAYS AGGREGATE (MANDATORY)                                  █
 ████████████████████████████████████████████████████████████████████████████████
 
-BEFORE outputting each exporter section, determine whether the HBL provides
-weight/CBM/volume data PER INDIVIDUAL ITEM/INVOICE or only as an AGGREGATE
-total for the entire exporter/supplier.
+The HBL NEVER breaks down weight/CBM per individual invoice within an exporter.
+Always use the AGGREGATE format: list manifest items as REFERENCE ONLY (no numeric
+comparison per item), then compare Weight/CBM/Volume at the SUBTOTALS level.
 
-HOW TO DETECT:
-- If the HBL shows ONE line of weight/CBM covering MULTIPLE invoices listed
-  under "AS PER INVOICE:", "INV.", or similar — it is AGGREGATE.
-- If the HBL lists separate weight/CBM for each invoice number — it is PER-ITEM.
-
-CRITICAL — HBL JSON ALWAYS HAS PER-EXPORTER DATA:
-The extracted HBL JSON ALWAYS contains an "exporters" array where each entry has:
+CRITICAL — HBL JSON HAS PER-EXPORTER DATA:
+The extracted HBL JSON contains an "exporters" array where each entry has:
   - "name": supplier name
   - "gross_weight_kg": weight for that supplier
   - "cbm": cubic meters for that supplier
   - "packages_qty": number of packages for that supplier
-These values are ALREADY EXTRACTED from the HBL document. You MUST use them
-in the Subtotals section for each exporter.
+You MUST use these values in the Subtotals section for each exporter.
 
-IMPORTANT DISTINCTION:
-- "Per-invoice" = the HBL does NOT break down weight/CBM per individual invoice (do NOT attempt)
-- "Per-exporter" = the HBL DOES have weight/CBM/volumes per supplier in the JSON "exporters" array (you MUST USE these values in Subtotals)
-
-RULE:
-- If AGGREGATE (most common case): Do NOT attempt per-item numeric comparisons.
-  List manifest items for reference only, then compare Weight/CBM/Volume
-  at the SUBTOTALS level using the HBL JSON "exporters" array data.
-- If PER-ITEM: Use the full per-item comparison format below.
+CRITICAL — INVOICE REFERENCE MAPPING:
+- The field "invoice_ref" in manifest ITEMS is the DELIVERY NOTE, NOT the invoice number.
+- The field "invoice_numbers" in manifest EXPORTERS is the actual list of invoices.
+- For Invoice References comparison, use "invoice_numbers" from the manifest EXPORTER
+  and compare with invoices listed in the HBL for that exporter.
+- Do NOT compare item-level "invoice_ref" (delivery notes) with HBL invoice numbers.
 
 YOU MUST USE THIS FORMAT - ONE COMPLETE SECTION PER EXPORTER:
 
@@ -1366,41 +1357,23 @@ EXPORTER #N: <COMPANY_NAME>
 - Seal: Manifest: <value> | HBL: <value> | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
 
 Invoice References:
-- Manifest invoices: [INV1, INV2, INV3]
-- HBL invoices: [INV1, INV2, INV3]
+- Manifest invoices: [list from exporter invoice_numbers]
+- HBL invoices: [list from HBL]
 - Status: MATCH | Missing: [list] | Extra: [list]
 
-=== IF HBL HAS PER-ITEM BREAKDOWN (rare) ===
-
-Item 1: <DESCRIPTION>
-- Gross Weight: Manifest: X kg | HBL: Y kg | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
-  [If UPDATE REQUIRED: → Update: Set weight to X kg]
-- CBM: Manifest: X m³ | HBL: Y m³ | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
-- Volume Qty: Manifest: N | HBL: N | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
-- Volume Type: Manifest: TYPE | HBL: TYPE | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
-- Invoice Ref: Manifest: REF | HBL: REF | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
-
-=== IF HBL AGGREGATES BY SUPPLIER (common case) ===
-
-Manifest Items (reference — no per-invoice breakdown in HBL, totals verified at exporter level):
-  - Invoice INV1: 1,200.000 kg / 5.500 m3 / 2 PALLETS
-  - Invoice INV2: 800.000 kg / 3.200 m3 / 1 PALLET
-  (Individual invoice weights from Manifest only — HBL totals compared at Subtotals below)
-
-=== ALWAYS OUTPUT SUBTOTALS (using HBL JSON "exporters" array) ===
-
-For each exporter, find the matching entry in the HBL JSON "exporters" array by name
-and use its gross_weight_kg, cbm, and packages_qty values:
+Manifest Items (reference only — totals verified at exporter level):
+  - Item: <description> / <reference_weight_kg> kg / <cbm> m³ / <packages_qty> <package_type>
+  (These are manifest item details for reference — numeric comparison at Subtotals below)
 
 Subtotals EXPORTER #N:
-- Total Weight: Manifest: X kg | HBL: Y kg (from exporters JSON) | Delta: Z kg | Status: <MATCH|UPDATE REQUIRED>
-- Total CBM: Manifest: X m³ | HBL: Y m³ (from exporters JSON) | Delta: Z m³ | Status: <MATCH|UPDATE REQUIRED>
-- Total Volumes: Manifest: N | HBL: N (from exporters JSON) | Delta: N | Status: <MATCH|UPDATE REQUIRED>
+- Total Weight: Manifest: X kg | HBL: Y kg | Delta: Z kg | Status: <MATCH|UPDATE REQUIRED>
+- Total CBM: Manifest: X m³ | HBL: Y m³ | Delta: Z m³ | Status: <MATCH|UPDATE REQUIRED>
+- Total Volumes: Manifest: N | HBL: N | Delta: N | Status: <MATCH|UPDATE REQUIRED>
 
 REPEAT THIS COMPLETE STRUCTURE FOR EVERY SINGLE EXPORTER (EXPORTER #1, #2, #3... #N)
 
 ████████████████████████████████████████████████████████████████████████████████
-█ CONCRETE EXAMPLE — AGGREGATE HBL (most common scenario)                      █
+█ CONCRETE EXAMPLE                                                              █
 ████████████████████████████████████████████████████████████████████████████████
 
 EXPORTER #1: ZF POLSKA SP. Z O.O.
@@ -1412,13 +1385,13 @@ Invoice References:
 - HBL invoices: [7500714130, 7500714767, 7500716058]
 - Status: MATCH
 
-Manifest Items (reference — no per-invoice breakdown in HBL, totals verified at exporter level):
-  - Invoice 7500714130: 1,200.000 kg / 5.500 m3 / 2 PALLETS
-  - Invoice 7500714767: 800.000 kg / 3.200 m3 / 1 PALLET
-  - Invoice 7500716058: 1,522.000 kg / 12.486 m3 / 4 PALLETS
-  (Individual invoice weights from Manifest only — HBL totals compared at Subtotals below)
+Manifest Items (reference only — totals verified at exporter level):
+  - Item: EBS Trailer Modulator / 1,200.000 kg / 5.500 m3 / 2 PALLETS
+  - Item: Válvula / 800.000 kg / 3.200 m3 / 1 PALLET
+  - Item: Kit Tampa / 1,522.000 kg / 12.486 m3 / 4 PALLETS
+  (Manifest item details for reference — numeric comparison at Subtotals below)
 
-Subtotals EXPORTER #1 (values from HBL JSON "exporters" array for "ZF POLSKA SP. Z O.O."):
+Subtotals EXPORTER #1:
 - Total Weight: Manifest: 3,522.000 kg | HBL: 3,522.000 kg | Delta: 0.000 kg | Status: MATCH
 - Total CBM: Manifest: 21.186 m3 | HBL: 21.186 m3 | Delta: 0.000 m3 | Status: MATCH
 - Total Volumes: Manifest: 7 | HBL: 7 | Delta: 0 | Status: MATCH
@@ -1430,8 +1403,9 @@ ADDITIONAL RULES:
 - NCM Codes and Container Number sections are MANDATORY.
 - If an HBL weight differs from the manifest by ~×1000 (within ±0.5%), down-scale the HBL value.
 - NEVER output "HBL: not individually specified" — this phrase is BANNED.
-- For Subtotals, you MUST find the matching exporter in the HBL JSON "exporters" array by name and use its gross_weight_kg, cbm, and packages_qty values. The HBL JSON ALWAYS contains per-exporter data.
-- If you cannot find a matching exporter in the HBL JSON, output "HBL: exporter not found in HBL JSON" with Status: NOT FOUND.`;
+- For Subtotals, you MUST find the matching exporter in the HBL JSON "exporters" array by name and use its gross_weight_kg, cbm, and packages_qty values.
+- If you cannot find a matching exporter in the HBL JSON, output "HBL: exporter not found in HBL JSON" with Status: NOT FOUND.
+- Do NOT output per-item comparisons like "Item 1: ... | HBL: not individually specified". Items are REFERENCE ONLY.`;
 
 
 
