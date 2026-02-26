@@ -1057,7 +1057,8 @@ async function runDualAnalysis(
   jsonXls: string,
   jsonPdfs: string,
   analysisType: string,
-  metadata: { consignee?: string; container?: string }
+  metadata: { consignee?: string; container?: string },
+  hblPdfData?: { base64: string; fileName: string }
 ): Promise<{ geminiResult: string; claudeResult: string }> {
   const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
   const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
@@ -1096,26 +1097,41 @@ DO NOT use "gross_weight_kg" from the Manifest — use "reference_weight_kg" ins
 ████████████████████████████████████████████████
 
 ████ HBL EXPORTER DATA ████
-For Subtotals comparison, you MUST search the HBL data (rider pages / cargo description
-in the PDF JSON "exporters" array) for each supplier. Look for matching names (the HBL may
-use abbreviated names like "BOLLHOFF GMBH" for "Bollhoff GmbH"). Extract their
-gross_weight_kg, cbm, and packages_qty from the HBL data.
-If you cannot find a matching exporter in the HBL data, output
+For Subtotals comparison, you MUST search the HBL PDF document attached below for each supplier.
+Look in the "Marks and Numbers" column and cargo description sections of the rider pages.
+The HBL may use abbreviated names like "BOLLHOFF GMBH" for "Bollhoff GmbH".
+Extract their individual gross_weight_kg, cbm, and packages_qty from the HBL PDF rider pages.
+Do NOT rely solely on the JSON "exporters" array — the PDF contains the complete rider page data.
+If you cannot find a matching exporter in the HBL PDF, output
 "HBL: exporter not found in HBL" with Status: NOT FOUND.
+Do NOT use "not individually specified" — each exporter must have specific values or NOT FOUND.
 ████████████████████████████████████████████████`;
 
-  console.log(`🔄 [Dual Analysis] Starting parallel Gemini + Claude analysis (prompt: ${analysisPrompt.length} chars)`);
+  const hasHblPdf = !!hblPdfData;
+  if (hasHblPdf) {
+    console.log(`📎 [Dual Analysis] HBL PDF attached for direct reading: ${hblPdfData!.fileName}`);
+  }
+
+  console.log(`🔄 [Dual Analysis] Starting parallel Gemini + Claude analysis (prompt: ${analysisPrompt.length} chars, HBL PDF: ${hasHblPdf ? 'YES' : 'NO'})`);
 
   const geminiPromise = (async (): Promise<string> => {
     try {
       console.log(`🤖 [Dual Analysis] Calling Gemini 3 Pro...`);
+      const parts: any[] = [{ text: analysisPrompt }];
+      
+      // Attach HBL PDF for direct reading of rider pages
+      if (hblPdfData) {
+        parts.push({ text: `\n\n[★★★ ATTACHED: HBL PDF DOCUMENT — Use this to find individual supplier weights, CBM, and package counts in the rider pages ★★★]\n[File: ${hblPdfData.fileName}]` });
+        parts.push({ inline_data: { mime_type: 'application/pdf', data: hblPdfData.base64 } });
+      }
+      
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=${geminiApiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: analysisPrompt }] }],
+            contents: [{ role: 'user', parts }],
             generationConfig: { maxOutputTokens: 32000 },
           }),
         }
@@ -1137,6 +1153,22 @@ If you cannot find a matching exporter in the HBL data, output
   const claudePromise = (async (): Promise<string> => {
     try {
       console.log(`🤖 [Dual Analysis] Calling Claude Sonnet 4.5...`);
+      
+      // Build content: text prompt + optional HBL PDF attachment
+      let content: any;
+      if (hblPdfData) {
+        content = [
+          { type: 'text', text: analysisPrompt },
+          { type: 'text', text: `\n\n[★★★ ATTACHED: HBL PDF DOCUMENT — Use this to find individual supplier weights, CBM, and package counts in the rider pages ★★★]\n[File: ${hblPdfData.fileName}]` },
+          {
+            type: 'document',
+            source: { type: 'base64', media_type: 'application/pdf', data: hblPdfData.base64 },
+          },
+        ];
+      } else {
+        content = analysisPrompt;
+      }
+      
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -1148,7 +1180,7 @@ If you cannot find a matching exporter in the HBL data, output
           model: 'claude-sonnet-4-5',
           max_tokens: 64000,
           temperature: 0,
-          messages: [{ role: 'user', content: analysisPrompt }],
+          messages: [{ role: 'user', content }],
         }),
       });
       if (!response.ok) {
@@ -1363,6 +1395,10 @@ async function analyzeWithMultiModelPipeline(
   // ========= STAGE 1B: Extract PDFs structured data (Gemini 3 Pro) =========
   await updateRunStatus(runId, 'extracting_pdf');
   const pdfExtractions: any[] = [];
+  // Preserve HBL PDF base64 for Stage 2 (so LLM can read rider pages directly)
+  let hblPdfBase64: string | null = null;
+  let hblPdfFileName: string | null = null;
+  
   for (const pdfFile of pdfFiles) {
     try {
       const fetchResp = await fetch(pdfFile.file_url);
@@ -1378,6 +1414,13 @@ async function analyzeWithMultiModelPipeline(
         binaryStr += String.fromCharCode.apply(null, Array.from(chunk));
       }
       const base64 = btoa(binaryStr);
+
+      // Save HBL PDF base64 for Stage 2 manifest_hbl analysis
+      if ((pdfFile.file_type === 'hbl' || pdfFile.file_type === 'base') && !hblPdfBase64) {
+        hblPdfBase64 = base64;
+        hblPdfFileName = pdfFile.file_name;
+        console.log(`📄 [Multi-Model] Preserved HBL PDF base64 for Stage 2: ${pdfFile.file_name} (${Math.round(base64.length / 1024)}KB)`);
+      }
 
       const extracted = await extractPdfStructured(base64, pdfFile.file_name, pdfFile.file_type);
       if (extracted.raw_extraction) {
@@ -1422,7 +1465,13 @@ async function analyzeWithMultiModelPipeline(
   // ========= STAGE 2: Dual Analysis (Gemini + Claude in parallel) =========
   await updateRunStatus(runId, 'analyzing_dual');
   const stage2Start = Date.now();
-  const { geminiResult, claudeResult } = await runDualAnalysis(jsonXls, jsonPdfs, analysisType, metadata);
+  const hblPdfData = (analysisType === 'manifest_hbl' && hblPdfBase64) 
+    ? { base64: hblPdfBase64, fileName: hblPdfFileName || 'hbl.pdf' } 
+    : undefined;
+  if (hblPdfData) {
+    console.log(`📎 [Multi-Model] Passing HBL PDF (${Math.round(hblPdfData.base64.length / 1024)}KB) to Stage 2 for direct rider page reading`);
+  }
+  const { geminiResult, claudeResult } = await runDualAnalysis(jsonXls, jsonPdfs, analysisType, metadata, hblPdfData);
 
   const stage2Time = Date.now() - stage2Start;
   console.log(`✅ [Multi-Model] Stage 2 complete in ${Math.round(stage2Time / 1000)}s`);
