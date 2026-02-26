@@ -1,15 +1,33 @@
 import { useState, useEffect, useMemo } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, TrendingUp, AlertTriangle, Clock, RefreshCw, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  DollarSign,
+  TrendingUp,
+  AlertTriangle,
+  Clock,
+  RefreshCw,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 
 interface AgingRow {
@@ -134,7 +152,11 @@ export default function OlimpoCobranca() {
     }
   };
 
-  useEffect(() => { fetchData(); setCurrentPage(1); setClientFilter(""); }, [viewMode]);
+  useEffect(() => {
+    fetchData();
+    setCurrentPage(1);
+    setClientFilter("");
+  }, [viewMode]);
 
   // Apply product mapping only for product view
   const displayRows = useMemo(() => {
@@ -148,20 +170,31 @@ export default function OlimpoCobranca() {
   }, [data, viewMode, clientFilter]);
 
   // Reset page when filter changes
-  useEffect(() => { setCurrentPage(1); }, [clientFilter]);
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [clientFilter]);
 
   const totalPages = Math.max(1, Math.ceil(displayRows.length / PAGE_SIZE));
-  const paginatedRows = viewMode === "client"
-    ? displayRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
-    : displayRows;
+  const paginatedRows =
+    viewMode === "client" ? displayRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE) : displayRows;
 
   // Recalculate totals from displayRows
   const totals = useMemo(() => {
     if (displayRows.length === 0) return null;
     const t: AgingRow = {
       product: "Grand Total",
-      not_due: 0, aging_90: 0, aging_180: 0, aging_240: 0, aging_360: 0, aging_360_plus: 0,
-      count_not_due: 0, count_90: 0, count_180: 0, count_240: 0, count_360: 0, count_360_plus: 0,
+      not_due: 0,
+      aging_90: 0,
+      aging_180: 0,
+      aging_240: 0,
+      aging_360: 0,
+      aging_360_plus: 0,
+      count_not_due: 0,
+      count_90: 0,
+      count_180: 0,
+      count_240: 0,
+      count_360: 0,
+      count_360_plus: 0,
     };
     for (const row of displayRows) {
       for (const k of agingKeys) (t[k] as number) += row[k] as number;
@@ -186,13 +219,15 @@ export default function OlimpoCobranca() {
   // Aging segmented bar
   const agingSegments = useMemo(() => {
     if (!totals || totalReceivable === 0) return [];
-    return agingKeys.map((k) => ({
-      key: k,
-      value: totals[k as keyof AgingRow] as number,
-      pct: (((totals[k as keyof AgingRow] as number) / totalReceivable) * 100),
-      color: AGING_COLORS[k],
-      label: AGING_LABELS[k],
-    })).filter((s) => s.pct >= 0);
+    return agingKeys
+      .map((k) => ({
+        key: k,
+        value: totals[k as keyof AgingRow] as number,
+        pct: ((totals[k as keyof AgingRow] as number) / totalReceivable) * 100,
+        color: AGING_COLORS[k],
+        label: AGING_LABELS[k],
+      }))
+      .filter((s) => s.pct >= 0);
   }, [totals, totalReceivable]);
 
   // Bar chart data
@@ -223,12 +258,15 @@ export default function OlimpoCobranca() {
     <div className="flex items-center gap-2">
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "product" | "client")}>
         <TabsList className="h-8">
-          <TabsTrigger value="product" className="text-xs px-3 py-1">Product</TabsTrigger>
-          <TabsTrigger value="client" className="text-xs px-3 py-1">Client</TabsTrigger>
+          <TabsTrigger value="product" className="text-xs px-3 py-1">
+            Product
+          </TabsTrigger>
+          <TabsTrigger value="client" className="text-xs px-3 py-1">
+            Client
+          </TabsTrigger>
         </TabsList>
       </Tabs>
       <Button
-        variant="outline"
         size="sm"
         onClick={fetchData}
         disabled={loading}
@@ -243,11 +281,21 @@ export default function OlimpoCobranca() {
   return (
     <PageLayout title="DACHSER" subtitle="Cobrança" pageIcon={DollarSign} backTo="/olimpo" rightContent={headerRight}>
       <div className="space-y-6">
-
         {/* KPI Cards */}
         <div className="grid gap-4 md:grid-cols-4">
-          <KpiCard icon={DollarSign} label="Total Receivable" value={formatCompact(totalReceivable)} loading={loading} />
-          <KpiCard icon={AlertTriangle} label="Total Overdue" value={formatCompact(totalOverdue)} loading={loading} accent />
+          <KpiCard
+            icon={DollarSign}
+            label="Total Receivable"
+            value={formatCompact(totalReceivable)}
+            loading={loading}
+          />
+          <KpiCard
+            icon={AlertTriangle}
+            label="Total Overdue"
+            value={formatCompact(totalOverdue)}
+            loading={loading}
+            accent
+          />
           <KpiCard icon={TrendingUp} label="% Overdue" value={`${pctOverdue}%`} loading={loading} />
           <KpiCard
             icon={Clock}
@@ -308,7 +356,9 @@ export default function OlimpoCobranca() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border/50">
-                    <th className="text-left py-3 px-4 text-xs uppercase tracking-wider text-muted-foreground font-semibold">{columnLabel}</th>
+                    <th className="text-left py-3 px-4 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                      {columnLabel}
+                    </th>
                     {agingKeys.map((k) => {
                       const seg = agingSegments.find((s) => s.key === k);
                       return (
@@ -324,34 +374,51 @@ export default function OlimpoCobranca() {
                     </th>
                     <th className="text-right py-3 px-4 font-semibold text-foreground">
                       <div className="text-xs uppercase tracking-wider">Total Receivable</div>
-                      {totalReceivable > 0 && <div className="text-[10px] font-normal text-muted-foreground mt-0.5">{formatCompact(totalReceivable)}</div>}
+                      {totalReceivable > 0 && (
+                        <div className="text-[10px] font-normal text-muted-foreground mt-0.5">
+                          {formatCompact(totalReceivable)}
+                        </div>
+                      )}
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={9} className="text-center py-8 text-muted-foreground">Carregando dados...</td>
+                      <td colSpan={9} className="text-center py-8 text-muted-foreground">
+                        Carregando dados...
+                      </td>
                     </tr>
                   ) : paginatedRows.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="text-center py-8 text-muted-foreground">Nenhum dado encontrado</td>
+                      <td colSpan={9} className="text-center py-8 text-muted-foreground">
+                        Nenhum dado encontrado
+                      </td>
                     </tr>
                   ) : (
                     <>
                       {paginatedRows.map((row, idx) => {
-                        const rowOverdue = row.aging_90 + row.aging_180 + row.aging_240 + row.aging_360 + row.aging_360_plus;
+                        const rowOverdue =
+                          row.aging_90 + row.aging_180 + row.aging_240 + row.aging_360 + row.aging_360_plus;
                         const rowTotal = row.not_due + rowOverdue;
                         return (
                           <tr key={idx} className="border-b border-border/30 hover:bg-muted/10">
                             <td className="py-2.5 px-4 font-medium text-foreground">{row.product}</td>
                             {agingKeys.map((k) => (
-                              <td key={k} className="py-2.5 px-4 text-right tabular-nums" style={{ color: (row[k] as number) > 0 ? AGING_COLORS[k] : "var(--muted-foreground)" }}>
+                              <td
+                                key={k}
+                                className="py-2.5 px-4 text-right tabular-nums"
+                                style={{ color: (row[k] as number) > 0 ? AGING_COLORS[k] : "var(--muted-foreground)" }}
+                              >
                                 {formatBRL(row[k] as number)}
                               </td>
                             ))}
-                            <td className="py-2.5 px-4 text-right tabular-nums text-red-400 font-medium">{formatBRL(rowOverdue)}</td>
-                            <td className="py-2.5 px-4 text-right tabular-nums text-foreground font-medium">{formatBRL(rowTotal)}</td>
+                            <td className="py-2.5 px-4 text-right tabular-nums text-red-400 font-medium">
+                              {formatBRL(rowOverdue)}
+                            </td>
+                            <td className="py-2.5 px-4 text-right tabular-nums text-foreground font-medium">
+                              {formatBRL(rowTotal)}
+                            </td>
                           </tr>
                         );
                       })}
@@ -359,12 +426,20 @@ export default function OlimpoCobranca() {
                         <tr className="border-t-2 border-primary/40 bg-primary/5">
                           <td className="py-3 px-4 font-bold text-primary">Grand Total</td>
                           {agingKeys.map((k) => (
-                            <td key={k} className="py-3 px-4 text-right tabular-nums font-bold" style={{ color: AGING_COLORS[k] }}>
+                            <td
+                              key={k}
+                              className="py-3 px-4 text-right tabular-nums font-bold"
+                              style={{ color: AGING_COLORS[k] }}
+                            >
                               {formatBRL(totals[k] as number)}
                             </td>
                           ))}
-                          <td className="py-3 px-4 text-right tabular-nums font-bold text-red-400">{formatBRL(totalOverdue)}</td>
-                          <td className="py-3 px-4 text-right tabular-nums font-bold text-foreground">{formatBRL(totalReceivable)}</td>
+                          <td className="py-3 px-4 text-right tabular-nums font-bold text-red-400">
+                            {formatBRL(totalOverdue)}
+                          </td>
+                          <td className="py-3 px-4 text-right tabular-nums font-bold text-foreground">
+                            {formatBRL(totalReceivable)}
+                          </td>
                         </tr>
                       )}
                     </>
@@ -378,10 +453,22 @@ export default function OlimpoCobranca() {
                   {displayRows.length} clientes • Página {currentPage} de {totalPages}
                 </span>
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage((p) => p - 1)}
+                  >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage((p) => p + 1)}
+                  >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
@@ -404,10 +491,20 @@ export default function OlimpoCobranca() {
                     <XAxis dataKey="product" tick={{ fill: "#aaa", fontSize: 11 }} />
                     <YAxis
                       tick={{ fill: "#aaa", fontSize: 11 }}
-                      tickFormatter={(v) => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}M` : v >= 1_000 ? `${(v / 1_000).toFixed(0)}K` : v}
+                      tickFormatter={(v) =>
+                        v >= 1_000_000
+                          ? `${(v / 1_000_000).toFixed(0)}M`
+                          : v >= 1_000
+                            ? `${(v / 1_000).toFixed(0)}K`
+                            : v
+                      }
                     />
                     <Tooltip
-                      contentStyle={{ backgroundColor: "rgba(0,0,0,0.85)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8 }}
+                      contentStyle={{
+                        backgroundColor: "rgba(0,0,0,0.85)",
+                        border: "1px solid rgba(255,255,255,0.15)",
+                        borderRadius: 8,
+                      }}
                       labelStyle={{ color: "#fff" }}
                       formatter={(value: number) => formatBRL(value)}
                     />
@@ -445,7 +542,11 @@ export default function OlimpoCobranca() {
                       ))}
                     </Pie>
                     <Tooltip
-                      contentStyle={{ backgroundColor: "rgba(0,0,0,0.85)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8 }}
+                      contentStyle={{
+                        backgroundColor: "rgba(0,0,0,0.85)",
+                        border: "1px solid rgba(255,255,255,0.15)",
+                        borderRadius: 8,
+                      }}
                       formatter={(value: number) => formatBRL(value)}
                     />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -460,7 +561,13 @@ export default function OlimpoCobranca() {
   );
 }
 
-function KpiCard({ icon: Icon, label, value, loading, accent }: {
+function KpiCard({
+  icon: Icon,
+  label,
+  value,
+  loading,
+  accent,
+}: {
   icon: any;
   label: string;
   value: string;
@@ -470,12 +577,16 @@ function KpiCard({ icon: Icon, label, value, loading, accent }: {
   return (
     <Card className="bg-card border-border">
       <CardContent className="p-4 flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${accent ? "bg-red-500/10 border border-red-500/30" : "bg-primary/10 border border-primary/30"}`}>
+        <div
+          className={`w-10 h-10 rounded-lg flex items-center justify-center ${accent ? "bg-red-500/10 border border-red-500/30" : "bg-primary/10 border border-primary/30"}`}
+        >
           <Icon className={`h-5 w-5 ${accent ? "text-red-400" : "text-primary"}`} />
         </div>
         <div>
           <p className="text-xs text-muted-foreground">{label}</p>
-          <p className={`text-lg font-bold ${loading ? "animate-pulse text-muted-foreground" : accent ? "text-red-400" : "text-foreground"}`}>
+          <p
+            className={`text-lg font-bold ${loading ? "animate-pulse text-muted-foreground" : accent ? "text-red-400" : "text-foreground"}`}
+          >
             {loading ? "..." : value}
           </p>
         </div>
