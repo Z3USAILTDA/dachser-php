@@ -679,39 +679,33 @@ serve(async (req) => {
       const etdForDiscrepancy = masters && masters.length > 0 ? (masters[0].etd || null) : null;
       const { pieces_discrepancy, baseline_pieces, has_dis_event } = detectPiecesDiscrepancy(timelineStr, etdForDiscrepancy);
 
-      // Derive status: ALWAYS prefer timeline (with ETD cutoff) to match what the timeline modal shows
+      // Derive status: PREFER last_status_code from DB, use timeline only as fallback for invalid statuses
       const rawStatus = ws.last_status_code ? String(ws.last_status_code).trim() : null;
+      const rawStatusUpper = (rawStatus || '').toUpperCase();
       const awbPrefix = awb.substring(0, 3);
       const destForClassify = ws.destination ? String(ws.destination).trim() : null;
       const origForClassify = ws.origin ? String(ws.origin).trim() : null;
       const etdForTimeline = etdForDiscrepancy; // same ETD used for pieces discrepancy
 
-      // Step 1: Resolve status from timeline (with ETD cutoff) — this is the authoritative source
-      const timelineStatus = resolveUnkFromTimeline(timelineStr, awb, etdForTimeline);
+      // Status that need timeline fallback (invalid/empty)
+      const needsTimelineFallback = !rawStatus || invalidStatuses.has(rawStatusUpper) || rawStatusUpper === 'UNK';
 
       let finalStatus: string | null;
 
-      if (timelineStatus) {
-        // Timeline has a valid status — use it (matches what the modal shows)
-        if (timelineStatus === 'DLV') {
-          // DLV guard: check if there's a classifiable ARR first
-          const arrCheck = classifyArrival('ARR', timelineStr, destForClassify, origForClassify, awb);
-          if (arrCheck && arrCheck !== 'ARR') {
-            console.log(`[timelinePrimary] ${awb}: DLV blocked, using ${arrCheck} instead`);
-            finalStatus = arrCheck;
-          } else {
-            finalStatus = 'DLV';
-          }
-        } else {
-          finalStatus = timelineStatus;
-          if (rawStatus && rawStatus.toUpperCase() !== timelineStatus.toUpperCase()) {
-            console.log(`[timelinePrimary] ${awb}: last_status_code="${rawStatus}" overridden by timeline="${timelineStatus}" (ETD-filtered)`);
-          }
-        }
-      } else {
-        // Timeline gave nothing — fall back to last_status_code from t_aereo_ws
+      if (!needsTimelineFallback) {
+        // DB has a valid last_status_code — use it as authoritative source
         finalStatus = classifyArrival(rawStatus, timelineStr, destForClassify, origForClassify, awb);
-        console.log(`[timelineFallback] ${awb}: using last_status_code="${rawStatus}" (no timeline status available)`);
+        console.log(`[dbPrimary] ${awb}: using last_status_code="${rawStatus}" → "${finalStatus}"`);
+      } else {
+        // DB status is invalid — fall back to timeline with ETD cutoff
+        const timelineStatus = resolveUnkFromTimeline(timelineStr, awb, etdForTimeline);
+        if (timelineStatus) {
+          finalStatus = classifyArrival(timelineStatus, timelineStr, destForClassify, origForClassify, awb);
+          console.log(`[timelineFallback] ${awb}: last_status_code="${rawStatus}" invalid, timeline="${timelineStatus}" → "${finalStatus}"`);
+        } else {
+          finalStatus = rawStatus;
+          console.log(`[noSource] ${awb}: no valid status from DB or timeline, using raw="${rawStatus}"`);
+        }
       }
 
       // Re-classificar ARR genérico para determinar CONEXAO/DESTINO
