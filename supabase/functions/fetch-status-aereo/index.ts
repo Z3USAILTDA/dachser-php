@@ -516,7 +516,8 @@ serve(async (req) => {
       );
     }
 
-    // ========== PASSO 1.5: Fallback via t_aereo_api para AWBs sem dados ==========
+    // ========== PASSO 1.5: Consultar t_aereo_api para TODOS os AWBs ==========
+    // t_aereo_api.ultimo_status é a fonte autoritativa quando disponível
     const invalidStatuses = new Set(['', 'N/A', 'NOT_FOUND', 'ERRO', 'UNK']);
     // Known error phrases in timeline that indicate bad/unusable data
     const timelineErrorPhrases = [
@@ -527,7 +528,6 @@ serve(async (req) => {
       'adicionarei suporte',
       'add support for',
     ];
-    const awbsSemDados: string[] = [];
     const apiFallbackMap = new Map<string, any>(); // mawb -> api row
 
     function isTimelineError(timelineJson: string | null): boolean {
@@ -536,32 +536,24 @@ serve(async (req) => {
       return timelineErrorPhrases.some(phrase => lower.includes(phrase));
     }
 
-    for (const ws of wsList) {
-      const status = (ws.last_status_code || '').trim().toUpperCase();
-      const needsFallback = invalidStatuses.has(status) || !ws.last_status_code || isTimelineError(ws.timeline_json);
-      if (needsFallback) {
-        const awb = String(ws.awb || '').trim();
-        if (awb) awbsSemDados.push(awb);
-      }
-    }
-
-    if (awbsSemDados.length > 0) {
-      const uniqueSemDados = [...new Set(awbsSemDados)];
-      const semDadosClause = uniqueSemDados.map(a => `'${a.replace(/'/g, "''")}'`).join(',');
+    // Query t_aereo_api for ALL AWBs to get authoritative ultimo_status
+    const allAwbsForApi = [...new Set(wsList.map((ws: any) => String(ws.awb || '').trim()).filter(Boolean))];
+    if (allAwbsForApi.length > 0) {
+      const apiInClause = allAwbsForApi.map(a => `'${a.replace(/'/g, "''")}'`).join(',');
       const apiQuery = `
         SELECT mawb, hawb, destinatario, nome_analista, email_analista,
                emaill_cliente, tipo_servico, ultimo_status, origem, destino,
                historico_status
         FROM ${database}.t_aereo_api
-        WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci IN (${semDadosClause})
+        WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci IN (${apiInClause})
           AND ultimo_status IS NOT NULL
           AND ultimo_status != 'N/A'
         ORDER BY id DESC
       `;
-      console.log(`Fallback: buscando ${uniqueSemDados.length} AWBs sem dados na t_aereo_api...`);
+      console.log(`Querying t_aereo_api for ${allAwbsForApi.length} AWBs (authoritative status)...`);
       const [apiRows] = await client.query(apiQuery) as [any[], any];
       const apiList = Array.isArray(apiRows) ? apiRows : [];
-      console.log(`Fallback: encontrados ${apiList.length} registros na t_aereo_api`);
+      console.log(`Found ${apiList.length} records in t_aereo_api`);
 
       // Build map (keep first = most recent due to ORDER BY id DESC)
       for (const row of apiList) {
@@ -571,14 +563,14 @@ serve(async (req) => {
         }
       }
 
-      // Overwrite ws records with api data
+      // For AWBs that have NO valid ws data, fully overwrite with api data (full fallback)
       for (const ws of wsList) {
         const awb = String(ws.awb || '').trim();
         const apiRow = apiFallbackMap.get(awb);
         if (!apiRow) continue;
         const status = (ws.last_status_code || '').trim().toUpperCase();
-        const needsFallback = invalidStatuses.has(status) || !ws.last_status_code || isTimelineError(ws.timeline_json);
-        if (needsFallback) {
+        const needsFullFallback = invalidStatuses.has(status) || !ws.last_status_code || isTimelineError(ws.timeline_json);
+        if (needsFullFallback) {
           ws.last_status_code = apiRow.ultimo_status || null;
           ws.last_status_description = apiRow.ultimo_status || null;
           ws.origin = apiRow.origem || ws.origin || null;
@@ -588,7 +580,7 @@ serve(async (req) => {
           ws._source = 'api';
         }
       }
-      console.log(`Fallback: ${apiFallbackMap.size} AWBs enriquecidos via t_aereo_api`);
+      console.log(`t_aereo_api: ${apiFallbackMap.size} AWBs found, full fallback applied where needed`);
     }
 
     // ========== PASSO 1.8: Verificar master_changed via t_master_swap_log ==========
@@ -698,7 +690,7 @@ serve(async (req) => {
       const etdForDiscrepancy = masters && masters.length > 0 ? (masters[0].etd || null) : null;
       const { pieces_discrepancy, baseline_pieces, has_dis_event } = detectPiecesDiscrepancy(timelineStr, etdForDiscrepancy);
 
-      // Derive status: PREFER last_status_code from DB, use timeline only as fallback for invalid statuses
+      // Derive status: PREFER t_aereo_api.ultimo_status (authoritative), then timeline, then ws.last_status_code
       const rawStatus = ws.last_status_code ? String(ws.last_status_code).trim() : null;
       const rawStatusUpper = (rawStatus || '').toUpperCase();
       const awbPrefix = awb.substring(0, 3);
@@ -706,26 +698,31 @@ serve(async (req) => {
       const origForClassify = ws.origin ? String(ws.origin).trim() : null;
       const etdForTimeline = etdForDiscrepancy; // same ETD used for pieces discrepancy
 
-      // ALWAYS try timeline first (with ETD cutoff) — it reflects the most recent event
+      // Check if t_aereo_api has an authoritative status for this AWB
+      const apiRow = apiFallbackMap.get(awb);
+      const apiStatus = apiRow ? String(apiRow.ultimo_status || '').trim().toUpperCase() : null;
+      const apiStatusValid = apiStatus && !invalidStatuses.has(apiStatus) && apiStatus !== 'UNK';
+
+      // Timeline status (for cases where API status is not available)
       const timelineStatus = resolveUnkFromTimeline(timelineStr, awb, etdForTimeline);
 
       let finalStatus: string | null;
 
-      if (timelineStatus) {
-        // Timeline has a valid status — use it (matches what the modal shows)
+      if (apiStatusValid) {
+        // t_aereo_api.ultimo_status is the authoritative source — use it directly
+        finalStatus = classifyArrival(apiStatus!, timelineStr, destForClassify, origForClassify, awb);
+        console.log(`[apiPrimary] ${awb}: t_aereo_api.ultimo_status="${apiStatus}" → "${finalStatus}"`);
+      } else if (timelineStatus) {
+        // No API status — use timeline-derived status
         finalStatus = classifyArrival(timelineStatus, timelineStr, destForClassify, origForClassify, awb);
-        if (rawStatus && rawStatusUpper !== timelineStatus.toUpperCase()) {
-          console.log(`[timelinePrimary] ${awb}: last_status_code="${rawStatus}" overridden by timeline="${timelineStatus}" → "${finalStatus}"`);
-        } else {
-          console.log(`[timelinePrimary] ${awb}: timeline="${timelineStatus}" → "${finalStatus}"`);
-        }
+        console.log(`[timelineFallback] ${awb}: timeline="${timelineStatus}" → "${finalStatus}"`);
       } else if (rawStatus && !invalidStatuses.has(rawStatusUpper) && rawStatusUpper !== 'UNK') {
-        // No timeline status — fall back to DB last_status_code
+        // No timeline status — fall back to DB last_status_code from t_aereo_ws
         finalStatus = classifyArrival(rawStatus, timelineStr, destForClassify, origForClassify, awb);
-        console.log(`[dbFallback] ${awb}: no timeline, using last_status_code="${rawStatus}" → "${finalStatus}"`);
+        console.log(`[wsFallback] ${awb}: ws.last_status_code="${rawStatus}" → "${finalStatus}"`);
       } else {
         finalStatus = rawStatus;
-        console.log(`[noSource] ${awb}: no valid status from timeline or DB, raw="${rawStatus}"`);
+        console.log(`[noSource] ${awb}: no valid status from api/timeline/ws, raw="${rawStatus}"`);
       }
 
       // Re-classificar ARR genérico para determinar CONEXAO/DESTINO
