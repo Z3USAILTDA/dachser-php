@@ -189,7 +189,28 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     'RCT': 'RCT',
   };
 
-  // Regex para extrair código IATA de descrições livres
+  // Known IATA codes for extraction from description prefix (e.g. "DIS - GRU, ...")
+  const knownIataCodes = ['DEP', 'ARR', 'RCF', 'DLV', 'NFD', 'MAN', 'BKD', 'RCS', 'DIS', 'NIL', 'OFLD', 'FOH', 'TRM', 'PRE', 'AWD', 'CCD', 'TGC', 'DDL', 'AWR', 'POD', 'TFD', 'RCT', 'RCP', 'LOF', 'TDE', 'ASN', 'MIS', 'TFS', 'BKF', 'FWB', 'CAN', 'NIF'];
+
+  // Extract IATA code from description string (mirrors extractStatusCode in mariadb-proxy)
+  function extractIataFromDesc(description: string): string | null {
+    if (!description) return null;
+    const upper = description.trim().toUpperCase();
+    // Check parenthesized code: "(AWA)", "(DIS)"
+    const parenMatch = description.match(/\(([A-Z]{2,5})\)/);
+    if (parenMatch && knownIataCodes.includes(parenMatch[1].toUpperCase())) {
+      return statusMap[parenMatch[1].toUpperCase()] || parenMatch[1].toUpperCase();
+    }
+    // Check if description starts with a known code: "DIS - GRU" or "DEP" or "DIS,"
+    for (const code of knownIataCodes) {
+      if (upper.startsWith(code + ' ') || upper.startsWith(code + '-') || upper.startsWith(code + ',') || upper === code) {
+        return statusMap[code] || code;
+      }
+    }
+    return null;
+  }
+
+  // Regex para extrair código IATA de descrições livres (full-word patterns)
   const descPatterns: Array<[RegExp, string]> = [
     [/\bdelivered\b/i, 'DLV'],
     [/^\(AWA\)/i, 'AWD'],
@@ -257,15 +278,22 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
         return resolved;
       }
 
-      // 2. Checar descrição no mapa
+      // 2. Checar descrição no mapa (exact match)
       if (rawDesc && statusMap[rawDesc]) {
         const resolved = statusMap[rawDesc];
         console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${rawDesc.substring(0, 30)}" → ${resolved} (desc map)`);
         return resolved;
       }
 
-      // 3. Checar descrição com regex
+      // 3. Extract IATA code from description prefix (e.g. "DIS - GRU, ...")
       const descRaw = ev.Description || ev.description || ev.title || ev.details || '';
+      const iataFromPrefix = extractIataFromDesc(descRaw);
+      if (iataFromPrefix) {
+        console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${descRaw.substring(0, 30)}" → ${iataFromPrefix} (prefix extract${etdCutoff ? ', ETD-filtered' : ''})`);
+        return iataFromPrefix;
+      }
+
+      // 4. Checar descrição com regex (full-word patterns)
       for (const [pattern, iata] of descPatterns) {
         if (pattern.test(descRaw)) {
           console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${descRaw.substring(0, 30)}" → ${iata} (regex${etdCutoff ? ', ETD-filtered' : ''})`);
