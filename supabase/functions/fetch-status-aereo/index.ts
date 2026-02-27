@@ -141,7 +141,29 @@ function classifyArrival(lastStatusCode: string | null, timelineJson: string | n
 // De-para: resolve status inspecionando a timeline_json
 // Sempre ordena eventos por data DESC antes de iterar (garante evento mais recente primeiro,
 // independentemente da ordem de armazenamento no JSON)
-function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: string): string | null {
+// Helper para parsear datas em português e inglês (shared between resolve and detect)
+function parseFlexibleDate(dateStr: string | null): Date | null {
+  if (!dateStr) return null;
+  const ptMonths: Record<string, string> = {
+    'jan': '01', 'fev': '02', 'mar': '03', 'abr': '04',
+    'mai': '05', 'jun': '06', 'jul': '07', 'ago': '08',
+    'set': '09', 'out': '10', 'nov': '11', 'dez': '12',
+  };
+  const direct = new Date(dateStr);
+  if (!isNaN(direct.getTime())) return direct;
+  const match = dateStr.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})(?:\s+(\d{2}:\d{2}))?/);
+  if (match) {
+    const day = match[1].padStart(2, '0');
+    const monthStr = match[2].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const year = match[3];
+    const time = match[4] || '00:00';
+    const month = ptMonths[monthStr] || null;
+    if (month) return new Date(`${year}-${month}-${day}T${time}:00`);
+  }
+  return null;
+}
+
+function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: string, etdStr?: string | null): string | null {
   if (!timelineJson) return null;
 
   // Mapeamento de código de status bruto → código IATA
@@ -168,10 +190,8 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
   };
 
   // Regex para extrair código IATA de descrições livres
-  // IMPORTANTE: a ordem importa — padrões mais específicos devem vir antes dos genéricos
   const descPatterns: Array<[RegExp, string]> = [
     [/\bdelivered\b/i, 'DLV'],
-    // Captura prefixo "(AWA)" em descrições da Air China antes de tentar "arrived"
     [/^\(AWA\)/i, 'AWD'],
     [/\bdocuments?\s+available\b/i, 'AWD'],
     [/\barrived?\b/i, 'ARR'],
@@ -186,7 +206,6 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     [/\bfreight\s+on\s+hand\b/i, 'FOH'],
     [/\bbookeds?\b|\bbooked\b/i, 'BKD'],
     [/\btransferred?\b/i, 'TFD'],
-    // DEP por último — evita falso positivo em descrições que mencionam "departed" de voos anteriores
     [/\bdeparted?\b/i, 'DEP'],
   ];
 
@@ -194,40 +213,62 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     const events = JSON.parse(timelineJson);
     if (!Array.isArray(events) || events.length === 0) return null;
 
-    // Ordenar eventos por data DESC (mais recente primeiro) para garantir que
-    // pegaremos sempre o evento mais atual, independente da ordem no JSON
+    // Apply ETD cutoff filter (same as timeline modal) to avoid picking events from previous shipments
+    let etdCutoff: Date | null = null;
+    if (etdStr) {
+      const etdDate = new Date(etdStr);
+      if (!isNaN(etdDate.getTime())) {
+        const now = new Date();
+        etdCutoff = etdDate < now ? etdDate : null;
+      }
+    }
+
+    // Ordenar eventos por data DESC (mais recente primeiro)
     const sorted = [...events].sort((a, b) => {
-      const dateA = a.date || a.Date || a.timestamp || a.time || a.datetime || '';
-      const dateB = b.date || b.Date || b.timestamp || b.time || b.datetime || '';
+      const dateA = a.date || a.Date || a.timestamp || a.Timestamp || a.time || a.datetime || a.dataEvento || '';
+      const dateB = b.date || b.Date || b.timestamp || b.Timestamp || b.time || b.datetime || b.dataEvento || '';
       if (!dateA && !dateB) return 0;
       if (!dateA) return 1;
       if (!dateB) return -1;
       return String(dateB).localeCompare(String(dateA));
     });
 
-    for (const ev of sorted) {
+    // Filter by ETD cutoff if available
+    const filtered = etdCutoff
+      ? sorted.filter(ev => {
+          const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
+          if (!ts) return true; // sem data, manter por segurança
+          const eventDate = parseFlexibleDate(String(ts));
+          if (!eventDate) return true;
+          return eventDate >= etdCutoff!;
+        })
+      : sorted;
+
+    if (filtered.length === 0) return null;
+
+    for (const ev of filtered) {
       const rawStatus = (ev.status || ev.Status || '').trim().toUpperCase();
       const rawDesc = (ev.Description || ev.description || ev.title || ev.details || '').trim().toUpperCase();
 
       // 1. Checar status direto no mapa
       if (rawStatus && statusMap[rawStatus]) {
         const resolved = statusMap[rawStatus];
-        console.log(`[resolveUNK] ${awbForDebug || '?'}: "${rawStatus}" → ${resolved} (status match)`);
+        console.log(`[resolveUNK] ${awbForDebug || '?'}: "${rawStatus}" → ${resolved} (status match${etdCutoff ? ', ETD-filtered' : ''})`);
         return resolved;
       }
 
-      // 2. Checar descrição no mapa (descrições longas)
+      // 2. Checar descrição no mapa
       if (rawDesc && statusMap[rawDesc]) {
         const resolved = statusMap[rawDesc];
         console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${rawDesc.substring(0, 30)}" → ${resolved} (desc map)`);
         return resolved;
       }
 
-      // 3. Checar descrição com regex (usa texto original para case-insensitive)
+      // 3. Checar descrição com regex
       const descRaw = ev.Description || ev.description || ev.title || ev.details || '';
       for (const [pattern, iata] of descPatterns) {
         if (pattern.test(descRaw)) {
-          console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${descRaw.substring(0, 30)}" → ${iata} (regex)`);
+          console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${descRaw.substring(0, 30)}" → ${iata} (regex${etdCutoff ? ', ETD-filtered' : ''})`);
           return iata;
         }
       }
@@ -610,71 +651,46 @@ serve(async (req) => {
       const etdForDiscrepancy = masters && masters.length > 0 ? (masters[0].etd || null) : null;
       const { pieces_discrepancy, baseline_pieces, has_dis_event } = detectPiecesDiscrepancy(timelineStr, etdForDiscrepancy);
 
-      // Classify ARR as connection or final destination
+      // Derive status: ALWAYS prefer timeline (with ETD cutoff) to match what the timeline modal shows
       const rawStatus = ws.last_status_code ? String(ws.last_status_code).trim() : null;
       const awbPrefix = awb.substring(0, 3);
-      const classifiedStatus = classifyArrival(rawStatus, timelineStr, ws.destination ? String(ws.destination).trim() : null, ws.origin ? String(ws.origin).trim() : null, awb);
-
-      let finalStatus: string | null = classifiedStatus;
-
       const destForClassify = ws.destination ? String(ws.destination).trim() : null;
       const origForClassify = ws.origin ? String(ws.origin).trim() : null;
+      const etdForTimeline = etdForDiscrepancy; // same ETD used for pieces discrepancy
 
-      if (awbPrefix === '014') {
-        // Prefixo 014 (Air China Cargo): sempre usar o último evento da timeline,
-        // pois seus códigos proprietários nunca mapeiam corretamente
-        const resolvedFromTimeline = resolveUnkFromTimeline(timelineStr, awb);
-        if (resolvedFromTimeline) {
-          finalStatus = resolvedFromTimeline;
-          console.log(`[prefix014] ${awb}: last_status_code="${rawStatus}" → ${resolvedFromTimeline} (forced timeline)`);
-        } else {
-          // Fallback: usar classifiedStatus se timeline estiver vazia
-          finalStatus = classifiedStatus;
-        }
-      } else if (finalStatus && finalStatus.toUpperCase() !== 'UNK') {
-        // Demais prefixos: validação cruzada — se timeline diverge, prefere a timeline
-        const timelineStatus = resolveUnkFromTimeline(timelineStr, awb);
-        if (timelineStatus && timelineStatus !== finalStatus && isMoreSpecific(finalStatus, timelineStatus)) {
-          // Se crossCheck quer aplicar DLV, verificar se existe ARR classificável
-          if (timelineStatus === 'DLV') {
-            const arrCheck = classifyArrival('ARR', timelineStr, destForClassify, origForClassify, awb);
-            if (arrCheck && arrCheck !== 'ARR') {
-              console.log(`[crossCheck] ${awb}: DLV blocked, using ${arrCheck} instead`);
-              finalStatus = arrCheck;
-            } else {
-              finalStatus = timelineStatus;
-            }
+      // Step 1: Resolve status from timeline (with ETD cutoff) — this is the authoritative source
+      const timelineStatus = resolveUnkFromTimeline(timelineStr, awb, etdForTimeline);
+
+      let finalStatus: string | null;
+
+      if (timelineStatus) {
+        // Timeline has a valid status — use it (matches what the modal shows)
+        if (timelineStatus === 'DLV') {
+          // DLV guard: check if there's a classifiable ARR first
+          const arrCheck = classifyArrival('ARR', timelineStr, destForClassify, origForClassify, awb);
+          if (arrCheck && arrCheck !== 'ARR') {
+            console.log(`[timelinePrimary] ${awb}: DLV blocked, using ${arrCheck} instead`);
+            finalStatus = arrCheck;
           } else {
-            console.log(`[crossCheck] ${awb}: last_status="${finalStatus}" vs timeline="${timelineStatus}" → prefer timeline`);
-            finalStatus = timelineStatus;
+            finalStatus = 'DLV';
+          }
+        } else {
+          finalStatus = timelineStatus;
+          if (rawStatus && rawStatus.toUpperCase() !== timelineStatus.toUpperCase()) {
+            console.log(`[timelinePrimary] ${awb}: last_status_code="${rawStatus}" overridden by timeline="${timelineStatus}" (ETD-filtered)`);
           }
         }
       } else {
-        // Status UNK ou nulo: tenta resolver via timeline (comportamento original)
-        const resolvedFromTimeline = resolveUnkFromTimeline(timelineStr, awb);
-        if (resolvedFromTimeline) {
-          // Se resolve para DLV, verificar se existe ARR classificável
-          if (resolvedFromTimeline === 'DLV') {
-            const arrCheck = classifyArrival('ARR', timelineStr, destForClassify, origForClassify, awb);
-            if (arrCheck && arrCheck !== 'ARR') {
-              console.log(`[resolveUNK] ${awb}: DLV blocked, using ${arrCheck} instead`);
-              finalStatus = arrCheck;
-            } else {
-              finalStatus = resolvedFromTimeline;
-              console.log(`[resolveUNK] ${awb}: UNK → ${resolvedFromTimeline} (via timeline de-para)`);
-            }
-          } else {
-            finalStatus = resolvedFromTimeline;
-            console.log(`[resolveUNK] ${awb}: UNK → ${resolvedFromTimeline} (via timeline de-para)`);
-          }
-        }
+        // Timeline gave nothing — fall back to last_status_code from t_aereo_ws
+        finalStatus = classifyArrival(rawStatus, timelineStr, destForClassify, origForClassify, awb);
+        console.log(`[timelineFallback] ${awb}: using last_status_code="${rawStatus}" (no timeline status available)`);
       }
 
-      // Re-classificar ARR genérico após crossCheck/resolve para determinar CONEXAO/DESTINO
+      // Re-classificar ARR genérico para determinar CONEXAO/DESTINO
       if (finalStatus && finalStatus.toUpperCase() === 'ARR') {
         const reclassified = classifyArrival(finalStatus, timelineStr, destForClassify, origForClassify, awb);
         if (reclassified && reclassified !== finalStatus) {
-          console.log(`[reClassify] ${awb}: ARR → ${reclassified} (post-crossCheck)`);
+          console.log(`[reClassify] ${awb}: ARR → ${reclassified} (post-resolve)`);
           finalStatus = reclassified;
         }
       }
