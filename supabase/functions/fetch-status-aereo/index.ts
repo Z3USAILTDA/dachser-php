@@ -268,36 +268,55 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     if (filtered.length === 0) return null;
 
     for (const ev of filtered) {
-      const rawStatus = (ev.status || ev.Status || '').trim().toUpperCase();
+      const rawStatusField = (ev.status || ev.Status || '').trim();
+      const rawStatus = rawStatusField.toUpperCase();
       const rawDesc = (ev.Description || ev.description || ev.title || ev.details || '').trim().toUpperCase();
 
-      // 1. Checar status direto no mapa
+      // 1. Checar status direto no mapa (exact match)
       if (rawStatus && statusMap[rawStatus]) {
         const resolved = statusMap[rawStatus];
         console.log(`[resolveUNK] ${awbForDebug || '?'}: "${rawStatus}" → ${resolved} (status match${etdCutoff ? ', ETD-filtered' : ''})`);
         return resolved;
       }
 
-      // 2. Checar descrição no mapa (exact match)
+      // 2. Extract IATA code from status field (e.g. "Departed MAD", "Manifested UX057")
+      if (rawStatusField) {
+        const iataFromStatus = extractIataFromDesc(rawStatusField);
+        if (iataFromStatus) {
+          console.log(`[resolveUNK] ${awbForDebug || '?'}: status "${rawStatusField.substring(0, 30)}" → ${iataFromStatus} (status prefix${etdCutoff ? ', ETD-filtered' : ''})`);
+          return iataFromStatus;
+        }
+        // Also try regex patterns on status field
+        for (const [pattern, iata] of descPatterns) {
+          if (pattern.test(rawStatusField)) {
+            console.log(`[resolveUNK] ${awbForDebug || '?'}: status "${rawStatusField.substring(0, 30)}" → ${iata} (status regex${etdCutoff ? ', ETD-filtered' : ''})`);
+            return iata;
+          }
+        }
+      }
+
+      // 3. Checar descrição no mapa (exact match)
       if (rawDesc && statusMap[rawDesc]) {
         const resolved = statusMap[rawDesc];
         console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${rawDesc.substring(0, 30)}" → ${resolved} (desc map)`);
         return resolved;
       }
 
-      // 3. Extract IATA code from description prefix (e.g. "DIS - GRU, ...")
+      // 4. Extract IATA code from description prefix (e.g. "DIS - GRU, ...")
       const descRaw = ev.Description || ev.description || ev.title || ev.details || '';
-      const iataFromPrefix = extractIataFromDesc(descRaw);
-      if (iataFromPrefix) {
-        console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${descRaw.substring(0, 30)}" → ${iataFromPrefix} (prefix extract${etdCutoff ? ', ETD-filtered' : ''})`);
-        return iataFromPrefix;
-      }
+      if (descRaw) {
+        const iataFromPrefix = extractIataFromDesc(descRaw);
+        if (iataFromPrefix) {
+          console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${descRaw.substring(0, 30)}" → ${iataFromPrefix} (prefix extract${etdCutoff ? ', ETD-filtered' : ''})`);
+          return iataFromPrefix;
+        }
 
-      // 4. Checar descrição com regex (full-word patterns)
-      for (const [pattern, iata] of descPatterns) {
-        if (pattern.test(descRaw)) {
-          console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${descRaw.substring(0, 30)}" → ${iata} (regex${etdCutoff ? ', ETD-filtered' : ''})`);
-          return iata;
+        // 5. Checar descrição com regex (full-word patterns)
+        for (const [pattern, iata] of descPatterns) {
+          if (pattern.test(descRaw)) {
+            console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${descRaw.substring(0, 30)}" → ${iata} (regex${etdCutoff ? ', ETD-filtered' : ''})`);
+            return iata;
+          }
         }
       }
     }
@@ -687,25 +706,26 @@ serve(async (req) => {
       const origForClassify = ws.origin ? String(ws.origin).trim() : null;
       const etdForTimeline = etdForDiscrepancy; // same ETD used for pieces discrepancy
 
-      // Status that need timeline fallback (invalid/empty)
-      const needsTimelineFallback = !rawStatus || invalidStatuses.has(rawStatusUpper) || rawStatusUpper === 'UNK';
+      // ALWAYS try timeline first (with ETD cutoff) — it reflects the most recent event
+      const timelineStatus = resolveUnkFromTimeline(timelineStr, awb, etdForTimeline);
 
       let finalStatus: string | null;
 
-      if (!needsTimelineFallback) {
-        // DB has a valid last_status_code — use it as authoritative source
-        finalStatus = classifyArrival(rawStatus, timelineStr, destForClassify, origForClassify, awb);
-        console.log(`[dbPrimary] ${awb}: using last_status_code="${rawStatus}" → "${finalStatus}"`);
-      } else {
-        // DB status is invalid — fall back to timeline with ETD cutoff
-        const timelineStatus = resolveUnkFromTimeline(timelineStr, awb, etdForTimeline);
-        if (timelineStatus) {
-          finalStatus = classifyArrival(timelineStatus, timelineStr, destForClassify, origForClassify, awb);
-          console.log(`[timelineFallback] ${awb}: last_status_code="${rawStatus}" invalid, timeline="${timelineStatus}" → "${finalStatus}"`);
+      if (timelineStatus) {
+        // Timeline has a valid status — use it (matches what the modal shows)
+        finalStatus = classifyArrival(timelineStatus, timelineStr, destForClassify, origForClassify, awb);
+        if (rawStatus && rawStatusUpper !== timelineStatus.toUpperCase()) {
+          console.log(`[timelinePrimary] ${awb}: last_status_code="${rawStatus}" overridden by timeline="${timelineStatus}" → "${finalStatus}"`);
         } else {
-          finalStatus = rawStatus;
-          console.log(`[noSource] ${awb}: no valid status from DB or timeline, using raw="${rawStatus}"`);
+          console.log(`[timelinePrimary] ${awb}: timeline="${timelineStatus}" → "${finalStatus}"`);
         }
+      } else if (rawStatus && !invalidStatuses.has(rawStatusUpper) && rawStatusUpper !== 'UNK') {
+        // No timeline status — fall back to DB last_status_code
+        finalStatus = classifyArrival(rawStatus, timelineStr, destForClassify, origForClassify, awb);
+        console.log(`[dbFallback] ${awb}: no timeline, using last_status_code="${rawStatus}" → "${finalStatus}"`);
+      } else {
+        finalStatus = rawStatus;
+        console.log(`[noSource] ${awb}: no valid status from timeline or DB, raw="${rawStatus}"`);
       }
 
       // Re-classificar ARR genérico para determinar CONEXAO/DESTINO
