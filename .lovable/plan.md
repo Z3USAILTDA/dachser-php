@@ -1,44 +1,116 @@
 
+# Budget e Forecast no Olimpo Cobranca
 
-## Corrigir Matching de Exportadores: Enviar PDF Base64 do HBL no Stage 2
+## Resumo
 
-### Problema
+Adicionar action `get_budget_forecast_auto` no `mariadb-proxy` e 3 KPI cards novos no frontend, com tratamento robusto de erros para nunca quebrar o aging existente.
 
-O Stage 2 (analise comparativa) envia ao LLM apenas o JSON extraido pelo pdfExtractor, que contem apenas 1 shipper (SCHENKER DEUTSCHLAND AG). Os 26 fornecedores individuais estao nas rider pages do HBL PDF na coluna "Marks and Numbers" e nao sao capturados pelo extrator. O LLM precisa ver o PDF original para encontra-los.
+---
 
-Nas 5 analises do TCNU4156682 (IDs 28-32), nenhuma conseguiu extrair pesos individuais dos exportadores do HBL.
+## Etapa 1 — Backend: nova action no `mariadb-proxy/index.ts`
 
-### Plano de Correcao
+Inserir novo case `get_budget_forecast_auto` apos o bloco `get_aging_by_client` (linha ~2232).
 
-**Arquivo: `supabase/functions/sea-submit-analysis/index.ts`**
+### Logica da action (com tratamento defensivo total):
 
-1. **Preservar o PDF base64 do HBL apos Stage 1**: Atualmente o PDF e baixado e enviado ao pdfExtractor, mas o base64 e descartado. Salvar o base64 do HBL em uma variavel para reutilizar no Stage 2.
+1. **Criar tabela** (try/catch isolado — se falhar, ignora):
+```text
+CREATE TABLE IF NOT EXISTS dados_dachser.t_budget_cobranca (
+  period CHAR(7) NOT NULL,
+  view_mode ENUM('product','client') NOT NULL,
+  budget_value DECIMAL(18,2) NOT NULL DEFAULT 0,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (period, view_mode)
+);
+```
 
-2. **Incluir o PDF base64 no prompt do Stage 2**: Quando a analise for `manifest_hbl`, anexar o PDF do HBL como documento (via `source.type: base64`) na chamada do Claude, e como `inline_data` na chamada do Gemini. Isso permite que o LLM leia as rider pages diretamente.
+2. **Buscar budget** (try/catch isolado — se falhar, budget = 0):
+```text
+SELECT COALESCE(budget_value, 0) AS budget
+FROM dados_dachser.t_budget_cobranca
+WHERE period = DATE_FORMAT(CURDATE(), '%Y-%m')
+  AND view_mode = ?
+```
 
-3. **Manter a correcao de peso total**: O `totals.reference_weight_kg` continua usando `weighed_weight_kg` do cabecalho quando disponivel.
+3. **Calcular forecast** (try/catch isolado — se falhar, forecast = 0):
+```text
+SELECT COALESCE(SUM(
+  t.valor_nf *
+  CASE
+    WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 0.85
+    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 90 THEN 0.55
+    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN 0.35
+    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN 0.20
+    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN 0.10
+    ELSE 0.05
+  END
+), 0) AS forecast
+FROM dados_dachser.t_dados_financeiro_nfs t
+LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
+WHERE COALESCE(sd.active, 1) = 1
+  AND NOT EXISTS (
+    SELECT 1 FROM dados_dachser.tbaixas b
+    WHERE b.IdLancamentoRM = t.id_rm
+      AND b.StatusLan IN (1, 2, 3)
+  )
+  AND (t.disputa IS NULL OR t.disputa = 0)
+  AND t.data_vencimento <= LAST_DAY(CURDATE())
+```
 
-**Arquivo: `supabase/functions/sea-submit-analysis/prompts.ts`**
+4. **Retorno sempre `success: true`** com `budget` e `forecast` como numeros (nunca null).
 
-4. **Atualizar instrucao de subtotais**: Trocar "search the HBL data (rider pages / cargo description in the PDF JSON exporters array)" por "search the HBL PDF document attached below for each supplier. Look in the 'Marks and Numbers' column and cargo description sections of the rider pages."
+---
 
-5. **Manter regras existentes**: invoice_ref vs invoice_numbers, proibicao de "not individually specified", formato AGGREGATE, fallback "NOT FOUND".
+## Etapa 2 — Frontend: `OlimpoCobranca.tsx`
 
-### Detalhes Tecnicos
+### 2.1 Interface e state
 
-No `index.ts`, na funcao que baixa os arquivos para extracao:
-- Ao baixar o PDF do HBL, armazenar `{ base64: pdfBase64, fileName }` em uma variavel `hblPdfData`
-- Na chamada `runDualAnalysis`, passar `hblPdfData` como parametro adicional
-- Nas funcoes `callClaude` e `callGemini` do Stage 2, incluir o PDF como parte do `content` array (documento para Claude, inline_data para Gemini)
+Adicionar `BudgetForecast` interface e `budgetForecast` state.
 
-Na funcao de construcao do prompt Stage 2:
-- Adicionar instrucao: "An HBL PDF document is attached. Use it to find individual supplier/exporter weights, CBM, and package counts in the rider pages."
+### 2.2 Atualizar `fetchData()`
 
-### Arquivos Modificados
-1. `supabase/functions/sea-submit-analysis/index.ts` — Preservar e enviar PDF base64 do HBL no Stage 2
-2. `supabase/functions/sea-submit-analysis/prompts.ts` — Atualizar instrucao para buscar dados no PDF anexado
+- Usar `Promise.allSettled` (nao `Promise.all`) para garantir que falha do budget nao impede aging.
+- Se a promise do budget falhar ou retornar erro, usar fallback silencioso:
+```text
+setBudgetForecast({
+  period: "YYYY-MM atual",
+  budget: 0,
+  forecast: 0,
+  asOf: new Date().toISOString(),
+});
+```
+- Sem toast destructive para erro de budget.
 
-### O que NAO sera alterado
-- pdfExtractor.ts, xlsxExtractor.ts
-- resultFormatter.ts, deterministicCompare.ts
-- Frontend / UI
+### 2.3 Calculos derivados
+
+```text
+budgetValue    = budgetForecast?.budget ?? 0
+forecastValue  = budgetForecast?.forecast ?? 0
+gapValue       = forecastValue - budgetValue
+attainmentPct  = budgetValue > 0 ? (forecastValue / budgetValue * 100).toFixed(1) : "0"
+isNegativeGap  = gapValue < 0
+```
+
+### 2.4 KPI Grid
+
+Expandir de `md:grid-cols-4` para `md:grid-cols-7` e adicionar 3 cards:
+
+| KPI | Icone | Valor | Accent |
+|-----|-------|-------|--------|
+| Budget (Mes) | DollarSign | formatCompact(budgetValue) | Nao |
+| Forecast (Mes) | TrendingUp | formatCompact(forecastValue) + " - " + attainmentPct + "%" | Nao |
+| Gap (Forecast - Budget) | AlertTriangle | formatCompact(gapValue) | Sim, se gap < 0 |
+
+---
+
+## O que NAO sera alterado
+
+- Actions `get_aging_overview` e `get_aging_by_client`
+- Tabela de aging, graficos, `mergeProductRows`, paginacao, filtros
+- Nenhum outro arquivo
+
+## Arquivos modificados
+
+1. `supabase/functions/mariadb-proxy/index.ts` — nova action com 3 try/catch isolados
+2. `src/pages/olimpo/OlimpoCobranca.tsx` — interface, state, fetch com fallback, 3 KPI cards
