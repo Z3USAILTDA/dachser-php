@@ -868,23 +868,31 @@ const ContainerTracking = () => {
     try {
       // Step 0a: Cleanup orphan PENDENTE containers from MBLs that already have valid containers
       console.log('[AutoSync] Step 0a: Cleaning up orphan PENDENTE containers...');
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=cleanup_orphan_pendentes`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      try {
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=cleanup_orphan_pendentes`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      } catch (e) {
+        console.warn('[AutoSync] cleanup_orphan_pendentes failed (non-blocking):', e);
+      }
 
       // Step 0b: Deactivate invalid MBLs (booking refs, no valid containers)
       console.log('[AutoSync] Step 0b: Deactivating invalid MBLs...');
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=deactivate_invalid_mbls`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      try {
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=deactivate_invalid_mbls`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      } catch (e) {
+        console.warn('[AutoSync] deactivate_invalid_mbls failed (non-blocking):', e);
+      }
 
       // Step 1: Sync new MBLs from t_master_dados
       setAutoSyncStatus('sync');
