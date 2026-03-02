@@ -2230,6 +2230,90 @@ serve(async (req) => {
         break;
       }
 
+      case 'get_budget_forecast_auto': {
+        const { viewMode } = body as { viewMode?: string };
+        const safeViewMode = viewMode === 'client' ? 'client' : 'product';
+        const currentPeriod = new Date().toISOString().slice(0, 7); // YYYY-MM
+
+        let budget = 0;
+        let forecast = 0;
+
+        // 1. Create table if not exists (isolated try/catch)
+        try {
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS dados_dachser.t_budget_cobranca (
+              period CHAR(7) NOT NULL,
+              view_mode ENUM('product','client') NOT NULL,
+              budget_value DECIMAL(18,2) NOT NULL DEFAULT 0,
+              updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                ON UPDATE CURRENT_TIMESTAMP,
+              PRIMARY KEY (period, view_mode)
+            )
+          `);
+        } catch (createErr) {
+          console.warn('[get_budget_forecast_auto] Table creation failed (may lack permissions):', createErr);
+        }
+
+        // 2. Fetch budget (isolated try/catch)
+        try {
+          const budgetRows = await client.query(
+            `SELECT COALESCE(budget_value, 0) AS budget
+             FROM dados_dachser.t_budget_cobranca
+             WHERE period = DATE_FORMAT(CURDATE(), '%Y-%m')
+               AND view_mode = ?`,
+            [safeViewMode]
+          );
+          if (budgetRows && budgetRows.length > 0) {
+            budget = Number(budgetRows[0].budget) || 0;
+          }
+        } catch (budgetErr) {
+          console.warn('[get_budget_forecast_auto] Budget query failed:', budgetErr);
+        }
+
+        // 3. Calculate forecast (isolated try/catch)
+        try {
+          const forecastRows = await client.query(`
+            SELECT COALESCE(SUM(
+              t.valor_nf *
+              CASE
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 0.85
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 90 THEN 0.55
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN 0.35
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN 0.20
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN 0.10
+                ELSE 0.05
+              END
+            ), 0) AS forecast
+            FROM dados_dachser.t_dados_financeiro_nfs t
+            LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
+            WHERE COALESCE(sd.active, 1) = 1
+              AND NOT EXISTS (
+                SELECT 1 FROM dados_dachser.tbaixas b
+                WHERE b.IdLancamentoRM = t.id_rm
+                  AND b.StatusLan IN (1, 2, 3)
+              )
+              AND (t.disputa IS NULL OR t.disputa = 0)
+              AND t.data_vencimento <= LAST_DAY(CURDATE())
+          `);
+          if (forecastRows && forecastRows.length > 0) {
+            forecast = Number(forecastRows[0].forecast) || 0;
+          }
+        } catch (forecastErr) {
+          console.warn('[get_budget_forecast_auto] Forecast query failed:', forecastErr);
+        }
+
+        console.log(`[get_budget_forecast_auto] period=${currentPeriod} viewMode=${safeViewMode} budget=${budget} forecast=${forecast}`);
+
+        result = {
+          success: true,
+          period: currentPeriod,
+          budget,
+          forecast,
+          asOf: new Date().toISOString(),
+        };
+        break;
+      }
+
       case 'get_regua_stage': {
         const { stage } = body as { stage?: string };
         if (!stage) {
