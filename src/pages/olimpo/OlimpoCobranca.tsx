@@ -52,6 +52,13 @@ interface AgingData {
   lastUpdate: string;
 }
 
+interface BudgetForecast {
+  period: string;
+  budget: number;
+  forecast: number;
+  asOf: string;
+}
+
 const AGING_COLORS = {
   not_due: "#22c55e",
   aging_90: "#eab308",
@@ -131,19 +138,50 @@ export default function OlimpoCobranca() {
   const [viewMode, setViewMode] = useState<"product" | "client">("product");
   const [clientFilter, setClientFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [budgetForecast, setBudgetForecast] = useState<BudgetForecast | null>(null);
   const PAGE_SIZE = 15;
   const { toast } = useToast();
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const action = viewMode === "client" ? "get_aging_by_client" : "get_aging_overview";
-      const { data: resp, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action },
-      });
-      if (error) throw error;
-      if (!resp?.success) throw new Error(resp?.error || "Erro desconhecido");
-      setData(resp);
+      const agingAction = viewMode === "client" ? "get_aging_by_client" : "get_aging_overview";
+
+      const [agingResult, bfResult] = await Promise.allSettled([
+        supabase.functions.invoke("mariadb-proxy", { body: { action: agingAction } }),
+        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_budget_forecast_auto", viewMode } }),
+      ]);
+
+      // Handle aging
+      if (agingResult.status === "fulfilled") {
+        const { data: resp, error } = agingResult.value;
+        if (error) throw error;
+        if (!resp?.success) throw new Error(resp?.error || "Erro desconhecido");
+        setData(resp);
+      } else {
+        throw agingResult.reason;
+      }
+
+      // Handle budget/forecast (never breaks aging)
+      const currentPeriod = new Date().toISOString().slice(0, 7);
+      const fallback: BudgetForecast = { period: currentPeriod, budget: 0, forecast: 0, asOf: new Date().toISOString() };
+      if (bfResult.status === "fulfilled") {
+        const { data: bfResp, error: bfError } = bfResult.value;
+        if (!bfError && bfResp?.success) {
+          setBudgetForecast({
+            period: bfResp.period || currentPeriod,
+            budget: Number(bfResp.budget) || 0,
+            forecast: Number(bfResp.forecast) || 0,
+            asOf: bfResp.asOf || new Date().toISOString(),
+          });
+        } else {
+          console.warn("Budget/forecast returned error, using fallback:", bfError || bfResp?.error);
+          setBudgetForecast(fallback);
+        }
+      } else {
+        console.warn("Budget/forecast request failed, using fallback:", bfResult.reason);
+        setBudgetForecast(fallback);
+      }
     } catch (err: any) {
       console.error("Erro ao buscar aging:", err);
       toast({ title: "Erro", description: err.message, variant: "destructive" });
@@ -216,6 +254,13 @@ export default function OlimpoCobranca() {
     : 0;
   const pctOverdue = totalReceivable > 0 ? ((totalOverdue / totalReceivable) * 100).toFixed(1) : "0";
 
+  // Budget / Forecast derived values
+  const budgetValue = budgetForecast?.budget ?? 0;
+  const forecastValue = budgetForecast?.forecast ?? 0;
+  const gapValue = forecastValue - budgetValue;
+  const attainmentPct = budgetValue > 0 ? ((forecastValue / budgetValue) * 100).toFixed(1) : "0";
+  const isNegativeGap = gapValue < 0;
+
   // Aging segmented bar
   const agingSegments = useMemo(() => {
     if (!totals || totalReceivable === 0) return [];
@@ -282,7 +327,7 @@ export default function OlimpoCobranca() {
     <PageLayout title="DACHSER" subtitle="Cobrança" pageIcon={DollarSign} backTo="/dashboard" rightContent={headerRight}>
       <div className="space-y-6">
         {/* KPI Cards */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-7">
           <KpiCard
             icon={DollarSign}
             label="Total Receivable"
@@ -302,6 +347,25 @@ export default function OlimpoCobranca() {
             label="Último Registro"
             value={data?.lastUpdate ? new Date(data.lastUpdate).toLocaleString("pt-BR") : "—"}
             loading={loading}
+          />
+          <KpiCard
+            icon={DollarSign}
+            label="Budget (Mês)"
+            value={formatCompact(budgetValue)}
+            loading={loading}
+          />
+          <KpiCard
+            icon={TrendingUp}
+            label="Forecast (Mês)"
+            value={`${formatCompact(forecastValue)} • ${attainmentPct}%`}
+            loading={loading}
+          />
+          <KpiCard
+            icon={AlertTriangle}
+            label="Gap"
+            value={formatCompact(gapValue)}
+            loading={loading}
+            accent={isNegativeGap}
           />
         </div>
 
