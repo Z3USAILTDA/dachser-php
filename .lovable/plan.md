@@ -1,116 +1,42 @@
 
-# Budget e Forecast no Olimpo Cobranca
+
+# Migrar fonte de dados do tracking aéreo: t_aereo_ws → t_aereo_ws_firecrawl
 
 ## Resumo
 
-Adicionar action `get_budget_forecast_auto` no `mariadb-proxy` e 3 KPI cards novos no frontend, com tratamento robusto de erros para nunca quebrar o aging existente.
+Substituir todas as referências à tabela `t_aereo_ws` por `t_aereo_ws_firecrawl` nos backends que alimentam a tela de rastreio aéreo. A estrutura de colunas é assumida como idêntica (mesmos campos: `awb`, `last_status_code`, `last_status_description`, `origin`, `destination`, `last_flight`, `scraped_at`, `sidebar_days_in_transit`, `timeline_json`, `id`).
 
 ---
 
-## Etapa 1 — Backend: nova action no `mariadb-proxy/index.ts`
+## Arquivos afetados
 
-Inserir novo case `get_budget_forecast_auto` apos o bloco `get_aging_by_client` (linha ~2232).
+### 1. `supabase/functions/fetch-status-aereo/index.ts`
+Este é o backend principal da tela de tracking aéreo. Contém 10+ referências a `t_aereo_ws` nas queries SQL e logs:
+- **PASSO 1** (linhas ~484-510): Query principal que busca snapshots mais recentes (`SELECT ... FROM t_aereo_ws w INNER JOIN (SELECT awb, MAX(id) ... FROM t_aereo_ws ...`)
+- Logs de console (`t_aereo_ws primary`, `from t_aereo_ws`, etc.)
 
-### Logica da action (com tratamento defensivo total):
+**Ação**: Substituir todas as ocorrências de `t_aereo_ws` por `t_aereo_ws_firecrawl` (find & replace direto — ~10 ocorrências).
 
-1. **Criar tabela** (try/catch isolado — se falhar, ignora):
-```text
-CREATE TABLE IF NOT EXISTS dados_dachser.t_budget_cobranca (
-  period CHAR(7) NOT NULL,
-  view_mode ENUM('product','client') NOT NULL,
-  budget_value DECIMAL(18,2) NOT NULL DEFAULT 0,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (period, view_mode)
-);
-```
+### 2. `supabase/functions/mariadb-proxy/index.ts`
+Três actions usam `t_aereo_ws`:
 
-2. **Buscar budget** (try/catch isolado — se falhar, budget = 0):
-```text
-SELECT COALESCE(budget_value, 0) AS budget
-FROM dados_dachser.t_budget_cobranca
-WHERE period = DATE_FORMAT(CURDATE(), '%Y-%m')
-  AND view_mode = ?
-```
+- **`get_cct_shipments`** (linhas ~3016-3046): Step 1 busca AWBs de `t_aereo_ws` para o CCT dashboard
+- **`get_awb_tracking_events`** (linhas ~6033-6343): Busca timeline_json de `t_aereo_ws` para o modal de eventos
+- **`get_cct_pending_hawbs`** (linhas ~11477-11491): Step 1 busca AWBs de `t_aereo_ws` para enriquecimento LeadComex
 
-3. **Calcular forecast** (try/catch isolado — se falhar, forecast = 0):
-```text
-SELECT COALESCE(SUM(
-  t.valor_nf *
-  CASE
-    WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 0.85
-    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 90 THEN 0.55
-    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN 0.35
-    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN 0.20
-    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN 0.10
-    ELSE 0.05
-  END
-), 0) AS forecast
-FROM dados_dachser.t_dados_financeiro_nfs t
-LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
-WHERE COALESCE(sd.active, 1) = 1
-  AND NOT EXISTS (
-    SELECT 1 FROM dados_dachser.tbaixas b
-    WHERE b.IdLancamentoRM = t.id_rm
-      AND b.StatusLan IN (1, 2, 3)
-  )
-  AND (t.disputa IS NULL OR t.disputa = 0)
-  AND t.data_vencimento <= LAST_DAY(CURDATE())
-```
-
-4. **Retorno sempre `success: true`** com `budget` e `forecast` como numeros (nunca null).
+**Ação**: Substituir todas as ocorrências de `t_aereo_ws` por `t_aereo_ws_firecrawl` nestas 3 actions (~15 ocorrências entre SQL e comentários/logs).
 
 ---
 
-## Etapa 2 — Frontend: `OlimpoCobranca.tsx`
+## O que NÃO será alterado
 
-### 2.1 Interface e state
+- Nenhuma lógica de merge, filtro, classificação ARR, detecção de discrepância
+- Nenhuma referência a `t_aereo_api` (continua como fallback autoritativo)
+- Nenhuma referência a `t_master_dados`
+- Frontend (nenhum arquivo `.tsx` referencia a tabela diretamente)
+- A action `get_aging_*` e budget/forecast recém-implementados
 
-Adicionar `BudgetForecast` interface e `budgetForecast` state.
+## Pré-requisito
 
-### 2.2 Atualizar `fetchData()`
+A tabela `t_aereo_ws_firecrawl` deve existir no MariaDB com a mesma estrutura de colunas que `t_aereo_ws` (id, awb, last_status_code, last_status_description, origin, destination, last_flight, scraped_at, sidebar_days_in_transit, timeline_json).
 
-- Usar `Promise.allSettled` (nao `Promise.all`) para garantir que falha do budget nao impede aging.
-- Se a promise do budget falhar ou retornar erro, usar fallback silencioso:
-```text
-setBudgetForecast({
-  period: "YYYY-MM atual",
-  budget: 0,
-  forecast: 0,
-  asOf: new Date().toISOString(),
-});
-```
-- Sem toast destructive para erro de budget.
-
-### 2.3 Calculos derivados
-
-```text
-budgetValue    = budgetForecast?.budget ?? 0
-forecastValue  = budgetForecast?.forecast ?? 0
-gapValue       = forecastValue - budgetValue
-attainmentPct  = budgetValue > 0 ? (forecastValue / budgetValue * 100).toFixed(1) : "0"
-isNegativeGap  = gapValue < 0
-```
-
-### 2.4 KPI Grid
-
-Expandir de `md:grid-cols-4` para `md:grid-cols-7` e adicionar 3 cards:
-
-| KPI | Icone | Valor | Accent |
-|-----|-------|-------|--------|
-| Budget (Mes) | DollarSign | formatCompact(budgetValue) | Nao |
-| Forecast (Mes) | TrendingUp | formatCompact(forecastValue) + " - " + attainmentPct + "%" | Nao |
-| Gap (Forecast - Budget) | AlertTriangle | formatCompact(gapValue) | Sim, se gap < 0 |
-
----
-
-## O que NAO sera alterado
-
-- Actions `get_aging_overview` e `get_aging_by_client`
-- Tabela de aging, graficos, `mergeProductRows`, paginacao, filtros
-- Nenhum outro arquivo
-
-## Arquivos modificados
-
-1. `supabase/functions/mariadb-proxy/index.ts` — nova action com 3 try/catch isolados
-2. `src/pages/olimpo/OlimpoCobranca.tsx` — interface, state, fetch com fallback, 3 KPI cards
