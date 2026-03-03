@@ -45,7 +45,7 @@ function formatMinutes(minutes: number): string {
   return m > 0 ? `${h}h ${m}min` : `${h}h`;
 }
 
-function generateAlertHtml(minutesSinceUpdate: number, totalRecords: number, recentInserts: number, uniqueAwbs: number): string {
+function generateAlertHtml(minutesSinceUpdate: number, totalRecords: number, recentInserts: number): string {
   const dashboardUrl = "https://stellar-route-hub.lovable.app/admin/firecrawl-monitor";
   return `
 <!DOCTYPE html>
@@ -73,17 +73,13 @@ function generateAlertHtml(minutesSinceUpdate: number, totalRecords: number, rec
         <tr><td style="background:#0a0b14;padding:24px;border:1px solid rgba(255,255,255,0.08);border-top:none;">
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr>
-              <td width="33%" style="text-align:center;padding:12px;">
+              <td width="50%" style="text-align:center;padding:12px;">
                 <div style="font-size:11px;color:#888;text-transform:uppercase;">Total Registros</div>
                 <div style="font-size:24px;color:#ffffff;font-weight:700;">${totalRecords.toLocaleString('pt-BR')}</div>
               </td>
-              <td width="33%" style="text-align:center;padding:12px;">
+              <td width="50%" style="text-align:center;padding:12px;">
                 <div style="font-size:11px;color:#888;text-transform:uppercase;">Inserções 24h</div>
                 <div style="font-size:24px;color:#22c55e;font-weight:700;">+${recentInserts.toLocaleString('pt-BR')}</div>
-              </td>
-              <td width="33%" style="text-align:center;padding:12px;">
-                <div style="font-size:11px;color:#888;text-transform:uppercase;">AWBs Únicas 24h</div>
-                <div style="font-size:24px;color:#ffc800;font-weight:700;">${uniqueAwbs.toLocaleString('pt-BR')}</div>
               </td>
             </tr>
           </table>
@@ -152,7 +148,6 @@ serve(async (req) => {
         MAX(scraped_at) as lastUpdate,
         COUNT(*) as totalRecords,
         SUM(CASE WHEN scraped_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recentInserts,
-        COUNT(DISTINCT CASE WHEN scraped_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN awb ELSE NULL END) as uniqueAwbs,
         TIMESTAMPDIFF(MINUTE, MAX(scraped_at), NOW()) as minutesSinceUpdate
       FROM ${database}.t_aereo_ws_firecrawl
     `) as any[];
@@ -169,7 +164,7 @@ serve(async (req) => {
     }
     const totalRecords = Number(row.totalRecords || 0);
     const recentInserts = Number(row.recentInserts || 0);
-    const uniqueAwbs = Number(row.uniqueAwbs || 0);
+    
     const isCritical = minutesSinceUpdate >= ALERT_THRESHOLD_MINUTES;
 
     console.log(`[firecrawl-monitor-alert] minutes=${minutesSinceUpdate}, critical=${isCritical}, test=${isTest}, force=${isForce}`);
@@ -211,7 +206,7 @@ serve(async (req) => {
         from: "Z3US.AI Monitor <noreply@hermes.z3us.ai>",
         to: RECIPIENTS,
         subject: `[TESTE] ⚠️ Firecrawl Parado — sem dados há ${formatMinutes(minutesSinceUpdate)}`,
-        html: generateAlertHtml(minutesSinceUpdate, totalRecords, recentInserts, uniqueAwbs),
+        html: generateAlertHtml(minutesSinceUpdate, totalRecords, recentInserts),
       });
       action = "test_alert_sent";
     } else if (isCritical && (!hasOpenAlert || isForce)) {
@@ -220,7 +215,7 @@ serve(async (req) => {
         from: "Z3US.AI Monitor <noreply@hermes.z3us.ai>",
         to: RECIPIENTS,
         subject: `⚠️ Firecrawl Parado — sem dados há ${formatMinutes(minutesSinceUpdate)}`,
-        html: generateAlertHtml(minutesSinceUpdate, totalRecords, recentInserts, uniqueAwbs),
+        html: generateAlertHtml(minutesSinceUpdate, totalRecords, recentInserts),
       });
 
       await client.execute(`
