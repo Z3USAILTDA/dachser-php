@@ -440,7 +440,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Connecting to MariaDB at ${host}:${port}/${database} for fetch-status-aereo (t_aereo_ws primary)`);
+    console.log(`Connecting to MariaDB at ${host}:${port}/${database} for fetch-status-aereo (t_aereo_ws_firecrawl primary)`);
 
     // Retry logic for transient connection timeouts
     const MAX_RETRIES = 2;
@@ -477,7 +477,7 @@ serve(async (req) => {
       );
     }
 
-    // ========== PASSO 1: Buscar snapshots mais recentes de t_aereo_ws ==========
+    // ========== PASSO 1: Buscar snapshots mais recentes de t_aereo_ws_firecrawl ==========
     let wsQuery: string;
     let wsParams: string[] = [];
 
@@ -485,10 +485,10 @@ serve(async (req) => {
       SELECT w.id, w.awb, w.last_status_code, w.last_status_description,
              w.origin, w.destination, w.last_flight, w.scraped_at,
              w.sidebar_days_in_transit, w.timeline_json
-      FROM ${database}.t_aereo_ws w
+      FROM ${database}.t_aereo_ws_firecrawl w
       INNER JOIN (
         SELECT awb, MAX(id) as max_id
-        FROM ${database}.t_aereo_ws
+        FROM ${database}.t_aereo_ws_firecrawl
         GROUP BY awb
       ) latest ON w.id = latest.max_id
     `;
@@ -504,10 +504,10 @@ serve(async (req) => {
       wsQuery = `${baseWsQuery} ORDER BY w.scraped_at DESC LIMIT 500`;
     }
 
-    console.log('Fetching latest snapshots from t_aereo_ws...');
+    console.log('Fetching latest snapshots from t_aereo_ws_firecrawl...');
     const [wsRows] = await client.query(wsQuery, wsParams) as [any[], any];
     const wsList = Array.isArray(wsRows) ? wsRows : [];
-    console.log(`Found ${wsList.length} AWBs from t_aereo_ws`);
+    console.log(`Found ${wsList.length} AWBs from t_aereo_ws_firecrawl`);
 
     if (wsList.length === 0) {
       return new Response(
@@ -673,7 +673,7 @@ serve(async (req) => {
     }
 
     // ========== PASSO 3: Merge em memória + detecção de discrepância ==========
-    // For each AWB from t_aereo_ws, create one row per HAWB found in t_master_dados
+    // For each AWB from t_aereo_ws_firecrawl, create one row per HAWB found in t_master_dados
     const processedRows: any[] = [];
     for (const ws of wsList) {
       const awb = String(ws.awb || '').trim();
@@ -717,7 +717,7 @@ serve(async (req) => {
         finalStatus = classifyArrival(timelineStatus, timelineStr, destForClassify, origForClassify, awb);
         console.log(`[timelineFallback] ${awb}: timeline="${timelineStatus}" → "${finalStatus}"`);
       } else if (rawStatus && !invalidStatuses.has(rawStatusUpper) && rawStatusUpper !== 'UNK') {
-        // No timeline status — fall back to DB last_status_code from t_aereo_ws
+        // No timeline status — fall back to DB last_status_code from t_aereo_ws_firecrawl
         finalStatus = classifyArrival(rawStatus, timelineStr, destForClassify, origForClassify, awb);
         console.log(`[wsFallback] ${awb}: ws.last_status_code="${rawStatus}" → "${finalStatus}"`);
       } else {

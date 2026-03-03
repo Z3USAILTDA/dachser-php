@@ -3013,18 +3013,18 @@ serve(async (req) => {
         ];
         const errorStatusFilter = errorStatuses.map(s => `'${s}'`).join(',');
         
-        // POST-TRACKING QUERY: TWO-STEP OPTIMIZED APPROACH (source: t_aereo_ws + t_master_dados)
-        // STEP 1: Get valid AWBs from t_aereo_ws with CCT-relevant statuses (sliding window 30 days)
-        console.log('CCT Step 1: Fetching valid AWBs from t_aereo_ws (sliding 30-day window)...');
+        // POST-TRACKING QUERY: TWO-STEP OPTIMIZED APPROACH (source: t_aereo_ws_firecrawl + t_master_dados)
+        // STEP 1: Get valid AWBs from t_aereo_ws_firecrawl with CCT-relevant statuses (sliding window 30 days)
+        console.log('CCT Step 1: Fetching valid AWBs from t_aereo_ws_firecrawl (sliding 30-day window)...');
         const cctRelevantStatuses = "'DEP','ARR','ATA','RCF','NFD','AWD','DLV','POD','FRO','DIS'";
         const awbAirlineLike = registeredAirlineCodes.map(c => `awb LIKE '${c}-%'`).join(' OR ');
         
         const validAwbs = await client.query(`
           SELECT ws.awb, ws.last_status_code, ws.origin, ws.destination, ws.scraped_at
-          FROM ${database}.t_aereo_ws ws
+          FROM ${database}.t_aereo_ws_firecrawl ws
           INNER JOIN (
             SELECT awb, MAX(id) as max_id
-            FROM ${database}.t_aereo_ws
+            FROM ${database}.t_aereo_ws_firecrawl
             WHERE scraped_at >= NOW() - INTERVAL 30 DAY
             AND last_status_code IN (${cctRelevantStatuses})
             AND last_status_code NOT IN (${errorStatusFilter})
@@ -3035,15 +3035,15 @@ serve(async (req) => {
         `);
         
         const mawbList = (validAwbs || []).map((r: any) => r.awb).filter((m: string) => m && m.trim() !== '');
-        // Build status lookup from t_aereo_ws for JS-side merge
+        // Build status lookup from t_aereo_ws_firecrawl for JS-side merge
         const awbStatusMap = new Map<string, any>();
         for (const snap of (validAwbs || [])) {
           awbStatusMap.set((snap.awb || '').trim(), snap);
         }
-        console.log(`CCT Step 1: Found ${mawbList.length} valid AWBs from t_aereo_ws`);
+        console.log(`CCT Step 1: Found ${mawbList.length} valid AWBs from t_aereo_ws_firecrawl`);
         
         if (mawbList.length === 0) {
-          console.log('CCT: No valid AWBs found in t_aereo_ws, returning empty');
+          console.log('CCT: No valid AWBs found in t_aereo_ws_firecrawl, returning empty');
           return new Response(JSON.stringify({ success: true, data: [] }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
@@ -3052,7 +3052,7 @@ serve(async (req) => {
         // Build WHERE IN clause with escaped values
         const mawbFilter = mawbList.map((m: string) => `'${m.replace(/'/g, "''")}'`).join(',');
         
-        // STEP 2: Get HAWBs from t_master_dados enriched with t_aereo_ws status
+        // STEP 2: Get HAWBs from t_master_dados enriched with t_aereo_ws_firecrawl status
         console.log('CCT Step 2: Fetching HAWBs from t_master_dados...');
         const rawShipments = await client.query(`
           SELECT 
@@ -3088,7 +3088,7 @@ serve(async (req) => {
           LIMIT 500
         `);
         
-        // Merge t_aereo_ws status into shipments (JS-side merge for performance)
+        // Merge t_aereo_ws_firecrawl status into shipments (JS-side merge for performance)
         const statusMapCCT: Record<string, string> = {
           'ARR': 'INFORMADA', 'ATA': 'INFORMADA',
           'DEP': 'MANIFESTADA', 'MAN': 'MANIFESTADA', 'BKD': 'MANIFESTADA',
@@ -6030,7 +6030,7 @@ serve(async (req) => {
         break;
       }
 
-      // ==================== AWB TRACKING EVENTS (from t_aereo_ws.timeline_json) ====================
+      // ==================== AWB TRACKING EVENTS (from t_aereo_ws_firecrawl.timeline_json) ====================
       case 'get_awb_tracking_events': {
         const { awb: queryAwb } = body as any;
         
@@ -6041,20 +6041,20 @@ serve(async (req) => {
           );
         }
 
-        console.log('Fetching AWB tracking events from t_aereo_ws.timeline_json:', queryAwb);
+        console.log('Fetching AWB tracking events from t_aereo_ws_firecrawl.timeline_json:', queryAwb);
 
         try {
-          // Get the most recent record for this AWB from t_aereo_ws
+          // Get the most recent record for this AWB from t_aereo_ws_firecrawl
           const wsRows = await client.query(`
             SELECT id, awb, timeline_json, scraped_at, last_status_code
-            FROM ${database}.t_aereo_ws
+            FROM ${database}.t_aereo_ws_firecrawl
             WHERE TRIM(awb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
             ORDER BY id DESC
             LIMIT 1
           `, [queryAwb]);
 
           if (!wsRows || wsRows.length === 0) {
-            console.log(`No t_aereo_ws record found for AWB ${queryAwb}`);
+            console.log(`No t_aereo_ws_firecrawl record found for AWB ${queryAwb}`);
             result = { success: true, data: [] };
             break;
           }
@@ -6079,7 +6079,7 @@ serve(async (req) => {
             return errorPhrases.some(p => lower.includes(p));
           };
 
-          // Parse timeline_json from t_aereo_ws
+          // Parse timeline_json from t_aereo_ws_firecrawl
           if (wsRecord.timeline_json) {
             try {
               const rawTimeline = typeof wsRecord.timeline_json === 'string'
@@ -6187,7 +6187,7 @@ serve(async (req) => {
 
           // Convert timeline entries to frontend format
           // Supports two formats:
-          // - t_aereo_ws: { Description, Timestamp, Location, Carrier }
+          // - t_aereo_ws_firecrawl: { Description, Timestamp, Location, Carrier }
           // - t_aereo_api: { status, aeroporto, dataEvento, voo, quantidadeCarga, pesoCarga }
           const events = timelineData.map((entry: any, idx: number) => {
             // t_aereo_api format
@@ -6219,7 +6219,7 @@ serve(async (req) => {
               };
             }
             
-            // t_aereo_ws format
+            // t_aereo_ws_firecrawl format
             const description = entry.Description || entry.description || '';
             const codigoEvento = extractStatusCode(description);
             
@@ -6339,7 +6339,7 @@ serve(async (req) => {
 
           result = { success: true, data: filteredEvents };
         } catch (tableErr) {
-          console.log('Error fetching from t_aereo_ws:', tableErr);
+          console.log('Error fetching from t_aereo_ws_firecrawl:', tableErr);
           result = { success: true, data: [] };
         }
         break;
@@ -11430,7 +11430,7 @@ serve(async (req) => {
       }
 
       // ==================== CCT: Get Pending HAWBs for LeadComex Enrichment ====================
-      // ALIGNED WITH get_cct_shipments: Use t_aereo_ws as primary source (same as tracking)
+      // ALIGNED WITH get_cct_shipments: Use t_aereo_ws_firecrawl as primary source (same as tracking)
       case 'get_cct_pending_hawbs': {
         const limit = body.limit || 500;
         const hawbFilter = body.hawb_filter || null;
@@ -11474,14 +11474,14 @@ serve(async (req) => {
             LIMIT ${limit}
           `);
         } else {
-          // Step 1: Get AWBs from t_aereo_ws with CCT-relevant statuses (sliding 30-day window)
+          // Step 1: Get AWBs from t_aereo_ws_firecrawl with CCT-relevant statuses (sliding 30-day window)
           const awbAirlineLike = registeredAirlineCodes.map(c => `awb LIKE '${c}-%'`).join(' OR ');
           const awbsResult = await client.query(`
             SELECT ws.awb, ws.scraped_at
-            FROM ${database}.t_aereo_ws ws
+            FROM ${database}.t_aereo_ws_firecrawl ws
             INNER JOIN (
               SELECT awb, MAX(id) as max_id
-              FROM ${database}.t_aereo_ws
+              FROM ${database}.t_aereo_ws_firecrawl
               WHERE scraped_at >= NOW() - INTERVAL 30 DAY
               AND last_status_code IN (${cctStatuses})
               AND last_status_code NOT IN (${errorStatusFilter})
