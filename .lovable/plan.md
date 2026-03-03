@@ -1,31 +1,25 @@
 
 
-# Cron Job: firecrawl-monitor-alert a cada 30 minutos
+# Fix: Bloquear logs de usuário "unknown" no useUsageLog
 
-## Ação
+## Problema
+O hook `useUsageLog` registra acessos com username "unknown" quando não há sessão válida, poluindo as métricas.
 
-Criar um cron job via `pg_cron` + `pg_net` que chama a edge function `firecrawl-monitor-alert` a cada 30 minutos.
+## Solução
 
-### SQL (via insert tool, não migration)
+**Arquivo: `src/hooks/useUsageLog.ts`**
 
-```sql
-select cron.schedule(
-  'firecrawl-monitor-alert-every-30min',
-  '*/30 * * * *',
-  $$
-  select net.http_post(
-    url:='https://finktakbjcfmurqeiubz.supabase.co/functions/v1/firecrawl-monitor-alert',
-    headers:='{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpbmt0YWtiamNmbXVycWVpdWJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4NjA2MjcsImV4cCI6MjA4MDQzNjYyN30.SqVlb4HtuPGbn6rRhZrTruR5JHf8XMSjVJfYxxPlT-s"}'::jsonb,
-    body:='{}'::jsonb
-  ) as request_id;
-  $$
-);
+Adicionar validação para só registrar quando houver um username real (não "unknown"):
+
+1. No hook `useUsageLog`: após extrair o username, verificar se é válido antes de chamar o log. Se for "unknown" ou vazio, abortar silenciosamente.
+
+2. Na função `logAction`: mesma validação — não registrar se username resultar em "unknown".
+
+```typescript
+// Antes de chamar o log:
+const username = user?.username || user?.email?.split("@")[0];
+if (!username || username === "unknown") return; // ← aborta
 ```
 
-A edge function já tem toda a lógica de:
-- Verificar `TIMESTAMPDIFF` do `scraped_at` vs threshold de 120 min
-- Deduplicação (não envia alerta repetido se já há um aberto)
-- Envio de e-mail de recuperação quando normaliza
-
-Nenhum arquivo precisa ser alterado — apenas executar o SQL acima.
+Alteração em um único arquivo, sem impacto no backend.
 
