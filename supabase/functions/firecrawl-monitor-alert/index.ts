@@ -158,7 +158,15 @@ serve(async (req) => {
     `) as any[];
 
     const row = statsRows[0] || {};
-    const minutesSinceUpdate = Number(row.minutesSinceUpdate || 9999);
+    let minutesSinceUpdate = row.minutesSinceUpdate != null ? Number(row.minutesSinceUpdate) : null;
+    if (minutesSinceUpdate === null || isNaN(minutesSinceUpdate) || minutesSinceUpdate < 0) {
+      if (row.lastUpdate) {
+        const lastDate = new Date(row.lastUpdate);
+        minutesSinceUpdate = Math.round((Date.now() - lastDate.getTime()) / 60000);
+      } else {
+        minutesSinceUpdate = 9999;
+      }
+    }
     const totalRecords = Number(row.totalRecords || 0);
     const recentInserts = Number(row.recentInserts || 0);
     const uniqueAwbs = Number(row.uniqueAwbs || 0);
