@@ -1,25 +1,33 @@
 
 
-# Fix: Bloquear logs de usuário "unknown" no useUsageLog
+# Fix: Bloquear "unknown" no backend (mariadb-proxy)
 
 ## Problema
-O hook `useUsageLog` registra acessos com username "unknown" quando não há sessão válida, poluindo as métricas.
+O fix no frontend (`useUsageLog.ts`) já está correto, mas ainda aparecem registros "unknown" porque:
+1. Navegadores com cache antigo podem enviar logs antes de carregar o código novo
+2. O backend não valida — aceita qualquer username que receber
 
-## Solução
+## Solução (3 alterações no `mariadb-proxy/index.ts`)
 
-**Arquivo: `src/hooks/useUsageLog.ts`**
-
-Adicionar validação para só registrar quando houver um username real (não "unknown"):
-
-1. No hook `useUsageLog`: após extrair o username, verificar se é válido antes de chamar o log. Se for "unknown" ou vazio, abortar silenciosamente.
-
-2. Na função `logAction`: mesma validação — não registrar se username resultar em "unknown".
-
+### 1. Rejeitar log_usage com username "unknown" no backend
+No case `log_usage` (linha ~579), adicionar validação para recusar inserções com username "unknown":
 ```typescript
-// Antes de chamar o log:
-const username = user?.username || user?.email?.split("@")[0];
-if (!username || username === "unknown") return; // ← aborta
+if (logUsername === 'unknown') {
+  result = { success: true }; // silently ignore
+  break;
+}
 ```
 
-Alteração em um único arquivo, sem impacto no backend.
+### 2. Filtrar "unknown" da lista de usuários
+No case `get_metric_users` (linha ~730), adicionar `unknown` ao filtro de exclusão padrão (não só para Dachser admins — para todos):
+```sql
+WHERE username != 'unknown'
+```
+
+### 3. Deletar registros remanescentes
+Executar DELETE via mariadb-proxy para limpar os registros "unknown" que foram criados após a última limpeza.
+
+---
+
+Resultado: mesmo que o frontend envie "unknown" (cache, bug, edge case), o backend nunca mais insere na tabela.
 
