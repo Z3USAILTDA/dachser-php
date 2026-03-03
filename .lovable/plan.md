@@ -1,42 +1,55 @@
 
 
-# Migrar fonte de dados do tracking aéreo: t_aereo_ws → t_aereo_ws_firecrawl
+# Monitor Firecrawl — Visível apenas para admins Z3US
 
 ## Resumo
 
-Substituir todas as referências à tabela `t_aereo_ws` por `t_aereo_ws_firecrawl` nos backends que alimentam a tela de rastreio aéreo. A estrutura de colunas é assumida como idêntica (mesmos campos: `awb`, `last_status_code`, `last_status_description`, `origin`, `destination`, `last_flight`, `scraped_at`, `sidebar_days_in_transit`, `timeline_json`, `id`).
+Criar a tela de monitoramento da `t_aereo_ws_firecrawl` e a edge function de alerta por e-mail, com acesso restrito exclusivamente a administradores Z3US (não DACHSER).
 
----
+## Arquivos a criar
 
-## Arquivos afetados
+### 1. `supabase/functions/firecrawl-monitor-stats/index.ts`
+Edge function que conecta ao MariaDB (`dados_dachser`) e retorna:
+- `MAX(scraped_at)` como `lastUpdate`
+- `COUNT(*)` como `totalRecords`
+- Contagem de registros nas últimas 24h
+- AWBs distintas nas últimas 24h
+- `TIMESTAMPDIFF(MINUTE, MAX(scraped_at), NOW())` como `minutesSinceUpdate`
+- Status derivado (Saudável ≤5min, Atenção 5-60min, Crítico >60min)
 
-### 1. `supabase/functions/fetch-status-aereo/index.ts`
-Este é o backend principal da tela de tracking aéreo. Contém 10+ referências a `t_aereo_ws` nas queries SQL e logs:
-- **PASSO 1** (linhas ~484-510): Query principal que busca snapshots mais recentes (`SELECT ... FROM t_aereo_ws w INNER JOIN (SELECT awb, MAX(id) ... FROM t_aereo_ws ...`)
-- Logs de console (`t_aereo_ws primary`, `from t_aereo_ws`, etc.)
+Padrão: `connectWithRetry` igual ao `fetch-database-stats`.
 
-**Ação**: Substituir todas as ocorrências de `t_aereo_ws` por `t_aereo_ws_firecrawl` (find & replace direto — ~10 ocorrências).
+### 2. `supabase/functions/firecrawl-monitor-alert/index.ts`
+Edge function de alerta por e-mail:
+- Threshold: **120 minutos** sem atualização em `scraped_at`
+- Destinatários: `devs@z3us.ai`, `rodrigo@z3us.ai`, `larissa@z3us.ai`
+- Deduplicação via `ai_agente.t_firecrawl_monitor_alerts` (padrão `recovered_at` do `db-critical-alert`)
+- E-mail via Resend com template HTML dark (padrão Z3US)
+- Suporte a `test` e `force` flags
 
-### 2. `supabase/functions/mariadb-proxy/index.ts`
-Três actions usam `t_aereo_ws`:
+### 3. `src/pages/admin/FirecrawlMonitor.tsx`
+Página simplificada inspirada no `DatabaseMonitor.tsx` para uma única tabela:
+- Card com indicador de saúde, último `scraped_at`, total de registros, inserções 24h, AWBs únicas
+- KPI summary no topo
+- Botão "Atualizar"
+- **Controle de acesso**: verifica `is_admin === 1` **e** que o username NÃO está na lista `DACHSER_ADMIN_USERS` (mesma lógica do `z3usOnly` no Dashboard). Se não for Z3US admin, redireciona para `/dashboard`.
 
-- **`get_cct_shipments`** (linhas ~3016-3046): Step 1 busca AWBs de `t_aereo_ws` para o CCT dashboard
-- **`get_awb_tracking_events`** (linhas ~6033-6343): Busca timeline_json de `t_aereo_ws` para o modal de eventos
-- **`get_cct_pending_hawbs`** (linhas ~11477-11491): Step 1 busca AWBs de `t_aereo_ws` para enriquecimento LeadComex
+## Arquivos a modificar
 
-**Ação**: Substituir todas as ocorrências de `t_aereo_ws` por `t_aereo_ws_firecrawl` nestas 3 actions (~15 ocorrências entre SQL e comentários/logs).
+### 4. `src/App.tsx`
+- Importar `FirecrawlMonitor`
+- Adicionar rota: `/admin/firecrawl-monitor`
 
----
+### 5. `src/pages/Dashboard.tsx`
+- Adicionar item no menu ADMIN com `z3usOnly: true`:
+```
+{ label: "Monitor Firecrawl", href: "/admin/firecrawl-monitor", z3usOnly: true }
+```
+Isso garante que só aparece para admins Z3US (excluindo `ana.tozzo`, `danilo.pedroso`, `teste.test3`).
 
-## O que NÃO será alterado
+## Controle de acesso
 
-- Nenhuma lógica de merge, filtro, classificação ARR, detecção de discrepância
-- Nenhuma referência a `t_aereo_api` (continua como fallback autoritativo)
-- Nenhuma referência a `t_master_dados`
-- Frontend (nenhum arquivo `.tsx` referencia a tabela diretamente)
-- A action `get_aging_*` e budget/forecast recém-implementados
-
-## Pré-requisito
-
-A tabela `t_aereo_ws_firecrawl` deve existir no MariaDB com a mesma estrutura de colunas que `t_aereo_ws` (id, awb, last_status_code, last_status_description, origin, destination, last_flight, scraped_at, sidebar_days_in_transit, timeline_json).
+- **Dashboard menu**: flag `z3usOnly: true` filtra via `getAdminUserType()` — só `Z3US` vê o item
+- **Página**: validação dupla no `useEffect` — `is_admin === 1` + username não está em `DACHSER_ADMIN_USERS`
+- **Edge functions**: sem restrição de acesso (dados internos, não sensíveis a usuários finais)
 
