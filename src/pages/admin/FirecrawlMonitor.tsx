@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { RefreshCw, Activity, Database, Clock, Hash, Loader2, Bug } from "lucide-react";
+import { RefreshCw, Activity, Database, Clock, Loader2, Bug } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,7 +16,7 @@ interface FirecrawlStats {
   lastUpdate: string | null;
   totalRecords: number;
   recentInserts: number;
-  uniqueAwbs: number;
+  
   minutesSinceUpdate: number;
   status: "healthy" | "warning" | "critical";
   fetchedAt: string;
@@ -161,7 +161,7 @@ export default function FirecrawlMonitor() {
       ) : stats ? (
         <div className="space-y-6">
           {/* KPI Summary */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <PageCard className="text-center">
               <Database className="h-5 w-5 mx-auto mb-2 text-[#ffc800]" />
               <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Total Registros</div>
@@ -172,11 +172,7 @@ export default function FirecrawlMonitor() {
               <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Inserções 24h</div>
               <div className="text-2xl font-bold text-emerald-400 mt-1">+{formatNumber(stats.recentInserts)}</div>
             </PageCard>
-            <PageCard className="text-center">
-              <Hash className="h-5 w-5 mx-auto mb-2 text-blue-400" />
-              <div className="text-[9px] uppercase tracking-wider text-muted-foreground">AWBs Únicas 24h</div>
-              <div className="text-2xl font-bold text-blue-400 mt-1">{formatNumber(stats.uniqueAwbs)}</div>
-            </PageCard>
+            
             <PageCard className="text-center">
               <Clock className="h-5 w-5 mx-auto mb-2 text-amber-400" />
               <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Status</div>
@@ -201,7 +197,7 @@ export default function FirecrawlMonitor() {
             </p>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
               <div className="p-3 rounded-lg bg-[#0a0b10] border border-white/10">
                 <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Última Atualização</div>
                 <div className={`text-sm font-medium mt-1 ${healthColors[health].text}`}>
@@ -220,10 +216,6 @@ export default function FirecrawlMonitor() {
               <div className="p-3 rounded-lg bg-[#0a0b10] border border-white/10">
                 <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Inserções 24h</div>
                 <div className="text-xl font-bold text-emerald-400 mt-1">+{formatNumber(stats.recentInserts)}</div>
-              </div>
-              <div className="p-3 rounded-lg bg-[#0a0b10] border border-white/10">
-                <div className="text-[9px] uppercase tracking-wider text-muted-foreground">AWBs Únicas 24h</div>
-                <div className="text-xl font-bold text-blue-400 mt-1">{formatNumber(stats.uniqueAwbs)}</div>
               </div>
             </div>
 
