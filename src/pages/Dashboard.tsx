@@ -64,6 +64,11 @@ const menuItems: MenuItem[] = [
         label: "Monitoramento de Dados",
         href: "/admin/database",
       },
+      {
+        label: "Monitor Firecrawl",
+        href: "/admin/firecrawl-monitor",
+        z3usOnly: true,
+      },
     ],
   },
   {

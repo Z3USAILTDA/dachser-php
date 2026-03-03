@@ -99,6 +99,7 @@ import ManualFinanceiro from "./pages/fin/ManualFinanceiro";
 import ManualAdmin from "./pages/admin/ManualAdmin";
 import UploadMaster from "./pages/admin/UploadMaster";
 import ApiKeyTest from "./pages/admin/ApiKeyTest";
+import FirecrawlMonitor from "./pages/admin/FirecrawlMonitor";
 
 // AWB Pages
 import AWBList from "./pages/AWBList";
@@ -222,6 +223,7 @@ const App = () => (
           {/* Admin Module Manual */}
           <Route path="/admin/manual" element={<ManualAdmin />} />
           <Route path="/admin/api-test" element={<ApiKeyTest />} />
+          <Route path="/admin/firecrawl-monitor" element={<FirecrawlMonitor />} />
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
