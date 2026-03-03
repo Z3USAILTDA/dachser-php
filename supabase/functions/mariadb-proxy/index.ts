@@ -583,6 +583,13 @@ serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
+
+        // Block "unknown" users from polluting metrics
+        if (logUsername === 'unknown') {
+          console.log('Blocked log_usage for unknown user');
+          result = { success: true };
+          break;
+        }
         
         await client.query(
           `INSERT INTO ai_agente.t_dachser_usage_logs (username, endpoint, method, event_time)
@@ -727,11 +734,11 @@ serve(async (req) => {
         const HIDDEN_LOG_USERS_MU = ["admin", "teste.test3"];
         const isDachserUserMU = metricRequester && DACHSER_ADMIN_USERS_MU.includes(metricRequester);
 
-        let usersQuery = `SELECT DISTINCT username FROM ai_agente.t_dachser_usage_logs`;
+        let usersQuery = `SELECT DISTINCT username FROM ai_agente.t_dachser_usage_logs WHERE username != 'unknown'`;
         let usersParams: string[] = [];
 
         if (isDachserUserMU) {
-          usersQuery += ` WHERE username NOT IN (${HIDDEN_LOG_USERS_MU.map(() => '?').join(', ')})`;
+          usersQuery += ` AND username NOT IN (${HIDDEN_LOG_USERS_MU.map(() => '?').join(', ')})`;
           usersParams = [...HIDDEN_LOG_USERS_MU];
         }
 
