@@ -24,7 +24,8 @@ export function useUsageLog({ endpoint, method = "GET" }: UseUsageLogOptions) {
         if (!storedUser) return;
         
         const user = JSON.parse(storedUser);
-        const username = user?.username || user?.email?.split("@")[0] || "unknown";
+        const username = user?.username || user?.email?.split("@")[0];
+        if (!username || username === "unknown") return;
 
         await supabase.functions.invoke("mariadb-proxy", {
           body: {
@@ -53,7 +54,8 @@ export async function logAction(endpoint: string, method: "POST" | "DELETE" | "P
     if (!storedUser) return;
     
     const user = JSON.parse(storedUser);
-    const username = user?.username || user?.email?.split("@")[0] || "unknown";
+    const username = user?.username || user?.email?.split("@")[0];
+    if (!username || username === "unknown") return;
 
     await supabase.functions.invoke("mariadb-proxy", {
       body: {
