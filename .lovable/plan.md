@@ -1,43 +1,39 @@
 
 
-# Ajustar árvore Z3US no menu ADMIN
+# Fix: minutesSinceUpdate falsy-zero bug in firecrawl-monitor-alert
 
-## Arquivo: `src/pages/Dashboard.tsx`
+## Root Cause
 
-Alterar o bloco Z3US dentro de `getVisibleChildren` (quando `adminType === "Z3US"`), reorganizando os 3 filhos expandíveis:
-
-### Estrutura atual (2 filhos: DACHSER + Z3US)
-### Nova estrutura (2 filhos: DACHSER + Z3US, com Z3US tendo 3 sub-grupos)
-
-O filho **Z3US** passará a ter 3 `expandableId` em vez de uma lista plana:
-
-```
-Z3US
-├── Usuários (expandableId: "z3us-usuarios")
-│   ├── Cadastro de Usuário → /admin/register
-│   ├── Métricas de Uso → /admin/metrics
-│   └── Gerenciamento de Usuários → /admin/users
-├── Monitoramento (expandableId: "z3us-monitoramento")
-│   ├── Gerenciamento de APIs → /admin/apis
-│   ├── Monitoramento de Dados → /admin/database
-│   └── Monitoramento de Dados ZEUS → /admin/firecrawl-monitor
-└── Teste (expandableId: "z3us-teste")
-    ├── Upload Master → /admin/z3us/upload-master
-    └── Teste de API Keys → /admin/api-test
+Line 161 in `firecrawl-monitor-alert/index.ts`:
+```typescript
+const minutesSinceUpdate = Number(row.minutesSinceUpdate || 9999);
 ```
 
-### Mudanças necessárias
+When MariaDB's `TIMESTAMPDIFF` returns `0` (data updated within the same minute), JavaScript's `||` operator treats `0` as falsy and substitutes `9999`. **9999 minutes = 166h 39min** — exactly what the email showed.
 
-1. **`getVisibleChildren`** — Substituir o array de `subChildren` do item Z3US por 3 filhos expandíveis (cada um com seu `expandableId` e `subChildren`). Isso requer suporte a **3 níveis de profundidade** (ADMIN → Z3US → Usuários/Monitoramento/Teste → itens finais).
+## Fix
 
-2. **Suporte a 3 níveis** — O código atual já suporta `expandableId` + `subChildren` em 2 níveis. Precisarei adicionar um nível intermediário: os subChildren do Z3US serão eles próprios expandíveis (com `expandableId` e `subChildren`). Isso exige:
-   - Estender a interface `SubChild` para aceitar `expandableId` + `subChildren` (ou criar um tipo recursivo)
-   - Adicionar lógica de renderização para o 3º nível no JSX (expandir sub-sub-children)
-   - Gerenciar estado de expansão do 3º nível (novo state ou reusar `expandedChild` com IDs distintos)
+**File: `supabase/functions/firecrawl-monitor-alert/index.ts`** (line 161)
 
-3. **Renomear** "Monitor Firecrawl" → "Monitoramento de Dados ZEUS"
+Replace the falsy `||` pattern with explicit null-checking + JS-side fallback (same pattern already used in `firecrawl-monitor-stats`):
 
-### Complexidade
+```typescript
+let minutesSinceUpdate = row.minutesSinceUpdate != null ? Number(row.minutesSinceUpdate) : null;
+if (minutesSinceUpdate === null || isNaN(minutesSinceUpdate) || minutesSinceUpdate < 0) {
+  if (row.lastUpdate) {
+    const lastDate = new Date(row.lastUpdate);
+    minutesSinceUpdate = Math.round((Date.now() - lastDate.getTime()) / 60000);
+  } else {
+    minutesSinceUpdate = 9999;
+  }
+}
+```
 
-O desafio principal é que o JSX atual renderiza no máximo 2 níveis de expansão. Precisarei adicionar renderização recursiva ou um 3º nível explícito no bloco de sub-children do Z3US.
+This handles:
+- `0` correctly (no longer treated as falsy)
+- `null`/`undefined` from the driver
+- Negative values from timezone mismatches
+- Missing `lastUpdate` as ultimate fallback
+
+One line change, no other files affected. Deploy `firecrawl-monitor-alert`.
 
