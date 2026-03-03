@@ -8,7 +8,9 @@ import logoZ3us from "@/assets/logo-z3us.png";
 import dachserBg from "@/assets/dachser-background.jpg";
 interface SubChild {
   label: string;
-  href: string;
+  href?: string;
+  expandableId?: string;
+  subChildren?: SubChild[];
 }
 interface ChildItem {
   label: string;
@@ -63,11 +65,6 @@ const menuItems: MenuItem[] = [
       {
         label: "Monitoramento de Dados",
         href: "/admin/database",
-      },
-      {
-        label: "Monitor Firecrawl",
-        href: "/admin/firecrawl-monitor",
-        z3usOnly: true,
       },
     ],
   },
@@ -184,6 +181,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [expandedChild, setExpandedChild] = useState<string | null>(null);
+  const [expandedSubChild, setExpandedSubChild] = useState<string | null>(null);
   const [user, setUser] = useState<{
     id: number;
     email: string;
@@ -219,6 +217,7 @@ const Dashboard = () => {
   const toggleMenu = (menuId: string) => {
     if (activeMenu !== menuId) {
       setExpandedChild(null);
+      setExpandedSubChild(null);
     }
     setActiveMenu(activeMenu === menuId ? null : menuId);
   };
@@ -240,7 +239,7 @@ const Dashboard = () => {
         ];
       }
       
-      // Z3US: mostra dois filhos expandíveis
+      // Z3US: mostra dois filhos expandíveis (DACHSER + Z3US com sub-grupos)
       return [
         {
           label: "DACHSER",
@@ -254,13 +253,32 @@ const Dashboard = () => {
           label: "Z3US",
           expandableId: "z3us-sub",
           subChildren: [
-            { label: "Cadastro de Usuário", href: "/admin/register" },
-            { label: "Métricas de Uso", href: "/admin/metrics" },
-            { label: "Gerenciamento de Usuários", href: "/admin/users" },
-            { label: "Gerenciamento de APIs", href: "/admin/apis" },
-            { label: "Monitoramento de Dados", href: "/admin/database" },
-            { label: "Upload Master", href: "/admin/z3us/upload-master" },
-            { label: "Teste de API Keys", href: "/admin/api-test" },
+            {
+              label: "Usuários",
+              expandableId: "z3us-usuarios",
+              subChildren: [
+                { label: "Cadastro de Usuário", href: "/admin/register" },
+                { label: "Métricas de Uso", href: "/admin/metrics" },
+                { label: "Gerenciamento de Usuários", href: "/admin/users" },
+              ],
+            },
+            {
+              label: "Monitoramento",
+              expandableId: "z3us-monitoramento",
+              subChildren: [
+                { label: "Gerenciamento de APIs", href: "/admin/apis" },
+                { label: "Monitoramento de Dados", href: "/admin/database" },
+                { label: "Monitoramento de Dados ZEUS", href: "/admin/firecrawl-monitor" },
+              ],
+            },
+            {
+              label: "Teste",
+              expandableId: "z3us-teste",
+              subChildren: [
+                { label: "Upload Master", href: "/admin/z3us/upload-master" },
+                { label: "Teste de API Keys", href: "/admin/api-test" },
+              ],
+            },
           ],
         },
       ];
@@ -475,11 +493,12 @@ const Dashboard = () => {
                           {child.expandableId ? (
                             <div className="relative mt-2.5 flex flex-col items-center w-full">
                               <button
-                                onClick={() =>
+                                onClick={() => {
+                                  setExpandedSubChild(null);
                                   setExpandedChild(
                                     expandedChild === child.expandableId ? null : child.expandableId!
-                                  )
-                                }
+                                  );
+                                }}
                                 className={`w-full px-4 py-2 rounded-full text-xs font-medium transition-all duration-200 cursor-pointer text-center ${
                                   expandedChild === child.expandableId
                                     ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_12px_hsl(var(--primary)/0.7)]'
@@ -525,18 +544,93 @@ const Dashboard = () => {
                                           <div className="w-0.5 h-3 bg-primary" />
                                           <div className="w-2 h-2 rounded-full bg-primary -mt-0.5 border border-background shadow-[0_0_6px_hsl(var(--primary)/0.6)]" />
 
-                                          <button
-                                            onClick={() => navigate(subChild.href)}
-                                            className="mt-2.5 w-full px-4 py-2 rounded-full text-foreground text-xs font-medium hover:-translate-y-0.5 transition-all duration-200 text-center"
-                                            style={{
-                                              background: 'rgba(4, 10, 30, 0.85)',
-                                              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-                                              backdropFilter: 'blur(18px)',
-                                              border: '1px solid rgba(255, 255, 255, 0.08)'
-                                            }}
-                                          >
-                                            {subChild.label}
-                                          </button>
+                                          {subChild.expandableId ? (
+                                            /* Level 3: expandable sub-child (e.g. Usuários, Monitoramento, Teste) */
+                                            <div className="relative mt-2.5 flex flex-col items-center w-full">
+                                              <button
+                                                onClick={() =>
+                                                  setExpandedSubChild(
+                                                    expandedSubChild === subChild.expandableId ? null : subChild.expandableId!
+                                                  )
+                                                }
+                                                className={`w-full px-4 py-2 rounded-full text-xs font-medium transition-all duration-200 cursor-pointer text-center ${
+                                                  expandedSubChild === subChild.expandableId
+                                                    ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_12px_hsl(var(--primary)/0.7)]'
+                                                    : 'text-foreground hover:-translate-y-0.5'
+                                                }`}
+                                                style={{
+                                                  ...(expandedSubChild !== subChild.expandableId && {
+                                                    background: 'rgba(4, 10, 30, 0.85)',
+                                                    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                                                    backdropFilter: 'blur(18px)',
+                                                    border: '1px solid rgba(255, 255, 255, 0.08)'
+                                                  })
+                                                }}
+                                              >
+                                                {subChild.label}
+                                              </button>
+
+                                              {/* Level 3 children (final links) */}
+                                              {expandedSubChild === subChild.expandableId && subChild.subChildren && (
+                                                <div className="flex flex-col items-center mt-4 animate-in fade-in duration-300">
+                                                  <div className="w-0.5 h-4 bg-primary" />
+
+                                                  <div className="relative flex flex-col items-center">
+                                                    {subChild.subChildren.length > 1 && (
+                                                      <div 
+                                                        className="absolute h-0.5 bg-primary"
+                                                        style={{ 
+                                                          top: 0,
+                                                          width: `calc(${(subChild.subChildren.length - 1) * 200}px + ${(subChild.subChildren.length - 1) * 20}px)`,
+                                                          left: '50%',
+                                                          transform: 'translateX(-50%)',
+                                                        }}
+                                                      />
+                                                    )}
+
+                                                    <div className="flex justify-center" style={{ gap: '20px' }}>
+                                                      {subChild.subChildren.map((leaf, leafIdx) => (
+                                                        <div
+                                                          key={leafIdx}
+                                                          className="flex flex-col items-center"
+                                                          style={{ width: '200px' }}
+                                                        >
+                                                          <div className="w-0.5 h-3 bg-primary" />
+                                                          <div className="w-2 h-2 rounded-full bg-primary -mt-0.5 border border-background shadow-[0_0_6px_hsl(var(--primary)/0.6)]" />
+
+                                                          <button
+                                                            onClick={() => leaf.href && navigate(leaf.href)}
+                                                            className="mt-2.5 w-full px-4 py-2 rounded-full text-foreground text-xs font-medium hover:-translate-y-0.5 transition-all duration-200 text-center"
+                                                            style={{
+                                                              background: 'rgba(4, 10, 30, 0.85)',
+                                                              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                                                              backdropFilter: 'blur(18px)',
+                                                              border: '1px solid rgba(255, 255, 255, 0.08)'
+                                                            }}
+                                                          >
+                                                            {leaf.label}
+                                                          </button>
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
+                                          ) : (
+                                            <button
+                                              onClick={() => subChild.href && navigate(subChild.href)}
+                                              className="mt-2.5 w-full px-4 py-2 rounded-full text-foreground text-xs font-medium hover:-translate-y-0.5 transition-all duration-200 text-center"
+                                              style={{
+                                                background: 'rgba(4, 10, 30, 0.85)',
+                                                boxShadow: '0 10px 25px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                                                backdropFilter: 'blur(18px)',
+                                                border: '1px solid rgba(255, 255, 255, 0.08)'
+                                              }}
+                                            >
+                                              {subChild.label}
+                                            </button>
+                                          )}
                                         </div>
                                       ))}
                                     </div>
