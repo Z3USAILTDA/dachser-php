@@ -55,27 +55,35 @@ serve(async (req) => {
 
     const rows = await client.query(`
       SELECT 
-        MAX(scraped_at) as lastUpdate,
+        MAX(CASE WHEN origin IS NOT NULL AND origin != '' 
+             AND destination IS NOT NULL AND destination != '' 
+             THEN scraped_at ELSE NULL END) as lastUpdate,
         COUNT(*) as totalRecords,
         SUM(CASE WHEN scraped_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recentInserts,
-        COUNT(DISTINCT CASE WHEN scraped_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN awb ELSE NULL END) as uniqueAwbs,
-        TIMESTAMPDIFF(MINUTE, MAX(scraped_at), NOW()) as minutesSinceUpdate
+        COUNT(DISTINCT CASE WHEN scraped_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN awb ELSE NULL END) as uniqueAwbs
       FROM ${database}.t_aereo_ws_firecrawl
     `) as any[];
+
+    // Check if the most recent record has empty origin/destination
+    const latestRow = await client.query(`
+      SELECT origin, destination, scraped_at
+      FROM ${database}.t_aereo_ws_firecrawl
+      ORDER BY scraped_at DESC LIMIT 1
+    `) as any[];
+    const latestRecord = latestRow[0] || {};
+    const hasEmptyFields = !latestRecord.origin || latestRecord.origin === '' 
+      || !latestRecord.destination || latestRecord.destination === '';
 
     await client.close();
     client = null;
 
     const row = rows[0] || {};
-    // If TIMESTAMPDIFF returns null or negative, compute from JS side
-    let minutesSinceUpdate = row.minutesSinceUpdate != null ? Number(row.minutesSinceUpdate) : null;
-    if (minutesSinceUpdate === null || isNaN(minutesSinceUpdate) || minutesSinceUpdate < 0) {
-      if (row.lastUpdate) {
-        const lastDate = new Date(row.lastUpdate);
-        minutesSinceUpdate = Math.round((Date.now() - lastDate.getTime()) / 60000);
-      } else {
-        minutesSinceUpdate = 9999;
-      }
+    let minutesSinceUpdate: number;
+    if (row.lastUpdate) {
+      const lastDate = new Date(row.lastUpdate);
+      minutesSinceUpdate = Math.round((Date.now() - lastDate.getTime()) / 60000);
+    } else {
+      minutesSinceUpdate = 9999;
     }
     
     let status: string;
@@ -90,6 +98,7 @@ serve(async (req) => {
       uniqueAwbs: Number(row.uniqueAwbs || 0),
       minutesSinceUpdate,
       status,
+      hasEmptyFields,
       fetchedAt: new Date().toISOString(),
     };
 
