@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plane, Ship, FileText, ExternalLink, Building2, MapPin } from "lucide-react";
+import { Plane, Ship, FileText, ExternalLink, Building2, MapPin, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ProcessoOrigemCardProps {
@@ -31,6 +31,12 @@ const ORIGEM_CONFIG = {
     fullLabel: "Customs House Broker",
     icon: FileText,
     className: "bg-warning/10 text-warning border-warning/30",
+  },
+  ROD: {
+    label: "ROD",
+    fullLabel: "Rodoviário",
+    icon: Truck,
+    className: "bg-emerald-500/10 text-emerald-500 border-emerald-500/30",
   },
 };
 
