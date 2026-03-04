@@ -1,33 +1,36 @@
 
 
-# Fix: Bloquear "unknown" no backend (mariadb-proxy)
+# Alterar Monitor Firecrawl: validar origin/destination nos dados mais recentes
 
 ## Problema
-O fix no frontend (`useUsageLog.ts`) já está correto, mas ainda aparecem registros "unknown" porque:
-1. Navegadores com cache antigo podem enviar logs antes de carregar o código novo
-2. O backend não valida — aceita qualquer username que receber
+Atualmente, o monitor considera o scraper "saudável" apenas verificando se `scraped_at` está recente. Porém, registros podem ser inseridos com `origin` e/ou `destination` vazios, o que indica dados inválidos. O sistema não deve considerá-los como dados válidos nem marcar como "recuperado".
 
-## Solução (3 alterações no `mariadb-proxy/index.ts`)
+## Solução
 
-### 1. Rejeitar log_usage com username "unknown" no backend
-No case `log_usage` (linha ~579), adicionar validação para recusar inserções com username "unknown":
-```typescript
-if (logUsername === 'unknown') {
-  result = { success: true }; // silently ignore
-  break;
-}
-```
+Alterar a query principal em ambas as Edge Functions para considerar como "última atualização válida" apenas registros onde `origin` e `destination` estejam preenchidos (não nulos e não vazios).
 
-### 2. Filtrar "unknown" da lista de usuários
-No case `get_metric_users` (linha ~730), adicionar `unknown` ao filtro de exclusão padrão (não só para Dachser admins — para todos):
+### 1. `firecrawl-monitor-stats/index.ts`
+
+Alterar a query SQL para buscar o `MAX(scraped_at)` apenas de registros com origin e destination preenchidos:
+
 ```sql
-WHERE username != 'unknown'
+SELECT 
+  MAX(CASE WHEN origin IS NOT NULL AND origin != '' 
+       AND destination IS NOT NULL AND destination != '' 
+       THEN scraped_at ELSE NULL END) as lastUpdate,
+  COUNT(*) as totalRecords,
+  SUM(CASE WHEN scraped_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recentInserts,
+  COUNT(DISTINCT CASE WHEN scraped_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN awb ELSE NULL END) as uniqueAwbs
+FROM dados_dachser.t_aereo_ws_firecrawl
 ```
 
-### 3. Deletar registros remanescentes
-Executar DELETE via mariadb-proxy para limpar os registros "unknown" que foram criados após a última limpeza.
+E calcular `minutesSinceUpdate` a partir desse `lastUpdate` filtrado. Adicionalmente, retornar um campo `hasEmptyFields` indicando se o registro mais recente tem campos vazios.
 
----
+### 2. `firecrawl-monitor-alert/index.ts`
 
-Resultado: mesmo que o frontend envie "unknown" (cache, bug, edge case), o backend nunca mais insere na tabela.
+Mesma alteração na query: o `MAX(scraped_at)` e o `TIMESTAMPDIFF` devem considerar apenas registros com `origin` e `destination` preenchidos. Isso garante que o alerta não seja considerado "recuperado" quando dados chegam sem essas colunas.
+
+### 3. `FirecrawlMonitor.tsx` (frontend)
+
+Adicionar indicador visual na interface quando o último registro tem campos vazios, mostrando ao admin que os dados estão incompletos mesmo que `scraped_at` seja recente.
 
