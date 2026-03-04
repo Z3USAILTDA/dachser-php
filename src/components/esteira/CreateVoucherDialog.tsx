@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Upload, X, Search, FileText, RefreshCw, Plane, Ship, FileCheck, AlertCircle, Loader2, Check, Save, Layers } from "lucide-react";
+import { Plus, Upload, X, Search, FileText, RefreshCw, Plane, Ship, FileCheck, AlertCircle, Loader2, Check, Save, Layers, Truck } from "lucide-react";
 import { format, parse, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -84,7 +84,7 @@ const validateCNPJ = (cnpj: string): boolean => {
 const formSchema = z.object({
   numeroRM: z.string().optional(),
   processoId: z.string().optional(),
-  origemProcesso: z.enum(["AIR", "SEA", "CHB"]).optional(),
+  origemProcesso: z.enum(["AIR", "SEA", "CHB", "ROD"]).optional(),
   fornecedor: z.string().optional(),
   beneficiario: z.string().optional(),
   cnpjFornecedor: z.string().optional().refine(
@@ -132,7 +132,7 @@ interface CreateVoucherDialogProps {
 }
 
 type EntryMode = "rm" | "manual" | "master";
-type OrigemProcesso = "AIR" | "SEA" | "CHB";
+type OrigemProcesso = "AIR" | "SEA" | "CHB" | "ROD";
 
 export const CreateVoucherDialog = ({ 
   open: controlledOpen, 
@@ -268,7 +268,7 @@ export const CreateVoucherDialog = ({
       }
 
       // Modal → origemProcesso (AIR/SEA/CHB)
-      if (rmData.modal && ["AIR", "SEA", "CHB"].includes(rmData.modal)) {
+      if (rmData.modal && ["AIR", "SEA", "CHB", "ROD"].includes(rmData.modal)) {
         setOrigemProcesso(rmData.modal as OrigemProcesso);
       }
 
@@ -898,7 +898,7 @@ export const CreateVoucherDialog = ({
                     Origem do Processo
                   </Label>
                   <div className="flex gap-2">
-                    {(["AIR", "SEA", "CHB"] as OrigemProcesso[]).map((tipo) => (
+                    {(["AIR", "SEA", "CHB", "ROD"] as OrigemProcesso[]).map((tipo) => (
                       <Button
                         key={tipo}
                         type="button"
@@ -914,6 +914,7 @@ export const CreateVoucherDialog = ({
                         {tipo === "AIR" && <Plane className="h-4 w-4" />}
                         {tipo === "SEA" && <Ship className="h-4 w-4" />}
                         {tipo === "CHB" && <FileCheck className="h-4 w-4" />}
+                        {tipo === "ROD" && <Truck className="h-4 w-4" />}
                         {tipo}
                       </Button>
                     ))}
