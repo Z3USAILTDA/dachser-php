@@ -16,9 +16,9 @@ interface FirecrawlStats {
   lastUpdate: string | null;
   totalRecords: number;
   recentInserts: number;
-  
   minutesSinceUpdate: number;
   status: "healthy" | "warning" | "critical";
+  hasEmptyFields?: boolean;
   fetchedAt: string;
 }
 
@@ -219,11 +219,20 @@ export default function FirecrawlMonitor() {
               </div>
             </div>
 
+            {/* Empty Fields Warning */}
+            {stats.hasEmptyFields && (
+              <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/20 text-xs text-red-300/80 mb-3">
+                <strong>⚠️ Dados incompletos:</strong> O registro mais recente possui campos
+                <code className="mx-1 px-1 py-0.5 bg-red-500/10 rounded text-red-400">origin</code> ou
+                <code className="mx-1 px-1 py-0.5 bg-red-500/10 rounded text-red-400">destination</code>
+                vazios. Esses registros <strong>não são considerados</strong> como dados válidos no cálculo de última atualização.
+              </div>
+            )}
+
             {/* Alert Info */}
             <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs text-amber-300/80">
               <strong>Alerta automático:</strong> E-mail enviado para devs@z3us.ai, rodrigo@z3us.ai e larissa@z3us.ai quando
-              <code className="mx-1 px-1 py-0.5 bg-amber-500/10 rounded text-amber-400">scraped_at</code>
-              ultrapassar <strong>2 horas</strong> sem atualização.
+              não houver dados <strong>válidos</strong> (com origin e destination preenchidos) há mais de <strong>2 horas</strong>.
             </div>
           </PageCard>
         </div>

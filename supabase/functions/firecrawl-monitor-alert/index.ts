@@ -145,22 +145,21 @@ serve(async (req) => {
     // Get current stats
     const statsRows = await client.query(`
       SELECT 
-        MAX(scraped_at) as lastUpdate,
+        MAX(CASE WHEN origin IS NOT NULL AND origin != '' 
+             AND destination IS NOT NULL AND destination != '' 
+             THEN scraped_at ELSE NULL END) as lastUpdate,
         COUNT(*) as totalRecords,
-        SUM(CASE WHEN scraped_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recentInserts,
-        TIMESTAMPDIFF(MINUTE, MAX(scraped_at), NOW()) as minutesSinceUpdate
+        SUM(CASE WHEN scraped_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recentInserts
       FROM ${database}.t_aereo_ws_firecrawl
     `) as any[];
 
     const row = statsRows[0] || {};
-    let minutesSinceUpdate = row.minutesSinceUpdate != null ? Number(row.minutesSinceUpdate) : null;
-    if (minutesSinceUpdate === null || isNaN(minutesSinceUpdate) || minutesSinceUpdate < 0) {
-      if (row.lastUpdate) {
-        const lastDate = new Date(row.lastUpdate);
-        minutesSinceUpdate = Math.round((Date.now() - lastDate.getTime()) / 60000);
-      } else {
-        minutesSinceUpdate = 9999;
-      }
+    let minutesSinceUpdate: number;
+    if (row.lastUpdate) {
+      const lastDate = new Date(row.lastUpdate);
+      minutesSinceUpdate = Math.round((Date.now() - lastDate.getTime()) / 60000);
+    } else {
+      minutesSinceUpdate = 9999;
     }
     const totalRecords = Number(row.totalRecords || 0);
     const recentInserts = Number(row.recentInserts || 0);
