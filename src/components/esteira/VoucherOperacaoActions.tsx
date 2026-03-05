@@ -266,6 +266,14 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
       // Determinar próxima etapa (Masters sempre vão para FISCAL, ADF segue fluxo normal)
       let proximaEtapa: "FISCAL" | "FINANCEIRO" | "SUPERVISOR";
       
+      console.log("[VoucherOperacaoActions] Routing decision:", {
+        isMaster,
+        urgenciaTipo: voucher.urgenciaTipo,
+        cobrancaEmNomeDe: voucher.cobrancaEmNomeDe,
+        tipoDocumento: voucher.tipoDocumento,
+        etapaAtual: voucher.etapaAtual,
+      });
+
       if (isMaster) {
         proximaEtapa = "FISCAL";
       } else if (voucher.urgenciaTipo === "URGENTE_REAL") {
@@ -275,6 +283,8 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
       } else {
         proximaEtapa = "FINANCEIRO";
       }
+      
+      console.log("[VoucherOperacaoActions] → proximaEtapa:", proximaEtapa);
 
       const updateData: Record<string, any> = {
         etapa_atual: proximaEtapa,
