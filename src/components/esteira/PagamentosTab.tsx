@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { 
+import {
+  ExternalLink,
+  FileDown,
+  Paperclip,
   Calendar, 
   Copy, 
   Check, 
@@ -132,6 +135,8 @@ export const PagamentosTab = () => {
   // Dialog state
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [selectedPagamento, setSelectedPagamento] = useState<PagamentoItem | null>(null);
+  const [anexosDialog, setAnexosDialog] = useState<any[]>([]);
+  const [loadingAnexos, setLoadingAnexos] = useState(false);
   
   const { toast } = useToast();
 
@@ -845,9 +850,21 @@ export const PagamentosTab = () => {
                           size="icon"
                           className="h-8 w-8"
                           title="Visualizar detalhes"
-                          onClick={() => {
+                          onClick={async () => {
                             setSelectedPagamento(pag);
                             setDetailsDialogOpen(true);
+                            setAnexosDialog([]);
+                            setLoadingAnexos(true);
+                            try {
+                              const { data } = await supabase.functions.invoke("mariadb-proxy", {
+                                body: { action: "get_voucher_anexos", voucher_id: pag.id }
+                              });
+                              setAnexosDialog(data?.anexos || []);
+                            } catch (e) {
+                              console.error("Erro ao carregar anexos:", e);
+                            } finally {
+                              setLoadingAnexos(false);
+                            }
                           }}
                         >
                           <Eye className="h-4 w-4" />
@@ -875,21 +892,85 @@ export const PagamentosTab = () => {
 
       {/* Details Dialog */}
       <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Dados de Pagamento - {selectedPagamento?.numero_spo}</DialogTitle>
           </DialogHeader>
           {selectedPagamento && (
-            <DadosPagamentoPanel
-              voucherId={selectedPagamento.id}
-              formaPagamento={selectedPagamento.forma_pagamento}
-              linhaDigitavel={selectedPagamento.linha_digitavel}
-              codigoBarras={selectedPagamento.codigo_barras}
-              cnpjFornecedor={selectedPagamento.cnpj_fornecedor}
-              dadosBancarios={dadosBancariosCache[selectedPagamento.cnpj_fornecedor]}
-              tipoExecucao={selectedPagamento.tipo_execucao_pagamento}
-              onUpdate={loadPagamentos}
-            />
+            <div className="space-y-6">
+              <DadosPagamentoPanel
+                voucherId={selectedPagamento.id}
+                formaPagamento={selectedPagamento.forma_pagamento}
+                linhaDigitavel={selectedPagamento.linha_digitavel}
+                codigoBarras={selectedPagamento.codigo_barras}
+                cnpjFornecedor={selectedPagamento.cnpj_fornecedor}
+                dadosBancarios={dadosBancariosCache[selectedPagamento.cnpj_fornecedor]}
+                tipoExecucao={selectedPagamento.tipo_execucao_pagamento}
+                anexos={anexosDialog.map((a: any) => ({
+                  id: a.id?.toString() || "",
+                  tipo: a.tipo || "",
+                  fileUrl: a.file_url || "",
+                  fileName: a.file_name || ""
+                }))}
+                onUpdate={loadPagamentos}
+              />
+
+              {/* Documentos Anexados */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Paperclip className="h-4 w-4 text-primary" />
+                  <span>Documentos Anexados</span>
+                  {!loadingAnexos && (
+                    <Badge variant="secondary" className="text-[10px]">{anexosDialog.length}</Badge>
+                  )}
+                </div>
+
+                <div className="rounded-lg bg-card border border-border p-4">
+                  {loadingAnexos ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : anexosDialog.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-3">Nenhum documento anexado</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {anexosDialog.map((anexo: any, idx: number) => {
+                        const tipoBadgeClass: Record<string, string> = {
+                          FATURA: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+                          BOLETO: "bg-green-500/20 text-green-400 border-green-500/30",
+                          COMPROVANTE: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+                          XML: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+                        };
+                        return (
+                          <div key={anexo.id || idx} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <span className="text-sm text-foreground truncate">{anexo.file_name || "Sem nome"}</span>
+                              <Badge variant="outline" className={cn("text-[9px] shrink-0", tipoBadgeClass[anexo.tipo] || "")}>
+                                {anexo.tipo || "OUTRO"}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {anexo.file_url && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => window.open(anexo.file_url, "_blank")}
+                                  title="Abrir em nova aba"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>
