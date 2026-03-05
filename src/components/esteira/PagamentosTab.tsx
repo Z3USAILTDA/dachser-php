@@ -859,7 +859,7 @@ export const PagamentosTab = () => {
                               const { data } = await supabase.functions.invoke("mariadb-proxy", {
                                 body: { action: "get_voucher_anexos", voucher_id: pag.id }
                               });
-                              setAnexosDialog(data?.anexos || []);
+                              setAnexosDialog(data?.data || []);
                             } catch (e) {
                               console.error("Erro ao carregar anexos:", e);
                             } finally {
