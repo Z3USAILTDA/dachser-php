@@ -8918,9 +8918,9 @@ serve(async (req) => {
             OR CAST(v.id_rm AS CHAR) = ?
             OR dfv.nd LIKE ?
           )
-          AND v.sync_status = 'ATIVO'
+          AND (v.etapa_atual != 'CANCELADO' OR v.etapa_atual IS NULL)
           ORDER BY v.created_at DESC
-          LIMIT 20
+          LIMIT 50
         `, [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, search, `%${search}%`]);
         console.log(`[search_vouchers_for_master] query took ${Date.now() - t0}ms, results: ${(vouchers as any[])?.length ?? 0}`);
         
