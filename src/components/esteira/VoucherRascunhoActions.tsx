@@ -215,6 +215,13 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
       // Determinar próxima etapa (ADF segue fluxo normal)
       let proximaEtapa: "OPERACAO" | "FISCAL" | "FINANCEIRO" | "SUPERVISOR";
       
+      console.log("[VoucherRascunhoActions] Routing decision:", {
+        urgenciaTipo: voucher.urgenciaTipo,
+        cobrancaEmNomeDe: voucher.cobrancaEmNomeDe,
+        tipoDocumento: voucher.tipoDocumento,
+        etapaAtual: voucher.etapaAtual,
+      });
+
       if (voucher.urgenciaTipo === "URGENTE_REAL") {
         proximaEtapa = "SUPERVISOR";
       } else if (voucher.cobrancaEmNomeDe === "DACHSER") {
@@ -222,6 +229,8 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
       } else {
         proximaEtapa = "FINANCEIRO";
       }
+      
+      console.log("[VoucherRascunhoActions] → proximaEtapa:", proximaEtapa);
 
       const { error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
