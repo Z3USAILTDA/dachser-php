@@ -181,8 +181,8 @@ export const PagamentosTab = () => {
     }
   };
 
-  const loadDadosBancarios = async (cnpj: string) => {
-    if (dadosBancariosCache[cnpj] || loadingDados[cnpj]) return;
+  const loadDadosBancarios = async (cnpj: string, retries = 2): Promise<void> => {
+    if (dadosBancariosCache[cnpj]) return;
 
     setLoadingDados(prev => ({ ...prev, [cnpj]: true }));
     try {
@@ -193,7 +193,14 @@ export const PagamentosTab = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        if (retries > 0) {
+          await new Promise(r => setTimeout(r, 1500));
+          setLoadingDados(prev => ({ ...prev, [cnpj]: false }));
+          return loadDadosBancarios(cnpj, retries - 1);
+        }
+        throw error;
+      }
 
       if (data?.data) {
         setDadosBancariosCache(prev => ({ ...prev, [cnpj]: data.data }));
@@ -210,11 +217,24 @@ export const PagamentosTab = () => {
   }, [filterVencimento, filterStatusPagamento, filterTipoExecucao, filterFormaPagamento, filterStatusIntegracaoRm]);
 
   useEffect(() => {
-    pagamentos.forEach(pag => {
-      if (pag.cnpj_fornecedor && !isBoleto(pag.forma_pagamento as any)) {
-        loadDadosBancarios(pag.cnpj_fornecedor);
+    // Serialize bank data requests to avoid exhausting MariaDB connections
+    const loadAllBankData = async () => {
+      const uniqueCnpjs = [...new Set(
+        pagamentos
+          .filter(pag => pag.cnpj_fornecedor && !isBoleto(pag.forma_pagamento as any))
+          .map(pag => pag.cnpj_fornecedor!)
+      )];
+      
+      for (const cnpj of uniqueCnpjs) {
+        if (!dadosBancariosCache[cnpj]) {
+          await loadDadosBancarios(cnpj);
+        }
       }
-    });
+    };
+    
+    if (pagamentos.length > 0) {
+      loadAllBankData();
+    }
   }, [pagamentos]);
 
   const handleCopy = async (text: string, id: string) => {
