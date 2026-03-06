@@ -151,7 +151,7 @@ function parseFlexibleDate(dateStr: string | null): Date | null {
   };
   const direct = new Date(dateStr);
   if (!isNaN(direct.getTime())) return direct;
-  const match = dateStr.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})(?:\s+(\d{2}:\d{2}))?/);
+  const match = dateStr.match(/^(\d{1,2})[\s-]+([A-Za-z]{3})[\s-]+(\d{4})(?:\s+(\d{2}:\d{2}))?/);
   if (match) {
     const day = match[1].padStart(2, '0');
     const monthStr = match[2].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
