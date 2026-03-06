@@ -2029,11 +2029,11 @@ const Index = () => {
             return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status) || awb.in_transit === true;
           case "alerta":
             // OFLD movido para críticos - DIS ou processos com data_atraso em alerta
-            return status === "DIS" || !!awb.data_atraso;
+            return !!awb.data_atraso;
           case "criticos":
             // OFLD agora é crítico junto com NIL e NIF, AWBs críticos específicos, e discrepância de peças
             const CRITICAL_AWBS = ["045-21167274"];
-            return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.has_dis_event === true;
+            return status === "NIL" || status === "NIF" || status === "OFLD" || status === "DIS" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.has_dis_event === true;
           default:
             return true;
         }
@@ -2348,7 +2348,7 @@ const Index = () => {
               if (excludedStatuses.includes(awb.status || "")) return false;
               const status = getStatusCode(awb.last_event).toUpperCase();
               // OFLD movido para críticos - DIS ou processos com data_atraso em alerta
-              return status === "DIS" || !!awb.data_atraso;
+              return !!awb.data_atraso;
             }).length
           }
           criticos={
@@ -2365,7 +2365,7 @@ const Index = () => {
               const status = getStatusCode(awb.last_event).toUpperCase();
               // OFLD agora é crítico junto com NIL e NIF, AWBs críticos específicos, e discrepância de peças
               const CRITICAL_AWBS = ["045-21167274"];
-              return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.has_dis_event === true;
+              return status === "NIL" || status === "NIF" || status === "OFLD" || status === "DIS" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.has_dis_event === true;
             }).length
           }
           activeFilter={cardFilter}
