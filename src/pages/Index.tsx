@@ -2332,7 +2332,7 @@ const Index = () => {
               ];
               if (excludedStatuses.includes(awb.status || "")) return false;
               const status = getStatusCode(awb.last_event).toUpperCase();
-              return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status);
+              return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status) || awb.in_transit === true;
             }).length
           }
           emAlerta={
