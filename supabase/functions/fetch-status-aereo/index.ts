@@ -484,7 +484,7 @@ serve(async (req) => {
     const baseWsQuery = `
       SELECT w.id, w.awb, w.last_status_code, w.last_status_description,
              w.origin, w.destination, w.last_flight, w.scraped_at,
-             w.sidebar_days_in_transit, w.timeline_json
+             w.timeline_json
       FROM ${database}.t_aereo_ws_firecrawl w
       INNER JOIN (
         SELECT awb, MAX(id) as max_id
@@ -748,7 +748,7 @@ serve(async (req) => {
         status_info: ws.last_status_description || null,
         'última atualização': scrapedAt,
         last_flight: ws.last_flight || null,
-        days_in_transit: ws.sidebar_days_in_transit || null,
+        days_in_transit: null,
         pieces_discrepancy,
         baseline_pieces,
         has_dis_event,
