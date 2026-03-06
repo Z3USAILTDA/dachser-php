@@ -6222,7 +6222,65 @@ serve(async (req) => {
           `, [queryAwb]);
 
           console.log(`CCT: Found ${events?.length || 0} events in t_cct_eventos_historico for AWB ${queryAwb}`);
-          result = { success: true, data: events || [] };
+          
+          // Also try to get events from t_aereo_cct partesEstoque for this AWB
+          let rfbEvents: any[] = [];
+          try {
+            const rfbRows = await client.query(`
+              SELECT identificacao, partesEstoque
+              FROM ${database}.t_aereo_cct
+              WHERE identificacao = ?
+              LIMIT 1
+            `, [queryAwb]);
+            
+            if (rfbRows && rfbRows.length > 0 && rfbRows[0].partesEstoque) {
+              let partes: any[] = [];
+              try {
+                partes = typeof rfbRows[0].partesEstoque === 'string' 
+                  ? JSON.parse(rfbRows[0].partesEstoque) 
+                  : rfbRows[0].partesEstoque;
+              } catch {}
+              
+              if (Array.isArray(partes)) {
+                // Map each partesEstoque entry as an RFB event
+                const existingCodes = new Set((events || []).map((e: any) => e.codigo_evento));
+                for (const pe of partes) {
+                  const situacao = pe?.situacao || pe?.status;
+                  if (!situacao) continue;
+                  
+                  // Map situacao to codigo_evento
+                  const lower = situacao.toLowerCase().trim();
+                  let codigoEvento = situacao.toUpperCase().replace(/\s+/g, '_');
+                  if (lower.includes('manifestada')) codigoEvento = 'MANIFESTADO';
+                  else if (lower.includes('informada')) codigoEvento = 'CHEGADA_INFORMADA';
+                  else if (lower.includes('recepcionada')) codigoEvento = 'RECEPCIONADO';
+                  else if (lower.includes('entregue')) codigoEvento = 'ENTREGUE';
+                  else if (lower.includes('transferência') || lower.includes('transferencia')) codigoEvento = 'AREA_TRANSFERENCIA';
+                  
+                  // Skip if already exists from t_cct_eventos_historico
+                  if (existingCodes.has(codigoEvento)) continue;
+                  
+                  rfbEvents.push({
+                    id: `rfb-${queryAwb}-${codigoEvento}`,
+                    awb: queryAwb,
+                    codigo_evento: codigoEvento,
+                    descricao_evento: `${situacao} (RFB)`,
+                    data_hora_evento: pe?.dataHora || pe?.data || new Date().toISOString(),
+                    fonte: 'RFB',
+                    aeroporto: pe?.aeroporto || null,
+                    nivel_confianca: 'COMPLEMENTAR',
+                    created_at: pe?.dataHora || pe?.data || new Date().toISOString(),
+                  });
+                  existingCodes.add(codigoEvento);
+                }
+              }
+            }
+          } catch (rfbEvtErr) {
+            console.warn('CCT: Error fetching t_aereo_cct events (non-fatal):', rfbEvtErr);
+          }
+          
+          const allEvents = [...(events || []), ...rfbEvents];
+          result = { success: true, data: allEvents };
         } catch (tableErr) {
           console.log('Error fetching from t_cct_eventos_historico:', tableErr);
           result = { success: true, data: [] };
