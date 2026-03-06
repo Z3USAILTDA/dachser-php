@@ -2914,7 +2914,6 @@ const Index = () => {
                                   statusCode === "NIF" ||
                                   statusCode === "OFLD" ||
                                   CRITICAL_AWBS.includes(awb.awb) ||
-                                  awb.pieces_discrepancy === true ||
                                   awb.pieces_discrepancy === true;
                                 const isDelayed = awb.data_atraso !== null;
 
