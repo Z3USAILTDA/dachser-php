@@ -2006,6 +2006,10 @@ const Index = () => {
         // Se não tem data de referência ou ainda dentro de 5 dias → mantém na tela
       }
 
+      if (awb.tracking_failed === true) {
+        return matchesSearch && matchesAirline && matchesAnalyst && matchesService && matchesProcessType;
+      }
+
       return matchesSearch && matchesAirline && matchesAnalyst && matchesService && matchesProcessType && isAllowed;
     });
 
