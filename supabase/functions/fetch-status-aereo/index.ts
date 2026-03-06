@@ -281,6 +281,11 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
 
     // Helper to resolve a single event to an IATA code
     function resolveEvent(ev: any): string | null {
+      // Check codigo_evento first (normalized events from mariadb-proxy)
+      const codigoEvento = (ev.codigo_evento || '').trim().toUpperCase();
+      if (codigoEvento && statusMap[codigoEvento]) return statusMap[codigoEvento];
+      if (codigoEvento && knownIataCodes.includes(codigoEvento)) return codigoEvento;
+
       const rawStatusField = (ev.status || ev.Status || '').trim();
       const rawStatus = rawStatusField.toUpperCase();
       const rawDesc = (ev.Description || ev.description || ev.title || ev.details || '').trim().toUpperCase();
