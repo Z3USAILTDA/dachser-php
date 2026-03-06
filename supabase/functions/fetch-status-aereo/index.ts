@@ -279,59 +279,78 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
 
     if (filtered.length === 0) return null;
 
-    for (const ev of filtered) {
+    // Helper to resolve a single event to an IATA code
+    function resolveEvent(ev: any): string | null {
       const rawStatusField = (ev.status || ev.Status || '').trim();
       const rawStatus = rawStatusField.toUpperCase();
       const rawDesc = (ev.Description || ev.description || ev.title || ev.details || '').trim().toUpperCase();
 
-      // 1. Checar status direto no mapa (exact match)
-      if (rawStatus && statusMap[rawStatus]) {
-        const resolved = statusMap[rawStatus];
-        console.log(`[resolveUNK] ${awbForDebug || '?'}: "${rawStatus}" → ${resolved} (status match${etdCutoff ? ', ETD-filtered' : ''})`);
-        return resolved;
-      }
+      if (rawStatus && statusMap[rawStatus]) return statusMap[rawStatus];
 
-      // 2. Extract IATA code from status field (e.g. "Departed MAD", "Manifested UX057")
       if (rawStatusField) {
         const iataFromStatus = extractIataFromDesc(rawStatusField);
-        if (iataFromStatus) {
-          console.log(`[resolveUNK] ${awbForDebug || '?'}: status "${rawStatusField.substring(0, 30)}" → ${iataFromStatus} (status prefix${etdCutoff ? ', ETD-filtered' : ''})`);
-          return iataFromStatus;
-        }
-        // Also try regex patterns on status field
+        if (iataFromStatus) return iataFromStatus;
         for (const [pattern, iata] of descPatterns) {
-          if (pattern.test(rawStatusField)) {
-            console.log(`[resolveUNK] ${awbForDebug || '?'}: status "${rawStatusField.substring(0, 30)}" → ${iata} (status regex${etdCutoff ? ', ETD-filtered' : ''})`);
-            return iata;
-          }
+          if (pattern.test(rawStatusField)) return iata;
         }
       }
 
-      // 3. Checar descrição no mapa (exact match)
-      if (rawDesc && statusMap[rawDesc]) {
-        const resolved = statusMap[rawDesc];
-        console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${rawDesc.substring(0, 30)}" → ${resolved} (desc map)`);
-        return resolved;
-      }
+      if (rawDesc && statusMap[rawDesc]) return statusMap[rawDesc];
 
-      // 4. Extract IATA code from description prefix (e.g. "DIS - GRU, ...")
       const descRaw = ev.Description || ev.description || ev.title || ev.details || '';
       if (descRaw) {
         const iataFromPrefix = extractIataFromDesc(descRaw);
-        if (iataFromPrefix) {
-          console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${descRaw.substring(0, 30)}" → ${iataFromPrefix} (prefix extract${etdCutoff ? ', ETD-filtered' : ''})`);
-          return iataFromPrefix;
-        }
-
-        // 5. Checar descrição com regex (full-word patterns)
+        if (iataFromPrefix) return iataFromPrefix;
         for (const [pattern, iata] of descPatterns) {
-          if (pattern.test(descRaw)) {
-            console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${descRaw.substring(0, 30)}" → ${iata} (regex${etdCutoff ? ', ETD-filtered' : ''})`);
-            return iata;
-          }
+          if (pattern.test(descRaw)) return iata;
         }
       }
+      return null;
     }
+
+    // Events are sorted DESC (most recent first).
+    // If the most recent resolved event is DIS, check if there's a non-DIS event
+    // with the SAME or NEWER date — meaning the process was updated after the discrepancy.
+    // We look at events that share the same timestamp group (within 1 minute) as the DIS event.
+    let firstResolved: string | null = null;
+    let firstResolvedDate: Date | null = null;
+
+    for (const ev of filtered) {
+      const resolved = resolveEvent(ev);
+      if (resolved) {
+        if (!firstResolved) {
+          firstResolved = resolved;
+          const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
+          firstResolvedDate = ts ? parseFlexibleDate(String(ts)) : null;
+        }
+        // If first was NOT DIS, just return it immediately (most recent non-DIS)
+        if (firstResolved !== 'DIS') {
+          console.log(`[resolveUNK] ${awbForDebug || '?'}: "${firstResolved}" (most recent${etdCutoff ? ', ETD-filtered' : ''})`);
+          return firstResolved;
+        }
+        // If first was DIS and this event is also resolvable and NOT DIS,
+        // check if it has same or later date (concurrent events)
+        if (resolved !== 'DIS' && firstResolvedDate) {
+          const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
+          const evDate = ts ? parseFlexibleDate(String(ts)) : null;
+          if (evDate) {
+            const diffMs = Math.abs(firstResolvedDate.getTime() - evDate.getTime());
+            // If the non-DIS event is within 24 hours of the DIS event, prefer non-DIS
+            if (diffMs <= 24 * 60 * 60 * 1000) {
+              console.log(`[resolveUNK] ${awbForDebug || '?'}: DIS superseded by "${resolved}" (concurrent event within 24h${etdCutoff ? ', ETD-filtered' : ''})`);
+              return resolved;
+            }
+          }
+        }
+        // DIS is genuinely the most recent, return it
+        if (firstResolved === 'DIS' && resolved !== 'DIS') break;
+      }
+    }
+
+    if (firstResolved) {
+      console.log(`[resolveUNK] ${awbForDebug || '?'}: "${firstResolved}" (final${etdCutoff ? ', ETD-filtered' : ''})`);
+    }
+    return firstResolved;
   } catch (_e) {
     console.log(`[resolveUNK] ${awbForDebug || '?'}: parse error: ${_e}`);
   }
