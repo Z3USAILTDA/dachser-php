@@ -11832,9 +11832,15 @@ serve(async (req) => {
               WHERE TRIM(lel.hawb) COLLATE utf8mb4_unicode_ci = TRIM(m.hawb) COLLATE utf8mb4_unicode_ci
               AND lel.success = 1
               AND lel.created_at >= NOW() - INTERVAL 4 HOUR
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM ${database}.t_leadcomex_enrichment_logs lel2
+              WHERE TRIM(lel2.hawb) COLLATE utf8mb4_unicode_ci = TRIM(m.hawb) COLLATE utf8mb4_unicode_ci
+              AND lel2.success = 0
+              AND lel2.created_at >= NOW() - INTERVAL 1 HOUR
             )`;
-            // Prioritize: never-tried first, then fewer recent failures first
-            orderBy = `ORDER BY COALESCE(fail_count.recent_failures, 0) ASC, m.data_insert DESC`;
+            // Prioritize: never-tried first, then by oldest insert
+            orderBy = `ORDER BY m.data_insert ASC`;
           } else if (!processAll) {
             extraWhere = 'AND (cct.peso_declarado IS NULL OR cct.cnpj_consignatario IS NULL)';
           }
