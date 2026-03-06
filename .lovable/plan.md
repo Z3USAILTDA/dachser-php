@@ -1,28 +1,24 @@
 
 
-# Fix: Documentos não aparecem no dialog de visualização
+# Fix: Link da Aeromexico (139) na página de Rastreio Aéreo
 
-## Causa raiz
+## Problema
+O link de rastreio da Aeromexico (código 139) na página principal de tracking (`src/pages/Index.tsx`, linha 128) está usando a URL antiga: `https://www.aeromexico.com/es-mx/carga/rastrear?awb=${iata}${awb}`.
 
-O edge function `get_voucher_anexos` retorna a estrutura:
-```json
-{ "success": true, "data": [ ...anexos... ] }
-```
-
-Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
+O arquivo `TrackingUtils.ts` já foi corrigido anteriormente, mas a página `/air/tracking` usa sua própria função `getTrackingUrl` em `Index.tsx`.
 
 ## Correção
+Alterar a linha 128 de `src/pages/Index.tsx`:
 
-### `src/components/esteira/PagamentosTab.tsx` — linha 862
-
-Trocar:
+**De:**
 ```typescript
-setAnexosDialog(data?.anexos || []);
-```
-Por:
-```typescript
-setAnexosDialog(data?.data || []);
+"139": (iata, awb) => `https://www.aeromexico.com/es-mx/carga/rastrear?awb=${iata}${awb}`,
 ```
 
-Uma única linha corrige o problema.
+**Para:**
+```typescript
+"139": (iata, awb) => `https://amcargo.aeromexico.com/seguimiento/resultado/${iata}-${awb}`,
+```
+
+Isso gera URLs no formato `https://amcargo.aeromexico.com/seguimiento/resultado/139-46748634`.
 
