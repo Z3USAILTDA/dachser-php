@@ -1,28 +1,34 @@
 
 
-# Fix: Documentos não aparecem no dialog de visualização
+# Corrigir: usar `in_transit` nos cards/filtros, não na coluna Situação
 
-## Causa raiz
+## O que o usuário quer
 
-O edge function `get_voucher_anexos` retorna a estrutura:
-```json
-{ "success": true, "data": [ ...anexos... ] }
-```
+O flag `in_transit` deve afetar a **contagem dos cards** (Em Trânsito) e o **filtro do card**, não a coluna "Situação". A Situação deve voltar ao comportamento original (Crítico/Atraso/No Prazo).
 
-Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
+## Correções em `src/pages/Index.tsx`
 
-## Correção
+### 1. Remover o bloco "Em Trânsito" da coluna Situação (linhas 2899-2908)
+Apagar o bloco que força "Em Trânsito" na coluna Situação baseado em `in_transit`. A Situação volta a mostrar apenas Crítico/Atraso/No Prazo como antes.
 
-### `src/components/esteira/PagamentosTab.tsx` — linha 862
-
-Trocar:
+### 2. Atualizar contagem do card "Em Trânsito" (linhas 2323-2336)
+Adicionar `awb.in_transit` como condição alternativa:
 ```typescript
-setAnexosDialog(data?.anexos || []);
-```
-Por:
-```typescript
-setAnexosDialog(data?.data || []);
+emTransito={
+  statusAereoData.filter((awb) => {
+    if (excludedStatuses.includes(awb.status || "")) return false;
+    const status = getStatusCode(awb.last_event).toUpperCase();
+    return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status) || awb.in_transit === true;
+  }).length
+}
 ```
 
-Uma única linha corrige o problema.
+### 3. Atualizar filtro do card "transito" (linhas 2028-2029)
+Mesma lógica no filtro da tabela:
+```typescript
+case "transito":
+  return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status) || awb.in_transit === true;
+```
+
+Isso garante que AWBs como 139-47195142 (BKD atual, mas já teve DEP) apareçam no card "Em Trânsito" e sejam filtrados corretamente, sem alterar a coluna Situação.
 
