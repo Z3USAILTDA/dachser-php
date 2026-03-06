@@ -434,11 +434,20 @@ function detectInTransit(timelineJson: string | null, etdStr?: string | null): b
       const rawStatus = (ev.status || ev.Status || '').trim().toUpperCase();
       if (TRANSIT_CODES.has(rawStatus)) return true;
 
-      // Also check description for transit keywords
-      const desc = (ev.Description || ev.description || ev.title || '').trim().toUpperCase();
+      // Check codigo_evento field (normalized timeline events from mariadb-proxy)
+      const codigo = (ev.codigo_evento || '').trim().toUpperCase();
+      if (TRANSIT_CODES.has(codigo)) return true;
+
+      // Also check description for transit keywords (strict patterns only)
+      const desc = (ev.Description || ev.description || ev.title || '').trim();
       if (desc) {
-        if (desc.startsWith('DEP') || desc.startsWith('MAN') || desc.startsWith('RCF') || desc.startsWith('ARR')) return true;
-        if (/\bdeparted?\b/i.test(desc) || /\bmanifested?\b/i.test(desc) || /\breceived?\s+from\s+flight\b/i.test(desc) || /\barrived?\b/i.test(desc)) return true;
+        // Match "DEP - ", "MAN - ", "RCF - ", "ARR - " (IATA code followed by separator)
+        if (/^(DEP|MAN|RCF|ARR)\s*[-–]\s*/i.test(desc)) return true;
+        // Match full words in context of actual transit descriptions
+        if (/\bdeparted?\s+(from|at)\b/i.test(desc)) return true;
+        if (/\bmanifested\s+(on|at|for)\b/i.test(desc)) return true;
+        if (/\breceived\s+from\s+flight\b/i.test(desc)) return true;
+        if (/\barrived?\s+(at|in)\b/i.test(desc)) return true;
       }
     }
   } catch (_e) {
