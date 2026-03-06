@@ -1,28 +1,29 @@
 
 
-# Fix: Documentos não aparecem no dialog de visualização
+# Fix: DIS sem discrepância de peso/volume não deve ser Crítico nem vermelho
 
-## Causa raiz
+## Problema
+O flag `has_dis_event` (que indica qualquer evento DIS na timeline) está sendo tratado como crítico em 5 locais. Apenas `pieces_discrepancy` (discrepância de peças/peso/volume) deve ser crítico e vermelho. DIS genérico deve ser âmbar e ficar no card "Em Alerta".
 
-O edge function `get_voucher_anexos` retorna a estrutura:
-```json
-{ "success": true, "data": [ ...anexos... ] }
-```
+## Correções em `src/pages/Index.tsx` — 5 locais
 
-Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
+### 1. Filtro card "criticos" (linha 2036)
+Remover `|| awb.has_dis_event === true`
 
-## Correção
+### 2. Card count "Críticos" (linha 2368)
+Remover `|| awb.has_dis_event === true`
 
-### `src/components/esteira/PagamentosTab.tsx` — linha 862
+### 3. Row highlight vermelho piscante (linha 2624)
+Remover `|| awb.has_dis_event === true`
 
-Trocar:
+### 4. Badge Situação — DIS âmbar (linha 2901)
+Mudar condição de `!awb.pieces_discrepancy && !awb.has_dis_event` para apenas `!awb.pieces_discrepancy`:
 ```typescript
-setAnexosDialog(data?.anexos || []);
-```
-Por:
-```typescript
-setAnexosDialog(data?.data || []);
+if (statusCode === "DIS" && !awb.pieces_discrepancy) {
 ```
 
-Uma única linha corrige o problema.
+### 5. Check isCritical na coluna Situação (linha 2918)
+Remover `awb.has_dis_event === true`
+
+**Resultado:** DIS genérico → âmbar, card "Em Alerta". DIS com `pieces_discrepancy` → vermelho, card "Críticos".
 
