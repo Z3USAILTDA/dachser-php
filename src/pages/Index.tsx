@@ -2857,18 +2857,6 @@ const Index = () => {
                                         </span>
                                       );
                                     })()}
-                                    {awb.awb?.startsWith("577") && (
-                                      <TooltipProvider>
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <Info className="h-4 w-4 text-blue-400 cursor-help" />
-                                          </TooltipTrigger>
-                                          <TooltipContent side="top" className="max-w-xs">
-                                            <p>Rastreio feito por API direta com a companhia.</p>
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </TooltipProvider>
-                                    )}
                                   </>
                                 )}
                               </div>
