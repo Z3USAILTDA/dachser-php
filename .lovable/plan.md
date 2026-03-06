@@ -1,28 +1,30 @@
 
 
-# Fix: Documentos não aparecem no dialog de visualização
+# Fix: ETD filter too strict -- events before ETD date are all removed
 
-## Causa raiz
+## Problem
 
-O edge function `get_voucher_anexos` retorna a estrutura:
-```json
-{ "success": true, "data": [ ...anexos... ] }
-```
+Logs show: `3 valid events, 0 after ETD filter (cutoff=2026-03-06T00:00:00.000Z)` for AWB 724-86856405.
 
-Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
+The ETD is today (2026-03-06). Since `etdDate <= now`, the code uses ETD directly as cutoff. But pre-departure events (BKD, RCS, etc.) naturally occur *before* the ETD, so `eventDate >= etdCutoff` filters them all out.
 
-## Correção
+## Root cause
 
-### `src/components/esteira/PagamentosTab.tsx` — linha 862
+Line 6270: when ETD is in the past, `etdCutoff = etdDate` with no buffer. Events like BKD happen days/weeks before ETD.
 
-Trocar:
+## Fix
+
+### `supabase/functions/mariadb-proxy/index.ts` -- line 6270
+
+When ETD is in the past, subtract 30 days as buffer to keep pre-departure events:
+
 ```typescript
-setAnexosDialog(data?.anexos || []);
-```
-Por:
-```typescript
-setAnexosDialog(data?.data || []);
+// Before:
+etdCutoff = etdDate;
+
+// After:
+etdCutoff = new Date(etdDate.getTime() - 30 * 24 * 60 * 60 * 1000);
 ```
 
-Uma única linha corrige o problema.
+This preserves all events from the current shipment cycle (BKD, RCS, DEP, ARR, etc.) while still filtering out stale events from previous uses of the same AWB number.
 
