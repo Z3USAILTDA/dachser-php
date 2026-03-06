@@ -386,6 +386,50 @@ function extractLastEventDate(timelineJson: string | null, etdStr?: string | nul
   return null;
 }
 
+// Detect if AWB has had any transit events (DEP, MAN, RCF, ARR) in the current cycle
+function detectInTransit(timelineJson: string | null, etdStr?: string | null): boolean {
+  if (!timelineJson) return false;
+  const TRANSIT_CODES = new Set(['DEP', 'MAN', 'RCF', 'ARR', 'DEPARTED', 'MANIFESTED', 'RECEIVED FROM FLIGHT', 'ARRIVED']);
+  try {
+    const events = JSON.parse(timelineJson);
+    if (!Array.isArray(events) || events.length === 0) return false;
+
+    // Apply ETD cutoff (same logic as resolveUnkFromTimeline)
+    let etdCutoff: Date | null = null;
+    if (etdStr) {
+      const etdDate = new Date(etdStr);
+      if (!isNaN(etdDate.getTime())) {
+        const now = new Date();
+        etdCutoff = etdDate < now ? etdDate : null;
+      }
+    }
+
+    for (const ev of events) {
+      // Apply ETD cutoff filter
+      if (etdCutoff) {
+        const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
+        if (ts) {
+          const eventDate = parseFlexibleDate(String(ts));
+          if (eventDate && eventDate < etdCutoff) continue;
+        }
+      }
+
+      const rawStatus = (ev.status || ev.Status || '').trim().toUpperCase();
+      if (TRANSIT_CODES.has(rawStatus)) return true;
+
+      // Also check description for transit keywords
+      const desc = (ev.Description || ev.description || ev.title || '').trim().toUpperCase();
+      if (desc) {
+        if (desc.startsWith('DEP') || desc.startsWith('MAN') || desc.startsWith('RCF') || desc.startsWith('ARR')) return true;
+        if (/\bdeparted?\b/i.test(desc) || /\bmanifested?\b/i.test(desc) || /\breceived?\s+from\s+flight\b/i.test(desc) || /\barrived?\b/i.test(desc)) return true;
+      }
+    }
+  } catch (_e) {
+    // ignore
+  }
+  return false;
+}
+
 // Guard: impede regressão de status mais específico para genérico
 // Ex.: "ARR - DESTINO" não deve ser sobrescrito por "ARR"
 function isMoreSpecific(current: string, candidate: string): boolean {

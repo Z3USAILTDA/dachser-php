@@ -399,6 +399,7 @@ interface AWBData {
   tracking_failed?: boolean; // Timeline vazia em todas as fontes (falha de rastreio)
   master_changed?: boolean; // Master (MAWB) foi atualizado via troca de master
   last_event_date?: string | null; // Data/hora do último evento real da timeline
+  in_transit?: boolean; // AWB já teve DEP/MAN/RCF/ARR na timeline do ciclo atual
 }
 
 const STORAGE_KEY = "tracked-awbs";
