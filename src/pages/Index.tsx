@@ -2026,7 +2026,7 @@ const Index = () => {
         const status = getStatusCode(awb.last_event).toUpperCase();
         switch (cardFilter) {
           case "transito":
-            return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status);
+            return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status) || awb.in_transit === true;
           case "alerta":
             // OFLD movido para críticos - DIS ou processos com data_atraso em alerta
             return status === "DIS" || !!awb.data_atraso;
@@ -2332,7 +2332,7 @@ const Index = () => {
               ];
               if (excludedStatuses.includes(awb.status || "")) return false;
               const status = getStatusCode(awb.last_event).toUpperCase();
-              return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status);
+              return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status) || awb.in_transit === true;
             }).length
           }
           emAlerta={
@@ -2896,16 +2896,6 @@ const Index = () => {
                                   );
                                 }
 
-                                // AWBs que já tiveram DEP/MAN/RCF/ARR na timeline → "Em Trânsito"
-                                const finalStatuses = ["ARR - DESTINO", "DLV", "NFD", "AWD", "POD"];
-                                if (awb.in_transit && !finalStatuses.includes(statusCode)) {
-                                  return (
-                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/40">
-                                      <Plane className="h-3 w-3" />
-                                      Em Trânsito
-                                    </span>
-                                  );
-                                }
 
                                 // Verificar se é crítico (NIL, NIF, OFLD, AWBs críticos específicos, ou discrepância de peças)
                                 const CRITICAL_AWBS = ["045-21167274"];
