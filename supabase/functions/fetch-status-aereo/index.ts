@@ -891,15 +891,21 @@ serve(async (req) => {
         baseline_pieces,
         has_dis_event,
         master_changed: swapChangedSet.has(awb) || wasSwapped,
-        in_transit: detectInTransit(timelineStr, etdForTimeline) || 
-          (apiRow?.historico_status 
-            ? detectInTransit(
-                typeof apiRow.historico_status === 'string' 
-                  ? apiRow.historico_status 
-                  : JSON.stringify(apiRow.historico_status), 
-                etdForTimeline
-              ) 
-            : false),
+        in_transit: (() => {
+          const PRE_TRANSIT_STATUSES = new Set(['BKD', 'RCS', 'NEW', 'BOO', 'BOOKED', 'UNK', 'NIL', 'NIF', 'NOT_FOUND']);
+          const resolvedUpper = (finalStatus || '').toUpperCase();
+          // If the resolved status is a pre-transit code, never mark as in_transit
+          if (PRE_TRANSIT_STATUSES.has(resolvedUpper)) return false;
+          return detectInTransit(timelineStr, etdForTimeline) || 
+            (apiRow?.historico_status 
+              ? detectInTransit(
+                  typeof apiRow.historico_status === 'string' 
+                    ? apiRow.historico_status 
+                    : JSON.stringify(apiRow.historico_status), 
+                  etdForTimeline
+                ) 
+              : false);
+        })(),
         last_event_date: extractLastEventDate(timelineStr, etdForTimeline) || 
           (apiRow?.historico_status 
             ? extractLastEventDate(
