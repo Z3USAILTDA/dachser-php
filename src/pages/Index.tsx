@@ -398,6 +398,7 @@ interface AWBData {
   etd?: string | null; // ETD do processo em t_master_dados
   tracking_failed?: boolean; // Timeline vazia em todas as fontes (falha de rastreio)
   master_changed?: boolean; // Master (MAWB) foi atualizado via troca de master
+  last_event_date?: string | null; // Data/hora do último evento real da timeline
 }
 
 const STORAGE_KEY = "tracked-awbs";
@@ -569,6 +570,7 @@ const Index = () => {
           has_dis_event: item.has_dis_event || false,
           etd: item.etd || null,
           master_changed: item.master_changed || false,
+          last_event_date: item.last_event_date || null,
         }));
 
         const deduplicatedData = convertedData.reduce((acc: AWBData[], current: AWBData) => {
@@ -2862,7 +2864,7 @@ const Index = () => {
                               </div>
                             </td>
                             <td className="px-3 py-3 text-[#aaaaaa] text-sm whitespace-nowrap">
-                              {formatDateTimeBR(awb.last_check || awb.created_at)}
+                              {formatDateTimeBR(awb.last_event_date || awb.last_check || awb.created_at)}
                             </td>
                             <td className="px-3 py-3 text-center">
                               {(() => {

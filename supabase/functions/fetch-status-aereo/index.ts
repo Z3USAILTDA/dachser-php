@@ -328,6 +328,63 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
 }
 
 
+// Extract the date of the most recent valid event from the timeline
+function extractLastEventDate(timelineJson: string | null, etdStr?: string | null): string | null {
+  if (!timelineJson) return null;
+  try {
+    const events = JSON.parse(timelineJson);
+    if (!Array.isArray(events) || events.length === 0) return null;
+
+    // Apply ETD cutoff (same logic as resolveUnkFromTimeline)
+    let etdCutoff: Date | null = null;
+    if (etdStr) {
+      const etdDate = new Date(etdStr);
+      if (!isNaN(etdDate.getTime())) {
+        const now = new Date();
+        etdCutoff = etdDate < now ? etdDate : null;
+      }
+    }
+
+    // Sort DESC by date
+    const sorted = [...events].sort((a, b) => {
+      const dateA = a.date || a.Date || a.timestamp || a.Timestamp || a.time || a.datetime || a.dataEvento || '';
+      const dateB = b.date || b.Date || b.timestamp || b.Timestamp || b.time || b.datetime || b.dataEvento || '';
+      if (!dateA && !dateB) return 0;
+      if (!dateA) return 1;
+      if (!dateB) return -1;
+      return String(dateB).localeCompare(String(dateA));
+    });
+
+    // Filter by ETD cutoff
+    const filtered = etdCutoff
+      ? sorted.filter(ev => {
+          const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
+          if (!ts) return true;
+          const eventDate = parseFlexibleDate(String(ts));
+          if (!eventDate) return true;
+          return eventDate >= etdCutoff!;
+        })
+      : sorted;
+
+    // Filter out future events
+    const now = new Date();
+    for (const ev of filtered) {
+      const ts = ev.date || ev.Date || ev.timestamp || ev.Timestamp || ev.time || ev.datetime || ev.dataEvento || null;
+      if (!ts) continue;
+      const eventDate = parseFlexibleDate(String(ts));
+      if (!eventDate || isNaN(eventDate.getTime())) continue;
+      if (eventDate > now) continue; // skip future dates (predictions)
+      // Skip API events with no valid status (likely predictions)
+      const src = (ev.source || ev.fonte || '').toUpperCase();
+      if (src === 'API' && !ts) continue;
+      return eventDate.toISOString();
+    }
+  } catch (_e) {
+    // ignore parse errors
+  }
+  return null;
+}
+
 // Guard: impede regressão de status mais específico para genérico
 // Ex.: "ARR - DESTINO" não deve ser sobrescrito por "ARR"
 function isMoreSpecific(current: string, candidate: string): boolean {
@@ -763,6 +820,7 @@ serve(async (req) => {
         baseline_pieces,
         has_dis_event,
         master_changed: swapChangedSet.has(awb) || wasSwapped,
+        last_event_date: extractLastEventDate(timelineStr, etdForTimeline),
       };
 
       // If this AWB was enriched via t_aereo_api fallback, use that data directly
