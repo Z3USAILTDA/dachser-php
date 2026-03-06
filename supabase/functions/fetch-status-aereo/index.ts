@@ -748,7 +748,7 @@ serve(async (req) => {
         status_info: ws.last_status_description || null,
         'última atualização': scrapedAt,
         last_flight: ws.last_flight || null,
-        days_in_transit: ws.sidebar_days_in_transit || null,
+        days_in_transit: null,
         pieces_discrepancy,
         baseline_pieces,
         has_dis_event,
