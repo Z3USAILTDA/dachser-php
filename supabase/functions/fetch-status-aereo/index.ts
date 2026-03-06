@@ -865,6 +865,15 @@ serve(async (req) => {
         baseline_pieces,
         has_dis_event,
         master_changed: swapChangedSet.has(awb) || wasSwapped,
+        in_transit: detectInTransit(timelineStr, etdForTimeline) || 
+          (apiRow?.historico_status 
+            ? detectInTransit(
+                typeof apiRow.historico_status === 'string' 
+                  ? apiRow.historico_status 
+                  : JSON.stringify(apiRow.historico_status), 
+                etdForTimeline
+              ) 
+            : false),
         last_event_date: extractLastEventDate(timelineStr, etdForTimeline) || 
           (apiRow?.historico_status 
             ? extractLastEventDate(
