@@ -2897,6 +2897,16 @@ const Index = () => {
                                 }
 
 
+                                // DIS puro (sem discrepância de peças) — badge âmbar
+                                if (statusCode === "DIS" && !awb.pieces_discrepancy && !awb.has_dis_event) {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                                      DIS - Discrepância
+                                    </span>
+                                  );
+                                }
+
                                 // Verificar se é crítico (NIL, NIF, OFLD, AWBs críticos específicos, ou discrepância de peças)
                                 const CRITICAL_AWBS = ["045-21167274"];
                                 const isCritical =
@@ -2906,7 +2916,7 @@ const Index = () => {
                                   CRITICAL_AWBS.includes(awb.awb) ||
                                   awb.pieces_discrepancy === true ||
                                   awb.has_dis_event === true;
-                                const isDelayed = awb.data_atraso !== null || statusCode === "DIS";
+                                const isDelayed = awb.data_atraso !== null;
 
                                 if (isCritical) {
                                   return (
