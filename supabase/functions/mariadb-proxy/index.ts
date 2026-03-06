@@ -6189,6 +6189,30 @@ serve(async (req) => {
                 return code;
               }
             }
+            // Map English/Portuguese descriptions to IATA codes before fallback
+            const descPatterns: Array<[RegExp, string]> = [
+              [/\bbooked\b/i, 'BKD'],
+              [/\bdelivered\b/i, 'DLV'],
+              [/\barrived?\b/i, 'ARR'],
+              [/\bdeparted?\b/i, 'DEP'],
+              [/\breceived?\s+from\s+flight\b/i, 'RCF'],
+              [/\breceived?\s+from\s+shipper\b/i, 'RCS'],
+              [/\bmanifested?\b/i, 'MAN'],
+              [/\bnotified?\s+(for\s+)?delivery\b/i, 'NFD'],
+              [/\bawaitin[g]?\s+delivery\b/i, 'AWD'],
+              [/\bavailable\s+for\s+delivery\b/i, 'AWD'],
+              [/\bdocuments?\s+available\b/i, 'AWD'],
+              [/\bdiscrepancy\b/i, 'DIS'],
+              [/\boffloaded?\b/i, 'OFLD'],
+              [/\bfreight\s+on\s+hand\b/i, 'FOH'],
+              [/\btransferred?\b/i, 'TFD'],
+              [/\bproof\s+of\s+delivery\b/i, 'POD'],
+              [/\bnot\s+found\b/i, 'NIF'],
+              [/\bcancell?ed\b/i, 'CAN'],
+            ];
+            for (const [pattern, code] of descPatterns) {
+              if (pattern.test(description)) return code;
+            }
             return upper.substring(0, 3) || 'UNK';
           };
 
