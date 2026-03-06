@@ -1,28 +1,30 @@
 
 
-# Fix: Documentos não aparecem no dialog de visualização
+# Filtrar eventos com data futura da timeline
 
-## Causa raiz
+## Problema
 
-O edge function `get_voucher_anexos` retorna a estrutura:
-```json
-{ "success": true, "data": [ ...anexos... ] }
-```
-
-Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
+A timeline mostra eventos com `data_hora_evento` no futuro (ex: ARR em 2026-03-08 quando hoje é 2026-03-06). Esses são previsões, não eventos reais. Para o AWB 724-13475593, apenas o FOH de 2026-03-05 deveria aparecer.
 
 ## Correção
 
-### `src/components/esteira/PagamentosTab.tsx` — linha 862
+### `supabase/functions/mariadb-proxy/index.ts` -- linhas 6333-6340
 
-Trocar:
+Adicionar filtro `eventDate <= now` junto ao filtro ETD existente:
+
 ```typescript
-setAnexosDialog(data?.anexos || []);
-```
-Por:
-```typescript
-setAnexosDialog(data?.data || []);
+const now = new Date();
+const filteredEvents = validEvents.filter((e: any) => {
+  if (!e.data_hora_evento) return true;
+  const eventDate = parseFlexibleDate(e.data_hora_evento);
+  if (!eventDate) return true;
+  // Excluir eventos com data futura (previsões)
+  if (eventDate > now) return false;
+  // Filtro ETD existente
+  if (etdCutoff && eventDate < etdCutoff) return false;
+  return true;
+});
 ```
 
-Uma única linha corrige o problema.
+Uma mudança, um arquivo. Eventos futuros serão filtrados antes de chegar ao frontend.
 
