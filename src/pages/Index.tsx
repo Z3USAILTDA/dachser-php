@@ -2898,7 +2898,7 @@ const Index = () => {
 
 
                                 // DIS puro (sem discrepância de peças) — badge âmbar
-                                if (statusCode === "DIS" && !awb.pieces_discrepancy && !awb.has_dis_event) {
+                                if (statusCode === "DIS" && !awb.pieces_discrepancy) {
                                   return (
                                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">
                                       <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
