@@ -3095,6 +3095,18 @@ serve(async (req) => {
           LIMIT 500
         `);
         
+        // Canonical CCT status ordering for merge logic
+        const CCT_STATUS_ORDER: Record<string, number> = {
+          'INFORMADA': 1,
+          'MANIFESTADA': 2,
+          'EM_AREA_TRANSFERENCIA': 3,
+          'RECEPCIONADA': 4,
+          'EM_TROCA_RECINTOS': 5,
+          'EM_TRANSITO_TERRESTRE': 6,
+          'ENTREGUE': 7,
+          'BLOQUEIO': 99,
+        };
+        
         // Merge t_aereo_ws_firecrawl status into shipments (JS-side merge for performance)
         const statusMapCCT: Record<string, string> = {
           'ARR': 'INFORMADA', 'ATA': 'INFORMADA',
@@ -3123,6 +3135,157 @@ serve(async (req) => {
         });
         
         console.log(`CCT Step 2: Found ${shipments.length} shipments`);
+        
+        // ==================== STEP 2.5: Enrich with t_aereo_cct (RFB data) ====================
+        // Query t_aereo_cct for MAWB data: RUC, weights, special handling, freight, parties, stock status
+        let cctRfbMap = new Map<string, any>();
+        if (mawbList.length > 0) {
+          try {
+            // Convert AWB format from "XXX-XXXXXXXX" to match t_aereo_cct.identificacao
+            const cctIdentFilter = mawbList.map((m: string) => `'${m.replace(/'/g, "''")}'`).join(',');
+            
+            console.log('CCT Step 2.5: Fetching RFB data from t_aereo_cct...');
+            const cctRfbData = await client.query(`
+              SELECT 
+                identificacao,
+                ruc,
+                codigoAeroportoOrigemConhecimento,
+                codigoAeroportoDestinoConhecimento,
+                recintoAduaneiroDestino,
+                quantidadeVolumesConhecimento,
+                pesoBrutoConhecimento,
+                indicadorPartesMadeira,
+                manuseiosEspeciais,
+                partesEstoque,
+                partes,
+                hawbAssociados,
+                frete,
+                viagensAssociadas,
+                dataEmissao,
+                situacao
+              FROM ${database}.t_aereo_cct
+              WHERE identificacao IN (${cctIdentFilter})
+            `);
+            
+            // Map situacao (stock status) from t_aereo_cct to canonical CCT status
+            const mapRfbSituacaoToCCT = (situacao: string | null): string | null => {
+              if (!situacao) return null;
+              const lower = situacao.toLowerCase().trim();
+              if (lower.includes('manifestada')) return 'MANIFESTADA';
+              if (lower.includes('informada') || lower.includes('chegada informada')) return 'INFORMADA';
+              if (lower.includes('recepcionada')) return 'RECEPCIONADA';
+              if (lower.includes('transferência') || lower.includes('transferencia')) return 'EM_AREA_TRANSFERENCIA';
+              if (lower.includes('trânsito') || lower.includes('transito')) return 'EM_TRANSITO_TERRESTRE';
+              if (lower.includes('entregue')) return 'ENTREGUE';
+              return null;
+            };
+            
+            for (const rfb of (cctRfbData || [])) {
+              const ident = (rfb.identificacao || '').trim();
+              
+              // Parse JSON fields safely
+              let manuseios: string[] = [];
+              try {
+                const raw = typeof rfb.manuseiosEspeciais === 'string' ? JSON.parse(rfb.manuseiosEspeciais) : rfb.manuseiosEspeciais;
+                if (Array.isArray(raw)) {
+                  manuseios = raw.map((m: any) => typeof m === 'string' ? m : m?.codigo || m?.code || '').filter(Boolean);
+                }
+              } catch {}
+              
+              let partesEstoque: any[] = [];
+              try {
+                const raw = typeof rfb.partesEstoque === 'string' ? JSON.parse(rfb.partesEstoque) : rfb.partesEstoque;
+                if (Array.isArray(raw)) partesEstoque = raw;
+              } catch {}
+              
+              let partes: any[] = [];
+              try {
+                const raw = typeof rfb.partes === 'string' ? JSON.parse(rfb.partes) : rfb.partes;
+                if (Array.isArray(raw)) partes = raw;
+              } catch {}
+              
+              let hawbAssociados: any[] = [];
+              try {
+                const raw = typeof rfb.hawbAssociados === 'string' ? JSON.parse(rfb.hawbAssociados) : rfb.hawbAssociados;
+                if (Array.isArray(raw)) hawbAssociados = raw;
+              } catch {}
+              
+              let frete: any = null;
+              try {
+                frete = typeof rfb.frete === 'string' ? JSON.parse(rfb.frete) : rfb.frete;
+              } catch {}
+              
+              let viagensAssociadas: any[] = [];
+              try {
+                const raw = typeof rfb.viagensAssociadas === 'string' ? JSON.parse(rfb.viagensAssociadas) : rfb.viagensAssociadas;
+                if (Array.isArray(raw)) viagensAssociadas = raw;
+              } catch {}
+              
+              // Extract consignatario from partes
+              const consignatario = partes.find((p: any) => {
+                const tipo = (p?.tipo || p?.funcao || '').toLowerCase();
+                return tipo.includes('consignat') || tipo.includes('destinat');
+              });
+              
+              // Extract most advanced situacao from partesEstoque
+              let rfbSituacao: string | null = null;
+              let rfbSituacaoMapped: string | null = null;
+              for (const pe of partesEstoque) {
+                const mapped = mapRfbSituacaoToCCT(pe?.situacao || pe?.status);
+                if (mapped && (!rfbSituacaoMapped || (CCT_STATUS_ORDER[mapped] || 0) > (CCT_STATUS_ORDER[rfbSituacaoMapped] || 0))) {
+                  rfbSituacaoMapped = mapped;
+                  rfbSituacao = pe?.situacao || pe?.status;
+                }
+              }
+              
+              // Extract numero_voo from viagensAssociadas
+              let numeroVoo: string | null = null;
+              if (viagensAssociadas.length > 0) {
+                const viagem = viagensAssociadas[0];
+                numeroVoo = viagem?.numero || viagem?.identificacao || null;
+              }
+              
+              // Parse frete info
+              let infoFrete: { moeda: string; formaPgto: string; total: number } | null = null;
+              if (frete) {
+                const moeda = frete.moedaOrigem || frete.moeda || '';
+                const formaPgto = frete.formaPgto || frete.forma_pagamento || '';
+                let total = 0;
+                if (Array.isArray(frete.totaisMoedaOrigem)) {
+                  const totalEntry = frete.totaisMoedaOrigem.find((t: any) => (t?.descricao || '').toLowerCase().includes('total'));
+                  total = totalEntry?.valor || 0;
+                } else if (frete.total) {
+                  total = frete.total;
+                }
+                if (moeda || total > 0) {
+                  infoFrete = { moeda, formaPgto, total };
+                }
+              }
+              
+              cctRfbMap.set(ident, {
+                ruc: rfb.ruc || null,
+                aeroporto_origem_rfb: rfb.codigoAeroportoOrigemConhecimento || null,
+                aeroporto_destino_rfb: rfb.codigoAeroportoDestinoConhecimento || null,
+                recinto_aduaneiro: rfb.recintoAduaneiroDestino || null,
+                volume_declarado_rfb: rfb.quantidadeVolumesConhecimento ? Number(rfb.quantidadeVolumesConhecimento) : null,
+                peso_declarado_rfb: rfb.pesoBrutoConhecimento ? Number(rfb.pesoBrutoConhecimento) : null,
+                indicador_madeira: rfb.indicadorPartesMadeira === 'S',
+                manuseios_especiais: manuseios,
+                rfb_situacao: rfbSituacao,
+                rfb_status_cct: rfbSituacaoMapped,
+                consignatario_cnpj: consignatario?.cnpj || consignatario?.documento || null,
+                consignatario_nome: consignatario?.nome || consignatario?.razaoSocial || null,
+                numero_voo: numeroVoo,
+                data_emissao: rfb.dataEmissao || null,
+                info_frete: infoFrete,
+                hawb_associados: hawbAssociados,
+              });
+            }
+            console.log(`CCT Step 2.5: Enriched ${cctRfbMap.size} MAWBs with RFB data from t_aereo_cct`);
+          } catch (rfbErr) {
+            console.warn('CCT Step 2.5: Error fetching t_aereo_cct (non-fatal):', rfbErr);
+          }
+        }
 
         // STEP 2: Enrich with CCT data using a separate, optimized query
         // This avoids the heavy JOIN with TRIM/COLLATE in the main query
