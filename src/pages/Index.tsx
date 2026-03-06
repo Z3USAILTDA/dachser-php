@@ -398,6 +398,7 @@ interface AWBData {
   etd?: string | null; // ETD do processo em t_master_dados
   tracking_failed?: boolean; // Timeline vazia em todas as fontes (falha de rastreio)
   master_changed?: boolean; // Master (MAWB) foi atualizado via troca de master
+  last_event_date?: string | null; // Data/hora do último evento real da timeline
 }
 
 const STORAGE_KEY = "tracked-awbs";
