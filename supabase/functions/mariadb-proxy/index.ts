@@ -6330,14 +6330,17 @@ serve(async (req) => {
             return null;
           };
 
-          const filteredEvents = etdCutoff
-            ? validEvents.filter((e: any) => {
-                if (!e.data_hora_evento) return true; // sem data, manter por segurança
-                const eventDate = parseFlexibleDate(e.data_hora_evento);
-                if (!eventDate) return true; // data inválida, manter por segurança
-                return eventDate >= etdCutoff!;
-              })
-            : validEvents;
+          const now = new Date();
+          const filteredEvents = validEvents.filter((e: any) => {
+            if (!e.data_hora_evento) return true; // sem data, manter por segurança
+            const eventDate = parseFlexibleDate(e.data_hora_evento);
+            if (!eventDate) return true; // data inválida, manter por segurança
+            // Excluir eventos com data futura (previsões, não eventos reais)
+            if (eventDate > now) return false;
+            // Filtro ETD existente
+            if (etdCutoff && eventDate < etdCutoff) return false;
+            return true;
+          });
 
           console.log(`Tracking: ${validEvents.length} valid events, ${filteredEvents.length} after ETD filter (cutoff=${etdCutoff?.toISOString() ?? 'none'}) for AWB ${queryAwb}`);
 
