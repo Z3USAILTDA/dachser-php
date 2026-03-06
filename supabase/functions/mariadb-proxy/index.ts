@@ -3420,21 +3420,39 @@ serve(async (req) => {
             statusCctOficial = 'AGUARDANDO_CONSULTA';
           }
           
+          // Apply canonical ordering: use the MOST ADVANCED status from all sources
+          if (rfbInfo?.rfb_status_cct) {
+            const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
+            const rfbOrder = CCT_STATUS_ORDER[rfbInfo.rfb_status_cct] || 0;
+            if (rfbOrder > currentOrder && rfbInfo.rfb_status_cct !== 'BLOQUEIO') {
+              statusCctOficial = rfbInfo.rfb_status_cct;
+            }
+          }
+          
           return {
             ...row,
             status_cct_oficial: statusCctOficial,
             situacao_portal: leadcomexInfo?.situacao_portal || null,
-            peso_declarado: cctInfo.peso_declarado || null,
+            peso_declarado: rfbInfo?.peso_declarado_rfb || cctInfo.peso_declarado || null,
             peso_constatado: cctInfo.peso_constatado || null,
-            volume_declarado: cctInfo.volume_declarado || null,
+            volume_declarado: rfbInfo?.volume_declarado_rfb || cctInfo.volume_declarado || null,
             volume_constatado: cctInfo.volume_constatado || null,
             eta: cctInfo.eta || null,
             etd: cctInfo.etd || null,
             data_decolagem_ultimo_trecho: cctInfo.data_decolagem_ultimo_trecho || null,
-            cnpj_consignatario: cctInfo.cnpj_consignatario || null,
+            cnpj_consignatario: rfbInfo?.consignatario_cnpj || cctInfo.cnpj_consignatario || null,
             data_manifestacao_cct: cctInfo.data_manifestacao_cct || null,
             leadcomex_status,
             leadcomex_attempts: leadcomexInfo?.attempts || null,
+            // New t_aereo_cct fields
+            ruc: rfbInfo?.ruc || null,
+            recinto_aduaneiro: rfbInfo?.recinto_aduaneiro || null,
+            numero_voo: rfbInfo?.numero_voo || null,
+            data_emissao: rfbInfo?.data_emissao || null,
+            indicador_madeira: rfbInfo?.indicador_madeira || false,
+            info_frete: rfbInfo?.info_frete || null,
+            manuseios_especiais_rfb: rfbInfo?.manuseios_especiais || [],
+            rfb_situacao: rfbInfo?.rfb_situacao || null,
           };
         });
 
