@@ -254,8 +254,10 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
       return String(dateB).localeCompare(String(dateA));
     });
 
-    // Filter by ETD cutoff if available
-    const filtered = etdCutoff
+    const now = new Date();
+
+    // Filter by ETD cutoff if available, then exclude future predictions
+    const filtered = (etdCutoff
       ? sorted.filter(ev => {
           const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
           if (!ts) return true; // sem data, manter por segurança
@@ -263,7 +265,17 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
           if (!eventDate) return true;
           return eventDate >= etdCutoff!;
         })
-      : sorted;
+      : sorted
+    ).filter(ev => {
+      // Exclude future events (predictions, not real statuses)
+      const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
+      if (!ts) return true;
+      const eventDate = parseFlexibleDate(String(ts));
+      if (!eventDate) return true;
+      if (eventDate > now) return false;
+      if (eventDate.getFullYear() < 2020) return false;
+      return true;
+    });
 
     if (filtered.length === 0) return null;
 
