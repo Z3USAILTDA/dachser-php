@@ -399,6 +399,7 @@ interface AWBData {
   tracking_failed?: boolean; // Timeline vazia em todas as fontes (falha de rastreio)
   master_changed?: boolean; // Master (MAWB) foi atualizado via troca de master
   last_event_date?: string | null; // Data/hora do último evento real da timeline
+  in_transit?: boolean; // AWB já teve DEP/MAN/RCF/ARR na timeline do ciclo atual
 }
 
 const STORAGE_KEY = "tracked-awbs";
@@ -571,6 +572,7 @@ const Index = () => {
           etd: item.etd || null,
           master_changed: item.master_changed || false,
           last_event_date: item.last_event_date || null,
+          in_transit: item.in_transit || false,
         }));
 
         const deduplicatedData = convertedData.reduce((acc: AWBData[], current: AWBData) => {
@@ -2889,6 +2891,17 @@ const Index = () => {
                                   return (
                                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-orange-500/20 text-orange-400 border border-orange-500/40">
                                       <ArrowLeftRight className="h-3 w-3" />
+                                      Em Trânsito
+                                    </span>
+                                  );
+                                }
+
+                                // AWBs que já tiveram DEP/MAN/RCF/ARR na timeline → "Em Trânsito"
+                                const finalStatuses = ["ARR - DESTINO", "DLV", "NFD", "AWD", "POD"];
+                                if (awb.in_transit && !finalStatuses.includes(statusCode)) {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/40">
+                                      <Plane className="h-3 w-3" />
                                       Em Trânsito
                                     </span>
                                   );
