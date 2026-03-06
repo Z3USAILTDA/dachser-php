@@ -3403,6 +3403,9 @@ serve(async (req) => {
             leadcomex_status = leadcomexInfo.success ? 'success' : 'failed';
           }
           
+          // Enrich with t_aereo_cct (RFB) data
+          const rfbInfo = cctRfbMap.get((row.master || '').trim());
+          
           // Use LeadComex status if available, otherwise fall back to tracking status
           // When LeadComex has data (success), use its status; otherwise use 'AGUARDANDO_CONSULTA'
           let statusCctOficial = row.status_cct_oficial; // Default from tracking
