@@ -11845,18 +11845,9 @@ serve(async (req) => {
             extraWhere = 'AND (cct.peso_declarado IS NULL OR cct.cnpj_consignatario IS NULL)';
           }
           
-          const useFailCount = prioritizePending;
-          const failCountJoin = useFailCount ? `
-            LEFT JOIN (
-              SELECT TRIM(hawb) COLLATE utf8mb4_unicode_ci as hawb, COUNT(*) as recent_failures
-              FROM ${database}.t_leadcomex_enrichment_logs
-              WHERE success = 0
-              AND created_at >= NOW() - INTERVAL 4 HOUR
-              GROUP BY TRIM(hawb)
-            ) fail_count ON TRIM(fail_count.hawb) COLLATE utf8mb4_unicode_ci = TRIM(m.hawb) COLLATE utf8mb4_unicode_ci
-          ` : '';
+          const failCountJoin = '';
           
-          console.log(`[get_cct_pending_hawbs] Fetching HAWBs from t_master_dados (${processAll ? 'ALL' : 'pending'}${prioritizePending ? ', with 4h cooldown + failure priority' : ''})...`);
+          console.log(`[get_cct_pending_hawbs] Fetching HAWBs from t_master_dados (${processAll ? 'ALL' : 'pending'}${prioritizePending ? ', with 4h success cooldown + 1h failure cooldown' : ''})...`);
           
           // Step 2: Get HAWBs from t_master_dados for these AWBs
           rows = await client.query(`
