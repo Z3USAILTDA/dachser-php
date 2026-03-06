@@ -3022,7 +3022,7 @@ serve(async (req) => {
         
         // POST-TRACKING QUERY: TWO-STEP OPTIMIZED APPROACH (source: t_aereo_ws_firecrawl + t_master_dados)
         // STEP 1: Get valid AWBs from t_aereo_ws_firecrawl with CCT-relevant statuses (sliding window 30 days)
-        console.log('CCT Step 1: Fetching valid AWBs from t_aereo_ws_firecrawl (sliding 30-day window)...');
+        console.log('CCT Step 1: Fetching valid AWBs from t_aereo_ws_firecrawl (sliding 1-day window)...');
         const cctRelevantStatuses = "'DEP','ARR','ATA','RCF','NFD','AWD','DLV','POD','FRO','DIS'";
         const awbAirlineLike = registeredAirlineCodes.map(c => `awb LIKE '${c}-%'`).join(' OR ');
         
@@ -3032,7 +3032,7 @@ serve(async (req) => {
           INNER JOIN (
             SELECT awb, MAX(id) as max_id
             FROM ${database}.t_aereo_ws_firecrawl
-            WHERE scraped_at >= NOW() - INTERVAL 30 DAY
+            WHERE scraped_at >= NOW() - INTERVAL 1 DAY
             AND last_status_code IN (${cctRelevantStatuses})
             AND last_status_code NOT IN (${errorStatusFilter})
             AND (${awbAirlineLike})
