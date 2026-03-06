@@ -2006,6 +2006,10 @@ const Index = () => {
         // Se não tem data de referência ou ainda dentro de 5 dias → mantém na tela
       }
 
+      if (awb.tracking_failed === true) {
+        return matchesSearch && matchesAirline && matchesAnalyst && matchesService && matchesProcessType;
+      }
+
       return matchesSearch && matchesAirline && matchesAnalyst && matchesService && matchesProcessType && isAllowed;
     });
 
@@ -2825,7 +2829,7 @@ const Index = () => {
                                 {awb.tracking_failed ? (
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-red-500/15 text-red-400 border border-red-500/30">
                                     <AlertTriangle className="h-3 w-3" />
-                                    Falha no Rastreio
+                                    Sem informação na companhia aérea
                                   </span>
                                 ) : (
                                   <>
