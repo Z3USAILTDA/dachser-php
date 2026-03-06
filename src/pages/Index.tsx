@@ -2621,7 +2621,7 @@ const Index = () => {
                       const isFalhaConsulta = isErroStatus || isCompanyNotRegistered;
                       // AWBs críticos específicos com destaque vermelho piscante (inclui discrepância de peças)
                       const CRITICAL_AWBS = ["045-21167274"];
-                      const isCriticalAwb = CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.has_dis_event === true;
+                      const isCriticalAwb = CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true;
 
                       return (
                         <React.Fragment key={`${awb.id}-${index}`}>
