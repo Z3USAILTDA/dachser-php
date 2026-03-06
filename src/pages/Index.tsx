@@ -2033,7 +2033,7 @@ const Index = () => {
           case "criticos":
             // OFLD agora é crítico junto com NIL e NIF, AWBs críticos específicos, e discrepância de peças
             const CRITICAL_AWBS = ["045-21167274"];
-            return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.has_dis_event === true;
+            return status === "NIL" || status === "NIF" || status === "OFLD" || status === "DIS" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.has_dis_event === true;
           default:
             return true;
         }
