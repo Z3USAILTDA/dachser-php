@@ -416,13 +416,18 @@ function detectInTransit(timelineJson: string | null, etdStr?: string | null): b
       }
     }
 
+    const now = new Date();
+
     for (const ev of events) {
-      // Apply ETD cutoff filter
-      if (etdCutoff) {
-        const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
-        if (ts) {
-          const eventDate = parseFlexibleDate(String(ts));
-          if (eventDate && eventDate < etdCutoff) continue;
+      const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
+      if (ts) {
+        const eventDate = parseFlexibleDate(String(ts));
+        if (eventDate) {
+          // Apply ETD cutoff filter
+          if (etdCutoff && eventDate < etdCutoff) continue;
+          // Exclude future events (predictions)
+          if (eventDate > now) continue;
+          if (eventDate.getFullYear() < 2020) continue;
         }
       }
 
