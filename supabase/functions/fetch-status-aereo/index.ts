@@ -859,8 +859,15 @@ serve(async (req) => {
         finalStatus = classifyArrival(rawStatus, timelineStr, destForClassify, origForClassify, awb);
         console.log(`[wsFallback] ${awb}: ws.last_status_code="${rawStatus}" → "${finalStatus}"`);
       } else {
-        finalStatus = rawStatus;
-        console.log(`[noSource] ${awb}: no valid status from api/timeline/ws, raw="${rawStatus}"`);
+        // Last resort: try extracting IATA code from last_status_description
+        const descFallback = extractIataFromDesc(ws.last_status_description || '');
+        if (descFallback) {
+          finalStatus = classifyArrival(descFallback, timelineStr, destForClassify, origForClassify, awb);
+          console.log(`[descFallback] ${awb}: extracted "${descFallback}" from description → "${finalStatus}"`);
+        } else {
+          finalStatus = rawStatus;
+          console.log(`[noSource] ${awb}: no valid status from api/timeline/ws, raw="${rawStatus}"`);
+        }
       }
 
       // Re-classificar ARR genérico para determinar CONEXAO/DESTINO
