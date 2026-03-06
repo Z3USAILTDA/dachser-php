@@ -1,30 +1,31 @@
 
 
-# Fix: ETD filter too strict -- events before ETD date are all removed
+# Fix: Timeline vazia para AWBs 724-86856405 e 724-13475593
 
-## Problem
+## Diagnóstico
 
-Logs show: `3 valid events, 0 after ETD filter (cutoff=2026-03-06T00:00:00.000Z)` for AWB 724-86856405.
+Testei a edge function diretamente e confirmei: retorna `{ data: [], success: true }`.
 
-The ETD is today (2026-03-06). Since `etdDate <= now`, the code uses ETD directly as cutoff. But pre-departure events (BKD, RCS, etc.) naturally occur *before* the ETD, so `eventDate >= etdCutoff` filters them all out.
+Os logs mostram:
+```
+Tracking: 3 valid events, 0 after ETD filter (cutoff=2026-03-06T00:00:00.000Z)
+```
 
-## Root cause
+O problema está na linha 6270 do `mariadb-proxy/index.ts`. Quando o ETD é passado (ou hoje), o cutoff é definido como o próprio ETD sem nenhuma margem. Eventos pré-partida (BKD, RCS, FOH) naturalmente ocorrem **antes** do ETD, então `eventDate >= etdCutoff` filtra todos.
 
-Line 6270: when ETD is in the past, `etdCutoff = etdDate` with no buffer. Events like BKD happen days/weeks before ETD.
+## Correção
 
-## Fix
+### `supabase/functions/mariadb-proxy/index.ts` -- linha 6270
 
-### `supabase/functions/mariadb-proxy/index.ts` -- line 6270
-
-When ETD is in the past, subtract 30 days as buffer to keep pre-departure events:
+Subtrair 30 dias do ETD quando ele for passado, preservando eventos do ciclo atual:
 
 ```typescript
-// Before:
+// Linha 6270 - Antes:
 etdCutoff = etdDate;
 
-// After:
+// Depois:
 etdCutoff = new Date(etdDate.getTime() - 30 * 24 * 60 * 60 * 1000);
 ```
 
-This preserves all events from the current shipment cycle (BKD, RCS, DEP, ARR, etc.) while still filtering out stale events from previous uses of the same AWB number.
+Uma única linha. Isso mantém a filtragem de ciclos antigos mas preserva BKD, RCS, DEP, ARR e todos os eventos relevantes do embarque atual.
 
