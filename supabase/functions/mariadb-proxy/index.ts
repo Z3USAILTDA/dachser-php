@@ -6351,6 +6351,16 @@ serve(async (req) => {
 
           console.log(`Tracking: ${validEvents.length} valid events, ${filteredEvents.length} after ETD filter (cutoff=${etdCutoff?.toISOString() ?? 'none'}) for AWB ${queryAwb}`);
 
+          // Re-check: if after filtering all events are UNK or empty, mark as tracking_failed
+          const allUnkOrEmpty = filteredEvents.length === 0 || 
+            filteredEvents.every((e: any) => e.codigo_evento === 'UNK');
+
+          if (allUnkOrEmpty) {
+            console.log(`Tracking failed for AWB ${queryAwb}: all events are UNK or empty after filtering`);
+            result = { success: true, data: filteredEvents, tracking_failed: true };
+            break;
+          }
+
           // ---- Inject synthetic NOVO_MASTER events from t_master_swap_log ----
           try {
             const swapLogRows = await client.query(`
