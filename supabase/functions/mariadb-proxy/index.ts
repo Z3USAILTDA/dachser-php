@@ -6267,7 +6267,7 @@ serve(async (req) => {
               const now = new Date();
               if (etdDate <= now) {
                 // ETD no passado: usar ETD como cutoff
-                etdCutoff = etdDate;
+                etdCutoff = new Date(etdDate.getTime() - 30 * 24 * 60 * 60 * 1000);
                 console.log(`ETD cutoff for AWB ${queryAwb}: etd=${etdDate.toISOString()}, cutoff=${etdCutoff.toISOString()} (ETD in past)`);
               } else {
                 // ETD futuro: usar data_insert - 7 dias como cutoff
