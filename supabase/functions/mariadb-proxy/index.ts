@@ -6256,7 +6256,7 @@ serve(async (req) => {
           let etdCutoff: Date | null = null;
           try {
             const etdRows = await client.query(`
-              SELECT etd FROM ${database}.t_master_dados
+              SELECT etd, data_insert FROM ${database}.t_master_dados
               WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
                 AND etd IS NOT NULL
               ORDER BY data_insert DESC LIMIT 1
@@ -6264,11 +6264,21 @@ serve(async (req) => {
 
           if (etdRows && etdRows.length > 0 && etdRows[0].etd) {
               const etdDate = new Date(etdRows[0].etd);
-              const candidateCutoff = new Date(etdDate.getTime()); // usar o próprio ETD como cutoff
-              // Garante que o cutoff nunca seja no futuro (evita remover todos os eventos)
               const now = new Date();
-              etdCutoff = candidateCutoff < now ? candidateCutoff : null;
-              console.log(`ETD cutoff for AWB ${queryAwb}: etd=${etdDate.toISOString()}, cutoff=${etdCutoff?.toISOString() ?? 'nullified (future ETD)'} (using ETD as cutoff)`);
+              if (etdDate <= now) {
+                // ETD no passado: usar ETD como cutoff
+                etdCutoff = etdDate;
+                console.log(`ETD cutoff for AWB ${queryAwb}: etd=${etdDate.toISOString()}, cutoff=${etdCutoff.toISOString()} (ETD in past)`);
+              } else {
+                // ETD futuro: usar data_insert - 7 dias como cutoff
+                const dataInsert = new Date(etdRows[0].data_insert);
+                if (!isNaN(dataInsert.getTime())) {
+                  etdCutoff = new Date(dataInsert.getTime() - 7 * 24 * 60 * 60 * 1000);
+                  console.log(`ETD cutoff for AWB ${queryAwb}: etd=${etdDate.toISOString()} (future), using data_insert=${dataInsert.toISOString()}, cutoff=${etdCutoff.toISOString()}`);
+                } else {
+                  console.log(`ETD cutoff for AWB ${queryAwb}: etd=${etdDate.toISOString()} (future), data_insert invalid, no cutoff`);
+                }
+              }
             }
           } catch (etdErr) {
             console.log(`Could not fetch ETD for AWB ${queryAwb}:`, etdErr);
