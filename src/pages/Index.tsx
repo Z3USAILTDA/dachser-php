@@ -2896,16 +2896,6 @@ const Index = () => {
                                   );
                                 }
 
-                                // AWBs que já tiveram DEP/MAN/RCF/ARR na timeline → "Em Trânsito"
-                                const finalStatuses = ["ARR - DESTINO", "DLV", "NFD", "AWD", "POD"];
-                                if (awb.in_transit && !finalStatuses.includes(statusCode)) {
-                                  return (
-                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/40">
-                                      <Plane className="h-3 w-3" />
-                                      Em Trânsito
-                                    </span>
-                                  );
-                                }
 
                                 // Verificar se é crítico (NIL, NIF, OFLD, AWBs críticos específicos, ou discrepância de peças)
                                 const CRITICAL_AWBS = ["045-21167274"];
