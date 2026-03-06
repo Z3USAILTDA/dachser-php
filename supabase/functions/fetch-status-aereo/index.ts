@@ -374,6 +374,7 @@ function extractLastEventDate(timelineJson: string | null, etdStr?: string | nul
       const eventDate = parseFlexibleDate(String(ts));
       if (!eventDate || isNaN(eventDate.getTime())) continue;
       if (eventDate > now) continue; // skip future dates (predictions)
+      if (eventDate.getFullYear() < 2020) continue; // skip clearly invalid dates
       // Skip API events with no valid status (likely predictions)
       const src = (ev.source || ev.fonte || '').toUpperCase();
       if (src === 'API' && !ts) continue;
