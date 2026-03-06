@@ -820,7 +820,15 @@ serve(async (req) => {
         baseline_pieces,
         has_dis_event,
         master_changed: swapChangedSet.has(awb) || wasSwapped,
-        last_event_date: extractLastEventDate(timelineStr, etdForTimeline),
+        last_event_date: extractLastEventDate(timelineStr, etdForTimeline) || 
+          (apiRow?.historico_status 
+            ? extractLastEventDate(
+                typeof apiRow.historico_status === 'string' 
+                  ? apiRow.historico_status 
+                  : JSON.stringify(apiRow.historico_status), 
+                etdForTimeline
+              ) 
+            : null),
       };
 
       // If this AWB was enriched via t_aereo_api fallback, use that data directly
