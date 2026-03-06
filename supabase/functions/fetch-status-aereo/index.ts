@@ -748,7 +748,17 @@ serve(async (req) => {
         status_info: ws.last_status_description || null,
         'última atualização': scrapedAt,
         last_flight: ws.last_flight || null,
-        days_in_transit: null,
+        days_in_transit: (() => {
+          // Compute days in transit from ETD to now (or to delivered date)
+          const etd = masters && masters.length > 0 ? masters[0].etd : null;
+          if (!etd) return null;
+          const etdDate = new Date(etd);
+          if (isNaN(etdDate.getTime())) return null;
+          const now = new Date();
+          const diffMs = now.getTime() - etdDate.getTime();
+          const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+          return days >= 0 ? days : null;
+        })(),
         pieces_discrepancy,
         baseline_pieces,
         has_dis_event,
