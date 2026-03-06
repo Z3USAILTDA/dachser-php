@@ -314,41 +314,27 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     }
 
     // Events are sorted DESC (most recent first).
-    // If the most recent resolved event is DIS, check if there's a non-DIS event
-    // with the SAME or NEWER date — meaning the process was updated after the discrepancy.
-    // We look at events that share the same timestamp group (within 1 minute) as the DIS event.
+    // If the most recent resolved event is DIS, check if ANY non-DIS event exists
+    // in the timeline — if so, prefer the non-DIS (process moved past discrepancy).
     let firstResolved: string | null = null;
-    let firstResolvedDate: Date | null = null;
 
     for (const ev of filtered) {
       const resolved = resolveEvent(ev);
       if (resolved) {
         if (!firstResolved) {
           firstResolved = resolved;
-          const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
-          firstResolvedDate = ts ? parseFlexibleDate(String(ts)) : null;
         }
-        // If first was NOT DIS, just return it immediately (most recent non-DIS)
+        // If first was NOT DIS, just return it immediately (most recent)
         if (firstResolved !== 'DIS') {
           console.log(`[resolveUNK] ${awbForDebug || '?'}: "${firstResolved}" (most recent${etdCutoff ? ', ETD-filtered' : ''})`);
           return firstResolved;
         }
-        // If first was DIS and this event is also resolvable and NOT DIS,
-        // check if it has same or later date (concurrent events)
-        if (resolved !== 'DIS' && firstResolvedDate) {
-          const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
-          const evDate = ts ? parseFlexibleDate(String(ts)) : null;
-          if (evDate) {
-            const diffMs = Math.abs(firstResolvedDate.getTime() - evDate.getTime());
-            // If the non-DIS event is within 24 hours of the DIS event, prefer non-DIS
-            if (diffMs <= 24 * 60 * 60 * 1000) {
-              console.log(`[resolveUNK] ${awbForDebug || '?'}: DIS superseded by "${resolved}" (concurrent event within 24h${etdCutoff ? ', ETD-filtered' : ''})`);
-              return resolved;
-            }
-          }
+        // If first was DIS and we found a non-DIS event anywhere in timeline,
+        // prefer the non-DIS (no time limit — process has moved forward)
+        if (resolved !== 'DIS') {
+          console.log(`[resolveUNK] ${awbForDebug || '?'}: DIS superseded by "${resolved}" (later event in timeline${etdCutoff ? ', ETD-filtered' : ''})`);
+          return resolved;
         }
-        // DIS is genuinely the most recent, return it
-        if (firstResolved === 'DIS' && resolved !== 'DIS') break;
       }
     }
 
