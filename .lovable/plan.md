@@ -1,28 +1,48 @@
 
 
-# Fix: Documentos não aparecem no dialog de visualização
+# Marcar AWBs como "Em Trânsito" se tiveram DEP/MAN/RCF/ARR na timeline
 
-## Causa raiz
+## Problema
+AWBs como 139-47195142 que já tiveram DEP na timeline mas cujo último status regrediu para BKD (novo master swap, por exemplo) aparecem como "No Prazo" na coluna Situação. Deveriam mostrar "Em Trânsito".
 
-O edge function `get_voucher_anexos` retorna a estrutura:
-```json
-{ "success": true, "data": [ ...anexos... ] }
-```
+## Solução
 
-Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
+### 1. Backend: `supabase/functions/fetch-status-aereo/index.ts`
 
-## Correção
+Criar função `detectInTransit(timelineJson, etdStr)` que verifica se algum evento filtrado (respeitando ETD cutoff) possui código DEP, MAN, RCF ou ARR. Retorna `boolean`.
 
-### `src/components/esteira/PagamentosTab.tsx` — linha 862
-
-Trocar:
+Adicionar ao `baseRow`:
 ```typescript
-setAnexosDialog(data?.anexos || []);
-```
-Por:
-```typescript
-setAnexosDialog(data?.data || []);
+in_transit: detectInTransit(timelineStr, etdForTimeline) || 
+  (apiRow?.historico_status 
+    ? detectInTransit(
+        typeof apiRow.historico_status === 'string' 
+          ? apiRow.historico_status 
+          : JSON.stringify(apiRow.historico_status), 
+        etdForTimeline
+      ) 
+    : false),
 ```
 
-Uma única linha corrige o problema.
+A função reutiliza a mesma lógica de parsing/ETD cutoff já existente em `resolveUnkFromTimeline`.
+
+### 2. Frontend: `src/pages/Index.tsx`
+
+**a)** Mapear `in_transit` no tipo `AWBData` e na conversão de dados.
+
+**b)** Na coluna Situação (linha ~2870), adicionar antes do bloco de "Crítico/Atraso/No Prazo":
+
+```typescript
+// AWBs que já tiveram DEP/MAN/RCF/ARR → "Em Trânsito"
+if (awb.in_transit && !["ARR - DESTINO", "DLV", "NFD", "AWD", "POD"].includes(statusCode)) {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/40">
+      <Plane className="h-3 w-3" />
+      Em Trânsito
+    </span>
+  );
+}
+```
+
+Isso garante que AWBs já entregues (DLV, NFD, AWD, ARR-DESTINO) não sejam rebaixados para "Em Trânsito", mas AWBs com BKD que já tiveram DEP mostrem corretamente.
 
