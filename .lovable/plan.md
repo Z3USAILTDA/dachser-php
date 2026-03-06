@@ -1,28 +1,47 @@
 
 
-# Fix: Documentos não aparecem no dialog de visualização
+# Fix: `resolveUnkFromTimeline` picking future events
 
-## Causa raiz
+## Problem
+AWB 045-21167753 shows **BKD** on screen but the real latest event is **DIS** (Discrepancy at 16:55 today). The function `resolveUnkFromTimeline` sorts timeline events by date DESC but doesn't filter out future-dated events. A "Booked" prediction event dated 2026-03-13 (future) is picked first, resolving to BKD instead of the real current status DIS.
 
-O edge function `get_voucher_anexos` retorna a estrutura:
-```json
-{ "success": true, "data": [ ...anexos... ] }
-```
+`extractLastEventDate` already filters future events (`if (eventDate > now) continue`), but this same guard was never added to `resolveUnkFromTimeline`.
 
-Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
+## Fix — `supabase/functions/fetch-status-aereo/index.ts`
 
-## Correção
+### In `resolveUnkFromTimeline` (around line 258, after ETD cutoff filtering)
 
-### `src/components/esteira/PagamentosTab.tsx` — linha 862
+Add future-date filtering to the `filtered` array, same as `extractLastEventDate`:
 
-Trocar:
 ```typescript
-setAnexosDialog(data?.anexos || []);
-```
-Por:
-```typescript
-setAnexosDialog(data?.data || []);
+const now = new Date();
+
+const filtered = (etdCutoff
+  ? sorted.filter(ev => {
+      const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
+      if (!ts) return true;
+      const eventDate = parseFlexibleDate(String(ts));
+      if (!eventDate) return true;
+      return eventDate >= etdCutoff!;
+    })
+  : sorted
+).filter(ev => {
+  // Also exclude future events (predictions, not real statuses)
+  const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
+  if (!ts) return true;
+  const eventDate = parseFlexibleDate(String(ts));
+  if (!eventDate) return true;
+  if (eventDate > now) return false;
+  if (eventDate.getFullYear() < 2020) return false;
+  return true;
+});
 ```
 
-Uma única linha corrige o problema.
+### Same fix in `detectInTransit` (around line 395)
+
+Apply identical future-date filtering to ensure `in_transit` detection also ignores future "Booked" events.
+
+Two surgical changes in the same file, consistent with the existing `extractLastEventDate` guards.
+
+**Expected result for 045-21167753:** Status changes from BKD → **DIS** (or FOH depending on exact ordering at same timestamp).
 
