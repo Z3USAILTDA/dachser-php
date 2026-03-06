@@ -2915,7 +2915,7 @@ const Index = () => {
                                   statusCode === "OFLD" ||
                                   CRITICAL_AWBS.includes(awb.awb) ||
                                   awb.pieces_discrepancy === true ||
-                                  awb.has_dis_event === true;
+                                  awb.pieces_discrepancy === true;
                                 const isDelayed = awb.data_atraso !== null;
 
                                 if (isCritical) {
