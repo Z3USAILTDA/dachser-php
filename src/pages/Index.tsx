@@ -2864,7 +2864,7 @@ const Index = () => {
                               </div>
                             </td>
                             <td className="px-3 py-3 text-[#aaaaaa] text-sm whitespace-nowrap">
-                              {formatDateTimeBR(awb.last_check || awb.created_at)}
+                              {formatDateTimeBR(awb.last_event_date || awb.last_check || awb.created_at)}
                             </td>
                             <td className="px-3 py-3 text-center">
                               {(() => {
