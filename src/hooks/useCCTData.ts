@@ -104,6 +104,15 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
     leadcomex_attempts: row.leadcomex_attempts || null,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    // t_aereo_cct (RFB) enrichment
+    ruc: row.ruc || null,
+    recinto_aduaneiro: row.recinto_aduaneiro || null,
+    numero_voo: row.numero_voo || null,
+    data_emissao: row.data_emissao || null,
+    indicador_madeira: row.indicador_madeira || false,
+    info_frete: row.info_frete || null,
+    manuseios_especiais_rfb: row.manuseios_especiais_rfb || [],
+    rfb_situacao: row.rfb_situacao || null,
   };
 
   // Build status_atual object - status is derived from ultimo_evento_codigo

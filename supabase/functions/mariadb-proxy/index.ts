@@ -3022,7 +3022,7 @@ serve(async (req) => {
         
         // POST-TRACKING QUERY: TWO-STEP OPTIMIZED APPROACH (source: t_aereo_ws_firecrawl + t_master_dados)
         // STEP 1: Get valid AWBs from t_aereo_ws_firecrawl with CCT-relevant statuses (sliding window 30 days)
-        console.log('CCT Step 1: Fetching valid AWBs from t_aereo_ws_firecrawl (sliding 30-day window)...');
+        console.log('CCT Step 1: Fetching valid AWBs from t_aereo_ws_firecrawl (sliding 1-day window)...');
         const cctRelevantStatuses = "'DEP','ARR','ATA','RCF','NFD','AWD','DLV','POD','FRO','DIS'";
         const awbAirlineLike = registeredAirlineCodes.map(c => `awb LIKE '${c}-%'`).join(' OR ');
         
@@ -3032,7 +3032,7 @@ serve(async (req) => {
           INNER JOIN (
             SELECT awb, MAX(id) as max_id
             FROM ${database}.t_aereo_ws_firecrawl
-            WHERE scraped_at >= NOW() - INTERVAL 30 DAY
+            WHERE scraped_at >= NOW() - INTERVAL 1 DAY
             AND last_status_code IN (${cctRelevantStatuses})
             AND last_status_code NOT IN (${errorStatusFilter})
             AND (${awbAirlineLike})
@@ -3095,6 +3095,18 @@ serve(async (req) => {
           LIMIT 500
         `);
         
+        // Canonical CCT status ordering for merge logic
+        const CCT_STATUS_ORDER: Record<string, number> = {
+          'INFORMADA': 1,
+          'MANIFESTADA': 2,
+          'EM_AREA_TRANSFERENCIA': 3,
+          'RECEPCIONADA': 4,
+          'EM_TROCA_RECINTOS': 5,
+          'EM_TRANSITO_TERRESTRE': 6,
+          'ENTREGUE': 7,
+          'BLOQUEIO': 99,
+        };
+        
         // Merge t_aereo_ws_firecrawl status into shipments (JS-side merge for performance)
         const statusMapCCT: Record<string, string> = {
           'ARR': 'INFORMADA', 'ATA': 'INFORMADA',
@@ -3123,6 +3135,157 @@ serve(async (req) => {
         });
         
         console.log(`CCT Step 2: Found ${shipments.length} shipments`);
+        
+        // ==================== STEP 2.5: Enrich with t_aereo_cct (RFB data) ====================
+        // Query t_aereo_cct for MAWB data: RUC, weights, special handling, freight, parties, stock status
+        let cctRfbMap = new Map<string, any>();
+        if (mawbList.length > 0) {
+          try {
+            // Convert AWB format from "XXX-XXXXXXXX" to match t_aereo_cct.identificacao
+            const cctIdentFilter = mawbList.map((m: string) => `'${m.replace(/'/g, "''")}'`).join(',');
+            
+            console.log('CCT Step 2.5: Fetching RFB data from t_aereo_cct...');
+            const cctRfbData = await client.query(`
+              SELECT 
+                identificacao,
+                ruc,
+                codigoAeroportoOrigemConhecimento,
+                codigoAeroportoDestinoConhecimento,
+                recintoAduaneiroDestino,
+                quantidadeVolumesConhecimento,
+                pesoBrutoConhecimento,
+                indicadorPartesMadeira,
+                manuseiosEspeciais,
+                partesEstoque,
+                partes,
+                hawbAssociados,
+                frete,
+                viagensAssociadas,
+                dataEmissao,
+                situacao
+              FROM ${database}.t_aereo_cct
+              WHERE identificacao IN (${cctIdentFilter})
+            `);
+            
+            // Map situacao (stock status) from t_aereo_cct to canonical CCT status
+            const mapRfbSituacaoToCCT = (situacao: string | null): string | null => {
+              if (!situacao) return null;
+              const lower = situacao.toLowerCase().trim();
+              if (lower.includes('manifestada')) return 'MANIFESTADA';
+              if (lower.includes('informada') || lower.includes('chegada informada')) return 'INFORMADA';
+              if (lower.includes('recepcionada')) return 'RECEPCIONADA';
+              if (lower.includes('transferência') || lower.includes('transferencia')) return 'EM_AREA_TRANSFERENCIA';
+              if (lower.includes('trânsito') || lower.includes('transito')) return 'EM_TRANSITO_TERRESTRE';
+              if (lower.includes('entregue')) return 'ENTREGUE';
+              return null;
+            };
+            
+            for (const rfb of (cctRfbData || [])) {
+              const ident = (rfb.identificacao || '').trim();
+              
+              // Parse JSON fields safely
+              let manuseios: string[] = [];
+              try {
+                const raw = typeof rfb.manuseiosEspeciais === 'string' ? JSON.parse(rfb.manuseiosEspeciais) : rfb.manuseiosEspeciais;
+                if (Array.isArray(raw)) {
+                  manuseios = raw.map((m: any) => typeof m === 'string' ? m : m?.codigo || m?.code || '').filter(Boolean);
+                }
+              } catch {}
+              
+              let partesEstoque: any[] = [];
+              try {
+                const raw = typeof rfb.partesEstoque === 'string' ? JSON.parse(rfb.partesEstoque) : rfb.partesEstoque;
+                if (Array.isArray(raw)) partesEstoque = raw;
+              } catch {}
+              
+              let partes: any[] = [];
+              try {
+                const raw = typeof rfb.partes === 'string' ? JSON.parse(rfb.partes) : rfb.partes;
+                if (Array.isArray(raw)) partes = raw;
+              } catch {}
+              
+              let hawbAssociados: any[] = [];
+              try {
+                const raw = typeof rfb.hawbAssociados === 'string' ? JSON.parse(rfb.hawbAssociados) : rfb.hawbAssociados;
+                if (Array.isArray(raw)) hawbAssociados = raw;
+              } catch {}
+              
+              let frete: any = null;
+              try {
+                frete = typeof rfb.frete === 'string' ? JSON.parse(rfb.frete) : rfb.frete;
+              } catch {}
+              
+              let viagensAssociadas: any[] = [];
+              try {
+                const raw = typeof rfb.viagensAssociadas === 'string' ? JSON.parse(rfb.viagensAssociadas) : rfb.viagensAssociadas;
+                if (Array.isArray(raw)) viagensAssociadas = raw;
+              } catch {}
+              
+              // Extract consignatario from partes
+              const consignatario = partes.find((p: any) => {
+                const tipo = (p?.tipo || p?.funcao || '').toLowerCase();
+                return tipo.includes('consignat') || tipo.includes('destinat');
+              });
+              
+              // Extract most advanced situacao from partesEstoque
+              let rfbSituacao: string | null = null;
+              let rfbSituacaoMapped: string | null = null;
+              for (const pe of partesEstoque) {
+                const mapped = mapRfbSituacaoToCCT(pe?.situacao || pe?.status);
+                if (mapped && (!rfbSituacaoMapped || (CCT_STATUS_ORDER[mapped] || 0) > (CCT_STATUS_ORDER[rfbSituacaoMapped] || 0))) {
+                  rfbSituacaoMapped = mapped;
+                  rfbSituacao = pe?.situacao || pe?.status;
+                }
+              }
+              
+              // Extract numero_voo from viagensAssociadas
+              let numeroVoo: string | null = null;
+              if (viagensAssociadas.length > 0) {
+                const viagem = viagensAssociadas[0];
+                numeroVoo = viagem?.numero || viagem?.identificacao || null;
+              }
+              
+              // Parse frete info
+              let infoFrete: { moeda: string; formaPgto: string; total: number } | null = null;
+              if (frete) {
+                const moeda = frete.moedaOrigem || frete.moeda || '';
+                const formaPgto = frete.formaPgto || frete.forma_pagamento || '';
+                let total = 0;
+                if (Array.isArray(frete.totaisMoedaOrigem)) {
+                  const totalEntry = frete.totaisMoedaOrigem.find((t: any) => (t?.descricao || '').toLowerCase().includes('total'));
+                  total = totalEntry?.valor || 0;
+                } else if (frete.total) {
+                  total = frete.total;
+                }
+                if (moeda || total > 0) {
+                  infoFrete = { moeda, formaPgto, total };
+                }
+              }
+              
+              cctRfbMap.set(ident, {
+                ruc: rfb.ruc || null,
+                aeroporto_origem_rfb: rfb.codigoAeroportoOrigemConhecimento || null,
+                aeroporto_destino_rfb: rfb.codigoAeroportoDestinoConhecimento || null,
+                recinto_aduaneiro: rfb.recintoAduaneiroDestino || null,
+                volume_declarado_rfb: rfb.quantidadeVolumesConhecimento ? Number(rfb.quantidadeVolumesConhecimento) : null,
+                peso_declarado_rfb: rfb.pesoBrutoConhecimento ? Number(rfb.pesoBrutoConhecimento) : null,
+                indicador_madeira: rfb.indicadorPartesMadeira === 'S',
+                manuseios_especiais: manuseios,
+                rfb_situacao: rfbSituacao,
+                rfb_status_cct: rfbSituacaoMapped,
+                consignatario_cnpj: consignatario?.cnpj || consignatario?.documento || null,
+                consignatario_nome: consignatario?.nome || consignatario?.razaoSocial || null,
+                numero_voo: numeroVoo,
+                data_emissao: rfb.dataEmissao || null,
+                info_frete: infoFrete,
+                hawb_associados: hawbAssociados,
+              });
+            }
+            console.log(`CCT Step 2.5: Enriched ${cctRfbMap.size} MAWBs with RFB data from t_aereo_cct`);
+          } catch (rfbErr) {
+            console.warn('CCT Step 2.5: Error fetching t_aereo_cct (non-fatal):', rfbErr);
+          }
+        }
 
         // STEP 2: Enrich with CCT data using a separate, optimized query
         // This avoids the heavy JOIN with TRIM/COLLATE in the main query
@@ -3240,6 +3403,9 @@ serve(async (req) => {
             leadcomex_status = leadcomexInfo.success ? 'success' : 'failed';
           }
           
+          // Enrich with t_aereo_cct (RFB) data
+          const rfbInfo = cctRfbMap.get((row.master || '').trim());
+          
           // Use LeadComex status if available, otherwise fall back to tracking status
           // When LeadComex has data (success), use its status; otherwise use 'AGUARDANDO_CONSULTA'
           let statusCctOficial = row.status_cct_oficial; // Default from tracking
@@ -3254,21 +3420,39 @@ serve(async (req) => {
             statusCctOficial = 'AGUARDANDO_CONSULTA';
           }
           
+          // Apply canonical ordering: use the MOST ADVANCED status from all sources
+          if (rfbInfo?.rfb_status_cct) {
+            const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
+            const rfbOrder = CCT_STATUS_ORDER[rfbInfo.rfb_status_cct] || 0;
+            if (rfbOrder > currentOrder && rfbInfo.rfb_status_cct !== 'BLOQUEIO') {
+              statusCctOficial = rfbInfo.rfb_status_cct;
+            }
+          }
+          
           return {
             ...row,
             status_cct_oficial: statusCctOficial,
             situacao_portal: leadcomexInfo?.situacao_portal || null,
-            peso_declarado: cctInfo.peso_declarado || null,
+            peso_declarado: rfbInfo?.peso_declarado_rfb || cctInfo.peso_declarado || null,
             peso_constatado: cctInfo.peso_constatado || null,
-            volume_declarado: cctInfo.volume_declarado || null,
+            volume_declarado: rfbInfo?.volume_declarado_rfb || cctInfo.volume_declarado || null,
             volume_constatado: cctInfo.volume_constatado || null,
             eta: cctInfo.eta || null,
             etd: cctInfo.etd || null,
             data_decolagem_ultimo_trecho: cctInfo.data_decolagem_ultimo_trecho || null,
-            cnpj_consignatario: cctInfo.cnpj_consignatario || null,
+            cnpj_consignatario: rfbInfo?.consignatario_cnpj || cctInfo.cnpj_consignatario || null,
             data_manifestacao_cct: cctInfo.data_manifestacao_cct || null,
             leadcomex_status,
             leadcomex_attempts: leadcomexInfo?.attempts || null,
+            // New t_aereo_cct fields
+            ruc: rfbInfo?.ruc || null,
+            recinto_aduaneiro: rfbInfo?.recinto_aduaneiro || null,
+            numero_voo: rfbInfo?.numero_voo || null,
+            data_emissao: rfbInfo?.data_emissao || null,
+            indicador_madeira: rfbInfo?.indicador_madeira || false,
+            info_frete: rfbInfo?.info_frete || null,
+            manuseios_especiais_rfb: rfbInfo?.manuseios_especiais || [],
+            rfb_situacao: rfbInfo?.rfb_situacao || null,
           };
         });
 
@@ -3396,12 +3580,21 @@ serve(async (req) => {
             data_atraso: row.data_atraso,
             data_decolagem_ultimo_trecho: row.dep_datetime || row.data_decolagem_ultimo_trecho || null,
             arr_datetime: row.arr_datetime,
-            dep_datetime: row.dep_datetime, // Timestamp real do DEP da companhia aérea
-            data_manifestacao_cct: row.data_manifestacao_cct, // Data de manifestação no CCT
+            dep_datetime: row.dep_datetime,
+            data_manifestacao_cct: row.data_manifestacao_cct,
             created_at: row.ultimo_evento_data || new Date().toISOString(),
             updated_at: row.ultimo_evento_data || new Date().toISOString(),
             leadcomex_status: row.leadcomex_status || 'pending',
             leadcomex_attempts: row.leadcomex_attempts || null,
+            // t_aereo_cct (RFB) fields
+            ruc: row.ruc || null,
+            recinto_aduaneiro: row.recinto_aduaneiro || null,
+            numero_voo: row.numero_voo || null,
+            data_emissao: row.data_emissao || null,
+            indicador_madeira: row.indicador_madeira || false,
+            info_frete: row.info_frete || null,
+            manuseios_especiais_rfb: row.manuseios_especiais_rfb || [],
+            rfb_situacao: row.rfb_situacao || null,
           };
         });
 
@@ -6029,7 +6222,65 @@ serve(async (req) => {
           `, [queryAwb]);
 
           console.log(`CCT: Found ${events?.length || 0} events in t_cct_eventos_historico for AWB ${queryAwb}`);
-          result = { success: true, data: events || [] };
+          
+          // Also try to get events from t_aereo_cct partesEstoque for this AWB
+          let rfbEvents: any[] = [];
+          try {
+            const rfbRows = await client.query(`
+              SELECT identificacao, partesEstoque
+              FROM ${database}.t_aereo_cct
+              WHERE identificacao = ?
+              LIMIT 1
+            `, [queryAwb]);
+            
+            if (rfbRows && rfbRows.length > 0 && rfbRows[0].partesEstoque) {
+              let partes: any[] = [];
+              try {
+                partes = typeof rfbRows[0].partesEstoque === 'string' 
+                  ? JSON.parse(rfbRows[0].partesEstoque) 
+                  : rfbRows[0].partesEstoque;
+              } catch {}
+              
+              if (Array.isArray(partes)) {
+                // Map each partesEstoque entry as an RFB event
+                const existingCodes = new Set((events || []).map((e: any) => e.codigo_evento));
+                for (const pe of partes) {
+                  const situacao = pe?.situacao || pe?.status;
+                  if (!situacao) continue;
+                  
+                  // Map situacao to codigo_evento
+                  const lower = situacao.toLowerCase().trim();
+                  let codigoEvento = situacao.toUpperCase().replace(/\s+/g, '_');
+                  if (lower.includes('manifestada')) codigoEvento = 'MANIFESTADO';
+                  else if (lower.includes('informada')) codigoEvento = 'CHEGADA_INFORMADA';
+                  else if (lower.includes('recepcionada')) codigoEvento = 'RECEPCIONADO';
+                  else if (lower.includes('entregue')) codigoEvento = 'ENTREGUE';
+                  else if (lower.includes('transferência') || lower.includes('transferencia')) codigoEvento = 'AREA_TRANSFERENCIA';
+                  
+                  // Skip if already exists from t_cct_eventos_historico
+                  if (existingCodes.has(codigoEvento)) continue;
+                  
+                  rfbEvents.push({
+                    id: `rfb-${queryAwb}-${codigoEvento}`,
+                    awb: queryAwb,
+                    codigo_evento: codigoEvento,
+                    descricao_evento: `${situacao} (RFB)`,
+                    data_hora_evento: pe?.dataHora || pe?.data || new Date().toISOString(),
+                    fonte: 'RFB',
+                    aeroporto: pe?.aeroporto || null,
+                    nivel_confianca: 'COMPLEMENTAR',
+                    created_at: pe?.dataHora || pe?.data || new Date().toISOString(),
+                  });
+                  existingCodes.add(codigoEvento);
+                }
+              }
+            }
+          } catch (rfbEvtErr) {
+            console.warn('CCT: Error fetching t_aereo_cct events (non-fatal):', rfbEvtErr);
+          }
+          
+          const allEvents = [...(events || []), ...rfbEvents];
+          result = { success: true, data: allEvents };
         } catch (tableErr) {
           console.log('Error fetching from t_cct_eventos_historico:', tableErr);
           result = { success: true, data: [] };
