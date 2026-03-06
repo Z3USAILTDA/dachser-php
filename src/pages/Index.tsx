@@ -2029,7 +2029,7 @@ const Index = () => {
             return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status) || awb.in_transit === true;
           case "alerta":
             // OFLD movido para críticos - DIS ou processos com data_atraso em alerta
-            return !!awb.data_atraso;
+            return status === "DIS" || !!awb.data_atraso;
           case "criticos":
             // OFLD agora é crítico junto com NIL e NIF, AWBs críticos específicos, e discrepância de peças
             const CRITICAL_AWBS = ["045-21167274"];
