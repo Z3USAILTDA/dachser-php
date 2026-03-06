@@ -279,59 +279,61 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
 
     if (filtered.length === 0) return null;
 
-    for (const ev of filtered) {
+    // Helper to resolve a single event to an IATA code
+    function resolveEvent(ev: any): string | null {
       const rawStatusField = (ev.status || ev.Status || '').trim();
       const rawStatus = rawStatusField.toUpperCase();
       const rawDesc = (ev.Description || ev.description || ev.title || ev.details || '').trim().toUpperCase();
 
-      // 1. Checar status direto no mapa (exact match)
-      if (rawStatus && statusMap[rawStatus]) {
-        const resolved = statusMap[rawStatus];
-        console.log(`[resolveUNK] ${awbForDebug || '?'}: "${rawStatus}" → ${resolved} (status match${etdCutoff ? ', ETD-filtered' : ''})`);
-        return resolved;
-      }
+      if (rawStatus && statusMap[rawStatus]) return statusMap[rawStatus];
 
-      // 2. Extract IATA code from status field (e.g. "Departed MAD", "Manifested UX057")
       if (rawStatusField) {
         const iataFromStatus = extractIataFromDesc(rawStatusField);
-        if (iataFromStatus) {
-          console.log(`[resolveUNK] ${awbForDebug || '?'}: status "${rawStatusField.substring(0, 30)}" → ${iataFromStatus} (status prefix${etdCutoff ? ', ETD-filtered' : ''})`);
-          return iataFromStatus;
-        }
-        // Also try regex patterns on status field
+        if (iataFromStatus) return iataFromStatus;
         for (const [pattern, iata] of descPatterns) {
-          if (pattern.test(rawStatusField)) {
-            console.log(`[resolveUNK] ${awbForDebug || '?'}: status "${rawStatusField.substring(0, 30)}" → ${iata} (status regex${etdCutoff ? ', ETD-filtered' : ''})`);
-            return iata;
-          }
+          if (pattern.test(rawStatusField)) return iata;
         }
       }
 
-      // 3. Checar descrição no mapa (exact match)
-      if (rawDesc && statusMap[rawDesc]) {
-        const resolved = statusMap[rawDesc];
-        console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${rawDesc.substring(0, 30)}" → ${resolved} (desc map)`);
-        return resolved;
-      }
+      if (rawDesc && statusMap[rawDesc]) return statusMap[rawDesc];
 
-      // 4. Extract IATA code from description prefix (e.g. "DIS - GRU, ...")
       const descRaw = ev.Description || ev.description || ev.title || ev.details || '';
       if (descRaw) {
         const iataFromPrefix = extractIataFromDesc(descRaw);
-        if (iataFromPrefix) {
-          console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${descRaw.substring(0, 30)}" → ${iataFromPrefix} (prefix extract${etdCutoff ? ', ETD-filtered' : ''})`);
-          return iataFromPrefix;
-        }
-
-        // 5. Checar descrição com regex (full-word patterns)
+        if (iataFromPrefix) return iataFromPrefix;
         for (const [pattern, iata] of descPatterns) {
-          if (pattern.test(descRaw)) {
-            console.log(`[resolveUNK] ${awbForDebug || '?'}: desc "${descRaw.substring(0, 30)}" → ${iata} (regex${etdCutoff ? ', ETD-filtered' : ''})`);
-            return iata;
-          }
+          if (pattern.test(descRaw)) return iata;
         }
       }
+      return null;
     }
+
+    // Resolve all events to find the most recent non-DIS status
+    // If the most recent is DIS but there's a subsequent non-DIS event, prefer the non-DIS
+    let firstResolved: string | null = null;
+    let firstNonDis: string | null = null;
+
+    for (const ev of filtered) {
+      const resolved = resolveEvent(ev);
+      if (resolved) {
+        if (!firstResolved) firstResolved = resolved;
+        if (!firstNonDis && resolved !== 'DIS') {
+          firstNonDis = resolved;
+          break; // Found a non-DIS, no need to continue
+        }
+        // If first was DIS, continue looking for non-DIS
+        if (firstResolved === 'DIS' && !firstNonDis) continue;
+        break;
+      }
+    }
+
+    // If the most recent event is DIS but there's a non-DIS event after it (or at same time),
+    // the process has been updated — use the non-DIS status
+    const finalResult = (firstResolved === 'DIS' && firstNonDis) ? firstNonDis : firstResolved;
+    if (finalResult) {
+      console.log(`[resolveUNK] ${awbForDebug || '?'}: resolved="${finalResult}"${firstResolved === 'DIS' && firstNonDis ? ` (DIS superseded by ${firstNonDis})` : ''}${etdCutoff ? ', ETD-filtered' : ''}`);
+    }
+    return finalResult;
   } catch (_e) {
     console.log(`[resolveUNK] ${awbForDebug || '?'}: parse error: ${_e}`);
   }
