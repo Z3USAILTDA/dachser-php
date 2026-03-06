@@ -3580,12 +3580,21 @@ serve(async (req) => {
             data_atraso: row.data_atraso,
             data_decolagem_ultimo_trecho: row.dep_datetime || row.data_decolagem_ultimo_trecho || null,
             arr_datetime: row.arr_datetime,
-            dep_datetime: row.dep_datetime, // Timestamp real do DEP da companhia aérea
-            data_manifestacao_cct: row.data_manifestacao_cct, // Data de manifestação no CCT
+            dep_datetime: row.dep_datetime,
+            data_manifestacao_cct: row.data_manifestacao_cct,
             created_at: row.ultimo_evento_data || new Date().toISOString(),
             updated_at: row.ultimo_evento_data || new Date().toISOString(),
             leadcomex_status: row.leadcomex_status || 'pending',
             leadcomex_attempts: row.leadcomex_attempts || null,
+            // t_aereo_cct (RFB) fields
+            ruc: row.ruc || null,
+            recinto_aduaneiro: row.recinto_aduaneiro || null,
+            numero_voo: row.numero_voo || null,
+            data_emissao: row.data_emissao || null,
+            indicador_madeira: row.indicador_madeira || false,
+            info_frete: row.info_frete || null,
+            manuseios_especiais_rfb: row.manuseios_especiais_rfb || [],
+            rfb_situacao: row.rfb_situacao || null,
           };
         });
 

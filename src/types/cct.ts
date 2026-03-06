@@ -234,9 +234,18 @@ export interface CCTShipment {
   data_manifestacao_cct?: string | null;
   leadcomex_status?: 'success' | 'failed' | 'pending';
   leadcomex_attempts?: number | null;
-  created_at: string;
-  updated_at: string;
-}
+    created_at: string;
+    updated_at: string;
+    // t_aereo_cct (RFB) enrichment fields
+    ruc?: string | null;
+    recinto_aduaneiro?: string | null;
+    numero_voo?: string | null;
+    data_emissao?: string | null;
+    indicador_madeira?: boolean;
+    info_frete?: { moeda: string; formaPgto: string; total: number } | null;
+    manuseios_especiais_rfb?: string[];
+    rfb_situacao?: string | null;
+  }
 
 export interface CCTEvento {
   id: string;
