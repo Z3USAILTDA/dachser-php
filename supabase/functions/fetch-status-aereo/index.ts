@@ -151,7 +151,7 @@ function parseFlexibleDate(dateStr: string | null): Date | null {
   };
   const direct = new Date(dateStr);
   if (!isNaN(direct.getTime())) return direct;
-  const match = dateStr.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})(?:\s+(\d{2}:\d{2}))?/);
+  const match = dateStr.match(/^(\d{1,2})[\s-]+([A-Za-z]{3})[\s-]+(\d{4})(?:\s+(\d{2}:\d{2}))?/);
   if (match) {
     const day = match[1].padStart(2, '0');
     const monthStr = match[2].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -374,6 +374,7 @@ function extractLastEventDate(timelineJson: string | null, etdStr?: string | nul
       const eventDate = parseFlexibleDate(String(ts));
       if (!eventDate || isNaN(eventDate.getTime())) continue;
       if (eventDate > now) continue; // skip future dates (predictions)
+      if (eventDate.getFullYear() < 2020) continue; // skip clearly invalid dates
       // Skip API events with no valid status (likely predictions)
       const src = (ev.source || ev.fonte || '').toUpperCase();
       if (src === 'API' && !ts) continue;
