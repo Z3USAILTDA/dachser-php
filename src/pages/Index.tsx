@@ -2033,7 +2033,7 @@ const Index = () => {
           case "criticos":
             // OFLD agora é crítico junto com NIL e NIF, AWBs críticos específicos, e discrepância de peças
             const CRITICAL_AWBS = ["045-21167274"];
-            return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.has_dis_event === true;
+            return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true;
           default:
             return true;
         }
@@ -2365,7 +2365,7 @@ const Index = () => {
               const status = getStatusCode(awb.last_event).toUpperCase();
               // OFLD agora é crítico junto com NIL e NIF, AWBs críticos específicos, e discrepância de peças
               const CRITICAL_AWBS = ["045-21167274"];
-              return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.has_dis_event === true;
+              return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true;
             }).length
           }
           activeFilter={cardFilter}
@@ -2621,7 +2621,7 @@ const Index = () => {
                       const isFalhaConsulta = isErroStatus || isCompanyNotRegistered;
                       // AWBs críticos específicos com destaque vermelho piscante (inclui discrepância de peças)
                       const CRITICAL_AWBS = ["045-21167274"];
-                      const isCriticalAwb = CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.has_dis_event === true;
+                      const isCriticalAwb = CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true;
 
                       return (
                         <React.Fragment key={`${awb.id}-${index}`}>
@@ -2898,7 +2898,7 @@ const Index = () => {
 
 
                                 // DIS puro (sem discrepância de peças) — badge âmbar
-                                if (statusCode === "DIS" && !awb.pieces_discrepancy && !awb.has_dis_event) {
+                                if (statusCode === "DIS" && !awb.pieces_discrepancy) {
                                   return (
                                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">
                                       <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
@@ -2914,8 +2914,7 @@ const Index = () => {
                                   statusCode === "NIF" ||
                                   statusCode === "OFLD" ||
                                   CRITICAL_AWBS.includes(awb.awb) ||
-                                  awb.pieces_discrepancy === true ||
-                                  awb.has_dis_event === true;
+                                  awb.pieces_discrepancy === true;
                                 const isDelayed = awb.data_atraso !== null;
 
                                 if (isCritical) {
