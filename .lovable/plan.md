@@ -1,28 +1,16 @@
 
 
-# Fix: Documentos não aparecem no dialog de visualização
+# Remover ícones "i" (Info) das companhias aéreas
 
-## Causa raiz
+## Problema
 
-O edge function `get_voucher_anexos` retorna a estrutura:
-```json
-{ "success": true, "data": [ ...anexos... ] }
-```
+Na coluna de status da tabela, AWBs que começam com "577" exibem um ícone azul "i" com tooltip "Rastreio feito por API direta com a companhia." — o usuário quer remover isso.
 
-Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
+## Correção — `src/pages/Index.tsx`
 
-## Correção
+### Remover bloco do ícone Info (linhas 2860-2871)
 
-### `src/components/esteira/PagamentosTab.tsx` — linha 862
+Deletar o bloco condicional `{awb.awb?.startsWith("577") && (...)}` que renderiza o `<TooltipProvider>` com o ícone `<Info>`.
 
-Trocar:
-```typescript
-setAnexosDialog(data?.anexos || []);
-```
-Por:
-```typescript
-setAnexosDialog(data?.data || []);
-```
-
-Uma única linha corrige o problema.
+Uma mudança, um arquivo.
 
