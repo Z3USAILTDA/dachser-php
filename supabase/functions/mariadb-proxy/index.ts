@@ -6332,9 +6332,16 @@ serve(async (req) => {
 
           const now = new Date();
           const filteredEvents = validEvents.filter((e: any) => {
-            if (!e.data_hora_evento) return true; // sem data, manter por segurança
+            if (!e.data_hora_evento) {
+              // Para eventos da t_aereo_api, dataEvento null = não aconteceu ainda
+              if (e.fonte === 'API') return false;
+              return true; // outras fontes: manter por segurança
+            }
             const eventDate = parseFlexibleDate(e.data_hora_evento);
-            if (!eventDate) return true; // data inválida, manter por segurança
+            if (!eventDate) {
+              if (e.fonte === 'API') return false;
+              return true; // data inválida de outras fontes, manter por segurança
+            }
             // Excluir eventos com data futura (previsões, não eventos reais)
             if (eventDate > now) return false;
             // Filtro ETD existente
