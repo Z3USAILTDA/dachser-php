@@ -2348,7 +2348,7 @@ const Index = () => {
               if (excludedStatuses.includes(awb.status || "")) return false;
               const status = getStatusCode(awb.last_event).toUpperCase();
               // OFLD movido para críticos - DIS ou processos com data_atraso em alerta
-              return !!awb.data_atraso;
+              return status === "DIS" || !!awb.data_atraso;
             }).length
           }
           criticos={
