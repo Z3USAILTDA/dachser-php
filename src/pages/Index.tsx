@@ -2026,7 +2026,7 @@ const Index = () => {
         const status = getStatusCode(awb.last_event).toUpperCase();
         switch (cardFilter) {
           case "transito":
-            return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status);
+            return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status) || awb.in_transit === true;
           case "alerta":
             // OFLD movido para críticos - DIS ou processos com data_atraso em alerta
             return status === "DIS" || !!awb.data_atraso;
