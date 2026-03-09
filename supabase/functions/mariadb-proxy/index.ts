@@ -3312,9 +3312,9 @@ serve(async (req) => {
               viagensAssociadas,
               dataEmissao,
               situacao,
-              data_insert
+              created_at
             FROM ${database}.t_aereo_cct
-            WHERE data_insert >= NOW() - INTERVAL 7 DAY
+            WHERE created_at >= NOW() - INTERVAL 30 DAY
             AND (${registeredAirlineCodes.map(c => `identificacao LIKE '${c}-%'`).join(' OR ')})
           `);
           
