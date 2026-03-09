@@ -8193,7 +8193,7 @@ serve(async (req) => {
         await insertEvent('HLCUIZ1260200160', '', 'ARR', 'Arrival in', '2026-02-21 09:23:00', 'LIVORNO (LEGHORN)', 'Truck', '');
         await insertEvent('HLCUIZ1260200160', '', 'CRG', 'Loaded', '2026-02-28 21:58:00', 'LIVORNO (LEGHORN)', 'MSC CADIZ', 'MM609A');
         await insertEvent('HLCUIZ1260200160', '', 'DEP', 'Vessel departed', '2026-03-01 03:23:00', 'LIVORNO (LEGHORN)', 'MSC CADIZ', '');
-        await updateMain('HLCUIZ1260200160', { last_event: 'Vessel departed - LIVORNO (LEGHORN)', navio: 'MSC CADIZ', status: 'DEP' });
+        await updateMain('HLCUIZ1260200160', { last_event: 'Vessel departed - LIVORNO (LEGHORN)', navio: 'MSC CADIZ', container_status: 'DEP' });
         results.push({ mbl: 'HLCUIZ1260200160', status: 'ok', events: 3 });
 
         // --- HLCUHAM2512ATNT8: 2 events ---
