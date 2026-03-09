@@ -846,16 +846,16 @@ serve(async (req) => {
 
       let finalStatus: string | null;
 
-      if (apiStatusValid) {
-        // t_aereo_api.ultimo_status is the authoritative source — use it directly
-        finalStatus = classifyArrival(apiStatus!, timelineStr, destForClassify, origForClassify, awb);
-        console.log(`[apiPrimary] ${awb}: t_aereo_api.ultimo_status="${apiStatus}" → "${finalStatus}"`);
-      } else if (timelineStatus) {
-        // No API status — use timeline-derived status
+      if (timelineStatus) {
+        // Timeline é sempre a fonte mais precisa — priorizar
         finalStatus = classifyArrival(timelineStatus, timelineStr, destForClassify, origForClassify, awb);
-        console.log(`[timelineFallback] ${awb}: timeline="${timelineStatus}" → "${finalStatus}"`);
+        console.log(`[timelinePrimary] ${awb}: timeline="${timelineStatus}" → "${finalStatus}"`);
+      } else if (apiStatusValid) {
+        // Sem status na timeline — usar t_aereo_api como fallback
+        finalStatus = classifyArrival(apiStatus!, timelineStr, destForClassify, origForClassify, awb);
+        console.log(`[apiFallback] ${awb}: t_aereo_api.ultimo_status="${apiStatus}" → "${finalStatus}"`);
       } else if (rawStatus && !invalidStatuses.has(rawStatusUpper) && rawStatusUpper !== 'UNK') {
-        // No timeline status — fall back to DB last_status_code from t_aereo_ws_firecrawl
+        // Sem timeline nem API — fallback para ws.last_status_code
         finalStatus = classifyArrival(rawStatus, timelineStr, destForClassify, origForClassify, awb);
         console.log(`[wsFallback] ${awb}: ws.last_status_code="${rawStatus}" → "${finalStatus}"`);
       } else {
