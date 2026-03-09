@@ -8177,7 +8177,7 @@ serve(async (req) => {
         await insertEvent('HLCULE1251247412', 'HAMU2871211', 'DCH', 'Discharged', '2026-02-21 12:53:00', 'SANTOS', 'BREMERHAVEN EXPRESS', 'NA602A');
         await insertEvent('HLCULE1251247412', 'HAMU2871211', 'DEP', 'Departure from', '2026-02-21 14:19:00', 'SANTOS', 'Truck', '');
         await insertEvent('HLCULE1251247412', 'HAMU2871211', 'GIE', 'Gate in empty', '2026-03-03 13:30:00', 'SANTOS', 'Truck', '');
-        await updateMain('HLCULE1251247412', { last_event: 'Gate in empty - SANTOS', navio: 'BREMERHAVEN EXPRESS', container_status: 'DLV', transshipment_port: 'ANTWERP', transshipment_date: '2026-01-16 12:20:00' });
+        await updateMain('HLCULE1251247412', { last_event: 'Gate in empty - SANTOS', navio: 'BREMERHAVEN EXPRESS', container_status: 'DLV' });
         results.push({ mbl: 'HLCULE1251247412', status: 'ok', events: 10 });
 
         // --- HLCULE1251248185 ---
