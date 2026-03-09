@@ -48,9 +48,6 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
             <p className="text-xs text-[#666] mt-1">
               IMO não disponível para rastreio em tempo real
             </p>
-            <p className="text-xs text-[#888] mt-2">
-              O IMO será populado automaticamente na próxima sincronização
-            </p>
           </div>
         </div>
 
