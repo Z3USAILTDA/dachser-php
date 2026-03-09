@@ -8153,7 +8153,7 @@ serve(async (req) => {
         await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'DCH', 'Discharged', '2026-02-02 09:39:00', 'SANTOS', 'MSC MUGE', 'NA552A');
         await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'DEP', 'Departure from', '2026-02-03 20:27:00', 'SANTOS', 'Truck', '');
         await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'GIE', 'Gate in empty', '2026-02-11 10:40:00', 'SANTOS', 'Truck', '');
-        await updateMain('HLCUGDY251224616', { last_event: 'Gate in empty - SANTOS', navio: 'MSC MUGE', container_status: 'DLV', transshipment_port: 'HAMBURG', transshipment_date: '2025-12-28 22:54:00' });
+        await updateMain('HLCUGDY251224616', { last_event: 'Gate in empty - SANTOS', navio: 'MSC MUGE', container_status: 'DLV' });
         results.push({ mbl: 'HLCUGDY251224616', status: 'ok', events: 12 });
 
         // --- HLCUIT1260305275 (sem informação no armador) ---
