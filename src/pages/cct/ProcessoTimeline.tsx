@@ -234,7 +234,7 @@ export default function ProcessoTimeline() {
                 <span>Status</span>
               </div>
               <div className="flex flex-col gap-2">
-                <StatusBadge status={status_atual?.status_cct_oficial || "AGUARDANDO_MANIFESTACAO"} />
+                <StatusBadge status={effectiveStatus} />
                 <SLAInfoBadge 
                   slaInfo={(status_atual as any)?.sla_info || { 
                     status: status_atual?.sla_status || 'OK', 
