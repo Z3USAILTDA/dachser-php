@@ -8207,7 +8207,7 @@ serve(async (req) => {
         await insertEvent('HLCULE1260135948', 'FANU3458056', 'DCH', 'Discharged', '2026-03-04 04:51:00', 'SANTOS', 'CZECH', 'NA604A');
         await insertEvent('HLCULE1260135948', 'FANU3458056', 'DEP', 'Departure from', '2026-03-04 08:47:00', 'SANTOS', 'Truck', '');
         await insertEvent('HLCULE1260135948', 'FANU3458056', 'GIE', 'Gate in empty', '2026-03-06 15:00:00', 'SANTOS', 'Truck', '');
-        await updateMain('HLCULE1260135948', { last_event: 'Gate in empty - SANTOS', navio: 'CZECH', container_status: 'DLV', transshipment_port: 'ANTWERP', transshipment_date: '2026-01-27 23:19:00' });
+        await updateMain('HLCULE1260135948', { last_event: 'Gate in empty - SANTOS', navio: 'CZECH', container_status: 'DLV' });
         results.push({ mbl: 'HLCULE1260135948', status: 'ok', events: 10 });
 
         // --- HLCULE1260206102 ---
