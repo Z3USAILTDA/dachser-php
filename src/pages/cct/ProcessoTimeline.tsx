@@ -30,6 +30,7 @@ import {
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { ProcessoCCT, CCTEvento } from "@/types/cct";
 import { STATUS_MAPPING } from "@/types/cct";
 
@@ -67,6 +68,7 @@ export default function ProcessoTimeline() {
 
   // Derive effective status from the most recent timeline event (RFB or tracking)
   const effectiveStatus = useMemo(() => {
+    if (isLoadingEvents) return null;
     const baseStatus = processo?.status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
     if (allEventos.length === 0) return baseStatus;
     
@@ -93,7 +95,7 @@ export default function ProcessoTimeline() {
     };
     
     return CCT_EVENT_TO_STATUS[latestCode] || baseStatus;
-  }, [allEventos, processo]);
+  }, [allEventos, processo, isLoadingEvents]);
 
   // Initialize form values when processo loads - use useEffect to properly update state
   useEffect(() => {
@@ -234,7 +236,11 @@ export default function ProcessoTimeline() {
                 <span>Status</span>
               </div>
               <div className="flex flex-col gap-2">
-                <StatusBadge status={effectiveStatus} />
+                {effectiveStatus ? (
+                  <StatusBadge status={effectiveStatus} />
+                ) : (
+                  <Skeleton className="h-6 w-32 bg-[rgba(255,255,255,0.1)]" />
+                )}
                 <SLAInfoBadge 
                   slaInfo={(status_atual as any)?.sla_info || { 
                     status: status_atual?.sla_status || 'OK', 
