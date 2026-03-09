@@ -8180,7 +8180,7 @@ serve(async (req) => {
         // --- HLCUSS5260153330: 2 events ---
         await insertEvent('HLCUSS5260153330', '', 'ARR', 'Vessel arrived', '2026-02-21 02:53:00', 'CARTAGENA (COLOMBIA)', 'DALIAN EXPRESS', '2551N');
         await insertEvent('HLCUSS5260153330', '', 'DCH', 'Discharged', '2026-02-21 05:46:00', 'CARTAGENA (COLOMBIA)', 'DALIAN EXPRESS', '');
-        await updateMain('HLCUSS5260153330', { last_event: 'Discharged - CARTAGENA (COLOMBIA)', navio: 'DALIAN EXPRESS', status: 'DCH' });
+        await updateMain('HLCUSS5260153330', { last_event: 'Discharged - CARTAGENA (COLOMBIA)', navio: 'DALIAN EXPRESS', container_status: 'DCH' });
         results.push({ mbl: 'HLCUSS5260153330', status: 'ok', events: 2 });
 
         // --- HLCUSS5251264397: 2 events ---
