@@ -6460,6 +6460,7 @@ serve(async (req) => {
               [/\bproof\s+of\s+delivery\b/i, 'POD'],
               [/\bnot\s+found\b/i, 'NIF'],
               [/\bcancell?ed\b/i, 'CAN'],
+              [/\breceived\b/i, 'RCF'],
             ];
             for (const [pattern, code] of descPatterns) {
               if (pattern.test(description)) return code;
