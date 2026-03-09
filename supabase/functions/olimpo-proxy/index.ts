@@ -8096,6 +8096,15 @@ serve(async (req) => {
     // ===== BULK MANUAL UPDATE SEA (one-time) =====
     if (action === 'bulk_manual_update_sea') {
       console.log('[bulk_manual_update_sea] Starting bulk manual update...');
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
       const client = await new Client().connect({
         hostname: mariadbHost,
