@@ -3408,10 +3408,11 @@ serve(async (req) => {
                 return null;
               };
               for (const pe of partesEstoque) {
-                const mapped = mapRfbSit(pe?.situacao || pe?.status);
+                const sitVal = pe?.situacaoAtual || pe?.situacao || pe?.status;
+                const mapped = mapRfbSit(sitVal);
                 if (mapped && (!rfbSituacaoMapped || (CCT_STATUS_ORDER[mapped] || 0) > (CCT_STATUS_ORDER[rfbSituacaoMapped] || 0))) {
                   rfbSituacaoMapped = mapped;
-                  rfbSituacao = pe?.situacao || pe?.status;
+                  rfbSituacao = sitVal;
                 }
               }
               
