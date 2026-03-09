@@ -8204,7 +8204,7 @@ serve(async (req) => {
 
         // --- HLCUSS5251264386: Remove duplicates, keep only Vessel departed ---
         await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5251264386' AND event_code != 'DEP'`);
-        await updateMain('HLCUSS5251264386', { status: 'DEP' });
+        await updateMain('HLCUSS5251264386', { container_status: 'DEP' });
         results.push({ mbl: 'HLCUSS5251264386', status: 'ok', deduplicated: true });
 
         // --- HLCUBC1251213949: container + 8 events ---
