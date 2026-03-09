@@ -349,6 +349,61 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
   return null;
 }
 
+// Extract the description of the last valid timeline event
+function extractLastEventDescription(timelineJson: string | null, etdStr?: string | null): string | null {
+  if (!timelineJson) return null;
+  try {
+    const events = JSON.parse(timelineJson);
+    if (!Array.isArray(events) || events.length === 0) return null;
+
+    let etdCutoff: Date | null = null;
+    if (etdStr) {
+      const etdDate = new Date(etdStr);
+      if (!isNaN(etdDate.getTime())) {
+        const now = new Date();
+        etdCutoff = etdDate < now ? etdDate : null;
+      }
+    }
+
+    const now = new Date();
+    const sorted = [...events].sort((a: any, b: any) => {
+      const dateA = a.date || a.Date || a.timestamp || a.Timestamp || a.time || a.datetime || a.dataEvento || '';
+      const dateB = b.date || b.Date || b.timestamp || b.Timestamp || b.time || b.datetime || b.dataEvento || '';
+      if (!dateA && !dateB) return 0;
+      if (!dateA) return 1;
+      if (!dateB) return -1;
+      return String(dateB).localeCompare(String(dateA));
+    });
+
+    const filtered = (etdCutoff
+      ? sorted.filter((ev: any) => {
+          const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
+          if (!ts) return true;
+          const eventDate = parseFlexibleDate(String(ts));
+          if (!eventDate) return true;
+          return eventDate >= etdCutoff!;
+        })
+      : sorted
+    ).filter((ev: any) => {
+      const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
+      if (!ts) return true;
+      const eventDate = parseFlexibleDate(String(ts));
+      if (!eventDate) return true;
+      if (eventDate > now) return false;
+      if (eventDate.getFullYear() < 2020) return false;
+      return true;
+    });
+
+    if (filtered.length === 0) return null;
+
+    // Return the description of the most recent event
+    const latest = filtered[0];
+    return (latest.Description || latest.description || latest.descricao_evento || latest.title || latest.details || '').trim() || null;
+  } catch (_e) {
+    return null;
+  }
+}
+
 
 // Extract the date of the most recent valid event from the timeline
 function extractLastEventDate(timelineJson: string | null, etdStr?: string | null): string | null {
