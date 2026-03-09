@@ -8289,7 +8289,7 @@ serve(async (req) => {
         await insertEvent('HLCUBSC251286321', 'CAIU 6986670', 'DCH', 'Discharged', '2026-02-03 07:30:00', 'SANTOS', 'MAERSK FREEPORT', '602S');
         await insertEvent('HLCUBSC251286321', 'CAIU 6986670', 'DEP', 'Departure from', '2026-02-05 01:16:00', 'SANTOS', 'Truck', '');
         await insertEvent('HLCUBSC251286321', 'CAIU 6986670', 'GIE', 'Gate in empty', '2026-02-13 10:37:00', 'SANTOS', 'Rail', '');
-        await updateMain('HLCUBSC251286321', { last_event: 'Gate in empty - SANTOS', navio: 'MAERSK FREEPORT', status: 'GIE' });
+        await updateMain('HLCUBSC251286321', { last_event: 'Gate in empty - SANTOS', navio: 'MAERSK FREEPORT', container_status: 'GIE' });
         results.push({ mbl: 'HLCUBSC251286321', status: 'ok', events: 8 });
 
         await client.close();
