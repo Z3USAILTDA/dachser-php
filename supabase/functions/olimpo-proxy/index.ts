@@ -8139,7 +8139,7 @@ serve(async (req) => {
         // --- HLCUSS5260125917: 2 events ---
         await insertEvent('HLCUSS5260125917', '', 'CRG', 'Loaded', '2026-03-01 07:32:00', 'SANTOS', 'MAERSK MONTE ALEGRE', '');
         await insertEvent('HLCUSS5260125917', '', 'DEP', 'Vessel departed', '2026-03-01 17:39:00', 'SANTOS', 'MAERSK MONTE ALEGRE', '');
-        await updateMain('HLCUSS5260125917', { last_event: 'Vessel departed - SANTOS', navio: 'MAERSK MONTE ALEGRE', status: 'DEP' });
+        await updateMain('HLCUSS5260125917', { last_event: 'Vessel departed - SANTOS', navio: 'MAERSK MONTE ALEGRE', container_status: 'DEP' });
         results.push({ mbl: 'HLCUSS5260125917', status: 'ok', events: 2 });
 
         // --- HLCUBKK260145016: 2 events ---
