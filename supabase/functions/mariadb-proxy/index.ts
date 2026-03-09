@@ -6519,8 +6519,19 @@ serve(async (req) => {
             };
           });
 
-          // Filter out error events and sort DESC by date
-          const validEvents = events.filter((e: any) => !isErrorEvent(e.descricao_evento));
+          // Whitelist of valid IATA status codes — reject arbitrary strings from timeline
+          const VALID_IATA_CODES = new Set([
+            'DEP', 'ARR', 'RCF', 'DLV', 'NFD', 'MAN', 'BKD', 'RCS', 'DIS', 'NIL',
+            'OFLD', 'FOH', 'TRM', 'PRE', 'AWD', 'CCD', 'TGC', 'DDL', 'AWR', 'POD',
+            'TFD', 'RCT', 'RCP', 'LOF', 'TDE', 'ASN', 'MIS', 'TFS', 'BKF', 'FWB',
+            'CAN', 'NIF', 'UNK', 'NOVO_MASTER',
+          ]);
+
+          // Filter out error events AND events with invalid IATA codes, then sort DESC by date
+          const validEvents = events.filter((e: any) => 
+            !isErrorEvent(e.descricao_evento) && 
+            VALID_IATA_CODES.has((e.codigo_evento || '').toUpperCase())
+          );
           validEvents.sort((a: any, b: any) => {
             const dateA = a.data_hora_evento ? new Date(a.data_hora_evento).getTime() : 0;
             const dateB = b.data_hora_evento ? new Date(b.data_hora_evento).getTime() : 0;
