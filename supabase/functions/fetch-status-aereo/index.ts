@@ -956,13 +956,19 @@ serve(async (req) => {
             finalStatus = classifyArrival(descResolved, timelineStr, destForClassify, origForClassify, awb);
             console.log(`[descFallback] ${awb}: extracted "${descResolved}" from description → "${finalStatus}"`);
           } else {
-            finalStatus = rawStatus;
-            console.log(`[noSource] ${awb}: no valid status from api/timeline/ws/desc, raw="${rawStatus}"`);
+            finalStatus = null;
+            console.log(`[noSource] ${awb}: no valid status from api/timeline/ws/desc, marking as tracking failed`);
           }
         } else {
-          finalStatus = rawStatus;
-          console.log(`[noSource] ${awb}: no valid status from api/timeline/ws, raw="${rawStatus}"`);
+          finalStatus = null;
+          console.log(`[noSource] ${awb}: no valid status from api/timeline/ws, marking as tracking failed`);
         }
+      }
+
+      // Final guard: if status is still UNK after all resolution, treat as tracking failed
+      if (finalStatus && finalStatus.toUpperCase() === 'UNK') {
+        finalStatus = null;
+        console.log(`[unkGuard] ${awb}: resolved to UNK, marking as tracking failed`);
       }
 
       // Re-classificar ARR genérico para determinar CONEXAO/DESTINO
@@ -985,6 +991,7 @@ serve(async (req) => {
         origem: ws.origin || null,
         destino: ws.destination || null,
         último_status: finalStatus || null,
+        tracking_failed: !finalStatus,
         status_info: extractLastEventDescription(timelineStr, etdForTimeline) || ws.last_status_description || null,
         'última atualização': scrapedAt,
         last_flight: ws.last_flight || null,

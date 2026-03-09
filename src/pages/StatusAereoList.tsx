@@ -156,13 +156,18 @@ const StatusAereoList = () => {
                       <TableCell>
                         <div className="flex items-center gap-1.5">
                           <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            item.último_status === 'DLV' 
+                            item.tracking_failed
+                              ? 'bg-red-500/20 text-red-700 dark:text-red-300'
+                              : item.último_status === 'DLV' 
                               ? 'bg-green-500/20 text-green-700 dark:text-green-300'
                               : item.último_status === 'ERRO' || item.último_status === 'NOT_FOUND'
                               ? 'bg-red-500/20 text-red-700 dark:text-red-300'
                               : 'bg-blue-500/20 text-blue-700 dark:text-blue-300'
                           }`}>
-                            {item.último_status || 'N/A'}
+                            {item.tracking_failed 
+                              ? (item.awb?.startsWith('577') ? 'Sem informação' : 'Falha no rastreio')
+                              : (item.último_status || 'N/A')
+                            }
                           </span>
                           {item.awb?.startsWith('577') && (
                             <TooltipProvider>
