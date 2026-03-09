@@ -766,6 +766,8 @@ serve(async (req) => {
       }
 
       // For AWBs that have NO valid ws data, fully overwrite with api data (full fallback)
+      // BUT: if the ws timeline has valid (non-error) tracking events, preserve it
+      // even when status_code is UNK (scraping artifact — timeline is still accurate)
       for (const ws of wsList) {
         const awb = String(ws.awb || '').trim();
         const apiRow = apiFallbackMap.get(awb);
@@ -773,13 +775,34 @@ serve(async (req) => {
         const status = (ws.last_status_code || '').trim().toUpperCase();
         const needsFullFallback = invalidStatuses.has(status) || !ws.last_status_code || isTimelineError(ws.timeline_json);
         if (needsFullFallback) {
-          ws.last_status_code = apiRow.ultimo_status || null;
-          ws.last_status_description = apiRow.ultimo_status || null;
-          ws.origin = apiRow.origem || ws.origin || null;
-          ws.destination = apiRow.destino || ws.destination || null;
-          ws.timeline_json = apiRow.historico_status || null;
-          ws._apiFallback = apiRow;
-          ws._source = 'api';
+          // Check if ws timeline has valid events before overwriting
+          const wsTimelineHasData = ws.timeline_json && !isTimelineError(ws.timeline_json) && (() => {
+            try {
+              const events = JSON.parse(ws.timeline_json);
+              return Array.isArray(events) && events.length > 0;
+            } catch { return false; }
+          })();
+
+          if (wsTimelineHasData) {
+            // Timeline from firecrawl is valid — only update status code and metadata, keep timeline
+            ws.last_status_code = apiRow.ultimo_status || ws.last_status_code;
+            ws.last_status_description = apiRow.ultimo_status || ws.last_status_description;
+            ws.origin = ws.origin || apiRow.origem || null;
+            ws.destination = ws.destination || apiRow.destino || null;
+            // DO NOT overwrite timeline_json — firecrawl timeline is richer
+            // DO NOT set _apiFallback — we want to use t_master_dados enrichment
+            ws._source = 'ws_with_api_status';
+            console.log(`[fallback] ${awb}: ws timeline has ${JSON.parse(ws.timeline_json).length} events, preserving firecrawl timeline (api status: ${apiRow.ultimo_status})`);
+          } else {
+            // No valid ws timeline — full fallback to API data
+            ws.last_status_code = apiRow.ultimo_status || null;
+            ws.last_status_description = apiRow.ultimo_status || null;
+            ws.origin = apiRow.origem || ws.origin || null;
+            ws.destination = apiRow.destino || ws.destination || null;
+            ws.timeline_json = apiRow.historico_status || null;
+            ws._apiFallback = apiRow;
+            ws._source = 'api';
+          }
         }
       }
       console.log(`t_aereo_api: ${apiFallbackMap.size} AWBs found, full fallback applied where needed`);
