@@ -575,6 +575,7 @@ const Index = () => {
           master_changed: item.master_changed || false,
           last_event_date: item.last_event_date || null,
           in_transit: item.in_transit || false,
+          tracking_failed: item.tracking_failed || false,
         }));
 
         const deduplicatedData = convertedData.reduce((acc: AWBData[], current: AWBData) => {
