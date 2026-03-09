@@ -255,18 +255,19 @@ export function useProcessoCCT(id: string) {
 /**
  * Fetch CCT events history for a specific AWB from MariaDB
  */
-export function useCCTEvents(awb: string) {
+export function useCCTEvents(awb: string, master?: string) {
   return useQuery({
-    queryKey: ["cct-events", awb],
+    queryKey: ["cct-events", awb, master],
     queryFn: async (): Promise<CCTEvento[]> => {
       if (!awb) return [];
 
-      console.log("CCT: Fetching events for AWB:", awb);
+      console.log("CCT: Fetching events for AWB:", awb, "Master:", master);
       
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: { 
           action: 'get_cct_events',
-          awb: awb
+          awb: awb,
+          master: master || '',
         }
       });
 

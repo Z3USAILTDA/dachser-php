@@ -45,8 +45,8 @@ export default function ProcessoTimeline() {
     return processos.find(p => p.shipment.id === id);
   }, [processos, id]);
 
-  // Fetch events from history table using the AWB (house - HAWB)
-  const { data: eventosHistorico = [], isLoading: isLoadingEvents } = useCCTEvents(processo?.shipment.house || '');
+  // Fetch events from history table using the AWB (house - HAWB) + Master (MAWB) for RFB lookup
+  const { data: eventosHistorico = [], isLoading: isLoadingEvents } = useCCTEvents(processo?.shipment.house || '', processo?.shipment.master || '');
 
   const [activeTab, setActiveTab] = useState("timeline");
   const [editingPeso, setEditingPeso] = useState(false);

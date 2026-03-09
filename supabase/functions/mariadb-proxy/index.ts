@@ -6223,15 +6223,34 @@ serve(async (req) => {
 
           console.log(`CCT: Found ${events?.length || 0} events in t_cct_eventos_historico for AWB ${queryAwb}`);
           
-          // Also try to get events from t_aereo_cct partesEstoque for this AWB
+      // Also try to get events from t_aereo_cct partesEstoque using MAWB
+          // t_aereo_cct.identificacao stores MAWB (e.g. 020-17606035), not HAWB
           let rfbEvents: any[] = [];
           try {
-            const rfbRows = await client.query(`
+            // Use master (MAWB) if provided, otherwise lookup from t_master_dados
+            let mawbForRfb = (body as any).master || '';
+            if (!mawbForRfb) {
+              try {
+                const mawbLookup = await client.query(`
+                  SELECT TRIM(master) as master FROM ${database}.t_master_dados
+                  WHERE TRIM(house) = TRIM(?) LIMIT 1
+                `, [queryAwb]);
+                if (mawbLookup && mawbLookup.length > 0) {
+                  mawbForRfb = mawbLookup[0].master;
+                }
+              } catch (lookupErr) {
+                console.warn('CCT: Could not lookup MAWB from HAWB:', lookupErr);
+              }
+            }
+            
+            console.log(`CCT: Looking up RFB events with MAWB: ${mawbForRfb} (HAWB: ${queryAwb})`);
+            
+            const rfbRows = mawbForRfb ? await client.query(`
               SELECT identificacao, partesEstoque
               FROM ${database}.t_aereo_cct
               WHERE identificacao = ?
               LIMIT 1
-            `, [queryAwb]);
+            `, [mawbForRfb]) : [];
             
             if (rfbRows && rfbRows.length > 0 && rfbRows[0].partesEstoque) {
               let partes: any[] = [];
