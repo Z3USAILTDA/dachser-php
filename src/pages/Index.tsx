@@ -606,21 +606,7 @@ const Index = () => {
           const withFlags = deduplicatedData.map((item: AWBData) =>
             flags[item.awb] ? { ...item, tracking_failed: true } : item
           );
-          // Non-admin users only see processes from 2027 onwards
-          const isUserAdmin = (() => {
-            try {
-              const su = localStorage.getItem("user") || localStorage.getItem("dachser_user");
-              if (su) { const p = JSON.parse(su); return p.is_admin === 1 || p.is_admin === "1" || p.is_admin === true; }
-            } catch { return false; }
-            return false;
-          })();
-          const filtered = isUserAdmin ? withFlags : withFlags.filter((item: AWBData) => {
-            const etdDate = item.etd ? new Date(item.etd) : null;
-            const checkDate = item.last_check ? new Date(item.last_check) : null;
-            const year = etdDate?.getFullYear() || checkDate?.getFullYear() || 0;
-            return year >= 2027;
-          });
-          setStatusAereoData(filtered);
+          setStatusAereoData(withFlags);
         } catch (_) {
           setStatusAereoData(deduplicatedData);
         }
