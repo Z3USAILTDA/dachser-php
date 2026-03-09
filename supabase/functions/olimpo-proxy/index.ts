@@ -8275,7 +8275,7 @@ serve(async (req) => {
         await insertEvent('HLCUBSC251212360', 'FANU 3088183', 'DCH', 'Discharged', '2026-02-11 16:05:00', 'SANTOS', 'MAERSK MONTE AZUL', '603S');
         await insertEvent('HLCUBSC251212360', 'FANU 3088183', 'DEP', 'Departure from', '2026-02-12 12:51:00', 'SANTOS', 'Truck', '');
         await insertEvent('HLCUBSC251212360', 'FANU 3088183', 'GIE', 'Gate in empty', '2026-02-20 14:25:00', 'SANTOS', 'Truck', '');
-        await updateMain('HLCUBSC251212360', { last_event: 'Gate in empty - SANTOS', navio: 'MAERSK MONTE AZUL', status: 'GIE' });
+        await updateMain('HLCUBSC251212360', { last_event: 'Gate in empty - SANTOS', navio: 'MAERSK MONTE AZUL', container_status: 'GIE' });
         results.push({ mbl: 'HLCUBSC251212360', status: 'ok', events: 12 });
 
         // --- HLCUBSC251286321: container + 8 events ---
