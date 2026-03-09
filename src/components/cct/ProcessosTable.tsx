@@ -178,6 +178,31 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                   <TableCell>
                     {(() => {
                       const statusOficial = processo.status_atual?.status_cct_oficial || 'INFORMADA';
+                      // Also check rfb_situacao for a more advanced status
+                      const rfbRaw = processo.shipment.rfb_situacao;
+                      let effectiveManifestacao = statusOficial;
+                      if (rfbRaw) {
+                        const lower = rfbRaw.toLowerCase().trim();
+                        let rfbMapped: string | null = null;
+                        if (lower.includes('entregue')) rfbMapped = 'ENTREGUE';
+                        else if (lower.includes('trânsito') || lower.includes('transito')) rfbMapped = 'EM_TRANSITO_TERRESTRE';
+                        else if (lower.includes('transferência') || lower.includes('transferencia')) rfbMapped = 'EM_AREA_TRANSFERENCIA';
+                        else if (lower.includes('recepcionada')) rfbMapped = 'RECEPCIONADA';
+                        else if (lower.includes('manifestada')) rfbMapped = 'MANIFESTADA';
+                        else if (lower.includes('informada')) rfbMapped = 'INFORMADA';
+                        
+                        if (rfbMapped) {
+                          const ORDER: Record<string, number> = {
+                            'INFORMADA': 1, 'MANIFESTADA': 2, 'EM_AREA_TRANSFERENCIA': 3,
+                            'RECEPCIONADA': 4, 'EM_TROCA_RECINTOS': 5, 'EM_TRANSITO_TERRESTRE': 6,
+                            'ENTREGUE': 7, 'BLOQUEIO': 8,
+                          };
+                          if ((ORDER[rfbMapped] || 0) > (ORDER[effectiveManifestacao] || 0)) {
+                            effectiveManifestacao = rfbMapped;
+                          }
+                        }
+                      }
+                      
                       const manifestacaoDots: Record<string, { label: string; bgColor: string }> = {
                         'INFORMADA': { label: 'Informada', bgColor: 'bg-cyan-500' },
                         'MANIFESTADA': { label: 'Manifestada', bgColor: 'bg-primary' },
@@ -188,7 +213,7 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                         'ENTREGUE': { label: 'Entregue', bgColor: 'bg-emerald-500' },
                         'BLOQUEIO': { label: 'Bloqueio', bgColor: 'bg-destructive' },
                       };
-                      const { label, bgColor } = manifestacaoDots[statusOficial] || manifestacaoDots['INFORMADA'];
+                      const { label, bgColor } = manifestacaoDots[effectiveManifestacao] || manifestacaoDots['INFORMADA'];
                       return (
                         <div className="flex justify-center">
                           <span 
