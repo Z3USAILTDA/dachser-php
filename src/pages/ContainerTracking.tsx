@@ -1769,10 +1769,13 @@ const ContainerTracking = () => {
 
     // Ordenar: MBLs com status "Aguardando" (AGD) por último
     mbls.sort((a, b) => {
-      const statusA = getReportStatus(a.last_event);
-      const statusB = getReportStatus(b.last_event);
-      if (statusA.code === 'AGD' && statusB.code !== 'AGD') return 1;
-      if (statusA.code !== 'AGD' && statusB.code === 'AGD') return -1;
+      const statusA = getReportStatus(a.last_event, a.container_status);
+      const statusB = getReportStatus(b.last_event, b.container_status);
+      const bottomCodes = ['AGD', 'SIA'];
+      const aIsBottom = bottomCodes.includes(statusA.code);
+      const bIsBottom = bottomCodes.includes(statusB.code);
+      if (aIsBottom && !bIsBottom) return 1;
+      if (!aIsBottom && bIsBottom) return -1;
       return 0;
     });
     return mbls;
