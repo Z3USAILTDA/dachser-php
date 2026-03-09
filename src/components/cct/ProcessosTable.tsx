@@ -202,9 +202,10 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                   <TableCell>
                     {(() => {
                       const statusOficial = processo.status_atual?.status_cct_oficial || '';
-                      const hasRealStatus = statusOficial && 
-                        statusOficial !== 'AGUARDANDO_CONSULTA' && 
-                        statusOficial !== 'AGUARDANDO_MANIFESTACAO';
+                      const statusStr = String(statusOficial);
+                      const hasRealStatus = statusStr && 
+                        statusStr !== 'AGUARDANDO_CONSULTA' && 
+                        statusStr !== 'AGUARDANDO_MANIFESTACAO';
                       
                       // Show real status badge if we have a valid status from any source (tracking, LeadComex, or RFB)
                       if (processo.shipment.leadcomex_status === 'success' || hasRealStatus) {
