@@ -8151,7 +8151,7 @@ serve(async (req) => {
         // --- HLCUBKK260146220: 2 events + origem/destino ---
         await insertEvent('HLCUBKK260146220', '', 'CRG', 'Loaded', '2026-03-03 13:03:00', 'YANTIAN', 'ZIM BANGKOK', '');
         await insertEvent('HLCUBKK260146220', '', 'DEP', 'Vessel departed', '2026-03-03 20:35:00', 'YANTIAN', 'ZIM BANGKOK', '');
-        await updateMain('HLCUBKK260146220', { last_event: 'Vessel departed - YANTIAN', navio: 'ZIM BANGKOK', status: 'DEP', origem: 'LAEM CHABANG', destino: 'SANTOS' });
+        await updateMain('HLCUBKK260146220', { last_event: 'Vessel departed - YANTIAN', navio: 'ZIM BANGKOK', container_status: 'DEP', origem: 'LAEM CHABANG', destino: 'SANTOS' });
         results.push({ mbl: 'HLCUBKK260146220', status: 'ok', events: 2 });
 
         // --- HLCUBKK260144320: 2 events ---
