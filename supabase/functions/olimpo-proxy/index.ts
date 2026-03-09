@@ -8163,7 +8163,7 @@ serve(async (req) => {
         // --- HLCUBKK260143931: 2 events ---
         await insertEvent('HLCUBKK260143931', '', 'CRG', 'Loaded', '2026-03-03 16:43:00', 'YANTIAN', 'ZIM BANGKOK', '');
         await insertEvent('HLCUBKK260143931', '', 'DEP', 'Vessel departed', '2026-03-03 20:35:00', 'YANTIAN', 'ZIM BANGKOK', '');
-        await updateMain('HLCUBKK260143931', { last_event: 'Vessel departed - YANTIAN', navio: 'ZIM BANGKOK', status: 'DEP' });
+        await updateMain('HLCUBKK260143931', { last_event: 'Vessel departed - YANTIAN', navio: 'ZIM BANGKOK', container_status: 'DEP' });
         results.push({ mbl: 'HLCUBKK260143931', status: 'ok', events: 2 });
 
         // --- HLCUSZX2601BTMJ8: 1 event ---
