@@ -8174,7 +8174,7 @@ serve(async (req) => {
         // --- HLCUVL1260108963: Delete all + insert 1 ---
         await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUVL1260108963'`);
         await insertEvent('HLCUVL1260108963', '', 'DEP', 'Vessel departed', '2026-02-08 05:15:00', 'VALENCIA', 'MSC ANTIGUA', '');
-        await updateMain('HLCUVL1260108963', { last_event: 'Vessel departed - VALENCIA', navio: 'MSC ANTIGUA', status: 'DEP' });
+        await updateMain('HLCUVL1260108963', { last_event: 'Vessel departed - VALENCIA', navio: 'MSC ANTIGUA', container_status: 'DEP' });
         results.push({ mbl: 'HLCUVL1260108963', status: 'ok', events: 1, cleared: true });
 
         // --- HLCUSS5260153330: 2 events ---
