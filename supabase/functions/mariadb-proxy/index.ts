@@ -6468,7 +6468,7 @@ serve(async (req) => {
                 // Map each partesEstoque entry as an RFB event
                 const existingCodes = new Set((events || []).map((e: any) => e.codigo_evento));
                 for (const pe of partes) {
-                  const situacao = pe?.situacao || pe?.status;
+                  const situacao = pe?.situacaoAtual || pe?.situacao || pe?.status;
                   if (!situacao) continue;
                   
                   // Map situacao to codigo_evento
