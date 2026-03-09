@@ -3292,6 +3292,7 @@ serve(async (req) => {
         try {
           console.log('CCT Step 2.6: Fetching t_aereo_cct-only processes (no tracking data)...');
           const existingMawbSet = new Set(mawbList.map((m: string) => m.trim()));
+          console.log(`CCT Step 2.6: existingMawbSet has ${existingMawbSet.size} entries, contains 014-78876932: ${existingMawbSet.has('014-78876932')}`);
           
           // Get all recent MAWBs from t_aereo_cct that match registered airlines
           const rfbOnlyAwbs = await client.query(`
