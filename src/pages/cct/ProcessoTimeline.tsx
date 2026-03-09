@@ -59,6 +59,41 @@ export default function ProcessoTimeline() {
   const [dataDecolagem, setDataDecolagem] = useState("");
 
   // Combine historic events with fallback evento from processo
+  const allEventos = useMemo(() => {
+    if (!processo) return [];
+    const fallback = processo.eventos || [];
+    return eventosHistorico.length > 0 ? eventosHistorico : fallback;
+  }, [processo, eventosHistorico]);
+
+  // Derive effective status from the most recent timeline event (RFB or tracking)
+  const effectiveStatus = useMemo(() => {
+    const baseStatus = processo?.status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
+    if (allEventos.length === 0) return baseStatus;
+    
+    const sorted = [...allEventos].sort(
+      (a, b) => new Date(b.data_hora_evento).getTime() - new Date(a.data_hora_evento).getTime()
+    );
+    const latestCode = sorted[0]?.codigo_evento?.toUpperCase() || '';
+    
+    const CCT_EVENT_TO_STATUS: Record<string, string> = {
+      'AREA_TRANSFERENCIA': 'EM_AREA_TRANSFERENCIA',
+      'MANIFESTADO': 'MANIFESTADA',
+      'RECEPCIONADO': 'RECEPCIONADA',
+      'CHEGADA_INFORMADA': 'INFORMADA',
+      'CHEGADA_AERONAVE': 'INFORMADA',
+      'EM_TRANSITO': 'EM_TRANSITO_TERRESTRE',
+      'ENTREGUE': 'ENTREGUE',
+      'BLOQUEIO': 'BLOQUEIO',
+      'DESEMBARACO': 'ENTREGUE',
+      'LIBERADO': 'ENTREGUE',
+      'DESBLOQUEIO': 'RECEPCIONADA',
+      ...Object.fromEntries(
+        Object.entries(STATUS_MAPPING).map(([k, v]) => [k, v])
+      ),
+    };
+    
+    return CCT_EVENT_TO_STATUS[latestCode] || baseStatus;
+  }, [allEventos, processo]);
 
   // Initialize form values when processo loads - use useEffect to properly update state
   useEffect(() => {
