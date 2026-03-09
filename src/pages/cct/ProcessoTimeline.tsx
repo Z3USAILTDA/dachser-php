@@ -142,6 +142,38 @@ export default function ProcessoTimeline() {
   // Use historic events if available, otherwise fallback to processo.eventos
   const allEventos = eventosHistorico.length > 0 ? eventosHistorico : eventosFallback;
 
+  // Derive effective status from the most recent timeline event (RFB or tracking)
+  const effectiveStatus = useMemo(() => {
+    if (allEventos.length === 0) return status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
+    
+    // Sort by date DESC, pick most recent
+    const sorted = [...allEventos].sort(
+      (a, b) => new Date(b.data_hora_evento).getTime() - new Date(a.data_hora_evento).getTime()
+    );
+    const latestCode = sorted[0]?.codigo_evento?.toUpperCase() || '';
+    
+    // Map event code to CCT official status
+    const CCT_EVENT_TO_STATUS: Record<string, string> = {
+      'AREA_TRANSFERENCIA': 'EM_AREA_TRANSFERENCIA',
+      'MANIFESTADO': 'MANIFESTADA',
+      'RECEPCIONADO': 'RECEPCIONADA',
+      'CHEGADA_INFORMADA': 'INFORMADA',
+      'CHEGADA_AERONAVE': 'INFORMADA',
+      'EM_TRANSITO': 'EM_TRANSITO_TERRESTRE',
+      'ENTREGUE': 'ENTREGUE',
+      'BLOQUEIO': 'BLOQUEIO',
+      'DESEMBARACO': 'ENTREGUE',
+      'LIBERADO': 'ENTREGUE',
+      'DESBLOQUEIO': 'RECEPCIONADA',
+      ...Object.fromEntries(
+        Object.entries(STATUS_MAPPING).map(([k, v]) => [k, v])
+      ),
+    };
+    
+    const mapped = CCT_EVENT_TO_STATUS[latestCode] || status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
+    return mapped;
+  }, [allEventos, status_atual]);
+
   return (
     <PageLayout
       title="DACHSER"
