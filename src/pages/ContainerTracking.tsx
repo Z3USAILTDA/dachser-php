@@ -2306,7 +2306,23 @@ const ContainerTracking = () => {
                             </td>
                             <td className="px-4 py-3 text-[#aaaaaa] text-sm">{mbl.destino || "-"}</td>
                             <td className="px-3 py-3 min-w-[280px]">
-                              <div className="relative h-1.5 w-full flex items-center">
+                              {isSIA ? (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-red-500/15 text-red-400 border border-red-500/30 cursor-help">
+                                        <AlertTriangle className="w-3.5 h-3.5" />
+                                        Sem informação no armador
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-xs">
+                                      <p className="text-xs font-medium">Sem informação no armador</p>
+                                      <p className="text-xs text-muted-foreground">Não foi possível obter dados de rastreio no armador. Nova consulta programada automaticamente.</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              ) : (
+                                <div className="relative h-1.5 w-full flex items-center">
                                 <div className="absolute inset-0 bg-gray-800/50 rounded-full" />
                                 <div className="absolute left-0 h-full rounded-l-full transition-all duration-700 ease-out" style={{
                             width: `${progress}%`,
@@ -2349,8 +2365,14 @@ const ContainerTracking = () => {
                                   </Tooltip>
                                 </TooltipProvider>
                               </div>
+                              )}
                             </td>
                             <td className="px-3 py-3">
+                              {isSIA ? (
+                                <span className="text-sm font-bold px-2 py-1 rounded-md text-red-400 bg-red-500/20">
+                                  SIA
+                                </span>
+                              ) : (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -2367,6 +2389,7 @@ const ContainerTracking = () => {
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
+                              )}
                             </td>
                             <td className="px-3 py-3 text-center">
                               {(() => {
