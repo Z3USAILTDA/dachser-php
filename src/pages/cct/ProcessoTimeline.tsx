@@ -236,7 +236,11 @@ export default function ProcessoTimeline() {
                 <span>Status</span>
               </div>
               <div className="flex flex-col gap-2">
-                <StatusBadge status={effectiveStatus} />
+                {effectiveStatus ? (
+                  <StatusBadge status={effectiveStatus} />
+                ) : (
+                  <Skeleton className="h-6 w-32 bg-[rgba(255,255,255,0.1)]" />
+                )}
                 <SLAInfoBadge 
                   slaInfo={(status_atual as any)?.sla_info || { 
                     status: status_atual?.sla_status || 'OK', 
