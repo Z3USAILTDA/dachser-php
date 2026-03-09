@@ -3231,10 +3231,11 @@ serve(async (req) => {
               let rfbSituacao: string | null = null;
               let rfbSituacaoMapped: string | null = null;
               for (const pe of partesEstoque) {
-                const mapped = mapRfbSituacaoToCCT(pe?.situacao || pe?.status);
+                const sitVal = pe?.situacaoAtual || pe?.situacao || pe?.status;
+                const mapped = mapRfbSituacaoToCCT(sitVal);
                 if (mapped && (!rfbSituacaoMapped || (CCT_STATUS_ORDER[mapped] || 0) > (CCT_STATUS_ORDER[rfbSituacaoMapped] || 0))) {
                   rfbSituacaoMapped = mapped;
-                  rfbSituacao = pe?.situacao || pe?.status;
+                  rfbSituacao = sitVal;
                 }
               }
               
@@ -3372,12 +3373,6 @@ serve(async (req) => {
                 if (Array.isArray(raw)) partesEstoque = raw;
               } catch {}
               
-              let partes: any[] = [];
-              try {
-                const raw = typeof rfb.partes === 'string' ? JSON.parse(rfb.partes) : rfb.partes;
-                if (Array.isArray(raw)) partes = raw;
-              } catch {}
-              
               let frete: any = null;
               try { frete = typeof rfb.frete === 'string' ? JSON.parse(rfb.frete) : rfb.frete; } catch {}
               
@@ -3387,9 +3382,10 @@ serve(async (req) => {
                 if (Array.isArray(raw)) viagensAssociadas = raw;
               } catch {}
               
-              const consignatario = partes.find((p: any) => {
-                const tipo = (p?.tipo || p?.funcao || '').toLowerCase();
-                return tipo.includes('consignat') || tipo.includes('destinat');
+              // Try to find consignatário from partesEstoque
+              const consignatario = partesEstoque.find((p: any) => {
+                const resp = (p?.cnpjResponsavelAtual || '').trim();
+                return resp.length > 0;
               });
               
               // Extract situacao
@@ -3407,10 +3403,11 @@ serve(async (req) => {
                 return null;
               };
               for (const pe of partesEstoque) {
-                const mapped = mapRfbSit(pe?.situacao || pe?.status);
+                const sitVal = pe?.situacaoAtual || pe?.situacao || pe?.status;
+                const mapped = mapRfbSit(sitVal);
                 if (mapped && (!rfbSituacaoMapped || (CCT_STATUS_ORDER[mapped] || 0) > (CCT_STATUS_ORDER[rfbSituacaoMapped] || 0))) {
                   rfbSituacaoMapped = mapped;
-                  rfbSituacao = pe?.situacao || pe?.status;
+                  rfbSituacao = sitVal;
                 }
               }
               
@@ -3450,8 +3447,8 @@ serve(async (req) => {
                   manuseios_especiais: manuseios,
                   rfb_situacao: rfbSituacao,
                   rfb_status_cct: rfbSituacaoMapped,
-                  consignatario_cnpj: consignatario?.cnpj || consignatario?.documento || null,
-                  consignatario_nome: consignatario?.nome || consignatario?.razaoSocial || null,
+                  consignatario_cnpj: consignatario?.cnpjResponsavelAtual || null,
+                  consignatario_nome: null,
                   numero_voo: numeroVoo,
                   data_emissao: rfb.dataEmissao || null,
                   info_frete: infoFrete,
@@ -6466,7 +6463,7 @@ serve(async (req) => {
                 // Map each partesEstoque entry as an RFB event
                 const existingCodes = new Set((events || []).map((e: any) => e.codigo_evento));
                 for (const pe of partes) {
-                  const situacao = pe?.situacao || pe?.status;
+                  const situacao = pe?.situacaoAtual || pe?.situacao || pe?.status;
                   if (!situacao) continue;
                   
                   // Map situacao to codigo_evento
