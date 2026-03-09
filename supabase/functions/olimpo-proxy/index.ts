@@ -8244,7 +8244,7 @@ serve(async (req) => {
         await insertEvent('HLCUBI1260201194', 'HLBU 1759059', 'DEP', 'Departure from', '2026-02-17 09:07:00', 'VALENCIA', 'Truck', '');
         await insertEvent('HLCUBI1260201194', 'HLBU 1759059', 'CRG', 'Loaded', '2026-02-23 12:52:00', 'VALENCIA', 'MSC MELINE', 'MM607A');
         await insertEvent('HLCUBI1260201194', 'HLBU 1759059', 'DEP', 'Vessel departed', '2026-02-23 19:13:00', 'VALENCIA', 'MSC MELINE', '');
-        await updateMain('HLCUBI1260201194', { last_event: 'Vessel departed - VALENCIA', navio: 'MSC MELINE', status: 'DEP' });
+        await updateMain('HLCUBI1260201194', { last_event: 'Vessel departed - VALENCIA', navio: 'MSC MELINE', container_status: 'DEP' });
         results.push({ mbl: 'HLCUBI1260201194', status: 'ok', events: 7 });
 
         // --- HLCUBI1260201201: container + 7 events + ETA ---
