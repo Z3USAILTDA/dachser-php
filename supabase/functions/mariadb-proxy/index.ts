@@ -3287,6 +3287,208 @@ serve(async (req) => {
           }
         }
 
+        // ==================== STEP 2.6: Include t_aereo_cct-only processes ====================
+        // Fetch MAWBs from t_aereo_cct that are NOT already in the tracking results
+        try {
+          console.log('CCT Step 2.6: Fetching t_aereo_cct-only processes (no tracking data)...');
+          const existingMawbSet = new Set(mawbList.map((m: string) => m.trim()));
+          
+          // Get all recent MAWBs from t_aereo_cct that match registered airlines
+          const rfbOnlyAwbs = await client.query(`
+            SELECT 
+              identificacao,
+              ruc,
+              codigoAeroportoOrigemConhecimento,
+              codigoAeroportoDestinoConhecimento,
+              recintoAduaneiroDestino,
+              quantidadeVolumesConhecimento,
+              pesoBrutoConhecimento,
+              indicadorPartesMadeira,
+              manuseiosEspeciais,
+              partesEstoque,
+              partes,
+              hawbAssociados,
+              frete,
+              viagensAssociadas,
+              dataEmissao,
+              situacao,
+              data_insert
+            FROM ${database}.t_aereo_cct
+            WHERE data_insert >= NOW() - INTERVAL 7 DAY
+            AND (${registeredAirlineCodes.map(c => `identificacao LIKE '${c}-%'`).join(' OR ')})
+          `);
+          
+          const rfbOnlyMawbs: any[] = [];
+          for (const rfb of (rfbOnlyAwbs || [])) {
+            const ident = (rfb.identificacao || '').trim();
+            if (!ident || existingMawbSet.has(ident)) continue;
+            rfbOnlyMawbs.push(rfb);
+          }
+          
+          console.log(`CCT Step 2.6: Found ${rfbOnlyMawbs.length} MAWBs in t_aereo_cct not in tracking`);
+          
+          if (rfbOnlyMawbs.length > 0) {
+            // Get HAWBs from t_master_dados for these RFB-only MAWBs
+            const rfbMawbFilter = rfbOnlyMawbs.map((r: any) => `'${(r.identificacao || '').trim().replace(/'/g, "''")}'`).join(',');
+            const rfbHawbs = await client.query(`
+              SELECT 
+                sub.id, sub.master, sub.house, sub.cliente, sub.nome_analista, sub.email_analista, sub.emails_cliente, sub.tipo_servico
+              FROM (
+                SELECT 
+                  m.id,
+                  TRIM(m.mawb) as master,
+                  TRIM(m.hawb) as house,
+                  TRIM(m.cliente) as cliente,
+                  m.nome_analista,
+                  m.email_analista,
+                  m.emails_cliente,
+                  COALESCE(m.tipo_servico, 'N/A') as tipo_servico,
+                  ROW_NUMBER() OVER (PARTITION BY TRIM(m.hawb) ORDER BY m.data_insert DESC) as rn
+                FROM ${database}.t_master_dados m
+                WHERE m.mawb IN (${rfbMawbFilter})
+                AND m.tipo_processo = 'AIR IMPORT'
+                AND m.hawb IS NOT NULL AND TRIM(m.hawb) != '' AND m.hawb != 'N/A'
+              ) sub
+              WHERE sub.rn = 1
+              LIMIT 500
+            `);
+            
+            console.log(`CCT Step 2.6: Found ${(rfbHawbs || []).length} HAWBs for RFB-only MAWBs`);
+            
+            // Build RFB data map for new MAWBs and create shipment entries
+            for (const rfb of rfbOnlyMawbs) {
+              const ident = (rfb.identificacao || '').trim();
+              
+              // Parse JSON fields (same logic as Step 2.5)
+              let manuseios: string[] = [];
+              try {
+                const raw = typeof rfb.manuseiosEspeciais === 'string' ? JSON.parse(rfb.manuseiosEspeciais) : rfb.manuseiosEspeciais;
+                if (Array.isArray(raw)) manuseios = raw.map((m: any) => typeof m === 'string' ? m : m?.codigo || m?.code || '').filter(Boolean);
+              } catch {}
+              
+              let partesEstoque: any[] = [];
+              try {
+                const raw = typeof rfb.partesEstoque === 'string' ? JSON.parse(rfb.partesEstoque) : rfb.partesEstoque;
+                if (Array.isArray(raw)) partesEstoque = raw;
+              } catch {}
+              
+              let partes: any[] = [];
+              try {
+                const raw = typeof rfb.partes === 'string' ? JSON.parse(rfb.partes) : rfb.partes;
+                if (Array.isArray(raw)) partes = raw;
+              } catch {}
+              
+              let frete: any = null;
+              try { frete = typeof rfb.frete === 'string' ? JSON.parse(rfb.frete) : rfb.frete; } catch {}
+              
+              let viagensAssociadas: any[] = [];
+              try {
+                const raw = typeof rfb.viagensAssociadas === 'string' ? JSON.parse(rfb.viagensAssociadas) : rfb.viagensAssociadas;
+                if (Array.isArray(raw)) viagensAssociadas = raw;
+              } catch {}
+              
+              const consignatario = partes.find((p: any) => {
+                const tipo = (p?.tipo || p?.funcao || '').toLowerCase();
+                return tipo.includes('consignat') || tipo.includes('destinat');
+              });
+              
+              // Extract situacao
+              let rfbSituacao: string | null = null;
+              let rfbSituacaoMapped: string | null = null;
+              const mapRfbSit = (situacao: string | null): string | null => {
+                if (!situacao) return null;
+                const lower = situacao.toLowerCase().trim();
+                if (lower.includes('manifestada')) return 'MANIFESTADA';
+                if (lower.includes('informada') || lower.includes('chegada informada')) return 'INFORMADA';
+                if (lower.includes('recepcionada')) return 'RECEPCIONADA';
+                if (lower.includes('transferência') || lower.includes('transferencia')) return 'EM_AREA_TRANSFERENCIA';
+                if (lower.includes('trânsito') || lower.includes('transito')) return 'EM_TRANSITO_TERRESTRE';
+                if (lower.includes('entregue')) return 'ENTREGUE';
+                return null;
+              };
+              for (const pe of partesEstoque) {
+                const mapped = mapRfbSit(pe?.situacao || pe?.status);
+                if (mapped && (!rfbSituacaoMapped || (CCT_STATUS_ORDER[mapped] || 0) > (CCT_STATUS_ORDER[rfbSituacaoMapped] || 0))) {
+                  rfbSituacaoMapped = mapped;
+                  rfbSituacao = pe?.situacao || pe?.status;
+                }
+              }
+              
+              let numeroVoo: string | null = null;
+              if (viagensAssociadas.length > 0) {
+                numeroVoo = viagensAssociadas[0]?.numero || viagensAssociadas[0]?.identificacao || null;
+              }
+              
+              let infoFrete: any = null;
+              if (frete) {
+                const moeda = frete.moedaOrigem || frete.moeda || '';
+                const formaPgto = frete.formaPgto || frete.forma_pagamento || '';
+                let total = 0;
+                if (Array.isArray(frete.totaisMoedaOrigem)) {
+                  const totalEntry = frete.totaisMoedaOrigem.find((t: any) => (t?.descricao || '').toLowerCase().includes('total'));
+                  total = totalEntry?.valor || 0;
+                } else if (frete.total) { total = frete.total; }
+                if (moeda || total > 0) infoFrete = { moeda, formaPgto, total };
+              }
+              
+              // Store in cctRfbMap for enrichment step
+              if (!cctRfbMap.has(ident)) {
+                let hawbAssociados: any[] = [];
+                try {
+                  const raw = typeof rfb.hawbAssociados === 'string' ? JSON.parse(rfb.hawbAssociados) : rfb.hawbAssociados;
+                  if (Array.isArray(raw)) hawbAssociados = raw;
+                } catch {}
+                
+                cctRfbMap.set(ident, {
+                  ruc: rfb.ruc || null,
+                  aeroporto_origem_rfb: rfb.codigoAeroportoOrigemConhecimento || null,
+                  aeroporto_destino_rfb: rfb.codigoAeroportoDestinoConhecimento || null,
+                  recinto_aduaneiro: rfb.recintoAduaneiroDestino || null,
+                  volume_declarado_rfb: rfb.quantidadeVolumesConhecimento ? Number(rfb.quantidadeVolumesConhecimento) : null,
+                  peso_declarado_rfb: rfb.pesoBrutoConhecimento ? Number(rfb.pesoBrutoConhecimento) : null,
+                  indicador_madeira: rfb.indicadorPartesMadeira === 'S',
+                  manuseios_especiais: manuseios,
+                  rfb_situacao: rfbSituacao,
+                  rfb_status_cct: rfbSituacaoMapped,
+                  consignatario_cnpj: consignatario?.cnpj || consignatario?.documento || null,
+                  consignatario_nome: consignatario?.nome || consignatario?.razaoSocial || null,
+                  numero_voo: numeroVoo,
+                  data_emissao: rfb.dataEmissao || null,
+                  info_frete: infoFrete,
+                  hawb_associados: hawbAssociados,
+                });
+              }
+            }
+            
+            // Create shipment entries for RFB-only HAWBs
+            for (const hawbRow of (rfbHawbs || [])) {
+              const masterTrimmed = (hawbRow.master || '').trim();
+              const rfbInfo = cctRfbMap.get(masterTrimmed);
+              
+              // Use RFB data for origin/destination if available
+              const statusFromRfb = rfbInfo?.rfb_status_cct || 'INFORMADA';
+              
+              shipments.push({
+                ...hawbRow,
+                aeroporto_origem: rfbInfo?.aeroporto_origem_rfb || null,
+                aeroporto_destino: rfbInfo?.aeroporto_destino_rfb || null,
+                dep_datetime: null,
+                ultimo_status_raw: null,
+                ultimo_evento_data: rfbInfo?.data_emissao || null,
+                ultimo_evento_codigo: statusFromRfb,
+                status_cct_oficial: statusFromRfb,
+                data_atraso: null,
+                arr_datetime: null,
+                fonte_primaria: 'RFB', // Mark as RFB-only for UI differentiation
+              });
+            }
+            
+            console.log(`CCT Step 2.6: Added ${(rfbHawbs || []).length} RFB-only shipments. Total now: ${shipments.length}`);
+          }
+        } catch (rfbOnlyErr) {
+          console.warn('CCT Step 2.6: Error fetching RFB-only processes (non-fatal):', rfbOnlyErr);
+        }
+
         // STEP 2: Enrich with CCT data using a separate, optimized query
         // This avoids the heavy JOIN with TRIM/COLLATE in the main query
         const houseList = (shipments || []).map((s: any) => s.house).filter((h: string) => h && h.trim() !== '');
