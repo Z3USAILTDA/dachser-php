@@ -95,7 +95,7 @@ export default function ProcessoTimeline() {
     };
     
     return CCT_EVENT_TO_STATUS[latestCode] || baseStatus;
-  }, [allEventos, processo]);
+  }, [allEventos, processo, isLoadingEvents]);
 
   // Initialize form values when processo loads - use useEffect to properly update state
   useEffect(() => {
