@@ -232,6 +232,10 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     [/\bbookeds?\b|\bbooked\b/i, 'BKD'],
     [/\btransferred?\b/i, 'TFD'],
     [/\bdeparted?\b/i, 'DEP'],
+    [/\bnotified\b/i, 'NFD'],
+    [/\bproof\s+of\s+delivery\b/i, 'POD'],
+    [/\bnot\s+found\b/i, 'NIF'],
+    [/\bcancell?ed\b/i, 'CAN'],
     [/\breceived\b/i, 'RCF'],
   ];
 
