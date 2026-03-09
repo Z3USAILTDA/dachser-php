@@ -953,7 +953,7 @@ serve(async (req) => {
         origem: ws.origin || null,
         destino: ws.destination || null,
         último_status: finalStatus || null,
-        status_info: ws.last_status_description || null,
+        status_info: extractLastEventDescription(timelineStr, etdForTimeline) || ws.last_status_description || null,
         'última atualização': scrapedAt,
         last_flight: ws.last_flight || null,
         days_in_transit: (() => {
