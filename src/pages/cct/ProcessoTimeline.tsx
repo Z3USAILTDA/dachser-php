@@ -68,6 +68,7 @@ export default function ProcessoTimeline() {
 
   // Derive effective status from the most recent timeline event (RFB or tracking)
   const effectiveStatus = useMemo(() => {
+    if (isLoadingEvents) return null;
     const baseStatus = processo?.status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
     if (allEventos.length === 0) return baseStatus;
     
