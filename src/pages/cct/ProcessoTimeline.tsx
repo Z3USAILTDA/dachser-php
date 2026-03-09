@@ -30,7 +30,8 @@ import {
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import type { ProcessoCCT } from "@/types/cct";
+import type { ProcessoCCT, CCTEvento } from "@/types/cct";
+import { STATUS_MAPPING } from "@/types/cct";
 
 
 export default function ProcessoTimeline() {
