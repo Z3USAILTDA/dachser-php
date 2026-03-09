@@ -6464,7 +6464,7 @@ serve(async (req) => {
             for (const [pattern, code] of descPatterns) {
               if (pattern.test(description)) return code;
             }
-            return upper.substring(0, 3) || 'UNK';
+            return 'UNK';
           };
 
           // Convert timeline entries to frontend format
