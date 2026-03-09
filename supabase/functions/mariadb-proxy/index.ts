@@ -3605,18 +3605,14 @@ serve(async (req) => {
           // Enrich with t_aereo_cct (RFB) data
           const rfbInfo = cctRfbMap.get((row.master || '').trim());
           
-          // Use LeadComex status if available, otherwise fall back to tracking status
-          // When LeadComex has data (success), use its status; otherwise use 'AGUARDANDO_CONSULTA'
-          let statusCctOficial = row.status_cct_oficial; // Default from tracking
+          // Preserve tracking status; only upgrade if LeadComex provides a more advanced status
+          let statusCctOficial = row.status_cct_oficial || 'AGUARDANDO_CONSULTA';
           if (leadcomexInfo?.success && leadcomexInfo.status_cct) {
-            // LeadComex has data - use its official status
-            statusCctOficial = leadcomexInfo.status_cct;
-          } else if (leadcomexInfo && !leadcomexInfo.success) {
-            // LeadComex was called but no data found
-            statusCctOficial = 'AGUARDANDO_CONSULTA';
-          } else if (!leadcomexInfo) {
-            // LeadComex not yet called
-            statusCctOficial = 'AGUARDANDO_CONSULTA';
+            const trackingOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
+            const leadcomexOrder = CCT_STATUS_ORDER[leadcomexInfo.status_cct] || 0;
+            if (leadcomexOrder > trackingOrder) {
+              statusCctOficial = leadcomexInfo.status_cct;
+            }
           }
           
           // Apply canonical ordering: use the MOST ADVANCED status from all sources
