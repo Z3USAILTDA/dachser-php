@@ -932,15 +932,7 @@ serve(async (req) => {
                  ) 
                : false);
            if (resolvedUpper === 'BKD') return hasTransitHistory;
-          return detectInTransit(timelineStr, etdForTimeline) || 
-            (apiRow?.historico_status 
-              ? detectInTransit(
-                  typeof apiRow.historico_status === 'string' 
-                    ? apiRow.historico_status 
-                    : JSON.stringify(apiRow.historico_status), 
-                  etdForTimeline
-                ) 
-              : false);
+           return hasTransitHistory;
         })(),
         last_event_date: extractLastEventDate(timelineStr, etdForTimeline) || 
           (apiRow?.historico_status 
