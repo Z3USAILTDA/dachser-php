@@ -184,6 +184,10 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     'BKD': 'BKD', 'BOOKED': 'BKD', 'RECEIVED': 'RCF',
     'PRE': 'PRE', 'PRE-ADVISED': 'PRE',
     'TFD': 'TFD', 'TRANSFERRED': 'TFD',
+    'NOTIFIED': 'NFD',
+    'CANCELLED': 'CAN', 'CANCELED': 'CAN',
+    'NOT FOUND': 'NIF',
+    'POD': 'POD',
     'FFM': 'FFM',
     'AUD': 'AUD',
     'RCT': 'RCT',
@@ -228,6 +232,10 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     [/\bbookeds?\b|\bbooked\b/i, 'BKD'],
     [/\btransferred?\b/i, 'TFD'],
     [/\bdeparted?\b/i, 'DEP'],
+    [/\bnotified\b/i, 'NFD'],
+    [/\bproof\s+of\s+delivery\b/i, 'POD'],
+    [/\bnot\s+found\b/i, 'NIF'],
+    [/\bcancell?ed\b/i, 'CAN'],
     [/\breceived\b/i, 'RCF'],
   ];
 
