@@ -157,6 +157,13 @@ const REPORT_STATUSES: Record<string, ReportStatus> = {
     etapa: 'PRE_EMBARQUE',
     etapaIndex: 0,
     color: '#64748b'
+  },
+  SIA: {
+    code: 'SIA',
+    label: 'Sem informação no armador',
+    etapa: 'PRE_EMBARQUE',
+    etapaIndex: 0,
+    color: '#ef4444'
   }
 };
 const EVENT_TO_REPORT_STATUS: Record<string, string> = {
