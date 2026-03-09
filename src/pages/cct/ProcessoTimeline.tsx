@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/cct/PageLayout";
 import { Badge } from "@/components/ui/badge";
