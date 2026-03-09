@@ -214,7 +214,9 @@ const EVENT_TO_REPORT_STATUS: Record<string, string> = {
   'DELIVERY': 'DLV',
   'EMPTY_RETURN': 'DLV',
   'EMPTY_RETURNED': 'DLV',
-  'EMPTY_RECEIVED_AT_CY': 'DLV'
+  'EMPTY_RECEIVED_AT_CY': 'DLV',
+  'NAO_ENCONTRADO': 'SIA',
+  'SEM_INFORMAÇÃO_NO_ARMADOR': 'SIA'
 };
 const getReportStatus = (lastEvent: string | null): ReportStatus => {
   if (!lastEvent) return REPORT_STATUSES.AGD;
