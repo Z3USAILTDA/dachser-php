@@ -3373,12 +3373,6 @@ serve(async (req) => {
                 if (Array.isArray(raw)) partesEstoque = raw;
               } catch {}
               
-              let partes: any[] = [];
-              try {
-                const raw = typeof rfb.partes === 'string' ? JSON.parse(rfb.partes) : rfb.partes;
-                if (Array.isArray(raw)) partes = raw;
-              } catch {}
-              
               let frete: any = null;
               try { frete = typeof rfb.frete === 'string' ? JSON.parse(rfb.frete) : rfb.frete; } catch {}
               
@@ -3388,9 +3382,10 @@ serve(async (req) => {
                 if (Array.isArray(raw)) viagensAssociadas = raw;
               } catch {}
               
-              const consignatario = partes.find((p: any) => {
-                const tipo = (p?.tipo || p?.funcao || '').toLowerCase();
-                return tipo.includes('consignat') || tipo.includes('destinat');
+              // Try to find consignatário from partesEstoque
+              const consignatario = partesEstoque.find((p: any) => {
+                const resp = (p?.cnpjResponsavelAtual || '').trim();
+                return resp.length > 0;
               });
               
               // Extract situacao
