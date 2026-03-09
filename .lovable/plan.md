@@ -1,39 +1,28 @@
 
 
-# Plano: BKD com histórico de trânsito deve contar como "Em Trânsito"
+# Fix: Documentos não aparecem no dialog de visualização
 
-## Problema
+## Causa raiz
 
-Em `supabase/functions/fetch-status-aereo/index.ts` (linhas 919-923), a lógica de `in_transit` faz um early-return `false` para qualquer AWB cujo status resolvido seja `BKD`, **antes** de verificar se a timeline contém eventos de trânsito (DEP, MAN, RCF, ARR).
-
-## Solução
-
-Remover `BKD` do conjunto `PRE_TRANSIT_STATUSES` na linha 920 e adicionar uma verificação específica: se o status for `BKD`, só retornar `in_transit = true` se `detectInTransit()` encontrar DEP/MAN/RCF/ARR na timeline.
-
-### Alteração (1 arquivo)
-
-**`supabase/functions/fetch-status-aereo/index.ts`** — linhas 919-933
-
-De:
-```typescript
-const PRE_TRANSIT_STATUSES = new Set(['BKD', 'RCS', 'NEW', 'BOO', 'BOOKED', 'UNK', 'NIL', 'NIF', 'NOT_FOUND']);
-const resolvedUpper = (finalStatus || '').toUpperCase();
-if (PRE_TRANSIT_STATUSES.has(resolvedUpper)) return false;
-return detectInTransit(timelineStr, etdForTimeline) || ...
+O edge function `get_voucher_anexos` retorna a estrutura:
+```json
+{ "success": true, "data": [ ...anexos... ] }
 ```
 
-Para:
+Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
+
+## Correção
+
+### `src/components/esteira/PagamentosTab.tsx` — linha 862
+
+Trocar:
 ```typescript
-const PRE_TRANSIT_STATUSES = new Set(['RCS', 'NEW', 'BOO', 'BOOKED', 'UNK', 'NIL', 'NIF', 'NOT_FOUND']);
-const resolvedUpper = (finalStatus || '').toUpperCase();
-// BKD só é in_transit se a timeline tiver eventos DEP/MAN/RCF/ARR anteriores
-if (PRE_TRANSIT_STATUSES.has(resolvedUpper)) return false;
-// Para BKD: verificar se houve trânsito real na timeline
-const hasTransitHistory = detectInTransit(timelineStr, etdForTimeline) || 
-  (apiRow?.historico_status ? detectInTransit(...) : false);
-if (resolvedUpper === 'BKD') return hasTransitHistory;
-return hasTransitHistory;
+setAnexosDialog(data?.anexos || []);
+```
+Por:
+```typescript
+setAnexosDialog(data?.data || []);
 ```
 
-A função `detectInTransit` já faz exatamente o que é necessário — procura por DEP, MAN, RCF, ARR na timeline. Basta deixar ela rodar para processos BKD.
+Uma única linha corrige o problema.
 
