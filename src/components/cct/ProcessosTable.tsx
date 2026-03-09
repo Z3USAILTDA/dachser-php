@@ -226,7 +226,7 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                   </TableCell>
                   <TableCell>
                     {(() => {
-                      const statusOficial = processo.status_atual?.status_cct_oficial || '';
+                      const statusOficial = String(processo.status_atual?.status_cct_oficial || '');
                       const isAguardando = !statusOficial || 
                         statusOficial === 'AGUARDANDO_CONSULTA' || 
                         statusOficial === 'AGUARDANDO_MANIFESTACAO';
