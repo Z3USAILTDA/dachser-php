@@ -8168,7 +8168,7 @@ serve(async (req) => {
 
         // --- HLCUSZX2601BTMJ8: 1 event ---
         await insertEvent('HLCUSZX2601BTMJ8', '', 'DEP', 'Departure from', '2026-03-04 04:19:00', 'SANTOS', 'Truck', '');
-        await updateMain('HLCUSZX2601BTMJ8', { last_event: 'Departure from - SANTOS', status: 'DEP' });
+        await updateMain('HLCUSZX2601BTMJ8', { last_event: 'Departure from - SANTOS', container_status: 'DEP' });
         results.push({ mbl: 'HLCUSZX2601BTMJ8', status: 'ok', events: 1 });
 
         // --- HLCUVL1260108963: Delete all + insert 1 ---
