@@ -218,8 +218,14 @@ const EVENT_TO_REPORT_STATUS: Record<string, string> = {
   'NAO_ENCONTRADO': 'SIA',
   'SEM_INFORMAÇÃO_NO_ARMADOR': 'SIA'
 };
-const getReportStatus = (lastEvent: string | null): ReportStatus => {
+const getReportStatus = (lastEvent: string | null, containerStatus?: string | null): ReportStatus => {
+  // Check container_status first for NAO_ENCONTRADO
+  if (containerStatus === 'NAO_ENCONTRADO') return REPORT_STATUSES.SIA;
   if (!lastEvent) return REPORT_STATUSES.AGD;
+  // Check for "Sem informação" in last_event
+  if (lastEvent.toLowerCase().includes('sem informação') || lastEvent.toLowerCase().includes('sem informacao')) {
+    return REPORT_STATUSES.SIA;
+  }
   const normalizedEvent = lastEvent.toUpperCase().replace(/[\s-]/g, '_');
   if (EVENT_TO_REPORT_STATUS[normalizedEvent]) {
     return REPORT_STATUSES[EVENT_TO_REPORT_STATUS[normalizedEvent]];
