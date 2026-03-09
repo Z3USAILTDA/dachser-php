@@ -8136,152 +8136,111 @@ serve(async (req) => {
           );
         };
 
-        // === BATCH 3 — 17 MBLs ===
+        // === BATCH 4 — 9 MBLs ===
 
-        // --- HLCUSS5260113060 ---
-        await updateMain('HLCUSS5260113060', { container: 'HLXU1151169', origem: 'SANTOS', destino: 'CALLAO' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260113060'`);
-        await insertEvent('HLCUSS5260113060', 'HLXU1151169', 'GOE', 'Gate out empty', '2026-01-14 15:36:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260113060', 'HLXU1151169', 'ARR', 'Arrival in', '2026-02-05 07:31:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260113060', 'HLXU1151169', 'CRG', 'Loaded', '2026-02-17 12:58:00', 'SANTOS', 'SEASPAN EMPIRE', '607W');
-        await insertEvent('HLCUSS5260113060', 'HLXU1151169', 'DEP', 'Vessel departed', '2026-02-18 03:35:00', 'SANTOS', 'SEASPAN EMPIRE', '607W');
-        await insertEvent('HLCUSS5260113060', 'HLXU1151169', 'ARR', 'Vessel arrived', '2026-03-05 02:05:00', 'CALLAO', 'SEASPAN EMPIRE', '607W');
-        await insertEvent('HLCUSS5260113060', 'HLXU1151169', 'DCH', 'Discharged', '2026-03-05 12:40:00', 'CALLAO', 'SEASPAN EMPIRE', '607W');
-        await insertEvent('HLCUSS5260113060', 'HLXU1151169', 'DEP', 'Departure from', '2026-03-06 02:38:00', 'CALLAO', 'Truck', '');
-        await updateMain('HLCUSS5260113060', { last_event: 'Departure from - CALLAO', navio: 'SEASPAN EMPIRE', container_status: 'DEP' });
-        results.push({ mbl: 'HLCUSS5260113060', status: 'ok', events: 7 });
+        // --- HLCUGDY251224616 (correction with new container) ---
+        await updateMain('HLCUGDY251224616', { container: 'HAMU4780384', origem: 'GDYNIA', destino: 'SANTOS' });
+        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUGDY251224616'`);
+        await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'GOE', 'Gate out empty', '2025-12-11 12:05:00', 'POZNAN', 'Truck', '');
+        await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'ARR', 'Arrival in', '2025-12-15 11:51:00', 'GDYNIA', 'Truck', '');
+        await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'CRG', 'Loaded', '2025-12-23 16:38:00', 'GDYNIA', 'LITTLE ATHINA', '2550W');
+        await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'DEP', 'Vessel departed', '2025-12-24 12:19:00', 'GDYNIA', 'LITTLE ATHINA', '2550W');
+        await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'ARR', 'Vessel arrived', '2025-12-28 22:54:00', 'HAMBURG', 'LITTLE ATHINA', '2550W');
+        await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'DCH', 'Discharged', '2025-12-29 01:06:00', 'HAMBURG', 'LITTLE ATHINA', '2550W');
+        await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'CRG', 'Loaded', '2026-01-15 01:52:00', 'HAMBURG', 'MSC MUGE', 'NA552A');
+        await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'DEP', 'Vessel departed', '2026-01-15 07:05:00', 'HAMBURG', 'MSC MUGE', 'NA552A');
+        await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'ARR', 'Vessel arrived', '2026-02-02 00:29:00', 'SANTOS', 'MSC MUGE', 'NA552A');
+        await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'DCH', 'Discharged', '2026-02-02 09:39:00', 'SANTOS', 'MSC MUGE', 'NA552A');
+        await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'DEP', 'Departure from', '2026-02-03 20:27:00', 'SANTOS', 'Truck', '');
+        await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'GIE', 'Gate in empty', '2026-02-11 10:40:00', 'SANTOS', 'Truck', '');
+        await updateMain('HLCUGDY251224616', { last_event: 'Gate in empty - SANTOS', navio: 'MSC MUGE', container_status: 'DLV', transshipment_port: 'HAMBURG', transshipment_date: '2025-12-28 22:54:00' });
+        results.push({ mbl: 'HLCUGDY251224616', status: 'ok', events: 12 });
 
-        // --- HLCUSS5260113960 ---
-        await updateMain('HLCUSS5260113960', { container: 'HLBU2612226', origem: 'SANTOS', destino: 'RAUMA', eta: '2026-04-01' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260113960'`);
-        await insertEvent('HLCUSS5260113960', 'HLBU2612226', 'GOE', 'Gate out empty', '2026-01-28 14:39:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260113960', 'HLBU2612226', 'ARR', 'Arrival in', '2026-02-13 13:18:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260113960', 'HLBU2612226', 'CRG', 'Loaded', '2026-02-17 02:45:00', 'SANTOS', 'LAEM CHABANG EXPRESS', 'NA606R');
-        await insertEvent('HLCUSS5260113960', 'HLBU2612226', 'DEP', 'Vessel departed', '2026-02-17 13:43:00', 'SANTOS', 'LAEM CHABANG EXPRESS', '');
-        await updateMain('HLCUSS5260113960', { last_event: 'Vessel departed - SANTOS', navio: 'LAEM CHABANG EXPRESS', container_status: 'DEP' });
-        results.push({ mbl: 'HLCUSS5260113960', status: 'ok', events: 4 });
+        // --- HLCUIT1260305275 (sem informação no armador) ---
+        await updateMain('HLCUIT1260305275', { last_event: 'Sem informação no armador', container_status: 'NAO_ENCONTRADO' });
+        results.push({ mbl: 'HLCUIT1260305275', status: 'ok', events: 0 });
 
-        // --- HLCUSS5260121101 ---
-        await updateMain('HLCUSS5260121101', { container: 'HAMU2779893', origem: 'SANTOS', destino: 'RAUMA', eta: '2026-04-01' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260121101'`);
-        await insertEvent('HLCUSS5260121101', 'HAMU2779893', 'GOE', 'Gate out empty', '2026-01-27 12:05:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260121101', 'HAMU2779893', 'ARR', 'Arrival in', '2026-01-30 05:17:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260121101', 'HAMU2779893', 'CRG', 'Loaded', '2026-02-16 20:53:00', 'SANTOS', 'LAEM CHABANG EXPRESS', 'NA606R');
-        await insertEvent('HLCUSS5260121101', 'HAMU2779893', 'DEP', 'Vessel departed', '2026-02-17 13:43:00', 'SANTOS', 'LAEM CHABANG EXPRESS', '');
-        await updateMain('HLCUSS5260121101', { last_event: 'Vessel departed - SANTOS', navio: 'LAEM CHABANG EXPRESS', container_status: 'DEP' });
-        results.push({ mbl: 'HLCUSS5260121101', status: 'ok', events: 4 });
+        // --- HLCUIT1260309210 (sem informação no armador) ---
+        await updateMain('HLCUIT1260309210', { last_event: 'Sem informação no armador', container_status: 'NAO_ENCONTRADO' });
+        results.push({ mbl: 'HLCUIT1260309210', status: 'ok', events: 0 });
 
-        // --- HLCUSS5260122210 ---
-        await updateMain('HLCUSS5260122210', { container: 'UETU6394599', origem: 'SANTOS', destino: 'LONDON GATEWAY PORT', eta: '2026-04-03' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260122210'`);
-        await insertEvent('HLCUSS5260122210', 'UETU6394599', 'GOE', 'Gate out empty', '2026-02-16 12:22:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260122210', 'UETU6394599', 'ARR', 'Arrival in', '2026-03-06 05:20:00', 'SANTOS', 'Truck', '');
-        await updateMain('HLCUSS5260122210', { last_event: 'Arrival in - SANTOS', navio: '', container_status: 'ARR' });
-        results.push({ mbl: 'HLCUSS5260122210', status: 'ok', events: 2 });
+        // --- HLCULE1251247412 ---
+        await updateMain('HLCULE1251247412', { container: 'HAMU2871211', origem: 'ATHUS', destino: 'SANTOS' });
+        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULE1251247412'`);
+        await insertEvent('HLCULE1251247412', 'HAMU2871211', 'GOE', 'Gate out empty', '2026-01-09 15:33:00', 'ATHUS', 'Truck', '');
+        await insertEvent('HLCULE1251247412', 'HAMU2871211', 'ARR', 'Arrival in', '2026-01-12 13:08:00', 'ATHUS', 'Truck', '');
+        await insertEvent('HLCULE1251247412', 'HAMU2871211', 'DEP', 'Departure from', '2026-01-13 17:44:00', 'ATHUS', 'Rail', '');
+        await insertEvent('HLCULE1251247412', 'HAMU2871211', 'ARR', 'Arrival in', '2026-01-16 12:20:00', 'ANTWERP', 'Truck', '');
+        await insertEvent('HLCULE1251247412', 'HAMU2871211', 'CRG', 'Loaded', '2026-01-20 23:49:00', 'ANTWERP', 'BREMERHAVEN EXPRESS', 'NA602A');
+        await insertEvent('HLCULE1251247412', 'HAMU2871211', 'DEP', 'Vessel departed', '2026-01-21 19:21:00', 'ANTWERP', 'BREMERHAVEN EXPRESS', 'NA602A');
+        await insertEvent('HLCULE1251247412', 'HAMU2871211', 'ARR', 'Vessel arrived', '2026-02-21 00:24:00', 'SANTOS', 'BREMERHAVEN EXPRESS', 'NA602A');
+        await insertEvent('HLCULE1251247412', 'HAMU2871211', 'DCH', 'Discharged', '2026-02-21 12:53:00', 'SANTOS', 'BREMERHAVEN EXPRESS', 'NA602A');
+        await insertEvent('HLCULE1251247412', 'HAMU2871211', 'DEP', 'Departure from', '2026-02-21 14:19:00', 'SANTOS', 'Truck', '');
+        await insertEvent('HLCULE1251247412', 'HAMU2871211', 'GIE', 'Gate in empty', '2026-03-03 13:30:00', 'SANTOS', 'Truck', '');
+        await updateMain('HLCULE1251247412', { last_event: 'Gate in empty - SANTOS', navio: 'BREMERHAVEN EXPRESS', container_status: 'DLV', transshipment_port: 'ANTWERP', transshipment_date: '2026-01-16 12:20:00' });
+        results.push({ mbl: 'HLCULE1251247412', status: 'ok', events: 10 });
 
-        // --- HLCUSS5260124311 ---
-        await updateMain('HLCUSS5260124311', { container: 'HAMU4197269', origem: 'SANTOS', destino: 'LONDON GATEWAY PORT', eta: '2026-03-27' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260124311'`);
-        await insertEvent('HLCUSS5260124311', 'HAMU4197269', 'GOE', 'Gate out empty', '2026-02-10 18:37:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260124311', 'HAMU4197269', 'ARR', 'Arrival in', '2026-02-27 22:58:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260124311', 'HAMU4197269', 'CRG', 'Loaded', '2026-03-03 10:51:00', 'SANTOS', 'XIAMEN EXPRESS', 'NA608R');
-        await insertEvent('HLCUSS5260124311', 'HAMU4197269', 'DEP', 'Vessel departed', '2026-03-03 17:10:00', 'SANTOS', 'XIAMEN EXPRESS', '');
-        await updateMain('HLCUSS5260124311', { last_event: 'Vessel departed - SANTOS', navio: 'XIAMEN EXPRESS', container_status: 'DEP' });
-        results.push({ mbl: 'HLCUSS5260124311', status: 'ok', events: 4 });
+        // --- HLCULE1251248185 ---
+        await updateMain('HLCULE1251248185', { container: 'HLBU1517780', origem: 'PARIS', destino: 'SANTOS' });
+        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULE1251248185'`);
+        await insertEvent('HLCULE1251248185', 'HLBU1517780', 'GOE', 'Gate out empty', '2026-01-09 12:05:00', 'PARIS', 'Truck', '');
+        await insertEvent('HLCULE1251248185', 'HLBU1517780', 'ARR', 'Arrival in', '2026-01-09 15:51:00', 'LE HAVRE', 'Truck', '');
+        await insertEvent('HLCULE1251248185', 'HLBU1517780', 'CRG', 'Loaded', '2026-01-21 06:47:00', 'LE HAVRE', 'XIAMEN EXPRESS', 'NA601A');
+        await insertEvent('HLCULE1251248185', 'HLBU1517780', 'DEP', 'Vessel departed', '2026-01-21 15:37:00', 'LE HAVRE', 'XIAMEN EXPRESS', 'NA601A');
+        await insertEvent('HLCULE1251248185', 'HLBU1517780', 'ARR', 'Vessel arrived', '2026-02-09 13:30:00', 'SANTOS', 'XIAMEN EXPRESS', 'NA601A');
+        await insertEvent('HLCULE1251248185', 'HLBU1517780', 'DCH', 'Discharged', '2026-02-09 16:50:00', 'SANTOS', 'XIAMEN EXPRESS', 'NA601A');
+        await insertEvent('HLCULE1251248185', 'HLBU1517780', 'DEP', 'Departure from', '2026-02-10 06:58:00', 'SANTOS', 'Truck', '');
+        await insertEvent('HLCULE1251248185', 'HLBU1517780', 'GIE', 'Gate in empty', '2026-02-19 11:29:00', 'SANTOS', 'Truck', '');
+        await updateMain('HLCULE1251248185', { last_event: 'Gate in empty - SANTOS', navio: 'XIAMEN EXPRESS', container_status: 'DLV' });
+        results.push({ mbl: 'HLCULE1251248185', status: 'ok', events: 8 });
 
-        // --- HLCUSS5260145518 ---
-        await updateMain('HLCUSS5260145518', { container: 'HAMU3080283', origem: 'SANTOS', destino: 'FREDERICIA', eta: '2026-04-16' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260145518'`);
-        await insertEvent('HLCUSS5260145518', 'HAMU3080283', 'GOE', 'Gate out empty', '2026-02-04 17:07:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260145518', 'HAMU3080283', 'ARR', 'Arrival in', '2026-03-07 02:28:00', 'SANTOS', 'Truck', '');
-        await updateMain('HLCUSS5260145518', { last_event: 'Arrival in - SANTOS', navio: '', container_status: 'ARR' });
-        results.push({ mbl: 'HLCUSS5260145518', status: 'ok', events: 2 });
+        // --- HLCULE1260135948 ---
+        await updateMain('HLCULE1260135948', { container: 'FANU3458056', origem: 'ATHUS', destino: 'SANTOS' });
+        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULE1260135948'`);
+        await insertEvent('HLCULE1260135948', 'FANU3458056', 'GOE', 'Gate out empty', '2026-01-23 14:21:00', 'ATHUS', 'Truck', '');
+        await insertEvent('HLCULE1260135948', 'FANU3458056', 'ARR', 'Arrival in', '2026-01-26 09:07:00', 'ATHUS', 'Truck', '');
+        await insertEvent('HLCULE1260135948', 'FANU3458056', 'DEP', 'Departure from', '2026-01-26 12:56:00', 'ATHUS', 'Rail', '');
+        await insertEvent('HLCULE1260135948', 'FANU3458056', 'ARR', 'Arrival in', '2026-01-27 23:19:00', 'ANTWERP', 'Rail', '');
+        await insertEvent('HLCULE1260135948', 'FANU3458056', 'CRG', 'Loaded', '2026-02-03 04:20:00', 'ANTWERP', 'CZECH', 'NA604A');
+        await insertEvent('HLCULE1260135948', 'FANU3458056', 'DEP', 'Vessel departed', '2026-02-03 08:30:00', 'ANTWERP', 'CZECH', 'NA604A');
+        await insertEvent('HLCULE1260135948', 'FANU3458056', 'ARR', 'Vessel arrived', '2026-03-03 22:39:00', 'SANTOS', 'CZECH', 'NA604A');
+        await insertEvent('HLCULE1260135948', 'FANU3458056', 'DCH', 'Discharged', '2026-03-04 04:51:00', 'SANTOS', 'CZECH', 'NA604A');
+        await insertEvent('HLCULE1260135948', 'FANU3458056', 'DEP', 'Departure from', '2026-03-04 08:47:00', 'SANTOS', 'Truck', '');
+        await insertEvent('HLCULE1260135948', 'FANU3458056', 'GIE', 'Gate in empty', '2026-03-06 15:00:00', 'SANTOS', 'Truck', '');
+        await updateMain('HLCULE1260135948', { last_event: 'Gate in empty - SANTOS', navio: 'CZECH', container_status: 'DLV', transshipment_port: 'ANTWERP', transshipment_date: '2026-01-27 23:19:00' });
+        results.push({ mbl: 'HLCULE1260135948', status: 'ok', events: 10 });
 
-        // --- HLCUSS5260165163 ---
-        await updateMain('HLCUSS5260165163', { container: 'FANU3483125', origem: 'SANTOS', destino: 'HAMBURG', eta: '2026-03-31' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260165163'`);
-        await insertEvent('HLCUSS5260165163', 'FANU3483125', 'GOE', 'Gate out empty', '2026-02-13 12:05:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260165163', 'FANU3483125', 'ARR', 'Arrival in', '2026-02-27 16:57:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260165163', 'FANU3483125', 'CRG', 'Loaded', '2026-03-03 12:59:00', 'SANTOS', 'XIAMEN EXPRESS', 'NA608R');
-        await insertEvent('HLCUSS5260165163', 'FANU3483125', 'DEP', 'Vessel departed', '2026-03-03 17:10:00', 'SANTOS', 'XIAMEN EXPRESS', '');
-        await updateMain('HLCUSS5260165163', { last_event: 'Vessel departed - SANTOS', navio: 'XIAMEN EXPRESS', container_status: 'DEP' });
-        results.push({ mbl: 'HLCUSS5260165163', status: 'ok', events: 4 });
+        // --- HLCULE1260206102 ---
+        await updateMain('HLCULE1260206102', { container: 'FANU1636502', origem: 'ATHUS', destino: 'SANTOS', eta: '2026-03-10' });
+        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULE1260206102'`);
+        await insertEvent('HLCULE1260206102', 'FANU1636502', 'GOE', 'Gate out empty', '2026-02-09 05:47:00', 'ATHUS', 'Truck', '');
+        await insertEvent('HLCULE1260206102', 'FANU1636502', 'ARR', 'Arrival in', '2026-02-09 11:40:00', 'ATHUS', 'Truck', '');
+        await insertEvent('HLCULE1260206102', 'FANU1636502', 'DEP', 'Departure from', '2026-02-10 08:35:00', 'ATHUS', 'Rail', '');
+        await insertEvent('HLCULE1260206102', 'FANU1636502', 'ARR', 'Arrival in', '2026-02-11 15:18:00', 'ANTWERP', 'Rail', '');
+        await insertEvent('HLCULE1260206102', 'FANU1636502', 'CRG', 'Loaded', '2026-02-20 00:57:00', 'ANTWERP', 'ANTHEA Y', 'NA606A');
+        await insertEvent('HLCULE1260206102', 'FANU1636502', 'DEP', 'Vessel departed', '2026-02-20 06:32:00', 'ANTWERP', 'ANTHEA Y', '');
+        await updateMain('HLCULE1260206102', { last_event: 'Vessel departed - ANTWERP', navio: 'ANTHEA Y', container_status: 'DEP', transshipment_port: 'ANTWERP', transshipment_date: '2026-02-11 15:18:00' });
+        results.push({ mbl: 'HLCULE1260206102', status: 'ok', events: 6 });
 
-        // --- HLCUSS5260165196 ---
-        await updateMain('HLCUSS5260165196', { container: 'HAMU2767892', origem: 'SANTOS', destino: 'HAMBURG', eta: '2026-04-07' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260165196'`);
-        await insertEvent('HLCUSS5260165196', 'HAMU2767892', 'GOE', 'Gate out empty', '2026-02-24 09:41:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260165196', 'HAMU2767892', 'ARR', 'Arrival in', '2026-03-06 07:30:00', 'SANTOS', 'Truck', '');
-        await updateMain('HLCUSS5260165196', { last_event: 'Arrival in - SANTOS', navio: '', container_status: 'ARR' });
-        results.push({ mbl: 'HLCUSS5260165196', status: 'ok', events: 2 });
+        // --- HLCULE1260212660 ---
+        await updateMain('HLCULE1260212660', { container: 'FANU1632750', origem: 'PARIS', destino: 'SANTOS', eta: '2026-03-18' });
+        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULE1260212660'`);
+        await insertEvent('HLCULE1260212660', 'FANU1632750', 'GOE', 'Gate out empty', '2026-02-09 12:05:00', 'PARIS', 'Truck', '');
+        await insertEvent('HLCULE1260212660', 'FANU1632750', 'ARR', 'Arrival in', '2026-02-10 16:31:00', 'ANTWERP', 'Truck', '');
+        await insertEvent('HLCULE1260212660', 'FANU1632750', 'CRG', 'Loaded', '2026-02-27 01:47:00', 'ANTWERP', 'MSC ADELE', 'NA607A');
+        await insertEvent('HLCULE1260212660', 'FANU1632750', 'DEP', 'Vessel departed', '2026-02-27 10:52:00', 'ANTWERP', 'MSC ADELE', '');
+        await updateMain('HLCULE1260212660', { last_event: 'Vessel departed - ANTWERP', navio: 'MSC ADELE', container_status: 'DEP', transshipment_port: 'ANTWERP', transshipment_date: '2026-02-27 01:47:00' });
+        results.push({ mbl: 'HLCULE1260212660', status: 'ok', events: 4 });
 
-        // --- HLCUSS5260165203 ---
-        await updateMain('HLCUSS5260165203', { container: 'HAMU3816100', origem: 'SANTOS', destino: 'HAMBURG', eta: '2026-01-14' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260165203'`);
-        await insertEvent('HLCUSS5260165203', 'HAMU3816100', 'GOE', 'Gate out empty', '2026-02-20 16:21:00', 'SANTOS', 'Truck', '');
-        await updateMain('HLCUSS5260165203', { last_event: 'Gate out empty - SANTOS', navio: '', container_status: 'GOE' });
-        results.push({ mbl: 'HLCUSS5260165203', status: 'ok', events: 1 });
-
-        // --- HLCUSS5260165214 ---
-        await updateMain('HLCUSS5260165214', { container: 'HAMU4249974', origem: 'SANTOS', destino: 'HAMBURG', eta: '2026-04-07' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260165214'`);
-        await insertEvent('HLCUSS5260165214', 'HAMU4249974', 'GOE', 'Gate out empty', '2026-02-20 15:02:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260165214', 'HAMU4249974', 'ARR', 'Arrival in', '2026-03-06 06:37:00', 'SANTOS', 'Truck', '');
-        await updateMain('HLCUSS5260165214', { last_event: 'Arrival in - SANTOS', navio: '', container_status: 'ARR' });
-        results.push({ mbl: 'HLCUSS5260165214', status: 'ok', events: 2 });
-
-        // --- HLCUSS5260165225 ---
-        await updateMain('HLCUSS5260165225', { container: 'HAMU1789095', origem: 'SANTOS', destino: 'HAMBURG', eta: '2026-04-14' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260165225'`);
-        await insertEvent('HLCUSS5260165225', 'HAMU1789095', 'GOE', 'Gate out empty', '2026-02-20 12:06:00', 'SANTOS', 'Truck', '');
-        await updateMain('HLCUSS5260165225', { last_event: 'Gate out empty - SANTOS', navio: '', container_status: 'GOE' });
-        results.push({ mbl: 'HLCUSS5260165225', status: 'ok', events: 1 });
-
-        // --- HLCUSS5260200159 ---
-        await updateMain('HLCUSS5260200159', { container: 'HLBU1179153', origem: 'SANTOS', destino: 'ALTAMIRA', eta: '2026-03-21' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260200159'`);
-        await insertEvent('HLCUSS5260200159', 'HLBU1179153', 'GOE', 'Gate out empty', '2026-02-24 10:42:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260200159', 'HLBU1179153', 'ARR', 'Arrival in', '2026-02-26 15:11:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260200159', 'HLBU1179153', 'CRG', 'Loaded', '2026-03-02 09:12:00', 'SANTOS', 'COSTA RICA EXPRESS', '2602N');
-        await insertEvent('HLCUSS5260200159', 'HLBU1179153', 'DEP', 'Vessel departed', '2026-03-02 14:38:00', 'SANTOS', 'COSTA RICA EXPRESS', '');
-        await updateMain('HLCUSS5260200159', { last_event: 'Vessel departed - SANTOS', navio: 'COSTA RICA EXPRESS', container_status: 'DEP' });
-        results.push({ mbl: 'HLCUSS5260200159', status: 'ok', events: 4 });
-
-        // --- HLCUSS5260210144 (transbordo PARANAGUA) ---
-        await updateMain('HLCUSS5260210144', { container: 'HAMU4376602', origem: 'SANTOS', destino: 'DURBAN' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260210144'`);
-        await insertEvent('HLCUSS5260210144', 'HAMU4376602', 'GOE', 'Gate out empty', '2026-02-24 09:55:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260210144', 'HAMU4376602', 'ARR', 'Arrival in', '2026-03-04 08:40:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260210144', 'HAMU4376602', 'CRG', 'Loaded', '2026-03-05 03:33:00', 'SANTOS', 'NC BREDA', '024N');
-        await insertEvent('HLCUSS5260210144', 'HAMU4376602', 'DEP', 'Vessel departed', '2026-03-05 21:17:00', 'SANTOS', 'NC BREDA', '024N');
-        await insertEvent('HLCUSS5260210144', 'HAMU4376602', 'ARR', 'Vessel arrived', '2026-03-07 07:42:00', 'PARANAGUA', 'NC BREDA', '024N');
-        await insertEvent('HLCUSS5260210144', 'HAMU4376602', 'DCH', 'Discharged', '2026-03-07 09:59:00', 'PARANAGUA', 'NC BREDA', '');
-        await updateMain('HLCUSS5260210144', { last_event: 'Discharged - PARANAGUA', navio: 'NC BREDA', container_status: 'DCH', transshipment_port: 'PARANAGUA' });
-        results.push({ mbl: 'HLCUSS5260210144', status: 'ok', events: 6 });
-
-        // --- HLCUSS5260210188 ---
-        await updateMain('HLCUSS5260210188', { container: 'HAMU2959540', origem: 'SANTOS', destino: 'HAMBURG' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260210188'`);
-        await insertEvent('HLCUSS5260210188', 'HAMU2959540', 'GOE', 'Gate out empty', '2026-02-25 19:49:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260210188', 'HAMU2959540', 'ARR', 'Arrival in', '2026-03-06 15:17:00', 'SANTOS', 'Truck', '');
-        await updateMain('HLCUSS5260210188', { last_event: 'Arrival in - SANTOS', navio: '', container_status: 'ARR' });
-        results.push({ mbl: 'HLCUSS5260210188', status: 'ok', events: 2 });
-
-        // --- HLCUSS5260210663 ---
-        await updateMain('HLCUSS5260210663', { container: 'HAMU2053344', origem: 'SANTOS', destino: 'HAMBURG' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260210663'`);
-        await insertEvent('HLCUSS5260210663', 'HAMU2053344', 'GOE', 'Gate out empty', '2026-02-25 11:04:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260210663', 'HAMU2053344', 'ARR', 'Arrival in', '2026-03-07 05:04:00', 'SANTOS', 'Truck', '');
-        await updateMain('HLCUSS5260210663', { last_event: 'Arrival in - SANTOS', navio: '', container_status: 'ARR' });
-        results.push({ mbl: 'HLCUSS5260210663', status: 'ok', events: 2 });
-
-        // --- HLCUSS5260210674 ---
-        await updateMain('HLCUSS5260210674', { container: 'FANU3835843', origem: 'SANTOS', destino: 'HAMBURG' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5260210674'`);
-        await insertEvent('HLCUSS5260210674', 'FANU3835843', 'GOE', 'Gate out empty', '2026-02-25 16:47:00', 'SANTOS', 'Truck', '');
-        await insertEvent('HLCUSS5260210674', 'FANU3835843', 'ARR', 'Arrival in', '2026-03-06 09:22:00', 'SANTOS', 'Truck', '');
-        await updateMain('HLCUSS5260210674', { last_event: 'Arrival in - SANTOS', navio: '', container_status: 'ARR' });
-        results.push({ mbl: 'HLCUSS5260210674', status: 'ok', events: 2 });
+        // --- HLCULE1260214465 ---
+        await updateMain('HLCULE1260214465', { container: 'UACU3896599', origem: 'LE HAVRE', destino: 'SANTOS', eta: '2026-03-18' });
+        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULE1260214465'`);
+        await insertEvent('HLCULE1260214465', 'UACU3896599', 'GOE', 'Gate out empty', '2026-02-19 09:35:00', 'LE HAVRE', 'Truck', '');
+        await insertEvent('HLCULE1260214465', 'UACU3896599', 'ARR', 'Arrival in', '2026-02-20 13:00:00', 'LE HAVRE', 'Truck', '');
+        await insertEvent('HLCULE1260214465', 'UACU3896599', 'CRG', 'Loaded', '2026-03-01 10:16:00', 'LE HAVRE', 'MSC ADELE', 'NA607A');
+        await insertEvent('HLCULE1260214465', 'UACU3896599', 'DEP', 'Vessel departed', '2026-03-01 16:42:00', 'LE HAVRE', 'MSC ADELE', '');
+        await updateMain('HLCULE1260214465', { last_event: 'Vessel departed - LE HAVRE', navio: 'MSC ADELE', container_status: 'DEP' });
+        results.push({ mbl: 'HLCULE1260214465', status: 'ok', events: 4 });
 
         await client.close();
         console.log('[bulk_manual_update_sea] Completed:', results.length, 'MBLs updated');
