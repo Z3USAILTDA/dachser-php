@@ -8096,6 +8096,14 @@ serve(async (req) => {
     // ===== BULK MANUAL UPDATE SEA (one-time) =====
     if (action === 'bulk_manual_update_sea') {
       console.log('[bulk_manual_update_sea] Starting bulk manual update...');
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
       const results: any[] = [];
       try {
         // Helper to insert event
