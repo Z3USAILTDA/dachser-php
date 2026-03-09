@@ -8119,7 +8119,7 @@ serve(async (req) => {
         const insertEvent = async (mbl: string, container: string, eventCode: string, eventDesc: string, eventDatetime: string, location: string, vessel: string, voyage: string) => {
           await client.execute(
             `INSERT IGNORE INTO dados_dachser.t_tracking_sea_history 
-             (mbl_id, container, event_code, event_description, event_datetime, location, vessel, voyage, source, created_at)
+             (mbl_id, container, event_code, event_description, event_datetime, location, vessel_name, voyage, source, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'MANUAL', NOW())`,
             [mbl, container, eventCode, eventDesc, eventDatetime, location, vessel, voyage]
           );
