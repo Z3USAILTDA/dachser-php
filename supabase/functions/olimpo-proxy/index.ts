@@ -8219,7 +8219,7 @@ serve(async (req) => {
         await insertEvent('HLCULE1260206102', 'FANU1636502', 'ARR', 'Arrival in', '2026-02-11 15:18:00', 'ANTWERP', 'Rail', '');
         await insertEvent('HLCULE1260206102', 'FANU1636502', 'CRG', 'Loaded', '2026-02-20 00:57:00', 'ANTWERP', 'ANTHEA Y', 'NA606A');
         await insertEvent('HLCULE1260206102', 'FANU1636502', 'DEP', 'Vessel departed', '2026-02-20 06:32:00', 'ANTWERP', 'ANTHEA Y', '');
-        await updateMain('HLCULE1260206102', { last_event: 'Vessel departed - ANTWERP', navio: 'ANTHEA Y', container_status: 'DEP', transshipment_port: 'ANTWERP', transshipment_date: '2026-02-11 15:18:00' });
+        await updateMain('HLCULE1260206102', { last_event: 'Vessel departed - ANTWERP', navio: 'ANTHEA Y', container_status: 'DEP' });
         results.push({ mbl: 'HLCULE1260206102', status: 'ok', events: 6 });
 
         // --- HLCULE1260212660 ---
