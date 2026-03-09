@@ -215,9 +215,7 @@ export function EventTimeline({ eventos }: EventTimelineProps) {
                 {/* Event content card */}
                 <div className={cn(
                   "p-4 rounded-lg border transition-all hover:bg-[rgba(255,255,255,0.02)]",
-                  evento.nivel_confianca === "COMPLEMENTAR" 
-                    ? "bg-[rgba(255,255,255,0.02)] border-dashed border-[rgba(255,255,255,0.08)]" 
-                    : cn("bg-[rgba(255,255,255,0.03)]", colors.card)
+                  "bg-[rgba(255,255,255,0.03)]", colors.card
                 )}>
                   <div className="flex items-start justify-between gap-2 flex-wrap">
                     {/* Left side - Event info */}
@@ -228,11 +226,6 @@ export function EventTimeline({ eventos }: EventTimelineProps) {
                       <Badge variant="outline" className={cn("text-xs", fonte.color)}>
                         {fonte.label}
                       </Badge>
-                      {evento.nivel_confianca === "COMPLEMENTAR" && (
-                        <Badge variant="outline" className="text-xs bg-[rgba(255,255,255,0.05)] text-[#888] border-[rgba(255,255,255,0.1)]">
-                          Complementar
-                        </Badge>
-                      )}
                     </div>
                     
                     {/* Right side - Date and Time */}
