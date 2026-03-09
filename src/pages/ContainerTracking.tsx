@@ -157,6 +157,13 @@ const REPORT_STATUSES: Record<string, ReportStatus> = {
     etapa: 'PRE_EMBARQUE',
     etapaIndex: 0,
     color: '#64748b'
+  },
+  SIA: {
+    code: 'SIA',
+    label: 'Sem informação no armador',
+    etapa: 'PRE_EMBARQUE',
+    etapaIndex: 0,
+    color: '#ef4444'
   }
 };
 const EVENT_TO_REPORT_STATUS: Record<string, string> = {
@@ -207,10 +214,18 @@ const EVENT_TO_REPORT_STATUS: Record<string, string> = {
   'DELIVERY': 'DLV',
   'EMPTY_RETURN': 'DLV',
   'EMPTY_RETURNED': 'DLV',
-  'EMPTY_RECEIVED_AT_CY': 'DLV'
+  'EMPTY_RECEIVED_AT_CY': 'DLV',
+  'NAO_ENCONTRADO': 'SIA',
+  'SEM_INFORMAÇÃO_NO_ARMADOR': 'SIA'
 };
-const getReportStatus = (lastEvent: string | null): ReportStatus => {
+const getReportStatus = (lastEvent: string | null, containerStatus?: string | null): ReportStatus => {
+  // Check container_status first for NAO_ENCONTRADO
+  if (containerStatus === 'NAO_ENCONTRADO') return REPORT_STATUSES.SIA;
   if (!lastEvent) return REPORT_STATUSES.AGD;
+  // Check for "Sem informação" in last_event
+  if (lastEvent.toLowerCase().includes('sem informação') || lastEvent.toLowerCase().includes('sem informacao')) {
+    return REPORT_STATUSES.SIA;
+  }
   const normalizedEvent = lastEvent.toUpperCase().replace(/[\s-]/g, '_');
   if (EVENT_TO_REPORT_STATUS[normalizedEvent]) {
     return REPORT_STATUSES[EVENT_TO_REPORT_STATUS[normalizedEvent]];
@@ -1754,10 +1769,13 @@ const ContainerTracking = () => {
 
     // Ordenar: MBLs com status "Aguardando" (AGD) por último
     mbls.sort((a, b) => {
-      const statusA = getReportStatus(a.last_event);
-      const statusB = getReportStatus(b.last_event);
-      if (statusA.code === 'AGD' && statusB.code !== 'AGD') return 1;
-      if (statusA.code !== 'AGD' && statusB.code === 'AGD') return -1;
+      const statusA = getReportStatus(a.last_event, a.container_status);
+      const statusB = getReportStatus(b.last_event, b.container_status);
+      const bottomCodes = ['AGD', 'SIA'];
+      const aIsBottom = bottomCodes.includes(statusA.code);
+      const bIsBottom = bottomCodes.includes(statusB.code);
+      if (aIsBottom && !bIsBottom) return 1;
+      if (!aIsBottom && bIsBottom) return -1;
       return 0;
     });
     return mbls;
@@ -2193,9 +2211,10 @@ const ContainerTracking = () => {
                   </thead>
                   <tbody>
                     {currentMbls.map((mbl, idx) => {
-                  const reportStatus = getReportStatus(mbl.last_event);
-                  const statusCode = reportStatus.code;
-                  const progress = getTimelineProgress(mbl.last_event);
+                   const reportStatus = getReportStatus(mbl.last_event, mbl.container_status);
+                   const statusCode = reportStatus.code;
+                   const isSIA = statusCode === 'SIA';
+                   const progress = isSIA ? 0 : getTimelineProgress(mbl.last_event);
                   const statusColor = reportStatus.color;
                   const isExpanded = expandedMbl === mbl.mbl_id;
                   return <Fragment key={`${mbl.mbl_id}-${idx}`}>
@@ -2290,7 +2309,23 @@ const ContainerTracking = () => {
                             </td>
                             <td className="px-4 py-3 text-[#aaaaaa] text-sm">{mbl.destino || "-"}</td>
                             <td className="px-3 py-3 min-w-[280px]">
-                              <div className="relative h-1.5 w-full flex items-center">
+                              {isSIA ? (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-red-500/15 text-red-400 border border-red-500/30 cursor-help">
+                                        <AlertTriangle className="w-3.5 h-3.5" />
+                                        Sem informação no armador
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-xs">
+                                      <p className="text-xs font-medium">Sem informação no armador</p>
+                                      <p className="text-xs text-muted-foreground">Não foi possível obter dados de rastreio no armador. Nova consulta programada automaticamente.</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              ) : (
+                                <div className="relative h-1.5 w-full flex items-center">
                                 <div className="absolute inset-0 bg-gray-800/50 rounded-full" />
                                 <div className="absolute left-0 h-full rounded-l-full transition-all duration-700 ease-out" style={{
                             width: `${progress}%`,
@@ -2333,8 +2368,14 @@ const ContainerTracking = () => {
                                   </Tooltip>
                                 </TooltipProvider>
                               </div>
+                              )}
                             </td>
                             <td className="px-3 py-3">
+                              {isSIA ? (
+                                <span className="text-sm font-bold px-2 py-1 rounded-md text-red-400 bg-red-500/20">
+                                  SIA
+                                </span>
+                              ) : (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -2351,6 +2392,7 @@ const ContainerTracking = () => {
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
+                              )}
                             </td>
                             <td className="px-3 py-3 text-center">
                               {(() => {
