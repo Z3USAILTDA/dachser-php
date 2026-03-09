@@ -8199,7 +8199,7 @@ serve(async (req) => {
         // --- HLCUHAM2512ATNT8: 2 events ---
         await insertEvent('HLCUHAM2512ATNT8', '', 'ARR', 'Vessel arrived', '2026-02-28 01:25:00', 'RIO GRANDE', 'MSC INSA', 'NA603A');
         await insertEvent('HLCUHAM2512ATNT8', '', 'DCH', 'Discharged', '2026-02-28 07:55:00', 'RIO GRANDE', 'MSC INSA', '');
-        await updateMain('HLCUHAM2512ATNT8', { last_event: 'Discharged - RIO GRANDE', navio: 'MSC INSA', status: 'DCH' });
+        await updateMain('HLCUHAM2512ATNT8', { last_event: 'Discharged - RIO GRANDE', navio: 'MSC INSA', container_status: 'DCH' });
         results.push({ mbl: 'HLCUHAM2512ATNT8', status: 'ok', events: 2 });
 
         // --- HLCUSS5251264386: Remove duplicates, keep only Vessel departed ---
