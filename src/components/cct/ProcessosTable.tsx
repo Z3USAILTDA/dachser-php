@@ -180,7 +180,7 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                       const statusOficial = processo.status_atual?.status_cct_oficial || 'INFORMADA';
                       // Also check rfb_situacao for a more advanced status
                       const rfbRaw = processo.shipment.rfb_situacao;
-                      let effectiveManifestacao = statusOficial;
+                      let effectiveManifestacao: string = statusOficial;
                       if (rfbRaw) {
                         const lower = rfbRaw.toLowerCase().trim();
                         let rfbMapped: string | null = null;
