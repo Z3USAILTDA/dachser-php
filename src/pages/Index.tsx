@@ -1683,6 +1683,7 @@ const Index = () => {
       "045": `https://www.latamcargo.com/en/trackshipment?docNumber=${number}&docPrefix=${prefix}&soType=MAWB`,
       "047": `https://parcelsapp.com/en/tracking/${formattedAwb}`,
       "055": `https://pg.fr8manage.app/cargospot/fetchTrackingData?airlinePrefix=${prefix}&serialNumber=${number}`,
+      "172": `https://www.cargolux.com/track-and-Trace#numbers=${prefix}-${number}`,
     };
 
     const url = airlineUrls[airlineCode];
