@@ -8186,7 +8186,7 @@ serve(async (req) => {
         // --- HLCUSS5251264397: 2 events ---
         await insertEvent('HLCUSS5251264397', '', 'ARR', 'Vessel arrived', '2026-03-03 15:42:00', 'NEW YORK, NY', 'WIELAND', '605N');
         await insertEvent('HLCUSS5251264397', '', 'DCH', 'Discharged', '2026-03-04 02:20:00', 'NEW YORK, NY', 'WIELAND', '');
-        await updateMain('HLCUSS5251264397', { last_event: 'Discharged - NEW YORK, NY', navio: 'WIELAND', status: 'DCH' });
+        await updateMain('HLCUSS5251264397', { last_event: 'Discharged - NEW YORK, NY', navio: 'WIELAND', container_status: 'DCH' });
         results.push({ mbl: 'HLCUSS5251264397', status: 'ok', events: 2 });
 
         // --- HLCUIZ1260200160: 3 events ---
