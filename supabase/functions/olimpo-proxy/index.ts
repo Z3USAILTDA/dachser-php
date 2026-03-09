@@ -8218,7 +8218,7 @@ serve(async (req) => {
         await insertEvent('HLCUBC1251213949', 'GCXU 2194037', 'DCH', 'Discharged', '2026-01-20 20:25:00', 'SANTOS', 'MSC AGADIR', 'MM552A');
         await insertEvent('HLCUBC1251213949', 'GCXU 2194037', 'DEP', 'Departure from', '2026-01-21 18:24:00', 'SANTOS', 'Truck', '');
         await insertEvent('HLCUBC1251213949', 'GCXU 2194037', 'GIE', 'Gate in empty', '2026-01-31 07:01:00', 'SANTOS', 'Truck', '');
-        await updateMain('HLCUBC1251213949', { last_event: 'Gate in empty - SANTOS', navio: 'MSC AGADIR', status: 'GIE' });
+        await updateMain('HLCUBC1251213949', { last_event: 'Gate in empty - SANTOS', navio: 'MSC AGADIR', container_status: 'GIE' });
         results.push({ mbl: 'HLCUBC1251213949', status: 'ok', events: 8 });
 
         // --- HLCUBI1260201172: container + 7 events ---
