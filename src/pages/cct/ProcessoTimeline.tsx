@@ -66,10 +66,13 @@ export default function ProcessoTimeline() {
     return eventosHistorico.length > 0 ? eventosHistorico : fallback;
   }, [processo, eventosHistorico]);
 
-  // Derive effective status from the most recent timeline event (RFB or tracking)
+  // Derive effective status: prefer backend-calculated status_cct_oficial (which merges
+  // tracking, LeadComex, RFB, and t_cct_eventos_historico), then fallback to timeline events
   const effectiveStatus = useMemo(() => {
     if (isLoadingEvents) return null;
     const baseStatus = processo?.status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
+    
+    // If no timeline events, use backend status directly
     if (allEventos.length === 0) return baseStatus;
     
     const sorted = [...allEventos].sort(
@@ -94,7 +97,21 @@ export default function ProcessoTimeline() {
       ),
     };
     
-    return CCT_EVENT_TO_STATUS[latestCode] || baseStatus;
+    const CCT_STATUS_ORDER: Record<string, number> = {
+      'AGUARDANDO_MANIFESTACAO': 0, 'AGUARDANDO_CONSULTA': 0,
+      'INFORMADA': 1, 'MANIFESTADA': 2,
+      'EM_AREA_TRANSFERENCIA': 3, 'RECEPCIONADA': 4,
+      'EM_TRANSITO_TERRESTRE': 5, 'ENTREGUE': 6,
+      'BLOQUEIO': 99,
+    };
+    
+    const timelineStatus = CCT_EVENT_TO_STATUS[latestCode] || baseStatus;
+    
+    // Use the most advanced status between timeline-derived and backend-calculated
+    const timelineOrder = CCT_STATUS_ORDER[timelineStatus] || 0;
+    const backendOrder = CCT_STATUS_ORDER[baseStatus] || 0;
+    
+    return backendOrder >= timelineOrder ? baseStatus : timelineStatus;
   }, [allEventos, processo, isLoadingEvents]);
 
   // Initialize form values when processo loads - use useEffect to properly update state
