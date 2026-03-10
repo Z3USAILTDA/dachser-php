@@ -297,8 +297,9 @@ function calcularSlaLimite(
   eta: Date | null,
   statusManifestacao: string
 ): Date | null {
-  // SLA só ativo para processos manifestados no CCT
-  if (statusManifestacao !== 'MANIFESTADO_CCT') return null;
+  // Não calcular SLA para processos já entregues
+  const statusFinais = ['ENTREGUE', 'DLV', 'POD'];
+  if (statusFinais.includes(statusManifestacao?.toUpperCase?.())) return null;
   
   if (tipoVoo === 'VOO_CURTO' && dataDecolagem) {
     return new Date(dataDecolagem.getTime() + 30 * 60 * 1000); // +30 min
