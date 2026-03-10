@@ -25,14 +25,23 @@ function extractPieces(text: string): number | null {
 }
 
 // Check if timeline_json contains real events (not errors or empty)
-function timelineHasValidEvents(timelineJson: string | null): boolean {
-  if (!timelineJson) return false;
+// Returns the raw status code/description of the last event if valid, or null
+function extractLastStatusFromTimeline(timelineJson: string | null): string | null {
+  if (!timelineJson) return null;
   const lower = timelineJson.toLowerCase();
-  if (lower.includes('"error"') || lower.includes('timeout') || lower.includes('failed to')) return false;
+  if (lower.includes('"error"') || lower.includes('timeout') || lower.includes('failed to')) return null;
   try {
     const events = JSON.parse(timelineJson);
-    return Array.isArray(events) && events.length > 0;
-  } catch { return false; }
+    if (!Array.isArray(events) || events.length === 0) return null;
+    // Events are typically DESC (newest first)
+    const last = events[0];
+    const code = (last.status || last.Status || '').trim().toUpperCase();
+    if (code && code !== 'UNK' && code !== 'UNKNOWN') return code;
+    // Fallback: try to get something from description
+    const desc = (last.Description || last.description || last.title || '').trim();
+    if (desc) return desc;
+    return null;
+  } catch { return null; }
 }
 
 // Classify ARR status as connection or final destination
