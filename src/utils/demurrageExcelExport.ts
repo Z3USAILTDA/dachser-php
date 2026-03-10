@@ -70,6 +70,8 @@ export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
   const excelData = data.map((c) => ({
     "Container": c.numero,
     "MBL": c.mbl,
+    "HBL": c.hbl || "-",
+    "Tipo Operação": c.tipo_processo || "-",
     "Cliente": c.cliente || "-",
     "Partner ID": c.partner_id || "-",
     "Armador": c.armador || "-",
