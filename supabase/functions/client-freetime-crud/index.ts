@@ -21,6 +21,8 @@ interface FreeTimeRecord {
   created_at?: string;
   updated_at?: string;
   created_by?: string | null;
+  customer_number?: string | null;
+  tipo_conteiner?: string | null;
 }
 
 serve(async (req) => {
