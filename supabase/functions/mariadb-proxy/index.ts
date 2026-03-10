@@ -3547,7 +3547,7 @@ serve(async (req) => {
                   manuseios_especiais: manuseios,
                   rfb_situacao: rfbSituacao,
                   rfb_status_cct: rfbSituacaoMapped,
-                  rfb_timestamp: rfbLatestTimestamp,
+                  rfb_timestamp: null,
                   consignatario_cnpj: consignatario?.cnpjResponsavelAtual || null,
                   consignatario_nome: null,
                   numero_voo: numeroVoo,
