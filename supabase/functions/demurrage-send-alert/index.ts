@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.78.0";
 import { Resend } from "https://esm.sh/resend@2.0.0";
-import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+import XLSX from "https://esm.sh/xlsx-js-style@1.2.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,7 +48,7 @@ interface AlertRequest {
 }
 
 function formatDateBR(dateStr: string | undefined | null): string {
-  if (!dateStr) return 'N/A';
+  if (!dateStr) return '';
   try {
     const d = new Date(dateStr);
     return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -83,6 +83,52 @@ Santos, SP - 11013-151.</p>
 </body></html>`;
 }
 
+// Style constants
+const DARK_BLUE = "003369";
+const WHITE_FONT = { color: { rgb: "FFFFFF" } };
+const BOLD = { bold: true };
+const THIN_BORDER = { style: "thin", color: { rgb: "000000" } };
+const ALL_BORDERS = { top: THIN_BORDER, bottom: THIN_BORDER, left: THIN_BORDER, right: THIN_BORDER };
+
+function headerCell(v: string): object {
+  return {
+    v, t: "s",
+    s: {
+      font: { ...WHITE_FONT, bold: true, sz: 9 },
+      fill: { fgColor: { rgb: DARK_BLUE } },
+      border: ALL_BORDERS,
+      alignment: { horizontal: "center", vertical: "center", wrapText: true },
+    }
+  };
+}
+
+function dataCell(v: string | number, fmt?: string): object {
+  const isNum = typeof v === "number";
+  return {
+    v, t: isNum ? "n" : "s",
+    s: {
+      font: { sz: 9 },
+      border: ALL_BORDERS,
+      alignment: { horizontal: isNum ? "right" : "center", vertical: "center" },
+      ...(fmt ? { numFmt: fmt } : {}),
+    }
+  };
+}
+
+function labelCell(v: string, bold = false): object {
+  return {
+    v, t: "s",
+    s: { font: { sz: 9, bold }, alignment: { horizontal: "left", vertical: "center" } }
+  };
+}
+
+function valCell(v: string, bold = false): object {
+  return {
+    v, t: "s",
+    s: { font: { sz: 9, bold }, alignment: { horizontal: "left", vertical: "center" } }
+  };
+}
+
 function generateDemonstrativoXlsx(params: {
   client_name?: string;
   house_bl?: string;
@@ -101,60 +147,216 @@ function generateDemonstrativoXlsx(params: {
     exchange_rate, total_usd, total_brl, containers } = params;
 
   const wb = XLSX.utils.book_new();
-  const rows: (string | number | null)[][] = [];
+  const ws: Record<string, unknown> = {};
+  const merges: Array<{ s: { r: number; c: number }; e: { r: number; c: number } }> = [];
 
-  rows.push(['DACHSER BRASIL LOGISTICA LTDA.']);
-  rows.push(['Rua Amador Bueno, 333 – Sl. 1201/1202, Centro – Santos/SP – CEP 11013-151']);
-  rows.push(['CNPJ: 01.658.446/0008-70']);
-  rows.push([]);
-  rows.push(['DEMONSTRATIVO DE COBRANÇA - DEMURRAGE']);
-  rows.push([]);
-  rows.push(['Consignee:', client_name || 'N/A', '', 'Data:', formatDateBR(issue_date || new Date().toISOString())]);
-  rows.push(['Partner ID:', partner_id || 'N/A']);
-  rows.push(['House BL:', house_bl || 'N/A']);
-  rows.push(['Shipment:', shipment_master || 'N/A']);
-  rows.push(['Origem:', origin_port || 'N/A', '', 'Destino:', destination_port || 'N/A']);
-  rows.push([]);
+  // Column widths (A-M = 13 columns)
+  ws["!cols"] = [
+    { wch: 16 }, // A - Container
+    { wch: 10 }, // B - Medida
+    { wch: 8 },  // C - Tipo
+    { wch: 12 }, // D - Descarga
+    { wch: 10 }, // E - Free Time
+    { wch: 16 }, // F - Limite Devolução
+    { wch: 14 }, // G - Devolução
+    { wch: 12 }, // H - Dias em Posse
+    { wch: 14 }, // I - Dias Incidêntes
+    { wch: 6 },  // J - 1° per qty
+    { wch: 12 }, // K - 1° per value
+    { wch: 6 },  // L - 2° per qty
+    { wch: 12 }, // M - 2° per value
+  ];
 
-  rows.push([
-    'Container', 'Medida', 'Tipo', 'Descarga', 'Free Time (dias)',
-    'Limite Devolução', 'Devolução', 'Dias em Posse', 'Dias Incidentes',
-    'Diária USD (1° Per.)', 'Diária USD (2° Per.)', 'Total USD'
-  ]);
+  let r = 0;
 
+  // Row 0: DACHSER header (left) + Company info (right)
+  ws[XLSX.utils.encode_cell({ r, c: 0 })] = {
+    v: "DACHSER", t: "s",
+    s: { font: { bold: true, sz: 18, color: { rgb: DARK_BLUE } } }
+  };
+  merges.push({ s: { r, c: 0 }, e: { r: r + 1, c: 3 } });
+  
+  ws[XLSX.utils.encode_cell({ r, c: 7 })] = {
+    v: "DACHSER BRASIL LOGISTICA LTDA", t: "s",
+    s: { font: { bold: true, sz: 9 }, alignment: { horizontal: "right" } }
+  };
+  merges.push({ s: { r, c: 7 }, e: { r, c: 12 } });
+  r++;
+
+  // Row 1: subtitle + address
+  ws[XLSX.utils.encode_cell({ r, c: 7 })] = {
+    v: "Rua Amador Bueno, 333 – Sl. 1201/1202, Centro", t: "s",
+    s: { font: { sz: 8, italic: true }, alignment: { horizontal: "right" } }
+  };
+  merges.push({ s: { r, c: 7 }, e: { r, c: 12 } });
+  r++;
+
+  // Row 2: Intelligent Logistics + city
+  ws[XLSX.utils.encode_cell({ r, c: 0 })] = {
+    v: "Intelligent Logistics", t: "s",
+    s: { font: { sz: 9, italic: true, color: { rgb: "666666" } } }
+  };
+  merges.push({ s: { r, c: 0 }, e: { r, c: 3 } });
+  
+  ws[XLSX.utils.encode_cell({ r, c: 7 })] = {
+    v: "Santos, SP - 11013-151", t: "s",
+    s: { font: { sz: 8, italic: true }, alignment: { horizontal: "right" } }
+  };
+  merges.push({ s: { r, c: 7 }, e: { r, c: 12 } });
+  r++;
+
+  // Row 3: CNPJ
+  ws[XLSX.utils.encode_cell({ r, c: 7 })] = {
+    v: "CNPJ NR. 08.996.109/0001-32", t: "s",
+    s: { font: { sz: 8, italic: true }, alignment: { horizontal: "right" } }
+  };
+  merges.push({ s: { r, c: 7 }, e: { r, c: 12 } });
+  r++;
+
+  // Row 4: blank
+  r++;
+
+  // Row 5: Title - centered
+  ws[XLSX.utils.encode_cell({ r, c: 0 })] = {
+    v: "DEMONSTRATIVO DE COBRANÇA - DEMURRAGE", t: "s",
+    s: { font: { bold: true, sz: 14 }, alignment: { horizontal: "center", vertical: "center" } }
+  };
+  merges.push({ s: { r, c: 0 }, e: { r, c: 12 } });
+  r++;
+
+  // Row 6: blank
+  r++;
+
+  // Row 7: Consignee / House BL (with borders)
+  const infoBoxStart = r;
+  ws[XLSX.utils.encode_cell({ r, c: 0 })] = { v: "Consignee:", t: "s", s: { font: { bold: true, sz: 9 }, border: { top: THIN_BORDER, left: THIN_BORDER } } };
+  ws[XLSX.utils.encode_cell({ r, c: 1 })] = { v: client_name || "", t: "s", s: { font: { sz: 9 }, border: { top: THIN_BORDER } } };
+  merges.push({ s: { r, c: 1 }, e: { r, c: 5 } });
+  ws[XLSX.utils.encode_cell({ r, c: 7 })] = { v: "House BL:", t: "s", s: { font: { bold: true, sz: 9 }, border: { top: THIN_BORDER } } };
+  ws[XLSX.utils.encode_cell({ r, c: 8 })] = { v: house_bl || "", t: "s", s: { font: { sz: 9 }, border: { top: THIN_BORDER, right: THIN_BORDER } } };
+  merges.push({ s: { r, c: 8 }, e: { r, c: 12 } });
+  r++;
+
+  // Row 8: Partner ID / Shipment
+  ws[XLSX.utils.encode_cell({ r, c: 0 })] = { v: "Partner ID:", t: "s", s: { font: { bold: true, sz: 9 }, border: { left: THIN_BORDER } } };
+  ws[XLSX.utils.encode_cell({ r, c: 1 })] = { v: partner_id || "", t: "s", s: { font: { sz: 9 } } };
+  merges.push({ s: { r, c: 1 }, e: { r, c: 5 } });
+  ws[XLSX.utils.encode_cell({ r, c: 7 })] = { v: "Shipment:", t: "s", s: { font: { bold: true, sz: 9 } } };
+  ws[XLSX.utils.encode_cell({ r, c: 8 })] = { v: shipment_master || "", t: "s", s: { font: { sz: 9 }, border: { right: THIN_BORDER } } };
+  merges.push({ s: { r, c: 8 }, e: { r, c: 12 } });
+  r++;
+
+  // Row 9: Origem / Destino / Data
+  ws[XLSX.utils.encode_cell({ r, c: 0 })] = { v: "Origem:", t: "s", s: { font: { bold: true, sz: 9 }, border: { left: THIN_BORDER, bottom: THIN_BORDER } } };
+  ws[XLSX.utils.encode_cell({ r, c: 1 })] = { v: origin_port || "", t: "s", s: { font: { sz: 9 }, border: { bottom: THIN_BORDER } } };
+  merges.push({ s: { r, c: 1 }, e: { r, c: 3 } });
+  ws[XLSX.utils.encode_cell({ r, c: 4 })] = { v: "Destino:", t: "s", s: { font: { bold: true, sz: 9 }, border: { bottom: THIN_BORDER } } };
+  ws[XLSX.utils.encode_cell({ r, c: 5 })] = { v: destination_port || "", t: "s", s: { font: { sz: 9 }, border: { bottom: THIN_BORDER } } };
+  merges.push({ s: { r, c: 5 }, e: { r, c: 6 } });
+  ws[XLSX.utils.encode_cell({ r, c: 7 })] = { v: "Data:", t: "s", s: { font: { bold: true, sz: 9 }, border: { bottom: THIN_BORDER } } };
+  ws[XLSX.utils.encode_cell({ r, c: 8 })] = { v: formatDateBR(issue_date || new Date().toISOString()), t: "s", s: { font: { sz: 9 }, border: { bottom: THIN_BORDER, right: THIN_BORDER } } };
+  merges.push({ s: { r, c: 8 }, e: { r, c: 12 } });
+  r++;
+
+  // Row 10: blank
+  r++;
+
+  // Row 11-12: Table header (two rows with merged "VALOR DIÁRIA USD")
+  const hdrRow1 = r;
+  // First header row
+  ws[XLSX.utils.encode_cell({ r, c: 0 })] = headerCell("CONTAINER");
+  ws[XLSX.utils.encode_cell({ r, c: 1 })] = headerCell("MEDIDA");
+  ws[XLSX.utils.encode_cell({ r, c: 2 })] = headerCell("TIPO");
+  ws[XLSX.utils.encode_cell({ r, c: 3 })] = headerCell("DESCARGA");
+  ws[XLSX.utils.encode_cell({ r, c: 4 })] = headerCell("FREE TIME");
+  ws[XLSX.utils.encode_cell({ r, c: 5 })] = headerCell("LIMITE DE DEVOLUÇÃO");
+  ws[XLSX.utils.encode_cell({ r, c: 6 })] = headerCell("DEVOLUÇÃO");
+  ws[XLSX.utils.encode_cell({ r, c: 7 })] = headerCell("DIAS EM POSSE");
+  ws[XLSX.utils.encode_cell({ r, c: 8 })] = headerCell("DIAS INCIDÊNTES");
+  // "VALOR DIÁRIA USD" spans J-M (cols 9-12)
+  ws[XLSX.utils.encode_cell({ r, c: 9 })] = headerCell("VALOR DIÁRIA USD");
+  merges.push({ s: { r, c: 9 }, e: { r, c: 12 } });
+
+  // Merge header cells that span 2 rows (A-I)
+  for (let c = 0; c <= 8; c++) {
+    merges.push({ s: { r: hdrRow1, c }, e: { r: hdrRow1 + 1, c } });
+  }
+  r++;
+
+  // Second header row: sub-headers for VALOR DIÁRIA USD
+  ws[XLSX.utils.encode_cell({ r, c: 9 })] = headerCell("1° PERÍODO");
+  merges.push({ s: { r, c: 9 }, e: { r, c: 10 } });
+  ws[XLSX.utils.encode_cell({ r, c: 11 })] = headerCell("2° PERÍODO");
+  merges.push({ s: { r, c: 11 }, e: { r, c: 12 } });
+  r++;
+
+  // Data rows
   const ctrs = containers || [];
   for (const c of ctrs) {
-    rows.push([
-      c.number || 'N/A', c.size || '', c.type || '',
-      formatDateBR(c.discharge_date), c.free_time_days ?? '',
-      formatDateBR(c.return_deadline), formatDateBR(c.return_date),
-      c.days_possession ?? '', c.days_incident ?? '',
-      c.rate_period1_usd ?? '', c.rate_period2_usd ?? '',
-      c.total_usd ?? 0,
-    ]);
+    ws[XLSX.utils.encode_cell({ r, c: 0 })] = dataCell(c.number || "N/A");
+    ws[XLSX.utils.encode_cell({ r, c: 1 })] = dataCell(c.size || "");
+    ws[XLSX.utils.encode_cell({ r, c: 2 })] = dataCell(c.type || "");
+    ws[XLSX.utils.encode_cell({ r, c: 3 })] = dataCell(formatDateBR(c.discharge_date));
+    ws[XLSX.utils.encode_cell({ r, c: 4 })] = dataCell(c.free_time_days ?? 0);
+    ws[XLSX.utils.encode_cell({ r, c: 5 })] = dataCell(formatDateBR(c.return_deadline));
+    ws[XLSX.utils.encode_cell({ r, c: 6 })] = dataCell(formatDateBR(c.return_date));
+    ws[XLSX.utils.encode_cell({ r, c: 7 })] = dataCell(c.days_possession ?? 0);
+    ws[XLSX.utils.encode_cell({ r, c: 8 })] = dataCell(c.days_incident ?? 0);
+    // 1° Período: qty + value
+    ws[XLSX.utils.encode_cell({ r, c: 9 })] = dataCell(c.days_incident ?? 0);
+    ws[XLSX.utils.encode_cell({ r, c: 10 })] = dataCell(c.rate_period1_usd ?? 0, "#,##0.00");
+    // 2° Período: qty + value
+    ws[XLSX.utils.encode_cell({ r, c: 11 })] = dataCell(0);
+    ws[XLSX.utils.encode_cell({ r, c: 12 })] = dataCell(c.rate_period2_usd ?? 0, "#,##0.00");
+    r++;
   }
 
-  rows.push([]);
+  // Blank row
+  r++;
+
+  // Totals
   const computedTotalUsd = total_usd ?? ctrs.reduce((s, c) => s + (c.total_usd || 0), 0);
   const rate = exchange_rate || 1;
   const computedTotalBrl = total_brl ?? (computedTotalUsd * rate);
 
-  rows.push(['', '', '', '', '', '', '', '', '', '', 'TOTAL USD:', computedTotalUsd]);
-  rows.push(['', '', '', '', '', '', '', '', '', '', 'TAXA USD:', rate]);
-  rows.push(['', '', '', '', '', '', '', '', '', '', 'TOTAL BRL:', computedTotalBrl]);
-  rows.push([]);
-  rows.push(['Prazo de contestação: 48 horas úteis a partir do recebimento deste demonstrativo.']);
-  rows.push(['Caso não haja manifestação dentro deste prazo, os valores serão considerados aceitos e lançados para faturamento.']);
+  const totalLabelStyle = { font: { bold: true, sz: 10 }, alignment: { horizontal: "right" as const } };
+  const totalValueStyle = { font: { bold: true, sz: 10 }, alignment: { horizontal: "right" as const }, numFmt: "#,##0.00" };
 
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [
-    { wch: 18 }, { wch: 8 }, { wch: 10 }, { wch: 12 }, { wch: 14 },
-    { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 14 },
-    { wch: 18 }, { wch: 18 }, { wch: 14 },
-  ];
+  ws[XLSX.utils.encode_cell({ r, c: 10 })] = { v: "TOTAL USD =", t: "s", s: totalLabelStyle };
+  merges.push({ s: { r, c: 10 }, e: { r, c: 11 } });
+  ws[XLSX.utils.encode_cell({ r, c: 12 })] = { v: computedTotalUsd, t: "n", s: totalValueStyle };
+  r++;
 
-  XLSX.utils.book_append_sheet(wb, ws, 'Demonstrativo');
-  return XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+  ws[XLSX.utils.encode_cell({ r, c: 10 })] = { v: "TAXA USD =", t: "s", s: totalLabelStyle };
+  merges.push({ s: { r, c: 10 }, e: { r, c: 11 } });
+  ws[XLSX.utils.encode_cell({ r, c: 12 })] = { v: rate, t: "n", s: totalValueStyle };
+  r++;
+
+  ws[XLSX.utils.encode_cell({ r, c: 10 })] = { v: "TOTAL BRL =", t: "s", s: totalLabelStyle };
+  merges.push({ s: { r, c: 10 }, e: { r, c: 11 } });
+  ws[XLSX.utils.encode_cell({ r, c: 12 })] = { v: computedTotalBrl, t: "n", s: totalValueStyle };
+  r++;
+
+  // Blank row
+  r++;
+
+  // Footer - contestation text (with border box)
+  const footerText = "Após o recebimento deste demonstrativo de cobrança, concedemos um prazo de 48 horas úteis para eventuais contestações, mediante apresentação de evidências. Caso não haja manifestação dentro deste período, procederemos com o faturamento e a emissão da Nota de Débito correspondente ao valor informado.";
+  ws[XLSX.utils.encode_cell({ r, c: 0 })] = {
+    v: footerText, t: "s",
+    s: { font: { sz: 9 }, alignment: { wrapText: true, vertical: "top" }, border: ALL_BORDERS }
+  };
+  merges.push({ s: { r, c: 0 }, e: { r: r + 2, c: 12 } });
+  // Set row heights for footer
+  if (!ws["!rows"]) ws["!rows"] = [];
+  (ws["!rows"] as Array<{ hpt?: number }>)[r] = { hpt: 50 };
+
+  // Set range
+  ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: r + 2, c: 12 } });
+  ws["!merges"] = merges;
+
+  XLSX.utils.book_append_sheet(wb, ws, "Demonstrativo");
+  return XLSX.write(wb, { type: "base64", bookType: "xlsx" });
 }
 
 serve(async (req) => {
@@ -190,11 +392,9 @@ serve(async (req) => {
       throw new Error("recipient_emails is required");
     }
 
-    console.log(`[Demurrage Alert] Sending alert for ${container_number || shipment_master || container_id}, containers: ${(containers || []).length}`);
+    console.log(`[Demurrage Alert] Sending alert, containers: ${(containers || []).length}`);
 
-    // Always use the standard notification text
     const html = generateNotificationHtml(test_mode);
-
     const testPrefix = test_mode ? '[TESTE] ' : '';
     const subject = `${testPrefix}Notificação - Alerta de Free Time - ${shipment_master || container_number || 'N/A'}`;
 
@@ -208,9 +408,9 @@ serve(async (req) => {
       });
       const filename = `Demonstrativo_Demurrage_${(shipment_master || container_number || 'N_A').replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
       attachments = [{ filename, content: xlsxBase64 }];
-      console.log(`[Demurrage Alert] XLSX attachment generated: ${filename}, size: ${xlsxBase64.length} chars`);
+      console.log(`[Demurrage Alert] XLSX generated: ${filename} (${xlsxBase64.length} chars)`);
     } catch (xlsxErr) {
-      console.error('[Demurrage Alert] Failed to generate XLSX:', xlsxErr);
+      console.error('[Demurrage Alert] XLSX generation failed:', xlsxErr);
     }
 
     const emailPayload: Record<string, unknown> = {
@@ -223,29 +423,22 @@ serve(async (req) => {
       emailPayload.attachments = attachments;
     }
 
-    console.log(`[Demurrage Alert] Sending email with ${attachments.length} attachment(s) to ${recipient_emails.join(', ')}`);
-
+    console.log(`[Demurrage Alert] Sending with ${attachments.length} attachment(s)`);
     const emailResponse = await resend.emails.send(emailPayload as any);
     const emailSuccess = emailResponse && !('error' in emailResponse);
-
-    console.log(`[Demurrage Alert] Email result:`, JSON.stringify(emailResponse));
+    console.log(`[Demurrage Alert] Result:`, JSON.stringify(emailResponse));
 
     if (!test_mode) {
-      const { error: insertError } = await supabaseClient
-        .from('demurrage_alerts')
-        .insert({
-          container_id: container_id || null,
-          alert_type: 'cost_statement',
-          risk_score,
-          expected_cost_usd: expected_cost_usd ?? total_usd,
-          days_remaining,
-          email_sent_to: recipient_emails,
-          email_sent_at: new Date().toISOString(),
-          email_status: emailSuccess ? 'sent' : 'failed',
-        });
-      if (insertError) {
-        console.error('[Demurrage Alert] Error recording alert:', insertError);
-      }
+      await supabaseClient.from('demurrage_alerts').insert({
+        container_id: container_id || null,
+        alert_type: 'cost_statement',
+        risk_score,
+        expected_cost_usd: expected_cost_usd ?? total_usd,
+        days_remaining,
+        email_sent_to: recipient_emails,
+        email_sent_at: new Date().toISOString(),
+        email_status: emailSuccess ? 'sent' : 'failed',
+      });
     }
 
     return new Response(
