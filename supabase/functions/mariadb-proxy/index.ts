@@ -3060,11 +3060,19 @@ serve(async (req) => {
         }
         
         const awbStatusMap = new Map<string, any>();
+        let depExtractedCount = 0;
         for (const snap of (validAwbs || [])) {
           const depDateFromTimeline = extractDepDateFromTimeline(snap.timeline_json);
+          if (depDateFromTimeline) depExtractedCount++;
+          // Debug: log timeline structure for specific AWB
+          if ((snap.awb || '').includes('14377845')) {
+            const parsed = typeof snap.timeline_json === 'string' ? JSON.parse(snap.timeline_json || '[]') : snap.timeline_json;
+            console.log(`[DEP_DEBUG] AWB ${snap.awb} timeline_json type=${typeof snap.timeline_json}, isArray=${Array.isArray(parsed)}, length=${Array.isArray(parsed) ? parsed.length : 'N/A'}, first=${JSON.stringify(Array.isArray(parsed) ? parsed[0] : parsed).substring(0, 300)}`);
+            console.log(`[DEP_DEBUG] Extracted dep_date: ${depDateFromTimeline}`);
+          }
           awbStatusMap.set((snap.awb || '').trim(), { ...snap, dep_date_from_timeline: depDateFromTimeline });
         }
-        console.log(`CCT Step 1: Found ${mawbList.length} valid AWBs from t_aereo_ws_firecrawl`);
+        console.log(`CCT Step 1: Found ${mawbList.length} valid AWBs from t_aereo_ws_firecrawl (${depExtractedCount} with DEP from timeline)`);
         
         if (mawbList.length === 0) {
           console.log('CCT: No valid AWBs found in t_aereo_ws_firecrawl, returning empty');
