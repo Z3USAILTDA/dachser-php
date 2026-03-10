@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
+import { ClientDetailSheet } from "@/components/olimpo/ClientDetailSheet";
 import { useToast } from "@/hooks/use-toast";
 import {
   BarChart,
