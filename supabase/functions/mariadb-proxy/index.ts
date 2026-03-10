@@ -3846,6 +3846,42 @@ serve(async (req) => {
             }
           }
           
+          // Override with t_cct_eventos_historico if it has a more recent event
+          // This ensures dashboard matches ProcessoTimeline detail page
+          const evtHistorico = eventosHistoricoMap.get(houseKey);
+          if (evtHistorico) {
+            const evtCode = evtHistorico.codigo_evento;
+            const eventToCctStatus: Record<string, string> = {
+              'AREA_TRANSFERENCIA': 'EM_AREA_TRANSFERENCIA',
+              'MANIFESTADO': 'MANIFESTADA',
+              'RECEPCIONADO': 'RECEPCIONADA',
+              'CHEGADA_INFORMADA': 'INFORMADA',
+              'CHEGADA_AERONAVE': 'INFORMADA',
+              'EM_TRANSITO': 'EM_TRANSITO_TERRESTRE',
+              'ENTREGUE': 'ENTREGUE',
+              'BLOQUEIO': 'BLOQUEIO',
+              'DESEMBARACO': 'ENTREGUE',
+              'LIBERADO': 'ENTREGUE',
+              'DESBLOQUEIO': 'RECEPCIONADA',
+              'ARR': 'INFORMADA', 'ATA': 'INFORMADA',
+              'DEP': 'MANIFESTADA', 'MAN': 'MANIFESTADA', 'BKD': 'MANIFESTADA',
+              'RCF': 'EM_AREA_TRANSFERENCIA', 'RCS': 'EM_AREA_TRANSFERENCIA',
+              'NFD': 'RECEPCIONADA', 'AWD': 'RECEPCIONADA',
+              'DLV': 'ENTREGUE', 'POD': 'ENTREGUE',
+              'FRO': 'BLOQUEIO', 'DIS': 'BLOQUEIO', 'OFLD': 'BLOQUEIO',
+            };
+            const evtMapped = eventToCctStatus[evtCode];
+            if (evtMapped) {
+              // Events historico is authoritative - it's the same source the detail page uses
+              const evtTs = evtHistorico.data_hora_evento ? new Date(evtHistorico.data_hora_evento).getTime() : 0;
+              const currentTs = row.ultimo_evento_data ? new Date(row.ultimo_evento_data).getTime() : 0;
+              // If historico event is more recent OR no tracking timestamp, use it
+              if (evtTs >= currentTs || currentTs === 0) {
+                statusCctOficial = evtMapped;
+              }
+            }
+          }
+          
           return {
             ...row,
             status_cct_oficial: statusCctOficial,
