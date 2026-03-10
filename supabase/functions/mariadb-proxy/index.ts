@@ -3750,21 +3750,16 @@ serve(async (req) => {
           }
         }
 
-        // ==================== STEP 3: Get latest event per HAWB from t_cct_eventos_historico ====================
-        // This ensures the dashboard status matches the detail page (ProcessoTimeline) which uses these events
-        let eventosHistoricoMap = new Map<string, { codigo_evento: string; data_hora_evento: string }>();
+        // ==================== STEP 3: Get MOST ADVANCED event per HAWB from t_cct_eventos_historico ====================
+        // Timeline is supreme: the most advanced status (by hierarchy) wins, not the most recent by timestamp
+        let eventosHistoricoMap = new Map<string, { codigo_evento: string; data_hora_evento: string; mapped_status: string }>();
         if (houseList.length > 0) {
           try {
             const houseFilterEvt = houseList.map((h: string) => `'${h.replace(/'/g, "''")}'`).join(',');
-            const latestEvents = await client.query(`
-              SELECT e.awb, e.codigo_evento, e.data_hora_evento
-              FROM ${database}.t_cct_eventos_historico e
-              INNER JOIN (
-                SELECT awb, MAX(data_hora_evento) as max_dt
-                FROM ${database}.t_cct_eventos_historico
-                WHERE TRIM(awb) IN (${houseFilterEvt})
-                GROUP BY awb
-              ) latest ON e.awb = latest.awb AND e.data_hora_evento = latest.max_dt
+            const allEvents = await client.query(`
+              SELECT awb, codigo_evento, data_hora_evento
+              FROM ${database}.t_cct_eventos_historico
+              WHERE TRIM(awb) IN (${houseFilterEvt})
             `);
             
             // Map evento codigo to CCT status (same mapping as ProcessoTimeline effectiveStatus)
@@ -3789,18 +3784,26 @@ serve(async (req) => {
               'FRO': 'BLOQUEIO', 'DIS': 'BLOQUEIO', 'OFLD': 'BLOQUEIO',
             };
             
-            for (const evt of (latestEvents || [])) {
+            // Pick the MOST ADVANCED event per HAWB by hierarchy, not by timestamp
+            for (const evt of (allEvents || [])) {
               const awbKey = (evt.awb || '').trim().toUpperCase();
               const code = (evt.codigo_evento || '').toUpperCase();
               const mapped = eventToCctStatus[code];
               if (mapped) {
-                eventosHistoricoMap.set(awbKey, {
-                  codigo_evento: code,
-                  data_hora_evento: evt.data_hora_evento,
-                });
+                const existing = eventosHistoricoMap.get(awbKey);
+                const existingOrder = existing ? (CCT_STATUS_ORDER[existing.mapped_status] || 0) : 0;
+                const newOrder = CCT_STATUS_ORDER[mapped] || 0;
+                // Use the most advanced status by hierarchy
+                if (newOrder > existingOrder) {
+                  eventosHistoricoMap.set(awbKey, {
+                    codigo_evento: code,
+                    data_hora_evento: evt.data_hora_evento,
+                    mapped_status: mapped,
+                  });
+                }
               }
             }
-            console.log(`CCT Step 3: Found latest events for ${eventosHistoricoMap.size} HAWBs from t_cct_eventos_historico`);
+            console.log(`CCT Step 3: Found most advanced events for ${eventosHistoricoMap.size} HAWBs from t_cct_eventos_historico`);
           } catch (evtErr) {
             console.warn('CCT Step 3: Error fetching t_cct_eventos_historico (non-fatal):', evtErr);
           }
@@ -3834,62 +3837,25 @@ serve(async (req) => {
             }
           }
           
-          // Apply chronological merge: if RFB has a more recent timestamp, its status wins
-          // regardless of hierarchy. Hierarchy is only used as tiebreaker.
+          // Apply RFB status ONLY if it's MORE ADVANCED than current (never downgrade)
           if (rfbInfo?.rfb_status_cct && rfbInfo.rfb_status_cct !== 'BLOQUEIO') {
-            const trackingTs = row.ultimo_evento_data ? new Date(row.ultimo_evento_data).getTime() : 0;
-            const rfbTs = rfbInfo.rfb_timestamp ? new Date(rfbInfo.rfb_timestamp).getTime() : 0;
-            
-            if (rfbTs > 0 && trackingTs > 0) {
-              // Both have timestamps: most recent wins
-              if (rfbTs > trackingTs) {
-                statusCctOficial = rfbInfo.rfb_status_cct;
-              } else if (rfbTs === trackingTs) {
-                // Tiebreaker: use hierarchy
-                const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
-                const rfbOrder = CCT_STATUS_ORDER[rfbInfo.rfb_status_cct] || 0;
-                if (rfbOrder > currentOrder) statusCctOficial = rfbInfo.rfb_status_cct;
-              }
-              // If trackingTs > rfbTs, keep tracking status (already set)
-            } else {
-              // No timestamps available on one side: fallback to hierarchy
-              const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
-              const rfbOrder = CCT_STATUS_ORDER[rfbInfo.rfb_status_cct] || 0;
-              if (rfbOrder > currentOrder) statusCctOficial = rfbInfo.rfb_status_cct;
+            const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
+            const rfbOrder = CCT_STATUS_ORDER[rfbInfo.rfb_status_cct] || 0;
+            if (rfbOrder > currentOrder) {
+              statusCctOficial = rfbInfo.rfb_status_cct;
             }
           }
           
-          // Override with t_cct_eventos_historico if it has a more recent event
-          // This ensures dashboard matches ProcessoTimeline detail page
+          // Override with t_cct_eventos_historico - TIMELINE IS SUPREME
+          // The most advanced event from the history table always wins (by hierarchy, not timestamp)
           const evtHistorico = eventosHistoricoMap.get(houseKey);
           if (evtHistorico) {
-            const evtCode = evtHistorico.codigo_evento;
-            const eventToCctStatus: Record<string, string> = {
-              'AREA_TRANSFERENCIA': 'EM_AREA_TRANSFERENCIA',
-              'MANIFESTADO': 'MANIFESTADA',
-              'RECEPCIONADO': 'RECEPCIONADA',
-              'CHEGADA_INFORMADA': 'INFORMADA',
-              'CHEGADA_AERONAVE': 'INFORMADA',
-              'EM_TRANSITO': 'EM_TRANSITO_TERRESTRE',
-              'ENTREGUE': 'ENTREGUE',
-              'BLOQUEIO': 'BLOQUEIO',
-              'DESEMBARACO': 'ENTREGUE',
-              'LIBERADO': 'ENTREGUE',
-              'DESBLOQUEIO': 'RECEPCIONADA',
-              'ARR': 'INFORMADA', 'ATA': 'INFORMADA',
-              'DEP': 'MANIFESTADA', 'MAN': 'MANIFESTADA', 'BKD': 'MANIFESTADA',
-              'RCF': 'EM_AREA_TRANSFERENCIA', 'RCS': 'EM_AREA_TRANSFERENCIA',
-              'NFD': 'RECEPCIONADA', 'AWD': 'RECEPCIONADA',
-              'DLV': 'ENTREGUE', 'POD': 'ENTREGUE',
-              'FRO': 'BLOQUEIO', 'DIS': 'BLOQUEIO', 'OFLD': 'BLOQUEIO',
-            };
-            const evtMapped = eventToCctStatus[evtCode];
+            const evtMapped = evtHistorico.mapped_status;
             if (evtMapped) {
-              // Events historico is authoritative - it's the same source the detail page uses
-              const evtTs = evtHistorico.data_hora_evento ? new Date(evtHistorico.data_hora_evento).getTime() : 0;
-              const currentTs = row.ultimo_evento_data ? new Date(row.ultimo_evento_data).getTime() : 0;
-              // If historico event is more recent OR no tracking timestamp, use it
-              if (evtTs >= currentTs || currentTs === 0) {
+              const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
+              const evtOrder = CCT_STATUS_ORDER[evtMapped] || 0;
+              // Timeline is supreme: if historico has a more advanced status, use it
+              if (evtOrder > currentOrder) {
                 statusCctOficial = evtMapped;
               }
             }
