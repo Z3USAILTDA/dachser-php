@@ -6880,7 +6880,7 @@ serve(async (req) => {
             timelineData = apiTimelineRaw.map(evt => ({
               ...evt,
               _fromApi: true,
-              _pecas: evt.quantidadeCarga ?? null,
+              _pecas: evt.quantidadeCargo ?? evt.quantidadeCarga ?? null,
               _peso: evt.pesoCarga ?? null,
             }));
             timelineSource = 'api';
