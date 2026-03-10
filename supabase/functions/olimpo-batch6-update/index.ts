@@ -39,7 +39,9 @@ serve(async (req) => {
     // Helper: insert event
     const insertEvent = async (mbl: string, container: string, code: string, desc: string, dt: string, location: string, vessel: string, voyage: string) => {
       await client.execute(
-        `INSERT INTO dados_dachser.t_tracking_sea_history (mbl_id, container_id, event_code, event_description, event_datetime, location, vessel_name, voyage_number, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'MANUAL')`,
+        `INSERT IGNORE INTO dados_dachser.t_tracking_sea_history 
+         (mbl_id, container, event_code, event_description, event_datetime, location, vessel_name, voyage, source, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'MANUAL', NOW())`,
         [mbl, container, code, desc, dt, location, vessel, voyage]
       );
     };
@@ -55,7 +57,7 @@ serve(async (req) => {
       sets.push('updated_at = NOW()');
       vals.push(mbl);
       await client.execute(
-        `UPDATE dados_dachser.t_tracking_sea_main SET ${sets.join(', ')} WHERE mbl_id = ?`,
+        `UPDATE dados_dachser.t_tracking_sea SET ${sets.join(', ')} WHERE mbl_id = ?`,
         vals
       );
     };
