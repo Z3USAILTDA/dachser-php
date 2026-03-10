@@ -101,7 +101,7 @@ export function DemurrageFreeTimeDialog({ open, onOpenChange, onSuccess }: Demur
 
     const data: CreateClientFreeTimeData & { customer_number?: string; tipo_conteiner?: string } = {
       cliente_nome: tipoFt === 'CONTRATO' ? clienteNome.trim() : (mbl.trim() || 'Processo'),
-      cliente_cnpj: clienteCnpj.trim() || undefined,
+      cliente_cnpj: tipoFt === 'CONTRATO' ? (clienteCnpj.trim() || undefined) : undefined,
       tipo_ft: tipoFt,
       free_time_days: freeTimeDays,
       notas: notas.trim() || undefined,
