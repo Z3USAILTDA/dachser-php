@@ -36,6 +36,16 @@ interface StageCounts {
   D60: number;
 }
 
+interface StageAmounts {
+  PRE: number;
+  D1: number;
+  D7: number;
+  D15: number;
+  D30: number;
+  D45: number;
+  D60: number;
+}
+
 interface StageRow {
   razao_base: string;
   razao_social: string;
