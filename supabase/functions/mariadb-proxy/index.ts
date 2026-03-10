@@ -2126,20 +2126,22 @@ serve(async (req) => {
         // Calculate totals
         const totals = {
           product: 'Grand Total',
-          not_due: 0, aging_90: 0, aging_180: 0, aging_240: 0, aging_360: 0, aging_360_plus: 0,
-          count_not_due: 0, count_90: 0, count_180: 0, count_240: 0, count_360: 0, count_360_plus: 0,
+          not_due: 0, aging_30: 0, aging_90: 0, aging_180: 0, aging_240: 0, aging_360: 0, aging_360_plus: 0,
+          count_not_due: 0, count_30: 0, count_90: 0, count_180: 0, count_240: 0, count_360: 0, count_360_plus: 0,
         };
         
         const rows = agingRows.map((r: any) => {
           const row = {
             product: r.product || 'Outros',
             not_due: Number(r.not_due) || 0,
+            aging_30: Number(r.aging_30) || 0,
             aging_90: Number(r.aging_90) || 0,
             aging_180: Number(r.aging_180) || 0,
             aging_240: Number(r.aging_240) || 0,
             aging_360: Number(r.aging_360) || 0,
             aging_360_plus: Number(r.aging_360_plus) || 0,
             count_not_due: Number(r.count_not_due) || 0,
+            count_30: Number(r.count_30) || 0,
             count_90: Number(r.count_90) || 0,
             count_180: Number(r.count_180) || 0,
             count_240: Number(r.count_240) || 0,
@@ -2147,12 +2149,14 @@ serve(async (req) => {
             count_360_plus: Number(r.count_360_plus) || 0,
           };
           totals.not_due += row.not_due;
+          totals.aging_30 += row.aging_30;
           totals.aging_90 += row.aging_90;
           totals.aging_180 += row.aging_180;
           totals.aging_240 += row.aging_240;
           totals.aging_360 += row.aging_360;
           totals.aging_360_plus += row.aging_360_plus;
           totals.count_not_due += row.count_not_due;
+          totals.count_30 += row.count_30;
           totals.count_90 += row.count_90;
           totals.count_180 += row.count_180;
           totals.count_240 += row.count_240;
