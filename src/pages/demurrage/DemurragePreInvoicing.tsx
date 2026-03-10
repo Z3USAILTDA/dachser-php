@@ -534,14 +534,6 @@ export default function DemurragePreInvoicing() {
                                   Lançar no Othello
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator className="bg-[rgba(255,255,255,0.1)]" />
-                                <DropdownMenuItem
-                                  onClick={() => { setEmailInvoice(invoice); setEmailDialogOpen(true); }}
-                                  className="cursor-pointer"
-                                >
-                                  <Mail className="h-4 w-4 mr-2" />
-                                  Enviar E-mail de Teste
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator className="bg-[rgba(255,255,255,0.1)]" />
                                 <DropdownMenuItem 
                                   onClick={() => handleSingleAction(invoice, 'paid')}
                                   className="cursor-pointer text-green-400"
