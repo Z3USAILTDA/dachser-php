@@ -3225,15 +3225,33 @@ serve(async (req) => {
                 return resp.length > 0;
               });
               
-              // Extract most advanced situacao from partesEstoque
+              // Extract most recent situacao from partesEstoque (chronological, not hierarchy)
               let rfbSituacao: string | null = null;
               let rfbSituacaoMapped: string | null = null;
+              let rfbLatestTimestamp: string | null = null;
               for (const pe of partesEstoque) {
                 const sitVal = pe?.situacaoAtual || pe?.situacao || pe?.status;
                 const mapped = mapRfbSituacaoToCCT(sitVal);
-                if (mapped && (!rfbSituacaoMapped || (CCT_STATUS_ORDER[mapped] || 0) > (CCT_STATUS_ORDER[rfbSituacaoMapped] || 0))) {
+                if (!mapped) continue;
+                // Extract timestamp from partesEstoque entry
+                const peTimestamp = pe?.dataHoraOperacao || pe?.dataHoraSituacao || pe?.dataHoraRecepcao || pe?.dataHora || null;
+                // Use chronological: pick the entry with the most recent timestamp
+                if (peTimestamp && rfbLatestTimestamp) {
+                  if (new Date(peTimestamp).getTime() > new Date(rfbLatestTimestamp).getTime()) {
+                    rfbSituacaoMapped = mapped;
+                    rfbSituacao = sitVal;
+                    rfbLatestTimestamp = peTimestamp;
+                  }
+                } else if (peTimestamp && !rfbLatestTimestamp) {
                   rfbSituacaoMapped = mapped;
                   rfbSituacao = sitVal;
+                  rfbLatestTimestamp = peTimestamp;
+                } else if (!rfbLatestTimestamp) {
+                  // No timestamps available, fallback to hierarchy
+                  if (!rfbSituacaoMapped || (CCT_STATUS_ORDER[mapped] || 0) > (CCT_STATUS_ORDER[rfbSituacaoMapped] || 0)) {
+                    rfbSituacaoMapped = mapped;
+                    rfbSituacao = sitVal;
+                  }
                 }
               }
               
@@ -3272,6 +3290,7 @@ serve(async (req) => {
                 manuseios_especiais: manuseios,
                 rfb_situacao: rfbSituacao,
                 rfb_status_cct: rfbSituacaoMapped,
+                rfb_timestamp: rfbLatestTimestamp,
                 consignatario_cnpj: consignatario?.cnpjResponsavelAtual || null,
                 consignatario_nome: null,
                 numero_voo: numeroVoo,
@@ -3389,9 +3408,10 @@ serve(async (req) => {
                 return resp.length > 0;
               });
               
-              // Extract situacao
+              // Extract situacao (chronological: most recent timestamp wins)
               let rfbSituacao: string | null = null;
               let rfbSituacaoMapped: string | null = null;
+              let rfbLatestTimestamp: string | null = null;
               const mapRfbSit = (situacao: string | null): string | null => {
                 if (!situacao) return null;
                 const lower = situacao.toLowerCase().trim();
@@ -3406,9 +3426,23 @@ serve(async (req) => {
               for (const pe of partesEstoque) {
                 const sitVal = pe?.situacaoAtual || pe?.situacao || pe?.status;
                 const mapped = mapRfbSit(sitVal);
-                if (mapped && (!rfbSituacaoMapped || (CCT_STATUS_ORDER[mapped] || 0) > (CCT_STATUS_ORDER[rfbSituacaoMapped] || 0))) {
+                if (!mapped) continue;
+                const peTimestamp = pe?.dataHoraOperacao || pe?.dataHoraSituacao || pe?.dataHoraRecepcao || pe?.dataHora || null;
+                if (peTimestamp && rfbLatestTimestamp) {
+                  if (new Date(peTimestamp).getTime() > new Date(rfbLatestTimestamp).getTime()) {
+                    rfbSituacaoMapped = mapped;
+                    rfbSituacao = sitVal;
+                    rfbLatestTimestamp = peTimestamp;
+                  }
+                } else if (peTimestamp && !rfbLatestTimestamp) {
                   rfbSituacaoMapped = mapped;
                   rfbSituacao = sitVal;
+                  rfbLatestTimestamp = peTimestamp;
+                } else if (!rfbLatestTimestamp) {
+                  if (!rfbSituacaoMapped || (CCT_STATUS_ORDER[mapped] || 0) > (CCT_STATUS_ORDER[rfbSituacaoMapped] || 0)) {
+                    rfbSituacaoMapped = mapped;
+                    rfbSituacao = sitVal;
+                  }
                 }
               }
               
@@ -3448,6 +3482,7 @@ serve(async (req) => {
                   manuseios_especiais: manuseios,
                   rfb_situacao: rfbSituacao,
                   rfb_status_cct: rfbSituacaoMapped,
+                  rfb_timestamp: rfbLatestTimestamp,
                   consignatario_cnpj: consignatario?.cnpjResponsavelAtual || null,
                   consignatario_nome: null,
                   numero_voo: numeroVoo,
@@ -3616,12 +3651,28 @@ serve(async (req) => {
             }
           }
           
-          // Apply canonical ordering: use the MOST ADVANCED status from all sources
-          if (rfbInfo?.rfb_status_cct) {
-            const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
-            const rfbOrder = CCT_STATUS_ORDER[rfbInfo.rfb_status_cct] || 0;
-            if (rfbOrder > currentOrder && rfbInfo.rfb_status_cct !== 'BLOQUEIO') {
-              statusCctOficial = rfbInfo.rfb_status_cct;
+          // Apply chronological merge: if RFB has a more recent timestamp, its status wins
+          // regardless of hierarchy. Hierarchy is only used as tiebreaker.
+          if (rfbInfo?.rfb_status_cct && rfbInfo.rfb_status_cct !== 'BLOQUEIO') {
+            const trackingTs = row.ultimo_evento_data ? new Date(row.ultimo_evento_data).getTime() : 0;
+            const rfbTs = rfbInfo.rfb_timestamp ? new Date(rfbInfo.rfb_timestamp).getTime() : 0;
+            
+            if (rfbTs > 0 && trackingTs > 0) {
+              // Both have timestamps: most recent wins
+              if (rfbTs > trackingTs) {
+                statusCctOficial = rfbInfo.rfb_status_cct;
+              } else if (rfbTs === trackingTs) {
+                // Tiebreaker: use hierarchy
+                const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
+                const rfbOrder = CCT_STATUS_ORDER[rfbInfo.rfb_status_cct] || 0;
+                if (rfbOrder > currentOrder) statusCctOficial = rfbInfo.rfb_status_cct;
+              }
+              // If trackingTs > rfbTs, keep tracking status (already set)
+            } else {
+              // No timestamps available on one side: fallback to hierarchy
+              const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
+              const rfbOrder = CCT_STATUS_ORDER[rfbInfo.rfb_status_cct] || 0;
+              if (rfbOrder > currentOrder) statusCctOficial = rfbInfo.rfb_status_cct;
             }
           }
           
