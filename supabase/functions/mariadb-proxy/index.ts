@@ -3993,6 +3993,10 @@ serve(async (req) => {
             ? statusCode 
             : statusCode || 'AGUARDANDO_MANIFESTACAO';
 
+          // For status_cct_oficial, always use the canonical CCT status name (not IATA code)
+          // This ensures the frontend manifestação dots and status badges render correctly
+          const cctStatusForOutput = row.status_cct_oficial || 'INFORMADA';
+
           return {
             id: row.id?.toString() || row.master,
             house: row.house || '',
@@ -4000,7 +4004,7 @@ serve(async (req) => {
             cliente: row.cliente || '',
             aeroporto_origem: row.aeroporto_origem || 'N/A',
             aeroporto_destino: row.aeroporto_destino || 'GRU',
-            status_cct_oficial: displayStatus,
+            status_cct_oficial: cctStatusForOutput,
             status_manifestacao: statusManifestacao,
             sla_status: slaStatus,
             sla_info: {
