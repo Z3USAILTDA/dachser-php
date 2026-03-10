@@ -1869,21 +1869,26 @@ serve(async (req) => {
               COALESCE(MAX(ts.tipo_carga), 'FCL') as tipo_carga,
               MAX(ts.coloader) as coloader,
               CASE 
-                WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
-                  AND COALESCE(MAX(md.eta), MAX(ts.eta)) < DATE_SUB(NOW(), INTERVAL 3 DAY)
+                WHEN COALESCE(MAX(md.eta), MAX(mdn.eta)) IS NOT NULL 
+                  AND MAX(ts.eta) IS NOT NULL
+                  AND MAX(ts.eta) > COALESCE(MAX(md.eta), MAX(mdn.eta))
+                  AND DATEDIFF(MAX(ts.eta), COALESCE(MAX(md.eta), MAX(mdn.eta))) >= 3
                   AND UPPER(COALESCE(MAX(ts.container_status), '')) NOT IN ('DELIVERED', 'GATE_OUT', 'DLV', 'GOD', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
                 THEN 1 ELSE 0 
               END as is_eta_delayed,
               CASE 
-                WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
-                  AND COALESCE(MAX(md.eta), MAX(ts.eta)) < DATE_SUB(NOW(), INTERVAL 7 DAY)
+                WHEN COALESCE(MAX(md.eta), MAX(mdn.eta)) IS NOT NULL 
+                  AND MAX(ts.eta) IS NOT NULL
+                  AND MAX(ts.eta) > COALESCE(MAX(md.eta), MAX(mdn.eta))
+                  AND DATEDIFF(MAX(ts.eta), COALESCE(MAX(md.eta), MAX(mdn.eta))) >= 7
                   AND UPPER(COALESCE(MAX(ts.container_status), '')) NOT IN ('DELIVERED', 'GATE_OUT', 'DLV', 'GOD', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
                 THEN 1 ELSE 0 
               END as is_critico,
               CASE 
-                WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
-                  AND COALESCE(MAX(md.eta), MAX(ts.eta)) < CURDATE()
-                THEN DATEDIFF(CURDATE(), COALESCE(MAX(md.eta), MAX(ts.eta)))
+                WHEN COALESCE(MAX(md.eta), MAX(mdn.eta)) IS NOT NULL 
+                  AND MAX(ts.eta) IS NOT NULL
+                  AND MAX(ts.eta) > COALESCE(MAX(md.eta), MAX(mdn.eta))
+                THEN DATEDIFF(MAX(ts.eta), COALESCE(MAX(md.eta), MAX(mdn.eta)))
                 ELSE 0 
               END as dias_atraso,
               COALESCE(MAX(tvc.transshipment_port), MAX(td.transshipment_port), MAX(th.transshipment_port)) as transshipment_port,
