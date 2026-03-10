@@ -24,6 +24,17 @@ function extractPieces(text: string): number | null {
   return null;
 }
 
+// Check if timeline_json contains real events (not errors or empty)
+function timelineHasValidEvents(timelineJson: string | null): boolean {
+  if (!timelineJson) return false;
+  const lower = timelineJson.toLowerCase();
+  if (lower.includes('"error"') || lower.includes('timeout') || lower.includes('failed to')) return false;
+  try {
+    const events = JSON.parse(timelineJson);
+    return Array.isArray(events) && events.length > 0;
+  } catch { return false; }
+}
+
 // Classify ARR status as connection or final destination
 function classifyArrival(lastStatusCode: string | null, timelineJson: string | null, destination: string | null, origin: string | null, awbForDebug?: string): string | null {
   if (!lastStatusCode) return lastStatusCode;
