@@ -3750,21 +3750,16 @@ serve(async (req) => {
           }
         }
 
-        // ==================== STEP 3: Get latest event per HAWB from t_cct_eventos_historico ====================
-        // This ensures the dashboard status matches the detail page (ProcessoTimeline) which uses these events
-        let eventosHistoricoMap = new Map<string, { codigo_evento: string; data_hora_evento: string }>();
+        // ==================== STEP 3: Get MOST ADVANCED event per HAWB from t_cct_eventos_historico ====================
+        // Timeline is supreme: the most advanced status (by hierarchy) wins, not the most recent by timestamp
+        let eventosHistoricoMap = new Map<string, { codigo_evento: string; data_hora_evento: string; mapped_status: string }>();
         if (houseList.length > 0) {
           try {
             const houseFilterEvt = houseList.map((h: string) => `'${h.replace(/'/g, "''")}'`).join(',');
-            const latestEvents = await client.query(`
-              SELECT e.awb, e.codigo_evento, e.data_hora_evento
-              FROM ${database}.t_cct_eventos_historico e
-              INNER JOIN (
-                SELECT awb, MAX(data_hora_evento) as max_dt
-                FROM ${database}.t_cct_eventos_historico
-                WHERE TRIM(awb) IN (${houseFilterEvt})
-                GROUP BY awb
-              ) latest ON e.awb = latest.awb AND e.data_hora_evento = latest.max_dt
+            const allEvents = await client.query(`
+              SELECT awb, codigo_evento, data_hora_evento
+              FROM ${database}.t_cct_eventos_historico
+              WHERE TRIM(awb) IN (${houseFilterEvt})
             `);
             
             // Map evento codigo to CCT status (same mapping as ProcessoTimeline effectiveStatus)
@@ -3789,18 +3784,26 @@ serve(async (req) => {
               'FRO': 'BLOQUEIO', 'DIS': 'BLOQUEIO', 'OFLD': 'BLOQUEIO',
             };
             
-            for (const evt of (latestEvents || [])) {
+            // Pick the MOST ADVANCED event per HAWB by hierarchy, not by timestamp
+            for (const evt of (allEvents || [])) {
               const awbKey = (evt.awb || '').trim().toUpperCase();
               const code = (evt.codigo_evento || '').toUpperCase();
               const mapped = eventToCctStatus[code];
               if (mapped) {
-                eventosHistoricoMap.set(awbKey, {
-                  codigo_evento: code,
-                  data_hora_evento: evt.data_hora_evento,
-                });
+                const existing = eventosHistoricoMap.get(awbKey);
+                const existingOrder = existing ? (CCT_STATUS_ORDER[existing.mapped_status] || 0) : 0;
+                const newOrder = CCT_STATUS_ORDER[mapped] || 0;
+                // Use the most advanced status by hierarchy
+                if (newOrder > existingOrder) {
+                  eventosHistoricoMap.set(awbKey, {
+                    codigo_evento: code,
+                    data_hora_evento: evt.data_hora_evento,
+                    mapped_status: mapped,
+                  });
+                }
               }
             }
-            console.log(`CCT Step 3: Found latest events for ${eventosHistoricoMap.size} HAWBs from t_cct_eventos_historico`);
+            console.log(`CCT Step 3: Found most advanced events for ${eventosHistoricoMap.size} HAWBs from t_cct_eventos_historico`);
           } catch (evtErr) {
             console.warn('CCT Step 3: Error fetching t_cct_eventos_historico (non-fatal):', evtErr);
           }
