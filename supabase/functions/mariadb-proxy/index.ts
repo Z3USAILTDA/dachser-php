@@ -3159,7 +3159,7 @@ serve(async (req) => {
                 indicadorPartesMadeira,
                 manuseiosEspeciais,
                 partesEstoque,
-                partes,
+                
                 hawbAssociados,
                 frete,
                 viagensAssociadas,
