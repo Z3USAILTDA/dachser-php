@@ -7168,7 +7168,21 @@ serve(async (req) => {
             console.log(`[NOVO_MASTER] Could not query t_master_swap_log for AWB ${queryAwb}:`, swapErr);
           }
 
-          result = { success: true, data: filteredEvents };
+          // Detect pieces discrepancy
+          const allPieces = filteredEvents
+            .map((e: any) => e.pecas)
+            .filter((v: any) => v != null && v > 0);
+          let discrepancy = null;
+          if (allPieces.length >= 2) {
+            const minP = Math.min(...allPieces);
+            const maxP = Math.max(...allPieces);
+            if (minP !== maxP) {
+              discrepancy = { field: 'pecas', values: [...new Set(allPieces)], min: minP, max: maxP };
+              console.log(`[DISCREPANCY] Pieces discrepancy detected for AWB ${queryAwb}: min=${minP}, max=${maxP}`);
+            }
+          }
+
+          result = { success: true, data: filteredEvents, ...(discrepancy ? { discrepancy } : {}) };
         } catch (tableErr) {
           console.log('Error fetching from t_aereo_ws_firecrawl:', tableErr);
           result = { success: true, data: [] };
