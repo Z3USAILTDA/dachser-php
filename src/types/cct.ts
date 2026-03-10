@@ -13,7 +13,7 @@ export type StatusCCTOficial =
   | "ENTREGUE"
   | "BLOQUEIO";
 
-export type SLAStatus = "OK" | "ALERTA" | "CRITICO" | "VENCIDO";
+export type SLAStatus = "OK" | "ALERTA" | "CRITICO" | "VENCIDO" | "CUMPRIDO";
 
 export type TipoVoo = "VOO_CURTO" | "VOO_LONGO";
 

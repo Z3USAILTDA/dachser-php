@@ -62,6 +62,8 @@ export function SLAInfoBadge({ slaInfo, className, showTipoVoo = false }: SLAInf
   
   const getColor = () => {
     switch (status) {
+      case 'CUMPRIDO':
+        return "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
       case 'OK':
         return "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
       case 'ALERTA':
@@ -75,8 +77,8 @@ export function SLAInfoBadge({ slaInfo, className, showTipoVoo = false }: SLAInf
     }
   };
   
-  // Format remaining hours
-  const displayValue = formatSLARestante(horasRestantes);
+  // Format remaining hours - for CUMPRIDO show checkmark
+  const displayValue = status === 'CUMPRIDO' ? '✓ Cumprido' : formatSLARestante(horasRestantes);
   
   // Tipo de voo label
   const tipoVooIcon = tipoVoo === 'VOO_CURTO' ? '✈️' : '🌍';
@@ -93,7 +95,7 @@ export function SLAInfoBadge({ slaInfo, className, showTipoVoo = false }: SLAInf
           {tipoVooIcon} {tipoVooLabel}
         </Badge>
       )}
-      <Badge variant="outline" className={cn(getColor(), "font-mono text-xs")}>
+      <Badge variant="outline" className={cn(getColor(), status === 'CUMPRIDO' ? "text-xs" : "font-mono text-xs")}>
         {displayValue}
       </Badge>
     </div>
