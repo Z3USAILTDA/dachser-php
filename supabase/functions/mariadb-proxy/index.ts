@@ -3183,7 +3183,7 @@ serve(async (req) => {
             };
             
             for (const rfb of (cctRfbData || [])) {
-              const ident = (rfb.identificacao || '').trim();
+              const ident = normalizeMawb(rfb.identificacao);
               
               // Parse JSON fields safely
               let manuseios: string[] = [];
