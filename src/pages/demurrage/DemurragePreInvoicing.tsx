@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   FileText, Clock, CheckCircle2, Send, Eye, AlertTriangle, DollarSign,
-  MoreHorizontal, FileSpreadsheet, Loader2, RefreshCw, Plus, Edit2
+  MoreHorizontal, FileSpreadsheet, Loader2, RefreshCw, Plus, Edit2, Mail
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
