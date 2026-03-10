@@ -59,10 +59,39 @@ export default function DemurragePreInvoicing() {
   const [infoInvoice, setInfoInvoice] = useState<PreInvoice | null>(null);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailInvoice, setEmailInvoice] = useState<PreInvoice | null>(null);
+  const [exchangeRates, setExchangeRates] = useState<Record<number, string>>({});
 
   const { data: preInvoices = [], isLoading, refetch } = useDemurragePreInvoices();
   const updateMutation = useUpdatePreInvoice();
   const generateMutation = useGeneratePreInvoices();
+
+  // Initialize exchange rates from loaded data
+  useEffect(() => {
+    if (preInvoices.length > 0) {
+      const rates: Record<number, string> = {};
+      preInvoices.forEach((pi: any) => {
+        if (pi.exchange_rate) rates[pi.id] = String(pi.exchange_rate);
+      });
+      setExchangeRates(prev => ({ ...rates, ...prev }));
+    }
+  }, [preInvoices]);
+
+  const handleExchangeRateChange = (invoiceId: number, value: string) => {
+    setExchangeRates(prev => ({ ...prev, [invoiceId]: value }));
+  };
+
+  const handleExchangeRateBlur = async (invoice: PreInvoice) => {
+    const rate = exchangeRates[invoice.id];
+    const numRate = rate ? parseFloat(rate) : null;
+    const currentRate = (invoice as any).exchange_rate || null;
+    if (numRate === currentRate) return;
+    try {
+      await updateMutation.mutateAsync({
+        invoiceId: invoice.id,
+        updates: { exchange_rate: numRate }
+      });
+    } catch { /* handled by hook */ }
+  };
   
   const handleViewDetails = (invoice: PreInvoice) => {
     setSelectedInvoice(invoice);
