@@ -143,6 +143,14 @@ serve(async (req) => {
           updates.push('ativo = ?');
           values.push(record.ativo);
         }
+        if ((record as any).customer_number !== undefined) {
+          updates.push('customer_number = ?');
+          values.push((record as any).customer_number);
+        }
+        if ((record as any).tipo_conteiner !== undefined) {
+          updates.push('tipo_conteiner = ?');
+          values.push((record as any).tipo_conteiner);
+        }
         
         values.push(id);
         
