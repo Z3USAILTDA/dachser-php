@@ -35,6 +35,7 @@ export default function DemurrageFreeTimes() {
   const [filterType, setFilterType] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   
   // Dialog states
   const [editingFreeTime, setEditingFreeTime] = useState<ClientFreeTime | null>(null);
