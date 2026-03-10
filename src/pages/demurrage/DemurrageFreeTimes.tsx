@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { DemurrageFreeTimeDialog } from "@/components/demurrage/DemurrageFreeTimeDialog";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -14,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { 
   Clock, Edit, Trash2, Search, FileText, Ship, Calendar, 
-  CheckCircle2, AlertCircle, Package, Info
+  CheckCircle2, AlertCircle, Package, Info, Plus
 } from "lucide-react";
 import { 
   useClientFreeTimeList, 
@@ -34,6 +35,7 @@ export default function DemurrageFreeTimes() {
   const [filterType, setFilterType] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   
   // Dialog states
   const [editingFreeTime, setEditingFreeTime] = useState<ClientFreeTime | null>(null);
@@ -180,6 +182,12 @@ export default function DemurrageFreeTimes() {
     <DemurrageLayout
       customCards={customCards}
       loading={isLoading}
+      rightActions={
+        <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]" onClick={() => setCreateDialogOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Cadastrar Free Time
+        </Button>
+      }
     >
       <div className="space-y-4">
         {/* Filters */}
@@ -389,6 +397,16 @@ export default function DemurrageFreeTimes() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Create Free Time Dialog */}
+      <DemurrageFreeTimeDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onSuccess={() => {
+          refetch();
+          recalcMutation.mutate();
+        }}
+      />
     </DemurrageLayout>
   );
 }

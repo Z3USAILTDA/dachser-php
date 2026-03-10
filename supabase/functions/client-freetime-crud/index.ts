@@ -21,6 +21,8 @@ interface FreeTimeRecord {
   created_at?: string;
   updated_at?: string;
   created_by?: string | null;
+  customer_number?: string | null;
+  tipo_conteiner?: string | null;
 }
 
 serve(async (req) => {
@@ -71,8 +73,8 @@ serve(async (req) => {
         await client.execute(
           `INSERT INTO t_client_free_time 
            (id, cliente_nome, cliente_cnpj, tipo_ft, mbl, armador, free_time_days, 
-            vigencia_inicio, vigencia_fim, notas, ativo, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?)`,
+            vigencia_inicio, vigencia_fim, notas, ativo, created_by, customer_number, tipo_conteiner)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?, ?)`,
           [
             newId,
             record.cliente_nome,
@@ -84,7 +86,9 @@ serve(async (req) => {
             record.vigencia_inicio || null,
             record.vigencia_fim || null,
             record.notas || null,
-            record.created_by || null
+            record.created_by || null,
+            record.customer_number || null,
+            record.tipo_conteiner || null
           ]
         );
         
@@ -138,6 +142,14 @@ serve(async (req) => {
         if (record.ativo !== undefined) {
           updates.push('ativo = ?');
           values.push(record.ativo);
+        }
+        if ((record as any).customer_number !== undefined) {
+          updates.push('customer_number = ?');
+          values.push((record as any).customer_number);
+        }
+        if ((record as any).tipo_conteiner !== undefined) {
+          updates.push('tipo_conteiner = ?');
+          values.push((record as any).tipo_conteiner);
         }
         
         values.push(id);

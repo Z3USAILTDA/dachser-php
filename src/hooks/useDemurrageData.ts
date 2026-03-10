@@ -59,6 +59,8 @@ export interface DemurrageContainer {
   pi_misk: string | null;
   pi_othello_registro: string | null;
   pi_observacao: string | null;
+  pi_exchange_rate: number | null;
+  hbl: string | null;
   active: boolean;
   created_at: string;
   updated_at: string;

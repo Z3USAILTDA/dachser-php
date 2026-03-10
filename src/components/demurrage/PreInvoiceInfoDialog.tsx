@@ -42,6 +42,7 @@ export function PreInvoiceInfoDialog({ open, onOpenChange, preInvoice }: PreInvo
   const [misk, setMisk] = useState("");
   const [observacao, setObservacao] = useState("");
   const [othelloRegistro, setOthelloRegistro] = useState<string | null>(null);
+  const [exchangeRate, setExchangeRate] = useState<string>("");
 
   const updateMutation = useUpdatePreInvoice();
 
@@ -52,6 +53,7 @@ export function PreInvoiceInfoDialog({ open, onOpenChange, preInvoice }: PreInvo
       setMisk(pi.misk || "");
       setObservacao(pi.observacao || "");
       setOthelloRegistro(pi.othello_registro || null);
+      setExchangeRate(pi.exchange_rate ? String(pi.exchange_rate) : "");
     }
   }, [preInvoice, open]);
 
@@ -71,6 +73,7 @@ export function PreInvoiceInfoDialog({ open, onOpenChange, preInvoice }: PreInvo
           misk: misk || null,
           observacao: observacao || null,
           othello_registro: othelloRegistro,
+          exchange_rate: exchangeRate ? parseFloat(exchangeRate) : null,
         }
       });
       toast.success("Informações atualizadas com sucesso");
@@ -127,6 +130,18 @@ export function PreInvoiceInfoDialog({ open, onOpenChange, preInvoice }: PreInvo
               placeholder="Código MISK"
               className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
               maxLength={100}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Taxa de Conversão (BRL)</Label>
+            <Input
+              type="number"
+              step="0.0001"
+              value={exchangeRate}
+              onChange={(e) => setExchangeRate(e.target.value)}
+              placeholder="Ex: 5.25"
+              className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
             />
           </div>
 

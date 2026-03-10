@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   FileText, Clock, CheckCircle2, Send, Eye, AlertTriangle, DollarSign,
-  MoreHorizontal, FileSpreadsheet, Loader2, RefreshCw, Plus, Edit2
+  MoreHorizontal, FileSpreadsheet, Loader2, RefreshCw, Plus, Edit2, Mail
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -37,6 +37,7 @@ import {
 } from "@/hooks/useDemurrageData";
 import { PreInvoiceDetailsDialog } from "@/components/demurrage/PreInvoiceDetailsDialog";
 import { PreInvoiceInfoDialog } from "@/components/demurrage/PreInvoiceInfoDialog";
+import { SendTestEmailDialog } from "@/components/demurrage/SendTestEmailDialog";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -56,6 +57,8 @@ export default function DemurragePreInvoicing() {
   const [infoDialogOpen, setInfoDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<PreInvoice | null>(null);
   const [infoInvoice, setInfoInvoice] = useState<PreInvoice | null>(null);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailInvoice, setEmailInvoice] = useState<PreInvoice | null>(null);
 
   const { data: preInvoices = [], isLoading, refetch } = useDemurragePreInvoices();
   const updateMutation = useUpdatePreInvoice();
@@ -472,6 +475,14 @@ export default function DemurragePreInvoicing() {
                                   Lançar no Othello
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator className="bg-[rgba(255,255,255,0.1)]" />
+                                <DropdownMenuItem
+                                  onClick={() => { setEmailInvoice(invoice); setEmailDialogOpen(true); }}
+                                  className="cursor-pointer"
+                                >
+                                  <Mail className="h-4 w-4 mr-2" />
+                                  Enviar E-mail de Teste
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator className="bg-[rgba(255,255,255,0.1)]" />
                                 <DropdownMenuItem 
                                   onClick={() => handleSingleAction(invoice, 'paid')}
                                   className="cursor-pointer text-green-400"
@@ -540,6 +551,13 @@ export default function DemurragePreInvoicing() {
         open={infoDialogOpen}
         onOpenChange={setInfoDialogOpen}
         preInvoice={infoInvoice}
+      />
+
+      {/* Send Test Email Dialog */}
+      <SendTestEmailDialog
+        open={emailDialogOpen}
+        onOpenChange={setEmailDialogOpen}
+        preInvoice={emailInvoice}
       />
     </DemurrageLayout>
   );

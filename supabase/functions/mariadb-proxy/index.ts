@@ -10166,7 +10166,9 @@ serve(async (req) => {
             pi.status_info as pi_status_info,
             pi.misk as pi_misk,
             pi.othello_registro as pi_othello_registro,
-            pi.observacao as pi_observacao
+            pi.observacao as pi_observacao,
+            pi.exchange_rate as pi_exchange_rate,
+            COALESCE(sm.hawb, mdn.hawb) as hbl
           FROM dados_dachser.t_dachser_demurrage_containers dc
           LEFT JOIN dados_dachser.t_clientes_base cb ON dc.cliente = cb.nome_cliente COLLATE utf8mb4_general_ci
           LEFT JOIN dados_dachser.t_dachser_demurrage_pre_invoices pi ON pi.id = (
@@ -10174,6 +10176,8 @@ serve(async (req) => {
             WHERE shipment_mbl = dc.mbl COLLATE utf8mb4_unicode_ci 
             ORDER BY created_at DESC LIMIT 1
           )
+          LEFT JOIN dados_dachser.t_sea_master sm ON dc.mbl = sm.mbl COLLATE utf8mb4_general_ci
+          LEFT JOIN dados_dachser.t_master_dados mdn ON dc.mbl = mdn.master COLLATE utf8mb4_general_ci
           WHERE ${whereConditions.join(' AND ')}
           ORDER BY dc.updated_at DESC
           LIMIT ?
@@ -13531,6 +13535,28 @@ serve(async (req) => {
             AND (t.container_status IS NULL OR UPPER(t.container_status) NOT LIKE '%NAO_ENCONTRADO%')
             AND (t.last_event IS NULL OR UPPER(t.last_event) NOT LIKE '%PREFIX NOT FOUND%')
             AND (t.last_event IS NULL OR UPPER(t.last_event) NOT LIKE '%NOT FOUND%')
+            AND (
+              -- IMPORT: from ARRIVED/Discharged until RETURNED/Empty returned
+              (UPPER(t.tipo_processo) = 'SEA IMPORT' AND (
+                UPPER(COALESCE(t.container_status, '')) IN ('DISCHARGED', 'ARRIVED', 'GATE-OUT', 'GATE_OUT', 'IMPORT_TO_CONSIGNEE', 'EMPTY_RETURNED', 'RETURNED')
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%arrived%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%discharged%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%gate out%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%return%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%empty%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%atracado%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%descarregado%'
+              ))
+              OR
+              -- EXPORT: from Empty pickup until Gate-in
+              (UPPER(t.tipo_processo) = 'SEA EXPORT' AND (
+                UPPER(COALESCE(t.container_status, '')) IN ('EMPTY_TO_SHIPPER', 'GATE-IN', 'GATE_IN', 'LOADED', 'IN_TRANSIT', 'DEPARTED')
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%empty to shipper%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%gate in%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%loaded%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%embarc%'
+              ))
+            )
           ORDER BY t.id DESC
           LIMIT 1000
         `);
@@ -13668,6 +13694,23 @@ serve(async (req) => {
 
         console.log(`[DEMURRAGE-SYNC] Done: created=${syncResults.created}, updated=${syncResults.updated}, errors=${syncResults.errors}`);
         result = { success: true, message: 'Demurrage sync completed', results: syncResults };
+        break;
+      }
+
+      case 'demurrage_search_clientes': {
+        const { search: searchTerm } = body as { search: string };
+        if (!searchTerm || searchTerm.length < 2) {
+          result = { success: true, data: [] };
+          break;
+        }
+        const clientes = await client.query(`
+          SELECT DISTINCT nome_cliente, dchr_customer_number, cnpj 
+          FROM dados_dachser.t_clientes_base 
+          WHERE nome_cliente LIKE ? 
+          ORDER BY nome_cliente ASC 
+          LIMIT 15
+        `, [`%${searchTerm}%`]);
+        result = { success: true, data: clientes || [] };
         break;
       }
 
