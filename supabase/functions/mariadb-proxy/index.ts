@@ -10170,8 +10170,8 @@ serve(async (req) => {
             pi.exchange_rate as pi_exchange_rate,
             (
               SELECT COALESCE(
-                (SELECT sm2.hawb FROM dados_dachser.t_sea_master sm2 WHERE sm2.master = dc.mbl LIMIT 1),
-                (SELECT mdn2.hawb FROM dados_dachser.t_master_dados mdn2 WHERE mdn2.mawb = dc.mbl LIMIT 1)
+                (SELECT sm2.hawb FROM dados_dachser.t_sea_master sm2 WHERE sm2.master COLLATE utf8mb4_unicode_ci = dc.mbl COLLATE utf8mb4_unicode_ci LIMIT 1),
+                (SELECT mdn2.hawb FROM dados_dachser.t_master_dados mdn2 WHERE mdn2.mawb COLLATE utf8mb4_unicode_ci = dc.mbl COLLATE utf8mb4_unicode_ci LIMIT 1)
               )
             ) as hbl
           FROM dados_dachser.t_dachser_demurrage_containers dc
