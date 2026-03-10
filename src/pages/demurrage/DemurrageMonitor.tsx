@@ -493,6 +493,11 @@ export default function DemurrageMonitor() {
                         <TableCell className="text-right font-semibold text-[#ffc800]">
                           {container.expected_cost_usd > 0 ? formatCurrency(container.expected_cost_usd) : '-'}
                         </TableCell>
+                        <TableCell className="text-right font-semibold text-green-400">
+                          {container.expected_cost_usd > 0 && container.pi_exchange_rate
+                            ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(container.expected_cost_usd * container.pi_exchange_rate)
+                            : '-'}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
