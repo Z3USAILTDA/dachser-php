@@ -3048,14 +3048,26 @@ serve(async (req) => {
           try {
             const timeline = typeof timelineJson === 'string' ? JSON.parse(timelineJson) : timelineJson;
             if (!Array.isArray(timeline)) return null;
-            const depEvent = timeline.find((evt: any) => {
+            // Search for DEP event — structure can vary:
+            // Format A: { status: 'DEP', date: '...' }
+            // Format B: { Description: 'Flight Departed...', Timestamp: '...' }
+            const depEvents = timeline.filter((evt: any) => {
               const code = (evt.status || evt.code || evt.milestone || '').toUpperCase();
-              return code === 'DEP' || code === 'DEPARTED';
+              if (code === 'DEP' || code === 'DEPARTED') return true;
+              // Check Description field for "Flight Departed" or "Departed"
+              const desc = (evt.Description || evt.description || '').toLowerCase();
+              if (desc.includes('flight departed') || desc.startsWith('departed')) return true;
+              return false;
             });
-            if (depEvent) {
-              return depEvent.date || depEvent.datetime || depEvent.timestamp || depEvent.time || null;
-            }
-            return null;
+            if (depEvents.length === 0) return null;
+            // Sort by timestamp ascending and pick the LAST departure (final leg to destination)
+            const sorted = depEvents
+              .map((evt: any) => ({
+                ts: evt.Timestamp || evt.timestamp || evt.date || evt.datetime || evt.time || null,
+              }))
+              .filter((e: any) => e.ts)
+              .sort((a: any, b: any) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+            return sorted.length > 0 ? sorted[sorted.length - 1].ts : null;
           } catch { return null; }
         }
         
