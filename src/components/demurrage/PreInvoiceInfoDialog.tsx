@@ -42,6 +42,7 @@ export function PreInvoiceInfoDialog({ open, onOpenChange, preInvoice }: PreInvo
   const [misk, setMisk] = useState("");
   const [observacao, setObservacao] = useState("");
   const [othelloRegistro, setOthelloRegistro] = useState<string | null>(null);
+  const [exchangeRate, setExchangeRate] = useState<string>("");
 
   const updateMutation = useUpdatePreInvoice();
 
