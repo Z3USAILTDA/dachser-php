@@ -66,19 +66,12 @@ export default function ProcessoTimeline() {
     return eventosHistorico.length > 0 ? eventosHistorico : fallback;
   }, [processo, eventosHistorico]);
 
-  // Derive effective status: prefer backend-calculated status_cct_oficial (which merges
-  // tracking, LeadComex, RFB, and t_cct_eventos_historico), then fallback to timeline events
+  // Derive effective status: use the MOST ADVANCED status across all sources (timeline is supreme)
   const effectiveStatus = useMemo(() => {
     if (isLoadingEvents) return null;
     const baseStatus = processo?.status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
     
-    // If no timeline events, use backend status directly
     if (allEventos.length === 0) return baseStatus;
-    
-    const sorted = [...allEventos].sort(
-      (a, b) => new Date(b.data_hora_evento).getTime() - new Date(a.data_hora_evento).getTime()
-    );
-    const latestCode = sorted[0]?.codigo_evento?.toUpperCase() || '';
     
     const CCT_EVENT_TO_STATUS: Record<string, string> = {
       'AREA_TRANSFERENCIA': 'EM_AREA_TRANSFERENCIA',
@@ -105,13 +98,25 @@ export default function ProcessoTimeline() {
       'BLOQUEIO': 99,
     };
     
-    const timelineStatus = CCT_EVENT_TO_STATUS[latestCode] || baseStatus;
+    // Find the MOST ADVANCED status from all timeline events (hierarchy wins, not chronology)
+    let bestTimelineStatus = baseStatus;
+    let bestTimelineOrder = CCT_STATUS_ORDER[baseStatus] || 0;
     
-    // Use the most advanced status between timeline-derived and backend-calculated
-    const timelineOrder = CCT_STATUS_ORDER[timelineStatus] || 0;
+    for (const evt of allEventos) {
+      const code = evt.codigo_evento?.toUpperCase() || '';
+      const mapped = CCT_EVENT_TO_STATUS[code];
+      if (mapped) {
+        const order = CCT_STATUS_ORDER[mapped] || 0;
+        if (order > bestTimelineOrder) {
+          bestTimelineStatus = mapped;
+          bestTimelineOrder = order;
+        }
+      }
+    }
+    
+    // Use the most advanced between backend and timeline
     const backendOrder = CCT_STATUS_ORDER[baseStatus] || 0;
-    
-    return backendOrder >= timelineOrder ? baseStatus : timelineStatus;
+    return bestTimelineOrder >= backendOrder ? bestTimelineStatus : baseStatus;
   }, [allEventos, processo, isLoadingEvents]);
 
   // Initialize form values when processo loads - use useEffect to properly update state
