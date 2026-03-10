@@ -53,6 +53,7 @@ export function PreInvoiceInfoDialog({ open, onOpenChange, preInvoice }: PreInvo
       setMisk(pi.misk || "");
       setObservacao(pi.observacao || "");
       setOthelloRegistro(pi.othello_registro || null);
+      setExchangeRate(pi.exchange_rate ? String(pi.exchange_rate) : "");
     }
   }, [preInvoice, open]);
 
