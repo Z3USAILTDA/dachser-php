@@ -6850,7 +6850,7 @@ serve(async (req) => {
 
                 if (statusMatch && (timeClose || !apiDate || !fcTime)) {
                   // Enrich firecrawl event with pecas/peso
-                  fcEvt._pecas = apiEvt.quantidadeCarga ?? null;
+                  fcEvt._pecas = apiEvt.quantidadeCargo ?? apiEvt.quantidadeCarga ?? null;
                   fcEvt._peso = apiEvt.pesoCarga ?? null;
                   matched = true;
                   break;
@@ -6862,7 +6862,7 @@ serve(async (req) => {
                 timelineData.push({
                   ...apiEvt,
                   _fromApi: true,
-                  _pecas: apiEvt.quantidadeCarga ?? null,
+                  _pecas: apiEvt.quantidadeCargo ?? apiEvt.quantidadeCarga ?? null,
                   _peso: apiEvt.pesoCarga ?? null,
                 });
               }
@@ -6872,7 +6872,7 @@ serve(async (req) => {
             timelineData = apiTimelineRaw.map(evt => ({
               ...evt,
               _fromApi: true,
-              _pecas: evt.quantidadeCarga ?? null,
+              _pecas: evt.quantidadeCargo ?? evt.quantidadeCarga ?? null,
               _peso: evt.pesoCarga ?? null,
             }));
             timelineSource = 'api';
@@ -6886,7 +6886,7 @@ serve(async (req) => {
                 const fcDesc = (fcEvt.Description || fcEvt.description || '').toUpperCase();
                 const fcLoc = (fcEvt.Location || fcEvt.location || '').toUpperCase();
                 if (fcDesc.includes(apiStatus) || fcLoc.includes(apiAirport)) {
-                  fcEvt._pecas = apiEvt.quantidadeCarga ?? null;
+                  fcEvt._pecas = apiEvt.quantidadeCargo ?? apiEvt.quantidadeCarga ?? null;
                   fcEvt._peso = apiEvt.pesoCarga ?? null;
                   break;
                 }
@@ -6998,14 +6998,14 @@ serve(async (req) => {
           // Convert timeline entries to frontend format
           // Supports two formats:
           // - t_aereo_ws_firecrawl: { Description, Timestamp, Location, Carrier }
-          // - t_aereo_api: { status, aeroporto, dataEvento, voo, quantidadeCarga, pesoCarga }
+          // - t_aereo_api: { status, aeroporto, dataEvento, voo, quantidadeCargo, pesoCarga }
           const events = timelineData.map((entry: any, idx: number) => {
             // t_aereo_api format (or _fromApi merged entries)
             if ((entry.status && !entry.Description && !entry.description) || entry._fromApi) {
               const statusCode = (entry.status || '').toUpperCase();
               const airport = entry.aeroporto || '';
               const flight = entry.voo || '';
-              const qty = entry._pecas ?? entry.quantidadeCarga;
+              const qty = entry._pecas ?? entry.quantidadeCargo ?? entry.quantidadeCarga;
               const weight = entry._peso ?? entry.pesoCarga;
               
               // Build description from API fields
