@@ -3408,9 +3408,10 @@ serve(async (req) => {
                 return resp.length > 0;
               });
               
-              // Extract situacao
+              // Extract situacao (chronological: most recent timestamp wins)
               let rfbSituacao: string | null = null;
               let rfbSituacaoMapped: string | null = null;
+              let rfbLatestTimestamp: string | null = null;
               const mapRfbSit = (situacao: string | null): string | null => {
                 if (!situacao) return null;
                 const lower = situacao.toLowerCase().trim();
@@ -3425,9 +3426,23 @@ serve(async (req) => {
               for (const pe of partesEstoque) {
                 const sitVal = pe?.situacaoAtual || pe?.situacao || pe?.status;
                 const mapped = mapRfbSit(sitVal);
-                if (mapped && (!rfbSituacaoMapped || (CCT_STATUS_ORDER[mapped] || 0) > (CCT_STATUS_ORDER[rfbSituacaoMapped] || 0))) {
+                if (!mapped) continue;
+                const peTimestamp = pe?.dataHoraOperacao || pe?.dataHoraSituacao || pe?.dataHoraRecepcao || pe?.dataHora || null;
+                if (peTimestamp && rfbLatestTimestamp) {
+                  if (new Date(peTimestamp).getTime() > new Date(rfbLatestTimestamp).getTime()) {
+                    rfbSituacaoMapped = mapped;
+                    rfbSituacao = sitVal;
+                    rfbLatestTimestamp = peTimestamp;
+                  }
+                } else if (peTimestamp && !rfbLatestTimestamp) {
                   rfbSituacaoMapped = mapped;
                   rfbSituacao = sitVal;
+                  rfbLatestTimestamp = peTimestamp;
+                } else if (!rfbLatestTimestamp) {
+                  if (!rfbSituacaoMapped || (CCT_STATUS_ORDER[mapped] || 0) > (CCT_STATUS_ORDER[rfbSituacaoMapped] || 0)) {
+                    rfbSituacaoMapped = mapped;
+                    rfbSituacao = sitVal;
+                  }
                 }
               }
               
@@ -3467,6 +3482,7 @@ serve(async (req) => {
                   manuseios_especiais: manuseios,
                   rfb_situacao: rfbSituacao,
                   rfb_status_cct: rfbSituacaoMapped,
+                  rfb_timestamp: rfbLatestTimestamp,
                   consignatario_cnpj: consignatario?.cnpjResponsavelAtual || null,
                   consignatario_nome: null,
                   numero_voo: numeroVoo,
