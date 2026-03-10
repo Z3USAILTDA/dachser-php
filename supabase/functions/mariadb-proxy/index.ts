@@ -3785,11 +3785,23 @@ serve(async (req) => {
             };
             
             // Pick the MOST ADVANCED event per HAWB by hierarchy, not by timestamp
+            // Track if DESBLOQUEIO exists to neutralize BLOQUEIO
+            const hasDesbloqueioSet = new Set<string>();
+            for (const evt of (allEvents || [])) {
+              const code = (evt.codigo_evento || '').toUpperCase();
+              if (code === 'DESBLOQUEIO') {
+                hasDesbloqueioSet.add((evt.awb || '').trim().toUpperCase());
+              }
+            }
+            
             for (const evt of (allEvents || [])) {
               const awbKey = (evt.awb || '').trim().toUpperCase();
               const code = (evt.codigo_evento || '').toUpperCase();
               const mapped = eventToCctStatus[code];
               if (mapped) {
+                // Skip BLOQUEIO if a DESBLOQUEIO exists for the same AWB (block was resolved)
+                if (mapped === 'BLOQUEIO' && hasDesbloqueioSet.has(awbKey)) continue;
+                
                 const existing = eventosHistoricoMap.get(awbKey);
                 const existingOrder = existing ? (CCT_STATUS_ORDER[existing.mapped_status] || 0) : 0;
                 const newOrder = CCT_STATUS_ORDER[mapped] || 0;
