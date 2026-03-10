@@ -2216,33 +2216,38 @@ serve(async (req) => {
         
         const clientTotals = {
           product: 'Grand Total',
-          not_due: 0, aging_90: 0, aging_180: 0, aging_240: 0, aging_360: 0, aging_360_plus: 0,
-          count_not_due: 0, count_90: 0, count_180: 0, count_240: 0, count_360: 0, count_360_plus: 0,
+          not_due: 0, aging_30: 0, aging_90: 0, aging_180: 0, aging_240: 0, aging_360: 0, aging_360_plus: 0,
+          count_not_due: 0, count_30: 0, count_90: 0, count_180: 0, count_240: 0, count_360: 0, count_360_plus: 0,
         };
         
         const clientRows = clientAgingRows.map((r: any) => {
           const row = {
             product: r.product || 'Sem Cliente',
             not_due: Number(r.not_due) || 0,
+            aging_30: Number(r.aging_30) || 0,
             aging_90: Number(r.aging_90) || 0,
             aging_180: Number(r.aging_180) || 0,
             aging_240: Number(r.aging_240) || 0,
             aging_360: Number(r.aging_360) || 0,
             aging_360_plus: Number(r.aging_360_plus) || 0,
             count_not_due: Number(r.count_not_due) || 0,
+            count_30: Number(r.count_30) || 0,
             count_90: Number(r.count_90) || 0,
             count_180: Number(r.count_180) || 0,
             count_240: Number(r.count_240) || 0,
             count_360: Number(r.count_360) || 0,
             count_360_plus: Number(r.count_360_plus) || 0,
+            cnpjs: r.cnpjs ? r.cnpjs.split(',') : [],
           };
           clientTotals.not_due += row.not_due;
+          clientTotals.aging_30 += row.aging_30;
           clientTotals.aging_90 += row.aging_90;
           clientTotals.aging_180 += row.aging_180;
           clientTotals.aging_240 += row.aging_240;
           clientTotals.aging_360 += row.aging_360;
           clientTotals.aging_360_plus += row.aging_360_plus;
           clientTotals.count_not_due += row.count_not_due;
+          clientTotals.count_30 += row.count_30;
           clientTotals.count_90 += row.count_90;
           clientTotals.count_180 += row.count_180;
           clientTotals.count_240 += row.count_240;
