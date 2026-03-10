@@ -6870,7 +6870,7 @@ serve(async (req) => {
                 timelineData.push({
                   ...apiEvt,
                   _fromApi: true,
-                  _pecas: apiEvt.quantidadeCarga ?? null,
+                  _pecas: apiEvt.quantidadeCargo ?? apiEvt.quantidadeCarga ?? null,
                   _peso: apiEvt.pesoCarga ?? null,
                 });
               }
