@@ -115,6 +115,9 @@ function ReguaCobrancaContent() {
   const [counts, setCounts] = useState<StageCounts>({
     PRE: 0, D1: 0, D7: 0, D15: 0, D30: 0, D45: 0, D60: 0,
   });
+  const [amounts, setAmounts] = useState<StageAmounts>({
+    PRE: 0, D1: 0, D7: 0, D15: 0, D30: 0, D45: 0, D60: 0,
+  });
   const [totalTitles, setTotalTitles] = useState(0);
   
   const [loading, setLoading] = useState(true);
