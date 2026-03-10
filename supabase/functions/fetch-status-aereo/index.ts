@@ -346,35 +346,47 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
       return null;
     }
 
-    // Events are sorted DESC (most recent first).
-    // If the most recent resolved event is DIS, check if ANY non-DIS event exists
-    // in the timeline — if so, prefer the non-DIS (process moved past discrepancy).
-    let firstResolved: string | null = null;
+    // IATA hierarchy: pick the MOST ADVANCED status across ALL events
+    const IATA_HIERARCHY: Record<string, number> = {
+      'BKD': 1, 'RCS': 2, 'MAN': 3, 'PRE': 3, 'FFM': 3,
+      'DEP': 4, 'TFD': 4,
+      'ARR': 5, 'RCF': 6, 'AWR': 7,
+      'NFD': 8, 'AWD': 9, 'POD': 10, 'DLV': 11,
+      // Non-progression statuses get low priority
+      'DIS': 0, 'OFLD': 0, 'NIL': 0, 'FOH': 0, 'CAN': 0, 'NIF': 0,
+      'AUD': 0, 'RCT': 0,
+    };
+
+    let bestStatus: string | null = null;
+    let bestOrder = -1;
 
     for (const ev of filtered) {
       const resolved = resolveEvent(ev);
       if (resolved) {
-        if (!firstResolved) {
-          firstResolved = resolved;
-        }
-        // If first was NOT DIS, just return it immediately (most recent)
-        if (firstResolved !== 'DIS') {
-          console.log(`[resolveUNK] ${awbForDebug || '?'}: "${firstResolved}" (most recent${etdCutoff ? ', ETD-filtered' : ''})`);
-          return firstResolved;
-        }
-        // If first was DIS and we found a non-DIS event anywhere in timeline,
-        // prefer the non-DIS (no time limit — process has moved forward)
-        if (resolved !== 'DIS') {
-          console.log(`[resolveUNK] ${awbForDebug || '?'}: DIS superseded by "${resolved}" (later event in timeline${etdCutoff ? ', ETD-filtered' : ''})`);
-          return resolved;
+        const order = IATA_HIERARCHY[resolved] ?? 0;
+        if (order > bestOrder) {
+          bestOrder = order;
+          bestStatus = resolved;
         }
       }
     }
 
-    if (firstResolved) {
-      console.log(`[resolveUNK] ${awbForDebug || '?'}: "${firstResolved}" (final${etdCutoff ? ', ETD-filtered' : ''})`);
+    // Special case: if only DIS-class statuses found and nothing advanced, return DIS
+    if (!bestStatus) {
+      // Check if any DIS was found
+      for (const ev of filtered) {
+        const resolved = resolveEvent(ev);
+        if (resolved) {
+          bestStatus = resolved;
+          break;
+        }
+      }
     }
-    return firstResolved;
+
+    if (bestStatus) {
+      console.log(`[resolveUNK] ${awbForDebug || '?'}: "${bestStatus}" (hierarchy-best, order=${bestOrder}${etdCutoff ? ', ETD-filtered' : ''})`);
+    }
+    return bestStatus;
   } catch (_e) {
     console.log(`[resolveUNK] ${awbForDebug || '?'}: parse error: ${_e}`);
   }
