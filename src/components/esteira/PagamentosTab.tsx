@@ -338,9 +338,13 @@ export const PagamentosTab = () => {
         if (pagamento) {
           const dadosBancarios = dadosBancariosCache[pagamento.cnpj_fornecedor];
           
-          // Determinar regra de forma de pagamento baseado no banco
+          // Determinar regra de forma de pagamento baseado no tipo
           let regrasFormaPag = "DOC (Compe)";
-          if (dadosBancarios) {
+          
+          // Se é boleto, sempre "Boleto"
+          if (isBoleto(pagamento.forma_pagamento as any)) {
+            regrasFormaPag = "Boleto";
+          } else if (dadosBancarios) {
             const bancoUpper = (dadosBancarios.banco || "").toUpperCase();
             if (bancoUpper.includes("ITAU") || bancoUpper.includes("ITAÚ") || bancoUpper.includes("341")) {
               regrasFormaPag = "Crédito em Conta Corrente da Mesma Titularidade";
