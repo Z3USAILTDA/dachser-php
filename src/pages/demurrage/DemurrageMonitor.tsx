@@ -462,6 +462,7 @@ export default function DemurrageMonitor() {
                       <TableHead>Risco</TableHead>
                       <TableHead className="text-right">Demurrage (USD)</TableHead>
                       <TableHead className="text-right">Total BRL</TableHead>
+                    </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paginatedContainers.map((container) => (
