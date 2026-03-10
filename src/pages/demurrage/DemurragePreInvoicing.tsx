@@ -396,6 +396,8 @@ export default function DemurragePreInvoicing() {
                       <TableHead>Navio</TableHead>
                       <TableHead>Data Emissão</TableHead>
                       <TableHead className="text-right">Total USD</TableHead>
+                      <TableHead className="text-right w-[110px]">Taxa Conversão</TableHead>
+                      <TableHead className="text-right">Total BRL</TableHead>
                       <TableHead>Workflow</TableHead>
                       <TableHead>Status Info</TableHead>
                       <TableHead>MISK</TableHead>
