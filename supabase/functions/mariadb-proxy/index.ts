@@ -3595,6 +3595,41 @@ serve(async (req) => {
               });
             }
             
+            // Fetch timeline_json for RFB-only MAWBs to get dep_datetime
+            const rfbOnlyMawbKeys = rfbOnlyMawbs.map((r: any) => (r.identificacao || '').trim()).filter(Boolean);
+            if (rfbOnlyMawbKeys.length > 0) {
+              try {
+                const rfbMawbTimelineFilter = rfbOnlyMawbKeys.map((m: string) => `'${m.replace(/'/g, "''")}'`).join(',');
+                const rfbTimelines = await client.query(`
+                  SELECT ws.awb, ws.timeline_json
+                  FROM ${database}.t_aereo_ws_firecrawl ws
+                  INNER JOIN (
+                    SELECT awb, MAX(id) as max_id
+                    FROM ${database}.t_aereo_ws_firecrawl
+                    WHERE awb IN (${rfbMawbTimelineFilter})
+                    GROUP BY awb
+                  ) latest ON ws.awb = latest.awb AND ws.id = latest.max_id
+                `);
+                let rfbDepCount = 0;
+                for (const fb of (rfbTimelines || [])) {
+                  const depDate = extractDepDateFromTimeline(fb.timeline_json);
+                  if (depDate) {
+                    const awbKey = (fb.awb || '').trim();
+                    for (const s of shipments) {
+                      if ((s.master || '').trim() === awbKey && !s.dep_datetime) {
+                        s.dep_datetime = depDate;
+                        s.data_decolagem_ultimo_trecho = depDate;
+                        rfbDepCount++;
+                      }
+                    }
+                  }
+                }
+                console.log(`CCT Step 2.6: Extracted DEP from timeline for ${rfbDepCount} RFB-only shipments`);
+              } catch (e) {
+                console.warn('CCT Step 2.6: Error fetching RFB-only timelines (non-fatal):', e);
+              }
+            }
+            
             console.log(`CCT Step 2.6: Added ${(rfbHawbs || []).length} RFB-only shipments. Total now: ${shipments.length}`);
           }
         } catch (rfbOnlyErr) {
