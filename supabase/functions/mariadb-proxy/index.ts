@@ -3317,33 +3317,18 @@ serve(async (req) => {
                 return resp.length > 0;
               });
               
-              // Extract most recent situacao from partesEstoque (chronological, not hierarchy)
+              // Extract status from partesEstoque using HIERARCHY (most advanced wins, timeline is supreme)
               let rfbSituacao: string | null = null;
               let rfbSituacaoMapped: string | null = null;
-              let rfbLatestTimestamp: string | null = null;
               for (const pe of partesEstoque) {
                 const sitVal = pe?.situacaoAtual || pe?.situacao || pe?.status;
                 const mapped = mapRfbSituacaoToCCT(sitVal);
                 if (!mapped) continue;
-                // Extract timestamp from partesEstoque entry
-                const peTimestamp = pe?.dataHoraOperacao || pe?.dataHoraSituacao || pe?.dataHoraRecepcao || pe?.dataHora || null;
-                // Use chronological: pick the entry with the most recent timestamp
-                if (peTimestamp && rfbLatestTimestamp) {
-                  if (new Date(peTimestamp).getTime() > new Date(rfbLatestTimestamp).getTime()) {
-                    rfbSituacaoMapped = mapped;
-                    rfbSituacao = sitVal;
-                    rfbLatestTimestamp = peTimestamp;
-                  }
-                } else if (peTimestamp && !rfbLatestTimestamp) {
+                const existingOrder = CCT_STATUS_ORDER[rfbSituacaoMapped || ''] || 0;
+                const newOrder = CCT_STATUS_ORDER[mapped] || 0;
+                if (newOrder > existingOrder) {
                   rfbSituacaoMapped = mapped;
                   rfbSituacao = sitVal;
-                  rfbLatestTimestamp = peTimestamp;
-                } else if (!rfbLatestTimestamp) {
-                  // No timestamps available, fallback to hierarchy
-                  if (!rfbSituacaoMapped || (CCT_STATUS_ORDER[mapped] || 0) > (CCT_STATUS_ORDER[rfbSituacaoMapped] || 0)) {
-                    rfbSituacaoMapped = mapped;
-                    rfbSituacao = sitVal;
-                  }
                 }
               }
               
