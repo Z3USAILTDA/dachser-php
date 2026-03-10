@@ -965,10 +965,26 @@ serve(async (req) => {
         }
       }
 
-      // Final guard: if status is still UNK after all resolution, treat as tracking failed
+      // Safety net: if no status but timeline has valid events, use fallback
+      if (!finalStatus && timelineHasValidEvents(timelineStr)) {
+        const rawWs = (rawStatus || '').trim().toUpperCase();
+        if (rawWs && rawWs !== 'UNK' && !invalidStatuses.has(rawWs)) {
+          finalStatus = rawWs;
+        } else {
+          finalStatus = 'EM RASTREIO';
+        }
+        console.log(`[timelineSafety] ${awb}: timeline has events but no resolved status, using "${finalStatus}"`);
+      }
+
+      // Final guard: if status is still UNK after all resolution
       if (finalStatus && finalStatus.toUpperCase() === 'UNK') {
-        finalStatus = null;
-        console.log(`[unkGuard] ${awb}: resolved to UNK, marking as tracking failed`);
+        if (timelineHasValidEvents(timelineStr)) {
+          finalStatus = 'EM RASTREIO';
+          console.log(`[unkGuard] ${awb}: UNK with valid timeline, using "EM RASTREIO"`);
+        } else {
+          finalStatus = null;
+          console.log(`[unkGuard] ${awb}: resolved to UNK with no timeline, marking as tracking failed`);
+        }
       }
 
       // Re-classificar ARR genérico para determinar CONEXAO/DESTINO
