@@ -10177,7 +10177,7 @@ serve(async (req) => {
             ORDER BY created_at DESC LIMIT 1
           )
           LEFT JOIN dados_dachser.t_sea_master sm ON dc.mbl = sm.master COLLATE utf8mb4_general_ci
-          LEFT JOIN dados_dachser.t_master_dados mdn ON dc.mbl = mdn.master COLLATE utf8mb4_general_ci
+          LEFT JOIN dados_dachser.t_master_dados mdn ON dc.mbl = mdn.mawb COLLATE utf8mb4_general_ci
           WHERE ${whereConditions.join(' AND ')}
           ORDER BY dc.updated_at DESC
           LIMIT ?
