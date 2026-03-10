@@ -7046,8 +7046,8 @@ serve(async (req) => {
               aeroporto: entry.Location || entry.location || null,
               nivel_confianca: 'PRIMARIA',
               created_at: entry.Timestamp || entry.timestamp || null,
-              pecas: entry._pecas ? Number(entry._pecas) : null,
-              peso: entry._peso && entry._peso !== 'N/A' ? String(entry._peso) : null,
+              pecas: entry._pecas ? Number(entry._pecas) : extractPiecesFromDesc(description),
+              peso: entry._peso && entry._peso !== 'N/A' ? String(entry._peso) : extractWeightFromDesc(description),
             };
           });
 
