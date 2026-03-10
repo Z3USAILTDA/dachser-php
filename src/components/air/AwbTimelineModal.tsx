@@ -142,7 +142,25 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
 
   const events = data?.data || [];
   const trackingFailed = data?.tracking_failed || false;
-  const discrepancy = data?.discrepancy || null;
+  
+  // Derive discrepancy: use backend discrepancy if present,
+  // otherwise if events have pieces data, force a display showing declared vs detected
+  const backendDiscrepancy = data?.discrepancy || null;
+  const discrepancy = React.useMemo(() => {
+    if (backendDiscrepancy) return backendDiscrepancy;
+    // Check if any events have pieces — if so, gather unique values
+    const piecesValues = events
+      .map((e: TimelineEvent) => e.pecas)
+      .filter((v): v is number => v != null && v > 0);
+    if (piecesValues.length === 0) return null;
+    const unique = [...new Set(piecesValues)];
+    // Even with a single consistent value, show it as declared info (not discrepancy)
+    // Discrepancy is only flagged if there are different values
+    if (unique.length >= 2) {
+      return { field: 'pecas', values: unique, min: Math.min(...unique), max: Math.max(...unique) };
+    }
+    return null;
+  }, [backendDiscrepancy, events]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
