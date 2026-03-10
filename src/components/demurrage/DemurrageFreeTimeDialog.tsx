@@ -159,61 +159,65 @@ export function DemurrageFreeTimeDialog({ open, onOpenChange, onSuccess }: Demur
             </RadioGroup>
           </div>
 
-          {/* Cliente com autocomplete */}
-          <div className="space-y-2 relative">
-            <Label className="text-gray-300">Cliente *</Label>
-            <div className="relative">
-              <Input
-                value={clienteNome}
-                onChange={(e) => handleClienteChange(e.target.value)}
-                onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                placeholder="Buscar por nome do cliente..."
-                className="bg-[#111] border-[#333] text-white placeholder:text-gray-500"
-                required
-              />
-              {isSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />}
-            </div>
-            {showSuggestions && suggestions.length > 0 && (
-              <div className="absolute z-50 w-full bg-[#222] border border-[#444] rounded-lg mt-1 max-h-48 overflow-y-auto shadow-lg">
-                {suggestions.map((c, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    className="w-full text-left px-3 py-2 hover:bg-[#333] text-sm transition-colors"
-                    onMouseDown={() => selectCliente(c)}
-                  >
-                    <span className="text-white">{c.nome_cliente}</span>
-                    {c.dchr_customer_number && (
-                      <span className="text-gray-400 ml-2 text-xs">({c.dchr_customer_number})</span>
-                    )}
-                  </button>
-                ))}
+          {/* Cliente com autocomplete - apenas para CONTRATO */}
+          {tipoFt === 'CONTRATO' && (
+            <>
+              <div className="space-y-2 relative">
+                <Label className="text-gray-300">Cliente *</Label>
+                <div className="relative">
+                  <Input
+                    value={clienteNome}
+                    onChange={(e) => handleClienteChange(e.target.value)}
+                    onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                    placeholder="Buscar por nome do cliente..."
+                    className="bg-[#111] border-[#333] text-white placeholder:text-gray-500"
+                    required
+                  />
+                  {isSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />}
+                </div>
+                {showSuggestions && suggestions.length > 0 && (
+                  <div className="absolute z-50 w-full bg-[#222] border border-[#444] rounded-lg mt-1 max-h-48 overflow-y-auto shadow-lg">
+                    {suggestions.map((c, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        className="w-full text-left px-3 py-2 hover:bg-[#333] text-sm transition-colors"
+                        onMouseDown={() => selectCliente(c)}
+                      >
+                        <span className="text-white">{c.nome_cliente}</span>
+                        {c.dchr_customer_number && (
+                          <span className="text-gray-400 ml-2 text-xs">({c.dchr_customer_number})</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* CNPJ + Customer Number */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label className="text-gray-300">CNPJ</Label>
-              <Input
-                value={clienteCnpj}
-                onChange={(e) => setClienteCnpj(e.target.value)}
-                placeholder="00.000.000/0000-00"
-                className="bg-[#111] border-[#333] text-white placeholder:text-gray-500"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-gray-300">Customer Number</Label>
-              <Input
-                value={customerNumber}
-                onChange={(e) => setCustomerNumber(e.target.value)}
-                placeholder="Código do cliente"
-                className="bg-[#111] border-[#333] text-white placeholder:text-gray-500"
-              />
-            </div>
-          </div>
+              {/* CNPJ + Customer Number */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-gray-300">CNPJ</Label>
+                  <Input
+                    value={clienteCnpj}
+                    onChange={(e) => setClienteCnpj(e.target.value)}
+                    placeholder="00.000.000/0000-00"
+                    className="bg-[#111] border-[#333] text-white placeholder:text-gray-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-gray-300">Customer Number</Label>
+                  <Input
+                    value={customerNumber}
+                    onChange={(e) => setCustomerNumber(e.target.value)}
+                    placeholder="Código do cliente"
+                    className="bg-[#111] border-[#333] text-white placeholder:text-gray-500"
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Campos por tipo */}
           {tipoFt === 'CONTRATO' ? (
