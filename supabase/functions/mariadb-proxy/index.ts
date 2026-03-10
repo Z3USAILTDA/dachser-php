@@ -7214,12 +7214,7 @@ serve(async (req) => {
             }
           }
 
-          // DEBUG: include raw API events sample for inspection
-          const debugApiSample = apiTimelineRaw.length > 0 
-            ? apiTimelineRaw.slice(0, 3).map((e: any) => ({ keys: Object.keys(e), ...e }))
-            : [];
-
-          result = { success: true, data: filteredEvents, ...(discrepancy ? { discrepancy } : {}), _debug_api_sample: debugApiSample, _debug_api_count: apiTimelineRaw.length };
+          result = { success: true, data: filteredEvents, ...(discrepancy ? { discrepancy } : {}) };
         } catch (tableErr) {
           console.log('Error fetching from t_aereo_ws_firecrawl:', tableErr);
           result = { success: true, data: [] };
