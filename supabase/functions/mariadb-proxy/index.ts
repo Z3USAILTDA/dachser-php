@@ -3027,7 +3027,7 @@ serve(async (req) => {
         const awbAirlineLike = registeredAirlineCodes.map(c => `awb LIKE '${c}-%'`).join(' OR ');
         
         const validAwbs = await client.query(`
-          SELECT ws.awb, ws.last_status_code, ws.origin, ws.destination, ws.scraped_at
+          SELECT ws.awb, ws.last_status_code, ws.origin, ws.destination, ws.scraped_at, ws.timeline_json
           FROM ${database}.t_aereo_ws_firecrawl ws
           INNER JOIN (
             SELECT awb, MAX(id) as max_id
