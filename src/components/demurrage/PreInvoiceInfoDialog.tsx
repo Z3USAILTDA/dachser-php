@@ -73,6 +73,7 @@ export function PreInvoiceInfoDialog({ open, onOpenChange, preInvoice }: PreInvo
           misk: misk || null,
           observacao: observacao || null,
           othello_registro: othelloRegistro,
+          exchange_rate: exchangeRate ? parseFloat(exchangeRate) : null,
         }
       });
       toast.success("Informações atualizadas com sucesso");
