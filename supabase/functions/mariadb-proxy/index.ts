@@ -3141,7 +3141,7 @@ serve(async (req) => {
             ...row,
             aeroporto_origem: (awbInfo?.origin || '').trim() || null,
             aeroporto_destino: (awbInfo?.destination || '').trim() || null,
-            dep_datetime: awbInfo?.scraped_at || null,
+            dep_datetime: awbInfo?.dep_date_from_timeline || awbInfo?.scraped_at || null,
             ultimo_status_raw: statusCode,
             ultimo_evento_data: awbInfo?.scraped_at || null,
             ultimo_evento_codigo: statusCode,
