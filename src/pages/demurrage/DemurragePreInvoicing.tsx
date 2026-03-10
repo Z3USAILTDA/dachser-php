@@ -37,6 +37,7 @@ import {
 } from "@/hooks/useDemurrageData";
 import { PreInvoiceDetailsDialog } from "@/components/demurrage/PreInvoiceDetailsDialog";
 import { PreInvoiceInfoDialog } from "@/components/demurrage/PreInvoiceInfoDialog";
+import { SendTestEmailDialog } from "@/components/demurrage/SendTestEmailDialog";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
