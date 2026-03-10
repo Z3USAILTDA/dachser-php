@@ -3043,9 +3043,26 @@ serve(async (req) => {
         
         const mawbList = (validAwbs || []).map((r: any) => r.awb).filter((m: string) => m && m.trim() !== '');
         // Build status lookup from t_aereo_ws_firecrawl for JS-side merge
+        // Helper: extract real DEP date from timeline_json
+        function extractDepDateFromTimeline(timelineJson: any): string | null {
+          try {
+            const timeline = typeof timelineJson === 'string' ? JSON.parse(timelineJson) : timelineJson;
+            if (!Array.isArray(timeline)) return null;
+            const depEvent = timeline.find((evt: any) => {
+              const code = (evt.status || evt.code || evt.milestone || '').toUpperCase();
+              return code === 'DEP' || code === 'DEPARTED';
+            });
+            if (depEvent) {
+              return depEvent.date || depEvent.datetime || depEvent.timestamp || depEvent.time || null;
+            }
+            return null;
+          } catch { return null; }
+        }
+        
         const awbStatusMap = new Map<string, any>();
         for (const snap of (validAwbs || [])) {
-          awbStatusMap.set((snap.awb || '').trim(), snap);
+          const depDateFromTimeline = extractDepDateFromTimeline(snap.timeline_json);
+          awbStatusMap.set((snap.awb || '').trim(), { ...snap, dep_date_from_timeline: depDateFromTimeline });
         }
         console.log(`CCT Step 1: Found ${mawbList.length} valid AWBs from t_aereo_ws_firecrawl`);
         
