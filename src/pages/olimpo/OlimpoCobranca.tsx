@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
+import { ClientDetailSheet } from "@/components/olimpo/ClientDetailSheet";
 import { useToast } from "@/hooks/use-toast";
 import {
   BarChart,
@@ -155,6 +156,8 @@ export default function OlimpoCobranca() {
   const [viewMode, setViewMode] = useState<"product" | "client">("product");
   const [clientFilter, setClientFilter] = useState("");
   const [budgetForecast, setBudgetForecast] = useState<BudgetForecast | null>(null);
+  const [selectedClient, setSelectedClient] = useState<AgingRow | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const { toast } = useToast();
 
   const fetchData = async () => {
@@ -534,7 +537,8 @@ export default function OlimpoCobranca() {
                         const rowTotal = row.not_due + rowOverdue;
                         const isBadDebt = row.aging_360_plus > 0;
                         return (
-                          <tr key={idx} className={`border-b border-border/30 hover:bg-muted/10 ${isBadDebt ? "bg-red-500/5" : ""}`}>
+                          <tr key={idx} className={`border-b border-border/30 hover:bg-muted/10 ${isBadDebt ? "bg-red-500/5" : ""} ${viewMode === "client" ? "cursor-pointer" : ""}`}
+                            onClick={() => { if (viewMode === "client") { setSelectedClient(row); setSheetOpen(true); } }}>
                             <td className="py-2.5 px-4 font-medium text-foreground">
                               {row.product}
                               {row.cnpjs && row.cnpjs.length > 1 && (
@@ -643,6 +647,8 @@ export default function OlimpoCobranca() {
           </div>
         )}
       </div>
+
+      <ClientDetailSheet client={selectedClient} open={sheetOpen} onOpenChange={setSheetOpen} />
     </PageLayout>
   );
 }
