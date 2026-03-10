@@ -3139,6 +3139,8 @@ serve(async (req) => {
         // ==================== STEP 2.5: Enrich with t_aereo_cct (RFB data) ====================
         // Query t_aereo_cct for MAWB data: RUC, weights, special handling, freight, parties, stock status
         let cctRfbMap = new Map<string, any>();
+        // Helper to normalize MAWB keys for consistent map lookup
+        const normalizeMawb = (m: string) => (m || '').trim().toUpperCase();
         if (mawbList.length > 0) {
           try {
             // Convert AWB format from "XXX-XXXXXXXX" to match t_aereo_cct.identificacao
@@ -3157,7 +3159,7 @@ serve(async (req) => {
                 indicadorPartesMadeira,
                 manuseiosEspeciais,
                 partesEstoque,
-                partes,
+                
                 hawbAssociados,
                 frete,
                 viagensAssociadas,
@@ -3181,7 +3183,7 @@ serve(async (req) => {
             };
             
             for (const rfb of (cctRfbData || [])) {
-              const ident = (rfb.identificacao || '').trim();
+              const ident = normalizeMawb(rfb.identificacao);
               
               // Parse JSON fields safely
               let manuseios: string[] = [];
@@ -3198,11 +3200,7 @@ serve(async (req) => {
                 if (Array.isArray(raw)) partesEstoque = raw;
               } catch {}
               
-              let partes: any[] = [];
-              try {
-                const raw = typeof rfb.partes === 'string' ? JSON.parse(rfb.partes) : rfb.partes;
-                if (Array.isArray(raw)) partes = raw;
-              } catch {}
+              
               
               let hawbAssociados: any[] = [];
               try {
@@ -3221,10 +3219,10 @@ serve(async (req) => {
                 if (Array.isArray(raw)) viagensAssociadas = raw;
               } catch {}
               
-              // Extract consignatario from partes
-              const consignatario = partes.find((p: any) => {
-                const tipo = (p?.tipo || p?.funcao || '').toLowerCase();
-                return tipo.includes('consignat') || tipo.includes('destinat');
+              // Extract consignatario from partesEstoque
+              const consignatario = partesEstoque.find((p: any) => {
+                const resp = (p?.cnpjResponsavelAtual || '').trim();
+                return resp.length > 0;
               });
               
               // Extract most advanced situacao from partesEstoque
@@ -3274,15 +3272,18 @@ serve(async (req) => {
                 manuseios_especiais: manuseios,
                 rfb_situacao: rfbSituacao,
                 rfb_status_cct: rfbSituacaoMapped,
-                consignatario_cnpj: consignatario?.cnpj || consignatario?.documento || null,
-                consignatario_nome: consignatario?.nome || consignatario?.razaoSocial || null,
+                consignatario_cnpj: consignatario?.cnpjResponsavelAtual || null,
+                consignatario_nome: null,
                 numero_voo: numeroVoo,
                 data_emissao: rfb.dataEmissao || null,
                 info_frete: infoFrete,
                 hawb_associados: hawbAssociados,
               });
             }
-            console.log(`CCT Step 2.5: Enriched ${cctRfbMap.size} MAWBs with RFB data from t_aereo_cct`);
+            console.log(`CCT Step 2.5: Enriched ${cctRfbMap.size}/${mawbList.length} MAWBs with RFB data from t_aereo_cct`);
+            if (cctRfbMap.size === 0 && mawbList.length > 0) {
+              console.warn('CCT Step 2.5: ⚠️ ALERT - 0% enrichment rate. Check t_aereo_cct data availability.');
+            }
           } catch (rfbErr) {
             console.warn('CCT Step 2.5: Error fetching t_aereo_cct (non-fatal):', rfbErr);
           }
@@ -3603,7 +3604,7 @@ serve(async (req) => {
           }
           
           // Enrich with t_aereo_cct (RFB) data
-          const rfbInfo = cctRfbMap.get((row.master || '').trim());
+          const rfbInfo = cctRfbMap.get(normalizeMawb(row.master));
           
           // Preserve tracking status; only upgrade if LeadComex provides a more advanced status
           let statusCctOficial = row.status_cct_oficial || 'AGUARDANDO_CONSULTA';
