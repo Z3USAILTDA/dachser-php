@@ -3139,6 +3139,8 @@ serve(async (req) => {
         // ==================== STEP 2.5: Enrich with t_aereo_cct (RFB data) ====================
         // Query t_aereo_cct for MAWB data: RUC, weights, special handling, freight, parties, stock status
         let cctRfbMap = new Map<string, any>();
+        // Helper to normalize MAWB keys for consistent map lookup
+        const normalizeMawb = (m: string) => (m || '').trim().toUpperCase();
         if (mawbList.length > 0) {
           try {
             // Convert AWB format from "XXX-XXXXXXXX" to match t_aereo_cct.identificacao
