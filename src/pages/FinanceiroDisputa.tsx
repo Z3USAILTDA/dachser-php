@@ -95,7 +95,7 @@ function FinanceiroDisputaContent() {
   // Observações editing state
   const [savingObservacoes, setSavingObservacoes] = useState<Record<string, boolean>>({});
   const [editingObservacoes, setEditingObservacoes] = useState<string | null>(null);
-  const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const observacoesInputRef = useRef<HTMLInputElement>(null);
 
   // Responsável editing state
