@@ -728,7 +728,6 @@ export function useSendTestAlert() {
     }) => {
       const { clientName, emails, preInvoice, items } = params;
 
-      // Map items to container details for the XLSX attachment
       const containers = (items || []).map(item => ({
         number: item.container_number,
         type: item.container_type || '',
@@ -747,7 +746,6 @@ export function useSendTestAlert() {
       const { data, error } = await supabase.functions.invoke('demurrage-send-alert', {
         body: {
           test_mode: true,
-          alert_type: containers.length > 0 ? 'cost_statement' : 'initial_notice',
           client_name: clientName,
           recipient_emails: emails,
           shipment_master: preInvoice?.shipment_mbl || '',
