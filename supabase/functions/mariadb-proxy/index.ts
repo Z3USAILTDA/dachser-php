@@ -3048,23 +3048,43 @@ serve(async (req) => {
           try {
             const timeline = typeof timelineJson === 'string' ? JSON.parse(timelineJson) : timelineJson;
             if (!Array.isArray(timeline)) return null;
-            const depEvent = timeline.find((evt: any) => {
+            // Search for DEP event — structure can vary:
+            // Format A: { status: 'DEP', date: '...' }
+            // Format B: { Description: 'Flight Departed...', Timestamp: '...' }
+            const depEvents = timeline.filter((evt: any) => {
               const code = (evt.status || evt.code || evt.milestone || '').toUpperCase();
-              return code === 'DEP' || code === 'DEPARTED';
+              if (code === 'DEP' || code === 'DEPARTED') return true;
+              // Check Description field for "Flight Departed" or "Departed"
+              const desc = (evt.Description || evt.description || '').toLowerCase();
+              if (desc.includes('flight departed') || desc.startsWith('departed')) return true;
+              return false;
             });
-            if (depEvent) {
-              return depEvent.date || depEvent.datetime || depEvent.timestamp || depEvent.time || null;
-            }
-            return null;
+            if (depEvents.length === 0) return null;
+            // Sort by timestamp ascending and pick the LAST departure (final leg to destination)
+            const sorted = depEvents
+              .map((evt: any) => ({
+                ts: evt.Timestamp || evt.timestamp || evt.date || evt.datetime || evt.time || null,
+              }))
+              .filter((e: any) => e.ts)
+              .sort((a: any, b: any) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+            return sorted.length > 0 ? sorted[sorted.length - 1].ts : null;
           } catch { return null; }
         }
         
         const awbStatusMap = new Map<string, any>();
+        let depExtractedCount = 0;
         for (const snap of (validAwbs || [])) {
           const depDateFromTimeline = extractDepDateFromTimeline(snap.timeline_json);
+          if (depDateFromTimeline) depExtractedCount++;
+          // Debug: log timeline structure for specific AWB
+          if ((snap.awb || '').includes('14377845')) {
+            const parsed = typeof snap.timeline_json === 'string' ? JSON.parse(snap.timeline_json || '[]') : snap.timeline_json;
+            console.log(`[DEP_DEBUG] AWB ${snap.awb} timeline_json type=${typeof snap.timeline_json}, isArray=${Array.isArray(parsed)}, length=${Array.isArray(parsed) ? parsed.length : 'N/A'}, first=${JSON.stringify(Array.isArray(parsed) ? parsed[0] : parsed).substring(0, 300)}`);
+            console.log(`[DEP_DEBUG] Extracted dep_date: ${depDateFromTimeline}`);
+          }
           awbStatusMap.set((snap.awb || '').trim(), { ...snap, dep_date_from_timeline: depDateFromTimeline });
         }
-        console.log(`CCT Step 1: Found ${mawbList.length} valid AWBs from t_aereo_ws_firecrawl`);
+        console.log(`CCT Step 1: Found ${mawbList.length} valid AWBs from t_aereo_ws_firecrawl (${depExtractedCount} with DEP from timeline)`);
         
         if (mawbList.length === 0) {
           console.log('CCT: No valid AWBs found in t_aereo_ws_firecrawl, returning empty');
@@ -3152,6 +3172,48 @@ serve(async (req) => {
         });
         
         console.log(`CCT Step 2: Found ${shipments.length} shipments`);
+        
+        // ==================== STEP 2.1: Fallback dep_datetime from timeline_json ====================
+        // For shipments without awbInfo in Step 1 (outside sliding window), fetch timeline_json separately
+        const missingDepMawbs = shipments
+          .filter((s: any) => !awbStatusMap.has((s.master || '').trim()))
+          .map((s: any) => (s.master || '').trim())
+          .filter((m: string) => m);
+        
+        if (missingDepMawbs.length > 0) {
+          try {
+            const missingFilter = missingDepMawbs.map((m: string) => `'${m.replace(/'/g, "''")}'`).join(',');
+            const fallbackTimelines = await client.query(`
+              SELECT ws.awb, ws.timeline_json
+              FROM ${database}.t_aereo_ws_firecrawl ws
+              INNER JOIN (
+                SELECT awb, MAX(id) as max_id
+                FROM ${database}.t_aereo_ws_firecrawl
+                WHERE awb IN (${missingFilter})
+                GROUP BY awb
+              ) latest ON ws.awb = latest.awb AND ws.id = latest.max_id
+            `);
+            
+            let fallbackCount = 0;
+            for (const fb of (fallbackTimelines || [])) {
+              const depDate = extractDepDateFromTimeline(fb.timeline_json);
+              if (depDate) {
+                const awbKey = (fb.awb || '').trim();
+                // Update matching shipments
+                for (const s of shipments) {
+                  if ((s.master || '').trim() === awbKey && !s.dep_datetime) {
+                    s.dep_datetime = depDate;
+                    s.data_decolagem_ultimo_trecho = depDate;
+                    fallbackCount++;
+                  }
+                }
+              }
+            }
+            console.log(`CCT Step 2.1: Fetched timeline fallback for ${missingDepMawbs.length} MAWBs, extracted DEP for ${fallbackCount}`);
+          } catch (e) {
+            console.warn('CCT Step 2.1: Error fetching fallback timelines (non-fatal):', e);
+          }
+        }
         
         // ==================== STEP 2.5: Enrich with t_aereo_cct (RFB data) ====================
         // Query t_aereo_cct for MAWB data: RUC, weights, special handling, freight, parties, stock status
@@ -3531,6 +3593,41 @@ serve(async (req) => {
                 arr_datetime: null,
                 fonte_primaria: 'RFB', // Mark as RFB-only for UI differentiation
               });
+            }
+            
+            // Fetch timeline_json for RFB-only MAWBs to get dep_datetime
+            const rfbOnlyMawbKeys = rfbOnlyMawbs.map((r: any) => (r.identificacao || '').trim()).filter(Boolean);
+            if (rfbOnlyMawbKeys.length > 0) {
+              try {
+                const rfbMawbTimelineFilter = rfbOnlyMawbKeys.map((m: string) => `'${m.replace(/'/g, "''")}'`).join(',');
+                const rfbTimelines = await client.query(`
+                  SELECT ws.awb, ws.timeline_json
+                  FROM ${database}.t_aereo_ws_firecrawl ws
+                  INNER JOIN (
+                    SELECT awb, MAX(id) as max_id
+                    FROM ${database}.t_aereo_ws_firecrawl
+                    WHERE awb IN (${rfbMawbTimelineFilter})
+                    GROUP BY awb
+                  ) latest ON ws.awb = latest.awb AND ws.id = latest.max_id
+                `);
+                let rfbDepCount = 0;
+                for (const fb of (rfbTimelines || [])) {
+                  const depDate = extractDepDateFromTimeline(fb.timeline_json);
+                  if (depDate) {
+                    const awbKey = (fb.awb || '').trim();
+                    for (const s of shipments) {
+                      if ((s.master || '').trim() === awbKey && !s.dep_datetime) {
+                        s.dep_datetime = depDate;
+                        s.data_decolagem_ultimo_trecho = depDate;
+                        rfbDepCount++;
+                      }
+                    }
+                  }
+                }
+                console.log(`CCT Step 2.6: Extracted DEP from timeline for ${rfbDepCount} RFB-only shipments`);
+              } catch (e) {
+                console.warn('CCT Step 2.6: Error fetching RFB-only timelines (non-fatal):', e);
+              }
             }
             
             console.log(`CCT Step 2.6: Added ${(rfbHawbs || []).length} RFB-only shipments. Total now: ${shipments.length}`);
