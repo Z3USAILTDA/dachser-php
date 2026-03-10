@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { 
   Clock, Edit, Trash2, Search, FileText, Ship, Calendar, 
-  CheckCircle2, AlertCircle, Package, Info
+  CheckCircle2, AlertCircle, Package, Info, Plus
 } from "lucide-react";
 import { 
   useClientFreeTimeList, 
