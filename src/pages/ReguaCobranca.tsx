@@ -172,6 +172,9 @@ function ReguaCobrancaContent() {
       if (data?.success && data.counts) {
         setCounts(data.counts);
         setTotalTitles(Object.values(data.counts as StageCounts).reduce((a, b) => a + b, 0));
+        if (data.amounts) {
+          setAmounts(data.amounts);
+        }
       }
     } catch (err) {
       console.error("Erro ao carregar contagens:", err);
