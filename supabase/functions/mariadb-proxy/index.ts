@@ -10166,7 +10166,9 @@ serve(async (req) => {
             pi.status_info as pi_status_info,
             pi.misk as pi_misk,
             pi.othello_registro as pi_othello_registro,
-            pi.observacao as pi_observacao
+            pi.observacao as pi_observacao,
+            pi.exchange_rate as pi_exchange_rate,
+            COALESCE(sm.hawb, mdn.hawb) as hbl
           FROM dados_dachser.t_dachser_demurrage_containers dc
           LEFT JOIN dados_dachser.t_clientes_base cb ON dc.cliente = cb.nome_cliente COLLATE utf8mb4_general_ci
           LEFT JOIN dados_dachser.t_dachser_demurrage_pre_invoices pi ON pi.id = (
@@ -10174,6 +10176,8 @@ serve(async (req) => {
             WHERE shipment_mbl = dc.mbl COLLATE utf8mb4_unicode_ci 
             ORDER BY created_at DESC LIMIT 1
           )
+          LEFT JOIN dados_dachser.t_sea_master sm ON dc.mbl = sm.mbl COLLATE utf8mb4_general_ci
+          LEFT JOIN dados_dachser.t_master_dados mdn ON dc.mbl = mdn.master COLLATE utf8mb4_general_ci
           WHERE ${whereConditions.join(' AND ')}
           ORDER BY dc.updated_at DESC
           LIMIT ?

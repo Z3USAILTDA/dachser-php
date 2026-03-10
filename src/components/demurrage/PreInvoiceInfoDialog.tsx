@@ -134,6 +134,18 @@ export function PreInvoiceInfoDialog({ open, onOpenChange, preInvoice }: PreInvo
           </div>
 
           <div className="space-y-1.5">
+            <Label>Taxa de Conversão (BRL)</Label>
+            <Input
+              type="number"
+              step="0.0001"
+              value={exchangeRate}
+              onChange={(e) => setExchangeRate(e.target.value)}
+              placeholder="Ex: 5.25"
+              className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
+            />
+          </div>
+
+          <div className="space-y-1.5">
             <Label>Observação</Label>
             <Textarea
               value={observacao}
