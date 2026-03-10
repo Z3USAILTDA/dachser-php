@@ -647,6 +647,8 @@ export default function OlimpoCobranca() {
           </div>
         )}
       </div>
+
+      <ClientDetailSheet client={selectedClient} open={sheetOpen} onOpenChange={setSheetOpen} />
     </PageLayout>
   );
 }
