@@ -13531,6 +13531,28 @@ serve(async (req) => {
             AND (t.container_status IS NULL OR UPPER(t.container_status) NOT LIKE '%NAO_ENCONTRADO%')
             AND (t.last_event IS NULL OR UPPER(t.last_event) NOT LIKE '%PREFIX NOT FOUND%')
             AND (t.last_event IS NULL OR UPPER(t.last_event) NOT LIKE '%NOT FOUND%')
+            AND (
+              -- IMPORT: from ARRIVED/Discharged until RETURNED/Empty returned
+              (UPPER(t.tipo_processo) = 'SEA IMPORT' AND (
+                UPPER(COALESCE(t.container_status, '')) IN ('DISCHARGED', 'ARRIVED', 'GATE-OUT', 'GATE_OUT', 'IMPORT_TO_CONSIGNEE', 'EMPTY_RETURNED', 'RETURNED')
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%arrived%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%discharged%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%gate out%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%return%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%empty%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%atracado%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%descarregado%'
+              ))
+              OR
+              -- EXPORT: from Empty pickup until Gate-in
+              (UPPER(t.tipo_processo) = 'SEA EXPORT' AND (
+                UPPER(COALESCE(t.container_status, '')) IN ('EMPTY_TO_SHIPPER', 'GATE-IN', 'GATE_IN', 'LOADED', 'IN_TRANSIT', 'DEPARTED')
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%empty to shipper%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%gate in%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%loaded%'
+                OR LOWER(COALESCE(t.last_event, '')) LIKE '%embarc%'
+              ))
+            )
           ORDER BY t.id DESC
           LIMIT 1000
         `);
