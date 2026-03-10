@@ -3173,6 +3173,48 @@ serve(async (req) => {
         
         console.log(`CCT Step 2: Found ${shipments.length} shipments`);
         
+        // ==================== STEP 2.1: Fallback dep_datetime from timeline_json ====================
+        // For shipments without awbInfo in Step 1 (outside sliding window), fetch timeline_json separately
+        const missingDepMawbs = shipments
+          .filter((s: any) => !awbStatusMap.has((s.master || '').trim()))
+          .map((s: any) => (s.master || '').trim())
+          .filter((m: string) => m);
+        
+        if (missingDepMawbs.length > 0) {
+          try {
+            const missingFilter = missingDepMawbs.map((m: string) => `'${m.replace(/'/g, "''")}'`).join(',');
+            const fallbackTimelines = await client.query(`
+              SELECT ws.awb, ws.timeline_json
+              FROM ${database}.t_aereo_ws_firecrawl ws
+              INNER JOIN (
+                SELECT awb, MAX(id) as max_id
+                FROM ${database}.t_aereo_ws_firecrawl
+                WHERE awb IN (${missingFilter})
+                GROUP BY awb
+              ) latest ON ws.awb = latest.awb AND ws.id = latest.max_id
+            `);
+            
+            let fallbackCount = 0;
+            for (const fb of (fallbackTimelines || [])) {
+              const depDate = extractDepDateFromTimeline(fb.timeline_json);
+              if (depDate) {
+                const awbKey = (fb.awb || '').trim();
+                // Update matching shipments
+                for (const s of shipments) {
+                  if ((s.master || '').trim() === awbKey && !s.dep_datetime) {
+                    s.dep_datetime = depDate;
+                    s.data_decolagem_ultimo_trecho = depDate;
+                    fallbackCount++;
+                  }
+                }
+              }
+            }
+            console.log(`CCT Step 2.1: Fetched timeline fallback for ${missingDepMawbs.length} MAWBs, extracted DEP for ${fallbackCount}`);
+          } catch (e) {
+            console.warn('CCT Step 2.1: Error fetching fallback timelines (non-fatal):', e);
+          }
+        }
+        
         // ==================== STEP 2.5: Enrich with t_aereo_cct (RFB data) ====================
         // Query t_aereo_cct for MAWB data: RUC, weights, special handling, freight, parties, stock status
         let cctRfbMap = new Map<string, any>();
