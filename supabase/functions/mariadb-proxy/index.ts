@@ -2267,6 +2267,111 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== OLIMPO CLIENT CNPJ DETAIL ====================
+      case 'get_client_cnpj_detail': {
+        const { clientName } = body as { clientName: string };
+        if (!clientName) { result = { success: false, error: 'clientName required' }; break; }
+        console.log(`[get_client_cnpj_detail] Fetching CNPJ detail for: ${clientName}`);
+
+        const cnpjDetailSql = `
+          SELECT
+            REPLACE(REPLACE(REPLACE(t.cnpj, '.', ''), '/', ''), '-', '') AS cnpj_clean,
+            t.cnpj AS cnpj_original,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS aging_30,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS aging_240,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN t.valor_nf ELSE 0 END) AS aging_360,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 360 THEN t.valor_nf ELSE 0 END) AS aging_360_plus,
+            COUNT(*) AS total_count
+          FROM dados_dachser.t_dados_financeiro_nfs t
+          LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
+          WHERE COALESCE(sd.active, 1) = 1
+            AND TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1)) = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM dados_dachser.tbaixas b
+              WHERE b.IdLancamentoRM = t.id_rm
+                AND b.StatusLan IN (1, 2, 3)
+            )
+            AND (t.disputa IS NULL OR t.disputa = 0)
+          GROUP BY cnpj_clean, cnpj_original
+          ORDER BY total_count DESC
+        `;
+
+        const cnpjRows = await client.query(cnpjDetailSql, [clientName]);
+        const mapped = cnpjRows.map((r: any) => ({
+          cnpj: r.cnpj_original || r.cnpj_clean,
+          cnpjClean: r.cnpj_clean,
+          not_due: Number(r.not_due) || 0,
+          aging_30: Number(r.aging_30) || 0,
+          aging_90: Number(r.aging_90) || 0,
+          aging_180: Number(r.aging_180) || 0,
+          aging_240: Number(r.aging_240) || 0,
+          aging_360: Number(r.aging_360) || 0,
+          aging_360_plus: Number(r.aging_360_plus) || 0,
+          totalCount: Number(r.total_count) || 0,
+        }));
+
+        // Also fetch observacoes for all CNPJs of this client
+        const cnpjList = mapped.map((m: any) => m.cnpjClean).filter(Boolean);
+        let observacoes: any[] = [];
+        if (cnpjList.length > 0) {
+          try {
+            await client.execute(`
+              CREATE TABLE IF NOT EXISTS dados_dachser.t_cobranca_observacoes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                cnpj VARCHAR(20) NOT NULL,
+                observacao TEXT,
+                updated_by VARCHAR(100),
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY idx_cnpj (cnpj)
+              )
+            `);
+            const placeholders = cnpjList.map(() => '?').join(',');
+            observacoes = await client.query(
+              `SELECT cnpj, observacao, updated_by, updated_at FROM dados_dachser.t_cobranca_observacoes WHERE cnpj IN (${placeholders})`,
+              cnpjList
+            );
+          } catch (e) {
+            console.warn('[get_client_cnpj_detail] Could not fetch observacoes:', e);
+          }
+        }
+
+        result = { success: true, data: mapped, observacoes };
+        break;
+      }
+
+      // ==================== OLIMPO SAVE OBSERVACAO ====================
+      case 'save_cobranca_observacao': {
+        const { cnpj: obsCnpj, observacao: obsText, updatedBy } = body as { cnpj: string; observacao: string; updatedBy?: string };
+        if (!obsCnpj) { result = { success: false, error: 'cnpj required' }; break; }
+        console.log(`[save_cobranca_observacao] Saving for CNPJ: ${obsCnpj}`);
+
+        try {
+          await client.execute(`
+            CREATE TABLE IF NOT EXISTS dados_dachser.t_cobranca_observacoes (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              cnpj VARCHAR(20) NOT NULL,
+              observacao TEXT,
+              updated_by VARCHAR(100),
+              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              UNIQUE KEY idx_cnpj (cnpj)
+            )
+          `);
+          await client.execute(
+            `INSERT INTO dados_dachser.t_cobranca_observacoes (cnpj, observacao, updated_by) VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE observacao = VALUES(observacao), updated_by = VALUES(updated_by)`,
+            [obsCnpj, obsText || '', updatedBy || null]
+          );
+          result = { success: true };
+        } catch (e: any) {
+          console.error('[save_cobranca_observacao] Error:', e);
+          result = { success: false, error: e.message };
+        }
+        break;
+      }
+
       case 'get_budget_forecast_auto': {
         const { viewMode } = body as { viewMode?: string };
         const safeViewMode = viewMode === 'client' ? 'client' : 'product';
