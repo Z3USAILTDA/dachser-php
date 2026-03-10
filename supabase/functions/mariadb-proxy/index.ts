@@ -3604,7 +3604,7 @@ serve(async (req) => {
           }
           
           // Enrich with t_aereo_cct (RFB) data
-          const rfbInfo = cctRfbMap.get((row.master || '').trim());
+          const rfbInfo = cctRfbMap.get(normalizeMawb(row.master));
           
           // Preserve tracking status; only upgrade if LeadComex provides a more advanced status
           let statusCctOficial = row.status_cct_oficial || 'AGUARDANDO_CONSULTA';
