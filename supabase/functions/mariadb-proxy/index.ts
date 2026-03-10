@@ -7728,10 +7728,14 @@ serve(async (req) => {
           );
         }
 
-        // Determine regras_forma_pag based on bank: DOC for other banks, Crédito CC for Itaú
+        // Determine regras_forma_pag: Boleto first, then bank-based logic
         let regrasFormaPagFinal = "DOC (Compe)"; // Default for other banks
         
-        if (cnpjFornecedorRm) {
+        // If forma_pag is BOLETO, always set regras_forma_pag to "Boleto"
+        const isBoletoPag = formaPag && formaPag.toUpperCase().includes("BOL");
+        if (isBoletoPag) {
+          regrasFormaPagFinal = "Boleto";
+        } else if (cnpjFornecedorRm) {
           try {
             const dadosBancarios = await client.query(`
               SELECT banco
