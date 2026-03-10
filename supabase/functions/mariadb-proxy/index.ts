@@ -6924,6 +6924,30 @@ serve(async (req) => {
             break;
           }
 
+          // Helper: extract pieces count from event description text
+          const extractPiecesFromDesc = (text: string): number | null => {
+            if (!text) return null;
+            const longMatch = text.match(/Pieces:\s*(\d+)/i);
+            if (longMatch) return parseInt(longMatch[1], 10);
+            const shortMatch = text.match(/(\d+)\s*\/\s*[\d.]+\s*KGS/i);
+            if (shortMatch) return parseInt(shortMatch[1], 10);
+            const qtyMatch = text.match(/qty:\s*(\d+)/i);
+            if (qtyMatch) return parseInt(qtyMatch[1], 10);
+            const piecesMatch = text.match(/(\d+)\s*piece(?:s|\(s\))?/i);
+            if (piecesMatch) return parseInt(piecesMatch[1], 10);
+            return null;
+          };
+
+          // Helper: extract weight from event description text
+          const extractWeightFromDesc = (text: string): string | null => {
+            if (!text) return null;
+            const wMatch = text.match(/Weight:\s*([\d.,]+\s*(?:K|KGS?|kg))/i);
+            if (wMatch) return wMatch[1];
+            const kgsMatch = text.match(/([\d.,]+)\s*KGS/i);
+            if (kgsMatch) return `${kgsMatch[1]} KGS`;
+            return null;
+          };
+
           // Helper: extract status code from description text
           const extractStatusCode = (description: string): string => {
             if (!description) return 'UNK';
@@ -7022,8 +7046,8 @@ serve(async (req) => {
               aeroporto: entry.Location || entry.location || null,
               nivel_confianca: 'PRIMARIA',
               created_at: entry.Timestamp || entry.timestamp || null,
-              pecas: entry._pecas ? Number(entry._pecas) : null,
-              peso: entry._peso && entry._peso !== 'N/A' ? String(entry._peso) : null,
+              pecas: entry._pecas ? Number(entry._pecas) : extractPiecesFromDesc(description),
+              peso: entry._peso && entry._peso !== 'N/A' ? String(entry._peso) : extractWeightFromDesc(description),
             };
           });
 
