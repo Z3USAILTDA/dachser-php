@@ -720,12 +720,46 @@ export function useSendTestAlert() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ clientName, emails }: { clientName: string; emails: string[] }) => {
+    mutationFn: async (params: {
+      clientName: string;
+      emails: string[];
+      preInvoice?: PreInvoice;
+      items?: PreInvoiceItem[];
+    }) => {
+      const { clientName, emails, preInvoice, items } = params;
+
+      // Map items to container details for the XLSX attachment
+      const containers = (items || []).map(item => ({
+        number: item.container_number,
+        type: item.container_type || '',
+        size: '',
+        discharge_date: item.period_start_date || '',
+        free_time_days: item.free_time_days || 0,
+        return_deadline: '',
+        return_date: item.period_end_date || '',
+        days_possession: item.days_count || 0,
+        days_incident: item.days_count || 0,
+        rate_period1_usd: item.daily_rate_usd || 0,
+        rate_period2_usd: 0,
+        total_usd: item.total_usd || 0,
+      }));
+
       const { data, error } = await supabase.functions.invoke('demurrage-send-alert', {
         body: {
           test_mode: true,
+          alert_type: containers.length > 0 ? 'cost_statement' : 'initial_notice',
           client_name: clientName,
           recipient_emails: emails,
+          shipment_master: preInvoice?.shipment_mbl || '',
+          house_bl: preInvoice?.bl_number || '',
+          origin_port: preInvoice?.origin_port || '',
+          destination_port: preInvoice?.destination_port || '',
+          exchange_rate: preInvoice?.exchange_rate || 1,
+          total_usd: preInvoice?.total_usd || 0,
+          total_brl: preInvoice?.total_brl || 0,
+          issue_date: preInvoice?.issue_date || new Date().toISOString(),
+          container_number: containers[0]?.number || '',
+          containers,
         }
       });
       if (error) throw error;
