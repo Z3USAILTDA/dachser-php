@@ -6787,6 +6787,14 @@ serve(async (req) => {
               
               if (Array.isArray(rawTimeline)) {
                 timelineData = rawTimeline;
+                // DEBUG: log raw event keys and sample data
+                if (rawTimeline.length > 0) {
+                  console.log(`[DEBUG] Raw timeline keys for AWB ${queryAwb}:`, JSON.stringify(Object.keys(rawTimeline[0])));
+                  console.log(`[DEBUG] First raw event:`, JSON.stringify(rawTimeline[0]).substring(0, 500));
+                  if (rawTimeline.length > 1) {
+                    console.log(`[DEBUG] Second raw event:`, JSON.stringify(rawTimeline[1]).substring(0, 500));
+                  }
+                }
               }
             } catch (parseErr) {
               console.log('Error parsing timeline_json:', parseErr);
