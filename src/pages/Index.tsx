@@ -599,13 +599,35 @@ const Index = () => {
 
         console.log(`AWB Deduplication: ${convertedData.length} -> ${deduplicatedData.length} records`);
 
-        // Restore tracking_failed flags from localStorage so they survive API refreshes
+        // Restore tracking_failed flags from localStorage, but never override valid backend status
         try {
           const stored = localStorage.getItem("tracking-failed-flags") || "{}";
           const flags: Record<string, boolean> = JSON.parse(stored);
-          const withFlags = deduplicatedData.map((item: AWBData) =>
-            flags[item.awb] ? { ...item, tracking_failed: true } : item
-          );
+
+          const hasValidStatus = (item: AWBData) => {
+            const status = (item.status || "").trim();
+            const statusDescription = (item.status_description || "").trim();
+            return (
+              (status !== "" && status !== "-" && status.toUpperCase() !== "UNK") ||
+              (statusDescription !== "" && statusDescription !== "-")
+            );
+          };
+
+          const cleanedFlags: Record<string, boolean> = { ...flags };
+          const withFlags = deduplicatedData.map((item: AWBData) => {
+            const flagged = !!flags[item.awb];
+            if (!flagged) return item;
+
+            // If backend already has status info, stale flag must be ignored and removed
+            if (hasValidStatus(item)) {
+              delete cleanedFlags[item.awb];
+              return { ...item, tracking_failed: false };
+            }
+
+            return { ...item, tracking_failed: true };
+          });
+
+          localStorage.setItem("tracking-failed-flags", JSON.stringify(cleanedFlags));
           setStatusAereoData(withFlags);
         } catch (_) {
           setStatusAereoData(deduplicatedData);
