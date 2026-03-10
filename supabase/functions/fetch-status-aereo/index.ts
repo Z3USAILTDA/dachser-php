@@ -411,13 +411,36 @@ function extractLastEventDescription(timelineJson: string | null, etdStr?: strin
     }
 
     const now = new Date();
+    // IATA hierarchy for tiebreaking when events share the same timestamp
+    const IATA_ORDER: Record<string, number> = {
+      'BKD': 1, 'RCS': 2, 'MAN': 3, 'PRE': 3, 'FFM': 3,
+      'DEP': 4, 'TFD': 4,
+      'RCT': 5, 'TGC': 5,
+      'RCF': 6, 'CRC': 6,
+      'AWD': 7, 'AWR': 7,
+      'NFD': 8,
+      'DLV': 9, 'POD': 9,
+      'DIS': 3, 'OFLD': 3,
+      'ARR': 10,
+    };
+
+    const getEventStatus = (ev: any): string => {
+      const raw = ev.Status || ev.status || ev.codigo_evento || ev.code || '';
+      return String(raw).trim().toUpperCase();
+    };
+
     const sorted = [...events].sort((a: any, b: any) => {
       const dateA = a.date || a.Date || a.timestamp || a.Timestamp || a.time || a.datetime || a.dataEvento || '';
       const dateB = b.date || b.Date || b.timestamp || b.Timestamp || b.time || b.datetime || b.dataEvento || '';
       if (!dateA && !dateB) return 0;
       if (!dateA) return 1;
       if (!dateB) return -1;
-      return String(dateB).localeCompare(String(dateA));
+      const cmp = String(dateB).localeCompare(String(dateA));
+      if (cmp !== 0) return cmp;
+      // Same timestamp: use IATA hierarchy as tiebreaker (higher = more advanced)
+      const orderA = IATA_ORDER[getEventStatus(a)] ?? 0;
+      const orderB = IATA_ORDER[getEventStatus(b)] ?? 0;
+      return orderB - orderA;
     });
 
     const filtered = (etdCutoff
@@ -441,7 +464,7 @@ function extractLastEventDescription(timelineJson: string | null, etdStr?: strin
 
     if (filtered.length === 0) return null;
 
-    // Return the description of the most recent event
+    // Return the description of the most recent (and highest-priority) event
     const latest = filtered[0];
     return (latest.Description || latest.description || latest.descricao_evento || latest.title || latest.details || '').trim() || null;
   } catch (_e) {
