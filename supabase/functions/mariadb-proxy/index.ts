@@ -6858,7 +6858,7 @@ serve(async (req) => {
 
                 if (statusMatch && (timeClose || !apiDate || !fcTime)) {
                   // Enrich firecrawl event with pecas/peso
-                  fcEvt._pecas = apiEvt.quantidadeCarga ?? null;
+                  fcEvt._pecas = apiEvt.quantidadeCargo ?? apiEvt.quantidadeCarga ?? null;
                   fcEvt._peso = apiEvt.pesoCarga ?? null;
                   matched = true;
                   break;
