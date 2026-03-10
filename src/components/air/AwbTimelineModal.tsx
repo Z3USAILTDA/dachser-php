@@ -142,7 +142,26 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
 
   const events = data?.data || [];
   const trackingFailed = data?.tracking_failed || false;
-  const discrepancy = data?.discrepancy || null;
+  const backendDiscrepancy = data?.discrepancy || null;
+
+  // Pieces summary: always calculate when events have pieces data
+  const piecesSummary = React.useMemo(() => {
+    const piecesValues = events
+      .map((e: TimelineEvent) => e.pecas)
+      .filter((v): v is number => v != null && v > 0);
+    if (piecesValues.length === 0) return null;
+    const unique = [...new Set(piecesValues)];
+    const hasDiscrepancy = backendDiscrepancy != null || unique.length >= 2;
+    return {
+      values: unique,
+      min: Math.min(...unique),
+      max: Math.max(...unique),
+      hasDiscrepancy,
+      declared: unique[unique.length - 1], // earliest event's pieces (last in DESC-sorted array)
+      current: unique[0], // latest event's pieces
+    };
+  }, [backendDiscrepancy, events]);
+  const discrepancy = backendDiscrepancy || (piecesSummary?.hasDiscrepancy ? { field: 'pecas', values: piecesSummary.values, min: piecesSummary.min, max: piecesSummary.max } : null);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -165,6 +184,18 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
         </DialogHeader>
 
         <div className="overflow-y-auto max-h-[55vh] pr-2 mt-4">
+          {/* Pieces summary / discrepancy alert */}
+          {piecesSummary && !discrepancy && (
+            <Alert className="mb-4 border-blue-500/30 bg-blue-500/10">
+              <Package className="h-4 w-4 text-blue-400" />
+              <AlertDescription className="text-blue-300 text-sm">
+                📦 Peças declaradas: <strong>{piecesSummary.declared}</strong> · Peso: {
+                  events.find((e: TimelineEvent) => e.peso)?.peso || 'N/A'
+                }
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Discrepancy alert banner */}
           {discrepancy && (
             <Alert className="mb-4 border-amber-500/40 bg-amber-500/10">
