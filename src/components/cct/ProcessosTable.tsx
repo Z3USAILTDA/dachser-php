@@ -178,7 +178,7 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                   <TableCell>
                     {(() => {
                       // Use the consolidated status_cct_oficial from backend (already merges tracking + LeadComex + RFB)
-                      const effectiveManifestacao = processo.status_atual?.status_cct_oficial || 'INFORMADA';
+                      const effectiveManifestacao = String(processo.status_atual?.status_cct_oficial || 'INFORMADA');
                       
                       const manifestacaoDots: Record<string, { label: string; bgColor: string }> = {
                         'INFORMADA': { label: 'Informada', bgColor: 'bg-cyan-500' },
