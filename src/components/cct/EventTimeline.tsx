@@ -241,7 +241,21 @@ export function EventTimeline({ eventos }: EventTimelineProps) {
                   
                   {/* Description */}
                   {evento.descricao && evento.descricao !== evento.codigo_evento && (
-                    <p className="text-sm text-[#aaa] mt-2">{evento.descricao}</p>
+                    <p className={cn(
+                      "text-sm mt-2",
+                      evento.codigo_evento?.toUpperCase() === 'BLOQUEIO' 
+                        ? "text-red-400 font-medium" 
+                        : evento.codigo_evento?.toUpperCase() === 'DESBLOQUEIO'
+                          ? "text-emerald-400 font-medium"
+                          : "text-[#aaa]"
+                    )}>
+                      {evento.descricao}
+                    </p>
+                  )}
+                  
+                  {/* Motivo do bloqueio - fallback when descricao equals codigo */}
+                  {evento.codigo_evento?.toUpperCase() === 'BLOQUEIO' && (!evento.descricao || evento.descricao === evento.codigo_evento || evento.descricao === 'BLOQUEIO') && (
+                    <p className="text-sm text-red-400/70 mt-2 italic">Motivo não informado</p>
                   )}
                   
                   {/* Aeroporto */}
