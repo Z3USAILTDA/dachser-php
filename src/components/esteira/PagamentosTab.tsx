@@ -338,9 +338,13 @@ export const PagamentosTab = () => {
         if (pagamento) {
           const dadosBancarios = dadosBancariosCache[pagamento.cnpj_fornecedor];
           
-          // Determinar regra de forma de pagamento baseado no banco
+          // Determinar regra de forma de pagamento baseado no tipo
           let regrasFormaPag = "DOC (Compe)";
-          if (dadosBancarios) {
+          
+          // Se é boleto, sempre "Boleto"
+          if (isBoleto(pagamento.forma_pagamento as any)) {
+            regrasFormaPag = "Boleto";
+          } else if (dadosBancarios) {
             const bancoUpper = (dadosBancarios.banco || "").toUpperCase();
             if (bancoUpper.includes("ITAU") || bancoUpper.includes("ITAÚ") || bancoUpper.includes("341")) {
               regrasFormaPag = "Crédito em Conta Corrente da Mesma Titularidade";
@@ -708,6 +712,14 @@ export const PagamentosTab = () => {
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 p-3 rounded-xl bg-primary/10 border border-primary/30">
           <span className="text-sm font-medium">{selectedIds.size} selecionado(s)</span>
+          {/* Sum of selected vouchers */}
+          <span className="text-sm font-bold text-primary">
+            {(() => {
+              const selectedPags = pagamentos.filter(p => selectedIds.has(p.id));
+              const sum = selectedPags.reduce((acc, p) => acc + (p.valor || 0), 0);
+              return `Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sum)}`;
+            })()}
+          </span>
           <div className="flex-1" />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

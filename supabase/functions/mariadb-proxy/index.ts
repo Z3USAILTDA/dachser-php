@@ -2026,7 +2026,7 @@ serve(async (req) => {
         const MAX_DIAS_ATRASO = 120;
         
         const sqlCount = `
-          SELECT stage, COUNT(*) as qt
+          SELECT stage, COUNT(*) as qt, COALESCE(SUM(valor_nf), 0) as total_valor
           FROM (
             SELECT
               CASE
@@ -2049,7 +2049,8 @@ serve(async (req) => {
                     WHEN DATEDIFF(CURDATE(), t.data_vencimento) >= 60 THEN 'D60'
                     ELSE NULL
                   END
-              END AS stage
+              END AS stage,
+              t.valor_nf
             FROM dados_dachser.t_dados_financeiro_nfs t
             LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
             WHERE COALESCE(sd.active, 1) = 1
@@ -2072,15 +2073,17 @@ serve(async (req) => {
         
         const countRows = await client.query(sqlCount, [MAX_DIAS_ATRASO]);
         const counts: Record<string, number> = { PRE: 0, D1: 0, D7: 0, D15: 0, D30: 0, D45: 0, D60: 0 };
+        const amounts: Record<string, number> = { PRE: 0, D1: 0, D7: 0, D15: 0, D30: 0, D45: 0, D60: 0 };
         
         for (const row of countRows) {
           if (row.stage && counts.hasOwnProperty(row.stage)) {
             counts[row.stage] = Number(row.qt) || 0;
+            amounts[row.stage] = Number(row.total_valor) || 0;
           }
         }
         
-        console.log('Régua counts:', counts);
-        result = { success: true, counts };
+        console.log('Régua counts:', counts, 'amounts:', amounts);
+        result = { success: true, counts, amounts };
         break;
       }
 
@@ -2092,13 +2095,15 @@ serve(async (req) => {
           SELECT
             COALESCE(t.modal, 'Outros') AS product,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS aging_30,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS aging_240,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN t.valor_nf ELSE 0 END) AS aging_360,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 360 THEN t.valor_nf ELSE 0 END) AS aging_360_plus,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 1 ELSE 0 END) AS count_not_due,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 90 THEN 1 ELSE 0 END) AS count_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN 1 ELSE 0 END) AS count_30,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 90 THEN 1 ELSE 0 END) AS count_90,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN 1 ELSE 0 END) AS count_180,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN 1 ELSE 0 END) AS count_240,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN 1 ELSE 0 END) AS count_360,
@@ -2121,20 +2126,22 @@ serve(async (req) => {
         // Calculate totals
         const totals = {
           product: 'Grand Total',
-          not_due: 0, aging_90: 0, aging_180: 0, aging_240: 0, aging_360: 0, aging_360_plus: 0,
-          count_not_due: 0, count_90: 0, count_180: 0, count_240: 0, count_360: 0, count_360_plus: 0,
+          not_due: 0, aging_30: 0, aging_90: 0, aging_180: 0, aging_240: 0, aging_360: 0, aging_360_plus: 0,
+          count_not_due: 0, count_30: 0, count_90: 0, count_180: 0, count_240: 0, count_360: 0, count_360_plus: 0,
         };
         
         const rows = agingRows.map((r: any) => {
           const row = {
             product: r.product || 'Outros',
             not_due: Number(r.not_due) || 0,
+            aging_30: Number(r.aging_30) || 0,
             aging_90: Number(r.aging_90) || 0,
             aging_180: Number(r.aging_180) || 0,
             aging_240: Number(r.aging_240) || 0,
             aging_360: Number(r.aging_360) || 0,
             aging_360_plus: Number(r.aging_360_plus) || 0,
             count_not_due: Number(r.count_not_due) || 0,
+            count_30: Number(r.count_30) || 0,
             count_90: Number(r.count_90) || 0,
             count_180: Number(r.count_180) || 0,
             count_240: Number(r.count_240) || 0,
@@ -2142,12 +2149,14 @@ serve(async (req) => {
             count_360_plus: Number(r.count_360_plus) || 0,
           };
           totals.not_due += row.not_due;
+          totals.aging_30 += row.aging_30;
           totals.aging_90 += row.aging_90;
           totals.aging_180 += row.aging_180;
           totals.aging_240 += row.aging_240;
           totals.aging_360 += row.aging_360;
           totals.aging_360_plus += row.aging_360_plus;
           totals.count_not_due += row.count_not_due;
+          totals.count_30 += row.count_30;
           totals.count_90 += row.count_90;
           totals.count_180 += row.count_180;
           totals.count_240 += row.count_240;
@@ -2176,17 +2185,20 @@ serve(async (req) => {
           SELECT
             TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1)) AS product,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS aging_30,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS aging_240,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN t.valor_nf ELSE 0 END) AS aging_360,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 360 THEN t.valor_nf ELSE 0 END) AS aging_360_plus,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 1 ELSE 0 END) AS count_not_due,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 90 THEN 1 ELSE 0 END) AS count_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN 1 ELSE 0 END) AS count_30,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 90 THEN 1 ELSE 0 END) AS count_90,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN 1 ELSE 0 END) AS count_180,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN 1 ELSE 0 END) AS count_240,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN 1 ELSE 0 END) AS count_360,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 360 THEN 1 ELSE 0 END) AS count_360_plus
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 360 THEN 1 ELSE 0 END) AS count_360_plus,
+            GROUP_CONCAT(DISTINCT REPLACE(REPLACE(REPLACE(t.cnpj, '.', ''), '/', ''), '-', '') SEPARATOR ',') AS cnpjs
           FROM dados_dachser.t_dados_financeiro_nfs t
           LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
           WHERE COALESCE(sd.active, 1) = 1
@@ -2197,40 +2209,45 @@ serve(async (req) => {
             )
             AND (t.disputa IS NULL OR t.disputa = 0)
           GROUP BY TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))
-          ORDER BY SUM(t.valor_nf) DESC
+          ORDER BY COUNT(*) DESC
         `;
         
         const clientAgingRows = await client.query(clientAgingSql);
         
         const clientTotals = {
           product: 'Grand Total',
-          not_due: 0, aging_90: 0, aging_180: 0, aging_240: 0, aging_360: 0, aging_360_plus: 0,
-          count_not_due: 0, count_90: 0, count_180: 0, count_240: 0, count_360: 0, count_360_plus: 0,
+          not_due: 0, aging_30: 0, aging_90: 0, aging_180: 0, aging_240: 0, aging_360: 0, aging_360_plus: 0,
+          count_not_due: 0, count_30: 0, count_90: 0, count_180: 0, count_240: 0, count_360: 0, count_360_plus: 0,
         };
         
         const clientRows = clientAgingRows.map((r: any) => {
           const row = {
             product: r.product || 'Sem Cliente',
             not_due: Number(r.not_due) || 0,
+            aging_30: Number(r.aging_30) || 0,
             aging_90: Number(r.aging_90) || 0,
             aging_180: Number(r.aging_180) || 0,
             aging_240: Number(r.aging_240) || 0,
             aging_360: Number(r.aging_360) || 0,
             aging_360_plus: Number(r.aging_360_plus) || 0,
             count_not_due: Number(r.count_not_due) || 0,
+            count_30: Number(r.count_30) || 0,
             count_90: Number(r.count_90) || 0,
             count_180: Number(r.count_180) || 0,
             count_240: Number(r.count_240) || 0,
             count_360: Number(r.count_360) || 0,
             count_360_plus: Number(r.count_360_plus) || 0,
+            cnpjs: r.cnpjs ? r.cnpjs.split(',') : [],
           };
           clientTotals.not_due += row.not_due;
+          clientTotals.aging_30 += row.aging_30;
           clientTotals.aging_90 += row.aging_90;
           clientTotals.aging_180 += row.aging_180;
           clientTotals.aging_240 += row.aging_240;
           clientTotals.aging_360 += row.aging_360;
           clientTotals.aging_360_plus += row.aging_360_plus;
           clientTotals.count_not_due += row.count_not_due;
+          clientTotals.count_30 += row.count_30;
           clientTotals.count_90 += row.count_90;
           clientTotals.count_180 += row.count_180;
           clientTotals.count_240 += row.count_240;
@@ -7728,10 +7745,14 @@ serve(async (req) => {
           );
         }
 
-        // Determine regras_forma_pag based on bank: DOC for other banks, Crédito CC for Itaú
+        // Determine regras_forma_pag: Boleto first, then bank-based logic
         let regrasFormaPagFinal = "DOC (Compe)"; // Default for other banks
         
-        if (cnpjFornecedorRm) {
+        // If forma_pag is BOLETO, always set regras_forma_pag to "Boleto"
+        const isBoletoPag = formaPag && formaPag.toUpperCase().includes("BOL");
+        if (isBoletoPag) {
+          regrasFormaPagFinal = "Boleto";
+        } else if (cnpjFornecedorRm) {
           try {
             const dadosBancarios = await client.query(`
               SELECT banco
@@ -7841,10 +7862,13 @@ serve(async (req) => {
 
         for (const v of vouchersToSync) {
           try {
-            // Determine regras_forma_pag based on bank
+            // Determine regras_forma_pag: Boleto first, then bank-based
             let regrasFormaPag = "DOC (Compe)";
             
-            if (v.cnpj_fornecedor) {
+            const isBoletoPagSync = v.forma_pagamento && v.forma_pagamento.toUpperCase().includes("BOL");
+            if (isBoletoPagSync) {
+              regrasFormaPag = "Boleto";
+            } else if (v.cnpj_fornecedor) {
               try {
                 const dadosBancarios = await client.query(`
                   SELECT banco

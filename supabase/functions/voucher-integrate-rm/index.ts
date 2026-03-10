@@ -46,13 +46,15 @@ const getMariaDBClient = async (): Promise<Client> => {
 
 // Map RM payment methods to form values
 const mapFormaPagamento = (rmValue: string | null): string => {
-  if (!rmValue) return "TRANSFERENCIA_PIX";
+  if (!rmValue) return "BOLETO";
   const upper = rmValue.toUpperCase();
+  if (upper.includes("BOL")) return "BOLETO";
   if (upper.includes("PIX")) return "TRANSFERENCIA_PIX";
-  if (upper.includes("BOLETO")) return "BOLETO";
   if (upper.includes("TED") || upper.includes("DOC") || upper.includes("TRANSF")) return "TRANSFERENCIA_PIX";
   if (upper.includes("DEBITO")) return "DEBITO_CONTA";
-  return "TRANSFERENCIA_PIX";
+  if (upper.includes("DARF")) return "DARF";
+  if (upper.includes("GPS")) return "GPS";
+  return "BOLETO";
 };
 
 const handler = async (req: Request): Promise<Response> => {

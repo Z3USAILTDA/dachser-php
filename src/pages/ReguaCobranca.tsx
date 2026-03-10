@@ -36,6 +36,16 @@ interface StageCounts {
   D60: number;
 }
 
+interface StageAmounts {
+  PRE: number;
+  D1: number;
+  D7: number;
+  D15: number;
+  D30: number;
+  D45: number;
+  D60: number;
+}
+
 interface StageRow {
   razao_base: string;
   razao_social: string;
@@ -105,6 +115,9 @@ function ReguaCobrancaContent() {
   const [counts, setCounts] = useState<StageCounts>({
     PRE: 0, D1: 0, D7: 0, D15: 0, D30: 0, D45: 0, D60: 0,
   });
+  const [amounts, setAmounts] = useState<StageAmounts>({
+    PRE: 0, D1: 0, D7: 0, D15: 0, D30: 0, D45: 0, D60: 0,
+  });
   const [totalTitles, setTotalTitles] = useState(0);
   
   const [loading, setLoading] = useState(true);
@@ -159,6 +172,9 @@ function ReguaCobrancaContent() {
       if (data?.success && data.counts) {
         setCounts(data.counts);
         setTotalTitles(Object.values(data.counts as StageCounts).reduce((a, b) => a + b, 0));
+        if (data.amounts) {
+          setAmounts(data.amounts);
+        }
       }
     } catch (err) {
       console.error("Erro ao carregar contagens:", err);
@@ -618,36 +634,54 @@ Financeiro Dachser`;
 
       {/* Ruler Panel */}
       <PageCard>
-        <div className="relative py-10 px-5 min-h-[120px]">
+        <div className="relative py-14 px-5 min-h-[140px]">
           {/* Bar */}
           <div className="absolute left-5 right-5 top-1/2 h-[2px] bg-[#3a3a3a] -translate-y-1/2 rounded" />
 
           {/* Ticks, Labels, Bubbles */}
-          {Object.entries(STAGE_POSITIONS).map(([stage, pos]) => (
-            <div key={stage}>
-              <div
-                className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-[2px] h-9 bg-[#8a8a8a] cursor-pointer hover:bg-primary transition-colors"
-                style={{ left: `${pos}%` }}
-                onClick={() => toggleStage(stage)}
-              />
-              <div
-                className="absolute top-2 -translate-x-1/2 text-[13px] text-[#e5e5e5] whitespace-nowrap cursor-pointer hover:text-primary transition-colors"
-                style={{ left: `${pos}%` }}
-                onClick={() => toggleStage(stage)}
-              >
-                {STAGE_LABELS[stage]}
+          {Object.entries(STAGE_POSITIONS).map(([stage, pos]) => {
+            const amount = amounts[stage as keyof StageAmounts] || 0;
+            const formatAmount = (v: number) => {
+              if (v >= 1_000_000) return `R$ ${(v / 1_000_000).toFixed(1)}M`;
+              if (v >= 1_000) return `R$ ${(v / 1_000).toFixed(0)}K`;
+              return `R$ ${v.toFixed(0)}`;
+            };
+            return (
+              <div key={stage}>
+                <div
+                  className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-[2px] h-9 bg-[#8a8a8a] cursor-pointer hover:bg-primary transition-colors"
+                  style={{ left: `${pos}%` }}
+                  onClick={() => toggleStage(stage)}
+                />
+                <div
+                  className="absolute top-1 -translate-x-1/2 text-[13px] text-[#e5e5e5] whitespace-nowrap cursor-pointer hover:text-primary transition-colors"
+                  style={{ left: `${pos}%` }}
+                  onClick={() => toggleStage(stage)}
+                >
+                  {STAGE_LABELS[stage]}
+                </div>
+                <div
+                  className={`absolute bottom-6 -translate-x-1/2 min-w-[28px] h-7 px-2 rounded-full bg-[#111] border border-white/18 text-[12px] flex items-center justify-center cursor-pointer hover:border-primary transition-colors ${
+                    counts[stage as keyof StageCounts] === 0 ? "opacity-40" : ""
+                  }`}
+                  style={{ left: `${pos}%` }}
+                  onClick={() => toggleStage(stage)}
+                >
+                  {loading ? "..." : counts[stage as keyof StageCounts]}
+                </div>
+                {/* Amount below the count bubble */}
+                <div
+                  className={`absolute bottom-0 -translate-x-1/2 text-[10px] whitespace-nowrap cursor-pointer transition-colors ${
+                    amount > 0 ? "text-primary font-semibold" : "text-muted-foreground opacity-40"
+                  }`}
+                  style={{ left: `${pos}%` }}
+                  onClick={() => toggleStage(stage)}
+                >
+                  {loading ? "" : formatAmount(amount)}
+                </div>
               </div>
-              <div
-                className={`absolute bottom-2 -translate-x-1/2 min-w-[28px] h-7 px-2 rounded-full bg-[#111] border border-white/18 text-[12px] flex items-center justify-center cursor-pointer hover:border-primary transition-colors ${
-                  counts[stage as keyof StageCounts] === 0 ? "opacity-40" : ""
-                }`}
-                style={{ left: `${pos}%` }}
-                onClick={() => toggleStage(stage)}
-              >
-                {loading ? "..." : counts[stage as keyof StageCounts]}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Legend */}

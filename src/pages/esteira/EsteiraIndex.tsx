@@ -650,8 +650,9 @@ const EsteiraIndex = () => {
   // Auto-filter etapa based on user role
   useEffect(() => {
     if (roleLoading || !role) return;
+    // OPERACAO users should NOT auto-filter by etapa, since roleFilteredVouchers 
+    // already handles showing both OPERACAO and A_PROCESSAR stages
     const roleEtapaMap: Record<string, string> = {
-      OPERACAO: "OPERACAO",
       FISCAL: "FISCAL",
       SUPERVISOR: "SUPERVISOR",
       FINANCEIRO: "FINANCEIRO",
