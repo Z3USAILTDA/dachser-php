@@ -537,7 +537,8 @@ export default function OlimpoCobranca() {
                         const rowTotal = row.not_due + rowOverdue;
                         const isBadDebt = row.aging_360_plus > 0;
                         return (
-                          <tr key={idx} className={`border-b border-border/30 hover:bg-muted/10 ${isBadDebt ? "bg-red-500/5" : ""}`}>
+                          <tr key={idx} className={`border-b border-border/30 hover:bg-muted/10 ${isBadDebt ? "bg-red-500/5" : ""} ${viewMode === "client" ? "cursor-pointer" : ""}`}
+                            onClick={() => { if (viewMode === "client") { setSelectedClient(row); setSheetOpen(true); } }}>
                             <td className="py-2.5 px-4 font-medium text-foreground">
                               {row.product}
                               {row.cnpjs && row.cnpjs.length > 1 && (
