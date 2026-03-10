@@ -40,7 +40,7 @@ export function DemurrageFreeTimeDialog({ open, onOpenChange, onSuccess }: Demur
   const [suggestions, setSuggestions] = useState<ClienteResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const createFreeTime = useCreateClientFreeTime();
 
