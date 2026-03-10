@@ -290,39 +290,49 @@ function determinarTipoVoo(aeroportoOrigem: string, aeroportoPaisMap: Map<string
   return PAISES_AMERICA_SUL.includes(pais || '') ? 'VOO_CURTO' : 'VOO_LONGO';
 }
 
-// Calcular limite do SLA baseado no tipo de voo
+// Calcular limite do SLA de manifestação baseado no tipo de voo
+// SLA mede: tempo desde DEP até o prazo para manifestar no CCT
+// Se já manifestou → SLA não se aplica (retorna null)
 function calcularSlaLimite(
   tipoVoo: string,
   dataDecolagem: Date | null,
   eta: Date | null,
-  statusManifestacao: string
+  statusCctOficial: string,
+  dataManifestacao: Date | null
 ): Date | null {
-  // Não calcular SLA para processos já entregues/finalizados
+  // Processos já entregues/finalizados → sem SLA
   const statusFinais = ['ENTREGUE', 'DLV', 'POD'];
-  const statusNormalizado = (statusManifestacao || '').toUpperCase().trim();
-  if (statusFinais.includes(statusNormalizado)) return null;
+  const statusNorm = (statusCctOficial || '').toUpperCase().trim();
+  if (statusFinais.includes(statusNorm)) return null;
 
-  if (tipoVoo === 'VOO_CURTO' && dataDecolagem) {
-    return new Date(dataDecolagem.getTime() + 30 * 60 * 1000); // +30 min
+  // Já manifestado no CCT → SLA cumprido, não precisa mais exibir
+  if (dataManifestacao) return null;
+
+  // Sem data de decolagem → não há como calcular SLA
+  if (!dataDecolagem) return null;
+
+  if (tipoVoo === 'VOO_CURTO') {
+    return new Date(dataDecolagem.getTime() + 30 * 60 * 1000); // DEP + 30min
   }
 
   if (tipoVoo === 'VOO_LONGO') {
-    if (eta) return new Date(eta.getTime() - 4 * 60 * 60 * 1000); // ETA -4h (regra principal)
-    if (dataDecolagem) return new Date(dataDecolagem.getTime() + 4 * 60 * 60 * 1000); // fallback: DEP +4h
+    if (eta) return new Date(eta.getTime() - 4 * 60 * 60 * 1000); // ETA - 4h
+    return new Date(dataDecolagem.getTime() + 4 * 60 * 60 * 1000); // fallback: DEP + 4h
   }
 
   return null;
 }
 
 // Calcular status do SLA
-function calcularSlaStatus(slaLimite: Date | null): 'OK' | 'ALERTA' | 'CRITICO' {
+function calcularSlaStatus(slaLimite: Date | null): 'OK' | 'ALERTA' | 'CRITICO' | 'VENCIDO' {
   if (!slaLimite) return 'OK';
   
   const now = new Date();
   const alertaLimite = new Date(slaLimite.getTime() - 60 * 60 * 1000); // -1 hora
   
-  if (now >= slaLimite) return 'CRITICO';
-  if (now >= alertaLimite) return 'ALERTA';
+  if (now >= slaLimite) return 'VENCIDO';
+  if (now >= alertaLimite) return 'CRITICO';
+  if (now >= new Date(slaLimite.getTime() - 2 * 60 * 60 * 1000)) return 'ALERTA';
   return 'OK';
 }
 
