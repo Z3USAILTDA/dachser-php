@@ -3200,11 +3200,7 @@ serve(async (req) => {
                 if (Array.isArray(raw)) partesEstoque = raw;
               } catch {}
               
-              let partes: any[] = [];
-              try {
-                const raw = typeof rfb.partes === 'string' ? JSON.parse(rfb.partes) : rfb.partes;
-                if (Array.isArray(raw)) partes = raw;
-              } catch {}
+              
               
               let hawbAssociados: any[] = [];
               try {
