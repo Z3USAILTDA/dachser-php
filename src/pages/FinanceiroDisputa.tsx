@@ -101,7 +101,7 @@ function FinanceiroDisputaContent() {
   // Responsável editing state
   const [savingResponsavel, setSavingResponsavel] = useState<Record<string, boolean>>({});
   const [editingResponsavel, setEditingResponsavel] = useState<string | null>(null);
-  const responsavelDebounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
+  const responsavelDebounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const responsavelInputRef = useRef<HTMLInputElement>(null);
 
   // Bulk actions state

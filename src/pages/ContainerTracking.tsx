@@ -423,7 +423,7 @@ const ContainerTracking = () => {
   const [consigneeSuggestions, setConsigneeSuggestions] = useState<ClienteSugerido[]>([]);
   const [consigneePopoverOpen, setConsigneePopoverOpen] = useState(false);
   const [isSearchingConsignee, setIsSearchingConsignee] = useState(false);
-  const searchConsigneeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const searchConsigneeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Função de busca de consignees com debounce
   const searchConsignee = (term: string) => {
