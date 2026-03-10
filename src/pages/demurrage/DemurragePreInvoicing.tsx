@@ -57,6 +57,8 @@ export default function DemurragePreInvoicing() {
   const [infoDialogOpen, setInfoDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<PreInvoice | null>(null);
   const [infoInvoice, setInfoInvoice] = useState<PreInvoice | null>(null);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailInvoice, setEmailInvoice] = useState<PreInvoice | null>(null);
 
   const { data: preInvoices = [], isLoading, refetch } = useDemurragePreInvoices();
   const updateMutation = useUpdatePreInvoice();
