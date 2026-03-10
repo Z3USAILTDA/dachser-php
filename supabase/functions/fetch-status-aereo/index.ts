@@ -985,22 +985,21 @@ serve(async (req) => {
         }
       }
 
-      // Safety net: if no status but timeline has valid events, use fallback
-      if (!finalStatus && timelineHasValidEvents(timelineStr)) {
-        const rawWs = (rawStatus || '').trim().toUpperCase();
-        if (rawWs && rawWs !== 'UNK' && !invalidStatuses.has(rawWs)) {
-          finalStatus = rawWs;
-        } else {
-          finalStatus = 'EM RASTREIO';
+      // Safety net: if no status but timeline has valid events, use raw last event status
+      if (!finalStatus) {
+        const rawTimelineStatus = extractLastStatusFromTimeline(timelineStr);
+        if (rawTimelineStatus) {
+          finalStatus = classifyArrival(rawTimelineStatus, timelineStr, destForClassify, origForClassify, awb);
+          console.log(`[timelineSafety] ${awb}: using raw timeline last event status "${rawTimelineStatus}" → "${finalStatus}"`);
         }
-        console.log(`[timelineSafety] ${awb}: timeline has events but no resolved status, using "${finalStatus}"`);
       }
 
       // Final guard: if status is still UNK after all resolution
       if (finalStatus && finalStatus.toUpperCase() === 'UNK') {
-        if (timelineHasValidEvents(timelineStr)) {
-          finalStatus = 'EM RASTREIO';
-          console.log(`[unkGuard] ${awb}: UNK with valid timeline, using "EM RASTREIO"`);
+        const rawTimelineStatus = extractLastStatusFromTimeline(timelineStr);
+        if (rawTimelineStatus && rawTimelineStatus !== 'UNK') {
+          finalStatus = rawTimelineStatus;
+          console.log(`[unkGuard] ${awb}: UNK with valid timeline, using raw "${rawTimelineStatus}"`);
         } else {
           finalStatus = null;
           console.log(`[unkGuard] ${awb}: resolved to UNK with no timeline, marking as tracking failed`);
