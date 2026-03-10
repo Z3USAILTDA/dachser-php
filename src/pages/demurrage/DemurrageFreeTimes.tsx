@@ -397,6 +397,16 @@ export default function DemurrageFreeTimes() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Create Free Time Dialog */}
+      <DemurrageFreeTimeDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onSuccess={() => {
+          refetch();
+          recalcMutation.mutate();
+        }}
+      />
     </DemurrageLayout>
   );
 }
