@@ -297,18 +297,20 @@ function calcularSlaLimite(
   eta: Date | null,
   statusManifestacao: string
 ): Date | null {
-  // Não calcular SLA para processos já entregues
+  // Não calcular SLA para processos já entregues/finalizados
   const statusFinais = ['ENTREGUE', 'DLV', 'POD'];
-  if (statusFinais.includes(statusManifestacao?.toUpperCase?.())) return null;
-  
+  const statusNormalizado = (statusManifestacao || '').toUpperCase().trim();
+  if (statusFinais.includes(statusNormalizado)) return null;
+
   if (tipoVoo === 'VOO_CURTO' && dataDecolagem) {
     return new Date(dataDecolagem.getTime() + 30 * 60 * 1000); // +30 min
   }
-  
-  if (tipoVoo === 'VOO_LONGO' && eta) {
-    return new Date(eta.getTime() - 4 * 60 * 60 * 1000); // -4 horas
+
+  if (tipoVoo === 'VOO_LONGO') {
+    if (eta) return new Date(eta.getTime() - 4 * 60 * 60 * 1000); // ETA -4h (regra principal)
+    if (dataDecolagem) return new Date(dataDecolagem.getTime() + 4 * 60 * 60 * 1000); // fallback: DEP +4h
   }
-  
+
   return null;
 }
 
