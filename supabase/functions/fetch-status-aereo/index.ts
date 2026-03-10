@@ -747,6 +747,95 @@ serve(async (req) => {
     const wsList = Array.isArray(wsRows) ? wsRows : [];
     console.log(`Found ${wsList.length} AWBs from t_aereo_ws_firecrawl`);
 
+    // ========== PASSO 1.1: Buscar AWBs órfãos de t_master_dados (não presentes no firecrawl) ==========
+    const firecrawlAwbSet = new Set(wsList.map((ws: any) => String(ws.awb || '').trim()));
+    try {
+      let masterOrphanQuery: string;
+      let masterOrphanParams: string[] = [];
+
+      if (search && search.trim() !== '') {
+        const searchPattern = `%${search.trim()}%`;
+        masterOrphanQuery = `
+          SELECT TRIM(mawb) as mawb, MAX(data_insert) as data_insert
+          FROM ${database}.t_master_dados
+          WHERE tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
+            AND data_insert >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            AND (TRIM(mawb) LIKE ? OR cliente LIKE ?)
+          GROUP BY TRIM(mawb)
+          ORDER BY MAX(data_insert) DESC
+          LIMIT 200
+        `;
+        masterOrphanParams = [searchPattern, searchPattern];
+      } else {
+        masterOrphanQuery = `
+          SELECT TRIM(mawb) as mawb, MAX(data_insert) as data_insert
+          FROM ${database}.t_master_dados
+          WHERE tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
+            AND data_insert >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+          GROUP BY TRIM(mawb)
+          ORDER BY MAX(data_insert) DESC
+          LIMIT 200
+        `;
+      }
+
+      const [orphanRows] = await client.query(masterOrphanQuery, masterOrphanParams) as [any[], any];
+      const orphanList = (Array.isArray(orphanRows) ? orphanRows : [])
+        .filter((r: any) => {
+          const mawb = String(r.mawb || '').trim();
+          return mawb && !firecrawlAwbSet.has(mawb);
+        });
+
+      if (orphanList.length > 0) {
+        console.log(`PASSO 1.1: Found ${orphanList.length} orphan AWBs from t_master_dados (not in firecrawl)`);
+
+        // Check t_aereo_api for these orphan AWBs
+        const orphanAwbs = orphanList.map((r: any) => String(r.mawb).trim());
+        const orphanInClause = orphanAwbs.map((a: string) => `'${a.replace(/'/g, "''")}'`).join(',');
+        const [orphanApiRows] = await client.query(`
+          SELECT mawb, hawb, destinatario, nome_analista, email_analista,
+                 emaill_cliente, tipo_servico, ultimo_status, origem, destino,
+                 historico_status
+          FROM ${database}.t_aereo_api
+          WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci IN (${orphanInClause})
+          ORDER BY id DESC
+        `) as [any[], any];
+        const orphanApiList = Array.isArray(orphanApiRows) ? orphanApiRows : [];
+        const orphanApiMap = new Map<string, any>();
+        for (const row of orphanApiList) {
+          const mawb = String(row.mawb || '').trim();
+          if (mawb && !orphanApiMap.has(mawb)) orphanApiMap.set(mawb, row);
+        }
+
+        // Create synthetic wsList entries for each orphan AWB
+        for (const orphan of orphanList) {
+          const mawb = String(orphan.mawb).trim();
+          const apiRow = orphanApiMap.get(mawb);
+          const syntheticEntry: any = {
+            id: null,
+            awb: mawb,
+            last_status_code: apiRow?.ultimo_status || null,
+            last_status_description: apiRow?.ultimo_status || null,
+            origin: apiRow?.origem || null,
+            destination: apiRow?.destino || null,
+            last_flight: null,
+            scraped_at: orphan.data_insert || null,
+            timeline_json: apiRow?.historico_status || null,
+            _source: 'master_only',
+          };
+          if (apiRow) {
+            syntheticEntry._apiFallback = apiRow;
+          }
+          wsList.push(syntheticEntry);
+          firecrawlAwbSet.add(mawb);
+        }
+        console.log(`PASSO 1.1: Added ${orphanList.length} synthetic entries to wsList (total now: ${wsList.length})`);
+      } else {
+        console.log('PASSO 1.1: No orphan AWBs found');
+      }
+    } catch (orphanErr) {
+      console.warn('PASSO 1.1: Error fetching orphan AWBs (non-blocking):', orphanErr instanceof Error ? orphanErr.message : String(orphanErr));
+    }
+
     if (wsList.length === 0) {
       return new Response(
         JSON.stringify({ success: true, data: [] }),
