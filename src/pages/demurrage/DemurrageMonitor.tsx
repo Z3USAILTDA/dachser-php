@@ -460,8 +460,8 @@ export default function DemurrageMonitor() {
                       <TableHead className="text-center">Free Time</TableHead>
                       <TableHead className="text-center">Dias Rest.</TableHead>
                       <TableHead>Risco</TableHead>
-                      <TableHead className="text-right">Demurrage</TableHead>
-                    </TableRow>
+                      <TableHead className="text-right">Demurrage (USD)</TableHead>
+                      <TableHead className="text-right">Total BRL</TableHead>
                   </TableHeader>
                   <TableBody>
                     {paginatedContainers.map((container) => (
