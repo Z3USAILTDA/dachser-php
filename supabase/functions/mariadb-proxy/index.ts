@@ -2026,7 +2026,7 @@ serve(async (req) => {
         const MAX_DIAS_ATRASO = 120;
         
         const sqlCount = `
-          SELECT stage, COUNT(*) as qt
+          SELECT stage, COUNT(*) as qt, COALESCE(SUM(valor_nf), 0) as total_valor
           FROM (
             SELECT
               CASE
@@ -2049,7 +2049,8 @@ serve(async (req) => {
                     WHEN DATEDIFF(CURDATE(), t.data_vencimento) >= 60 THEN 'D60'
                     ELSE NULL
                   END
-              END AS stage
+              END AS stage,
+              t.valor_nf
             FROM dados_dachser.t_dados_financeiro_nfs t
             LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
             WHERE COALESCE(sd.active, 1) = 1
@@ -2072,15 +2073,17 @@ serve(async (req) => {
         
         const countRows = await client.query(sqlCount, [MAX_DIAS_ATRASO]);
         const counts: Record<string, number> = { PRE: 0, D1: 0, D7: 0, D15: 0, D30: 0, D45: 0, D60: 0 };
+        const amounts: Record<string, number> = { PRE: 0, D1: 0, D7: 0, D15: 0, D30: 0, D45: 0, D60: 0 };
         
         for (const row of countRows) {
           if (row.stage && counts.hasOwnProperty(row.stage)) {
             counts[row.stage] = Number(row.qt) || 0;
+            amounts[row.stage] = Number(row.total_valor) || 0;
           }
         }
         
-        console.log('Régua counts:', counts);
-        result = { success: true, counts };
+        console.log('Régua counts:', counts, 'amounts:', amounts);
+        result = { success: true, counts, amounts };
         break;
       }
 

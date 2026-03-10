@@ -449,7 +449,10 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       key={voucher.id} 
                       className={cn(
                         "hover:bg-primary/5 transition-all duration-200 cursor-pointer", 
-                        getRowClassName(voucher.vencimento)
+                        getRowClassName(voucher.vencimento),
+                        // Highlight vouchers that returned from another stage (ajuste)
+                        (voucher.etapaAtual === "AJUSTE_OPERACAO" || voucher.etapaAtual === "AJUSTE_FISCAL" || voucher.ajusteOperacao || voucher.ajusteFiscal)
+                          && "border-l-4 border-l-orange-500 bg-orange-500/5"
                       )}
                       onDoubleClick={() => onViewDetails(voucher)}
                     >
