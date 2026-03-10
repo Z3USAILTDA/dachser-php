@@ -160,6 +160,8 @@ const StatusAereoList = () => {
                               ? 'bg-red-500/20 text-red-700 dark:text-red-300'
                               : item.último_status === 'DLV' 
                               ? 'bg-green-500/20 text-green-700 dark:text-green-300'
+                              : item.último_status === 'EM RASTREIO'
+                              ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300'
                               : item.último_status === 'ERRO' || item.último_status === 'NOT_FOUND'
                               ? 'bg-red-500/20 text-red-700 dark:text-red-300'
                               : 'bg-blue-500/20 text-blue-700 dark:text-blue-300'
