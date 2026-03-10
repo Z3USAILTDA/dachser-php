@@ -6894,7 +6894,7 @@ serve(async (req) => {
                 const fcDesc = (fcEvt.Description || fcEvt.description || '').toUpperCase();
                 const fcLoc = (fcEvt.Location || fcEvt.location || '').toUpperCase();
                 if (fcDesc.includes(apiStatus) || fcLoc.includes(apiAirport)) {
-                  fcEvt._pecas = apiEvt.quantidadeCarga ?? null;
+                  fcEvt._pecas = apiEvt.quantidadeCargo ?? apiEvt.quantidadeCarga ?? null;
                   fcEvt._peso = apiEvt.pesoCarga ?? null;
                   break;
                 }
