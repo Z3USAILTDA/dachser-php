@@ -7006,7 +7006,7 @@ serve(async (req) => {
           // Convert timeline entries to frontend format
           // Supports two formats:
           // - t_aereo_ws_firecrawl: { Description, Timestamp, Location, Carrier }
-          // - t_aereo_api: { status, aeroporto, dataEvento, voo, quantidadeCarga, pesoCarga }
+          // - t_aereo_api: { status, aeroporto, dataEvento, voo, quantidadeCargo, pesoCarga }
           const events = timelineData.map((entry: any, idx: number) => {
             // t_aereo_api format (or _fromApi merged entries)
             if ((entry.status && !entry.Description && !entry.description) || entry._fromApi) {
