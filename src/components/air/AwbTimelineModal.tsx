@@ -184,6 +184,18 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
         </DialogHeader>
 
         <div className="overflow-y-auto max-h-[55vh] pr-2 mt-4">
+          {/* Pieces summary / discrepancy alert */}
+          {piecesSummary && !discrepancy && (
+            <Alert className="mb-4 border-blue-500/30 bg-blue-500/10">
+              <Package className="h-4 w-4 text-blue-400" />
+              <AlertDescription className="text-blue-300 text-sm">
+                📦 Peças declaradas: <strong>{piecesSummary.declared}</strong> · Peso: {
+                  events.find((e: TimelineEvent) => e.peso)?.peso || 'N/A'
+                }
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Discrepancy alert banner */}
           {discrepancy && (
             <Alert className="mb-4 border-amber-500/40 bg-amber-500/10">
