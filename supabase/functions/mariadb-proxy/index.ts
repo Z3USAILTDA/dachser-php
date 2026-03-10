@@ -13697,6 +13697,23 @@ serve(async (req) => {
         break;
       }
 
+      case 'demurrage_search_clientes': {
+        const { search: searchTerm } = body as { search: string };
+        if (!searchTerm || searchTerm.length < 2) {
+          result = { success: true, data: [] };
+          break;
+        }
+        const clientes = await client.query(`
+          SELECT DISTINCT nome_cliente, dchr_customer_number, cnpj 
+          FROM dados_dachser.t_clientes_base 
+          WHERE nome_cliente LIKE ? 
+          ORDER BY nome_cliente ASC 
+          LIMIT 15
+        `, [`%${searchTerm}%`]);
+        result = { success: true, data: clientes || [] };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
