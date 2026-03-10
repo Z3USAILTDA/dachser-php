@@ -6976,13 +6976,13 @@ serve(async (req) => {
           // - t_aereo_ws_firecrawl: { Description, Timestamp, Location, Carrier }
           // - t_aereo_api: { status, aeroporto, dataEvento, voo, quantidadeCarga, pesoCarga }
           const events = timelineData.map((entry: any, idx: number) => {
-            // t_aereo_api format
-            if (entry.status && !entry.Description && !entry.description) {
+            // t_aereo_api format (or _fromApi merged entries)
+            if ((entry.status && !entry.Description && !entry.description) || entry._fromApi) {
               const statusCode = (entry.status || '').toUpperCase();
               const airport = entry.aeroporto || '';
               const flight = entry.voo || '';
-              const qty = entry.quantidadeCarga;
-              const weight = entry.pesoCarga;
+              const qty = entry._pecas ?? entry.quantidadeCarga;
+              const weight = entry._peso ?? entry.pesoCarga;
               
               // Build description from API fields
               let desc = statusCode;
@@ -7002,6 +7002,8 @@ serve(async (req) => {
                 aeroporto: airport || null,
                 nivel_confianca: 'PRIMARIA',
                 created_at: entry.dataEvento || null,
+                pecas: qty && qty > 0 ? Number(qty) : null,
+                peso: weight && weight !== 'N/A' ? String(weight) : null,
               };
             }
             
@@ -7020,6 +7022,8 @@ serve(async (req) => {
               aeroporto: entry.Location || entry.location || null,
               nivel_confianca: 'PRIMARIA',
               created_at: entry.Timestamp || entry.timestamp || null,
+              pecas: entry._pecas ? Number(entry._pecas) : null,
+              peso: entry._peso && entry._peso !== 'N/A' ? String(entry._peso) : null,
             };
           });
 
