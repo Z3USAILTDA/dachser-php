@@ -3930,7 +3930,7 @@ serve(async (req) => {
           const paisOrigem = aeroportoPaisMap.get(row.aeroporto_origem?.toUpperCase()?.trim()) || 'Desconhecido';
           
           // Calculate sla_limite based on tipo_voo
-          const slaLimite = calcularSlaLimite(tipoVoo, depDatetime, eta, statusManifestacao);
+          const slaLimite = calcularSlaLimite(tipoVoo, depDatetime, eta, statusCode);
           
           // Calculate sla_status
           let slaStatus = calcularSlaStatus(slaLimite);
