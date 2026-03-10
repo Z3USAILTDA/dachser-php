@@ -98,6 +98,11 @@ export default function ProcessoTimeline() {
       'BLOQUEIO': 99,
     };
     
+    // Check if DESBLOQUEIO exists (block was resolved)
+    const hasDesbloqueio = allEventos.some(evt => 
+      (evt.codigo_evento?.toUpperCase() || '') === 'DESBLOQUEIO'
+    );
+    
     // Find the MOST ADVANCED status from all timeline events (hierarchy wins, not chronology)
     let bestTimelineStatus = baseStatus;
     let bestTimelineOrder = CCT_STATUS_ORDER[baseStatus] || 0;
@@ -106,6 +111,9 @@ export default function ProcessoTimeline() {
       const code = evt.codigo_evento?.toUpperCase() || '';
       const mapped = CCT_EVENT_TO_STATUS[code];
       if (mapped) {
+        // Skip BLOQUEIO if a DESBLOQUEIO exists (block was resolved)
+        if (mapped === 'BLOQUEIO' && hasDesbloqueio) continue;
+        
         const order = CCT_STATUS_ORDER[mapped] || 0;
         if (order > bestTimelineOrder) {
           bestTimelineStatus = mapped;
