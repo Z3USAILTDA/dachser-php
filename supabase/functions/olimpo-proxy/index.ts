@@ -6066,19 +6066,28 @@ serve(async (req) => {
             ts.last_check,
             ts.shipping_line,
             CASE 
-              WHEN ts.eta IS NOT NULL AND ts.eta < DATE_SUB(NOW(), INTERVAL 3 DAY) THEN 1 
-              ELSE 0 
+              WHEN COALESCE(MAX(sm.eta), MAX(mdn.eta)) IS NOT NULL 
+                AND MAX(ts.eta) IS NOT NULL
+                AND MAX(ts.eta) > COALESCE(MAX(sm.eta), MAX(mdn.eta))
+                AND DATEDIFF(MAX(ts.eta), COALESCE(MAX(sm.eta), MAX(mdn.eta))) >= 3
+              THEN 1 ELSE 0 
             END AS is_eta_delayed,
-            ot.origem_lat,
-            ot.origem_lon,
-            ot.destino_lat,
-            ot.destino_lon,
-            ot.current_lat,
-            ot.current_lon,
-            ot.last_api_update
+            MAX(ot.origem_lat) as origem_lat,
+            MAX(ot.origem_lon) as origem_lon,
+            MAX(ot.destino_lat) as destino_lat,
+            MAX(ot.destino_lon) as destino_lon,
+            MAX(ot.current_lat) as current_lat,
+            MAX(ot.current_lon) as current_lon,
+            MAX(ot.last_api_update) as last_api_update
           FROM dados_dachser.t_tracking_sea ts
           LEFT JOIN dados_dachser.t_olimpo_tracking ot 
             ON ot.mode = 'sea' AND ot.asset COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
+          LEFT JOIN dados_dachser.t_sea_master sm
+            ON TRIM(sm.master) COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
+          LEFT JOIN dados_dachser.t_master_dados mdn
+            ON TRIM(mdn.mawb) COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
+            AND mdn.tipo_processo IN ('SI', 'SE')
+            AND mdn.data_abertura >= '2026-02-01'
           WHERE ts.active = 1
             AND NOT (
               UPPER(ts.container_status) IN ('DELIVERED', 'DLV', 'GOD', 'EMPTY_RETURNED')
