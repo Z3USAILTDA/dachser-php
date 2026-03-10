@@ -7845,10 +7845,13 @@ serve(async (req) => {
 
         for (const v of vouchersToSync) {
           try {
-            // Determine regras_forma_pag based on bank
+            // Determine regras_forma_pag: Boleto first, then bank-based
             let regrasFormaPag = "DOC (Compe)";
             
-            if (v.cnpj_fornecedor) {
+            const isBoletoPagSync = v.forma_pagamento && v.forma_pagamento.toUpperCase().includes("BOL");
+            if (isBoletoPagSync) {
+              regrasFormaPag = "Boleto";
+            } else if (v.cnpj_fornecedor) {
               try {
                 const dadosBancarios = await client.query(`
                   SELECT banco
