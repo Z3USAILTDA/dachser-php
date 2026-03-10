@@ -493,6 +493,15 @@ export default function DemurragePreInvoicing() {
                             >
                               <Edit2 className="h-4 w-4" />
                             </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-blue-400"
+                              onClick={() => { setEmailInvoice(invoice); setEmailDialogOpen(true); }}
+                              title="Enviar E-mail de Teste"
+                            >
+                              <Mail className="h-4 w-4" />
+                            </Button>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
@@ -523,14 +532,6 @@ export default function DemurragePreInvoicing() {
                                 >
                                   <Send className="h-4 w-4 mr-2" />
                                   Lançar no Othello
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator className="bg-[rgba(255,255,255,0.1)]" />
-                                <DropdownMenuItem
-                                  onClick={() => { setEmailInvoice(invoice); setEmailDialogOpen(true); }}
-                                  className="cursor-pointer"
-                                >
-                                  <Mail className="h-4 w-4 mr-2" />
-                                  Enviar E-mail de Teste
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator className="bg-[rgba(255,255,255,0.1)]" />
                                 <DropdownMenuItem 
