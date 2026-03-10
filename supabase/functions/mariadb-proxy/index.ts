@@ -305,8 +305,8 @@ function calcularSlaLimite(
   const statusNorm = (statusCctOficial || '').toUpperCase().trim();
   if (statusFinais.includes(statusNorm)) return null;
 
-  // Já manifestado no CCT → SLA cumprido, não precisa mais exibir
-  if (dataManifestacao) return null;
+  // Já manifestado no CCT → still calculate the limit for reference (status will be CUMPRIDO)
+  // Don't return null anymore so we can show "Cumprido" badge
 
   // Sem data de decolagem → não há como calcular SLA
   if (!dataDecolagem) return null;
