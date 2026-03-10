@@ -1976,6 +1976,7 @@ const Index = () => {
         "AUD",
         "NFD",
         "AWD",
+        "AWR",
         // UNK: companhias com códigos proprietários (ex: Delta); mostrado em badge amarelo
         // O backend tenta resolver via timeline, mas caso não consiga, mantemos visível
         "UNK",
