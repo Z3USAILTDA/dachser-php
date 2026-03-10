@@ -156,6 +156,8 @@ export default function OlimpoCobranca() {
   const [viewMode, setViewMode] = useState<"product" | "client">("product");
   const [clientFilter, setClientFilter] = useState("");
   const [budgetForecast, setBudgetForecast] = useState<BudgetForecast | null>(null);
+  const [selectedClient, setSelectedClient] = useState<AgingRow | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const { toast } = useToast();
 
   const fetchData = async () => {
