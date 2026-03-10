@@ -3219,10 +3219,10 @@ serve(async (req) => {
                 if (Array.isArray(raw)) viagensAssociadas = raw;
               } catch {}
               
-              // Extract consignatario from partes
-              const consignatario = partes.find((p: any) => {
-                const tipo = (p?.tipo || p?.funcao || '').toLowerCase();
-                return tipo.includes('consignat') || tipo.includes('destinat');
+              // Extract consignatario from partesEstoque
+              const consignatario = partesEstoque.find((p: any) => {
+                const resp = (p?.cnpjResponsavelAtual || '').trim();
+                return resp.length > 0;
               });
               
               // Extract most advanced situacao from partesEstoque
