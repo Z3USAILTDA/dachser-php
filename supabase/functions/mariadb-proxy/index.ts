@@ -3945,8 +3945,8 @@ serve(async (req) => {
           const dataManifestacao = row.data_manifestacao_cct ? new Date(row.data_manifestacao_cct) : null;
           const slaLimite = calcularSlaLimite(tipoVoo, depDatetime, eta, statusCode, dataManifestacao);
           
-          // Calculate sla_status
-          let slaStatus = calcularSlaStatus(slaLimite);
+          // Calculate sla_status - if already manifested, status is CUMPRIDO
+          let slaStatus: string = dataManifestacao ? 'CUMPRIDO' : calcularSlaStatus(slaLimite);
           
           // Calculate horasRestantes for display
           const horasRestantes = slaLimite 
