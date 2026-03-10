@@ -107,7 +107,7 @@ export function DemurrageFreeTimeDialog({ open, onOpenChange, onSuccess }: Demur
       notas: notas.trim() || undefined,
     };
 
-    if (customerNumber) (data as any).customer_number = customerNumber;
+    if (tipoFt === 'CONTRATO' && customerNumber) (data as any).customer_number = customerNumber;
     if (tipoConteiner) (data as any).tipo_conteiner = tipoConteiner;
 
     if (tipoFt === 'CONTRATO') {
