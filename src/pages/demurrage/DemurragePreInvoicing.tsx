@@ -459,6 +459,24 @@ export default function DemurragePreInvoicing() {
                         <TableCell className="text-right font-semibold text-[#ffc800]">
                           {formatCurrency(invoice.total_usd)}
                         </TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={exchangeRates[invoice.id] ?? ''}
+                            onChange={(e) => handleExchangeRateChange(invoice.id, e.target.value)}
+                            onBlur={() => handleExchangeRateBlur(invoice)}
+                            placeholder="0.00"
+                            className="w-[90px] h-7 text-right text-xs bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.15)] px-2"
+                          />
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-green-400">
+                          {(() => {
+                            const rate = parseFloat(exchangeRates[invoice.id] || '0');
+                            if (!rate) return '-';
+                            return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((invoice.total_usd || 0) * rate);
+                          })()}
+                        </TableCell>
                         <TableCell>{getWorkflowBadge(invoice.workflow_status)}</TableCell>
                         <TableCell className="text-sm">{(invoice as any).status_info || '-'}</TableCell>
                         <TableCell className="font-mono text-sm">{(invoice as any).misk || '-'}</TableCell>
