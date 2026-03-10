@@ -7013,7 +7013,7 @@ serve(async (req) => {
               const statusCode = (entry.status || '').toUpperCase();
               const airport = entry.aeroporto || '';
               const flight = entry.voo || '';
-              const qty = entry._pecas ?? entry.quantidadeCarga;
+              const qty = entry._pecas ?? entry.quantidadeCargo ?? entry.quantidadeCarga;
               const weight = entry._peso ?? entry.pesoCarga;
               
               // Build description from API fields
