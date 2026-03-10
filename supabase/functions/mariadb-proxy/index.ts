@@ -3635,12 +3635,28 @@ serve(async (req) => {
             }
           }
           
-          // Apply canonical ordering: use the MOST ADVANCED status from all sources
-          if (rfbInfo?.rfb_status_cct) {
-            const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
-            const rfbOrder = CCT_STATUS_ORDER[rfbInfo.rfb_status_cct] || 0;
-            if (rfbOrder > currentOrder && rfbInfo.rfb_status_cct !== 'BLOQUEIO') {
-              statusCctOficial = rfbInfo.rfb_status_cct;
+          // Apply chronological merge: if RFB has a more recent timestamp, its status wins
+          // regardless of hierarchy. Hierarchy is only used as tiebreaker.
+          if (rfbInfo?.rfb_status_cct && rfbInfo.rfb_status_cct !== 'BLOQUEIO') {
+            const trackingTs = row.ultimo_evento_data ? new Date(row.ultimo_evento_data).getTime() : 0;
+            const rfbTs = rfbInfo.rfb_timestamp ? new Date(rfbInfo.rfb_timestamp).getTime() : 0;
+            
+            if (rfbTs > 0 && trackingTs > 0) {
+              // Both have timestamps: most recent wins
+              if (rfbTs > trackingTs) {
+                statusCctOficial = rfbInfo.rfb_status_cct;
+              } else if (rfbTs === trackingTs) {
+                // Tiebreaker: use hierarchy
+                const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
+                const rfbOrder = CCT_STATUS_ORDER[rfbInfo.rfb_status_cct] || 0;
+                if (rfbOrder > currentOrder) statusCctOficial = rfbInfo.rfb_status_cct;
+              }
+              // If trackingTs > rfbTs, keep tracking status (already set)
+            } else {
+              // No timestamps available on one side: fallback to hierarchy
+              const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
+              const rfbOrder = CCT_STATUS_ORDER[rfbInfo.rfb_status_cct] || 0;
+              if (rfbOrder > currentOrder) statusCctOficial = rfbInfo.rfb_status_cct;
             }
           }
           
