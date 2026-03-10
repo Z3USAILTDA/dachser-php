@@ -3272,15 +3272,18 @@ serve(async (req) => {
                 manuseios_especiais: manuseios,
                 rfb_situacao: rfbSituacao,
                 rfb_status_cct: rfbSituacaoMapped,
-                consignatario_cnpj: consignatario?.cnpj || consignatario?.documento || null,
-                consignatario_nome: consignatario?.nome || consignatario?.razaoSocial || null,
+                consignatario_cnpj: consignatario?.cnpjResponsavelAtual || null,
+                consignatario_nome: null,
                 numero_voo: numeroVoo,
                 data_emissao: rfb.dataEmissao || null,
                 info_frete: infoFrete,
                 hawb_associados: hawbAssociados,
               });
             }
-            console.log(`CCT Step 2.5: Enriched ${cctRfbMap.size} MAWBs with RFB data from t_aereo_cct`);
+            console.log(`CCT Step 2.5: Enriched ${cctRfbMap.size}/${mawbList.length} MAWBs with RFB data from t_aereo_cct`);
+            if (cctRfbMap.size === 0 && mawbList.length > 0) {
+              console.warn('CCT Step 2.5: ⚠️ ALERT - 0% enrichment rate. Check t_aereo_cct data availability.');
+            }
           } catch (rfbErr) {
             console.warn('CCT Step 2.5: Error fetching t_aereo_cct (non-fatal):', rfbErr);
           }
