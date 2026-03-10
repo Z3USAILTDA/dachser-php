@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Mail } from "lucide-react";
-import { useSendTestAlert, type PreInvoice } from "@/hooks/useDemurrageData";
+import { useSendTestAlert, useDemurragePreInvoiceItems, type PreInvoice } from "@/hooks/useDemurrageData";
 import { toast } from "sonner";
 
 interface SendTestEmailDialogProps {
@@ -16,6 +16,7 @@ interface SendTestEmailDialogProps {
 export function SendTestEmailDialog({ open, onOpenChange, preInvoice }: SendTestEmailDialogProps) {
   const [email, setEmail] = useState("");
   const sendMutation = useSendTestAlert();
+  const { data: items } = useDemurragePreInvoiceItems(preInvoice?.id ?? null);
 
   const handleSend = async () => {
     if (!preInvoice || !email.trim()) return;
@@ -24,8 +25,10 @@ export function SendTestEmailDialog({ open, onOpenChange, preInvoice }: SendTest
       await sendMutation.mutateAsync({
         clientName: preInvoice.client_name || "Teste",
         emails: [email.trim()],
+        preInvoice,
+        items: items || [],
       });
-      toast.success("E-mail de teste enviado com sucesso");
+      toast.success("E-mail de teste enviado com sucesso (com anexo XLSX)");
       onOpenChange(false);
       setEmail("");
     } catch (error) {
@@ -45,6 +48,11 @@ export function SendTestEmailDialog({ open, onOpenChange, preInvoice }: SendTest
           </DialogTitle>
           <DialogDescription>
             Pré-Fatura: {preInvoice.invoice_number} • {preInvoice.client_name || "Sem cliente"}
+            {items && items.length > 0 && (
+              <span className="block text-xs mt-1 text-muted-foreground">
+                📎 Demonstrativo XLSX será anexado ({items.length} item(ns))
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -60,7 +68,7 @@ export function SendTestEmailDialog({ open, onOpenChange, preInvoice }: SendTest
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            O e-mail de notificação de demurrage será enviado para o destinatário acima como teste.
+            O e-mail de notificação será enviado com o demonstrativo de cobrança em anexo (XLSX).
           </p>
         </div>
 
