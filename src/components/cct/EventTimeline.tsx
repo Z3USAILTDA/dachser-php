@@ -173,11 +173,15 @@ export function EventTimeline({ eventos }: EventTimelineProps) {
     );
   }
 
-  // Ordenar eventos por data DESC (mais recente primeiro) e remover duplicados por status
+  // Ordenar eventos por data DESC (mais recente primeiro) e remover duplicados
+  // Para BLOQUEIO/DESBLOQUEIO: manter todos (cada um tem motivo diferente)
+  // Para outros: manter apenas a primeira ocorrência de cada código (a mais recente)
   const sortedEventos = [...eventos]
     .sort((a, b) => new Date(b.data_hora_evento).getTime() - new Date(a.data_hora_evento).getTime())
     .filter((evento, index, arr) => {
-      // Mantém apenas a primeira ocorrência de cada código de evento (a mais recente)
+      const code = evento.codigo_evento?.toUpperCase() || '';
+      // Keep all BLOQUEIO/DESBLOQUEIO events (each has a different reason)
+      if (code === 'BLOQUEIO' || code === 'DESBLOQUEIO') return true;
       return arr.findIndex(e => e.codigo_evento === evento.codigo_evento) === index;
     });
 
@@ -241,7 +245,21 @@ export function EventTimeline({ eventos }: EventTimelineProps) {
                   
                   {/* Description */}
                   {evento.descricao && evento.descricao !== evento.codigo_evento && (
-                    <p className="text-sm text-[#aaa] mt-2">{evento.descricao}</p>
+                    <p className={cn(
+                      "text-sm mt-2",
+                      evento.codigo_evento?.toUpperCase() === 'BLOQUEIO' 
+                        ? "text-red-400 font-medium" 
+                        : evento.codigo_evento?.toUpperCase() === 'DESBLOQUEIO'
+                          ? "text-emerald-400 font-medium"
+                          : "text-[#aaa]"
+                    )}>
+                      {evento.descricao}
+                    </p>
+                  )}
+                  
+                  {/* Motivo do bloqueio - fallback when descricao equals codigo */}
+                  {evento.codigo_evento?.toUpperCase() === 'BLOQUEIO' && (!evento.descricao || evento.descricao === evento.codigo_evento || evento.descricao === 'BLOQUEIO') && (
+                    <p className="text-sm text-red-400/70 mt-2 italic">Motivo não informado</p>
                   )}
                   
                   {/* Aeroporto */}
