@@ -4,6 +4,7 @@ import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { 
   FileText, Clock, CheckCircle2, Send, Eye, AlertTriangle, DollarSign,
   MoreHorizontal, FileSpreadsheet, Loader2, RefreshCw, Plus, Edit2, Mail
@@ -59,10 +60,39 @@ export default function DemurragePreInvoicing() {
   const [infoInvoice, setInfoInvoice] = useState<PreInvoice | null>(null);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailInvoice, setEmailInvoice] = useState<PreInvoice | null>(null);
+  const [exchangeRates, setExchangeRates] = useState<Record<number, string>>({});
 
   const { data: preInvoices = [], isLoading, refetch } = useDemurragePreInvoices();
   const updateMutation = useUpdatePreInvoice();
   const generateMutation = useGeneratePreInvoices();
+
+  // Initialize exchange rates from loaded data
+  useEffect(() => {
+    if (preInvoices.length > 0) {
+      const rates: Record<number, string> = {};
+      preInvoices.forEach((pi: any) => {
+        if (pi.exchange_rate) rates[pi.id] = String(pi.exchange_rate);
+      });
+      setExchangeRates(prev => ({ ...rates, ...prev }));
+    }
+  }, [preInvoices]);
+
+  const handleExchangeRateChange = (invoiceId: number, value: string) => {
+    setExchangeRates(prev => ({ ...prev, [invoiceId]: value }));
+  };
+
+  const handleExchangeRateBlur = async (invoice: PreInvoice) => {
+    const rate = exchangeRates[invoice.id];
+    const numRate = rate ? parseFloat(rate) : null;
+    const currentRate = (invoice as any).exchange_rate || null;
+    if (numRate === currentRate) return;
+    try {
+      await updateMutation.mutateAsync({
+        invoiceId: invoice.id,
+        updates: { exchange_rate: numRate }
+      });
+    } catch { /* handled by hook */ }
+  };
   
   const handleViewDetails = (invoice: PreInvoice) => {
     setSelectedInvoice(invoice);
@@ -396,6 +426,8 @@ export default function DemurragePreInvoicing() {
                       <TableHead>Navio</TableHead>
                       <TableHead>Data Emissão</TableHead>
                       <TableHead className="text-right">Total USD</TableHead>
+                      <TableHead className="text-right w-[110px]">Taxa Conversão</TableHead>
+                      <TableHead className="text-right">Total BRL</TableHead>
                       <TableHead>Workflow</TableHead>
                       <TableHead>Status Info</TableHead>
                       <TableHead>MISK</TableHead>
@@ -427,6 +459,24 @@ export default function DemurragePreInvoicing() {
                         <TableCell>{formatDate(invoice.issue_date)}</TableCell>
                         <TableCell className="text-right font-semibold text-[#ffc800]">
                           {formatCurrency(invoice.total_usd)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={exchangeRates[invoice.id] ?? ''}
+                            onChange={(e) => handleExchangeRateChange(invoice.id, e.target.value)}
+                            onBlur={() => handleExchangeRateBlur(invoice)}
+                            placeholder="0.00"
+                            className="w-[90px] h-7 text-right text-xs bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.15)] px-2"
+                          />
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-green-400">
+                          {(() => {
+                            const rate = parseFloat(exchangeRates[invoice.id] || '0');
+                            if (!rate) return '-';
+                            return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((invoice.total_usd || 0) * rate);
+                          })()}
                         </TableCell>
                         <TableCell>{getWorkflowBadge(invoice.workflow_status)}</TableCell>
                         <TableCell className="text-sm">{(invoice as any).status_info || '-'}</TableCell>
