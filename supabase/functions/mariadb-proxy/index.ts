@@ -3837,62 +3837,25 @@ serve(async (req) => {
             }
           }
           
-          // Apply chronological merge: if RFB has a more recent timestamp, its status wins
-          // regardless of hierarchy. Hierarchy is only used as tiebreaker.
+          // Apply RFB status ONLY if it's MORE ADVANCED than current (never downgrade)
           if (rfbInfo?.rfb_status_cct && rfbInfo.rfb_status_cct !== 'BLOQUEIO') {
-            const trackingTs = row.ultimo_evento_data ? new Date(row.ultimo_evento_data).getTime() : 0;
-            const rfbTs = rfbInfo.rfb_timestamp ? new Date(rfbInfo.rfb_timestamp).getTime() : 0;
-            
-            if (rfbTs > 0 && trackingTs > 0) {
-              // Both have timestamps: most recent wins
-              if (rfbTs > trackingTs) {
-                statusCctOficial = rfbInfo.rfb_status_cct;
-              } else if (rfbTs === trackingTs) {
-                // Tiebreaker: use hierarchy
-                const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
-                const rfbOrder = CCT_STATUS_ORDER[rfbInfo.rfb_status_cct] || 0;
-                if (rfbOrder > currentOrder) statusCctOficial = rfbInfo.rfb_status_cct;
-              }
-              // If trackingTs > rfbTs, keep tracking status (already set)
-            } else {
-              // No timestamps available on one side: fallback to hierarchy
-              const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
-              const rfbOrder = CCT_STATUS_ORDER[rfbInfo.rfb_status_cct] || 0;
-              if (rfbOrder > currentOrder) statusCctOficial = rfbInfo.rfb_status_cct;
+            const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
+            const rfbOrder = CCT_STATUS_ORDER[rfbInfo.rfb_status_cct] || 0;
+            if (rfbOrder > currentOrder) {
+              statusCctOficial = rfbInfo.rfb_status_cct;
             }
           }
           
-          // Override with t_cct_eventos_historico if it has a more recent event
-          // This ensures dashboard matches ProcessoTimeline detail page
+          // Override with t_cct_eventos_historico - TIMELINE IS SUPREME
+          // The most advanced event from the history table always wins (by hierarchy, not timestamp)
           const evtHistorico = eventosHistoricoMap.get(houseKey);
           if (evtHistorico) {
-            const evtCode = evtHistorico.codigo_evento;
-            const eventToCctStatus: Record<string, string> = {
-              'AREA_TRANSFERENCIA': 'EM_AREA_TRANSFERENCIA',
-              'MANIFESTADO': 'MANIFESTADA',
-              'RECEPCIONADO': 'RECEPCIONADA',
-              'CHEGADA_INFORMADA': 'INFORMADA',
-              'CHEGADA_AERONAVE': 'INFORMADA',
-              'EM_TRANSITO': 'EM_TRANSITO_TERRESTRE',
-              'ENTREGUE': 'ENTREGUE',
-              'BLOQUEIO': 'BLOQUEIO',
-              'DESEMBARACO': 'ENTREGUE',
-              'LIBERADO': 'ENTREGUE',
-              'DESBLOQUEIO': 'RECEPCIONADA',
-              'ARR': 'INFORMADA', 'ATA': 'INFORMADA',
-              'DEP': 'MANIFESTADA', 'MAN': 'MANIFESTADA', 'BKD': 'MANIFESTADA',
-              'RCF': 'EM_AREA_TRANSFERENCIA', 'RCS': 'EM_AREA_TRANSFERENCIA',
-              'NFD': 'RECEPCIONADA', 'AWD': 'RECEPCIONADA',
-              'DLV': 'ENTREGUE', 'POD': 'ENTREGUE',
-              'FRO': 'BLOQUEIO', 'DIS': 'BLOQUEIO', 'OFLD': 'BLOQUEIO',
-            };
-            const evtMapped = eventToCctStatus[evtCode];
+            const evtMapped = evtHistorico.mapped_status;
             if (evtMapped) {
-              // Events historico is authoritative - it's the same source the detail page uses
-              const evtTs = evtHistorico.data_hora_evento ? new Date(evtHistorico.data_hora_evento).getTime() : 0;
-              const currentTs = row.ultimo_evento_data ? new Date(row.ultimo_evento_data).getTime() : 0;
-              // If historico event is more recent OR no tracking timestamp, use it
-              if (evtTs >= currentTs || currentTs === 0) {
+              const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
+              const evtOrder = CCT_STATUS_ORDER[evtMapped] || 0;
+              // Timeline is supreme: if historico has a more advanced status, use it
+              if (evtOrder > currentOrder) {
                 statusCctOficial = evtMapped;
               }
             }
