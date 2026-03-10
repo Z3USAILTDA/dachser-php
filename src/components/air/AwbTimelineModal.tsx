@@ -1,7 +1,8 @@
 import React, { useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Clock, Plane, MapPin, AlertCircle, AlertTriangle, Loader2, X, RefreshCw } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Clock, Plane, MapPin, AlertCircle, AlertTriangle, Loader2, X, RefreshCw, Package } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -22,12 +23,22 @@ interface TimelineEvent {
   data_hora_evento: string;
   aeroporto?: string;
   fonte?: string;
+  pecas?: number | null;
+  peso?: string | null;
+}
+
+interface Discrepancy {
+  field: string;
+  values: number[];
+  min: number;
+  max: number;
 }
 
 interface TimelineResponse {
   success: boolean;
   data: TimelineEvent[];
   tracking_failed?: boolean;
+  discrepancy?: Discrepancy;
 }
 
 const getEventIcon = (codigo: string) => {
@@ -65,7 +76,6 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
   consigneeName,
   onTrackingResult,
 }) => {
-  // Keep a ref to the latest result so we can fire it even when modal closes
   const latestResultRef = React.useRef<{ awb: string; failed: boolean } | null>(null);
 
   const { data, isLoading, error } = useQuery({
@@ -87,9 +97,10 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
         data_hora_evento: row.data_hora_evento || "",
         aeroporto: row.aeroporto || "",
         fonte: row.fonte || "",
+        pecas: row.pecas ?? null,
+        peso: row.peso ?? null,
       }));
 
-      // Client-side dedup + sort DESC as safety net
       const deduped = rawEvents.filter((event: TimelineEvent, index: number) => {
         if (index === 0) return true;
         return event.codigo_evento?.toUpperCase() !== rawEvents[index - 1].codigo_evento?.toUpperCase();
@@ -101,25 +112,27 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
         return dateB - dateA;
       });
 
-      return { success: true, data: deduped, tracking_failed: !!data.tracking_failed };
+      return {
+        success: true,
+        data: deduped,
+        tracking_failed: !!data.tracking_failed,
+        discrepancy: data.discrepancy || null,
+      };
     },
     enabled: open && !!awb,
-    staleTime: 0, // Always re-fetch when opened
+    staleTime: 0,
   });
 
-  // Whenever we have a result (loading done, no error), store it in the ref AND notify parent immediately
   useEffect(() => {
     if (!isLoading && !error && data !== undefined && awb) {
       const failed = data.tracking_failed === true;
       latestResultRef.current = { awb, failed };
-      // Notify parent immediately when result is ready
       if (onTrackingResult) {
         onTrackingResult(awb, failed);
       }
     }
-  }, [data, isLoading, error, awb]); // intentionally omit onTrackingResult to avoid re-firing
+  }, [data, isLoading, error, awb]);
 
-  // When modal closes, also fire the callback with the stored result (safety net)
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen && latestResultRef.current && onTrackingResult) {
       onTrackingResult(latestResultRef.current.awb, latestResultRef.current.failed);
@@ -129,6 +142,7 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
 
   const events = data?.data || [];
   const trackingFailed = data?.tracking_failed || false;
+  const discrepancy = data?.discrepancy || null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -151,6 +165,17 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
         </DialogHeader>
 
         <div className="overflow-y-auto max-h-[55vh] pr-2 mt-4">
+          {/* Discrepancy alert banner */}
+          {discrepancy && (
+            <Alert className="mb-4 border-amber-500/40 bg-amber-500/10">
+              <AlertTriangle className="h-4 w-4 text-amber-400" />
+              <AlertDescription className="text-amber-300 text-sm">
+                ⚠ Discrepância de {discrepancy.field === 'pecas' ? 'peças' : discrepancy.field} detectada: valores encontrados{' '}
+                <strong>{discrepancy.values.join(' e ')}</strong>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {isLoading && (
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="w-8 h-8 text-[#ffc800] animate-spin mb-3" />
@@ -166,7 +191,6 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
             </div>
           )}
 
-          {/* Tracking failed state */}
           {!isLoading && !error && trackingFailed && (
             <div className="flex flex-col items-center justify-center py-12">
               <div className="w-14 h-14 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
@@ -179,7 +203,6 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
             </div>
           )}
 
-          {/* No events (but not a failure) */}
           {!isLoading && !error && !trackingFailed && events.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12">
               <Clock className="w-8 h-8 text-muted-foreground/50 mb-3" />
@@ -187,44 +210,66 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
             </div>
           )}
 
-          {/* Events */}
           {!isLoading && !error && !trackingFailed && events.length > 0 && (
             <div className="relative pl-6">
               <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-[rgba(255,255,255,.1)]" />
               <div className="space-y-4">
-                {events.map((event, index) => (
-                  <div key={event.id} className="relative flex gap-4">
-                    <div className={`absolute -left-6 w-6 h-6 rounded-full flex items-center justify-center border ${getEventColor(event.codigo_evento)}`}>
-                      {getEventIcon(event.codigo_evento)}
-                    </div>
-                    <div className="flex-1 bg-[rgba(255,255,255,.03)] rounded-lg p-3 border border-[rgba(255,255,255,.06)] hover:border-[rgba(255,255,255,.12)] transition-colors">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${getEventColor(event.codigo_evento)}`}>
-                            {event.codigo_evento}
-                          </span>
-                          {index === 0 && (
-                            <span className="text-[0.65rem] uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                              Mais recente
+                {events.map((event, index) => {
+                  const hasDivergentPieces = discrepancy && event.pecas != null && event.pecas !== discrepancy.max;
+                  return (
+                    <div key={event.id} className="relative flex gap-4">
+                      <div className={`absolute -left-6 w-6 h-6 rounded-full flex items-center justify-center border ${getEventColor(event.codigo_evento)}`}>
+                        {getEventIcon(event.codigo_evento)}
+                      </div>
+                      <div className={`flex-1 rounded-lg p-3 border transition-colors ${
+                        hasDivergentPieces
+                          ? 'bg-red-500/5 border-red-500/20 hover:border-red-500/30'
+                          : 'bg-[rgba(255,255,255,.03)] border-[rgba(255,255,255,.06)] hover:border-[rgba(255,255,255,.12)]'
+                      }`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${getEventColor(event.codigo_evento)}`}>
+                              {event.codigo_evento}
                             </span>
+                            {index === 0 && (
+                              <span className="text-[0.65rem] uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                                Mais recente
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            {formatDateTime(event.data_hora_evento)}
+                          </span>
+                        </div>
+                        {event.descricao_evento && (
+                          <p className="text-sm text-[#f5f5f5] mt-2">{event.descricao_evento}</p>
+                        )}
+                        <div className="flex items-center gap-3 mt-2 flex-wrap">
+                          {event.aeroporto && (
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <MapPin className="w-3 h-3" />
+                              <span>{event.aeroporto}</span>
+                            </div>
+                          )}
+                          {(event.pecas != null || event.peso != null) && (
+                            <div className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded ${
+                              hasDivergentPieces
+                                ? 'bg-red-500/15 text-red-400 border border-red-500/30'
+                                : 'bg-[rgba(255,255,255,.06)] text-muted-foreground'
+                            }`}>
+                              <Package className="w-3 h-3" />
+                              <span>
+                                {event.pecas != null ? `${event.pecas} pcs` : ''}
+                                {event.pecas != null && event.peso ? ' · ' : ''}
+                                {event.peso ? `${event.peso}` : ''}
+                              </span>
+                            </div>
                           )}
                         </div>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {formatDateTime(event.data_hora_evento)}
-                        </span>
                       </div>
-                      {event.descricao_evento && (
-                        <p className="text-sm text-[#f5f5f5] mt-2">{event.descricao_evento}</p>
-                      )}
-                      {event.aeroporto && (
-                        <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
-                          <MapPin className="w-3 h-3" />
-                          <span>{event.aeroporto}</span>
-                        </div>
-                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

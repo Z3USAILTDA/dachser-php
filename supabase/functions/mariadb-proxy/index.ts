@@ -6801,34 +6801,96 @@ serve(async (req) => {
             || invalidStatuses.has(wsStatus) 
             || !wsRecord.last_status_code;
 
-          if (needsFallback) {
-            console.log(`Timeline fallback needed for AWB ${queryAwb} (status=${wsStatus}, timelineLen=${timelineData.length})`);
-            try {
-              const apiRows = await client.query(`
-                SELECT historico_status
-                FROM ${database}.t_aereo_api
-                WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
-                  AND historico_status IS NOT NULL
-                ORDER BY id DESC
-                LIMIT 1
-              `, [queryAwb]);
+          // Always try to fetch API events for enrichment (pecas/peso)
+          let apiTimelineRaw: any[] = [];
+          try {
+            const apiRows = await client.query(`
+              SELECT historico_status
+              FROM ${database}.t_aereo_api
+              WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
+                AND historico_status IS NOT NULL
+              ORDER BY id DESC
+              LIMIT 1
+            `, [queryAwb]);
 
-              if (apiRows && apiRows.length > 0 && apiRows[0].historico_status) {
-                try {
-                  const apiTimeline = typeof apiRows[0].historico_status === 'string'
-                    ? JSON.parse(apiRows[0].historico_status)
-                    : apiRows[0].historico_status;
-                  if (Array.isArray(apiTimeline) && apiTimeline.length > 0) {
-                    timelineData = apiTimeline;
-                    timelineSource = 'api';
-                    console.log(`Timeline fallback: using ${apiTimeline.length} events from t_aereo_api for AWB ${queryAwb}`);
-                  }
-                } catch (apiParseErr) {
-                  console.log('Error parsing t_aereo_api historico_status:', apiParseErr);
+            if (apiRows && apiRows.length > 0 && apiRows[0].historico_status) {
+              try {
+                const parsed = typeof apiRows[0].historico_status === 'string'
+                  ? JSON.parse(apiRows[0].historico_status)
+                  : apiRows[0].historico_status;
+                if (Array.isArray(parsed)) apiTimelineRaw = parsed;
+              } catch (apiParseErr) {
+                console.log('Error parsing t_aereo_api historico_status:', apiParseErr);
+              }
+            }
+          } catch (apiErr) {
+            console.log('Error fetching from t_aereo_api:', apiErr);
+          }
+
+          if (needsFallback && timelineData.length > 0 && apiTimelineRaw.length > 0) {
+            // MERGE: keep firecrawl events, enrich with API pecas/peso, add API-only events
+            console.log(`Timeline MERGE for AWB ${queryAwb}: ${timelineData.length} firecrawl + ${apiTimelineRaw.length} API events`);
+            timelineSource = 'merged';
+
+            // Build a lookup from API events for matching
+            for (const apiEvt of apiTimelineRaw) {
+              const apiStatus = (apiEvt.status || '').toUpperCase();
+              const apiAirport = (apiEvt.aeroporto || '').toUpperCase();
+              const apiDate = apiEvt.dataEvento ? new Date(apiEvt.dataEvento).getTime() : 0;
+
+              let matched = false;
+              for (const fcEvt of timelineData) {
+                const fcDesc = (fcEvt.Description || fcEvt.description || '').toUpperCase();
+                const fcLoc = (fcEvt.Location || fcEvt.location || '').toUpperCase();
+                const fcDate = fcEvt.Timestamp || fcEvt.timestamp;
+                const fcTime = fcDate ? new Date(fcDate).getTime() : 0;
+
+                const statusMatch = fcDesc.includes(apiStatus) || fcLoc.includes(apiAirport);
+                const timeClose = apiDate && fcTime && Math.abs(apiDate - fcTime) < 2 * 3600 * 1000;
+
+                if (statusMatch && (timeClose || !apiDate || !fcTime)) {
+                  // Enrich firecrawl event with pecas/peso
+                  fcEvt._pecas = apiEvt.quantidadeCarga ?? null;
+                  fcEvt._peso = apiEvt.pesoCarga ?? null;
+                  matched = true;
+                  break;
                 }
               }
-            } catch (apiErr) {
-              console.log('Error fetching fallback from t_aereo_api:', apiErr);
+
+              if (!matched) {
+                // Add API event as new entry with pecas/peso embedded
+                timelineData.push({
+                  ...apiEvt,
+                  _fromApi: true,
+                  _pecas: apiEvt.quantidadeCarga ?? null,
+                  _peso: apiEvt.pesoCarga ?? null,
+                });
+              }
+            }
+          } else if (needsFallback && timelineData.length === 0 && apiTimelineRaw.length > 0) {
+            // Pure fallback: no firecrawl data, use API only
+            timelineData = apiTimelineRaw.map(evt => ({
+              ...evt,
+              _fromApi: true,
+              _pecas: evt.quantidadeCarga ?? null,
+              _peso: evt.pesoCarga ?? null,
+            }));
+            timelineSource = 'api';
+            console.log(`Timeline fallback: using ${apiTimelineRaw.length} events from t_aereo_api for AWB ${queryAwb}`);
+          } else if (!needsFallback && apiTimelineRaw.length > 0) {
+            // No fallback needed but API has pecas/peso — enrich silently
+            for (const apiEvt of apiTimelineRaw) {
+              const apiStatus = (apiEvt.status || '').toUpperCase();
+              const apiAirport = (apiEvt.aeroporto || '').toUpperCase();
+              for (const fcEvt of timelineData) {
+                const fcDesc = (fcEvt.Description || fcEvt.description || '').toUpperCase();
+                const fcLoc = (fcEvt.Location || fcEvt.location || '').toUpperCase();
+                if (fcDesc.includes(apiStatus) || fcLoc.includes(apiAirport)) {
+                  fcEvt._pecas = apiEvt.quantidadeCarga ?? null;
+                  fcEvt._peso = apiEvt.pesoCarga ?? null;
+                  break;
+                }
+              }
             }
           }
 
@@ -6914,13 +6976,13 @@ serve(async (req) => {
           // - t_aereo_ws_firecrawl: { Description, Timestamp, Location, Carrier }
           // - t_aereo_api: { status, aeroporto, dataEvento, voo, quantidadeCarga, pesoCarga }
           const events = timelineData.map((entry: any, idx: number) => {
-            // t_aereo_api format
-            if (entry.status && !entry.Description && !entry.description) {
+            // t_aereo_api format (or _fromApi merged entries)
+            if ((entry.status && !entry.Description && !entry.description) || entry._fromApi) {
               const statusCode = (entry.status || '').toUpperCase();
               const airport = entry.aeroporto || '';
               const flight = entry.voo || '';
-              const qty = entry.quantidadeCarga;
-              const weight = entry.pesoCarga;
+              const qty = entry._pecas ?? entry.quantidadeCarga;
+              const weight = entry._peso ?? entry.pesoCarga;
               
               // Build description from API fields
               let desc = statusCode;
@@ -6940,6 +7002,8 @@ serve(async (req) => {
                 aeroporto: airport || null,
                 nivel_confianca: 'PRIMARIA',
                 created_at: entry.dataEvento || null,
+                pecas: qty && qty > 0 ? Number(qty) : null,
+                peso: weight && weight !== 'N/A' ? String(weight) : null,
               };
             }
             
@@ -6958,6 +7022,8 @@ serve(async (req) => {
               aeroporto: entry.Location || entry.location || null,
               nivel_confianca: 'PRIMARIA',
               created_at: entry.Timestamp || entry.timestamp || null,
+              pecas: entry._pecas ? Number(entry._pecas) : null,
+              peso: entry._peso && entry._peso !== 'N/A' ? String(entry._peso) : null,
             };
           });
 
@@ -7102,7 +7168,21 @@ serve(async (req) => {
             console.log(`[NOVO_MASTER] Could not query t_master_swap_log for AWB ${queryAwb}:`, swapErr);
           }
 
-          result = { success: true, data: filteredEvents };
+          // Detect pieces discrepancy
+          const allPieces = filteredEvents
+            .map((e: any) => e.pecas)
+            .filter((v: any) => v != null && v > 0);
+          let discrepancy = null;
+          if (allPieces.length >= 2) {
+            const minP = Math.min(...allPieces);
+            const maxP = Math.max(...allPieces);
+            if (minP !== maxP) {
+              discrepancy = { field: 'pecas', values: [...new Set(allPieces)], min: minP, max: maxP };
+              console.log(`[DISCREPANCY] Pieces discrepancy detected for AWB ${queryAwb}: min=${minP}, max=${maxP}`);
+            }
+          }
+
+          result = { success: true, data: filteredEvents, ...(discrepancy ? { discrepancy } : {}) };
         } catch (tableErr) {
           console.log('Error fetching from t_aereo_ws_firecrawl:', tableErr);
           result = { success: true, data: [] };
