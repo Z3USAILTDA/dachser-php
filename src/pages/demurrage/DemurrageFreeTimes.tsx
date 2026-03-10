@@ -182,6 +182,12 @@ export default function DemurrageFreeTimes() {
     <DemurrageLayout
       customCards={customCards}
       loading={isLoading}
+      rightActions={
+        <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]" onClick={() => setCreateDialogOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Cadastrar Free Time
+        </Button>
+      }
     >
       <div className="space-y-4">
         {/* Filters */}

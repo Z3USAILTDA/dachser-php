@@ -552,6 +552,13 @@ export default function DemurragePreInvoicing() {
         onOpenChange={setInfoDialogOpen}
         preInvoice={infoInvoice}
       />
+
+      {/* Send Test Email Dialog */}
+      <SendTestEmailDialog
+        open={emailDialogOpen}
+        onOpenChange={setEmailDialogOpen}
+        preInvoice={emailInvoice}
+      />
     </DemurrageLayout>
   );
 }
