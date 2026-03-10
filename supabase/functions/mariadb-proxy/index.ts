@@ -3941,8 +3941,9 @@ serve(async (req) => {
           const tipoVoo = determinarTipoVoo(row.aeroporto_origem, aeroportoPaisMap);
           const paisOrigem = aeroportoPaisMap.get(row.aeroporto_origem?.toUpperCase()?.trim()) || 'Desconhecido';
           
-          // Calculate sla_limite based on tipo_voo
-          const slaLimite = calcularSlaLimite(tipoVoo, depDatetime, eta, statusCode);
+          // Calculate sla_limite based on tipo_voo and manifestation status
+          const dataManifestacao = row.data_manifestacao_cct ? new Date(row.data_manifestacao_cct) : null;
+          const slaLimite = calcularSlaLimite(tipoVoo, depDatetime, eta, statusCode, dataManifestacao);
           
           // Calculate sla_status
           let slaStatus = calcularSlaStatus(slaLimite);
