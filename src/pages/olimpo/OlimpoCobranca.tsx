@@ -785,7 +785,7 @@ export default function OlimpoCobranca() {
         
         {/* Score Rating + Bad Debts (side by side) */}
         {historicalData.length > 0 && (
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-6 lg:grid-cols-3">
             {/* SCORE RATING (Historical %) */}
             <Card className="bg-card border-border">
               <CardHeader className="pb-2">
@@ -817,6 +817,45 @@ export default function OlimpoCobranca() {
                           <td className="py-1.5 px-2 text-right tabular-nums text-red-500">{row.pct_241_360}%</td>
                           <td className="py-1.5 px-2 text-right tabular-nums text-red-700">{row.pct_361_plus}%</td>
                           <td className="py-1.5 px-2 text-right tabular-nums text-destructive font-bold">{row.pct_od}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* AGING LIST (Historical R$) */}
+            <Card className="bg-card border-border">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-foreground">Aging List — Histórico R$</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border/50">
+                        <th className="text-left py-1.5 px-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Período</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-emerald-400">NOT OD</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-yellow-400">1-90</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-amber-400">91-180</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-red-400">181-240</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-red-500">241-360</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-red-700">&gt;361</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-foreground">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historicalData.map((row, idx) => (
+                        <tr key={idx} className="border-b border-border/30 hover:bg-muted/10">
+                          <td className="py-1.5 px-2 font-medium text-foreground">{formatPeriodLabel(row.periodo)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-emerald-400">{formatBRL(row.not_od)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-yellow-400">{formatBRL(row.d1_90)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-amber-400">{formatBRL(row.d91_180)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-red-400">{formatBRL(row.d181_240)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-red-500">{formatBRL(row.d241_360)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-red-700">{formatBRL(row.d361_plus)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-foreground font-bold">{formatBRL(row.total)}</td>
                         </tr>
                       ))}
                     </tbody>
