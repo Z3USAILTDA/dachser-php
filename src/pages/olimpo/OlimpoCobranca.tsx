@@ -518,13 +518,10 @@ export default function OlimpoCobranca() {
     <PageLayout title="DACHSER" subtitle="Cobrança" pageIcon={DollarSign} backTo="/dashboard" rightContent={headerRight}>
       <div className="space-y-6">
         {/* KPI Cards */}
-        <div className="grid gap-4 md:grid-cols-7">
+        <div className="grid gap-4 md:grid-cols-4">
           <KpiCard icon={DollarSign} label="Total Receivable" value={formatCompact(totalReceivable)} loading={loading} />
           <KpiCard icon={AlertTriangle} label="Total Overdue" value={formatCompact(totalOverdue)} loading={loading} accent />
           <KpiCard icon={TrendingUp} label="% Overdue" value={`${pctOverdue}%`} loading={loading} />
-          <KpiCard icon={AlertTriangle} label="Bad Debts (>360)" value={formatCompact(badDebtsValue)} loading={loading} accent />
-          <KpiCard icon={DollarSign} label="Budget (Mês)" value={formatCompact(budgetValue)} loading={loading} />
-          <KpiCard icon={TrendingUp} label="Forecast (Mês)" value={`${formatCompact(forecastValue)} • ${attainmentPct}%`} loading={loading} />
           <KpiCard icon={Clock} label="Último Registro" value={data?.lastUpdate ? new Date(data.lastUpdate).toLocaleString("pt-BR") : "—"} loading={loading} />
         </div>
 
