@@ -625,83 +625,8 @@ export default function OlimpoCobranca() {
           );
         })()}
 
-        {/* Provisioning Detail Table */}
-        {totals && totalReceivable > 0 && (
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-foreground">Provisão Detalhada</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border/50">
-                      <th className="text-left py-2 px-4 text-xs uppercase tracking-wider text-muted-foreground font-semibold min-w-[120px]">Faixa</th>
-                      {agingKeys.map(k => (
-                        <th key={k} className="text-right py-2 px-2 text-xs uppercase tracking-wider font-semibold min-w-[80px]" style={{ color: AGING_COLORS[k] }}>
-                          {AGING_LABELS[k]}
-                        </th>
-                      ))}
-                      <th className="text-right py-2 px-2 text-xs uppercase tracking-wider font-semibold text-red-400 min-w-[100px]">Total Overdue</th>
-                      <th className="text-right py-2 px-4 text-xs uppercase tracking-wider font-semibold text-foreground min-w-[100px]">Grand Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* Row 1: Score Rating % */}
-                    <tr className="border-b border-border/30">
-                      <td className="py-2 px-4 font-medium text-foreground">Score Rating %</td>
-                      {agingKeys.map(k => (
-                        <td key={k} className="py-2 px-2 text-right tabular-nums" style={{ color: AGING_COLORS[k] }}>
-                          {((totals[k] as number) / totalReceivable * 100).toFixed(1)}%
-                        </td>
-                      ))}
-                      <td className="py-2 px-2 text-right tabular-nums text-red-400 font-medium">{pctOverdue}%</td>
-                      <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">100%</td>
-                    </tr>
-                    {/* Row 2: Absolute values */}
-                    <tr className="border-b border-border/30">
-                      <td className="py-2 px-4 font-medium text-foreground">Valor</td>
-                      {agingKeys.map(k => (
-                        <td key={k} className="py-2 px-2 text-right tabular-nums" style={{ color: AGING_COLORS[k] }}>
-                          {formatBRL(totals[k] as number)}
-                        </td>
-                      ))}
-                      <td className="py-2 px-2 text-right tabular-nums text-red-400 font-medium">{formatBRL(totalOverdue)}</td>
-                      <td className="py-2 px-4 text-right tabular-nums text-foreground font-medium">{formatBRL(totalReceivable)}</td>
-                    </tr>
-                    {/* Row 3: % Provisão */}
-                    <tr className="border-b border-border/30">
-                      <td className="py-2 px-4 text-muted-foreground">% Provisão</td>
-                      {agingKeys.map(k => (
-                        <td key={k} className="py-2 px-2 text-right tabular-nums text-muted-foreground">
-                          {PROVISION_PCT[k]}%
-                        </td>
-                      ))}
-                      <td className="py-2 px-2" />
-                      <td className="py-2 px-4" />
-                    </tr>
-                    {/* Row 4: Provision values */}
-                    <tr className="border-t-2 border-primary/40 bg-primary/5">
-                      <td className="py-2 px-4 font-bold text-primary">Valor Provisionado</td>
-                      {agingKeys.map(k => {
-                        const prov = (totals[k] as number) * PROVISION_PCT[k] / 100;
-                        return (
-                          <td key={k} className="py-2 px-2 text-right tabular-nums font-bold" style={{ color: prov > 0 ? AGING_COLORS[k] : "var(--muted-foreground)" }}>
-                            {formatBRL(prov)}
-                          </td>
-                        );
-                      })}
-                      <td className="py-2 px-2" />
-                      <td className="py-2 px-4 text-right tabular-nums font-bold text-foreground">
-                        {formatBRL(agingKeys.reduce((s, k) => s + (totals[k] as number) * PROVISION_PCT[k] / 100, 0))}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+
+
 
         {/* PYMT Term Rating */}
         {pymtTermData.length > 0 && (
