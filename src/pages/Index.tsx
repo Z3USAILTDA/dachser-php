@@ -641,9 +641,20 @@ const Index = () => {
           });
 
           localStorage.setItem("tracking-failed-flags", JSON.stringify(cleanedFlags));
-          setStatusAereoData(withFlags);
+          // Filtrar para 2027 se não for Z3US admin
+          const filtered2027 = isZ3usAdmin() ? withFlags : withFlags.filter(item => {
+            const dateStr = item.last_check || item.scraped_at || '';
+            if (!dateStr) return false;
+            return new Date(dateStr).getFullYear() === 2027;
+          });
+          setStatusAereoData(filtered2027);
         } catch (_) {
-          setStatusAereoData(deduplicatedData);
+          const filtered2027 = isZ3usAdmin() ? deduplicatedData : deduplicatedData.filter(item => {
+            const dateStr = item.last_check || item.scraped_at || '';
+            if (!dateStr) return false;
+            return new Date(dateStr).getFullYear() === 2027;
+          });
+          setStatusAereoData(filtered2027);
         }
       }
     } catch (error) {

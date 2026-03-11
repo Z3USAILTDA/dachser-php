@@ -79,6 +79,16 @@ export default function CCTDashboard() {
   
   const { data: profiles = [] } = useProfiles();
   const { data: excecoes = [] } = useExcecoes();
+
+  // Filtrar processos para 2027 se não for Z3US admin
+  const filteredProcessos = useMemo(() => {
+    if (isZ3usAdmin()) return processos;
+    return processos.filter(p => {
+      const dateStr = p.data_decolagem_ultimo_trecho || p.created_at || '';
+      if (!dateStr) return false;
+      return new Date(dateStr).getFullYear() === 2027;
+    });
+  }, [processos]);
   
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedProcesso, setSelectedProcesso] = useState<ProcessoCCT | null>(null);
