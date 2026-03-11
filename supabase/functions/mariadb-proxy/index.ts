@@ -2130,44 +2130,19 @@ serve(async (req) => {
         const agingRows = await client.query(agingSql);
         
         // Calculate totals
-        const totals = {
+        const totals: any = {
           product: 'Grand Total',
-          not_due: 0, aging_30: 0, aging_90: 0, aging_180: 0, aging_240: 0, aging_360: 0, aging_360_plus: 0,
-          count_not_due: 0, count_30: 0, count_90: 0, count_180: 0, count_240: 0, count_360: 0, count_360_plus: 0,
+          not_due: 0, aging_30: 0, aging_40: 0, aging_60: 0, aging_90: 0, aging_120: 0, aging_180: 0, aging_240: 0, aging_365: 0, aging_366_plus: 0,
+          count_not_due: 0, count_30: 0, count_40: 0, count_60: 0, count_90: 0, count_120: 0, count_180: 0, count_240: 0, count_365: 0, count_366_plus: 0,
         };
         
+        const agingFields = ['not_due', 'aging_30', 'aging_40', 'aging_60', 'aging_90', 'aging_120', 'aging_180', 'aging_240', 'aging_365', 'aging_366_plus'];
+        const countFields = ['count_not_due', 'count_30', 'count_40', 'count_60', 'count_90', 'count_120', 'count_180', 'count_240', 'count_365', 'count_366_plus'];
+        
         const rows = agingRows.map((r: any) => {
-          const row = {
-            product: r.product || 'Outros',
-            not_due: Number(r.not_due) || 0,
-            aging_30: Number(r.aging_30) || 0,
-            aging_90: Number(r.aging_90) || 0,
-            aging_180: Number(r.aging_180) || 0,
-            aging_240: Number(r.aging_240) || 0,
-            aging_360: Number(r.aging_360) || 0,
-            aging_360_plus: Number(r.aging_360_plus) || 0,
-            count_not_due: Number(r.count_not_due) || 0,
-            count_30: Number(r.count_30) || 0,
-            count_90: Number(r.count_90) || 0,
-            count_180: Number(r.count_180) || 0,
-            count_240: Number(r.count_240) || 0,
-            count_360: Number(r.count_360) || 0,
-            count_360_plus: Number(r.count_360_plus) || 0,
-          };
-          totals.not_due += row.not_due;
-          totals.aging_30 += row.aging_30;
-          totals.aging_90 += row.aging_90;
-          totals.aging_180 += row.aging_180;
-          totals.aging_240 += row.aging_240;
-          totals.aging_360 += row.aging_360;
-          totals.aging_360_plus += row.aging_360_plus;
-          totals.count_not_due += row.count_not_due;
-          totals.count_30 += row.count_30;
-          totals.count_90 += row.count_90;
-          totals.count_180 += row.count_180;
-          totals.count_240 += row.count_240;
-          totals.count_360 += row.count_360;
-          totals.count_360_plus += row.count_360_plus;
+          const row: any = { product: r.product || 'Outros' };
+          for (const f of agingFields) { row[f] = Number(r[f]) || 0; totals[f] += row[f]; }
+          for (const f of countFields) { row[f] = Number(r[f]) || 0; totals[f] += row[f]; }
           return row;
         });
         
@@ -2177,7 +2152,7 @@ serve(async (req) => {
         `);
         const lastUpdate = lastUpdateResult?.[0]?.last_update || null;
         
-        console.log(`[get_aging_overview] Found ${rows.length} products, total receivable: ${totals.not_due + totals.aging_90 + totals.aging_180 + totals.aging_240 + totals.aging_360 + totals.aging_360_plus}`);
+        console.log(`[get_aging_overview] Found ${rows.length} products`);
         
         result = { success: true, data: rows, totals, lastUpdate };
         break;
