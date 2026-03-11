@@ -2167,18 +2167,24 @@ serve(async (req) => {
             TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1)) AS product,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS aging_30,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 40 THEN t.valor_nf ELSE 0 END) AS aging_40,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 41 AND 60 THEN t.valor_nf ELSE 0 END) AS aging_60,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 61 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 120 THEN t.valor_nf ELSE 0 END) AS aging_120,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 121 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS aging_240,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN t.valor_nf ELSE 0 END) AS aging_360,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 360 THEN t.valor_nf ELSE 0 END) AS aging_360_plus,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 365 THEN t.valor_nf ELSE 0 END) AS aging_365,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 365 THEN t.valor_nf ELSE 0 END) AS aging_366_plus,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 1 ELSE 0 END) AS count_not_due,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN 1 ELSE 0 END) AS count_30,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 90 THEN 1 ELSE 0 END) AS count_90,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN 1 ELSE 0 END) AS count_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 40 THEN 1 ELSE 0 END) AS count_40,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 41 AND 60 THEN 1 ELSE 0 END) AS count_60,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 61 AND 90 THEN 1 ELSE 0 END) AS count_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 120 THEN 1 ELSE 0 END) AS count_120,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 121 AND 180 THEN 1 ELSE 0 END) AS count_180,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN 1 ELSE 0 END) AS count_240,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN 1 ELSE 0 END) AS count_360,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 360 THEN 1 ELSE 0 END) AS count_360_plus,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 365 THEN 1 ELSE 0 END) AS count_365,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 365 THEN 1 ELSE 0 END) AS count_366_plus,
             GROUP_CONCAT(DISTINCT REPLACE(REPLACE(REPLACE(t.cnpj, '.', ''), '/', ''), '-', '') SEPARATOR ',') AS cnpjs
           FROM dados_dachser.t_dados_financeiro_nfs t
           LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
@@ -2195,45 +2201,22 @@ serve(async (req) => {
         
         const clientAgingRows = await client.query(clientAgingSql);
         
-        const clientTotals = {
+        const clientTotals: any = {
           product: 'Grand Total',
-          not_due: 0, aging_30: 0, aging_90: 0, aging_180: 0, aging_240: 0, aging_360: 0, aging_360_plus: 0,
-          count_not_due: 0, count_30: 0, count_90: 0, count_180: 0, count_240: 0, count_360: 0, count_360_plus: 0,
+          not_due: 0, aging_30: 0, aging_40: 0, aging_60: 0, aging_90: 0, aging_120: 0, aging_180: 0, aging_240: 0, aging_365: 0, aging_366_plus: 0,
+          count_not_due: 0, count_30: 0, count_40: 0, count_60: 0, count_90: 0, count_120: 0, count_180: 0, count_240: 0, count_365: 0, count_366_plus: 0,
         };
         
+        const agingFieldsC = ['not_due', 'aging_30', 'aging_40', 'aging_60', 'aging_90', 'aging_120', 'aging_180', 'aging_240', 'aging_365', 'aging_366_plus'];
+        const countFieldsC = ['count_not_due', 'count_30', 'count_40', 'count_60', 'count_90', 'count_120', 'count_180', 'count_240', 'count_365', 'count_366_plus'];
+        
         const clientRows = clientAgingRows.map((r: any) => {
-          const row = {
+          const row: any = {
             product: r.product || 'Sem Cliente',
-            not_due: Number(r.not_due) || 0,
-            aging_30: Number(r.aging_30) || 0,
-            aging_90: Number(r.aging_90) || 0,
-            aging_180: Number(r.aging_180) || 0,
-            aging_240: Number(r.aging_240) || 0,
-            aging_360: Number(r.aging_360) || 0,
-            aging_360_plus: Number(r.aging_360_plus) || 0,
-            count_not_due: Number(r.count_not_due) || 0,
-            count_30: Number(r.count_30) || 0,
-            count_90: Number(r.count_90) || 0,
-            count_180: Number(r.count_180) || 0,
-            count_240: Number(r.count_240) || 0,
-            count_360: Number(r.count_360) || 0,
-            count_360_plus: Number(r.count_360_plus) || 0,
             cnpjs: r.cnpjs ? r.cnpjs.split(',') : [],
           };
-          clientTotals.not_due += row.not_due;
-          clientTotals.aging_30 += row.aging_30;
-          clientTotals.aging_90 += row.aging_90;
-          clientTotals.aging_180 += row.aging_180;
-          clientTotals.aging_240 += row.aging_240;
-          clientTotals.aging_360 += row.aging_360;
-          clientTotals.aging_360_plus += row.aging_360_plus;
-          clientTotals.count_not_due += row.count_not_due;
-          clientTotals.count_30 += row.count_30;
-          clientTotals.count_90 += row.count_90;
-          clientTotals.count_180 += row.count_180;
-          clientTotals.count_240 += row.count_240;
-          clientTotals.count_360 += row.count_360;
-          clientTotals.count_360_plus += row.count_360_plus;
+          for (const f of agingFieldsC) { row[f] = Number(r[f]) || 0; clientTotals[f] += row[f]; }
+          for (const f of countFieldsC) { row[f] = Number(r[f]) || 0; clientTotals[f] += row[f]; }
           return row;
         });
         
