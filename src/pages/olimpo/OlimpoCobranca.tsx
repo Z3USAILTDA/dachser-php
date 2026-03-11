@@ -767,6 +767,192 @@ export default function OlimpoCobranca() {
           </CardContent>
         </Card>
 
+        {/* ==================== HISTORICAL VISUALIZATIONS ==================== */}
+        
+        {/* Score Rating + Bad Debts (side by side) */}
+        {historicalData.length > 0 && (
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* SCORE RATING (Historical %) */}
+            <Card className="bg-card border-border">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-foreground">Score Rating — Histórico %</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border/50">
+                        <th className="text-left py-1.5 px-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Período</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-emerald-400">NOT OD</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-yellow-400">1-90</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-amber-400">91-180</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-red-400">181-240</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-red-500">241-360</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-red-700">&gt;361</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-destructive">OD%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historicalData.map((row, idx) => (
+                        <tr key={idx} className="border-b border-border/30 hover:bg-muted/10">
+                          <td className="py-1.5 px-2 font-medium text-foreground">{formatPeriodLabel(row.periodo)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-emerald-400">{row.pct_not_od}%</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-yellow-400">{row.pct_1_90}%</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-amber-400">{row.pct_91_180}%</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-red-400">{row.pct_181_240}%</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-red-500">{row.pct_241_360}%</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-red-700">{row.pct_361_plus}%</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-destructive font-bold">{row.pct_od}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* BAD DEBTS (Historical Provision R$) */}
+            <Card className="bg-card border-border">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-foreground">Bad Debts — Provisão Histórica (R$)</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border/50">
+                        <th className="text-left py-1.5 px-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Período</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-yellow-400">1-90 (1%)</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-amber-400">91-180 (25%)</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-red-400">181-240 (50%)</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-red-500">241-360 (75%)</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-red-700">&gt;361 (100%)</th>
+                        <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-foreground">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historicalData.map((row, idx) => (
+                        <tr key={idx} className="border-b border-border/30 hover:bg-muted/10">
+                          <td className="py-1.5 px-2 font-medium text-foreground">{formatPeriodLabel(row.periodo)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-yellow-400">{formatBRL(row.prov_1_90)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-amber-400">{formatBRL(row.prov_91_180)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-red-400">{formatBRL(row.prov_181_240)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-red-500">{formatBRL(row.prov_241_360)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-red-700">{formatBRL(row.prov_361_plus)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-foreground font-bold">{formatBRL(row.prov_total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* CURRENT CUSTOMERS - AGING LIST (Historical) */}
+        {historicalData.length > 0 && (
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-foreground">Current Customers — Aging List (Clientes Distintos)</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border/50">
+                      <th className="text-left py-1.5 px-3 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Período</th>
+                      <th className="text-right py-1.5 px-3 text-[10px] font-semibold text-emerald-400">NOT OD</th>
+                      <th className="text-right py-1.5 px-3 text-[10px] font-semibold text-yellow-400">1-90</th>
+                      <th className="text-right py-1.5 px-3 text-[10px] font-semibold text-amber-400">91-180</th>
+                      <th className="text-right py-1.5 px-3 text-[10px] font-semibold text-red-400">181-240</th>
+                      <th className="text-right py-1.5 px-3 text-[10px] font-semibold text-red-500">241-360</th>
+                      <th className="text-right py-1.5 px-3 text-[10px] font-semibold text-red-700">&gt;361</th>
+                      <th className="text-right py-1.5 px-3 text-[10px] font-semibold text-foreground">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historicalData.map((row, idx) => {
+                      const totalCust = row.cust_not_od + row.cust_1_90 + row.cust_91_180 + row.cust_181_240 + row.cust_241_360 + row.cust_361_plus;
+                      return (
+                        <tr key={idx} className="border-b border-border/30 hover:bg-muted/10">
+                          <td className="py-1.5 px-3 font-medium text-foreground">{formatPeriodLabel(row.periodo)}</td>
+                          <td className="py-1.5 px-3 text-right tabular-nums text-emerald-400">{row.cust_not_od}</td>
+                          <td className="py-1.5 px-3 text-right tabular-nums text-yellow-400">{row.cust_1_90}</td>
+                          <td className="py-1.5 px-3 text-right tabular-nums text-amber-400">{row.cust_91_180}</td>
+                          <td className="py-1.5 px-3 text-right tabular-nums text-red-400">{row.cust_181_240}</td>
+                          <td className="py-1.5 px-3 text-right tabular-nums text-red-500">{row.cust_241_360}</td>
+                          <td className="py-1.5 px-3 text-right tabular-nums text-red-700">{row.cust_361_plus}</td>
+                          <td className="py-1.5 px-3 text-right tabular-nums text-foreground font-bold">{totalCust}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* PYMT TERM POR CLIENTE (Collapsible) */}
+        {clientPymtHistorical.length > 0 && (
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-foreground">PYMT Term Rating — Por Cliente</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y divide-border/30">
+                {clientPymtHistorical.map((client, idx) => (
+                  <Collapsible key={idx}>
+                    <CollapsibleTrigger className="flex items-center gap-2 w-full py-2.5 px-4 hover:bg-muted/10 text-left group">
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+                      <span className="text-sm font-medium text-foreground">{client.cliente}</span>
+                      <span className="text-[10px] text-muted-foreground ml-auto">{client.periodos.length} períodos</span>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="overflow-x-auto px-4 pb-3">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-border/50">
+                              <th className="text-left py-1.5 px-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Período</th>
+                              <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-emerald-400">0-15</th>
+                              <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-green-400">16-30</th>
+                              <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-yellow-400">31-45</th>
+                              <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-orange-400">46-60</th>
+                              <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-red-400">61-90</th>
+                              <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-red-600">&gt;90</th>
+                              <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-red-500">TT &gt;30</th>
+                              <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-muted-foreground">Total Pago</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {client.periodos.map((p, pIdx) => {
+                              const ttGt30 = (p.pct_31_45 + p.pct_46_60 + p.pct_61_90 + p.pct_gt90).toFixed(1);
+                              return (
+                                <tr key={pIdx} className="border-b border-border/20 hover:bg-muted/5">
+                                  <td className="py-1 px-2 font-medium text-foreground">{formatPeriodLabel(p.periodo)}</td>
+                                  <td className="py-1 px-2 text-right tabular-nums text-emerald-400">{p.pct_0_15}%</td>
+                                  <td className="py-1 px-2 text-right tabular-nums text-green-400">{p.pct_16_30}%</td>
+                                  <td className="py-1 px-2 text-right tabular-nums text-yellow-400">{p.pct_31_45}%</td>
+                                  <td className="py-1 px-2 text-right tabular-nums text-orange-400">{p.pct_46_60}%</td>
+                                  <td className="py-1 px-2 text-right tabular-nums text-red-400">{p.pct_61_90}%</td>
+                                  <td className="py-1 px-2 text-right tabular-nums text-red-600">{p.pct_gt90}%</td>
+                                  <td className="py-1 px-2 text-right tabular-nums text-red-500 font-bold">{ttGt30}%</td>
+                                  <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">{formatBRL(p.total_baixado)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Charts */}
         {!loading && displayRows.length > 0 && (
           <div className="grid gap-6 lg:grid-cols-2">
