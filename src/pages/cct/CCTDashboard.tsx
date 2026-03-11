@@ -24,6 +24,19 @@ import ExcecoesContent from "./tabs/ExcecoesTab";
 import RegrasContent from "./tabs/RegrasTab";
 import ConsoleContent from "./tabs/ConsoleTab";
 
+// Usuários DACHSER (não são Z3US admins)
+const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
+
+const isZ3usAdmin = (): boolean => {
+  try {
+    const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+    if (!storedUser) return false;
+    const parsed = JSON.parse(storedUser);
+    const isAdmin = parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
+    return isAdmin && !DACHSER_ADMIN_USERS.includes(parsed.username);
+  } catch { return false; }
+};
+
 type TabType = "dashboard" | "analytics" | "excecoes" | "regras" | "console";
 
 interface NavTab {
