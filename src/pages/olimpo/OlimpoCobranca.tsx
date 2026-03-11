@@ -729,30 +729,6 @@ export default function OlimpoCobranca() {
           </Card>
         )}
 
-        {/* Aging Distribution Bar */}
-        {agingSegments.length > 0 && (
-          <Card className="bg-card border-border">
-            <CardContent className="p-5">
-              <div className="flex rounded-lg overflow-hidden h-8">
-                {agingSegments.map((seg) => (
-                  <div key={seg.key} className="flex items-center justify-center text-[10px] font-bold text-white transition-all"
-                    style={{ width: `${Math.max(seg.pct, 1)}%`, backgroundColor: seg.color }}
-                    title={`${seg.label}: ${formatBRL(seg.value)} (${seg.pct.toFixed(1)}%)`}>
-                    {seg.pct > 4 && `${seg.pct.toFixed(0)}%`}
-                  </div>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-3 mt-3">
-                {agingSegments.map((seg) => (
-                  <div key={seg.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: seg.color }} />
-                    {seg.label}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Aging Table */}
         <Card className="bg-card border-border overflow-hidden">
