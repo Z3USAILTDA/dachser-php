@@ -947,7 +947,62 @@ export default function OlimpoCobranca() {
           </Card>
         )}
 
-        {/* PYMT TERM POR CLIENTE (Collapsible) */}
+        {/* AGING LIST POR CLIENTE (Collapsible) */}
+        {clientAgingHistorical.length > 0 && (
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-foreground">Aging List — Por Cliente (R$)</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y divide-border/30 max-h-[600px] overflow-y-auto">
+                {clientAgingHistorical.map((client, idx) => (
+                  <Collapsible key={idx}>
+                    <CollapsibleTrigger className="flex items-center gap-2 w-full py-2.5 px-4 hover:bg-muted/10 text-left group">
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+                      <span className="text-sm font-medium text-foreground">{client.cliente}</span>
+                      <span className="text-[10px] text-muted-foreground ml-auto">
+                        {client.periodos.length} períodos • {formatBRL(client.periodos[client.periodos.length - 1]?.total || 0)}
+                      </span>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="overflow-x-auto px-4 pb-3">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-border/50">
+                              <th className="text-left py-1.5 px-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Período</th>
+                              <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-emerald-400">NOT OD</th>
+                              <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-yellow-400">1-90</th>
+                              <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-amber-400">91-180</th>
+                              <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-red-400">181-240</th>
+                              <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-red-500">241-360</th>
+                              <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-red-700">&gt;361</th>
+                              <th className="text-right py-1.5 px-2 text-[10px] font-semibold text-foreground">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {client.periodos.map((p, pIdx) => (
+                              <tr key={pIdx} className="border-b border-border/20 hover:bg-muted/5">
+                                <td className="py-1 px-2 font-medium text-foreground">{formatPeriodLabel(p.periodo)}</td>
+                                <td className="py-1 px-2 text-right tabular-nums text-emerald-400">{formatBRL(p.not_od)}</td>
+                                <td className="py-1 px-2 text-right tabular-nums text-yellow-400">{formatBRL(p.d1_90)}</td>
+                                <td className="py-1 px-2 text-right tabular-nums text-amber-400">{formatBRL(p.d91_180)}</td>
+                                <td className="py-1 px-2 text-right tabular-nums text-red-400">{formatBRL(p.d181_240)}</td>
+                                <td className="py-1 px-2 text-right tabular-nums text-red-500">{formatBRL(p.d241_360)}</td>
+                                <td className="py-1 px-2 text-right tabular-nums text-red-700">{formatBRL(p.d361_plus)}</td>
+                                <td className="py-1 px-2 text-right tabular-nums text-foreground font-bold">{formatBRL(p.total)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {clientPymtHistorical.length > 0 && (
           <Card className="bg-card border-border">
             <CardHeader className="pb-2">
