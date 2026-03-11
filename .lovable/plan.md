@@ -1,38 +1,28 @@
 
 
-## Adicionar 4 visualizações históricas ao dashboard de Cobrança
+# Fix: Documentos não aparecem no dialog de visualização
 
-Já existem na tela: **Aging List** e **Aging List por cliente**. Não serão tocados.
+## Causa raiz
 
-### Visualizações a adicionar
+O edge function `get_voucher_anexos` retorna a estrutura:
+```json
+{ "success": true, "data": [ ...anexos... ] }
+```
 
-1. **SCORE RATING** (histórico) — % por faixa simplificada (NOT OD, 1-90, 91-180, 181-240, 241-360, >361, OD%), últimos 10 meses
-2. **BAD DEBTS** (histórico) — Valores de provisão (R$) por faixa, últimos 10 meses
-3. **CURRENT CUSTOMERS - AGING LIST** (histórico) — Contagem de clientes distintos por faixa, últimos 10 meses
-4. **PYMT TERM por cliente** — Tabela expandível por empresa, distribuição de prazos de pagamento por cliente
+Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
 
-### Backend — `mariadb-proxy/index.ts`
+## Correção
 
-**2 novas actions:**
+### `src/components/esteira/PagamentosTab.tsx` — linha 862
 
-- **`get_aging_historical`** — Para cada final de mês (últimos 10), calcula faturas em aberto (emitidas antes do ref_date, sem baixa antes do ref_date). Retorna: % por faixa (Score Rating), valores de provisão (Bad Debts), contagem de clientes distintos (Current Customers). Uma query com CROSS JOIN de 10 datas.
+Trocar:
+```typescript
+setAnexosDialog(data?.anexos || []);
+```
+Por:
+```typescript
+setAnexosDialog(data?.data || []);
+```
 
-- **`get_pymt_term_by_client`** — Top 20 clientes, distribuição de prazos de pagamento mensal dos últimos 10 meses a partir de `tbaixas`.
-
-### Frontend — `OlimpoCobranca.tsx`
-
-- 2 novos states: `historicalData`, `clientPymtHistorical`
-- Fetch em paralelo no `fetchData` existente
-- **Grid 2 colunas**: Score Rating + Bad Debts lado a lado (tabelas compactas)
-- **Full-width**: Current Customers - Aging List
-- **Full-width**: PYMT Term por cliente (collapsible por empresa)
-
-Todas adicionadas **após** as visualizações existentes, sem alterar nada atual.
-
-### Arquivos modificados
-
-| Arquivo | Alteração |
-|---|---|
-| `supabase/functions/mariadb-proxy/index.ts` | 2 novas actions |
-| `src/pages/olimpo/OlimpoCobranca.tsx` | 4 novas seções + states + fetch |
+Uma única linha corrige o problema.
 
