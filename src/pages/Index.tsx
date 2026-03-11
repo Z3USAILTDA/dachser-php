@@ -57,6 +57,19 @@ const EMAIL_SENDING_ENABLED = false;
 const ARR_RETENTION_HOURS = 120; // 5 dias para AWBs em ARR permanecerem visíveis
 const ARR_RETENTION_MS = ARR_RETENTION_HOURS * 60 * 60 * 1000;
 
+// Usuários DACHSER (não são Z3US admins)
+const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
+
+const isZ3usAdmin = (): boolean => {
+  try {
+    const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+    if (!storedUser) return false;
+    const parsed = JSON.parse(storedUser);
+    const isAdmin = parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
+    return isAdmin && !DACHSER_ADMIN_USERS.includes(parsed.username);
+  } catch { return false; }
+};
+
 // AWBs excluídos manualmente da visualização
 const EXCLUDED_AWBS = [
   "045-12829121",
