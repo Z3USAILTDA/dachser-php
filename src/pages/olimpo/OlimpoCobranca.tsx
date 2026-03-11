@@ -217,6 +217,8 @@ export default function OlimpoCobranca() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [pymtTermData, setPymtTermData] = useState<PymtTermRow[]>([]);
   const [exportingExcel, setExportingExcel] = useState(false);
+  const [historicalData, setHistoricalData] = useState<HistoricalAgingRow[]>([]);
+  const [clientPymtHistorical, setClientPymtHistorical] = useState<ClientPymtTerm[]>([]);
   const { toast } = useToast();
 
   const fetchData = async () => {
