@@ -8274,9 +8274,9 @@ serve(async (req) => {
         const statsResult = await client.query(
           `SELECT 
             COUNT(*) as total,
-            -- A Vencer (vencimento >= hoje)
-            SUM(CASE WHEN v.vencimento >= CURDATE() AND (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) THEN 1 ELSE 0 END) as a_vencer_count,
-            SUM(CASE WHEN v.vencimento >= CURDATE() AND (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) THEN COALESCE(v.valor, 0) ELSE 0 END) as a_vencer_valor,
+            -- A Vencer (vencimento >= hoje, independente de is_pronto)
+            SUM(CASE WHEN v.vencimento >= CURDATE() THEN 1 ELSE 0 END) as a_vencer_count,
+            SUM(CASE WHEN v.vencimento >= CURDATE() THEN COALESCE(v.valor, 0) ELSE 0 END) as a_vencer_valor,
             -- Vencidos (vencimento < hoje)
             SUM(CASE WHEN v.vencimento < CURDATE() AND (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) THEN 1 ELSE 0 END) as vencidos_count,
             SUM(CASE WHEN v.vencimento < CURDATE() AND (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) THEN COALESCE(v.valor, 0) ELSE 0 END) as vencidos_valor,
