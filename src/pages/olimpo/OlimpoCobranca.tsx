@@ -35,18 +35,24 @@ interface AgingRow {
   product: string;
   not_due: number;
   aging_30: number;
+  aging_40: number;
+  aging_60: number;
   aging_90: number;
+  aging_120: number;
   aging_180: number;
   aging_240: number;
-  aging_360: number;
-  aging_360_plus: number;
+  aging_365: number;
+  aging_366_plus: number;
   count_not_due: number;
   count_30: number;
+  count_40: number;
+  count_60: number;
   count_90: number;
+  count_120: number;
   count_180: number;
   count_240: number;
-  count_360: number;
-  count_360_plus: number;
+  count_365: number;
+  count_366_plus: number;
   cnpjs?: string[];
 }
 
@@ -76,32 +82,40 @@ interface PymtTermRow {
 const AGING_COLORS: Record<string, string> = {
   not_due: "#22c55e",
   aging_30: "#84cc16",
+  aging_40: "#a3e635",
+  aging_60: "#facc15",
   aging_90: "#eab308",
+  aging_120: "#f59e0b",
   aging_180: "#f97316",
   aging_240: "#ef4444",
-  aging_360: "#dc2626",
-  aging_360_plus: "#991b1b",
+  aging_365: "#dc2626",
+  aging_366_plus: "#991b1b",
 };
 
 const AGING_LABELS: Record<string, string> = {
-  not_due: "Not Due",
+  not_due: "Not Overdue",
   aging_30: "0-30",
-  aging_90: "31-90",
-  aging_180: "91-180",
+  aging_40: "31-40",
+  aging_60: "41-60",
+  aging_90: "61-90",
+  aging_120: "91-120",
+  aging_180: "121-180",
   aging_240: "181-240",
-  aging_360: "241-360",
-  aging_360_plus: "> 360",
+  aging_365: "241-365",
+  aging_366_plus: "366+",
 };
 
-// Provisioning percentages per aging bucket (based on Working Capital model)
 const PROVISION_PCT: Record<string, number> = {
   not_due: 0,
   aging_30: 1,
+  aging_40: 1,
+  aging_60: 1,
   aging_90: 1,
-  aging_180: 1,
-  aging_240: 25,
-  aging_360: 50,
-  aging_360_plus: 100,
+  aging_120: 25,
+  aging_180: 25,
+  aging_240: 50,
+  aging_365: 75,
+  aging_366_plus: 100,
 };
 
 // Provisioning percentages for the analytical export (by days overdue)
@@ -109,8 +123,8 @@ function getProvisionPct(dias: number): { bucket: string; pct: number } {
   if (dias <= 90) return { bucket: '≤90', pct: 1 };
   if (dias <= 180) return { bucket: '91-180', pct: 25 };
   if (dias <= 240) return { bucket: '181-240', pct: 50 };
-  if (dias <= 360) return { bucket: '241-360', pct: 75 };
-  return { bucket: '>360', pct: 100 };
+  if (dias <= 365) return { bucket: '241-365', pct: 75 };
+  return { bucket: '>365', pct: 100 };
 }
 
 const PIE_COLORS = ["#22c55e", "#ef4444"];
@@ -126,7 +140,8 @@ const PRODUCT_MAP: Record<string, string> = {
   TCK: "Trucking",
 };
 
-const agingKeys = ["not_due", "aging_30", "aging_90", "aging_180", "aging_240", "aging_360", "aging_360_plus"] as const;
+const agingKeys = ["not_due", "aging_30", "aging_40", "aging_60", "aging_90", "aging_120", "aging_180", "aging_240", "aging_365", "aging_366_plus"] as const;
+const overdueKeys = agingKeys.filter(k => k !== "not_due");
 
 function formatBRL(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -159,13 +174,10 @@ function mergeProductRows(rows: AgingRow[]): AgingRow[] {
       for (const k of agingKeys) {
         (grouped[mapped][k] as number) += row[k] as number;
       }
-      grouped[mapped].count_not_due += row.count_not_due;
-      grouped[mapped].count_30 += row.count_30;
-      grouped[mapped].count_90 += row.count_90;
-      grouped[mapped].count_180 += row.count_180;
-      grouped[mapped].count_240 += row.count_240;
-      grouped[mapped].count_360 += row.count_360;
-      grouped[mapped].count_360_plus += row.count_360_plus;
+      const countKeys = ["count_not_due", "count_30", "count_40", "count_60", "count_90", "count_120", "count_180", "count_240", "count_365", "count_366_plus"] as const;
+      for (const ck of countKeys) {
+        (grouped[mapped] as any)[ck] += (row as any)[ck];
+      }
     }
   }
   return Object.values(grouped).sort((a, b) => {
@@ -254,39 +266,25 @@ export default function OlimpoCobranca() {
     return rows;
   }, [data, viewMode, clientFilter]);
 
-  // Recalculate totals from displayRows
   const totals = useMemo(() => {
     if (displayRows.length === 0) return null;
-    const t: AgingRow = {
+    const t: any = {
       product: "Grand Total",
-      not_due: 0, aging_30: 0, aging_90: 0, aging_180: 0, aging_240: 0, aging_360: 0, aging_360_plus: 0,
-      count_not_due: 0, count_30: 0, count_90: 0, count_180: 0, count_240: 0, count_360: 0, count_360_plus: 0,
+      not_due: 0, aging_30: 0, aging_40: 0, aging_60: 0, aging_90: 0, aging_120: 0, aging_180: 0, aging_240: 0, aging_365: 0, aging_366_plus: 0,
+      count_not_due: 0, count_30: 0, count_40: 0, count_60: 0, count_90: 0, count_120: 0, count_180: 0, count_240: 0, count_365: 0, count_366_plus: 0,
     };
     for (const row of displayRows) {
-      for (const k of agingKeys) (t[k] as number) += row[k] as number;
-      t.count_not_due += row.count_not_due;
-      t.count_30 += row.count_30;
-      t.count_90 += row.count_90;
-      t.count_180 += row.count_180;
-      t.count_240 += row.count_240;
-      t.count_360 += row.count_360;
-      t.count_360_plus += row.count_360_plus;
+      for (const k of agingKeys) t[k] += (row[k] as number) || 0;
+      const countKeys = ["count_not_due", "count_30", "count_40", "count_60", "count_90", "count_120", "count_180", "count_240", "count_365", "count_366_plus"];
+      for (const ck of countKeys) t[ck] += (row as any)[ck] || 0;
     }
-    return t;
+    return t as AgingRow;
   }, [displayRows]);
 
   const totalReceivable = totals ? agingKeys.reduce((s, k) => s + (totals[k] as number), 0) : 0;
-  const totalOverdue = totals ? totalReceivable - totals.not_due : 0;
+  const totalOverdue = totals ? overdueKeys.reduce((s, k) => s + (totals[k] as number), 0) : 0;
   const pctOverdue = totalReceivable > 0 ? ((totalOverdue / totalReceivable) * 100).toFixed(1) : "0";
-  const badDebtsValue = totals?.aging_360_plus || 0;
 
-  const budgetValue = budgetForecast?.budget ?? 0;
-  const forecastValue = budgetForecast?.forecast ?? 0;
-  const gapValue = forecastValue - budgetValue;
-  const attainmentPct = budgetValue > 0 ? ((forecastValue / budgetValue) * 100).toFixed(1) : "0";
-  const isNegativeGap = gapValue < 0;
-
-  // Aging segmented bar
   const agingSegments = useMemo(() => {
     if (!totals || totalReceivable === 0) return [];
     return agingKeys.map((k) => ({
@@ -302,13 +300,16 @@ export default function OlimpoCobranca() {
   const barData = useMemo(() => {
     return displayRows.map((r) => ({
       product: r.product,
-      "Not Due": r.not_due,
+      "Not Overdue": r.not_due,
       "0-30": r.aging_30,
-      "31-90": r.aging_90,
-      "91-180": r.aging_180,
+      "31-40": r.aging_40,
+      "41-60": r.aging_60,
+      "61-90": r.aging_90,
+      "91-120": r.aging_120,
+      "121-180": r.aging_180,
       "181-240": r.aging_240,
-      "241-360": r.aging_360,
-      "> 360": r.aging_360_plus,
+      "241-365": r.aging_365,
+      "366+": r.aging_366_plus,
     }));
   }, [displayRows]);
 
@@ -320,61 +321,30 @@ export default function OlimpoCobranca() {
     ];
   }, [totals, totalOverdue, totalReceivable]);
 
-  // Score Rating: % distribution by aging bucket
-  const scoreRating = useMemo(() => {
-    if (!totals || totalReceivable === 0) return null;
-    const currentMonth = new Date().toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
-    return {
-      period: currentMonth,
-      not_od: ((totals.not_due / totalReceivable) * 100).toFixed(1),
-      pct_1_90: (((totals.aging_30 + totals.aging_90) / totalReceivable) * 100).toFixed(1),
-      pct_91_180: ((totals.aging_180 / totalReceivable) * 100).toFixed(1),
-      pct_181_240: ((totals.aging_240 / totalReceivable) * 100).toFixed(1),
-      pct_241_360: ((totals.aging_360 / totalReceivable) * 100).toFixed(1),
-      pct_361_plus: ((totals.aging_360_plus / totalReceivable) * 100).toFixed(1),
-      od_pct: pctOverdue,
-    };
-  }, [totals, totalReceivable, pctOverdue]);
-
-  // Bad Debts: absolute values by aging bucket
-  const badDebtsRow = useMemo(() => {
-    if (!totals) return null;
-    return {
-      not_due: totals.not_due,
-      aging_1_90: totals.aging_30 + totals.aging_90,
-      aging_91_180: totals.aging_180,
-      aging_181_240: totals.aging_240,
-      aging_241_360: totals.aging_360,
-      aging_361_plus: totals.aging_360_plus,
-      total: totalReceivable,
-    };
-  }, [totals, totalReceivable]);
-
   // Export to Excel with Analítico tab
   const handleExportExcel = async () => {
     if (!displayRows.length) return;
     setExportingExcel(true);
 
     try {
-      // Sheet 1: Aging
       const wsData: any[][] = [
-        ["Brazil Customer Aging Overview", "", "", "", "", "", "", "", "", ""],
-        [viewMode === "product" ? "Product" : "Client", "Not Due", "0-30", "31-90", "91-180", "181-240", "241-360", "> 360 (Bad Debts)", "Total Overdue", "Total Receivable"],
+        ["Brazil Customer Aging Overview", "", "", "", "", "", "", "", "", "", "", "", ""],
+        [viewMode === "product" ? "Product" : "Client", ...agingKeys.map(k => AGING_LABELS[k]), "Total Overdue", "Total Receivable"],
       ];
       for (const row of displayRows) {
-        const rowOverdue = row.aging_30 + row.aging_90 + row.aging_180 + row.aging_240 + row.aging_360 + row.aging_360_plus;
+        const rowOverdue = overdueKeys.reduce((s, k) => s + (row[k] as number), 0);
         const rowTotal = row.not_due + rowOverdue;
         wsData.push([
-          row.product, row.not_due.toFixed(2), row.aging_30.toFixed(2), row.aging_90.toFixed(2),
-          row.aging_180.toFixed(2), row.aging_240.toFixed(2), row.aging_360.toFixed(2),
-          row.aging_360_plus.toFixed(2), rowOverdue.toFixed(2), rowTotal.toFixed(2),
+          row.product,
+          ...agingKeys.map(k => (row[k] as number).toFixed(2)),
+          rowOverdue.toFixed(2), rowTotal.toFixed(2),
         ]);
       }
       if (totals) {
         wsData.push([
-          "Grand Total", totals.not_due.toFixed(2), totals.aging_30.toFixed(2), totals.aging_90.toFixed(2),
-          totals.aging_180.toFixed(2), totals.aging_240.toFixed(2), totals.aging_360.toFixed(2),
-          totals.aging_360_plus.toFixed(2), totalOverdue.toFixed(2), totalReceivable.toFixed(2),
+          "Grand Total",
+          ...agingKeys.map(k => (totals[k] as number).toFixed(2)),
+          totalOverdue.toFixed(2), totalReceivable.toFixed(2),
         ]);
         wsData.push([
           "% do Total",
@@ -414,7 +384,7 @@ export default function OlimpoCobranca() {
               "STATUS FINANCEIRO", "VALOR ORIGINAL", "VALOR LÍQUIDO",
               "PROCESSO", "MASTER", "HOUSE", "IDLAN",
               "Provisão ≤90 (1%)", "Provisão 91-180 (25%)", "Provisão 181-240 (50%)",
-              "Provisão 241-360 (75%)", "Provisão >360 (100%)",
+              "Provisão 241-365 (75%)", "Provisão >365 (100%)",
               "Qtd. Dias de Vencimento",
             ],
           ];
@@ -431,7 +401,7 @@ export default function OlimpoCobranca() {
             if (dias <= 90) p1 = provValue;
             else if (dias <= 180) p25 = provValue;
             else if (dias <= 240) p50 = provValue;
-            else if (dias <= 360) p75 = provValue;
+            else if (dias <= 365) p75 = provValue;
             else p100 = provValue;
 
             totalProv1 += p1;
@@ -466,7 +436,6 @@ export default function OlimpoCobranca() {
             ]);
           }
 
-          // Totals row
           analiticoWs.push([]);
           analiticoWs.push([
             "", "", "", "", "", "", "", "", "",
@@ -525,69 +494,73 @@ export default function OlimpoCobranca() {
           <KpiCard icon={Clock} label="Último Registro" value={data?.lastUpdate ? new Date(data.lastUpdate).toLocaleString("pt-BR") : "—"} loading={loading} />
         </div>
 
-        {/* Provisioning Summary Card (Working Capital style) */}
+        {/* Combined Bad Debts / Score Rating / Provision Table */}
         {totals && totalReceivable > 0 && (
           <Card className="bg-card border-border">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-foreground">Resumo de Provisão — Working Capital</CardTitle>
+              <CardTitle className="text-sm text-foreground">Bad Debts — Score Rating & Provisão</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border/50">
-                      <th className="text-left py-2 px-4 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Faixa</th>
+                      <th className="text-left py-2 px-4 text-xs uppercase tracking-wider text-muted-foreground font-semibold min-w-[120px]">Faixa</th>
                       {agingKeys.map(k => (
-                        <th key={k} className="text-right py-2 px-3 text-xs uppercase tracking-wider font-semibold" style={{ color: AGING_COLORS[k] }}>
+                        <th key={k} className="text-right py-2 px-2 text-xs uppercase tracking-wider font-semibold min-w-[80px]" style={{ color: AGING_COLORS[k] }}>
                           {AGING_LABELS[k]}
                         </th>
                       ))}
-                      <th className="text-right py-2 px-3 text-xs uppercase tracking-wider font-semibold text-red-400">Total Overdue</th>
-                      <th className="text-right py-2 px-4 text-xs uppercase tracking-wider font-semibold text-foreground">Grand Total</th>
+                      <th className="text-right py-2 px-2 text-xs uppercase tracking-wider font-semibold text-red-400 min-w-[100px]">Total Overdue</th>
+                      <th className="text-right py-2 px-4 text-xs uppercase tracking-wider font-semibold text-foreground min-w-[100px]">Grand Total</th>
                     </tr>
                   </thead>
                   <tbody>
+                    {/* Row 1: Score Rating % */}
                     <tr className="border-b border-border/30">
-                      <td className="py-2 px-4 font-medium text-foreground">Valor</td>
+                      <td className="py-2 px-4 font-medium text-foreground">Score Rating %</td>
                       {agingKeys.map(k => (
-                        <td key={k} className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS[k] }}>
-                          {formatBRL(totals[k] as number)}
-                        </td>
-                      ))}
-                      <td className="py-2 px-3 text-right tabular-nums text-red-400 font-medium">{formatBRL(totalOverdue)}</td>
-                      <td className="py-2 px-4 text-right tabular-nums text-foreground font-medium">{formatBRL(totalReceivable)}</td>
-                    </tr>
-                    <tr className="border-b border-border/30">
-                      <td className="py-2 px-4 text-muted-foreground">% do Total</td>
-                      {agingKeys.map(k => (
-                        <td key={k} className="py-2 px-3 text-right tabular-nums text-muted-foreground">
+                        <td key={k} className="py-2 px-2 text-right tabular-nums" style={{ color: AGING_COLORS[k] }}>
                           {((totals[k] as number) / totalReceivable * 100).toFixed(1)}%
                         </td>
                       ))}
-                      <td className="py-2 px-3 text-right tabular-nums text-red-400">{pctOverdue}%</td>
+                      <td className="py-2 px-2 text-right tabular-nums text-red-400 font-medium">{pctOverdue}%</td>
                       <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">100%</td>
                     </tr>
+                    {/* Row 2: Absolute values */}
+                    <tr className="border-b border-border/30">
+                      <td className="py-2 px-4 font-medium text-foreground">Valor</td>
+                      {agingKeys.map(k => (
+                        <td key={k} className="py-2 px-2 text-right tabular-nums" style={{ color: AGING_COLORS[k] }}>
+                          {formatBRL(totals[k] as number)}
+                        </td>
+                      ))}
+                      <td className="py-2 px-2 text-right tabular-nums text-red-400 font-medium">{formatBRL(totalOverdue)}</td>
+                      <td className="py-2 px-4 text-right tabular-nums text-foreground font-medium">{formatBRL(totalReceivable)}</td>
+                    </tr>
+                    {/* Row 3: % Provisão */}
                     <tr className="border-b border-border/30">
                       <td className="py-2 px-4 text-muted-foreground">% Provisão</td>
                       {agingKeys.map(k => (
-                        <td key={k} className="py-2 px-3 text-right tabular-nums text-muted-foreground">
+                        <td key={k} className="py-2 px-2 text-right tabular-nums text-muted-foreground">
                           {PROVISION_PCT[k]}%
                         </td>
                       ))}
-                      <td className="py-2 px-3" />
+                      <td className="py-2 px-2" />
                       <td className="py-2 px-4" />
                     </tr>
+                    {/* Row 4: Provision values */}
                     <tr className="border-t-2 border-primary/40 bg-primary/5">
                       <td className="py-2 px-4 font-bold text-primary">Valor Provisionado</td>
                       {agingKeys.map(k => {
                         const prov = (totals[k] as number) * PROVISION_PCT[k] / 100;
                         return (
-                          <td key={k} className="py-2 px-3 text-right tabular-nums font-bold" style={{ color: prov > 0 ? AGING_COLORS[k] : "var(--muted-foreground)" }}>
+                          <td key={k} className="py-2 px-2 text-right tabular-nums font-bold" style={{ color: prov > 0 ? AGING_COLORS[k] : "var(--muted-foreground)" }}>
                             {formatBRL(prov)}
                           </td>
                         );
                       })}
-                      <td className="py-2 px-3" />
+                      <td className="py-2 px-2" />
                       <td className="py-2 px-4 text-right tabular-nums font-bold text-foreground">
                         {formatBRL(agingKeys.reduce((s, k) => s + (totals[k] as number) * PROVISION_PCT[k] / 100, 0))}
                       </td>
@@ -597,92 +570,6 @@ export default function OlimpoCobranca() {
               </div>
             </CardContent>
           </Card>
-        )}
-
-        {/* Score Rating + Bad Debts side by side */}
-        {scoreRating && badDebtsRow && (
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Score Rating */}
-            <Card className="bg-card border-border">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-foreground">Score Rating — Distribuição % do Receivable</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border/50">
-                        <th className="text-left py-2 px-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Período</th>
-                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.not_due }}>NOT OD%</th>
-                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_90 }}>1-90%</th>
-                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_180 }}>91-180%</th>
-                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_240 }}>181-240%</th>
-                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_360 }}>241-360%</th>
-                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_360_plus }}>&gt;361%</th>
-                        <th className="text-right py-2 px-3 text-xs font-semibold text-red-400">OD%</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-b border-border/30">
-                        <td className="py-2 px-3 font-medium text-foreground">{scoreRating.period}</td>
-                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.not_due }}>{scoreRating.not_od}%</td>
-                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_90 }}>{scoreRating.pct_1_90}%</td>
-                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_180 }}>{scoreRating.pct_91_180}%</td>
-                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_240 }}>{scoreRating.pct_181_240}%</td>
-                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_360 }}>{scoreRating.pct_241_360}%</td>
-                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_360_plus }}>{scoreRating.pct_361_plus}%</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-red-400 font-bold">{scoreRating.od_pct}%</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Bad Debts */}
-            <Card className="bg-card border-border">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-foreground">Bad Debts — Valores por Faixa de Aging</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border/50">
-                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.not_due }}>Not Due</th>
-                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_90 }}>1-90</th>
-                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_180 }}>91-180</th>
-                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_240 }}>181-240</th>
-                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_360 }}>241-360</th>
-                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_360_plus }}>&gt;360</th>
-                        <th className="text-right py-2 px-3 text-xs font-semibold text-foreground">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-b border-border/30">
-                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.not_due }}>{formatBRL(badDebtsRow.not_due)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_90 }}>{formatBRL(badDebtsRow.aging_1_90)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_180 }}>{formatBRL(badDebtsRow.aging_91_180)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_240 }}>{formatBRL(badDebtsRow.aging_181_240)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_360 }}>{formatBRL(badDebtsRow.aging_241_360)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums font-bold" style={{ color: AGING_COLORS.aging_360_plus }}>{formatBRL(badDebtsRow.aging_361_plus)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums font-bold text-foreground">{formatBRL(badDebtsRow.total)}</td>
-                      </tr>
-                      <tr>
-                        <td className="py-1 px-3 text-right text-xs text-muted-foreground">0%</td>
-                        <td className="py-1 px-3 text-right text-xs text-muted-foreground">1%</td>
-                        <td className="py-1 px-3 text-right text-xs text-muted-foreground">25%</td>
-                        <td className="py-1 px-3 text-right text-xs text-muted-foreground">50%</td>
-                        <td className="py-1 px-3 text-right text-xs text-muted-foreground">75%</td>
-                        <td className="py-1 px-3 text-right text-xs text-muted-foreground">100%</td>
-                        <td className="py-1 px-3 text-right text-xs text-muted-foreground">Provisão</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
         )}
 
         {/* PYMT Term Rating */}
@@ -729,7 +616,6 @@ export default function OlimpoCobranca() {
           </Card>
         )}
 
-
         {/* Aging Table */}
         <Card className="bg-card border-border overflow-hidden">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
@@ -753,18 +639,18 @@ export default function OlimpoCobranca() {
                     {agingKeys.map((k) => {
                       const seg = agingSegments.find((s) => s.key === k);
                       return (
-                        <th key={k} className="text-right py-3 px-4 font-semibold" style={{ color: AGING_COLORS[k] }}>
+                        <th key={k} className="text-right py-3 px-3 font-semibold" style={{ color: AGING_COLORS[k] }}>
                           {seg && <div className="text-sm font-bold mb-1">{seg.pct.toFixed(0)}%</div>}
-                          <div className="text-xs uppercase tracking-wider">{AGING_LABELS[k]}</div>
+                          <div className="text-[10px] uppercase tracking-wider">{AGING_LABELS[k]}</div>
                         </th>
                       );
                     })}
-                    <th className="text-right py-3 px-4 font-semibold text-red-400">
+                    <th className="text-right py-3 px-3 font-semibold text-red-400">
                       {totalReceivable > 0 && <div className="text-sm font-bold mb-1">{pctOverdue}%</div>}
-                      <div className="text-xs uppercase tracking-wider">Total Overdue</div>
+                      <div className="text-[10px] uppercase tracking-wider">Total Overdue</div>
                     </th>
                     <th className="text-right py-3 px-4 font-semibold text-foreground">
-                      <div className="text-xs uppercase tracking-wider">Total Receivable</div>
+                      <div className="text-[10px] uppercase tracking-wider">Total Receivable</div>
                       {totalReceivable > 0 && (
                         <div className="text-[10px] font-normal text-muted-foreground mt-0.5">{formatCompact(totalReceivable)}</div>
                       )}
@@ -773,15 +659,15 @@ export default function OlimpoCobranca() {
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan={10} className="text-center py-8 text-muted-foreground">Carregando dados...</td></tr>
+                    <tr><td colSpan={13} className="text-center py-8 text-muted-foreground">Carregando dados...</td></tr>
                   ) : displayRows.length === 0 ? (
-                    <tr><td colSpan={10} className="text-center py-8 text-muted-foreground">Nenhum dado encontrado</td></tr>
+                    <tr><td colSpan={13} className="text-center py-8 text-muted-foreground">Nenhum dado encontrado</td></tr>
                   ) : (
                     <>
                       {displayRows.map((row, idx) => {
-                        const rowOverdue = row.aging_30 + row.aging_90 + row.aging_180 + row.aging_240 + row.aging_360 + row.aging_360_plus;
+                        const rowOverdue = overdueKeys.reduce((s, k) => s + (row[k] as number), 0);
                         const rowTotal = row.not_due + rowOverdue;
-                        const isBadDebt = row.aging_360_plus > 0;
+                        const isBadDebt = row.aging_366_plus > 0;
                         return (
                           <tr key={idx} className={`border-b border-border/30 hover:bg-muted/10 ${isBadDebt ? "bg-red-500/5" : ""} ${viewMode === "client" ? "cursor-pointer" : ""}`}
                             onClick={() => { if (viewMode === "client") { setSelectedClient(row); setSheetOpen(true); } }}>
@@ -792,28 +678,28 @@ export default function OlimpoCobranca() {
                               )}
                             </td>
                             {agingKeys.map((k) => (
-                              <td key={k} className="py-2.5 px-4 text-right tabular-nums"
+                              <td key={k} className="py-2.5 px-3 text-right tabular-nums"
                                 style={{ color: (row[k] as number) > 0 ? AGING_COLORS[k] : "var(--muted-foreground)" }}>
                                 {formatBRL(row[k] as number)}
                               </td>
                             ))}
-                            <td className="py-2.5 px-4 text-right tabular-nums text-red-400 font-medium">{formatBRL(rowOverdue)}</td>
-                            <td className="py-2.5 px-4 text-right tabular-nums text-foreground font-medium">{formatBRL(rowTotal)}</td>
+                            <td className="py-2.5 px-3 text-right tabular-nums text-red-400 font-medium">{formatBRL(rowOverdue)}</td>
+                            <td className="py-2.5 px-3 text-right tabular-nums text-foreground font-medium">{formatBRL(rowTotal)}</td>
                           </tr>
                         );
                       })}
                       {/* Bad Debts summary row */}
-                      {totals && totals.aging_360_plus > 0 && (
+                      {totals && totals.aging_366_plus > 0 && (
                         <tr className="border-t border-red-500/30 bg-red-500/10">
-                          <td className="py-2.5 px-4 font-bold text-red-400">Bad Debts ({">"}360)</td>
+                          <td className="py-2.5 px-4 font-bold text-red-400">Bad Debts ({">"} 365)</td>
                           {agingKeys.map((k) => (
-                            <td key={k} className="py-2.5 px-4 text-right tabular-nums font-bold" style={{ color: k === "aging_360_plus" ? "#991b1b" : "transparent" }}>
-                              {k === "aging_360_plus" ? formatBRL(totals.aging_360_plus) : ""}
+                            <td key={k} className="py-2.5 px-3 text-right tabular-nums font-bold" style={{ color: k === "aging_366_plus" ? "#991b1b" : "transparent" }}>
+                              {k === "aging_366_plus" ? formatBRL(totals.aging_366_plus) : ""}
                             </td>
                           ))}
-                          <td className="py-2.5 px-4" />
-                          <td className="py-2.5 px-4 text-right tabular-nums font-bold text-red-400">
-                            {totalReceivable > 0 ? `${((totals.aging_360_plus / totalReceivable) * 100).toFixed(1)}% do total` : ""}
+                          <td className="py-2.5 px-3" />
+                          <td className="py-2.5 px-3 text-right tabular-nums font-bold text-red-400">
+                            {totalReceivable > 0 ? `${((totals.aging_366_plus / totalReceivable) * 100).toFixed(1)}% do total` : ""}
                           </td>
                         </tr>
                       )}
@@ -822,12 +708,12 @@ export default function OlimpoCobranca() {
                         <tr className="border-t-2 border-primary/40 bg-primary/5 sticky bottom-0">
                           <td className="py-3 px-4 font-bold text-primary">Grand Total</td>
                           {agingKeys.map((k) => (
-                            <td key={k} className="py-3 px-4 text-right tabular-nums font-bold" style={{ color: AGING_COLORS[k] }}>
+                            <td key={k} className="py-3 px-3 text-right tabular-nums font-bold" style={{ color: AGING_COLORS[k] }}>
                               {formatBRL(totals[k] as number)}
                             </td>
                           ))}
-                          <td className="py-3 px-4 text-right tabular-nums font-bold text-red-400">{formatBRL(totalOverdue)}</td>
-                          <td className="py-3 px-4 text-right tabular-nums font-bold text-foreground">{formatBRL(totalReceivable)}</td>
+                          <td className="py-3 px-3 text-right tabular-nums font-bold text-red-400">{formatBRL(totalOverdue)}</td>
+                          <td className="py-3 px-3 text-right tabular-nums font-bold text-foreground">{formatBRL(totalReceivable)}</td>
                         </tr>
                       )}
                     </>
@@ -860,13 +746,16 @@ export default function OlimpoCobranca() {
                     <Tooltip contentStyle={{ backgroundColor: "rgba(0,0,0,0.85)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8 }}
                       labelStyle={{ color: "#fff" }} formatter={(value: number) => formatBRL(value)} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="Not Due" stackId="a" fill={AGING_COLORS.not_due} />
+                    <Bar dataKey="Not Overdue" stackId="a" fill={AGING_COLORS.not_due} />
                     <Bar dataKey="0-30" stackId="a" fill={AGING_COLORS.aging_30} />
-                    <Bar dataKey="31-90" stackId="a" fill={AGING_COLORS.aging_90} />
-                    <Bar dataKey="91-180" stackId="a" fill={AGING_COLORS.aging_180} />
+                    <Bar dataKey="31-40" stackId="a" fill={AGING_COLORS.aging_40} />
+                    <Bar dataKey="41-60" stackId="a" fill={AGING_COLORS.aging_60} />
+                    <Bar dataKey="61-90" stackId="a" fill={AGING_COLORS.aging_90} />
+                    <Bar dataKey="91-120" stackId="a" fill={AGING_COLORS.aging_120} />
+                    <Bar dataKey="121-180" stackId="a" fill={AGING_COLORS.aging_180} />
                     <Bar dataKey="181-240" stackId="a" fill={AGING_COLORS.aging_240} />
-                    <Bar dataKey="241-360" stackId="a" fill={AGING_COLORS.aging_360} />
-                    <Bar dataKey="> 360" stackId="a" fill={AGING_COLORS.aging_360_plus} />
+                    <Bar dataKey="241-365" stackId="a" fill={AGING_COLORS.aging_365} />
+                    <Bar dataKey="366+" stackId="a" fill={AGING_COLORS.aging_366_plus} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
