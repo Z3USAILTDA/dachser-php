@@ -405,7 +405,7 @@ export default function CCTDashboard() {
             </>
           )}
 
-          {activeTab === "analytics" && <AnalyticsContent processos={processos} isLoading={isLoading} refetch={refetch} isRefetching={isRefetching} />}
+          {activeTab === "analytics" && <AnalyticsContent processos={filteredProcessos} isLoading={isLoading} refetch={refetch} isRefetching={isRefetching} />}
           {activeTab === "excecoes" && <ExcecoesContent />}
           {activeTab === "regras" && <RegrasContent />}
           {activeTab === "console" && <ConsoleContent />}
