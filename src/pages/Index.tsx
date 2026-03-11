@@ -57,6 +57,19 @@ const EMAIL_SENDING_ENABLED = false;
 const ARR_RETENTION_HOURS = 120; // 5 dias para AWBs em ARR permanecerem visíveis
 const ARR_RETENTION_MS = ARR_RETENTION_HOURS * 60 * 60 * 1000;
 
+// Usuários DACHSER (não são Z3US admins)
+const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
+
+const isZ3usAdmin = (): boolean => {
+  try {
+    const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+    if (!storedUser) return false;
+    const parsed = JSON.parse(storedUser);
+    const isAdmin = parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
+    return isAdmin && !DACHSER_ADMIN_USERS.includes(parsed.username);
+  } catch { return false; }
+};
+
 // AWBs excluídos manualmente da visualização
 const EXCLUDED_AWBS = [
   "045-12829121",
@@ -628,9 +641,20 @@ const Index = () => {
           });
 
           localStorage.setItem("tracking-failed-flags", JSON.stringify(cleanedFlags));
-          setStatusAereoData(withFlags);
+          // Filtrar para 2027 se não for Z3US admin
+          const filtered2027 = isZ3usAdmin() ? withFlags : withFlags.filter(item => {
+            const dateStr = item.last_check || item.created_at || '';
+            if (!dateStr) return false;
+            return new Date(dateStr).getFullYear() === 2027;
+          });
+          setStatusAereoData(filtered2027);
         } catch (_) {
-          setStatusAereoData(deduplicatedData);
+          const filtered2027 = isZ3usAdmin() ? deduplicatedData : deduplicatedData.filter(item => {
+            const dateStr = item.last_check || item.created_at || '';
+            if (!dateStr) return false;
+            return new Date(dateStr).getFullYear() === 2027;
+          });
+          setStatusAereoData(filtered2027);
         }
       }
     } catch (error) {

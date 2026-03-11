@@ -24,6 +24,19 @@ import ExcecoesContent from "./tabs/ExcecoesTab";
 import RegrasContent from "./tabs/RegrasTab";
 import ConsoleContent from "./tabs/ConsoleTab";
 
+// Usuários DACHSER (não são Z3US admins)
+const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
+
+const isZ3usAdmin = (): boolean => {
+  try {
+    const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+    if (!storedUser) return false;
+    const parsed = JSON.parse(storedUser);
+    const isAdmin = parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
+    return isAdmin && !DACHSER_ADMIN_USERS.includes(parsed.username);
+  } catch { return false; }
+};
+
 type TabType = "dashboard" | "analytics" | "excecoes" | "regras" | "console";
 
 interface NavTab {
@@ -66,21 +79,29 @@ export default function CCTDashboard() {
   
   const { data: profiles = [] } = useProfiles();
   const { data: excecoes = [] } = useExcecoes();
+
+  // Filtrar processos para 2027 se não for Z3US admin
+  const filteredProcessos = useMemo(() => {
+    if (isZ3usAdmin()) return processos;
+    return processos.filter(p => {
+      const dateStr = p.shipment?.data_decolagem_ultimo_trecho || p.shipment?.created_at || '';
+      if (!dateStr) return false;
+      return new Date(dateStr).getFullYear() === 2027;
+    });
+  }, [processos]);
   
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedProcesso, setSelectedProcesso] = useState<ProcessoCCT | null>(null);
   const [metricFilter, setMetricFilter] = useState<MetricFilterType>(null);
   
   const metrics = useMemo(() => {
-    const total = processos.length;
-    const emTransito = processos.filter(p => p.status_atual?.status_cct_oficial === "INFORMADA" || p.status_atual?.status_cct_oficial === "MANIFESTADA").length;
-    // ALERTA: apenas status ALERTA (não inclui VENCIDO nem CRITICO)
-    const alerta = processos.filter(p => p.status_atual?.sla_status === "ALERTA").length;
-    // CRITICO: inclui tanto CRITICO quanto VENCIDO (ambos precisam de ação imediata)
-    const critico = processos.filter(p => 
+    const total = filteredProcessos.length;
+    const emTransito = filteredProcessos.filter(p => p.status_atual?.status_cct_oficial === "INFORMADA" || p.status_atual?.status_cct_oficial === "MANIFESTADA").length;
+    const alerta = filteredProcessos.filter(p => p.status_atual?.sla_status === "ALERTA").length;
+    const critico = filteredProcessos.filter(p => 
       p.status_atual?.sla_status === "CRITICO" || p.status_atual?.sla_status === "VENCIDO"
     ).length;
-    const eventos24h = processos.reduce((acc, p) => {
+    const eventos24h = filteredProcessos.reduce((acc, p) => {
       const recent = p.eventos.filter(e => {
         const eventDate = new Date(e.data_hora_evento);
         const now = new Date();
@@ -89,7 +110,7 @@ export default function CCTDashboard() {
       return acc + recent.length;
     }, 0);
     return { total, emTransito, alerta, critico, eventos24h };
-  }, [processos]);
+  }, [filteredProcessos]);
 
   const excecoesStats = useMemo(() => ({
     abertas: excecoes.filter(e => e.status_excecao === "ABERTA").length,
@@ -225,7 +246,7 @@ export default function CCTDashboard() {
               </button>
               <button 
                 onClick={() => {
-                  const count = exportCCTWithoutDepDateToExcel(processos);
+                  const count = exportCCTWithoutDepDateToExcel(filteredProcessos);
                   if (count > 0) {
                     toast.success(`${count} AWBs sem data de decolagem exportadas`);
                   } else {
@@ -379,12 +400,12 @@ export default function CCTDashboard() {
               {isLoading ? (
                 <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
               ) : (
-                <ProcessosTable processos={processos} onAssignAnalista={handleOpenAssignDialog} metricFilter={metricFilter} />
+                <ProcessosTable processos={filteredProcessos} onAssignAnalista={handleOpenAssignDialog} metricFilter={metricFilter} />
               )}
             </>
           )}
 
-          {activeTab === "analytics" && <AnalyticsContent processos={processos} isLoading={isLoading} refetch={refetch} isRefetching={isRefetching} />}
+          {activeTab === "analytics" && <AnalyticsContent processos={filteredProcessos} isLoading={isLoading} refetch={refetch} isRefetching={isRefetching} />}
           {activeTab === "excecoes" && <ExcecoesContent />}
           {activeTab === "regras" && <RegrasContent />}
           {activeTab === "console" && <ConsoleContent />}
