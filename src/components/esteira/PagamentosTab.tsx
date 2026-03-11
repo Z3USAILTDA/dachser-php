@@ -716,7 +716,7 @@ export const PagamentosTab = () => {
           <span className="text-sm font-bold text-primary">
             {(() => {
               const selectedPags = pagamentos.filter(p => selectedIds.has(p.id));
-              const sum = selectedPags.reduce((acc, p) => acc + (p.valor || 0), 0);
+              const sum = selectedPags.reduce((acc, p) => acc + (parseFloat(String(p.valor)) || 0), 0);
               return `Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sum)}`;
             })()}
           </span>
