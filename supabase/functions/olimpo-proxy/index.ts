@@ -2688,6 +2688,37 @@ serve(async (req) => {
           if (!apiRes.__curl_error && !apiRes.error && (apiRes.data || apiRes.container_status)) {
             const data = apiRes.data || apiRes;
             
+            // ===== EXTRACT CONTAINER COORDINATES =====
+            // Try multiple sources: last_movement, vessel position, or direct fields
+            let containerLat: number | null = null;
+            let containerLon: number | null = null;
+            
+            // Source 1: last_movement (most specific - actual container position)
+            if (data.last_movement?.latitude && data.last_movement?.longitude) {
+              containerLat = +data.last_movement.latitude || null;
+              containerLon = +data.last_movement.longitude || null;
+            }
+            // Source 2: Direct fields on response
+            if (!containerLat && data.latitude && data.longitude) {
+              containerLat = +data.latitude || null;
+              containerLon = +data.longitude || null;
+            }
+            // Source 3: Current vessel position (fallback)
+            if (!containerLat && data.current_vessel_lat && data.current_vessel_lon) {
+              containerLat = +data.current_vessel_lat || null;
+              containerLon = +data.current_vessel_lon || null;
+            }
+            // Source 4: Last event with coordinates
+            if (!containerLat && data.events && Array.isArray(data.events)) {
+              for (const evt of data.events) {
+                if (evt.latitude && evt.longitude) {
+                  containerLat = +evt.latitude || null;
+                  containerLon = +evt.longitude || null;
+                  break;
+                }
+              }
+            }
+            
             let lastEventDescription = data.container_status || null;
             if (data.events && Array.isArray(data.events) && data.events.length > 0) {
               lastEventDescription = data.events[0].description || data.events[0].event_type || lastEventDescription;
