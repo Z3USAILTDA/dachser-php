@@ -13915,6 +13915,177 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== OLIMPO AGING HISTORICAL (Score Rating, Bad Debts, Current Customers) ====================
+      case 'get_aging_historical': {
+        console.log('[get_aging_historical] Fetching historical aging snapshots...');
+        try {
+          // Generate last 10 month-end dates
+          const months: string[] = [];
+          const now = new Date();
+          for (let i = 0; i < 10; i++) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 0); // last day of (current - i - 1) month
+            if (i === 0) {
+              // For current month, use today as reference
+              months.push(now.toISOString().slice(0, 10));
+            } else {
+              months.push(d.toISOString().slice(0, 10));
+            }
+          }
+          months.reverse(); // oldest first
+
+          const results: any[] = [];
+
+          for (const refDate of months) {
+            const histSql = `
+              SELECT
+                SUM(CASE WHEN DATEDIFF(?, t.data_vencimento) <= 0 THEN t.valor_nf ELSE 0 END) AS not_od,
+                SUM(CASE WHEN DATEDIFF(?, t.data_vencimento) BETWEEN 1 AND 90 THEN t.valor_nf ELSE 0 END) AS d1_90,
+                SUM(CASE WHEN DATEDIFF(?, t.data_vencimento) BETWEEN 91 AND 180 THEN t.valor_nf ELSE 0 END) AS d91_180,
+                SUM(CASE WHEN DATEDIFF(?, t.data_vencimento) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS d181_240,
+                SUM(CASE WHEN DATEDIFF(?, t.data_vencimento) BETWEEN 241 AND 360 THEN t.valor_nf ELSE 0 END) AS d241_360,
+                SUM(CASE WHEN DATEDIFF(?, t.data_vencimento) > 360 THEN t.valor_nf ELSE 0 END) AS d361_plus,
+                COUNT(DISTINCT CASE WHEN DATEDIFF(?, t.data_vencimento) <= 0 THEN TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'X'), '-', 1)) END) AS cust_not_od,
+                COUNT(DISTINCT CASE WHEN DATEDIFF(?, t.data_vencimento) BETWEEN 1 AND 90 THEN TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'X'), '-', 1)) END) AS cust_1_90,
+                COUNT(DISTINCT CASE WHEN DATEDIFF(?, t.data_vencimento) BETWEEN 91 AND 180 THEN TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'X'), '-', 1)) END) AS cust_91_180,
+                COUNT(DISTINCT CASE WHEN DATEDIFF(?, t.data_vencimento) BETWEEN 181 AND 240 THEN TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'X'), '-', 1)) END) AS cust_181_240,
+                COUNT(DISTINCT CASE WHEN DATEDIFF(?, t.data_vencimento) BETWEEN 241 AND 360 THEN TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'X'), '-', 1)) END) AS cust_241_360,
+                COUNT(DISTINCT CASE WHEN DATEDIFF(?, t.data_vencimento) > 360 THEN TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'X'), '-', 1)) END) AS cust_361_plus
+              FROM dados_dachser.t_dados_financeiro_nfs t
+              LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
+              WHERE COALESCE(sd.active, 1) = 1
+                AND t.data_emissao <= ?
+                AND NOT EXISTS (
+                  SELECT 1 FROM dados_dachser.tbaixas b
+                  WHERE b.IdLancamentoRM = t.id_rm
+                    AND b.StatusLan IN (1, 2, 3)
+                    AND b.DataBaixa <= ?
+                )
+                AND (t.disputa IS NULL OR t.disputa = 0)
+            `;
+            const params = Array(12).fill(refDate).concat([refDate, refDate]);
+            const rows = await client.query(histSql, params);
+            const r = rows[0] || {};
+            
+            const not_od = Number(r.not_od) || 0;
+            const d1_90 = Number(r.d1_90) || 0;
+            const d91_180 = Number(r.d91_180) || 0;
+            const d181_240 = Number(r.d181_240) || 0;
+            const d241_360 = Number(r.d241_360) || 0;
+            const d361_plus = Number(r.d361_plus) || 0;
+            const total = not_od + d1_90 + d91_180 + d181_240 + d241_360 + d361_plus;
+            const od_total = d1_90 + d91_180 + d181_240 + d241_360 + d361_plus;
+
+            results.push({
+              periodo: refDate.slice(0, 7),
+              ref_date: refDate,
+              // Absolute values
+              not_od, d1_90, d91_180, d181_240, d241_360, d361_plus, total,
+              // Score Rating %
+              pct_not_od: total > 0 ? Number((not_od / total * 100).toFixed(1)) : 0,
+              pct_1_90: total > 0 ? Number((d1_90 / total * 100).toFixed(1)) : 0,
+              pct_91_180: total > 0 ? Number((d91_180 / total * 100).toFixed(1)) : 0,
+              pct_181_240: total > 0 ? Number((d181_240 / total * 100).toFixed(1)) : 0,
+              pct_241_360: total > 0 ? Number((d241_360 / total * 100).toFixed(1)) : 0,
+              pct_361_plus: total > 0 ? Number((d361_plus / total * 100).toFixed(1)) : 0,
+              pct_od: total > 0 ? Number((od_total / total * 100).toFixed(1)) : 0,
+              // Bad Debts (Provision)
+              prov_not_od: 0,
+              prov_1_90: Number((d1_90 * 0.01).toFixed(2)),
+              prov_91_180: Number((d91_180 * 0.25).toFixed(2)),
+              prov_181_240: Number((d181_240 * 0.50).toFixed(2)),
+              prov_241_360: Number((d241_360 * 0.75).toFixed(2)),
+              prov_361_plus: Number((d361_plus * 1.00).toFixed(2)),
+              prov_total: Number((d1_90 * 0.01 + d91_180 * 0.25 + d181_240 * 0.50 + d241_360 * 0.75 + d361_plus).toFixed(2)),
+              // Current Customers
+              cust_not_od: Number(r.cust_not_od) || 0,
+              cust_1_90: Number(r.cust_1_90) || 0,
+              cust_91_180: Number(r.cust_91_180) || 0,
+              cust_181_240: Number(r.cust_181_240) || 0,
+              cust_241_360: Number(r.cust_241_360) || 0,
+              cust_361_plus: Number(r.cust_361_plus) || 0,
+            });
+          }
+
+          console.log(`[get_aging_historical] Processed ${results.length} months`);
+          result = { success: true, data: results };
+        } catch (e: any) {
+          console.error('[get_aging_historical] Error:', e);
+          result = { success: false, error: e.message };
+        }
+        break;
+      }
+
+      // ==================== OLIMPO PYMT TERM BY CLIENT ====================
+      case 'get_pymt_term_by_client': {
+        console.log('[get_pymt_term_by_client] Fetching payment term distribution by client...');
+        try {
+          const pymtClientSql = `
+            SELECT
+              TRIM(SUBSTRING_INDEX(COALESCE(nf.razao_social, 'Sem Cliente'), '-', 1)) AS cliente,
+              DATE_FORMAT(b.DataBaixa, '%Y-%m') AS periodo,
+              SUM(b.ValorBaixado) AS total_baixado,
+              SUM(CASE WHEN DATEDIFF(b.DataBaixa, b.DataVencimento) BETWEEN 0 AND 15 THEN b.ValorBaixado ELSE 0 END) AS val_0_15,
+              SUM(CASE WHEN DATEDIFF(b.DataBaixa, b.DataVencimento) BETWEEN 16 AND 30 THEN b.ValorBaixado ELSE 0 END) AS val_16_30,
+              SUM(CASE WHEN DATEDIFF(b.DataBaixa, b.DataVencimento) BETWEEN 31 AND 45 THEN b.ValorBaixado ELSE 0 END) AS val_31_45,
+              SUM(CASE WHEN DATEDIFF(b.DataBaixa, b.DataVencimento) BETWEEN 46 AND 60 THEN b.ValorBaixado ELSE 0 END) AS val_46_60,
+              SUM(CASE WHEN DATEDIFF(b.DataBaixa, b.DataVencimento) BETWEEN 61 AND 90 THEN b.ValorBaixado ELSE 0 END) AS val_61_90,
+              SUM(CASE WHEN DATEDIFF(b.DataBaixa, b.DataVencimento) > 90 THEN b.ValorBaixado ELSE 0 END) AS val_gt90
+            FROM dados_dachser.tbaixas b
+            INNER JOIN dados_dachser.t_dados_financeiro_nfs nf ON nf.id_rm = b.IdLancamentoRM
+            WHERE b.StatusLan IN (1, 2, 3)
+              AND b.DataBaixa >= DATE_SUB(CURDATE(), INTERVAL 10 MONTH)
+              AND b.ValorBaixado > 0
+              AND TRIM(SUBSTRING_INDEX(COALESCE(nf.razao_social, 'Sem Cliente'), '-', 1)) IN (
+                SELECT sub.cliente FROM (
+                  SELECT TRIM(SUBSTRING_INDEX(COALESCE(nf2.razao_social, 'Sem Cliente'), '-', 1)) AS cliente,
+                         SUM(b2.ValorBaixado) AS total
+                  FROM dados_dachser.tbaixas b2
+                  INNER JOIN dados_dachser.t_dados_financeiro_nfs nf2 ON nf2.id_rm = b2.IdLancamentoRM
+                  WHERE b2.StatusLan IN (1, 2, 3)
+                    AND b2.DataBaixa >= DATE_SUB(CURDATE(), INTERVAL 10 MONTH)
+                    AND b2.ValorBaixado > 0
+                  GROUP BY cliente
+                  ORDER BY total DESC
+                  LIMIT 20
+                ) sub
+              )
+            GROUP BY cliente, DATE_FORMAT(b.DataBaixa, '%Y-%m')
+            ORDER BY cliente, periodo DESC
+          `;
+          const pymtClientRows = await client.query(pymtClientSql);
+          
+          // Group by client
+          const clientMap: Record<string, any[]> = {};
+          for (const r of pymtClientRows) {
+            const cliente = r.cliente || 'Sem Cliente';
+            if (!clientMap[cliente]) clientMap[cliente] = [];
+            const total = Number(r.total_baixado) || 1;
+            clientMap[cliente].push({
+              periodo: r.periodo,
+              pct_0_15: Number(((Number(r.val_0_15) || 0) / total * 100).toFixed(1)),
+              pct_16_30: Number(((Number(r.val_16_30) || 0) / total * 100).toFixed(1)),
+              pct_31_45: Number(((Number(r.val_31_45) || 0) / total * 100).toFixed(1)),
+              pct_46_60: Number(((Number(r.val_46_60) || 0) / total * 100).toFixed(1)),
+              pct_61_90: Number(((Number(r.val_61_90) || 0) / total * 100).toFixed(1)),
+              pct_gt90: Number(((Number(r.val_gt90) || 0) / total * 100).toFixed(1)),
+              total_baixado: Number(r.total_baixado) || 0,
+            });
+          }
+          
+          const data = Object.entries(clientMap).map(([cliente, periodos]) => ({
+            cliente,
+            periodos,
+          }));
+          
+          console.log(`[get_pymt_term_by_client] Found ${data.length} clients`);
+          result = { success: true, data };
+        } catch (e: any) {
+          console.error('[get_pymt_term_by_client] Error:', e);
+          result = { success: false, error: e.message };
+        }
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
