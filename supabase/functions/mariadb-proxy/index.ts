@@ -2456,6 +2456,109 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== OLIMPO PYMT TERM RATING ====================
+      case 'get_pymt_term_rating': {
+        console.log('[get_pymt_term_rating] Fetching payment term distribution...');
+        try {
+          const pymtSql = `
+            SELECT
+              DATE_FORMAT(b.DataBaixa, '%Y-%m') AS periodo,
+              SUM(b.ValorBaixado) AS total_baixado,
+              SUM(CASE WHEN DATEDIFF(b.DataBaixa, b.DataVencimento) BETWEEN 0 AND 15 THEN b.ValorBaixado ELSE 0 END) AS val_0_15,
+              SUM(CASE WHEN DATEDIFF(b.DataBaixa, b.DataVencimento) BETWEEN 16 AND 30 THEN b.ValorBaixado ELSE 0 END) AS val_16_30,
+              SUM(CASE WHEN DATEDIFF(b.DataBaixa, b.DataVencimento) BETWEEN 31 AND 45 THEN b.ValorBaixado ELSE 0 END) AS val_31_45,
+              SUM(CASE WHEN DATEDIFF(b.DataBaixa, b.DataVencimento) BETWEEN 46 AND 60 THEN b.ValorBaixado ELSE 0 END) AS val_46_60,
+              SUM(CASE WHEN DATEDIFF(b.DataBaixa, b.DataVencimento) BETWEEN 61 AND 90 THEN b.ValorBaixado ELSE 0 END) AS val_61_90,
+              SUM(CASE WHEN DATEDIFF(b.DataBaixa, b.DataVencimento) > 90 THEN b.ValorBaixado ELSE 0 END) AS val_gt90
+            FROM dados_dachser.tbaixas b
+            WHERE b.StatusLan IN (1, 2, 3)
+              AND b.DataBaixa >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+              AND b.ValorBaixado > 0
+            GROUP BY DATE_FORMAT(b.DataBaixa, '%Y-%m')
+            ORDER BY periodo DESC
+          `;
+          const pymtRows = await client.query(pymtSql);
+          const data = pymtRows.map((r: any) => {
+            const total = Number(r.total_baixado) || 1;
+            return {
+              periodo: r.periodo,
+              pct_0_15: Number(((Number(r.val_0_15) || 0) / total * 100).toFixed(1)),
+              pct_16_30: Number(((Number(r.val_16_30) || 0) / total * 100).toFixed(1)),
+              pct_31_45: Number(((Number(r.val_31_45) || 0) / total * 100).toFixed(1)),
+              pct_46_60: Number(((Number(r.val_46_60) || 0) / total * 100).toFixed(1)),
+              pct_61_90: Number(((Number(r.val_61_90) || 0) / total * 100).toFixed(1)),
+              pct_gt90: Number(((Number(r.val_gt90) || 0) / total * 100).toFixed(1)),
+            };
+          });
+          console.log(`[get_pymt_term_rating] Found ${data.length} periods`);
+          result = { success: true, data };
+        } catch (e: any) {
+          console.error('[get_pymt_term_rating] Error:', e);
+          result = { success: false, error: e.message };
+        }
+        break;
+      }
+
+      // ==================== OLIMPO AGING ANALÍTICO ====================
+      case 'get_aging_analitico': {
+        console.log('[get_aging_analitico] Fetching individual invoice records...');
+        try {
+          const analiticoSql = `
+            SELECT
+              t.documento,
+              t.numero_nf,
+              t.modal,
+              t.tipo_documento,
+              t.data_emissao,
+              t.data_vencimento,
+              t.cod_cliente,
+              t.razao_social,
+              t.valor_nf,
+              t.valor_liquido,
+              t.processo,
+              t.master,
+              t.house,
+              t.id_rm,
+              DATEDIFF(CURDATE(), t.data_vencimento) AS dias_vencimento
+            FROM dados_dachser.t_dados_financeiro_nfs t
+            LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
+            WHERE COALESCE(sd.active, 1) = 1
+              AND NOT EXISTS (
+                SELECT 1 FROM dados_dachser.tbaixas b
+                WHERE b.IdLancamentoRM = t.id_rm
+                  AND b.StatusLan IN (1, 2, 3)
+              )
+              AND (t.disputa IS NULL OR t.disputa = 0)
+            ORDER BY t.razao_social, t.data_vencimento
+            LIMIT 10000
+          `;
+          const analiticoRows = await client.query(analiticoSql);
+          const data = analiticoRows.map((r: any) => ({
+            documento: r.documento,
+            numero_nf: r.numero_nf,
+            modal: r.modal,
+            tipo_documento: r.tipo_documento,
+            data_emissao: r.data_emissao,
+            data_vencimento: r.data_vencimento,
+            cod_cliente: r.cod_cliente,
+            razao_social: r.razao_social,
+            valor_nf: Number(r.valor_nf) || 0,
+            valor_liquido: Number(r.valor_liquido) || Number(r.valor_nf) || 0,
+            processo: r.processo,
+            master: r.master,
+            house: r.house,
+            id_rm: r.id_rm,
+            dias_vencimento: Number(r.dias_vencimento) || 0,
+          }));
+          console.log(`[get_aging_analitico] Found ${data.length} records`);
+          result = { success: true, data, dataCorte: new Date().toISOString().slice(0, 10) };
+        } catch (e: any) {
+          console.error('[get_aging_analitico] Error:', e);
+          result = { success: false, error: e.message };
+        }
+        break;
+      }
+
       case 'get_regua_stage': {
         const { stage } = body as { stage?: string };
         if (!stage) {
