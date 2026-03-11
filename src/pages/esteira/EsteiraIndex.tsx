@@ -1191,20 +1191,24 @@ const EsteiraIndex = () => {
 
     // Users with only SUPERVISOR role
     if (isSupervisor) {
+      if (filters.etapa && filters.etapa !== "all") return vouchers;
       return vouchers.filter(v => v.etapaAtual === "SUPERVISOR" || v.responsavelSupervisorUserId === currentUserId);
     }
     if (isOperacao) {
-      // OPERACAO users see all vouchers in OPERACAO and A_PROCESSAR stages
+      // If user selected a specific etapa filter, show all vouchers (filterVouchers will handle it)
+      if (filters.etapa && filters.etapa !== "all") return vouchers;
+      // Default view: only OPERACAO and A_PROCESSAR
       return vouchers.filter(v => 
         v.etapaAtual === "OPERACAO" ||
         v.etapaAtual === "A_PROCESSAR"
       );
     }
     if (isFiscal) {
+      if (filters.etapa && filters.etapa !== "all") return vouchers;
       return vouchers.filter(v => v.etapaAtual === "FISCAL" || v.etapaAtual === "AJUSTE_FISCAL" || v.responsavelFiscalUserId === currentUserId);
     }
     return vouchers;
-  }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro]);
+  }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro, filters.etapa]);
   const filterVouchers = (vouchersList: Voucher[]) => {
     const now = new Date();
     const tomorrow = new Date(now);
