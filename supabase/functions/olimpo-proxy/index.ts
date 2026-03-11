@@ -2988,6 +2988,8 @@ serve(async (req) => {
                       ELSE transshipment_port 
                     END,
                     loading_port = COALESCE(?, loading_port),
+                    latitude = COALESCE(?, latitude),
+                    longitude = COALESCE(?, longitude),
                     last_check = NOW(),
                     last_error = NULL,
                     sibling_synced = 1,
@@ -3006,6 +3008,8 @@ serve(async (req) => {
                   shippingLine ? normalizeShippingLine(shippingLine) : null,
                   transshipmentPort,
                   currentLoadingPort,
+                  containerLat,
+                  containerLon,
                   mblId,
                   row.id
                 ]);
