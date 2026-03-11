@@ -63,6 +63,16 @@ interface BudgetForecast {
   asOf: string;
 }
 
+interface PymtTermRow {
+  periodo: string;
+  pct_0_15: number;
+  pct_16_30: number;
+  pct_31_45: number;
+  pct_46_60: number;
+  pct_61_90: number;
+  pct_gt90: number;
+}
+
 const AGING_COLORS: Record<string, string> = {
   not_due: "#22c55e",
   aging_30: "#84cc16",
@@ -94,6 +104,15 @@ const PROVISION_PCT: Record<string, number> = {
   aging_360_plus: 100,
 };
 
+// Provisioning percentages for the analytical export (by days overdue)
+function getProvisionPct(dias: number): { bucket: string; pct: number } {
+  if (dias <= 90) return { bucket: '≤90', pct: 1 };
+  if (dias <= 180) return { bucket: '91-180', pct: 25 };
+  if (dias <= 240) return { bucket: '181-240', pct: 50 };
+  if (dias <= 360) return { bucket: '241-360', pct: 75 };
+  return { bucket: '>360', pct: 100 };
+}
+
 const PIE_COLORS = ["#22c55e", "#ef4444"];
 
 const PRODUCT_MAP: Record<string, string> = {
@@ -122,6 +141,12 @@ function formatCompact(value: number): string {
   if (value >= 1_000_000) return `R$ ${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `R$ ${(value / 1_000).toFixed(0)}K`;
   return formatBRL(value);
+}
+
+function formatPeriodLabel(periodo: string): string {
+  const [year, month] = periodo.split('-');
+  const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  return `${months[parseInt(month) - 1]}/${year.slice(2)}`;
 }
 
 function mergeProductRows(rows: AgingRow[]): AgingRow[] {
@@ -158,6 +183,8 @@ export default function OlimpoCobranca() {
   const [budgetForecast, setBudgetForecast] = useState<BudgetForecast | null>(null);
   const [selectedClient, setSelectedClient] = useState<AgingRow | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [pymtTermData, setPymtTermData] = useState<PymtTermRow[]>([]);
+  const [exportingExcel, setExportingExcel] = useState(false);
   const { toast } = useToast();
 
   const fetchData = async () => {
@@ -165,9 +192,10 @@ export default function OlimpoCobranca() {
     try {
       const agingAction = viewMode === "client" ? "get_aging_by_client" : "get_aging_overview";
 
-      const [agingResult, bfResult] = await Promise.allSettled([
+      const [agingResult, bfResult, pymtResult] = await Promise.allSettled([
         supabase.functions.invoke("mariadb-proxy", { body: { action: agingAction } }),
         supabase.functions.invoke("mariadb-proxy", { body: { action: "get_budget_forecast_auto", viewMode } }),
+        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_pymt_term_rating" } }),
       ]);
 
       if (agingResult.status === "fulfilled") {
@@ -195,6 +223,13 @@ export default function OlimpoCobranca() {
         }
       } else {
         setBudgetForecast(fallback);
+      }
+
+      if (pymtResult.status === "fulfilled") {
+        const { data: pymtResp } = pymtResult.value;
+        if (pymtResp?.success) {
+          setPymtTermData(pymtResp.data || []);
+        }
       }
     } catch (err: any) {
       console.error("Erro ao buscar aging:", err);
@@ -285,69 +320,177 @@ export default function OlimpoCobranca() {
     ];
   }, [totals, totalOverdue, totalReceivable]);
 
-  // Export to Excel
-  const handleExportExcel = () => {
+  // Score Rating: % distribution by aging bucket
+  const scoreRating = useMemo(() => {
+    if (!totals || totalReceivable === 0) return null;
+    const currentMonth = new Date().toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
+    return {
+      period: currentMonth,
+      not_od: ((totals.not_due / totalReceivable) * 100).toFixed(1),
+      pct_1_90: (((totals.aging_30 + totals.aging_90) / totalReceivable) * 100).toFixed(1),
+      pct_91_180: ((totals.aging_180 / totalReceivable) * 100).toFixed(1),
+      pct_181_240: ((totals.aging_240 / totalReceivable) * 100).toFixed(1),
+      pct_241_360: ((totals.aging_360 / totalReceivable) * 100).toFixed(1),
+      pct_361_plus: ((totals.aging_360_plus / totalReceivable) * 100).toFixed(1),
+      od_pct: pctOverdue,
+    };
+  }, [totals, totalReceivable, pctOverdue]);
+
+  // Bad Debts: absolute values by aging bucket
+  const badDebtsRow = useMemo(() => {
+    if (!totals) return null;
+    return {
+      not_due: totals.not_due,
+      aging_1_90: totals.aging_30 + totals.aging_90,
+      aging_91_180: totals.aging_180,
+      aging_181_240: totals.aging_240,
+      aging_241_360: totals.aging_360,
+      aging_361_plus: totals.aging_360_plus,
+      total: totalReceivable,
+    };
+  }, [totals, totalReceivable]);
+
+  // Export to Excel with Analítico tab
+  const handleExportExcel = async () => {
     if (!displayRows.length) return;
-    const wsData = [
-      ["Brazil Customer Aging Overview", "", "", "", "", "", "", "", "", ""],
-      [viewMode === "product" ? "Product" : "Client", "Not Due", "0-30", "31-90", "91-180", "181-240", "241-360", "> 360 (Bad Debts)", "Total Overdue", "Total Receivable"],
-    ];
-    for (const row of displayRows) {
-      const rowOverdue = row.aging_30 + row.aging_90 + row.aging_180 + row.aging_240 + row.aging_360 + row.aging_360_plus;
-      const rowTotal = row.not_due + rowOverdue;
-      wsData.push([
-        row.product,
-        row.not_due.toFixed(2),
-        row.aging_30.toFixed(2),
-        row.aging_90.toFixed(2),
-        row.aging_180.toFixed(2),
-        row.aging_240.toFixed(2),
-        row.aging_360.toFixed(2),
-        row.aging_360_plus.toFixed(2),
-        rowOverdue.toFixed(2),
-        rowTotal.toFixed(2),
-      ]);
+    setExportingExcel(true);
+
+    try {
+      // Sheet 1: Aging
+      const wsData: any[][] = [
+        ["Brazil Customer Aging Overview", "", "", "", "", "", "", "", "", ""],
+        [viewMode === "product" ? "Product" : "Client", "Not Due", "0-30", "31-90", "91-180", "181-240", "241-360", "> 360 (Bad Debts)", "Total Overdue", "Total Receivable"],
+      ];
+      for (const row of displayRows) {
+        const rowOverdue = row.aging_30 + row.aging_90 + row.aging_180 + row.aging_240 + row.aging_360 + row.aging_360_plus;
+        const rowTotal = row.not_due + rowOverdue;
+        wsData.push([
+          row.product, row.not_due.toFixed(2), row.aging_30.toFixed(2), row.aging_90.toFixed(2),
+          row.aging_180.toFixed(2), row.aging_240.toFixed(2), row.aging_360.toFixed(2),
+          row.aging_360_plus.toFixed(2), rowOverdue.toFixed(2), rowTotal.toFixed(2),
+        ]);
+      }
+      if (totals) {
+        wsData.push([
+          "Grand Total", totals.not_due.toFixed(2), totals.aging_30.toFixed(2), totals.aging_90.toFixed(2),
+          totals.aging_180.toFixed(2), totals.aging_240.toFixed(2), totals.aging_360.toFixed(2),
+          totals.aging_360_plus.toFixed(2), totalOverdue.toFixed(2), totalReceivable.toFixed(2),
+        ]);
+        wsData.push([
+          "% do Total",
+          ...agingKeys.map(k => totalReceivable > 0 ? `${((totals[k] as number) / totalReceivable * 100).toFixed(1)}%` : "0%"),
+          totalReceivable > 0 ? `${(totalOverdue / totalReceivable * 100).toFixed(1)}%` : "0%",
+          "100%",
+        ]);
+        wsData.push([
+          "% Provisão", ...agingKeys.map(k => `${PROVISION_PCT[k]}%`), "", "",
+        ]);
+        wsData.push([
+          "Valor Provisionado",
+          ...agingKeys.map(k => ((totals[k] as number) * PROVISION_PCT[k] / 100).toFixed(2)),
+          "",
+          agingKeys.reduce((s, k) => s + (totals[k] as number) * PROVISION_PCT[k] / 100, 0).toFixed(2),
+        ]);
+      }
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      XLSX.utils.book_append_sheet(wb, ws, "Aging");
+
+      // Sheet 2: Analítico de Clientes
+      try {
+        const { data: analiticoResp } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "get_aging_analitico" },
+        });
+
+        if (analiticoResp?.success && analiticoResp.data?.length > 0) {
+          const dataCorte = analiticoResp.dataCorte || new Date().toISOString().slice(0, 10);
+          const analiticoWs: any[][] = [
+            [`DATA DE CORTE: ${dataCorte}`],
+            [],
+            [
+              "COLIGADA", "NUMERO DOCUMENTO", "NOTA FISCAL", "MODAL", "TIPO DOC.",
+              "DATA EMISSÃO", "VENCTO", "COD. CLIENTE", "RAZÃO SOCIAL CLIENTE",
+              "STATUS FINANCEIRO", "VALOR ORIGINAL", "VALOR LÍQUIDO",
+              "PROCESSO", "MASTER", "HOUSE", "IDLAN",
+              "Provisão ≤90 (1%)", "Provisão 91-180 (25%)", "Provisão 181-240 (50%)",
+              "Provisão 241-360 (75%)", "Provisão >360 (100%)",
+              "Qtd. Dias de Vencimento",
+            ],
+          ];
+
+          let totalProv1 = 0, totalProv25 = 0, totalProv50 = 0, totalProv75 = 0, totalProv100 = 0;
+
+          for (const r of analiticoResp.data) {
+            const dias = r.dias_vencimento;
+            const valor = r.valor_nf;
+            const { pct } = getProvisionPct(dias);
+            const provValue = valor * pct / 100;
+
+            let p1 = 0, p25 = 0, p50 = 0, p75 = 0, p100 = 0;
+            if (dias <= 90) p1 = provValue;
+            else if (dias <= 180) p25 = provValue;
+            else if (dias <= 240) p50 = provValue;
+            else if (dias <= 360) p75 = provValue;
+            else p100 = provValue;
+
+            totalProv1 += p1;
+            totalProv25 += p25;
+            totalProv50 += p50;
+            totalProv75 += p75;
+            totalProv100 += p100;
+
+            analiticoWs.push([
+              "1",
+              r.documento || "",
+              r.numero_nf || "",
+              r.modal || "",
+              r.tipo_documento || "",
+              r.data_emissao ? new Date(r.data_emissao).toLocaleDateString('pt-BR') : "",
+              r.data_vencimento ? new Date(r.data_vencimento).toLocaleDateString('pt-BR') : "",
+              r.cod_cliente || "",
+              r.razao_social || "",
+              "Em aberto",
+              valor.toFixed(2),
+              (r.valor_liquido || valor).toFixed(2),
+              r.processo || "",
+              r.master || "",
+              r.house || "",
+              r.id_rm || "",
+              p1 > 0 ? p1.toFixed(2) : "",
+              p25 > 0 ? p25.toFixed(2) : "",
+              p50 > 0 ? p50.toFixed(2) : "",
+              p75 > 0 ? p75.toFixed(2) : "",
+              p100 > 0 ? p100.toFixed(2) : "",
+              dias > 0 ? dias : 0,
+            ]);
+          }
+
+          // Totals row
+          analiticoWs.push([]);
+          analiticoWs.push([
+            "", "", "", "", "", "", "", "", "",
+            "TOTAL", "", "",
+            "", "", "", "",
+            totalProv1.toFixed(2), totalProv25.toFixed(2), totalProv50.toFixed(2),
+            totalProv75.toFixed(2), totalProv100.toFixed(2),
+            "",
+          ]);
+
+          const ws2 = XLSX.utils.aoa_to_sheet(analiticoWs);
+          XLSX.utils.book_append_sheet(wb, ws2, "Analítico de Clientes");
+        }
+      } catch (e) {
+        console.warn("Could not fetch analítico data:", e);
+      }
+
+      XLSX.writeFile(wb, `aging_${viewMode}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      toast({ title: "Excel exportado com sucesso" });
+    } catch (err: any) {
+      toast({ title: "Erro ao exportar", description: err.message, variant: "destructive" });
+    } finally {
+      setExportingExcel(false);
     }
-    if (totals) {
-      wsData.push([
-        "Grand Total",
-        totals.not_due.toFixed(2),
-        totals.aging_30.toFixed(2),
-        totals.aging_90.toFixed(2),
-        totals.aging_180.toFixed(2),
-        totals.aging_240.toFixed(2),
-        totals.aging_360.toFixed(2),
-        totals.aging_360_plus.toFixed(2),
-        totalOverdue.toFixed(2),
-        totalReceivable.toFixed(2),
-      ]);
-      // % row
-      wsData.push([
-        "% do Total",
-        ...agingKeys.map(k => totalReceivable > 0 ? `${((totals[k] as number) / totalReceivable * 100).toFixed(1)}%` : "0%"),
-        totalReceivable > 0 ? `${(totalOverdue / totalReceivable * 100).toFixed(1)}%` : "0%",
-        "100%",
-      ]);
-      // Provision row
-      wsData.push([
-        "% Provisão",
-        ...agingKeys.map(k => `${PROVISION_PCT[k]}%`),
-        "",
-        "",
-      ]);
-      // Provisioned value
-      wsData.push([
-        "Valor Provisionado",
-        ...agingKeys.map(k => ((totals[k] as number) * PROVISION_PCT[k] / 100).toFixed(2)),
-        "",
-        agingKeys.reduce((s, k) => s + (totals[k] as number) * PROVISION_PCT[k] / 100, 0).toFixed(2),
-      ]);
-    }
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Aging");
-    XLSX.writeFile(wb, `aging_${viewMode}_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    toast({ title: "Excel exportado com sucesso" });
   };
 
   const columnLabel = viewMode === "product" ? "Product" : "Client";
@@ -360,9 +503,9 @@ export default function OlimpoCobranca() {
           <TabsTrigger value="client" className="text-xs px-3 py-1">Client</TabsTrigger>
         </TabsList>
       </Tabs>
-      <Button size="sm" onClick={handleExportExcel} disabled={loading || !displayRows.length}
+      <Button size="sm" onClick={handleExportExcel} disabled={loading || exportingExcel || !displayRows.length}
         className="h-8 border-border bg-card text-muted-foreground hover:text-foreground text-xs">
-        <Download className="h-3.5 w-3.5 mr-1.5" /> Excel
+        <Download className={`h-3.5 w-3.5 mr-1.5 ${exportingExcel ? "animate-spin" : ""}`} /> {exportingExcel ? "Exportando..." : "Excel"}
       </Button>
       <Button size="sm" onClick={fetchData} disabled={loading}
         className="h-8 border-border bg-card text-muted-foreground hover:text-foreground text-xs">
@@ -452,6 +595,136 @@ export default function OlimpoCobranca() {
                         {formatBRL(agingKeys.reduce((s, k) => s + (totals[k] as number) * PROVISION_PCT[k] / 100, 0))}
                       </td>
                     </tr>
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Score Rating + Bad Debts side by side */}
+        {scoreRating && badDebtsRow && (
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Score Rating */}
+            <Card className="bg-card border-border">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-foreground">Score Rating — Distribuição % do Receivable</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border/50">
+                        <th className="text-left py-2 px-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Período</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.not_due }}>NOT OD%</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_90 }}>1-90%</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_180 }}>91-180%</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_240 }}>181-240%</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_360 }}>241-360%</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_360_plus }}>&gt;361%</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold text-red-400">OD%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-border/30">
+                        <td className="py-2 px-3 font-medium text-foreground">{scoreRating.period}</td>
+                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.not_due }}>{scoreRating.not_od}%</td>
+                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_90 }}>{scoreRating.pct_1_90}%</td>
+                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_180 }}>{scoreRating.pct_91_180}%</td>
+                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_240 }}>{scoreRating.pct_181_240}%</td>
+                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_360 }}>{scoreRating.pct_241_360}%</td>
+                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_360_plus }}>{scoreRating.pct_361_plus}%</td>
+                        <td className="py-2 px-3 text-right tabular-nums text-red-400 font-bold">{scoreRating.od_pct}%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Bad Debts */}
+            <Card className="bg-card border-border">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-foreground">Bad Debts — Valores por Faixa de Aging</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border/50">
+                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.not_due }}>Not Due</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_90 }}>1-90</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_180 }}>91-180</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_240 }}>181-240</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_360 }}>241-360</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold" style={{ color: AGING_COLORS.aging_360_plus }}>&gt;360</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold text-foreground">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-border/30">
+                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.not_due }}>{formatBRL(badDebtsRow.not_due)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_90 }}>{formatBRL(badDebtsRow.aging_1_90)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_180 }}>{formatBRL(badDebtsRow.aging_91_180)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_240 }}>{formatBRL(badDebtsRow.aging_181_240)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums" style={{ color: AGING_COLORS.aging_360 }}>{formatBRL(badDebtsRow.aging_241_360)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums font-bold" style={{ color: AGING_COLORS.aging_360_plus }}>{formatBRL(badDebtsRow.aging_361_plus)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums font-bold text-foreground">{formatBRL(badDebtsRow.total)}</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 px-3 text-right text-xs text-muted-foreground">0%</td>
+                        <td className="py-1 px-3 text-right text-xs text-muted-foreground">1%</td>
+                        <td className="py-1 px-3 text-right text-xs text-muted-foreground">25%</td>
+                        <td className="py-1 px-3 text-right text-xs text-muted-foreground">50%</td>
+                        <td className="py-1 px-3 text-right text-xs text-muted-foreground">75%</td>
+                        <td className="py-1 px-3 text-right text-xs text-muted-foreground">100%</td>
+                        <td className="py-1 px-3 text-right text-xs text-muted-foreground">Provisão</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* PYMT Term Rating */}
+        {pymtTermData.length > 0 && (
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-foreground">PYMT Term Rating — % Pagamentos por Prazo</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/50">
+                      <th className="text-left py-2 px-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Período</th>
+                      <th className="text-right py-2 px-3 text-xs font-semibold text-emerald-400">0-15</th>
+                      <th className="text-right py-2 px-3 text-xs font-semibold text-green-400">16-30</th>
+                      <th className="text-right py-2 px-3 text-xs font-semibold text-yellow-400">31-45</th>
+                      <th className="text-right py-2 px-3 text-xs font-semibold text-orange-400">46-60</th>
+                      <th className="text-right py-2 px-3 text-xs font-semibold text-red-400">61-90</th>
+                      <th className="text-right py-2 px-3 text-xs font-semibold text-red-600">&gt;90</th>
+                      <th className="text-right py-2 px-3 text-xs font-semibold text-red-500">TT &gt;30</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pymtTermData.map((row, idx) => {
+                      const ttGt30 = (row.pct_31_45 + row.pct_46_60 + row.pct_61_90 + row.pct_gt90).toFixed(1);
+                      return (
+                        <tr key={idx} className="border-b border-border/30 hover:bg-muted/10">
+                          <td className="py-2 px-3 font-medium text-foreground">{formatPeriodLabel(row.periodo)}</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-emerald-400">{row.pct_0_15}%</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-green-400">{row.pct_16_30}%</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-yellow-400">{row.pct_31_45}%</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-orange-400">{row.pct_46_60}%</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-red-400">{row.pct_61_90}%</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-red-600">{row.pct_gt90}%</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-red-500 font-bold">{ttGt30}%</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
