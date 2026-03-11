@@ -232,12 +232,13 @@ export default function OlimpoCobranca() {
     try {
       const agingAction = viewMode === "client" ? "get_aging_by_client" : "get_aging_overview";
 
-      const [agingResult, bfResult, pymtResult, histResult, pymtClientResult] = await Promise.allSettled([
+      const [agingResult, bfResult, pymtResult, histResult, pymtClientResult, agingClientResult] = await Promise.allSettled([
         supabase.functions.invoke("mariadb-proxy", { body: { action: agingAction } }),
         supabase.functions.invoke("mariadb-proxy", { body: { action: "get_budget_forecast_auto", viewMode } }),
         supabase.functions.invoke("mariadb-proxy", { body: { action: "get_pymt_term_rating" } }),
         supabase.functions.invoke("mariadb-proxy", { body: { action: "get_aging_historical" } }),
         supabase.functions.invoke("mariadb-proxy", { body: { action: "get_pymt_term_by_client" } }),
+        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_aging_historical_by_client" } }),
       ]);
 
       if (agingResult.status === "fulfilled") {
