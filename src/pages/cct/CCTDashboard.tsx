@@ -84,7 +84,7 @@ export default function CCTDashboard() {
   const filteredProcessos = useMemo(() => {
     if (isZ3usAdmin()) return processos;
     return processos.filter(p => {
-      const dateStr = p.data_decolagem_ultimo_trecho || p.created_at || '';
+      const dateStr = p.shipment?.data_decolagem_ultimo_trecho || p.shipment?.created_at || '';
       if (!dateStr) return false;
       return new Date(dateStr).getFullYear() === 2027;
     });
