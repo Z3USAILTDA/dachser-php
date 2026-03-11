@@ -8190,7 +8190,6 @@ serve(async (req) => {
           conditions.push("v.vencimento BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)");
         } else if (filterVencimento === 'a_vencer') {
           conditions.push("v.vencimento >= CURDATE()");
-          conditions.push("(v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL)");
         }
 
         if (filterStatusPagamento) {
