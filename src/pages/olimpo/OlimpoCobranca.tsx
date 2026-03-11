@@ -99,6 +99,11 @@ interface ClientPymtTerm {
   }>;
 }
 
+interface ClientAgingHistorical {
+  cliente: string;
+  periodos: HistoricalAgingRow[];
+}
+
 const AGING_COLORS: Record<string, string> = {
   not_due: "#22c55e",
   aging_30: "#84cc16",
