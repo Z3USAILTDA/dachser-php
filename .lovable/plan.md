@@ -1,28 +1,39 @@
 
 
-# Fix: Documentos não aparecem no dialog de visualização
+## Correção: Filtro de etapa não funciona para usuário Operacional
 
-## Causa raiz
+### Problema
+O `roleFilteredVouchers` (linha 1196-1201) filtra rigidamente os vouchers para usuários OPERACAO, mostrando apenas processos em `OPERACAO` e `A_PROCESSAR`. Essa filtragem ocorre **antes** do filtro de etapa da UI ser aplicado. Quando o usuário seleciona "Fiscal" no filtro, o resultado é vazio porque os vouchers fiscais já foram removidos.
 
-O edge function `get_voucher_anexos` retorna a estrutura:
-```json
-{ "success": true, "data": [ ...anexos... ] }
-```
+### Solução
+Alterar a lógica de `roleFilteredVouchers` para que, quando o usuário OPERACAO aplicar um filtro de etapa específico (diferente de "all"), o filtro de role não restrinja — permitindo que o `filterVouchers` subsequente cuide da filtragem por etapa. A visão padrão (sem filtro) continua mostrando apenas OPERACAO + A_PROCESSAR.
 
-Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
+### Arquivo: `src/pages/esteira/EsteiraIndex.tsx` (linhas 1196-1202)
 
-## Correção
-
-### `src/components/esteira/PagamentosTab.tsx` — linha 862
-
-Trocar:
+Alterar de:
 ```typescript
-setAnexosDialog(data?.anexos || []);
-```
-Por:
-```typescript
-setAnexosDialog(data?.data || []);
+if (isOperacao) {
+  return vouchers.filter(v => 
+    v.etapaAtual === "OPERACAO" ||
+    v.etapaAtual === "A_PROCESSAR"
+  );
+}
 ```
 
-Uma única linha corrige o problema.
+Para:
+```typescript
+if (isOperacao) {
+  // If user has selected a specific etapa filter, show all vouchers (filter will be applied later)
+  if (filters.etapa && filters.etapa !== "all") {
+    return vouchers;
+  }
+  // Default view: only OPERACAO and A_PROCESSAR
+  return vouchers.filter(v => 
+    v.etapaAtual === "OPERACAO" ||
+    v.etapaAtual === "A_PROCESSAR"
+  );
+}
+```
+
+Aplicar a mesma lógica para os demais roles (FISCAL, SUPERVISOR) para consistência — quando um filtro de etapa específico é selecionado, todos os vouchers ficam visíveis para aquele role.
 
