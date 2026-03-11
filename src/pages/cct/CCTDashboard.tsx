@@ -400,7 +400,7 @@ export default function CCTDashboard() {
               {isLoading ? (
                 <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
               ) : (
-                <ProcessosTable processos={processos} onAssignAnalista={handleOpenAssignDialog} metricFilter={metricFilter} />
+                <ProcessosTable processos={filteredProcessos} onAssignAnalista={handleOpenAssignDialog} metricFilter={metricFilter} />
               )}
             </>
           )}
