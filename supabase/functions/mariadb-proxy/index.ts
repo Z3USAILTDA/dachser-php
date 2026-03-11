@@ -9747,6 +9747,7 @@ serve(async (req) => {
         // With 3.5M+ rows (mostly Leadcomex), we use a 2-step approach:
         // 1. Fast count per API from last 24h
         // 2. Recent logs from last 24h
+        // Calculate billing cycle start (day 25 to day 25)
         const stats = await client.query(`
           SELECT 
             api_name,
@@ -9756,7 +9757,10 @@ serve(async (req) => {
             SUM(CASE WHEN status_code >= 400 OR error_message IS NOT NULL THEN 1 ELSE 0 END) as error_count,
             ROUND(100.0 * SUM(CASE WHEN status_code < 400 AND error_message IS NULL THEN 1 ELSE 0 END) / COUNT(*), 1) as success_rate
           FROM ai_agente.t_api_usage_logs FORCE INDEX (idx_created_at_api)
-          WHERE created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+          WHERE created_at >= CASE 
+            WHEN DAY(NOW()) >= 25 THEN DATE_FORMAT(NOW(), '%Y-%m-25')
+            ELSE DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 MONTH), '%Y-%m-25')
+          END
           GROUP BY api_name
           ORDER BY total_calls DESC
         `);
