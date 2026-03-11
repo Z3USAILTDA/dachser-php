@@ -2096,18 +2096,24 @@ serve(async (req) => {
             COALESCE(t.modal, 'Outros') AS product,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS aging_30,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 40 THEN t.valor_nf ELSE 0 END) AS aging_40,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 41 AND 60 THEN t.valor_nf ELSE 0 END) AS aging_60,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 61 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 120 THEN t.valor_nf ELSE 0 END) AS aging_120,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 121 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS aging_240,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN t.valor_nf ELSE 0 END) AS aging_360,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 360 THEN t.valor_nf ELSE 0 END) AS aging_360_plus,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 365 THEN t.valor_nf ELSE 0 END) AS aging_365,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 365 THEN t.valor_nf ELSE 0 END) AS aging_366_plus,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 1 ELSE 0 END) AS count_not_due,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN 1 ELSE 0 END) AS count_30,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 90 THEN 1 ELSE 0 END) AS count_90,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN 1 ELSE 0 END) AS count_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 40 THEN 1 ELSE 0 END) AS count_40,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 41 AND 60 THEN 1 ELSE 0 END) AS count_60,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 61 AND 90 THEN 1 ELSE 0 END) AS count_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 120 THEN 1 ELSE 0 END) AS count_120,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 121 AND 180 THEN 1 ELSE 0 END) AS count_180,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN 1 ELSE 0 END) AS count_240,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN 1 ELSE 0 END) AS count_360,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 360 THEN 1 ELSE 0 END) AS count_360_plus
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 365 THEN 1 ELSE 0 END) AS count_365,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 365 THEN 1 ELSE 0 END) AS count_366_plus
           FROM dados_dachser.t_dados_financeiro_nfs t
           LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
           WHERE COALESCE(sd.active, 1) = 1
