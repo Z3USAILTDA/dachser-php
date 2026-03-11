@@ -65,177 +65,146 @@ const getFtSourceLabel = (source: string | null): string => {
   }
 };
 
-export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
-  // Preparar dados para exportação
-  const excelData = data.map((c) => ({
-    "Container": c.numero,
-    "MBL": c.mbl,
-    "HBL": c.hbl || "-",
-    "Tipo Operação": c.tipo_processo || "-",
-    "Cliente": c.cliente || "-",
-    "Partner ID": c.partner_id || "-",
-    "Armador": c.armador || "-",
-    "Tipo Container": c.tipo_conteiner || "-",
-    "Status Cronos": c.cronos_status || "-",
-    "Free Time (Dias)": c.free_time_days,
-    "Origem Free Time": getFtSourceLabel(c.ft_source),
-    "Início Free Time": formatDate(c.ft_started_at),
-    "Fim Free Time": formatDate(c.free_time_end_date),
-    "Dias Restantes": c.days_remaining ?? "-",
-    "Dias Excedidos": c.excedente_dias ?? "-",
-    "Custo Estimado (USD)": formatCurrency(c.expected_cost_usd),
-    "Status Risco": getRiskLabel(c.risk_status),
-    "Último Evento": c.last_event || "-",
-    "Porto Origem": c.porto_origem || "-",
-    "Porto Destino": c.porto_destino || "-",
-    "ETA": formatDate(c.eta),
-    "Data Gate Out": formatDate(c.data_gate_out),
-    "Status Info": c.pi_status_info || "-",
-    "MISK": c.pi_misk || "-",
-    "Reg. Othello": c.pi_othello_registro || "-",
-    "Observação": c.pi_observacao || "-",
-    "Data Criação": formatDateTime(c.created_at),
-    "Última Atualização": formatDateTime(c.updated_at),
-  }));
+const mapContainerToRow = (c: DemurrageContainer) => ({
+  "Container": c.numero,
+  "MBL": c.mbl,
+  "HBL": c.hbl || "-",
+  "Tipo Operação": c.tipo_processo || "-",
+  "Cliente": c.cliente || "-",
+  "Partner ID": c.partner_id || "-",
+  "Armador": c.armador || "-",
+  "Tipo Container": c.tipo_conteiner || "-",
+  "Status Cronos": c.cronos_status || "-",
+  "Free Time (Dias)": c.free_time_days,
+  "Origem Free Time": getFtSourceLabel(c.ft_source),
+  "Início Free Time": formatDate(c.ft_started_at),
+  "Fim Free Time": formatDate(c.free_time_end_date),
+  "Dias Restantes": c.days_remaining ?? "-",
+  "Dias Excedidos": c.excedente_dias ?? "-",
+  "Custo Estimado (USD)": formatCurrency(c.expected_cost_usd),
+  "Status Risco": getRiskLabel(c.risk_status),
+  "Último Evento": c.last_event || "-",
+  "Porto Origem": c.porto_origem || "-",
+  "Porto Destino": c.porto_destino || "-",
+  "ETA": formatDate(c.eta),
+  "Data Gate Out": formatDate(c.data_gate_out),
+  "Status Info": c.pi_status_info || "-",
+  "MISK": c.pi_misk || "-",
+  "Reg. Othello": c.pi_othello_registro || "-",
+  "Observação": c.pi_observacao || "-",
+  "Data Criação": formatDateTime(c.created_at),
+  "Última Atualização": formatDateTime(c.updated_at),
+});
 
-  // Criar worksheet
-  const ws = XLSX.utils.json_to_sheet(excelData);
+const DATA_COL_WIDTHS = [
+  { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 70 },
+  { wch: 28 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
+  { wch: 15 }, { wch: 13 }, { wch: 13 }, { wch: 12 }, { wch: 12 },
+  { wch: 20 }, { wch: 12 }, { wch: 25 }, { wch: 14 }, { wch: 14 },
+  { wch: 12 }, { wch: 13 }, { wch: 16 }, { wch: 12 }, { wch: 14 },
+  { wch: 25 }, { wch: 15 }, { wch: 15 },
+];
 
-  // Obter range
+const styleSheet = (ws: XLSX.WorkSheet, containers: DemurrageContainer[]) => {
   const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
 
-  // Estilizar cabeçalho
   for (let col = range.s.c; col <= range.e.c; col++) {
-    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-    if (!ws[cellAddress]) continue;
-
-    ws[cellAddress].s = {
+    const addr = XLSX.utils.encode_cell({ r: 0, c: col });
+    if (!ws[addr]) continue;
+    ws[addr].s = {
       fill: COLORS.header,
-      font: {
-        bold: true,
-        sz: 11,
-        color: COLORS.headerText.color,
-      },
-      alignment: {
-        horizontal: "center",
-        vertical: "center",
-        wrapText: false,
-      },
+      font: { bold: true, sz: 11, color: COLORS.headerText.color },
+      alignment: { horizontal: "center", vertical: "center", wrapText: false },
       border: COLORS.border,
     };
   }
 
-  // Estilizar linhas de dados baseado no status de risco
   for (let row = range.s.r + 1; row <= range.e.r; row++) {
-    const container = data[row - 1];
-    const riskStatus = container?.risk_status;
-    const isAlternate = row % 2 === 0;
-
+    const c = containers[row - 1];
+    const rs = c?.risk_status;
     let fillColor;
-    if (riskStatus === "exceeded" || riskStatus === "critical") {
-      fillColor = COLORS.criticalRow;
-    } else if (riskStatus === "at_risk") {
-      fillColor = COLORS.atRiskRow;
-    } else if (riskStatus === "safe") {
-      fillColor = COLORS.safeRow;
-    } else {
-      fillColor = isAlternate ? COLORS.alternateRow : { fgColor: { rgb: "FFFFFF" } };
-    }
+    if (rs === "exceeded" || rs === "critical") fillColor = COLORS.criticalRow;
+    else if (rs === "at_risk") fillColor = COLORS.atRiskRow;
+    else if (rs === "safe") fillColor = COLORS.safeRow;
+    else fillColor = row % 2 === 0 ? COLORS.alternateRow : { fgColor: { rgb: "FFFFFF" } };
 
     for (let col = range.s.c; col <= range.e.c; col++) {
-      const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
-      if (!ws[cellAddress]) continue;
-
-      ws[cellAddress].s = {
+      const addr = XLSX.utils.encode_cell({ r: row, c: col });
+      if (!ws[addr]) continue;
+      ws[addr].s = {
         fill: fillColor,
-        font: {
-          sz: 10,
-          bold: riskStatus === "exceeded" || riskStatus === "critical",
-        },
-        alignment: {
-          horizontal: col <= 1 ? "left" : "center",
-          vertical: "center",
-          wrapText: false,
-        },
+        font: { sz: 10, bold: rs === "exceeded" || rs === "critical" },
+        alignment: { horizontal: col <= 1 ? "left" : "center", vertical: "center", wrapText: false },
         border: COLORS.border,
       };
     }
   }
 
-  // Ajustar largura das colunas
-  const colWidths = [
-    { wch: 14 }, // Container
-    { wch: 18 }, // MBL
-    { wch: 18 }, // HBL
-    { wch: 16 }, // Tipo Operação
-    { wch: 70 }, // Cliente
-    { wch: 28 }, // Partner ID
-    { wch: 14 }, // Armador
-    { wch: 14 }, // Tipo Container
-    { wch: 14 }, // Status Cronos
-    { wch: 12 }, // Free Time (Dias)
-    { wch: 15 }, // Origem Free Time
-    { wch: 13 }, // Início FT
-    { wch: 13 }, // Fim FT
-    { wch: 12 }, // Dias Restantes
-    { wch: 12 }, // Dias Excedidos
-    { wch: 20 }, // Custo Estimado
-    { wch: 12 }, // Status Risco
-    { wch: 25 }, // Último Evento
-    { wch: 14 }, // Porto Origem
-    { wch: 14 }, // Porto Destino
-    { wch: 12 }, // ETA
-    { wch: 13 }, // Data Gate Out
-    { wch: 16 }, // Status Info
-    { wch: 12 }, // MISK
-    { wch: 14 }, // Reg. Othello
-    { wch: 25 }, // Observação
-    { wch: 15 }, // Data Criação
-    { wch: 15 }, // Última Atualização
-  ];
-  ws["!cols"] = colWidths;
-
-  // Ajustar altura das linhas
-  const rowHeights: { hpt: number }[] = [];
-  rowHeights[0] = { hpt: 25 }; // Header height
-  for (let row = 1; row <= range.e.r; row++) {
-    rowHeights[row] = { hpt: 18 }; // Data row height
-  }
+  ws["!cols"] = DATA_COL_WIDTHS;
+  const rowHeights: { hpt: number }[] = [{ hpt: 25 }];
+  for (let row = 1; row <= range.e.r; row++) rowHeights[row] = { hpt: 18 };
   ws["!rows"] = rowHeights;
+};
 
-  // Criar workbook
+const isExport = (c: DemurrageContainer) => {
+  const t = (c.tipo_processo || "").toUpperCase();
+  return t.includes("EXP") || t.includes("EXPORTA");
+};
+
+export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
+  const importData = data.filter(c => !isExport(c));
+  const exportData = data.filter(c => isExport(c));
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Demurrage Monitor");
 
-  // Adicionar aba de resumo
+  // Aba Importação
+  if (importData.length > 0) {
+    const ws = XLSX.utils.json_to_sheet(importData.map(mapContainerToRow));
+    styleSheet(ws, importData);
+    XLSX.utils.book_append_sheet(wb, ws, "Importação");
+  }
+
+  // Aba Exportação
+  if (exportData.length > 0) {
+    const ws = XLSX.utils.json_to_sheet(exportData.map(mapContainerToRow));
+    styleSheet(ws, exportData);
+    XLSX.utils.book_append_sheet(wb, ws, "Exportação");
+  }
+
+  // Aba Resumo
+  const buildMetrics = (label: string, items: DemurrageContainer[]) => [
+    { "Métrica": `${label} - Total de Containers`, "Valor": items.length },
+    { "Métrica": `${label} - OK`, "Valor": items.filter(c => c.risk_status === "safe").length },
+    { "Métrica": `${label} - Em Risco`, "Valor": items.filter(c => c.risk_status === "at_risk").length },
+    { "Métrica": `${label} - Críticos`, "Valor": items.filter(c => c.risk_status === "critical").length },
+    { "Métrica": `${label} - Excedidos`, "Valor": items.filter(c => c.risk_status === "exceeded").length },
+    { "Métrica": `${label} - Custo Estimado`, "Valor": formatCurrency(items.reduce((s, c) => s + (c.expected_cost_usd || 0), 0)) },
+  ];
+
   const summaryData = [
-    { "Métrica": "Total de Containers", "Valor": data.length },
-    { "Métrica": "Containers OK", "Valor": data.filter(c => c.risk_status === "safe").length },
-    { "Métrica": "Containers em Risco", "Valor": data.filter(c => c.risk_status === "at_risk").length },
-    { "Métrica": "Containers Críticos", "Valor": data.filter(c => c.risk_status === "critical").length },
-    { "Métrica": "Containers Excedidos", "Valor": data.filter(c => c.risk_status === "exceeded").length },
-    { "Métrica": "Custo Total Estimado", "Valor": formatCurrency(data.reduce((sum, c) => sum + (c.expected_cost_usd || 0), 0)) },
+    { "Métrica": "Total Geral de Containers", "Valor": data.length },
+    { "Métrica": "", "Valor": "" },
+    ...buildMetrics("Importação", importData),
+    { "Métrica": "", "Valor": "" },
+    ...buildMetrics("Exportação", exportData),
+    { "Métrica": "", "Valor": "" },
     { "Métrica": "Data Exportação", "Valor": format(new Date(), "dd/MM/yyyy HH:mm", { locale: ptBR }) },
   ];
   const wsSummary = XLSX.utils.json_to_sheet(summaryData);
-  
-  // Estilizar aba de resumo
-  const summaryRange = XLSX.utils.decode_range(wsSummary["!ref"] || "A1");
-  for (let col = summaryRange.s.c; col <= summaryRange.e.c; col++) {
-    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-    if (!wsSummary[cellAddress]) continue;
-    wsSummary[cellAddress].s = {
+  const sr = XLSX.utils.decode_range(wsSummary["!ref"] || "A1");
+  for (let col = sr.s.c; col <= sr.e.c; col++) {
+    const addr = XLSX.utils.encode_cell({ r: 0, c: col });
+    if (!wsSummary[addr]) continue;
+    wsSummary[addr].s = {
       fill: COLORS.header,
       font: { bold: true, sz: 12, color: COLORS.headerText.color },
       alignment: { horizontal: "center", vertical: "center", wrapText: false },
       border: COLORS.border,
     };
   }
-  wsSummary["!cols"] = [{ wch: 25 }, { wch: 20 }];
-  
+  wsSummary["!cols"] = [{ wch: 35 }, { wch: 20 }];
   XLSX.utils.book_append_sheet(wb, wsSummary, "Resumo");
 
-  // Adicionar informações do documento
   wb.Props = {
     Title: "Relatório de Demurrage",
     Subject: "Monitoramento de Demurrage",
@@ -243,10 +212,8 @@ export const exportDemurrageToExcel = (data: DemurrageContainer[]) => {
     CreatedDate: new Date(),
   };
 
-  // Gerar arquivo
   const fileName = `demurrage_${format(new Date(), "yyyy-MM-dd_HH-mm")}.xlsx`;
   XLSX.writeFile(wb, fileName, { cellStyles: true });
-
   return fileName;
 };
 
