@@ -267,6 +267,20 @@ export default function OlimpoCobranca() {
           setPymtTermData(pymtResp.data || []);
         }
       }
+
+      if (histResult.status === "fulfilled") {
+        const { data: histResp } = histResult.value;
+        if (histResp?.success) {
+          setHistoricalData(histResp.data || []);
+        }
+      }
+
+      if (pymtClientResult.status === "fulfilled") {
+        const { data: pymtClientResp } = pymtClientResult.value;
+        if (pymtClientResp?.success) {
+          setClientPymtHistorical(pymtClientResp.data || []);
+        }
+      }
     } catch (err: any) {
       console.error("Erro ao buscar aging:", err);
       toast({ title: "Erro", description: err.message, variant: "destructive" });
