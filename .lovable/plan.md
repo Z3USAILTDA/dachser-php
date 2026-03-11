@@ -1,28 +1,23 @@
 
 
-# Fix: Documentos não aparecem no dialog de visualização
+## Separar Excel de Demurrage por abas: Exportação e Importação
 
-## Causa raiz
+### Problema
+Atualmente o Excel exporta todos os containers em uma única aba "Demurrage Monitor", sem separação por tipo de operação.
 
-O edge function `get_voucher_anexos` retorna a estrutura:
-```json
-{ "success": true, "data": [ ...anexos... ] }
-```
+### Correção
+**Arquivo**: `src/utils/demurrageExcelExport.ts` — função `exportDemurrageToExcel`
 
-Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
+1. Separar o array `data` em dois grupos usando o campo `tipo_processo`:
+   - `Exportação` → containers com `tipo_processo` contendo "EXP" ou "Exportação"
+   - `Importação` → containers com `tipo_processo` contendo "IMP" ou "Importação" (ou qualquer outro valor como fallback)
 
-## Correção
+2. Substituir a criação de uma única sheet "Demurrage Monitor" por duas sheets:
+   - Criar sheet "Importação" com os dados filtrados de importação (aplicando mesma estilização de cabeçalho, cores por risco, larguras de coluna)
+   - Criar sheet "Exportação" com os dados filtrados de exportação (mesma estilização)
+   - Só criar a aba se houver dados para aquele tipo
 
-### `src/components/esteira/PagamentosTab.tsx` — linha 862
+3. Manter a aba "Resumo" existente, mas atualizar as métricas para incluir breakdown por tipo (Importação/Exportação)
 
-Trocar:
-```typescript
-setAnexosDialog(data?.anexos || []);
-```
-Por:
-```typescript
-setAnexosDialog(data?.data || []);
-```
-
-Uma única linha corrige o problema.
+4. Extrair a lógica de estilização da sheet em uma função auxiliar reutilizável para evitar duplicação de código
 
