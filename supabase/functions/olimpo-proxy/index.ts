@@ -2291,7 +2291,7 @@ serve(async (req) => {
       });
 
       try {
-        // Ensure last_error and needs_manual_review columns exist
+        // Ensure last_error, needs_manual_review, latitude, longitude columns exist
         try {
           await client.execute(`
             ALTER TABLE dados_dachser.t_tracking_sea 
@@ -2300,6 +2300,14 @@ serve(async (req) => {
           await client.execute(`
             ALTER TABLE dados_dachser.t_tracking_sea 
             ADD COLUMN IF NOT EXISTS needs_manual_review TINYINT(1) DEFAULT 0
+          `);
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_tracking_sea 
+            ADD COLUMN IF NOT EXISTS latitude DECIMAL(10,6) DEFAULT NULL
+          `);
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_tracking_sea 
+            ADD COLUMN IF NOT EXISTS longitude DECIMAL(10,6) DEFAULT NULL
           `);
         } catch (alterErr: any) {
           // Columns might already exist, ignore error
@@ -2680,6 +2688,37 @@ serve(async (req) => {
           if (!apiRes.__curl_error && !apiRes.error && (apiRes.data || apiRes.container_status)) {
             const data = apiRes.data || apiRes;
             
+            // ===== EXTRACT CONTAINER COORDINATES =====
+            // Try multiple sources: last_movement, vessel position, or direct fields
+            let containerLat: number | null = null;
+            let containerLon: number | null = null;
+            
+            // Source 1: last_movement (most specific - actual container position)
+            if (data.last_movement?.latitude && data.last_movement?.longitude) {
+              containerLat = +data.last_movement.latitude || null;
+              containerLon = +data.last_movement.longitude || null;
+            }
+            // Source 2: Direct fields on response
+            if (!containerLat && data.latitude && data.longitude) {
+              containerLat = +data.latitude || null;
+              containerLon = +data.longitude || null;
+            }
+            // Source 3: Current vessel position (fallback)
+            if (!containerLat && data.current_vessel_lat && data.current_vessel_lon) {
+              containerLat = +data.current_vessel_lat || null;
+              containerLon = +data.current_vessel_lon || null;
+            }
+            // Source 4: Last event with coordinates
+            if (!containerLat && data.events && Array.isArray(data.events)) {
+              for (const evt of data.events) {
+                if (evt.latitude && evt.longitude) {
+                  containerLat = +evt.latitude || null;
+                  containerLon = +evt.longitude || null;
+                  break;
+                }
+              }
+            }
+            
             let lastEventDescription = data.container_status || null;
             if (data.events && Array.isArray(data.events) && data.events.length > 0) {
               lastEventDescription = data.events[0].description || data.events[0].event_type || lastEventDescription;
@@ -2830,6 +2869,8 @@ serve(async (req) => {
                   ELSE transshipment_port 
                 END,
                 loading_port = COALESCE(?, loading_port),
+                latitude = COALESCE(?, latitude),
+                longitude = COALESCE(?, longitude),
                 last_check = NOW(),
                 last_error = NULL
               WHERE id = ?
@@ -2844,6 +2885,8 @@ serve(async (req) => {
               shippingLine ? normalizeShippingLine(shippingLine) : null,
               transshipmentPort,
               currentLoadingPort,
+              containerLat,
+              containerLon,
               row.id
             ]);
             
@@ -2945,6 +2988,8 @@ serve(async (req) => {
                       ELSE transshipment_port 
                     END,
                     loading_port = COALESCE(?, loading_port),
+                    latitude = COALESCE(?, latitude),
+                    longitude = COALESCE(?, longitude),
                     last_check = NOW(),
                     last_error = NULL,
                     sibling_synced = 1,
@@ -2963,6 +3008,8 @@ serve(async (req) => {
                   shippingLine ? normalizeShippingLine(shippingLine) : null,
                   transshipmentPort,
                   currentLoadingPort,
+                  containerLat,
+                  containerLon,
                   mblId,
                   row.id
                 ]);
