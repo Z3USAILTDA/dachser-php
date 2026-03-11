@@ -494,83 +494,139 @@ export default function OlimpoCobranca() {
           <KpiCard icon={Clock} label="Último Registro" value={data?.lastUpdate ? new Date(data.lastUpdate).toLocaleString("pt-BR") : "—"} loading={loading} />
         </div>
 
-        {/* Combined Bad Debts / Score Rating / Provision Table */}
-        {totals && totalReceivable > 0 && (
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-foreground">Bad Debts — Score Rating & Provisão</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border/50">
-                      <th className="text-left py-2 px-4 text-xs uppercase tracking-wider text-muted-foreground font-semibold min-w-[120px]">Faixa</th>
-                      {agingKeys.map(k => (
-                        <th key={k} className="text-right py-2 px-2 text-xs uppercase tracking-wider font-semibold min-w-[80px]" style={{ color: AGING_COLORS[k] }}>
-                          {AGING_LABELS[k]}
-                        </th>
-                      ))}
-                      <th className="text-right py-2 px-2 text-xs uppercase tracking-wider font-semibold text-red-400 min-w-[100px]">Total Overdue</th>
-                      <th className="text-right py-2 px-4 text-xs uppercase tracking-wider font-semibold text-foreground min-w-[100px]">Grand Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* Row 1: Score Rating % */}
-                    <tr className="border-b border-border/30">
-                      <td className="py-2 px-4 font-medium text-foreground">Score Rating %</td>
-                      {agingKeys.map(k => (
-                        <td key={k} className="py-2 px-2 text-right tabular-nums" style={{ color: AGING_COLORS[k] }}>
-                          {((totals[k] as number) / totalReceivable * 100).toFixed(1)}%
-                        </td>
-                      ))}
-                      <td className="py-2 px-2 text-right tabular-nums text-red-400 font-medium">{pctOverdue}%</td>
-                      <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">100%</td>
-                    </tr>
-                    {/* Row 2: Absolute values */}
-                    <tr className="border-b border-border/30">
-                      <td className="py-2 px-4 font-medium text-foreground">Valor</td>
-                      {agingKeys.map(k => (
-                        <td key={k} className="py-2 px-2 text-right tabular-nums" style={{ color: AGING_COLORS[k] }}>
-                          {formatBRL(totals[k] as number)}
-                        </td>
-                      ))}
-                      <td className="py-2 px-2 text-right tabular-nums text-red-400 font-medium">{formatBRL(totalOverdue)}</td>
-                      <td className="py-2 px-4 text-right tabular-nums text-foreground font-medium">{formatBRL(totalReceivable)}</td>
-                    </tr>
-                    {/* Row 3: % Provisão */}
-                    <tr className="border-b border-border/30">
-                      <td className="py-2 px-4 text-muted-foreground">% Provisão</td>
-                      {agingKeys.map(k => (
-                        <td key={k} className="py-2 px-2 text-right tabular-nums text-muted-foreground">
-                          {PROVISION_PCT[k]}%
-                        </td>
-                      ))}
-                      <td className="py-2 px-2" />
-                      <td className="py-2 px-4" />
-                    </tr>
-                    {/* Row 4: Provision values */}
-                    <tr className="border-t-2 border-primary/40 bg-primary/5">
-                      <td className="py-2 px-4 font-bold text-primary">Valor Provisionado</td>
-                      {agingKeys.map(k => {
-                        const prov = (totals[k] as number) * PROVISION_PCT[k] / 100;
-                        return (
-                          <td key={k} className="py-2 px-2 text-right tabular-nums font-bold" style={{ color: prov > 0 ? AGING_COLORS[k] : "var(--muted-foreground)" }}>
-                            {formatBRL(prov)}
+        {/* Summary Tables: Score Rating + Aging List + Bad Debts (side by side) */}
+        {totals && totalReceivable > 0 && (() => {
+          const currentMonth = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+          // Aggregated summary buckets
+          const sum = {
+            not_od: totals.not_due,
+            r1_90: totals.aging_30 + totals.aging_40 + totals.aging_60 + totals.aging_90,
+            r91_180: totals.aging_120 + totals.aging_180,
+            r181_240: totals.aging_240,
+            r241_360: totals.aging_365,
+            r361_plus: totals.aging_366_plus,
+          };
+          const grandTotal = totalReceivable;
+          const summaryKeys = ['not_od', 'r1_90', 'r91_180', 'r181_240', 'r241_360', 'r361_plus'] as const;
+          const summaryLabels = { not_od: 'NOT OD', r1_90: '1 - 90', r91_180: '91 - 180', r181_240: '181 - 240', r241_360: '241 - 360', r361_plus: '>361' };
+          const summaryColors = { not_od: '#22c55e', r1_90: '#eab308', r91_180: '#f97316', r181_240: '#ef4444', r241_360: '#dc2626', r361_plus: '#991b1b' };
+          const provisionPcts = { not_od: 0, r1_90: 1, r91_180: 25, r181_240: 50, r241_360: 75, r361_plus: 100 };
+          const odPct = grandTotal > 0 ? ((grandTotal - sum.not_od) / grandTotal * 100).toFixed(2) : '0';
+
+          const thClass = "text-right py-1.5 px-2 text-[10px] uppercase tracking-wider font-semibold";
+          const tdClass = "py-1.5 px-2 text-right tabular-nums text-xs";
+
+          return (
+            <div className="grid gap-4 lg:grid-cols-3">
+              {/* SCORE RATING */}
+              <Card className="bg-card border-border">
+                <CardHeader className="py-2 px-3">
+                  <CardTitle className="text-xs text-foreground font-bold text-center uppercase tracking-wider">Score Rating</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border/50">
+                          <th className="text-left py-1.5 px-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Soma</th>
+                          {summaryKeys.map(k => (
+                            <th key={k} className={thClass} style={{ color: summaryColors[k] }}>{summaryLabels[k]}</th>
+                          ))}
+                          <th className={`${thClass} text-red-400`}>OD %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b border-border/30 hover:bg-muted/10">
+                          <td className="py-1.5 px-2 text-xs font-medium text-foreground">{currentMonth}</td>
+                          {summaryKeys.map(k => (
+                            <td key={k} className={tdClass} style={{ color: summaryColors[k] }}>
+                              {(sum[k] / grandTotal * 100).toFixed(2)}%
+                            </td>
+                          ))}
+                          <td className={`${tdClass} text-red-400 font-bold`}>{odPct}%</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* AGING LIST */}
+              <Card className="bg-card border-border">
+                <CardHeader className="py-2 px-3">
+                  <CardTitle className="text-xs text-foreground font-bold text-center uppercase tracking-wider">Aging List</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border/50">
+                          <th className="text-left py-1.5 px-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Soma</th>
+                          {summaryKeys.map(k => (
+                            <th key={k} className={thClass} style={{ color: summaryColors[k] }}>{summaryLabels[k]}</th>
+                          ))}
+                          <th className={`${thClass} text-foreground`}>Total Geral</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b border-border/30 hover:bg-muted/10">
+                          <td className="py-1.5 px-2 text-xs font-medium text-foreground">{currentMonth}</td>
+                          {summaryKeys.map(k => (
+                            <td key={k} className={tdClass} style={{ color: summaryColors[k] }}>
+                              {formatBRL(sum[k])}
+                            </td>
+                          ))}
+                          <td className={`${tdClass} text-foreground font-bold`}>{formatBRL(grandTotal)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* BAD DEBTS */}
+              <Card className="bg-card border-border">
+                <CardHeader className="py-2 px-3">
+                  <CardTitle className="text-xs text-foreground font-bold text-center uppercase tracking-wider">Bad Debts</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border/50">
+                          <th className="text-left py-1.5 px-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Soma</th>
+                          {summaryKeys.map(k => (
+                            <th key={k} className={thClass} style={{ color: summaryColors[k] }}>{summaryLabels[k]}</th>
+                          ))}
+                          <th className={`${thClass} text-foreground`}>Total Geral</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b border-border/30 hover:bg-muted/10">
+                          <td className="py-1.5 px-2 text-xs font-medium text-foreground">{currentMonth}</td>
+                          {summaryKeys.map(k => {
+                            const prov = sum[k] * provisionPcts[k] / 100;
+                            return (
+                              <td key={k} className={tdClass} style={{ color: prov > 0 ? summaryColors[k] : 'var(--muted-foreground)' }}>
+                                {formatBRL(prov)}
+                              </td>
+                            );
+                          })}
+                          <td className={`${tdClass} text-foreground font-bold`}>
+                            {formatBRL(summaryKeys.reduce((s, k) => s + sum[k] * provisionPcts[k] / 100, 0))}
                           </td>
-                        );
-                      })}
-                      <td className="py-2 px-2" />
-                      <td className="py-2 px-4 text-right tabular-nums font-bold text-foreground">
-                        {formatBRL(agingKeys.reduce((s, k) => s + (totals[k] as number) * PROVISION_PCT[k] / 100, 0))}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          );
+        })()}
+
+
+
 
         {/* PYMT Term Rating */}
         {pymtTermData.length > 0 && (
