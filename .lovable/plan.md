@@ -1,24 +1,28 @@
 
 
-## Correção: "A Vencer" não mostra vouchers marcados como Pronto
+# Fix: Documentos não aparecem no dialog de visualização
 
-### Problema
-A query de stats (linha 8278) já conta todos os vouchers com `vencimento >= CURDATE()` corretamente, mas o filtro da view `a_vencer` (linha 8193) ainda exclui vouchers com `is_pronto_para_robo = 1`. Isso faz com que o card mostre zero quando todos os vouchers "a vencer" estão marcados como Pronto.
+## Causa raiz
 
-### Correção
-**Arquivo**: `supabase/functions/mariadb-proxy/index.ts` — linha 8193
-
-Remover a linha:
-```typescript
-conditions.push("(v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL)");
+O edge function `get_voucher_anexos` retorna a estrutura:
+```json
+{ "success": true, "data": [ ...anexos... ] }
 ```
 
-Manter apenas:
+Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
+
+## Correção
+
+### `src/components/esteira/PagamentosTab.tsx` — linha 862
+
+Trocar:
 ```typescript
-} else if (filterVencimento === 'a_vencer') {
-  conditions.push("v.vencimento >= CURDATE()");
-}
+setAnexosDialog(data?.anexos || []);
+```
+Por:
+```typescript
+setAnexosDialog(data?.data || []);
 ```
 
-Isso garante que vouchers com vencimento futuro apareçam no card "A Vencer" independentemente do status `is_pronto_para_robo`.
+Uma única linha corrige o problema.
 
