@@ -81,6 +81,24 @@ interface PymtTermRow {
   pct_gt90: number;
 }
 
+interface HistoricalAgingRow {
+  periodo: string;
+  ref_date: string;
+  not_od: number; d1_90: number; d91_180: number; d181_240: number; d241_360: number; d361_plus: number; total: number;
+  pct_not_od: number; pct_1_90: number; pct_91_180: number; pct_181_240: number; pct_241_360: number; pct_361_plus: number; pct_od: number;
+  prov_not_od: number; prov_1_90: number; prov_91_180: number; prov_181_240: number; prov_241_360: number; prov_361_plus: number; prov_total: number;
+  cust_not_od: number; cust_1_90: number; cust_91_180: number; cust_181_240: number; cust_241_360: number; cust_361_plus: number;
+}
+
+interface ClientPymtTerm {
+  cliente: string;
+  periodos: Array<{
+    periodo: string;
+    pct_0_15: number; pct_16_30: number; pct_31_45: number; pct_46_60: number; pct_61_90: number; pct_gt90: number;
+    total_baixado: number;
+  }>;
+}
+
 const AGING_COLORS: Record<string, string> = {
   not_due: "#22c55e",
   aging_30: "#84cc16",
