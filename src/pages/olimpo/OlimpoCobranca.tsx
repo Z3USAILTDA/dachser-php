@@ -288,6 +288,13 @@ export default function OlimpoCobranca() {
           setClientPymtHistorical(pymtClientResp.data || []);
         }
       }
+
+      if (agingClientResult.status === "fulfilled") {
+        const { data: agingClientResp } = agingClientResult.value;
+        if (agingClientResp?.success) {
+          setClientAgingHistorical(agingClientResp.data || []);
+        }
+      }
     } catch (err: any) {
       console.error("Erro ao buscar aging:", err);
       toast({ title: "Erro", description: err.message, variant: "destructive" });
