@@ -82,10 +82,10 @@ interface ApiLimitConfig {
 
 const API_LIMITS: Record<string, ApiLimitConfig> = {
   "JSONCargo": {
-    monthlyLimit: 5000,
-    alertThreshold: 4000, // 80% de 5000
+    monthlyLimit: 2500,
+    alertThreshold: 2000, // 80% de 2500
     plan: "Navigator (€299/mês)",
-    renewalDay: 29 // Renova dia 29 de cada mês
+    renewalDay: 25 // Renova dia 25 de cada mês
   }
   // Adicionar outras APIs aqui conforme necessário
 };
