@@ -2291,7 +2291,7 @@ serve(async (req) => {
       });
 
       try {
-        // Ensure last_error and needs_manual_review columns exist
+        // Ensure last_error, needs_manual_review, latitude, longitude columns exist
         try {
           await client.execute(`
             ALTER TABLE dados_dachser.t_tracking_sea 
@@ -2300,6 +2300,14 @@ serve(async (req) => {
           await client.execute(`
             ALTER TABLE dados_dachser.t_tracking_sea 
             ADD COLUMN IF NOT EXISTS needs_manual_review TINYINT(1) DEFAULT 0
+          `);
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_tracking_sea 
+            ADD COLUMN IF NOT EXISTS latitude DECIMAL(10,6) DEFAULT NULL
+          `);
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_tracking_sea 
+            ADD COLUMN IF NOT EXISTS longitude DECIMAL(10,6) DEFAULT NULL
           `);
         } catch (alterErr: any) {
           // Columns might already exist, ignore error

@@ -9765,11 +9765,14 @@ serve(async (req) => {
           ORDER BY total_calls DESC
         `);
 
-        // Get recent logs (last 24h)
+        // Get recent logs (current billing cycle, day 25-25)
         const recentLogs = await client.query(`
           SELECT id, api_name, endpoint, method, status_code, response_time_ms, created_at, user_email, edge_function, error_message
           FROM ai_agente.t_api_usage_logs FORCE INDEX (idx_created_at)
-          WHERE created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+          WHERE created_at >= CASE 
+            WHEN DAY(NOW()) >= 25 THEN DATE_FORMAT(NOW(), '%Y-%m-25')
+            ELSE DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 MONTH), '%Y-%m-25')
+          END
           ORDER BY created_at DESC
           LIMIT 100
         `);

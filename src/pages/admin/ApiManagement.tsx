@@ -142,9 +142,9 @@ const API_PRICING: Record<string, ApiPricing> = {
     tier: "Pro"
   },
   "JSONCargo": { 
-    costPerCall: 0.0598, // €299/mês ÷ 5000 calls = €0.0598 por chamada
+    costPerCall: 0.1196, // €299/mês ÷ 2500 calls = €0.1196 por chamada
     unit: "por consulta",
-    notes: "Plano Navigator: €299/mês (5000 chamadas incluídas)",
+    notes: "Plano Navigator: €299/mês (2500 chamadas incluídas)",
     tier: "Navigator"
   },
   "FlightRadar24": { 
