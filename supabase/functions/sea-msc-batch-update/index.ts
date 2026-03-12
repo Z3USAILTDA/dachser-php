@@ -104,7 +104,7 @@ function parseMscText(text: string): ParsedMBL[] {
       const nextLine = (i + 1 < lines.length) ? lines[i + 1].trim() : '';
       if (nextLine.startsWith('- containers:')) {
         if (current) results.push(current);
-        const containers = nextLine.replace('- containers:', '').trim().split(/\s+/).filter(c => c.length > 0);
+        const containers = nextLine.replace('- containers:', '').trim().split(/[\s,]+/).filter(c => c.length > 0);
         current = { mbl, containers, events: [], eta: null, noInfo: false };
         i += 2; // skip mbl + containers line
         
