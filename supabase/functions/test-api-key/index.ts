@@ -90,15 +90,22 @@ async function testJsoncargo(customKey?: string): Promise<{ success: boolean; er
   const key = customKey || Deno.env.get("JSONCARGO_API_KEY");
   if (!key) return { success: false, error: "JSONCARGO_API_KEY not configured" };
 
-  const res = await fetch("https://api.jsoncargo.com/v1/tracking?bl=TEST0000000", {
-    headers: { "x-api-key": key },
+  // Test with a real MSC container for accurate results
+  const testContainer = "MSBU4633186";
+  const res = await fetch(`https://api.jsoncargo.com/v1/tracking?bl=${testContainer}`, {
+    headers: { "x-api-key": key, "Accept": "application/json" },
   });
+  const body = await res.text();
   if (res.status === 401 || res.status === 403) {
-    const body = await res.text();
-    return { success: false, error: `HTTP ${res.status}`, details: body.slice(0, 200) };
+    return { success: false, error: `HTTP ${res.status}`, details: body.slice(0, 300) };
   }
-  await res.text();
-  return { success: true, details: `HTTP ${res.status} (auth OK)${customKey ? " – custom key" : ""}` };
+  // Try to parse JSON to check validity
+  try {
+    JSON.parse(body);
+    return { success: true, details: `HTTP ${res.status} – container ${testContainer} – valid JSON (${body.length} chars)` };
+  } catch {
+    return { success: false, error: `HTTP ${res.status} – invalid JSON`, details: body.slice(0, 500) };
+  }
 }
 
 async function testFlightradar(customKey?: string): Promise<{ success: boolean; error?: string; details?: string }> {
