@@ -6962,7 +6962,7 @@ serve(async (req) => {
           
           try {
             // Buscar IMO pelo nome usando vessel/finder
-            const foundImo = await findVesselImo(vesselName);
+            const foundImo = await findVesselImo(vesselName, client);
             
             if (foundImo && foundImo !== currentImo) {
               // Atualizar com nova IMO
