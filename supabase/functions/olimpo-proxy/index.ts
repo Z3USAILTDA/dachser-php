@@ -3279,13 +3279,13 @@ serve(async (req) => {
         await client.close();
         console.log(`[refresh_sea_tracking] Batch: ${processed} API calls, ${siblingsPropagated} siblings propagated, ${updated + siblingsPropagated} total updated, ${errors} errors, ${siblingSynced} fallback synced, ${leasingDetected} leasing, ${imoLookups} IMO lookups, ${remaining} remaining`);
         
-        return new Response(JSON.stringify({ 
+        const responseData: any = { 
           success: true, 
           updated, 
           errors, 
           processed,
-          siblingsPropagated,   // Containers updated via immediate sibling propagation (0 API calls)
-          siblingSynced,        // Containers updated via final fallback sync
+          siblingsPropagated,
+          siblingSynced,
           leasingDetected,
           imoLookups,
           remaining,
@@ -3294,7 +3294,19 @@ serve(async (req) => {
           totalPending,
           optimization: 'one_per_mbl_immediate_sibling_propagation',
           elapsedMs: Date.now() - startTime
-        }), {
+        };
+        
+        // Add force_all specific stats
+        if (forceAll && containers.__totalMbls !== undefined) {
+          responseData.forceAll = {
+            totalMbls: containers.__totalMbls,
+            uniqueContainersToTrack: containers.__totalUniqueContainers,
+            containersDeduplicated: containers.__totalMbls - containers.__totalUniqueContainers,
+            batchProcessed: containers.length,
+          };
+        }
+        
+        return new Response(JSON.stringify(responseData), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       } catch (e: any) {
