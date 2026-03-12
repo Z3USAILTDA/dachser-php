@@ -6848,7 +6848,7 @@ serve(async (req) => {
             console.log(`CCT: Looking up RFB events with MAWB: ${mawbForRfb} (HAWB: ${queryAwb})`);
             
             const rfbRows = mawbForRfb ? await client.query(`
-              SELECT identificacao, partesEstoque
+              SELECT identificacao, partesEstoque, dataEmissao
               FROM ${database}.t_aereo_cct
               WHERE identificacao = ?
               LIMIT 1
