@@ -8687,7 +8687,7 @@ serve(async (req) => {
             containerSet.add(`${carrier}:${cid}`);
             grouped[carrier][mbl].push({
               container: cid,
-              status: row.container_status || row.enrichment_status || 'unknown',
+              status: row.container_status || 'unknown',
               navio: row.navio || null,
               last_event: row.last_event || null,
               last_check: row.last_check || null,
