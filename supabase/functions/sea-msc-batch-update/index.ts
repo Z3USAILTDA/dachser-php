@@ -123,8 +123,8 @@ function parseMscText(text: string): ParsedMBL[] {
       }
     }
 
-    // Check for ETA line
-    const etaMatch = line.match(/^eta\s+(.+)$/i);
+    // Check for ETA line (supports "eta ...", "- ETA: ...", "ETA: ...")
+    const etaMatch = line.match(/^-?\s*eta:?\s+(.+)$/i);
     if (etaMatch && current) {
       const etaStr = etaMatch[1].trim().replace(/;/g, '/');
       const parts = etaStr.split('/');
