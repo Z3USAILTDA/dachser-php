@@ -1,21 +1,28 @@
 
-## Fix: Grand Total row overlapping client rows
 
-The Grand Total row uses `sticky bottom-0` which causes it to float over client data rows as you scroll, creating an ugly overlap because the background is semi-transparent (`bg-primary/5`).
+# Fix: Documentos não aparecem no dialog de visualização
 
-### Fix (single line change)
+## Causa raiz
 
-In `src/pages/olimpo/OlimpoCobranca.tsx` line 760, change the Grand Total `<tr>` classes:
+O edge function `get_voucher_anexos` retorna a estrutura:
+```json
+{ "success": true, "data": [ ...anexos... ] }
+```
 
-**From:** `border-t-2 border-primary/40 bg-primary/5 sticky bottom-0`
-**To:** `border-t-2 border-primary/40 bg-card sticky bottom-0 z-10 shadow-[0_-2px_6px_rgba(0,0,0,0.3)]`
+Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
 
-This gives the sticky row:
-- An opaque background (`bg-card`) so content doesn't show through
-- A `z-10` to stay above other rows
-- A subtle top shadow to visually separate it from the scrolling content
+## Correção
 
-### File modified
-| File | Change |
-|---|---|
-| `src/pages/olimpo/OlimpoCobranca.tsx` | Opaque background + z-index + shadow on Grand Total sticky row |
+### `src/components/esteira/PagamentosTab.tsx` — linha 862
+
+Trocar:
+```typescript
+setAnexosDialog(data?.anexos || []);
+```
+Por:
+```typescript
+setAnexosDialog(data?.data || []);
+```
+
+Uma única linha corrige o problema.
+
