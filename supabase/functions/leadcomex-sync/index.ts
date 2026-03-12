@@ -668,7 +668,12 @@ async function processLeadComexData(
               action: 'insert_cct_event',
               awb: hawb,
               codigo_evento: 'BLOQUEIO',
-              descricao_evento: `Bloqueio ${bloqueio.codigo || bloqueio.codigoBloqueio || 'N/A'}: ${bloqueio.descricao || bloqueio.descricaoBloqueio || bloqueio.motivo || 'Motivo não informado'}`,
+              descricao_evento: [
+                bloqueio.motivoBloqueio || bloqueio.descricao || bloqueio.descricaoBloqueio || 'Motivo não informado',
+                bloqueio.justificativaBloqueio ? `Justificativa: ${bloqueio.justificativaBloqueio}` : null,
+                bloqueio.tipoBloqueio ? `Tipo: ${bloqueio.tipoBloqueio}` : null,
+                bloqueio.alcanceBloqueio ? `Alcance: ${bloqueio.alcanceBloqueio}` : null,
+              ].filter(Boolean).join(' | '),
               data_hora_evento: parseBrazilianDate(bloqueio.dataHoraBloqueio) || new Date().toISOString(),
               fonte: 'LEADCOMEX',
               nivel_confianca: 'PRIMARIA',
