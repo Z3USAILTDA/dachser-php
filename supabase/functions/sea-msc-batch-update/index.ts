@@ -266,7 +266,7 @@ serve(async (req) => {
   
   try {
     const body = await req.json();
-    let { rawText, dryRun, storageUrl } = body;
+    let { rawText, dryRun, storageUrl, offset = 0, limit = 30 } = body;
 
     // If storageUrl provided, fetch text from Supabase Storage
     if (storageUrl && !rawText) {
