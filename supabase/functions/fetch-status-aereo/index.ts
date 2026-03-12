@@ -743,7 +743,7 @@ serve(async (req) => {
     let wsParams: string[] = [];
 
     const baseWsQuery = `
-      SELECT w.id, w.awb, w.last_status_code, w.last_status_description,
+      SELECT w.id, w.awb, w.last_status_code,
              w.origin, w.destination, w.last_flight, w.scraped_at,
              w.timeline_json
       FROM ${database}.t_aereo_ws_firecrawl w
