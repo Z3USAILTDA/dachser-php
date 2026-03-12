@@ -6785,19 +6785,29 @@ serve(async (req) => {
           )
         `);
 
-        // Insert event (ignore duplicates)
+        // Insert event - use ON DUPLICATE KEY UPDATE to refresh description for BLOQUEIO/DESBLOQUEIO
+        const eventDescValue = descricao_evento || codigo_evento;
+        const eventDateValue = data_hora_evento || new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const eventFonteValue = fonte || 'TRACKING';
+        const eventAeroportoValue = aeroporto || null;
+        const eventConfiancaValue = nivel_confianca || 'PRIMARIA';
+
         await client.execute(`
-          INSERT IGNORE INTO ${database}.t_cct_eventos_historico 
+          INSERT INTO ${database}.t_cct_eventos_historico 
           (awb, codigo_evento, descricao_evento, data_hora_evento, fonte, aeroporto, nivel_confianca)
           VALUES (TRIM(?), TRIM(?), ?, ?, ?, ?, ?)
+          ON DUPLICATE KEY UPDATE 
+            descricao_evento = VALUES(descricao_evento),
+            fonte = VALUES(fonte),
+            aeroporto = COALESCE(VALUES(aeroporto), aeroporto)
         `, [
           eventAwb,
           codigo_evento,
-          descricao_evento || codigo_evento,
-          data_hora_evento || new Date().toISOString().slice(0, 19).replace('T', ' '),
-          fonte || 'TRACKING',
-          aeroporto || null,
-          nivel_confianca || 'PRIMARIA'
+          eventDescValue,
+          eventDateValue,
+          eventFonteValue,
+          eventAeroportoValue,
+          eventConfiancaValue
         ]);
 
         result = { success: true, message: 'Event inserted' };
