@@ -2125,6 +2125,37 @@ serve(async (req) => {
           ORDER BY ts.container
         `, [mbl_id]);
 
+        // Auto-resolução de IMO para qualquer processo aberto:
+        // 1) procura IMO já existente na tabela
+        // 2) só consulta API se não existir no banco
+        const normalize = (v?: string | null) => (v || '').toUpperCase().replace(/\s+/g, ' ').trim();
+        const missingVessels = Array.from(new Set(
+          rows
+            .filter((r: any) => !r.vessel_imo && r.navio)
+            .map((r: any) => normalize(r.navio))
+            .filter(Boolean)
+        ));
+
+        if (missingVessels.length > 0) {
+          for (const vesselName of missingVessels) {
+            const resolvedImo = await findVesselImo(vesselName, client);
+            if (!resolvedImo) continue;
+
+            await client.execute(`
+              UPDATE dados_dachser.t_tracking_sea
+              SET vessel_imo = ?
+              WHERE UPPER(TRIM(navio)) = ?
+                AND (vessel_imo IS NULL OR TRIM(vessel_imo) = '')
+            `, [resolvedImo, vesselName]);
+
+            for (const row of rows as any[]) {
+              if (!row.vessel_imo && normalize(row.navio) === vesselName) {
+                row.vessel_imo = resolvedImo;
+              }
+            }
+          }
+        }
+
         await client.close();
         console.log(`[get_sea_tracking_containers] Returning ${rows.length} containers for MBL ${mbl_id}`);
         return new Response(JSON.stringify({ success: true, data: rows }), {
