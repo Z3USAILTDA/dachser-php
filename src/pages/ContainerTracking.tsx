@@ -2319,7 +2319,22 @@ const ContainerTracking = () => {
                           <tr className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)] transition">
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
-                                <span className="text-[#f5f5f5] font-mono text-sm">{mbl.mbl_id}</span>
+                                <span className={`font-mono text-sm ${!mbl.vessel_imo && mbl.navio ? 'text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/30' : 'text-[#f5f5f5]'}`}>{mbl.mbl_id}</span>
+                                {!mbl.vessel_imo && mbl.navio && (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.65rem] font-medium bg-rose-500/20 text-rose-400 border border-rose-500/30 cursor-help whitespace-nowrap">
+                                          <AlertTriangle className="w-3 h-3" />
+                                          Sem IMO
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p className="text-xs">Navio <strong>{mbl.navio}</strong> sem IMO — mapa indisponível</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )}
                                 {!mbl.has_free_time && <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
