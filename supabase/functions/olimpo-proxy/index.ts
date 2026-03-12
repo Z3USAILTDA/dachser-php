@@ -6177,7 +6177,7 @@ serve(async (req) => {
           }
           
           const vesselName = row.navio;
-          const imo = await findVesselImo(vesselName);
+          const imo = await findVesselImo(vesselName, client);
           processed++;
           
           if (imo) {
