@@ -743,7 +743,7 @@ serve(async (req) => {
     let wsParams: string[] = [];
 
     const baseWsQuery = `
-      SELECT w.id, w.awb, w.last_status_code, w.last_status_description,
+      SELECT w.id, w.awb, w.last_status_code,
              w.origin, w.destination, w.last_flight, w.scraped_at,
              w.timeline_json
       FROM ${database}.t_aereo_ws_firecrawl w
@@ -757,10 +757,10 @@ serve(async (req) => {
     if (search && search.trim() !== '') {
       const searchPattern = `%${search.trim()}%`;
       wsQuery = `${baseWsQuery}
-        WHERE (w.awb LIKE ? OR w.last_status_code LIKE ? OR w.last_status_description LIKE ?)
+        WHERE (w.awb LIKE ? OR w.last_status_code LIKE ?)
         ORDER BY w.scraped_at DESC
         LIMIT 500`;
-      wsParams = [searchPattern, searchPattern, searchPattern];
+      wsParams = [searchPattern, searchPattern];
     } else {
       wsQuery = `${baseWsQuery} ORDER BY w.scraped_at DESC LIMIT 500`;
     }
