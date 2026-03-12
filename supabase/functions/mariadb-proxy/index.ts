@@ -4006,19 +4006,11 @@ serve(async (req) => {
             }
           }
           
-          // Override with t_cct_eventos_historico - TIMELINE IS SUPREME
-          // The most advanced event from the history table always wins (by hierarchy, not timestamp)
+          // Override with latest timeline event from t_cct_eventos_historico
+          // This keeps dashboard status aligned with the top event in timeline
           const evtHistorico = eventosHistoricoMap.get(houseKey);
-          if (evtHistorico) {
-            const evtMapped = evtHistorico.mapped_status;
-            if (evtMapped) {
-              const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
-              const evtOrder = CCT_STATUS_ORDER[evtMapped] || 0;
-              // Timeline is supreme: if historico has a more advanced status, use it
-              if (evtOrder > currentOrder) {
-                statusCctOficial = evtMapped;
-              }
-            }
+          if (evtHistorico?.mapped_status) {
+            statusCctOficial = evtHistorico.mapped_status;
           }
           
           return {
