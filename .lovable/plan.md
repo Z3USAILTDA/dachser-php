@@ -1,28 +1,39 @@
 
 
-# Fix: Documentos não aparecem no dialog de visualização
+## Plano: Corrigir processos MSC que ainda mostram "Aguardando"
 
-## Causa raiz
+### Problema
+Processos atualizados pelo batch MSC ainda aparecem como "Aguardando" (AGD) por duas falhas de mapeamento:
 
-O edge function `get_voucher_anexos` retorna a estrutura:
-```json
-{ "success": true, "data": [ ...anexos... ] }
-```
+1. **Backend (`sea-msc-batch-update`)** — O `resolveContainerStatus` não mapeia `GIO`, `GOE`, `BKG` corretamente, caindo no `default: 'AGD'`.
+2. **Frontend (`ContainerTracking.tsx`)** — O `getReportStatus` não reconhece descrições MSC no campo `last_event` (ex: "Export Loaded on Rail", "Full Transshipment Discharged"), resultando em fallback para AGD.
 
-Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
+### Correções
 
-## Correção
+#### 1. Backend — `supabase/functions/sea-msc-batch-update/index.ts`
+Atualizar o `switch` em `resolveContainerStatus` para mapear corretamente:
+- `GIO` → `'GIO'`
+- `GOE` → `'CLT'`
+- `BKG` → `'BKG'`
+- `STATUS_UPDATE` → manter `'AGD'` apenas como último recurso
 
-### `src/components/esteira/PagamentosTab.tsx` — linha 862
+#### 2. Frontend — `src/pages/ContainerTracking.tsx`
+Adicionar reconhecimento de descrições MSC no `getReportStatus` via `lastEvent.toLowerCase().includes(...)`:
+- "loaded on vessel" → CRG
+- "received at cy/origin" → GIO
+- "transshipment" → TSP
+- "discharged from vessel" → DCH
+- "available for delivery" / "carrier release" → INS
+- "import to consignee" → GOD
+- "empty received" → DLV
+- "empty to shipper" → CLT
+- "loaded on rail/barge" → CRG
+- "start export cycle" → BKG
 
-Trocar:
-```typescript
-setAnexosDialog(data?.anexos || []);
-```
-Por:
-```typescript
-setAnexosDialog(data?.data || []);
-```
+#### 3. Re-processar todos os MBLs MSC
+Após deploy das correções, re-executar o batch para os ~130 MBLs (offsets 0–130, limit 15) para atualizar o `container_status` no banco.
 
-Uma única linha corrige o problema.
+### Arquivos alterados
+- `supabase/functions/sea-msc-batch-update/index.ts`
+- `src/pages/ContainerTracking.tsx`
 
