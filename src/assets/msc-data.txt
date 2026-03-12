@@ -1,0 +1,5659 @@
+MEDUBD243987
+- containers: MEDUBD243987, UETU7493739, FFAU2941003
+- eventos: 
+28/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC ELODIE NA608A
+
+Hhla container terminal altenwerder
+
+23/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+21/02/2026
+Ceska trebova, CZ
+Export Loaded on Rail
+LADEN
+Metrans ceska trebova
+
+20/02/2026
+Ceska trebova, CZ
+Export Unloaded from Rail
+LADEN
+Metrans ceska trebova
+
+20/02/2026
+Dunajska streda, SK
+Export Loaded on Rail
+LADEN
+Metrans
+
+18/02/2026
+Dunajska streda, SK
+Export Unloaded from Rail
+LADEN
+Metrans
+
+18/02/2026
+Zilina, SK
+Export Loaded on Rail
+LADEN
+Metrans
+
+17/02/2026
+Zilina, SK
+Export received at CY
+LADEN
+Metrans
+
+16/02/2026
+Zilina, SK
+Empty to Shipper
+EMPTY
+Metrans
+
+- ETA: 25/03/2026
+
+
+
+MEDUEC652868
+- containers: MSDU4389441
+- eventos:
+07/02/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Fassina sts
+
+29/01/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+29/01/2026
+Santos, BR
+Import Discharged from Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Brasil terminal portuario s/a
+
+02/01/2026
+Bremerhaven, DE
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Msc gate
+
+22/12/2025
+Bremerhaven, DE
+Export Unloaded from Rail
+LADEN
+Msc gate
+
+21/12/2025
+Dunajska streda, SK
+Export Loaded on Rail
+LADEN
+Metrans
+
+17/12/2025
+Dunajska streda, SK
+Export Unloaded from Rail
+LADEN
+Metrans
+
+17/12/2025
+Budapest, HU
+Export Loaded on Rail
+LADEN
+Metrans
+
+15/12/2025
+Budapest, HU
+Export received at CY
+LADEN
+Metrans
+
+13/12/2025
+Budapest, HU
+Empty to Shipper
+EMPTY
+Mahart
+
+MEDUEC652868
+- containers: MSNU1211163
+- eventos:
+10/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+09/02/2026
+Santos, BR
+Import Discharged from Vessel
+XIAMEN EXPRESS NA601A
+
+Brasil terminal portuario s/a
+
+10/01/2026
+Bremerhaven, DE
+Export Loaded on Vessel
+XIAMEN EXPRESS NA601A
+
+Msc gate
+
+07/01/2026
+Bremerhaven, DE
+Export Unloaded from Rail
+LADEN
+Msc gate
+
+05/01/2026
+Dunajska streda, SK
+Export Loaded on Rail
+LADEN
+Metrans
+
+30/12/2025
+Dunajska streda, SK
+Export Unloaded from Rail
+LADEN
+Metrans
+
+29/12/2025
+Budapest, HU
+Export Loaded on Rail
+LADEN
+Metrans
+
+29/12/2025
+Budapest, HU
+Export received at CY
+LADEN
+Metrans
+
+29/12/2025
+Budapest, HU
+Empty to Shipper
+EMPTY
+Mahart
+
+MEDUEC664467
+- containers: MSDU4719559
+- eventos:
+05/03/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC LEILA NA609A
+
+Hhla container terminal altenwerder
+
+02/03/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+26/02/2026
+Budapest, HU
+Export Loaded on Rail
+LADEN
+Metrans
+
+23/02/2026
+Budapest, HU
+Export received at CY
+LADEN
+Metrans
+
+20/02/2026
+Budapest, HU
+Empty to Shipper
+EMPTY
+Mahart
+
+eta 31;03;2026
+
+MEDUFM176485
+- containers: TGBU3092602
+- eventos:
+06/02/2026
+Rio grande, BR
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA606R
+
+Tecon rio grande
+
+28/01/2026
+Rio grande, BR
+Export received at CY
+LADEN
+Tecon rio grande
+
+24/01/2026
+Rio grande, BR
+Empty to Shipper
+EMPTY
+Medlog rig
+
+eta 09/04/2026
+
+MEDUFM197457
+- containers: FBLU0077849 MEDU8430504
+- eventos:
+06/03/2026
+Rio grande, BR
+Export Loaded on Vessel
+BREMERHAVEN EXPRESS NA610R
+
+Tecon rio grande
+
+04/03/2026
+Rio grande, BR
+Export received at CY
+LADEN
+Tecon rio grande
+
+02/03/2026
+Rio grande, BR
+Empty to Shipper
+EMPTY
+Medlog rig
+
+eta 11/04/26
+
+MEDUJX121737
+- containers: MEDU5022983
+- eventos:
+
+20/02/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+17/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Santos brasil terminal
+
+15/02/2026
+Santos, BR
+Import Discharged from Vessel
+MSC DOMITILLE MM603A
+
+Santos brasil terminal
+
+26/01/2026
+Valencia, ES
+Full Transshipment Loaded
+MSC DOMITILLE MM603A
+
+M.S.C. Terminal valencia
+
+18/01/2026
+Valencia, ES
+Full Transshipment Discharged
+MSC WASHINGTON IS602R
+
+M.S.C. Terminal valencia
+
+06/01/2026
+Tekirdag (asyaport), TR
+Export Loaded on Vessel
+MSC WASHINGTON IS602R
+
+Asyaport
+
+25/12/2025
+Tekirdag (asyaport), TR
+Export received at CY
+LADEN
+Asyaport
+
+25/12/2025
+Tekirdag (asyaport), TR
+Empty to Shipper
+EMPTY
+Medlog tekirdag depot
+
+MEDUK8866684
+- containers: MSDU6522907 MSNU5638976
+- eventos:
+11/02/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+08/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Santos brasil terminal
+
+28/01/2026
+Santos, BR
+Import Discharged from Vessel
+MSC HORTENSE MM601A
+
+Santos brasil terminal
+
+09/01/2026
+Valencia, ES
+Full Transshipment Loaded
+MSC HORTENSE MM601A
+
+M.S.C. Terminal valencia
+
+07/01/2026
+Valencia, ES
+Full Transshipment Discharged
+MSC PORTO III MB601A
+
+M.S.C. Terminal valencia
+
+27/12/2025
+Gebze, TR
+Export Loaded on Vessel
+MSC PORTO III MB552R
+
+Yilport container terminal gebze
+
+19/12/2025
+Gebze, TR
+Export received at CY
+LADEN
+Yilport container terminal gebze
+
+18/12/2025
+Gebze, TR
+Empty to Shipper
+EMPTY
+Medlog gebze depot
+
+MEDUK9520942
+- containers: MEDU5455200
+- eventos:
+06/02/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+04/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Santos brasil terminal
+
+12/01/2026
+Santos, BR
+Import Discharged from Vessel
+MSC ALBANY MM551A
+
+Santos brasil terminal
+
+23/12/2025
+Genoa, IT
+Export Loaded on Vessel
+MSC ALBANY MM551A
+
+Psa sech
+
+18/12/2025
+Genoa, IT
+Export Unloaded from Rail
+LADEN
+Psa sech
+
+17/12/2025
+Modena, IT
+Export Loaded on Rail
+LADEN
+Terminali italia marzaglia
+
+16/12/2025
+Modena, IT
+Export received at origin rail ramp
+LADEN
+Terminali italia marzaglia
+
+15/12/2025
+La spezia, IT
+Empty to Shipper
+EMPTY
+Lsct - la spezia container terminal
+
+MEDUKJ551341
+- containers: MSDU8736404
+- eventos:
+
+09/02/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+17/01/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+17/01/2026
+Santos, BR
+Import Discharged from Vessel
+MSC LEILA NA550A
+
+Brasil terminal portuario s/a
+
+21/12/2025
+Hamburg, DE
+Export Loaded on Vessel
+MSC LEILA NA550A
+
+Hhla container terminal altenwerder
+
+17/12/2025
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+11/12/2025
+Bremen, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+
+MEDUKJ605030
+- containers: TXGU8899210
+- eventos:
+14/02/2026
+Praia grande, BR
+Empty received at CY
+EMPTY
+Transtecworld logistica ltda
+
+29/01/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+29/01/2026
+Santos, BR
+Import Discharged from Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Brasil terminal portuario s/a
+
+30/12/2025
+Hamburg, DE
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Hhla container terminal altenwerder
+
+24/12/2025
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+18/12/2025
+Bremen, DE
+Empty to Shipper
+EMPTY
+
+MEDUKJ626309
+- containers: MEDU6446923 MSNU2877534 DFSU2676678
+- eventos:
+20/02/2026
+Itajai, BR
+Empty received at CY
+EMPTY
+Conexao maritima
+
+10/02/2026
+Navegantes, BR
+Import to consignee
+LADEN
+Portonave
+
+09/02/2026
+Navegantes, BR
+Import Discharged from Vessel
+LAEM CHABANG EXPRESS NA606R
+
+Portonave
+
+30/12/2025
+Hamburg, DE
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Hhla container terminal altenwerder
+
+22/12/2025
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+19/12/2025
+Ulm, DE
+Export Loaded on Rail
+LADEN
+Tfg ubf ulm
+
+19/12/2025
+Ulm, DE
+Export received at CY
+LADEN
+Tfg ubf ulm
+
+17/12/2025
+Ulm, DE
+Empty to Shipper
+EMPTY
+Dbis ulm kombiwaggon gmbh
+
+MEDUKJ628255
+- containers: MSMU1401874 MSMU2651570 
+- eventos:
+09/02/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+05/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+29/01/2026
+Santos, BR
+Import Discharged from Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Brasil terminal portuario s/a
+
+30/12/2025
+Hamburg, DE
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Hhla container terminal altenwerder
+
+23/12/2025
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+19/12/2025
+Ulm, DE
+Export Loaded on Rail
+LADEN
+Tfg ubf ulm
+
+19/12/2025
+Ulm, DE
+Export received at CY
+LADEN
+Tfg ubf ulm
+
+19/12/2025
+Ulm, DE
+Empty to Shipper
+EMPTY
+Dbis ulm kombiwaggon gmbh
+
+MEDUKJ644708
+- containers: TIIU4395222
+- eventos:
+10/02/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Transtecworld logistica ltda
+
+03/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Santos brasil terminal
+
+02/02/2026
+Santos, BR
+Import Discharged from Vessel
+MSC MUGE NA552A
+
+Santos brasil terminal
+
+15/01/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC MUGE NA552A
+
+Hhla container terminal altenwerder
+
+30/12/2025
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+29/12/2025
+Bremen, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+
+MEDUKJ644880
+- containers: TIIU4395222
+- eventos:
+
+10/02/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Transtecworld logistica ltda
+
+03/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Santos brasil terminal
+
+02/02/2026
+Santos, BR
+Import Discharged from Vessel
+MSC MUGE NA552A
+
+Santos brasil terminal
+
+15/01/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC MUGE NA552A
+
+Hhla container terminal altenwerder
+
+30/12/2025
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+29/12/2025
+Bremen, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+
+MEDUKJ657734
+- containers: MSDU5620323
+- eventos:
+05/02/2026
+Praia grande, BR
+Empty received at CY
+EMPTY
+Transtecworld logistica ltda
+
+04/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+29/01/2026
+Santos, BR
+Import Discharged from Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Brasil terminal portuario s/a
+
+02/01/2026
+Bremerhaven, DE
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Msc gate
+
+23/12/2025
+Bremerhaven, DE
+Export Unloaded from Rail
+LADEN
+Msc gate
+
+22/12/2025
+Munchen, DE
+Export Loaded on Rail
+LADEN
+Duss muenchen
+
+19/12/2025
+Munchen, DE
+Export received at CY
+LADEN
+Duss muenchen
+
+18/12/2025
+Munchen, DE
+Empty to Shipper
+EMPTY
+Kloiber
+
+MEDUKJ704114
+- containers: MSBU8195220
+- eventos:
+14/02/2026
+Itajai, BR
+Empty received at CY
+EMPTY
+Kairos terminal ltda
+
+13/02/2026
+Itapoa, BR
+Import to consignee
+LADEN
+Itapoa terminais portuarios s/a
+
+10/02/2026
+Itapoa, BR
+Import Discharged from Vessel
+SANTA LINEA QI549A
+
+Itapoa terminais portuarios s/a
+
+24/01/2026
+Rio de janeiro, BR
+Full Transshipment Loaded
+SANTA LINEA QI549A
+
+Multiterminais rio de janeiro
+
+21/01/2026
+Rio de janeiro, BR
+Full Transshipment Discharged
+LAEM CHABANG EXPRESS NA551A
+
+Multiterminais rio de janeiro
+
+06/01/2026
+Antwerp, BE
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Mpet k1742 deurganck terminal
+
+26/12/2025
+Antwerp, BE
+Export Unloaded from Rail
+LADEN
+Mpet k1742 deurganck terminal
+
+24/12/2025
+Athus, BE
+Export Loaded on Rail
+LADEN
+Terminal container athus
+
+22/12/2025
+Athus, BE
+Export received at CY
+LADEN
+Terminal container athus
+
+19/12/2025
+Athus, BE
+Empty to Shipper
+EMPTY
+Terminal container athus
+
+MEDUKJ704890
+- containers: TRHU7575515
+- eventos:
+11/03/2026
+Itajai, BR
+Empty received at CY
+EMPTY
+Kairos terminal ltda
+
+06/03/2026
+Itapoa, BR
+Import to consignee
+LADEN
+Itapoa terminais portuarios s/a
+
+28/02/2026
+Itapoa, BR
+Import Discharged from Vessel
+MSC FIRENZE QI601A
+
+Itapoa terminais portuarios s/a
+
+23/02/2026
+Rio de janeiro, BR
+Full Transshipment Loaded
+MSC FIRENZE QI601A
+
+Multiterminais rio de janeiro
+
+18/02/2026
+Rio de janeiro, BR
+Full Transshipment Discharged
+BREMERHAVEN EXPRESS NA602A
+
+Multiterminais rio de janeiro
+
+21/01/2026
+Antwerp, BE
+Export Loaded on Vessel
+BREMERHAVEN EXPRESS NA602A
+
+Mpet k1742 deurganck terminal
+
+13/01/2026
+Antwerp, BE
+Export Unloaded from Rail
+LADEN
+Mpet k1742 deurganck terminal
+
+09/01/2026
+Athus, BE
+Export Loaded on Rail
+LADEN
+Terminal container athus
+
+08/01/2026
+Athus, BE
+Export received at CY
+LADEN
+Terminal container athus
+
+08/01/2026
+Athus, BE
+Empty to Shipper
+EMPTY
+Terminal container athus
+
+MEDUKJ718437
+- containers: CAIU6158680
+- eventos:
+14/02/2026
+Navegantes, BR
+Empty received at CY
+EMPTY
+Vmg terminais ltda
+
+13/02/2026
+Itapoa, BR
+Import to consignee
+LADEN
+Itapoa terminais portuarios s/a
+
+10/02/2026
+Itapoa, BR
+Import Discharged from Vessel
+SANTA LINEA QI549A
+
+Itapoa terminais portuarios s/a
+
+24/01/2026
+Rio de janeiro, BR
+Full Transshipment Loaded
+SANTA LINEA QI549A
+
+Multiterminais rio de janeiro
+
+15/01/2026
+Rio de janeiro, BR
+Full Transshipment Discharged
+MSC LEILA NA550A
+
+Multiterminais rio de janeiro
+
+25/12/2025
+Antwerp, BE
+Export Loaded on Vessel
+MSC LEILA NA550A
+
+Mpet k1742 deurganck terminal
+
+22/12/2025
+Antwerp, BE
+Export Unloaded from Rail
+LADEN
+Mpet k1742 deurganck terminal
+
+19/12/2025
+Athus, BE
+Export Loaded on Rail
+LADEN
+Terminal container athus
+
+17/12/2025
+Athus, BE
+Export received at CY
+LADEN
+Terminal container athus
+
+16/12/2025
+Athus, BE
+Empty to Shipper
+EMPTY
+Terminal container athus
+
+MEDUKJ728204
+- containers: MSNU7324193
+- eventos:
+14/02/2026
+Sumare, BR
+Empty received at CY
+EMPTY
+Brado logistica s.A
+
+29/01/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+29/01/2026
+Santos, BR
+Import Discharged from Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Brasil terminal portuario s/a
+
+30/12/2025
+Hamburg, DE
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Hhla container terminal altenwerder
+
+15/12/2025
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+13/12/2025
+Ulm, DE
+Export Loaded on Rail
+LADEN
+Tfg ubf ulm
+
+12/12/2025
+Ulm, DE
+Export received at CY
+LADEN
+Tfg ubf ulm
+
+11/12/2025
+Ulm, DE
+Empty to Shipper
+EMPTY
+Dbis ulm kombiwaggon gmbh
+
+MEDUKJ644708
+- containers: TGBU3108355
+- eventos:
+23/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC ADELE NA607A
+
+Hhla container terminal altenwerder
+
+18/02/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+13/02/2026
+Bremen, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+eta 21/03/2026
+
+MEDUKJ735365
+- containers: UETU6290932
+- eventos:
+05/03/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC LEILA NA609A
+
+Hhla container terminal altenwerder
+
+03/03/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+02/03/2026
+Bremen, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+eta 31/03/2026
+
+MEDUKJ644708
+- containers: TEMU2044929
+- eventos:
+19/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+18/02/2026
+Santos, BR
+Import Discharged from Vessel
+MSC INSA NA603A
+
+Brasil terminal portuario s/a
+
+25/01/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC INSA NA603A
+
+Hhla container terminal altenwerder
+
+19/01/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+08/01/2026
+Bremen, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+
+MEDUKJ735423
+- containers: TEMU2044929
+- eventos:
+19/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+18/02/2026
+Santos, BR
+Import Discharged from Vessel
+MSC INSA NA603A
+
+Brasil terminal portuario s/a
+
+25/01/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC INSA NA603A
+
+Hhla container terminal altenwerder
+
+19/01/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+08/01/2026
+Bremen, DE
+Empty to Shipper
+EMPTY
+
+MEDUKJ756767
+- containers: MEDU5947181
+- eventos:
+
+30/01/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Transtecworld logistica ltda
+
+29/01/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+29/01/2026
+Santos, BR
+Import Discharged from Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Brasil terminal portuario s/a
+
+30/12/2025
+Hamburg, DE
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Hhla container terminal altenwerder
+
+19/12/2025
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+17/12/2025
+Ulm, DE
+Empty to Shipper
+EMPTY
+Dbis ulm kombiwaggon gmbh
+
+MEDUKJ772848
+- containers: TEMU3792268
+- eventos:
+
+27/01/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+23/01/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+17/01/2026
+Santos, BR
+Import Discharged from Vessel
+MSC LEILA NA550A
+
+Brasil terminal portuario s/a
+
+25/12/2025
+Antwerp, BE
+Export Loaded on Vessel
+MSC LEILA NA550A
+
+Mpet k1742 deurganck terminal
+
+17/12/2025
+Antwerp, BE
+Export received at CY
+LADEN
+Mpet k1742 deurganck terminal
+
+16/12/2025
+Antwerp, BE
+Start Export Cycle
+Mpet k1742 deurganck terminal
+
+MEDUKJ783589
+- containers: MSNU3228165 FFAU1723814
+- eventos:
+26/02/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+29/01/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+29/01/2026
+Santos, BR
+Import Discharged from Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Brasil terminal portuario s/a
+
+30/12/2025
+Hamburg, DE
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Hhla container terminal altenwerder
+
+21/12/2025
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+18/12/2025
+Ulm, DE
+Empty to Shipper
+EMPTY
+Dbis ulm kombiwaggon gmbh
+
+MEDUKJ789099
+- containers: MSDU5376520
+- eventos:
+06/03/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+18/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+18/02/2026
+Santos, BR
+Import Discharged from Vessel
+MSC INSA NA603A
+
+Brasil terminal portuario s/a
+
+18/01/2026
+Rotterdam, NL
+Export Loaded on Vessel
+MSC INSA NA603A
+
+Ect delta marine terminal (dmt)
+
+13/01/2026
+Rotterdam, NL
+Export received at CY
+LADEN
+Ect delta marine terminal (dmt)
+
+12/01/2026
+Dortmund, DE
+Empty to Shipper
+EMPTY
+
+MEDUKJ794909
+- containers: MSBU1375771
+- eventos:
+
+
+24/02/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+19/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+18/02/2026
+Santos, BR
+Import Discharged from Vessel
+MSC INSA NA603A
+
+Brasil terminal portuario s/a
+
+25/01/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC INSA NA603A
+
+Hhla container terminal altenwerder
+
+20/01/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+13/01/2026
+Bremen, DE
+Empty to Shipper
+EMPTY
+Roland
+
+MEDUKJ798066
+- containers: MSDU6417901
+- eventos:
+10/03/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+21/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+21/02/2026
+Santos, BR
+Import Discharged from Vessel
+BREMERHAVEN EXPRESS NA602A
+
+Brasil terminal portuario s/a
+
+16/01/2026
+Rotterdam, NL
+Export Loaded on Vessel
+BREMERHAVEN EXPRESS NA602A
+
+Ect delta marine terminal (dmt)
+
+06/01/2026
+Rotterdam, NL
+Export received at CY
+LADEN
+Ect delta marine terminal (dmt)
+
+05/01/2026
+Rotterdam, NL
+Start Export Cycle
+N.A
+
+MEDUKJ804609
+- containers: FFAU1909500
+- eventos:
+06/03/2026
+Praia grande, BR
+Empty received at CY
+EMPTY
+Transtecworld logistica ltda
+
+21/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+21/02/2026
+Santos, BR
+Import Discharged from Vessel
+BREMERHAVEN EXPRESS NA602A
+
+Brasil terminal portuario s/a
+
+16/01/2026
+Rotterdam, NL
+Export Loaded on Vessel
+BREMERHAVEN EXPRESS NA602A
+
+Ect delta marine terminal (dmt)
+
+05/01/2026
+Rotterdam, NL
+Export received at CY
+LADEN
+Ect delta marine terminal (dmt)
+
+02/01/2026
+Rotterdam, NL
+Start Export Cycle
+N.A
+
+MEDUKJ804682
+- containers: TXGU7426700
+- eventos:
+06/03/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+21/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+21/02/2026
+Santos, BR
+Import Discharged from Vessel
+BREMERHAVEN EXPRESS NA602A
+
+Brasil terminal portuario s/a
+
+16/01/2026
+Rotterdam, NL
+Export Loaded on Vessel
+BREMERHAVEN EXPRESS NA602A
+
+Ect delta marine terminal (dmt)
+
+05/01/2026
+Rotterdam, NL
+Export received at CY
+LADEN
+Ect delta marine terminal (dmt)
+
+02/01/2026
+Rotterdam, NL
+Empty to Shipper
+EMPTY
+Medrepair smirnoffweg
+
+MEDUKJ808469
+- containers: MSMU3391158
+- eventos:
+24/02/2026
+Rio grande, BR
+Empty received at CY
+EMPTY
+Medlog rig
+
+21/02/2026
+Rio grande, BR
+Import to consignee
+LADEN
+Tecon rio grande
+
+06/02/2026
+Rio grande, BR
+Import Discharged from Vessel
+LAEM CHABANG EXPRESS NA606R
+
+Tecon rio grande
+
+02/01/2026
+Bremerhaven, DE
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Msc gate
+
+18/12/2025
+Bremerhaven, DE
+Export received at CY
+LADEN
+Msc gate
+
+17/12/2025
+Kornwestheim, DE
+Empty to Shipper
+EMPTY
+Dbis kornwestheim
+
+MEDUKJ811521
+- containers: MEDU7055306
+- eventos:
+
+20/02/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+30/01/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+29/01/2026
+Santos, BR
+Import Discharged from Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Brasil terminal portuario s/a
+
+07/01/2026
+Antwerp, BE
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Mpet k1742 deurganck terminal
+
+29/12/2025
+Antwerp, BE
+Export Unloaded from Rail
+LADEN
+Mpet k1742 deurganck terminal
+
+27/12/2025
+Germersheim, DE
+Export Loaded on Rail
+LADEN
+Dp world germersheim
+
+23/12/2025
+Germersheim, DE
+Export received at CY
+LADEN
+Dp world germersheim
+
+22/12/2025
+Germersheim, DE
+Empty to Shipper
+EMPTY
+Dp world germersheim
+
+MEDUKJ816926
+- containers: MSDU5132925
+- eventos:
+06/02/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Transtecworld logistica ltda
+
+29/01/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+29/01/2026
+Santos, BR
+Import Discharged from Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Brasil terminal portuario s/a
+
+02/01/2026
+Bremerhaven, DE
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Msc gate
+
+22/12/2025
+Bremerhaven, DE
+Export received at CY
+LADEN
+Msc gate
+
+18/12/2025
+Bremerhaven, DE
+Empty to Shipper
+EMPTY
+
+MEDUKJ824615
+- containers: CORU2553506
+- eventos:
+19/02/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Transtecworld logistica ltda
+
+12/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+09/02/2026
+Santos, BR
+Import Discharged from Vessel
+XIAMEN EXPRESS NA601A
+
+Brasil terminal portuario s/a
+
+10/01/2026
+Bremerhaven, DE
+Export Loaded on Vessel
+XIAMEN EXPRESS NA601A
+
+Msc gate
+
+08/01/2026
+Bremerhaven, DE
+Export received at CY
+LADEN
+Msc gate
+
+06/01/2026
+Bremerhaven, DE
+Start Export Cycle
+N.A
+
+MEDUKJ827824
+- containers: MSBU7296509
+- eventos:
+06/02/2026
+Praia grande, BR
+Empty received at CY
+EMPTY
+Transtecworld logistica ltda
+
+29/01/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+29/01/2026
+Santos, BR
+Import Discharged from Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Brasil terminal portuario s/a
+
+02/01/2026
+Bremerhaven, DE
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Msc gate
+
+22/12/2025
+Bremerhaven, DE
+Export received at CY
+LADEN
+Msc gate
+
+18/12/2025
+Bremerhaven, DE
+Empty to Shipper
+EMPTY
+Msc gate
+
+MEDUKJ830133
+- containers: TEMU5411289
+- eventos:
+
+10/02/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+29/01/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+29/01/2026
+Santos, BR
+Import Discharged from Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Brasil terminal portuario s/a
+
+02/01/2026
+Bremerhaven, DE
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Msc gate
+
+23/12/2025
+Bremerhaven, DE
+Export received at CY
+LADEN
+Msc gate
+
+18/12/2025
+Bremerhaven, DE
+Empty to Shipper
+EMPTY
+Msc gate
+
+MEDUKJ832907
+- containers: MSMU1165130
+- eventos:
+09/03/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Transtecworld logistica ltda
+
+21/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+21/02/2026
+Santos, BR
+Import Discharged from Vessel
+BREMERHAVEN EXPRESS NA602A
+
+Brasil terminal portuario s/a
+
+15/01/2026
+Rotterdam, NL
+Export Loaded on Vessel
+BREMERHAVEN EXPRESS NA602A
+
+Ect delta marine terminal (dmt)
+
+07/01/2026
+Rotterdam, NL
+Export received at CY
+LADEN
+Ect delta marine terminal (dmt)
+
+06/01/2026
+Rotterdam, NL
+Empty to Shipper
+EMPTY
+Medrepair smirnoffweg
+
+MEDUKJ834663
+- containers: CAAU7340233 MSDU7673976
+- eventos:
+06/03/2026
+Itajai, BR
+Empty received at CY
+EMPTY
+Kairos terminal ltda
+
+04/03/2026
+Itapoa, BR
+Import to consignee
+LADEN
+Itapoa terminais portuarios s/a
+
+22/02/2026
+Itapoa, BR
+Import Discharged from Vessel
+COPIAPO MM604A
+
+Itapoa terminais portuarios s/a
+
+17/02/2026
+Rio de janeiro, BR
+Full Transshipment Loaded
+COPIAPO MM604A
+
+Multiterminais rio de janeiro
+
+15/02/2026
+Rio de janeiro, BR
+Full Transshipment Discharged
+MSC INSA NA603A
+
+Multiterminais rio de janeiro
+
+25/01/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC INSA NA603A
+
+Hhla container terminal altenwerder
+
+19/01/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+13/01/2026
+Bremen, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+
+MEDUKJ834739
+- containers: FFAU1949530
+- eventos:
+17/02/2026
+Itajai, BR
+Empty received at CY
+EMPTY
+Kairos terminal ltda
+
+15/02/2026
+Itapoa, BR
+Import to consignee
+LADEN
+Itapoa terminais portuarios s/a
+
+10/02/2026
+Itapoa, BR
+Import Discharged from Vessel
+SANTA LINEA QI549A
+
+Itapoa terminais portuarios s/a
+
+24/01/2026
+Rio de janeiro, BR
+Full Transshipment Loaded
+SANTA LINEA QI549A
+
+Multiterminais rio de janeiro
+
+21/01/2026
+Rio de janeiro, BR
+Full Transshipment Discharged
+LAEM CHABANG EXPRESS NA551A
+
+Multiterminais rio de janeiro
+
+30/12/2025
+Hamburg, DE
+Export Loaded on Vessel
+LAEM CHABANG EXPRESS NA551A
+
+Hhla container terminal altenwerder
+
+23/12/2025
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+18/12/2025
+Bremen, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+
+MEDUKJ644708
+- containers: MSNU6644778 MSNU5718310
+- eventos:
+
+09/02/2026
+Itapoa, BR
+Import Discharged from Vessel
+MSC AMALFI MM602A
+
+Itapoa terminais portuarios s/a
+
+02/02/2026
+Rio de janeiro, BR
+Full Transshipment Loaded
+MSC AMALFI MM602A
+
+Multiterminais rio de janeiro
+
+31/01/2026
+Rio de janeiro, BR
+Full Transshipment Discharged
+MSC MUGE NA552A
+
+Multiterminais rio de janeiro
+
+14/01/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC MUGE NA552A
+
+Hhla container terminal altenwerder
+
+30/12/2025
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+23/12/2025
+Bremen, DE
+Empty to Shipper
+EMPTY
+
+MEDUKJ839985
+- containers: TLLU2193630
+- eventos:
+11/03/2026
+Navegantes, BR
+Empty received at CY
+EMPTY
+Vmg terminais ltda
+
+05/03/2026
+Itapoa, BR
+Import to consignee
+LADEN
+Itapoa terminais portuarios s/a
+
+28/02/2026
+Itapoa, BR
+Import Discharged from Vessel
+MSC FIRENZE QI601A
+
+Itapoa terminais portuarios s/a
+
+23/02/2026
+Rio de janeiro, BR
+Full Transshipment Loaded
+MSC FIRENZE QI601A
+
+Multiterminais rio de janeiro
+
+18/02/2026
+Rio de janeiro, BR
+Full Transshipment Discharged
+BREMERHAVEN EXPRESS NA602A
+
+Multiterminais rio de janeiro
+
+21/01/2026
+Antwerp, BE
+Export Loaded on Vessel
+BREMERHAVEN EXPRESS NA602A
+
+Mpet k1742 deurganck terminal
+
+16/01/2026
+Antwerp, BE
+Export Unloaded from Rail
+LADEN
+Mpet k1742 deurganck terminal
+
+13/01/2026
+Athus, BE
+Export Loaded on Rail
+LADEN
+Terminal container athus
+
+13/01/2026
+Athus, BE
+Export received at CY
+LADEN
+Terminal container athus
+
+13/01/2026
+Athus, BE
+Empty to Shipper
+EMPTY
+Terminal container athus
+
+MEDUKJ843664
+- containers: FFAU4089576
+- eventos:
+06/03/2026
+Praia grande, BR
+Empty received at CY
+EMPTY
+Transtecworld logistica ltda
+
+21/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+21/02/2026
+Santos, BR
+Import Discharged from Vessel
+BREMERHAVEN EXPRESS NA602A
+
+Brasil terminal portuario s/a
+
+15/01/2026
+Rotterdam, NL
+Export Loaded on Vessel
+BREMERHAVEN EXPRESS NA602A
+
+Ect delta marine terminal (dmt)
+
+07/01/2026
+Rotterdam, NL
+Export received at CY
+LADEN
+Ect delta marine terminal (dmt)
+
+06/01/2026
+Rotterdam, NL
+Start Export Cycle
+N.A
+
+MEDUKJ862326
+- containers: MSMU3489611
+- eventos:
+08/03/2026
+Rio de janeiro, BR
+Full Transshipment Loaded
+MSC MELINE MM607A
+
+Multiterminais rio de janeiro
+
+07/03/2026
+Rio de janeiro, BR
+Full Transshipment Discharged
+ANTHEA Y NA606A
+
+Multiterminais rio de janeiro
+
+19/02/2026
+Antwerp, BE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Mpet k1742 deurganck terminal
+
+11/02/2026
+Antwerp, BE
+Export Unloaded from Rail
+LADEN
+Mpet k1742 deurganck terminal
+
+10/02/2026
+Athus, BE
+Export Loaded on Rail
+LADEN
+Terminal container athus
+
+09/02/2026
+Athus, BE
+Export received at CY
+LADEN
+Terminal container athus
+
+06/02/2026
+Athus, BE
+Empty to Shipper
+EMPTY
+Terminal container athus
+eta 15/03/2026
+
+MEDUKJ891366
+- containers: MSNU5494550 TLLU7603131 BMOU6880081 
+- eventos:
+09/03/2026
+Rio de janeiro, BR
+Full Transshipment Loaded
+MSC MELINE MM607A
+
+Multiterminais rio de janeiro
+
+07/03/2026
+Rio de janeiro, BR
+Full Transshipment Discharged
+ANTHEA Y NA606A
+
+Multiterminais rio de janeiro
+
+15/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Hhla container terminal altenwerder
+
+12/02/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+09/02/2026
+Bremen, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+eta 15/03/2026
+
+MEDUKJ898312
+- containers: MSNU2439517
+- eventos:
+01/03/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC ELODIE NA608A
+
+Hhla container terminal altenwerder
+
+25/02/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+19/02/2026
+Bremen, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+eta 24/03/2026
+
+MEDUKJ898338
+- containers: MSNU6067906
+- eventos:
+28/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC ELODIE NA608A
+
+Hhla container terminal altenwerder
+
+25/02/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+19/02/2026
+Bremen, DE
+Empty to Shipper
+EMPTY
+eta 24/03/2026
+
+MEDUKJ902601
+- containers: MEDU5674770
+- eventos:
+
+25/02/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+21/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+18/02/2026
+Santos, BR
+Import Discharged from Vessel
+MSC INSA NA603A
+
+Brasil terminal portuario s/a
+
+18/01/2026
+Rotterdam, NL
+Export Loaded on Vessel
+MSC INSA NA603A
+
+Ect delta marine terminal (dmt)
+
+13/01/2026
+Rotterdam, NL
+Export received at CY
+LADEN
+Ect delta marine terminal (dmt)
+
+13/01/2026
+Koln, DE
+Empty to Shipper
+EMPTY
+Cts
+
+MEDUFM176485
+- containers: BEAU2954828 TEMU0959310 FCIU2182141 TEMU0906665 MSMU2209906 MSNU2197394 MSMU2176818
+- eventos:
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+15/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Hhla container terminal altenwerder
+
+07/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+05/02/2026
+Ulm, DE
+Export Loaded on Rail
+LADEN
+Tfg ubf ulm
+
+03/02/2026
+Ulm, DE
+Empty to Shipper
+EMPTY
+Dbis ulm kombiwaggon gmbh
+
+MEDUKJ917617
+- containers: MSMU7247853
+- eventos:
+10/03/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+09/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+04/03/2026
+Santos, BR
+Import Discharged from Vessel
+CZECH NA604A
+
+Brasil terminal portuario s/a
+
+31/01/2026
+Hamburg, DE
+Export Loaded on Vessel
+CZECH NA604A
+
+Hhla container terminal altenwerder
+
+23/01/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+20/01/2026
+Munchen, DE
+Export Loaded on Rail
+LADEN
+Duss muenchen
+
+19/01/2026
+Munchen, DE
+Export received at CY
+LADEN
+Duss muenchen
+
+16/01/2026
+Munchen, DE
+Empty to Shipper
+EMPTY
+Kloiber
+
+MEDUKJ919365
+- containers: MSDU7328563
+- eventos:
+
+10/03/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+09/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+04/03/2026
+Santos, BR
+Import Discharged from Vessel
+CZECH NA604A
+
+Brasil terminal portuario s/a
+
+31/01/2026
+Hamburg, DE
+Export Loaded on Vessel
+CZECH NA604A
+
+Hhla container terminal altenwerder
+
+19/01/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+16/01/2026
+Munchen, DE
+Export Loaded on Rail
+LADEN
+Duss muenchen
+
+16/01/2026
+Munchen, DE
+Export received at CY
+LADEN
+Duss muenchen
+
+15/01/2026
+Munchen, DE
+Empty to Shipper
+EMPTY
+Kloiber
+
+MEDUKJ952135
+- containers: MSBU1768819 TIIU4752063 
+- eventos:
+11/03/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+18/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+18/02/2026
+Santos, BR
+Import Discharged from Vessel
+MSC INSA NA603A
+
+Brasil terminal portuario s/a
+
+26/01/2026
+Bremerhaven, DE
+Export Loaded on Vessel
+MSC INSA NA603A
+
+Msc gate
+
+23/01/2026
+Bremerhaven, DE
+Export received at CY
+LADEN
+Msc gate
+
+19/01/2026
+Bremerhaven, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+
+MEDUKJ978239
+- containers: MSBU2046699
+- eventos:
+08/03/2026
+Rio de janeiro, BR
+Full Transshipment Loaded
+MSC MELINE MM607A
+
+Multiterminais rio de janeiro
+
+07/03/2026
+Rio de janeiro, BR
+Full Transshipment Discharged
+ANTHEA Y NA606A
+
+Multiterminais rio de janeiro
+
+19/02/2026
+Antwerp, BE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Mpet k1742 deurganck terminal
+
+13/02/2026
+Antwerp, BE
+Export Unloaded from Rail
+LADEN
+Mpet k1742 deurganck terminal
+
+12/02/2026
+Athus, BE
+Export Loaded on Rail
+LADEN
+Terminal container athus
+
+10/02/2026
+Athus, BE
+Export received at CY
+LADEN
+Terminal container athus
+
+09/02/2026
+Athus, BE
+Empty to Shipper
+EMPTY
+Terminal container athus
+eta 15/03/2026
+
+MEDUKJ987214
+- containers: TRHU1507534
+- eventos:
+
+26/02/2026
+Antwerp, BE
+Export Loaded on Vessel
+MSC ADELE NA607A
+
+Mpet k1742 deurganck terminal
+
+20/02/2026
+Antwerp, BE
+Export Unloaded from Rail
+LADEN
+Mpet k1742 deurganck terminal
+
+19/02/2026
+Athus, BE
+Export Loaded on Rail
+LADEN
+Terminal container athus
+
+17/02/2026
+Athus, BE
+Export received at CY
+LADEN
+Terminal container athus
+
+16/02/2026
+Athus, BE
+Empty to Shipper
+EMPTY
+Terminal container athus
+eta 27/03/2026
+
+MEDUKQ568728
+- containers: MSMU4983932
+- eventos:
+11/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+09/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+21/02/2026
+Le havre, FR
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Tn msc
+
+16/02/2026
+Le havre, FR
+Export Discharged from Barge
+LADEN
+Tn msc
+
+12/02/2026
+Paris, FR
+Export Loaded on Barge
+LADEN
+Medlog inland terminal paris-bruyeres
+
+11/02/2026
+Paris, FR
+Export at barge yard
+LADEN
+Medlog inland terminal paris-bruyeres
+
+11/02/2026
+Le havre, FR
+Start Export Cycle
+N.A
+
+MEDUKQ672462
+- containers: MSDU2996404
+- eventos:
+26/02/2026
+Rotterdam, NL
+Export Loaded on Vessel
+MSC ELODIE NA608A
+
+Ect delta marine terminal (dmt)
+
+20/02/2026
+Rotterdam, NL
+Export received at CY
+LADEN
+Ect delta marine terminal (dmt)
+
+17/02/2026
+Strasbourg, FR
+Empty to Shipper
+EMPTY
+Rhine europe terminals sud
+eta 01/04/2026
+
+MEDUKQ686306
+- containers: MSMU2751497
+- eventos:
+03/03/2026
+Rotterdam, NL
+Export Loaded on Vessel
+MSC LEILA NA609A
+
+Ect delta marine terminal (dmt)
+
+24/02/2026
+Rotterdam, NL
+Export received at CY
+LADEN
+Ect delta marine terminal (dmt)
+
+20/02/2026
+Strasbourg, FR
+Empty to Shipper
+EMPTY
+Rhine europe terminals sud
+eta 11/04/2026
+
+MEDUKZ993198
+- containers: MSDU4150858
+- eventos:
+09/03/2026
+Manaus, BR
+Import to consignee
+LADEN
+Terminal porto chibatao
+
+04/03/2026
+Manaus, BR
+Import Discharged from Vessel
+LOG-IN JACARANDA 190N
+
+Terminal porto chibatao
+
+26/02/2026
+Pecem, BR
+Full Transshipment Loaded
+LOG-IN JACARANDA 190N
+
+Apm terminals pecem
+
+21/02/2026
+Pecem, BR
+Full Transshipment Discharged
+MSC AURIGA UX552A
+
+Apm terminals pecem
+
+16/01/2026
+Busan, KR
+Full Transshipment Loaded
+MSC AURIGA UX552A
+
+Pusan new port international terminal (pnit)
+
+14/01/2026
+Busan, KR
+Full Transshipment Positioned In
+LADEN
+Pusan new port international terminal (pnit)
+
+14/01/2026
+Busan, KR
+Full Transshipment Positioned Out
+LADEN
+Pusan newport company limited
+
+30/12/2025
+Busan, KR
+Full Transshipment Discharged
+MSC KATYAYNI VI GY547R
+
+Pusan newport company limited
+
+25/12/2025
+Nansha, CN
+Export Loaded on Vessel
+MSC KATYAYNI VI GY547R
+
+Nansha international container terminal
+
+19/12/2025
+Nansha, CN
+Export received at CY
+LADEN
+Nansha international container terminal
+
+18/12/2025
+Nansha, CN
+Empty to Shipper
+EMPTY
+
+MEDUP4998365
+- containers: MSDU8974486
+- eventos:
+
+03/03/2026
+Navegantes, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda
+
+03/03/2026
+Navegantes, BR
+Import to consignee
+LADEN
+Portonave
+
+24/02/2026
+Navegantes, BR
+Import Discharged from Vessel
+COPIAPO MM604A
+
+Portonave
+
+17/02/2026
+Rio de janeiro, BR
+Full Transshipment Loaded
+COPIAPO MM604A
+
+Multiterminais rio de janeiro
+
+15/02/2026
+Rio de janeiro, BR
+Full Transshipment Discharged
+MSC GABRIELLA QI552A
+
+Multiterminais rio de janeiro
+
+25/01/2026
+Vizhinjam international sea port, IN
+Full Transshipment Loaded
+MSC GABRIELLA QI552A
+
+Vizhinjam international sea port
+
+09/01/2026
+Vizhinjam international sea port, IN
+Full Transshipment Discharged
+MSC TRACY V OB601B
+
+Vizhinjam international sea port
+
+31/12/2025
+Mundra, IN
+Export Loaded on Vessel
+MSC TRACY V XA552A
+
+Adani international container terminal pvt ltd
+
+21/12/2025
+Mundra, IN
+Export Unloaded from Rail
+LADEN
+Adani international container terminal pvt ltd
+
+20/12/2025
+Ahmedabad, IN
+Export Loaded on Rail
+LADEN
+Icd khodiyar
+
+18/12/2025
+Ahmedabad, IN
+Export received at origin rail ramp
+LADEN
+Icd khodiyar
+
+16/12/2025
+Ahmedabad, IN
+Empty to Shipper
+EMPTY
+Golden horn container services - ahmedabad
+
+MEDUR3095987
+sem informação
+
+MEDUR3098569
+- containers: TEMU5853948
+- eventos:
+03/03/2026
+Santos, BR
+Export Loaded on Vessel
+XIAMEN EXPRESS NA608R
+
+Brasil terminal portuario s/a
+
+28/02/2026
+Santos, BR
+Export received at CY
+LADEN
+Brasil terminal portuario s/a
+
+23/02/2026
+Cubatao, BR
+Empty to Shipper
+EMPTY
+Mafro transportes ltda
+eta 08/04/2026
+
+MEDUR8007631
+- containers: MSDU5637970
+- eventos:
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+15/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Hhla container terminal altenwerder
+
+10/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+06/02/2026
+Munchen, DE
+Export Loaded on Rail
+LADEN
+Duss muenchen
+
+06/02/2026
+Munchen, DE
+Export received at CY
+LADEN
+Duss muenchen
+
+06/02/2026
+Munchen, DE
+Empty to Shipper
+EMPTY
+Kloiber
+
+MEDUR8028181
+- containers: MSDU4630902
+- eventos:
+11/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+17/02/2026
+Bremerhaven, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Msc gate
+
+13/02/2026
+Bremerhaven, DE
+Export Unloaded from Rail
+LADEN
+Msc gate
+
+11/02/2026
+Nurnberg, DE
+Export Loaded on Rail
+LADEN
+Tricon containerterminal
+
+10/02/2026
+Nurnberg, DE
+Export received at CY
+LADEN
+Tricon containerterminal
+
+09/02/2026
+Nurnberg, DE
+Empty to Shipper
+EMPTY
+Cdn-contr depot nurnberg
+
+MEDUR8029189
+- containers: TCNU8856088 FFAU6590571
+- eventos:
+28/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC ELODIE NA608A
+
+Hhla container terminal altenwerder
+
+24/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+22/02/2026
+Ulm, DE
+Export Loaded on Rail
+LADEN
+Tfg ubf ulm
+
+21/02/2026
+Ulm, DE
+Export received at CY
+LADEN
+Tfg ubf ulm
+
+17/02/2026
+Ulm, DE
+Empty to Shipper
+EMPTY
+Dbis ulm kombiwaggon gmbh
+eta 24/03/2026
+
+MEDUR8051274
+- containers: CAAU5124770
+- eventos:
+10/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+17/02/2026
+Bremerhaven, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Msc gate
+
+12/02/2026
+Bremerhaven, DE
+Export received at CY
+LADEN
+Msc gate
+
+09/02/2026
+Bremerhaven, DE
+Empty to Shipper
+EMPTY
+Msc gate
+
+MEDUR8051795
+- containers: MSNU8530286
+- eventos:
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+15/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Hhla container terminal altenwerder
+
+12/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+09/02/2026
+Munchen, DE
+Export Loaded on Rail
+LADEN
+Duss muenchen
+
+09/02/2026
+Munchen, DE
+Export received at CY
+LADEN
+Duss muenchen
+
+06/02/2026
+Munchen, DE
+Empty to Shipper
+EMPTY
+Kloiber
+
+MEDUR8054534
+- containers: TGBU1290234 MSBU5559231 CAAU7730674
+- eventos:
+10/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+16/02/2026
+Bremerhaven, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Msc gate
+
+13/02/2026
+Bremerhaven, DE
+Export received at CY
+LADEN
+Msc gate
+
+12/02/2026
+Bremerhaven, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+
+MEDUR8101293
+- containers: TIIU4168342 MSDU6480360 MSMU7897355 MEDU9388923
+- eventos:
+10/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+17/02/2026
+Bremerhaven, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Msc gate
+
+13/02/2026
+Bremerhaven, DE
+Export received at CY
+LADEN
+Msc gate
+
+09/02/2026
+Bremerhaven, DE
+Empty to Shipper
+EMPTY
+Msc gate
+
+MEDUR8115582
+- containers: CAIU4954499
+- eventos:
+
+23/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC ADELE NA607A
+
+Hhla container terminal altenwerder
+
+18/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+16/02/2026
+Munchen, DE
+Export Loaded on Rail
+LADEN
+Duss muenchen
+
+16/02/2026
+Munchen, DE
+Export received at CY
+LADEN
+Duss muenchen
+
+13/02/2026
+Munchen, DE
+Empty to Shipper
+EMPTY
+Kloiber
+eta 21/03/2026
+
+MEDUR8115772
+- containers: MSBU5121559 MSNU6708656
+- eventos:
+
+10/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+16/02/2026
+Bremerhaven, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Msc gate
+
+13/02/2026
+Bremerhaven, DE
+Export received at CY
+LADEN
+Msc gate
+
+09/02/2026
+Bremerhaven, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+
+MEDUR8124386
+- containers: MSMU6390284
+- eventos:
+23/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC ADELE NA607A
+
+Hhla container terminal altenwerder
+
+18/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+16/02/2026
+Munchen, DE
+Export Loaded on Rail
+LADEN
+Duss muenchen
+
+16/02/2026
+Munchen, DE
+Export received at CY
+LADEN
+Duss muenchen
+
+13/02/2026
+Munchen, DE
+Empty to Shipper
+EMPTY
+Kloiber
+eta 21/03/2026
+
+MEDUR8124659
+- containers: CAIU4657000
+- eventos:
+23/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC ADELE NA607A
+
+Hhla container terminal altenwerder
+
+18/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+16/02/2026
+Munchen, DE
+Export Loaded on Rail
+LADEN
+Duss muenchen
+
+16/02/2026
+Munchen, DE
+Export received at CY
+LADEN
+Duss muenchen
+
+13/02/2026
+Munchen, DE
+Empty to Shipper
+EMPTY
+Kloiber
+eta 21/03/2026
+
+MEDUR8134971
+- containers: MSNU6055090
+- eventos:
+23/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC ADELE NA607A
+
+Hhla container terminal altenwerder
+
+18/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+16/02/2026
+Munchen, DE
+Export Loaded on Rail
+LADEN
+Duss muenchen
+
+16/02/2026
+Munchen, DE
+Export received at CY
+LADEN
+Duss muenchen
+
+13/02/2026
+Munchen, DE
+Empty to Shipper
+EMPTY
+Kloiber
+eta 21/03/2026
+
+MEDUR8145506
+- containers: MSNU8490310
+- eventos:
+28/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC ELODIE NA608A
+
+Hhla container terminal altenwerder
+
+23/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+20/02/2026
+Munchen, DE
+Export Loaded on Rail
+LADEN
+Duss muenchen
+
+20/02/2026
+Munchen, DE
+Export received at CY
+LADEN
+Duss muenchen
+
+19/02/2026
+Munchen, DE
+Empty to Shipper
+EMPTY
+Kloiber
+eta 24/03/2026
+
+MEDUR8172237
+- containers: MSBU5587172
+- eventos:
+01/03/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC ELODIE NA608A
+
+Hhla container terminal altenwerder
+
+25/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+23/02/2026
+Munchen, DE
+Export Loaded on Rail
+LADEN
+Duss muenchen
+
+23/02/2026
+Munchen, DE
+Export received at CY
+LADEN
+Duss muenchen
+
+20/02/2026
+Munchen, DE
+Empty to Shipper
+EMPTY
+Kloiber
+eta 24/03/2026
+
+MEDUR8192714
+- containers: MSDU1544457
+- eventos:
+01/03/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC ELODIE NA608A
+
+Hhla container terminal altenwerder
+
+25/02/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+19/02/2026
+Bremen, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+eta 24/03/2026
+
+MEDUR8213403
+- containers: MSDU4201359
+- eventos:
+03/03/2026
+Rotterdam, NL
+Export Loaded on Vessel
+MSC LEILA NA609A
+
+Ect delta marine terminal (dmt)
+
+28/02/2026
+Rotterdam, NL
+Export received at CY
+LADEN
+Ect delta marine terminal (dmt)
+
+27/02/2026
+Dortmund, DE
+Empty to Shipper
+EMPTY
+Container terminal dortmund
+eta 31/03/2026
+
+MEDUR8265742
+- containers: MSDU2641847
+- eventos:
+
+05/03/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC LEILA NA609A
+
+Hhla container terminal altenwerder
+
+03/03/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+02/03/2026
+Dortmund, DE
+Empty to Shipper
+EMPTY
+Container terminal dortmund
+eta 31/03/2026
+
+MEDUR8265833
+- containers: MSNU1788941
+- eventos:
+05/03/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC LEILA NA609A
+
+Hhla container terminal altenwerder
+
+03/03/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+02/03/2026
+Dortmund, DE
+Empty to Shipper
+EMPTY
+Container terminal dortmund
+eta 31/03/2026
+
+MEDURK013148
+- containers: MSDU4822680
+- eventos:
+10/03/2026
+Manaus, BR
+Import Discharged from Vessel
+LOG-IN EXPERIENCE 022N
+
+Terminal porto chibatao
+
+05/03/2026
+Pecem, BR
+Full Transshipment Loaded
+LOG-IN EXPERIENCE 022N
+
+Apm terminals pecem
+
+02/03/2026
+Pecem, BR
+Full Transshipment Discharged
+MSC PALAK UX610R
+
+Apm terminals pecem
+
+03/01/2026
+Nansha, CN
+Export Loaded on Vessel
+MSC PALAK GY548R
+
+Nansha international container terminal
+
+25/12/2025
+Nansha, CN
+Export received at CY
+LADEN
+Nansha international container terminal
+
+24/12/2025
+Nansha, CN
+Empty to Shipper
+EMPTY
+Nansha international container terminal
+
+MEDURN036195
+- containers: MSMU3327539 MSNU2597981 FCIU6462048 MSNU2386042 TRHU1480942 CAIU6433930 MEDU5812150 MSDU2629142 SEGU2798033 TRHU1549210 SEGU1518800 MAGU2388950 TCLU3038918 MSDU1508315 MEDU3015429 TRHU3533949
+- eventos:
+29/01/2026
+Houston, US
+End Import Cycle
+N.A
+28/01/2026
+Houston, US
+Import to consignee
+LADEN
+Barbours cut terminal
+
+26/01/2026
+Houston, US
+Full Available for Delivery
+LADEN
+Barbours cut terminal
+
+26/01/2026
+Houston, US
+Import Discharged from Vessel
+MAERSK CHACHAI 552N
+
+Barbours cut terminal
+
+14/01/2026
+Houston, US
+Carrier release
+MAERSK CHACHAI 552N
+
+N.A
+30/12/2025
+Rio de janeiro, BR
+Export Loaded on Vessel
+MAERSK CHACHAI 552N
+
+Multiterminais rio de janeiro
+
+24/12/2025
+Rio de janeiro, BR
+Export received at CY
+LADEN
+Multiterminais rio de janeiro
+
+18/12/2025
+Rio de janeiro, BR
+Empty to Shipper
+EMPTY
+Msc mediterranean logistica ltda
+
+MEDUW3035161
+- containers: MSCU4484790 MSDU9932952
+- eventos:
+09/03/2026
+Praia grande, BR
+Empty received at CY
+EMPTY
+Transtecworld logistica ltda
+
+02/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Santos brasil terminal
+
+17/02/2026
+Santos, BR
+Import Discharged from Vessel
+MSC GABRIELLA QI552A
+
+Santos brasil terminal
+
+18/01/2026
+Singapore, SG
+Full Transshipment Loaded
+MSC GABRIELLA QI552A
+
+Pasir panjang terminal 2
+
+12/01/2026
+Singapore, SG
+Full Transshipment Discharged
+MSC APOLLO HI552A
+
+Pasir panjang terminal 2
+
+26/12/2025
+Yokohama, JP
+Export Loaded on Vessel
+MSC APOLLO HI552A
+
+Honmoku bc container terminal
+
+25/12/2025
+Yokohama, JP
+Export received at CY
+LADEN
+Honmoku bc container terminal
+
+17/12/2025
+Yokohama, JP
+Empty to Shipper
+EMPTY
+Honmoku d1 container terminal
+
+MEDUW7154141
+- containers: MEDU4618601
+- eventos:
+
+05/03/2026
+Rio grande, BR
+Empty received at CY
+EMPTY
+Medlog rig
+
+02/03/2026
+Rio grande, BR
+Import to consignee
+LADEN
+Tecon rio grande
+
+21/02/2026
+Rio grande, BR
+Import Discharged from Vessel
+EUROPE UA608R
+
+Tecon rio grande
+
+16/02/2026
+Buenos aires, AR
+Full Transshipment Loaded
+EUROPE UA608R
+
+Exolgan s.A.
+
+11/02/2026
+Buenos aires, AR
+Full Transshipment Discharged
+MSC CARLOTTA QI550A
+
+Exolgan s.A.
+
+28/12/2025
+Shanghai, CN
+Export Loaded on Vessel
+MSC CARLOTTA QI550A
+
+Shanghai yangshan shangdong terminal
+
+26/12/2025
+Shanghai, CN
+Export received at CY
+LADEN
+Shanghai yangshan shangdong terminal
+
+15/12/2025
+Shanghai, CN
+Empty to Shipper
+EMPTY
+Tongsheng mediterranean depot
+
+MEDUW7205836
+- containers: CXDU2087130
+- eventos:
+10/03/2026
+Manaus, BR
+Empty received at CY
+EMPTY
+Chibatao navegacao e comercio ltda
+
+02/03/2026
+Manaus, BR
+Import to consignee
+LADEN
+Terminal porto chibatao
+
+24/02/2026
+Manaus, BR
+Import Discharged from Vessel
+LOG-IN EVOLUTION 047N
+
+Terminal porto chibatao
+
+18/02/2026
+Pecem, BR
+Full Transshipment Loaded
+LOG-IN EVOLUTION 047N
+
+Apm terminals pecem
+
+16/02/2026
+Pecem, BR
+Full Transshipment Discharged
+MSC DENISSE X UX551A
+
+Apm terminals pecem
+
+31/12/2025
+Shanghai, CN
+Export Loaded on Vessel
+MSC DENISSE X UX551A
+
+Shanghai yangshan shangdong terminal
+
+27/12/2025
+Shanghai, CN
+Export received at CY
+LADEN
+Shanghai yangshan shangdong terminal
+
+23/12/2025
+Shanghai, CN
+Empty to Shipper
+EMPTY
+Tongsheng mediterranean depot
+
+MEDUW7265319
+- containers: TEMU3792545
+- eventos:
+25/02/2026
+Navegantes, BR
+Empty received at CY
+EMPTY
+Vmg terminais ltda
+
+19/02/2026
+Itapoa, BR
+Import to consignee
+LADEN
+Itapoa terminais portuarios s/a
+
+10/02/2026
+Itapoa, BR
+Import Discharged from Vessel
+SANTA LINEA QI549A
+
+Itapoa terminais portuarios s/a
+
+17/12/2025
+Shanghai, CN
+Export Loaded on Vessel
+SANTA LINEA QI549A
+
+Shanghai yangshan shangdong terminal
+
+14/12/2025
+Shanghai, CN
+Export received at CY
+LADEN
+Shanghai yangshan shangdong terminal
+
+10/12/2025
+Shanghai, CN
+Empty to Shipper
+EMPTY
+Shanghai yifa container service co. Ltd
+
+MEDUW7265327
+- containers: MEDU5920426
+- eventos:
+
+11/03/2026
+Manaus, BR
+Empty received at CY
+EMPTY
+Chibatao navegacao e comercio ltda
+
+04/03/2026
+Manaus, BR
+Import to consignee
+LADEN
+Terminal porto chibatao
+
+24/02/2026
+Manaus, BR
+Import Discharged from Vessel
+LOG-IN EVOLUTION 047N
+
+Terminal porto chibatao
+
+18/02/2026
+Pecem, BR
+Full Transshipment Loaded
+LOG-IN EVOLUTION 047N
+
+Apm terminals pecem
+
+16/02/2026
+Pecem, BR
+Full Transshipment Discharged
+MSC DENISSE X UX551A
+
+Apm terminals pecem
+
+31/12/2025
+Shanghai, CN
+Export Loaded on Vessel
+MSC DENISSE X UX551A
+
+Shanghai yangshan shangdong terminal
+
+27/12/2025
+Shanghai, CN
+Export received at CY
+LADEN
+Shanghai yangshan shangdong terminal
+
+23/12/2025
+Shanghai, CN
+Empty to Shipper
+EMPTY
+Tongsheng mediterranean depot
+
+MEDUW7287123
+- containers: TRHU2296101
+- eventos:
+11/03/2026
+Manaus, BR
+Empty received at CY
+EMPTY
+Chibatao navegacao e comercio ltda
+
+02/03/2026
+Manaus, BR
+Import to consignee
+LADEN
+Terminal porto chibatao
+
+25/02/2026
+Manaus, BR
+Import Discharged from Vessel
+LOG-IN EVOLUTION 047N
+
+Terminal porto chibatao
+
+19/02/2026
+Pecem, BR
+Full Transshipment Loaded
+LOG-IN EVOLUTION 047N
+
+Apm terminals pecem
+
+16/02/2026
+Pecem, BR
+Full Transshipment Discharged
+MSC DENISSE X UX551A
+
+Apm terminals pecem
+
+31/12/2025
+Shanghai, CN
+Export Loaded on Vessel
+MSC DENISSE X UX551A
+
+Shanghai yangshan shangdong terminal
+
+27/12/2025
+Shanghai, CN
+Export received at CY
+LADEN
+Shanghai yangshan shangdong terminal
+
+22/12/2025
+Shanghai, CN
+Empty to Shipper
+EMPTY
+Tongsheng mediterranean depot
+
+MEDUW7339726
+- containers: MEDU2362172
+- eventos:
+09/03/2026
+Manaus, BR
+Import to consignee
+LADEN
+Terminal porto chibatao
+
+03/03/2026
+Manaus, BR
+Import Discharged from Vessel
+LOG-IN JACARANDA 190N
+
+Terminal porto chibatao
+
+25/02/2026
+Pecem, BR
+Full Transshipment Loaded
+LOG-IN JACARANDA 190N
+
+Apm terminals pecem
+
+22/02/2026
+Pecem, BR
+Full Transshipment Discharged
+MSC AURIGA UX552A
+
+Apm terminals pecem
+
+08/01/2026
+Shanghai, CN
+Export Loaded on Vessel
+MSC AURIGA UX552A
+
+Shanghai guandong international container terminal co.,ltd
+
+04/01/2026
+Shanghai, CN
+Export received at CY
+LADEN
+Shanghai guandong international container terminal co.,ltd
+
+28/12/2025
+Shanghai, CN
+Empty to Shipper
+EMPTY
+Tongsheng mediterranean depot
+
+MEDUW7443031
+- containers: MSCU4363443
+- eventos:
+
+03/03/2026
+Rio grande, BR
+Empty received at CY
+EMPTY
+Medlog rig
+
+24/02/2026
+Rio grande, BR
+Import to consignee
+LADEN
+Tecon rio grande
+
+22/02/2026
+Rio grande, BR
+Import Discharged from Vessel
+SANTA CATARINA EXPRESS 2552W
+
+Tecon rio grande
+
+10/01/2026
+Shanghai, CN
+Export Loaded on Vessel
+SANTA CATARINA EXPRESS 2552W
+
+Shanghai guandong international container terminal co.,ltd
+
+06/01/2026
+Shanghai, CN
+Export received at CY
+LADEN
+Shanghai guandong international container terminal co.,ltd
+
+23/12/2025
+Shanghai, CN
+Empty to Shipper
+EMPTY
+Tongsheng mediterranean depot
+
+MEDUW7475058
+- containers: MSDU4392569
+- eventos:
+06/03/2026
+Manaus, BR
+Empty received at CY
+EMPTY
+Chibatao navegacao e comercio ltda
+
+02/03/2026
+Manaus, BR
+Import to consignee
+LADEN
+Terminal porto chibatao
+
+24/02/2026
+Manaus, BR
+Import Discharged from Vessel
+LOG-IN EVOLUTION 047N
+
+Terminal porto chibatao
+
+19/02/2026
+Pecem, BR
+Full Transshipment Loaded
+LOG-IN EVOLUTION 047N
+
+Apm terminals pecem
+
+15/02/2026
+Pecem, BR
+Full Transshipment Discharged
+MSC DENISSE X UX551A
+
+Apm terminals pecem
+
+31/12/2025
+Shanghai, CN
+Export Loaded on Vessel
+MSC DENISSE X UX551A
+
+Shanghai yangshan shangdong terminal
+
+27/12/2025
+Shanghai, CN
+Export received at CY
+LADEN
+Shanghai yangshan shangdong terminal
+
+22/12/2025
+Shanghai, CN
+Empty to Shipper
+EMPTY
+Tongsheng mediterranean depot
+
+MMEDUW7498910
+- containers: FCIU5817713
+- eventos:
+09/03/2026
+Manaus, BR
+Import to consignee
+LADEN
+Terminal porto chibatao
+
+03/03/2026
+Manaus, BR
+Import Discharged from Vessel
+LOG-IN JACARANDA 190N
+
+Terminal porto chibatao
+
+25/02/2026
+Pecem, BR
+Full Transshipment Loaded
+LOG-IN JACARANDA 190N
+
+Apm terminals pecem
+
+22/02/2026
+Pecem, BR
+Full Transshipment Discharged
+MSC AURIGA UX552A
+
+Apm terminals pecem
+
+08/01/2026
+Shanghai, CN
+Export Loaded on Vessel
+MSC AURIGA UX552A
+
+Shanghai guandong international container terminal co.,ltd
+
+04/01/2026
+Shanghai, CN
+Export received at CY
+LADEN
+Shanghai guandong international container terminal co.,ltd
+
+27/12/2025
+Shanghai, CN
+Empty to Shipper
+EMPTY
+Tongsheng mediterranean depot
+
+MEDUW7499272
+- containers: MSNU3550269
+- eventos:
+27/02/2026
+Navegantes, BR
+Empty received at CY
+EMPTY
+Vmg terminais ltda
+
+23/02/2026
+Itapoa, BR
+Import to consignee
+LADEN
+Itapoa terminais portuarios s/a
+
+16/02/2026
+Itapoa, BR
+Import Discharged from Vessel
+MSC CARLOTTA MM607R
+
+Itapoa terminais portuarios s/a
+
+28/12/2025
+Shanghai, CN
+Export Loaded on Vessel
+MSC CARLOTTA QI550A
+
+Shanghai yangshan shangdong terminal
+
+25/12/2025
+Shanghai, CN
+Export received at CY
+LADEN
+Shanghai yangshan shangdong terminal
+
+17/12/2025
+Shanghai, CN
+Empty to Shipper
+EMPTY
+Tongsheng mediterranean depot
+
+MEDUW7630389
+- containers: MSBU3171709 IPXU3860958 MEDU5447078 CAIU6147860
+- eventos:
+11/03/2026
+Manaus, BR
+Import to consignee
+LADEN
+Terminal porto chibatao
+
+03/03/2026
+Manaus, BR
+Import Discharged from Vessel
+LOG-IN JACARANDA 190N
+
+Terminal porto chibatao
+
+25/02/2026
+Pecem, BR
+Full Transshipment Loaded
+LOG-IN JACARANDA 190N
+
+Apm terminals pecem
+
+22/02/2026
+Pecem, BR
+Full Transshipment Discharged
+MSC AURIGA UX552A
+
+Apm terminals pecem
+
+08/01/2026
+Shanghai, CN
+Export Loaded on Vessel
+MSC AURIGA UX552A
+
+Shanghai guandong international container terminal co.,ltd
+
+05/01/2026
+Shanghai, CN
+Export received at CY
+LADEN
+Shanghai guandong international container terminal co.,ltd
+
+29/12/2025
+Shanghai, CN
+Empty to Shipper
+EMPTY
+Tongsheng mediterranean depot
+
+MEDUWG427745
+- containers: MSNU3726208 CXDU1480266 MSNU1317319 MSMU1484776
+- eventos:
+09/03/2026
+Pecem, BR
+Full Transshipment Loaded
+PEDRO ALVARES CABRAL 120N
+
+Apm terminals pecem
+
+08/03/2026
+Pecem, BR
+Full Transshipment Discharged
+MSC ORION UX602A
+
+Apm terminals pecem
+
+28/01/2026
+Busan, KR
+Full Transshipment Loaded
+MSC ORION UX602A
+
+Pusan new port international terminal (pnit)
+
+26/01/2026
+Busan, KR
+Full Transshipment Positioned In
+LADEN
+Pusan new port international terminal (pnit)
+
+26/01/2026
+Busan, KR
+Full Transshipment Positioned Out
+LADEN
+Busan container terminal - bct
+
+17/01/2026
+Busan, KR
+Full Transshipment Discharged
+MSC OSCAR FY602A
+
+Busan container terminal - bct
+
+09/01/2026
+Tianjinxingang, CN
+Export Loaded on Vessel
+MSC OSCAR FY602A
+
+Tianjin port second container terminal co., ltd
+
+07/01/2026
+Tianjinxingang, CN
+Export received at CY
+LADEN
+Tianjin port second container terminal co., ltd
+
+04/01/2026
+Tianjinxingang, CN
+Empty to Shipper
+EMPTY
+Msc (tianjin) container depot company limited
+
+MEDUWG427752
+- containers: MSBU1952770 MSBU1913795 MSBU1950166 MSBU1929493
+- eventos:
+09/03/2026
+Pecem, BR
+Full Transshipment Loaded
+PEDRO ALVARES CABRAL 120N
+
+Apm terminals pecem
+
+08/03/2026
+Pecem, BR
+Full Transshipment Discharged
+MSC ORION UX602A
+
+Apm terminals pecem
+
+28/01/2026
+Busan, KR
+Full Transshipment Loaded
+MSC ORION UX602A
+
+Pusan new port international terminal (pnit)
+
+21/01/2026
+Busan, KR
+Full Transshipment Positioned In
+LADEN
+Pusan new port international terminal (pnit)
+
+21/01/2026
+Busan, KR
+Full Transshipment Positioned Out
+LADEN
+Busan container terminal - bct
+
+17/01/2026
+Busan, KR
+Full Transshipment Discharged
+MSC OSCAR FY602A
+
+Busan container terminal - bct
+
+09/01/2026
+Tianjinxingang, CN
+Export Loaded on Vessel
+MSC OSCAR FY602A
+
+Tianjin port second container terminal co., ltd
+
+07/01/2026
+Tianjinxingang, CN
+Export received at CY
+LADEN
+Tianjin port second container terminal co., ltd
+
+04/01/2026
+Tianjinxingang, CN
+Empty to Shipper
+EMPTY
+Cimc wetrans supply chain management(tianjin) co., ltd
+
+MEDUWG427760
+- containers: MSBU1932080 MSBU1945220 MSBU1910688 MSBU1957197
+- eventos:
+
+10/03/2026
+Pecem, BR
+Full Transshipment Loaded
+PEDRO ALVARES CABRAL 120N
+
+Apm terminals pecem
+
+08/03/2026
+Pecem, BR
+Full Transshipment Discharged
+MSC ORION UX602A
+
+Apm terminals pecem
+
+28/01/2026
+Busan, KR
+Full Transshipment Loaded
+MSC ORION UX602A
+
+Pusan new port international terminal (pnit)
+
+21/01/2026
+Busan, KR
+Full Transshipment Positioned In
+LADEN
+Pusan new port international terminal (pnit)
+
+21/01/2026
+Busan, KR
+Full Transshipment Positioned Out
+LADEN
+Busan container terminal - bct
+
+17/01/2026
+Busan, KR
+Full Transshipment Discharged
+MSC OSCAR FY602A
+
+Busan container terminal - bct
+
+09/01/2026
+Tianjinxingang, CN
+Export Loaded on Vessel
+MSC OSCAR FY602A
+
+Tianjin port second container terminal co., ltd
+
+07/01/2026
+Tianjinxingang, CN
+Export received at CY
+LADEN
+Tianjin port second container terminal co., ltd
+
+04/01/2026
+Tianjinxingang, CN
+Empty to Shipper
+EMPTY
+
+MEDUWJ700980
+- containers: MEDU5060807
+- eventos:
+03/03/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+26/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+24/02/2026
+Santos, BR
+Import Discharged from Vessel
+MSC MAGNUM VII UA604A
+
+Brasil terminal portuario s/a
+
+26/01/2026
+Norfolk, US
+Export Loaded on Vessel
+MSC MAGNUM VII UA604A
+
+Virginia international gateway
+
+19/01/2026
+Norfolk, US
+Export Unloaded from Rail
+LADEN
+Virginia international gateway
+
+17/01/2026
+Chicago, US
+Export Rail Departure
+LADEN
+Csx - 59th street (404)
+
+17/01/2026
+Chicago, US
+Export Loaded on Rail
+LADEN
+Csx - 59th street (404)
+
+16/01/2026
+Chicago, US
+Export received at origin rail ramp
+LADEN
+Csx - 59th street (404)
+
+16/01/2026
+Chicago, US
+Start Export Cycle
+N.A
+
+MEDUWJ834417
+- containers: MSMU8955440
+- eventos:
+
+09/03/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+04/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+04/03/2026
+Santos, BR
+Import Discharged from Vessel
+MSC URSULA VI UA605A
+
+Brasil terminal portuario s/a
+
+03/02/2026
+Norfolk, US
+Export Loaded on Vessel
+MSC URSULA VI UA605A
+
+Virginia international gateway
+
+29/01/2026
+Norfolk, US
+Export Unloaded from Rail
+LADEN
+Virginia international gateway
+
+25/01/2026
+Chicago, US
+Export Rail Departure
+LADEN
+Csx - 59th street (404)
+
+25/01/2026
+Chicago, US
+Export Loaded on Rail
+LADEN
+Csx - 59th street (404)
+
+23/01/2026
+Chicago, US
+Export received at origin rail ramp
+LADEN
+Csx - 59th street (404)
+
+23/01/2026
+Chicago, US
+Start Export Cycle
+N.A
+
+MEDUWN069085
+- containers: MSDU7510515
+- eventos:
+19/02/2026
+Savannah, US
+Export Loaded on Vessel
+MSC YAMUNA VI UA606A
+
+Garden city terminal
+
+14/02/2026
+Savannah, US
+Export Unloaded from Rail
+LADEN
+Garden city terminal
+
+14/02/2026
+Savannah, US
+Export arrived at destination rail ramp
+LADEN
+Garden city terminal
+
+13/02/2026
+Atlanta, US
+Export Rail Departure
+LADEN
+Csx fairburn - atlanta (404)
+
+12/02/2026
+Atlanta, US
+Export Loaded on Rail
+LADEN
+Csx fairburn - atlanta (404)
+
+12/02/2026
+Atlanta, US
+Export received at origin rail ramp
+LADEN
+Csx fairburn - atlanta (404)
+
+09/02/2026
+Atlanta, US
+Empty to Shipper
+EMPTY
+C & k trucking - atl
+eta 17/03/2026
+
+MEDUWN508751
+- containers: BEAU5723170
+- eventos:
+
+09/03/2026
+Norfolk, US
+Export Loaded on Vessel
+MSC DAMLA UA610A
+
+Virginia international gateway
+
+06/03/2026
+Norfolk, US
+Export Unloaded from Rail
+LADEN
+Virginia international gateway
+
+02/03/2026
+Chicago, US
+Export Loaded on Rail
+LADEN
+Csx - 59th street (404)
+
+02/03/2026
+Chicago, US
+Export received at origin rail ramp
+LADEN
+Csx - 59th street (404)
+
+02/03/2026
+Chicago, US
+Empty to Shipper
+EMPTY
+Integrated industries - 35th st
+eta 08/04/2026
+
+MEDUWP168026
+- containers: MEDU7196372
+- eventos:
+04/03/2026
+Navegantes, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda
+
+04/03/2026
+Navegantes, BR
+Import to consignee
+LADEN
+Portonave
+
+24/02/2026
+Navegantes, BR
+Import Discharged from Vessel
+COPIAPO MM604A
+
+Portonave
+
+17/02/2026
+Rio de janeiro, BR
+Full Transshipment Loaded
+COPIAPO MM604A
+
+Multiterminais rio de janeiro
+
+16/02/2026
+Rio de janeiro, BR
+Full Transshipment Discharged
+MSC GABRIELLA QI552A
+
+Multiterminais rio de janeiro
+
+25/01/2026
+Vizhinjam international sea port, IN
+Full Transshipment Loaded
+MSC GABRIELLA QI552A
+
+Vizhinjam international sea port
+
+17/01/2026
+Vizhinjam international sea port, IN
+Full Transshipment Discharged
+MSC LAURENCE IS551A
+
+Vizhinjam international sea port
+
+11/01/2026
+Mundra, IN
+Export Loaded on Vessel
+MSC LAURENCE IS551A
+
+Adani international container terminal pvt ltd
+
+05/01/2026
+Mundra, IN
+Export Unloaded from Rail
+LADEN
+Adani international container terminal pvt ltd
+
+04/01/2026
+Ahmedabad, IN
+Export Loaded on Rail
+LADEN
+Icd khodiyar
+
+31/12/2025
+Ahmedabad, IN
+Export received at origin rail ramp
+LADEN
+Icd khodiyar
+
+29/12/2025
+Ahmedabad, IN
+Empty to Shipper
+EMPTY
+Golden horn container services - ahmedabad
+
+MEDUWP235338
+- containers: MEDU7441232
+- eventos:
+04/03/2026
+Ortigueira, BR
+Empty received at CY
+EMPTY
+Tcp log s.A.
+
+26/02/2026
+Paranagua, BR
+Import to consignee
+LADEN
+Terminal de conteinedores de paranagua
+
+20/02/2026
+Paranagua, BR
+Import Discharged from Vessel
+MSC GABRIELLA QI552A
+
+Terminal de conteinedores de paranagua
+
+25/01/2026
+Vizhinjam international sea port, IN
+Full Transshipment Loaded
+MSC GABRIELLA QI552A
+
+Vizhinjam international sea port
+
+17/01/2026
+Vizhinjam international sea port, IN
+Full Transshipment Discharged
+MSC LAURENCE IS551A
+
+Vizhinjam international sea port
+
+11/01/2026
+Mundra, IN
+Export Loaded on Vessel
+MSC LAURENCE IS551A
+
+Adani international container terminal pvt ltd
+
+05/01/2026
+Mundra, IN
+Export Unloaded from Rail
+LADEN
+Adani international container terminal pvt ltd
+
+04/01/2026
+Ahmedabad, IN
+Export Loaded on Rail
+LADEN
+Icd khodiyar
+
+02/01/2026
+Ahmedabad, IN
+Export received at origin rail ramp
+LADEN
+Icd khodiyar
+
+01/01/2026
+Ahmedabad, IN
+Empty to Shipper
+EMPTY
+Golden horn container services - ahmedabad
+
+MEDUWP243027
+- containers: MSDU2431624
+- eventos:
+07/03/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+27/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Santos brasil terminal
+
+26/02/2026
+Santos, BR
+Import Discharged from Vessel
+MSC FIRENZE QI601A
+
+Santos brasil terminal
+
+01/02/2026
+Vizhinjam international sea port, IN
+Full Transshipment Loaded
+MSC FIRENZE QI601A
+
+Vizhinjam international sea port
+
+20/01/2026
+Vizhinjam international sea port, IN
+Full Transshipment Discharged
+MSC MARIE LESLIE IS552A
+
+Vizhinjam international sea port
+
+16/01/2026
+Mundra, IN
+Full Transshipment Loaded
+MSC MARIE LESLIE IS552A
+
+Adani international container terminal pvt ltd
+
+15/01/2026
+Mundra, IN
+Full Transshipment Discharged
+SCI DELHI IP602A
+
+Adani international container terminal pvt ltd
+
+11/01/2026
+Hazira port/surat, IN
+Export Loaded on Vessel
+SCI DELHI IP602A
+
+Adani hazira container terminal
+
+06/01/2026
+Hazira port/surat, IN
+Export received at CY
+LADEN
+Adani hazira container terminal
+
+04/01/2026
+Hazira port/surat, IN
+Empty to Shipper
+EMPTY
+Empezar container yard
+
+MEDUYL121413
+- containers: MEDUYL121413
+- eventos:
+10/03/2026
+Itapoa, BR
+Import to consignee
+LADEN
+Itapoa terminais portuarios s/a
+
+09/03/2026
+Itapoa, BR
+Import Discharged from Vessel
+MSC GABRIELLA MM609R
+
+Itapoa terminais portuarios s/a
+
+11/01/2026
+Shekou, CN
+Export Loaded on Vessel
+MSC GABRIELLA QI552A
+
+Chiwan container terminal (cct)
+
+30/12/2025
+Shekou, CN
+Export Discharged from Barge
+LADEN
+Chiwan container terminal (cct)
+
+29/12/2025
+Zhongshan, CN
+Export Loaded on Barge
+LADEN
+Zhongshan port (hangyun)
+
+25/12/2025
+Zhongshan, CN
+Export at barge yard
+LADEN
+Zhongshan port (hangyun)
+
+25/12/2025
+Zhongshan, CN
+Empty to Shipper
+EMPTY
+Zhongshan port (hangyun)
+
+MEDUYM405195
+- containers: MSDU4208348 MSDU4400392 
+- eventos:
+09/03/2026
+Manaus, BR
+Import to consignee
+LADEN
+Terminal porto chibatao
+
+04/03/2026
+Manaus, BR
+Import Discharged from Vessel
+LOG-IN JACARANDA 190N
+
+Terminal porto chibatao
+
+26/02/2026
+Pecem, BR
+Full Transshipment Loaded
+LOG-IN JACARANDA 190N
+
+Apm terminals pecem
+
+21/02/2026
+Pecem, BR
+Full Transshipment Discharged
+MSC AURIGA UX552A
+
+Apm terminals pecem
+
+30/12/2025
+Yantian, CN
+Export Loaded on Vessel
+MSC AURIGA UX552A
+
+Yantian international container terminals ltd
+
+20/12/2025
+Yantian, CN
+Export Discharged from Barge
+LADEN
+Yantian international container terminals ltd
+
+19/12/2025
+Beijiao, CN
+Export Loaded on Barge
+LADEN
+Beijiao port phase 1
+
+15/12/2025
+Beijiao, CN
+Export at barge yard
+LADEN
+Beijiao port phase 1
+
+15/12/2025
+Beijiao, CN
+Empty to Shipper
+EMPTY
+Beijiao port phase 1
+
+MEDUYM405591
+- containers: MEDU2903847
+- eventos:
+10/03/2026
+Manaus, BR
+Import to consignee
+LADEN
+Terminal porto chibatao
+
+03/03/2026
+Manaus, BR
+Import Discharged from Vessel
+LOG-IN JACARANDA 190N
+
+Terminal porto chibatao
+
+25/02/2026
+Pecem, BR
+Full Transshipment Loaded
+LOG-IN JACARANDA 190N
+
+Apm terminals pecem
+
+21/02/2026
+Pecem, BR
+Full Transshipment Discharged
+MSC AURIGA UX552A
+
+Apm terminals pecem
+
+30/12/2025
+Yantian, CN
+Export Loaded on Vessel
+MSC AURIGA UX552A
+
+Yantian international container terminals ltd
+
+21/12/2025
+Yantian, CN
+Export Discharged from Barge
+LADEN
+Yantian international container terminals ltd
+
+19/12/2025
+Zhongshan, CN
+Export Loaded on Barge
+LADEN
+Zhongshan port (hangyun)
+
+16/12/2025
+Zhongshan, CN
+Export at barge yard
+LADEN
+Zhongshan port (hangyun)
+
+16/12/2025
+Zhongshan, CN
+Empty to Shipper
+EMPTY
+Zhongshan port (hangyun)
+
+MEDUYM455620
+- containers: MSNU8934879 MSNU8935108
+- eventos:
+03/03/2026
+Manaus, BR
+Import to consignee
+LADEN
+Terminal porto chibatao
+
+25/02/2026
+Manaus, BR
+Import Discharged from Vessel
+LOG-IN EVOLUTION 047N
+
+Terminal porto chibatao
+
+19/02/2026
+Pecem, BR
+Full Transshipment Loaded
+LOG-IN EVOLUTION 047N
+
+Apm terminals pecem
+
+15/02/2026
+Pecem, BR
+Full Transshipment Discharged
+MSC DENISSE X UX551A
+
+Apm terminals pecem
+
+23/12/2025
+Yantian, CN
+Export Loaded on Vessel
+MSC DENISSE X UX551A
+
+Yantian international container terminals ltd
+
+13/12/2025
+Yantian, CN
+Export Discharged from Barge
+LADEN
+Yantian international container terminals ltd
+
+12/12/2025
+Beijiao, CN
+Export Loaded on Barge
+LADEN
+Beijiao port phase 1
+
+10/12/2025
+Beijiao, CN
+Export at barge yard
+LADEN
+Beijiao port phase 1
+
+10/12/2025
+Beijiao, CN
+Empty to Shipper
+EMPTY
+Beijiao port phase 1
+
+MEDUW2530287
+- containers: AXIU2194982
+- eventos:
+
+09/03/2026
+Pecem, BR
+Empty received at CY
+EMPTY
+Apm terminals depot pecem
+
+07/03/2026
+Pecem, BR
+Import to consignee
+LADEN
+Apm terminals pecem
+
+17/02/2026
+Pecem, BR
+Import Discharged from Vessel
+LOG-IN JATOBA 279S
+
+Apm terminals pecem
+
+15/02/2026
+Suape, BR
+Full Transshipment Loaded
+LOG-IN JATOBA 279S
+
+Tecon suape
+
+14/02/2026
+Suape, BR
+Full Transshipment Discharged
+COPIAPO MM604A
+
+Tecon suape
+
+03/02/2026
+Valencia, ES
+Export Loaded on Vessel
+COPIAPO MM604A
+
+Csp iberian valencia terminal
+
+23/01/2026
+Valencia, ES
+Export received at CY
+LADEN
+Csp iberian valencia terminal
+
+22/01/2026
+Valencia, ES
+Empty to Shipper
+EMPTY
+M.S.C. Terminal valencia
+
+MEDUFB069047
+- containers: MSBU4189507
+- eventos:
+
+02/03/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Fassina sts
+
+22/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+21/02/2026
+Santos, BR
+Import Discharged from Vessel
+BREMERHAVEN EXPRESS NA602A
+
+Brasil terminal portuario s/a
+
+15/01/2026
+Rotterdam, NL
+Export Loaded on Vessel
+BREMERHAVEN EXPRESS NA602A
+
+Ect delta marine terminal (dmt)
+
+07/01/2026
+Rotterdam, NL
+Export received at CY
+LADEN
+Ect delta marine terminal (dmt)
+
+05/01/2026
+Rotterdam, NL
+Empty to Shipper
+EMPTY
+Medrepair smirnoffweg
+
+MEDUKJ753525
+- containers: MSNU2463750 MSNU7944297 MSMU8683091 FCIU8915499 MSDU575140 BEAU5713130 MSNU7072960
+- eventos:
+
+06/03/2026
+Sumare, BR
+Empty received at CY
+EMPTY
+Brado logistica s.A
+
+18/02/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+18/02/2026
+Santos, BR
+Import Discharged from Vessel
+MSC INSA NA603A
+
+Brasil terminal portuario s/a
+
+25/01/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC INSA NA603A
+
+Hhla container terminal altenwerder
+
+15/01/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+12/01/2026
+Ulm, DE
+Export Loaded on Rail
+LADEN
+Tfg ubf ulm
+
+09/01/2026
+Ulm, DE
+Empty to Shipper
+EMPTY
+Dbis ulm kombiwaggon gmbh
+
+MEDUBD242526
+- containers: MSMU8816091 MEDU4462400
+- eventos:
+
+10/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+15/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Hhla container terminal altenwerder
+
+08/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+06/02/2026
+Dunajska streda, SK
+Export Loaded on Rail
+LADEN
+Metrans
+
+30/01/2026
+Dunajska streda, SK
+Export Unloaded from Rail
+LADEN
+Metrans
+
+30/01/2026
+Zilina, SK
+Export Loaded on Rail
+LADEN
+Metrans
+
+30/01/2026
+Zilina, SK
+Export received at CY
+LADEN
+Metrans
+
+28/01/2026
+Dunajska streda, SK
+Empty to Shipper
+EMPTY
+Metrans
+
+MEDUBD243219
+- containers: MSMU8178037
+- eventos:
+23/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC ADELE NA607A
+
+Hhla container terminal altenwerder
+
+15/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+13/02/2026
+Dunajska streda, SK
+Export Loaded on Rail
+LADEN
+Metrans
+
+06/02/2026
+Dunajska streda, SK
+Export Unloaded from Rail
+LADEN
+Metrans
+
+06/02/2026
+Zilina, SK
+Export Loaded on Rail
+LADEN
+Metrans
+
+06/02/2026
+Zilina, SK
+Export received at CY
+LADEN
+Metrans
+
+05/02/2026
+Zilina, SK
+Empty to Shipper
+EMPTY
+Metrans
+eta 21/03/2026
+
+MEDUEC661117
+- containers: MSDU4458711
+- eventos:
+11/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+15/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Hhla container terminal altenwerder
+
+10/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+07/02/2026
+Dunajska streda, SK
+Export Loaded on Rail
+LADEN
+Metrans
+
+04/02/2026
+Dunajska streda, SK
+Export Unloaded from Rail
+LADEN
+Metrans
+
+03/02/2026
+Budapest, HU
+Export Loaded on Rail
+LADEN
+Metrans
+
+30/01/2026
+Budapest, HU
+Export received at CY
+LADEN
+Metrans
+
+30/01/2026
+Budapest, HU
+Empty to Shipper
+EMPTY
+Mahart
+
+MEDUEC661133
+- containers: MSDU4473212
+- eventos:
+10/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+15/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Hhla container terminal altenwerder
+
+10/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+07/02/2026
+Dunajska streda, SK
+Export Loaded on Rail
+LADEN
+Metrans
+
+07/02/2026
+Dunajska streda, SK
+Export Unloaded from Rail
+LADEN
+Metrans
+
+06/02/2026
+Budapest, HU
+Export Loaded on Rail
+LADEN
+Metrans
+
+05/02/2026
+Budapest, HU
+Export received at CY
+LADEN
+Metrans
+
+05/02/2026
+Budapest, HU
+Empty to Shipper
+EMPTY
+Mahart
+
+MEDUFM195220
+- containers: MSBU3109847
+- eventos:
+07/03/2026
+Rio grande, BR
+Export Loaded on Vessel
+BREMERHAVEN EXPRESS NA610R
+
+Tecon rio grande
+
+05/03/2026
+Rio grande, BR
+Export received at CY
+LADEN
+Tecon rio grande
+
+03/03/2026
+Rio grande, BR
+Empty to Shipper
+EMPTY
+Medlog rig
+eta 14/04/2026
+
+MEDUHI723287
+- containers: CAIU4847438
+- eventos:
+04/03/2026
+Paranagua, BR
+Export Loaded on Vessel
+MSC INSA NA609R
+
+Terminal de conteinedores de paranagua
+
+27/02/2026
+Paranagua, BR
+Export received at CY
+LADEN
+Terminal de conteinedores de paranagua
+
+26/02/2026
+Paranagua, BR
+Empty to Shipper
+EMPTY
+Granelmar logistica - depot 1
+eta 07/04/2026
+
+MEDUKJ598060
+- containers: TGBU6436300
+- eventos:
+
+12/03/2026
+Santos, BR
+Empty received at CY
+EMPTY
+Msc mediterranean logistica ltda.
+
+10/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+15/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Hhla container terminal altenwerder
+
+13/02/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+09/02/2026
+Bremen, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+
+MEDUKJ734137
+- containers: CAAU7313393
+- eventos:
+23/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+MSC ADELE NA607A
+
+Hhla container terminal altenwerder
+
+19/02/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+12/02/2026
+Bremen, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+eta 21/03/2026
+
+MEDUKJ859686
+- containers: MSMU8831753
+- eventos:
+10/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+15/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Hhla container terminal altenwerder
+
+13/02/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+09/02/2026
+Bremen, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+
+MEDUKJ913947
+- containers: MSNU2615494 MSBU1069365 TGBU1032203
+- eventos:
+
+15/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Hhla container terminal altenwerder
+
+09/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+06/02/2026
+Ulm, DE
+Export Loaded on Rail
+LADEN
+Tfg ubf ulm
+
+04/02/2026
+Ulm, DE
+Empty to Shipper
+EMPTY
+Dbis ulm kombiwaggon gmbh
+eta 27/03/2026
+
+MEDUKJ943233
+- containers: TEMU2123289
+- eventos:
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+15/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Hhla container terminal altenwerder
+
+09/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+06/02/2026
+Ulm, DE
+Export Loaded on Rail
+LADEN
+Tfg ubf ulm
+
+05/02/2026
+Ulm, DE
+Empty to Shipper
+EMPTY
+Dbis ulm kombiwaggon gmbh
+
+MEDUKJ944132
+- containers: MEDU5645319
+- eventos:
+15/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Hhla container terminal altenwerder
+
+09/02/2026
+Hamburg, DE
+Export Unloaded from Rail
+LADEN
+Hhla container terminal altenwerder
+
+06/02/2026
+Ulm, DE
+Export Loaded on Rail
+LADEN
+Tfg ubf ulm
+
+06/02/2026
+Ulm, DE
+Export received at CY
+LADEN
+Tfg ubf ulm
+
+05/02/2026
+Ulm, DE
+Empty to Shipper
+EMPTY
+Dbis ulm kombiwaggon gmbh
+eta 27/03/2026
+
+MEDUKJ956680
+- containers: UETU7397078
+- eventos:
+
+11/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+15/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Hhla container terminal altenwerder
+
+11/02/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+03/02/2026
+Ulm, DE
+Empty to Shipper
+EMPTY
+
+MEDUR3080039
+sem informação
+
+MEDUR3086325
+- containers: MEDU3315494
+- eventos:
+23/02/2026
+Santos, BR
+Export Loaded on Vessel
+MSC MUGE NA607R
+
+Brasil terminal portuario s/a
+
+19/02/2026
+Santos, BR
+Export received at CY
+LADEN
+Brasil terminal portuario s/a
+
+18/02/2026
+Santos, BR
+Empty to Shipper
+EMPTY
+Msc mediterranean logistica ltda.
+eta 20/03/2026
+
+MEDUR3088271
+- containers: CAIU3249914
+- eventos:
+03/03/2026
+Santos, BR
+Export Loaded on Vessel
+XIAMEN EXPRESS NA608R
+
+Brasil terminal portuario s/a
+
+27/02/2026
+Santos, BR
+Export received at CY
+LADEN
+Brasil terminal portuario s/a
+
+20/02/2026
+Santos, BR
+Empty to Shipper
+EMPTY
+Msc mediterranean logistica ltda.
+eta 19/04/2026
+
+MEDUR3088289
+- containers: MEDU6652333
+- eventos:
+
+03/03/2026
+Santos, BR
+Export Loaded on Vessel
+XIAMEN EXPRESS NA608R
+
+Brasil terminal portuario s/a
+
+28/02/2026
+Santos, BR
+Export received at CY
+LADEN
+Brasil terminal portuario s/a
+
+20/02/2026
+Santos, BR
+Empty to Shipper
+EMPTY
+Msc mediterranean logistica ltda.
+eta 19/04/2026
+
+MEDUR8109817
+- containers: MSMU3312694
+- eventos:
+11/03/2026
+Santos, BR
+Import to consignee
+LADEN
+Brasil terminal portuario s/a
+
+10/03/2026
+Santos, BR
+Import Discharged from Vessel
+ANTHEA Y NA606A
+
+Brasil terminal portuario s/a
+
+15/02/2026
+Hamburg, DE
+Export Loaded on Vessel
+ANTHEA Y NA606A
+
+Hhla container terminal altenwerder
+
+13/02/2026
+Hamburg, DE
+Export received at CY
+LADEN
+Hhla container terminal altenwerder
+
+09/02/2026
+Bremen, DE
+Empty to Shipper
+EMPTY
+Cont. Service friedr. Tiemann
+
+MEDUWN035417
+- containers: DFSU2853691
+- eventos:
+17/02/2026
+Charleston, US
+Export Loaded on Vessel
+MSC YAMUNA VI UA606A
+
+Wando welch terminal
+
+11/02/2026
+Charleston, US
+Export received at CY
+LADEN
+Wando welch terminal
+
+10/02/2026
+Charleston, US
+Empty to Shipper
+EMPTY
+Wando welch terminal
+eta 01/04/2026
+
+
+
+
+
+
+
+
+
