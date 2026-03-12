@@ -3453,6 +3453,7 @@ serve(async (req) => {
 
       let client: any = null;
       try {
+        const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
         client = await new Client().connect({
           hostname: mariadbHost!, port: parseInt(mariadbPort),
           username: mariadbUser!, password: mariadbPass!, db: mariadbDb!
