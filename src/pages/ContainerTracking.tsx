@@ -1472,6 +1472,7 @@ const ContainerTracking = () => {
     });
     try {
       let hasMore = true;
+      let consecutiveNoProgress = 0;
       while (hasMore && iteration < maxIterations) {
         iteration++;
         const progressEl = document.getElementById('carrier-progress');
