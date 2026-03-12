@@ -33,18 +33,42 @@ import { useTheme } from "@/hooks/useTheme";
 import { detectCarrierFromMbl, SHIPPING_LINE_INFO, ShippingLineCode, getTrackableCarriers, MBL_PREFIX_MAP, LCL_PREFIXES, ROUTE_FORMAT_PREFIXES, NUMERIC_MBL_INFO, INTERNAL_PREFIXES } from "@/lib/shippingLineMapping";
 import { Separator } from "@/components/ui/separator";
 
+// Alias map for shipping_line values from DB → ShippingLineCode
+const SHIPPING_LINE_ALIAS_MAP: Record<string, ShippingLineCode> = {
+  'HAPAG_LLOYD': 'HAPAG_LLOYD', 'HAPAG-LLOYD': 'HAPAG_LLOYD', 'HAPAG LLOYD': 'HAPAG_LLOYD', 'HAPAG': 'HAPAG_LLOYD', 'HL': 'HAPAG_LLOYD',
+  'MSC': 'MSC', 'MEDITERRANEAN_SHIPPING': 'MSC', 'MEDITERRANEAN SHIPPING': 'MSC',
+  'MAERSK': 'MAERSK', 'MAERSK_LINE': 'MAERSK', 'MAERSK LINE': 'MAERSK', 'SEALAND': 'MAERSK', 'SAFMARINE': 'MAERSK',
+  'HAMBURG_SUD': 'HAMBURG_SUD', 'HAMBURG SUD': 'HAMBURG_SUD', 'HAMBURG_SÜD': 'HAMBURG_SUD', 'HAMBURG SÜD': 'HAMBURG_SUD', 'HAMBURGSD': 'HAMBURG_SUD', 'HSUD': 'HAMBURG_SUD',
+  'CMA_CGM': 'CMA_CGM', 'CMA CGM': 'CMA_CGM', 'CMA': 'CMA_CGM', 'APL': 'CMA_CGM', 'ANL': 'CMA_CGM',
+  'ONE': 'ONE', 'OCEAN_NETWORK_EXPRESS': 'ONE', 'OCEAN NETWORK EXPRESS': 'ONE', 'NYK': 'ONE', 'MOL': 'ONE', 'K_LINE': 'ONE', 'K LINE': 'ONE',
+  'EVERGREEN': 'EVERGREEN', 'EVERGREEN_LINE': 'EVERGREEN',
+  'COSCO': 'COSCO', 'COSCO_SHIPPING': 'COSCO', 'COSCO SHIPPING': 'COSCO', 'OOCL': 'COSCO',
+  'YANG_MING': 'YANG_MING', 'YANG MING': 'YANG_MING', 'YANGMING': 'YANG_MING',
+  'HMM': 'HMM', 'HYUNDAI': 'HMM', 'HYUNDAI_MERCHANT': 'HMM',
+  'ZIM': 'ZIM', 'ZIM_INTEGRATED': 'ZIM',
+  'PIL': 'PIL', 'PACIFIC_INTERNATIONAL': 'PIL',
+  'WAN_HAI': 'WAN_HAI', 'WAN HAI': 'WAN_HAI', 'WANHAI': 'WAN_HAI',
+  'SEABOARD': 'SEABOARD', 'CROWLEY': 'CROWLEY', 'ARKAS': 'ARKAS', 'TURKON': 'TURKON', 'GRIMALDI': 'GRIMALDI', 'SM_LINE': 'SM_LINE', 'TRANSROLL': 'TRANSROLL',
+};
+
 // Deriva o armador do MBL usando o mapeamento centralizado - retorna código normalizado
 const getShippingLineCodeFromMbl = (mbl_id: string, shipping_line: string | null | undefined): ShippingLineCode => {
   // Se já tiver shipping_line no banco, tenta mapear para código
   if (shipping_line) {
-    const upper = shipping_line.toUpperCase().trim().replace(/[\s-]+/g, '_');
-    // Verifica se é um código válido
-    if (SHIPPING_LINE_INFO[upper as ShippingLineCode]) {
-      return upper as ShippingLineCode;
+    const normalized = shipping_line.toUpperCase().trim();
+    // Lookup direto no alias map (com e sem normalização de separadores)
+    const directMatch = SHIPPING_LINE_ALIAS_MAP[normalized] || SHIPPING_LINE_ALIAS_MAP[normalized.replace(/[\s-]+/g, '_')];
+    if (directMatch) return directMatch;
+    // Verifica se é um código válido direto
+    if (SHIPPING_LINE_INFO[normalized as ShippingLineCode]) {
+      return normalized as ShippingLineCode;
     }
-    // Tenta pelo nome
-    const found = Object.entries(SHIPPING_LINE_INFO).find(([_, info]) => info.name.toUpperCase() === shipping_line.toUpperCase().trim());
+    // Tenta pelo nome completo
+    const found = Object.entries(SHIPPING_LINE_INFO).find(([_, info]) => info.name.toUpperCase() === normalized);
     if (found) return found[0] as ShippingLineCode;
+    // Tenta busca parcial (ex: "Hapag" → HAPAG_LLOYD)
+    const partialFound = Object.entries(SHIPPING_LINE_ALIAS_MAP).find(([alias]) => normalized.includes(alias) || alias.includes(normalized));
+    if (partialFound) return partialFound[1];
   }
   // Caso contrário, detecta pelo prefixo do MBL
   return detectCarrierFromMbl(mbl_id).code;
@@ -61,7 +85,14 @@ const normalizeArmadorName = (name: string): string => {
 // Retorna o nome legível do armador (normalizado)
 const getShippingLineFromMbl = (mbl_id: string, shipping_line: string | null | undefined): string => {
   const code = getShippingLineCodeFromMbl(mbl_id, shipping_line);
-  if (code === 'UNKNOWN') return 'N/D';
+  if (code === 'UNKNOWN') {
+    // Se temos shipping_line do banco mas não conseguimos mapear para código conhecido,
+    // usar o valor do banco como fallback em vez de 'N/D'
+    if (shipping_line && shipping_line.trim() && shipping_line.trim().toUpperCase() !== 'UNKNOWN') {
+      return shipping_line.trim();
+    }
+    return 'N/D';
+  }
   return normalizeArmadorName(SHIPPING_LINE_INFO[code].name);
 };
 
