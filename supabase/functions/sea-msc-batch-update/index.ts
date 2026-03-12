@@ -48,6 +48,10 @@ function resolveContainerStatus(events: ParsedEvent[]): string {
         case 'TRANSSHIPMENT': return 'TSP';
         case 'CRG': return 'CRG';
         case 'DEP': return 'DEP';
+        case 'ARR': return 'ARR';
+        case 'GIO': return 'GIO';
+        case 'GOE': return 'CLT';
+        case 'BKG': return 'BKG';
         default: return 'AGD';
       }
     }
