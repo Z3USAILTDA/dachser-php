@@ -4085,8 +4085,11 @@ serve(async (req) => {
           const dataManifestacao = row.data_manifestacao_cct ? new Date(row.data_manifestacao_cct) : null;
           const slaLimite = calcularSlaLimite(tipoVoo, depDatetime, eta, statusCode, dataManifestacao);
           
-          // Calculate sla_status - if already manifested, status is CUMPRIDO
-          let slaStatus: string = dataManifestacao ? 'CUMPRIDO' : calcularSlaStatus(slaLimite);
+          // Calculate sla_status - if already manifested (by date OR by canonical status hierarchy), status is CUMPRIDO
+          const STATUS_MANIFESTADO_OU_ALEM = ['MANIFESTADA', 'EM_AREA_TRANSFERENCIA', 'RECEPCIONADA', 'EM_TROCA_RECINTOS', 'EM_TRANSITO_TERRESTRE', 'ENTREGUE'];
+          const cctStatusParaSla = row.status_cct_oficial || 'INFORMADA';
+          const jaManifestado = !!dataManifestacao || STATUS_MANIFESTADO_OU_ALEM.includes(cctStatusParaSla);
+          let slaStatus: string = jaManifestado ? 'CUMPRIDO' : calcularSlaStatus(slaLimite);
           
           // Calculate horasRestantes for display
           const horasRestantes = slaLimite 
