@@ -2276,6 +2276,7 @@ serve(async (req) => {
       const staleHours = parseInt(url.searchParams.get('stale_hours') || '4');
       const refreshValidHours = parseInt(url.searchParams.get('refresh_valid_hours') || '48');
       const forceRefresh = url.searchParams.get('force') === '1';
+      const forceAll = url.searchParams.get('force_all') === '1'; // Re-track ALL containers regardless of status
       const carrierFilter = url.searchParams.get('carrier_filter') || '';
       const startTime = Date.now();
       
