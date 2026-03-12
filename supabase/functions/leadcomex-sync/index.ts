@@ -116,14 +116,28 @@ interface LeadComexCarga {
   // API returns "conhecimentoCargaDetalhada" (with "a" at the end)
   conhecimentoCargaDetalhada?: {
     bloqueiosAtivos?: Array<{
-      codigo: string;
-      descricao: string;
-      dataHoraBloqueio: string;
+      codigo?: string;
+      descricao?: string;
+      codigoBloqueio?: string;
+      descricaoBloqueio?: string;
+      motivoBloqueio?: string;
+      justificativaBloqueio?: string;
+      tipoBloqueio?: string;
+      alcanceBloqueio?: string;
+      responsavelBloqueio?: string | null;
+      dataHoraBloqueio?: string;
     }>;
     bloqueiosBaixados?: Array<{
-      codigo: string;
-      descricao: string;
-      dataHoraDesbloqueio: string;
+      codigo?: string;
+      descricao?: string;
+      codigoBloqueio?: string;
+      descricaoBloqueio?: string;
+      motivoBloqueio?: string;
+      justificativaBloqueio?: string;
+      tipoBloqueio?: string;
+      alcanceBloqueio?: string;
+      responsavelBloqueio?: string | null;
+      dataHoraDesbloqueio?: string;
     }>;
     divergencias?: Array<{
       campo: string;
@@ -149,14 +163,28 @@ interface LeadComexCarga {
   // Keep backwards compatibility with old field name
   conhecimentoCargaDetalhado?: {
     bloqueiosAtivos?: Array<{
-      codigo: string;
-      descricao: string;
-      dataHoraBloqueio: string;
+      codigo?: string;
+      descricao?: string;
+      codigoBloqueio?: string;
+      descricaoBloqueio?: string;
+      motivoBloqueio?: string;
+      justificativaBloqueio?: string;
+      tipoBloqueio?: string;
+      alcanceBloqueio?: string;
+      responsavelBloqueio?: string | null;
+      dataHoraBloqueio?: string;
     }>;
     bloqueiosBaixados?: Array<{
-      codigo: string;
-      descricao: string;
-      dataHoraDesbloqueio: string;
+      codigo?: string;
+      descricao?: string;
+      codigoBloqueio?: string;
+      descricaoBloqueio?: string;
+      motivoBloqueio?: string;
+      justificativaBloqueio?: string;
+      tipoBloqueio?: string;
+      alcanceBloqueio?: string;
+      responsavelBloqueio?: string | null;
+      dataHoraDesbloqueio?: string;
     }>;
     divergencias?: Array<{
       campo: string;
@@ -640,7 +668,12 @@ async function processLeadComexData(
               action: 'insert_cct_event',
               awb: hawb,
               codigo_evento: 'BLOQUEIO',
-              descricao_evento: `Bloqueio ${bloqueio.codigo || bloqueio.codigoBloqueio || 'N/A'}: ${bloqueio.descricao || bloqueio.descricaoBloqueio || bloqueio.motivo || 'Motivo não informado'}`,
+              descricao_evento: [
+                bloqueio.motivoBloqueio || bloqueio.descricao || bloqueio.descricaoBloqueio || 'Motivo não informado',
+                bloqueio.justificativaBloqueio ? `Justificativa: ${bloqueio.justificativaBloqueio}` : null,
+                bloqueio.tipoBloqueio ? `Tipo: ${bloqueio.tipoBloqueio}` : null,
+                bloqueio.alcanceBloqueio ? `Alcance: ${bloqueio.alcanceBloqueio}` : null,
+              ].filter(Boolean).join(' | '),
               data_hora_evento: parseBrazilianDate(bloqueio.dataHoraBloqueio) || new Date().toISOString(),
               fonte: 'LEADCOMEX',
               nivel_confianca: 'PRIMARIA',
@@ -670,7 +703,12 @@ async function processLeadComexData(
               action: 'insert_cct_event',
               awb: hawb,
               codigo_evento: 'DESBLOQUEIO',
-              descricao_evento: `Desbloqueio ${desbloqueio.codigo || desbloqueio.codigoBloqueio || 'N/A'}: ${desbloqueio.descricao || desbloqueio.descricaoBloqueio || desbloqueio.motivo || 'Motivo não informado'}`,
+              descricao_evento: [
+                desbloqueio.motivoBloqueio || desbloqueio.descricao || desbloqueio.descricaoBloqueio || 'Motivo não informado',
+                desbloqueio.justificativaBloqueio ? `Justificativa: ${desbloqueio.justificativaBloqueio}` : null,
+                desbloqueio.tipoBloqueio ? `Tipo: ${desbloqueio.tipoBloqueio}` : null,
+                desbloqueio.alcanceBloqueio ? `Alcance: ${desbloqueio.alcanceBloqueio}` : null,
+              ].filter(Boolean).join(' | '),
               data_hora_evento: parseBrazilianDate(desbloqueio.dataHoraDesbloqueio) || new Date().toISOString(),
               fonte: 'LEADCOMEX',
               nivel_confianca: 'PRIMARIA',
