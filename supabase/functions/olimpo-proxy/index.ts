@@ -3443,6 +3443,53 @@ serve(async (req) => {
       }
     }
 
+    // ===== UPDATE VESSEL IMO =====
+    if (action === 'update_vessel_imo') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+
+      let client: any = null;
+      try {
+        client = await new Client().connect({
+          hostname: mariadbHost!, port: parseInt(mariadbPort),
+          username: mariadbUser!, password: mariadbPass!, db: mariadbDb!
+        });
+
+        const vessel_name = url.searchParams.get('vessel_name') || '';
+        const imo = url.searchParams.get('imo') || '';
+        if (!vessel_name || !imo) {
+          await client.close();
+          return new Response(JSON.stringify({ error: 'vessel_name e imo são obrigatórios' }), {
+            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        const result = await client.execute(`
+          UPDATE dados_dachser.t_tracking_sea 
+          SET vessel_imo = ? 
+          WHERE navio LIKE ? AND (vessel_imo IS NULL OR vessel_imo = '')
+        `, [imo, `%${vessel_name}%`]);
+
+        await client.close();
+        return new Response(JSON.stringify({ 
+          success: true, 
+          vessel_name, 
+          imo, 
+          rows_updated: result.affectedRows || 0 
+        }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        if (client) await client.close();
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
 
     if (action === 'enrich_sea_containers') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');
