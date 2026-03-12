@@ -2276,7 +2276,32 @@ serve(async (req) => {
       const staleHours = parseInt(url.searchParams.get('stale_hours') || '4');
       const refreshValidHours = parseInt(url.searchParams.get('refresh_valid_hours') || '48');
       const forceRefresh = url.searchParams.get('force') === '1';
+      const carrierFilter = url.searchParams.get('carrier_filter') || '';
       const startTime = Date.now();
+      
+      // Build carrier prefix filter SQL clause if carrier_filter is provided
+      const CARRIER_PREFIX_MAP: Record<string, string[]> = {
+        'MSC': ['MSCU','MEDU','MSCM','MSDU','MSCB','MSCR'],
+        'ONE': ['ONEY','ONEU','NYKU','MOLU','KKFU','MOAU','KKLU'],
+        'EVERGREEN': ['EISU','EITU','EGSU','EGHU','EMCU','EGLV'],
+        'MAERSK': ['MAEU','MRKU','MSKU','PONU','SEAU'],
+      };
+      
+      let carrierSqlClause = '';
+      if (carrierFilter) {
+        const carriers = carrierFilter.split(',').map(c => c.trim().toUpperCase());
+        const allPrefixes: string[] = [];
+        for (const carrier of carriers) {
+          if (CARRIER_PREFIX_MAP[carrier]) {
+            allPrefixes.push(...CARRIER_PREFIX_MAP[carrier]);
+          }
+        }
+        if (allPrefixes.length > 0) {
+          const prefixList = allPrefixes.map(p => `'${p}'`).join(',');
+          carrierSqlClause = `AND UPPER(LEFT(mbl_id, 4)) IN (${prefixList})`;
+          console.log(`[refresh_sea_tracking] Carrier filter active: ${carrierFilter} → ${allPrefixes.length} prefixes`);
+        }
+      }
       
       // Final statuses that should not be refreshed
       const FINAL_STATUSES = ['DELIVERED', 'COMPLETED', 'EMPTY_RETURNED', 'EMPTY_RETURN', 'DLV', 'GOD'];
@@ -2343,6 +2368,7 @@ serve(async (req) => {
                 AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
                 AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
                 AND mbl_id IS NOT NULL AND mbl_id != ''
+                ${carrierSqlClause}
                 AND (
                   container_status IS NULL 
                   OR container_status = '' 
@@ -2390,6 +2416,7 @@ serve(async (req) => {
                 AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
                 AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
                 AND mbl_id IS NOT NULL AND mbl_id != ''
+                ${carrierSqlClause}
                 -- Exclude final statuses (DELIVERED, COMPLETED, etc.)
                 AND (container_status IS NULL OR UPPER(container_status) NOT IN (${finalStatusList}))
                 AND (last_event IS NULL OR UPPER(last_event) NOT REGEXP 'DELIVERED|EMPTY.?RETURN')
