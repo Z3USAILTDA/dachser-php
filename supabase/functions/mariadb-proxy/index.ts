@@ -3912,19 +3912,20 @@ serve(async (req) => {
           }
         }
 
-        // ==================== STEP 3: Get MOST ADVANCED event per HAWB from t_cct_eventos_historico ====================
-        // Timeline is supreme: the most advanced status (by hierarchy) wins, not the most recent by timestamp
+        // ==================== STEP 3: Get LATEST mapped event per HAWB from t_cct_eventos_historico ====================
+        // Status in dashboard must match the most recent event shown in timeline
         let eventosHistoricoMap = new Map<string, { codigo_evento: string; data_hora_evento: string; mapped_status: string }>();
         if (houseList.length > 0) {
           try {
             const houseFilterEvt = houseList.map((h: string) => `'${h.replace(/'/g, "''")}'`).join(',');
             const allEvents = await client.query(`
-              SELECT awb, codigo_evento, data_hora_evento
+              SELECT id, TRIM(awb) as awb, codigo_evento, data_hora_evento, created_at
               FROM ${database}.t_cct_eventos_historico
               WHERE TRIM(awb) IN (${houseFilterEvt})
+              ORDER BY TRIM(awb) ASC, data_hora_evento DESC, created_at DESC, id DESC
             `);
             
-            // Map evento codigo to CCT status (same mapping as ProcessoTimeline effectiveStatus)
+            // Map evento codigo to CCT status (same mapping used in frontend timeline status resolution)
             const eventToCctStatus: Record<string, string> = {
               'AREA_TRANSFERENCIA': 'EM_AREA_TRANSFERENCIA',
               'MANIFESTADO': 'MANIFESTADA',
@@ -3945,39 +3946,24 @@ serve(async (req) => {
               'DLV': 'ENTREGUE', 'POD': 'ENTREGUE',
               'FRO': 'BLOQUEIO', 'DIS': 'BLOQUEIO', 'OFLD': 'BLOQUEIO',
             };
-            
-            // Pick the MOST ADVANCED event per HAWB by hierarchy, not by timestamp
-            // Track if DESBLOQUEIO exists to neutralize BLOQUEIO
-            const hasDesbloqueioSet = new Set<string>();
-            for (const evt of (allEvents || [])) {
-              const code = (evt.codigo_evento || '').toUpperCase();
-              if (code === 'DESBLOQUEIO') {
-                hasDesbloqueioSet.add((evt.awb || '').trim().toUpperCase());
-              }
-            }
-            
+
+            // Because rows are already ordered by recency, the first mapped event per HAWB wins
             for (const evt of (allEvents || [])) {
               const awbKey = (evt.awb || '').trim().toUpperCase();
+              if (!awbKey || eventosHistoricoMap.has(awbKey)) continue;
+
               const code = (evt.codigo_evento || '').toUpperCase();
               const mapped = eventToCctStatus[code];
-              if (mapped) {
-                // Skip BLOQUEIO if a DESBLOQUEIO exists for the same AWB (block was resolved)
-                if (mapped === 'BLOQUEIO' && hasDesbloqueioSet.has(awbKey)) continue;
-                
-                const existing = eventosHistoricoMap.get(awbKey);
-                const existingOrder = existing ? (CCT_STATUS_ORDER[existing.mapped_status] || 0) : 0;
-                const newOrder = CCT_STATUS_ORDER[mapped] || 0;
-                // Use the most advanced status by hierarchy
-                if (newOrder > existingOrder) {
-                  eventosHistoricoMap.set(awbKey, {
-                    codigo_evento: code,
-                    data_hora_evento: evt.data_hora_evento,
-                    mapped_status: mapped,
-                  });
-                }
-              }
+              if (!mapped) continue;
+
+              eventosHistoricoMap.set(awbKey, {
+                codigo_evento: code,
+                data_hora_evento: evt.data_hora_evento,
+                mapped_status: mapped,
+              });
             }
-            console.log(`CCT Step 3: Found most advanced events for ${eventosHistoricoMap.size} HAWBs from t_cct_eventos_historico`);
+
+            console.log(`CCT Step 3: Found latest mapped events for ${eventosHistoricoMap.size} HAWBs from t_cct_eventos_historico`);
           } catch (evtErr) {
             console.warn('CCT Step 3: Error fetching t_cct_eventos_historico (non-fatal):', evtErr);
           }
@@ -4020,19 +4006,11 @@ serve(async (req) => {
             }
           }
           
-          // Override with t_cct_eventos_historico - TIMELINE IS SUPREME
-          // The most advanced event from the history table always wins (by hierarchy, not timestamp)
+          // Override with latest timeline event from t_cct_eventos_historico
+          // This keeps dashboard status aligned with the top event in timeline
           const evtHistorico = eventosHistoricoMap.get(houseKey);
-          if (evtHistorico) {
-            const evtMapped = evtHistorico.mapped_status;
-            if (evtMapped) {
-              const currentOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
-              const evtOrder = CCT_STATUS_ORDER[evtMapped] || 0;
-              // Timeline is supreme: if historico has a more advanced status, use it
-              if (evtOrder > currentOrder) {
-                statusCctOficial = evtMapped;
-              }
-            }
+          if (evtHistorico?.mapped_status) {
+            statusCctOficial = evtHistorico.mapped_status;
           }
           
           return {
@@ -6841,7 +6819,7 @@ serve(async (req) => {
               created_at
             FROM ${database}.t_cct_eventos_historico
             WHERE TRIM(awb) = TRIM(?)
-            ORDER BY data_hora_evento DESC
+            ORDER BY data_hora_evento DESC, created_at DESC, id DESC
             LIMIT 100
           `, [queryAwb]);
 
@@ -6870,7 +6848,7 @@ serve(async (req) => {
             console.log(`CCT: Looking up RFB events with MAWB: ${mawbForRfb} (HAWB: ${queryAwb})`);
             
             const rfbRows = mawbForRfb ? await client.query(`
-              SELECT identificacao, partesEstoque
+              SELECT identificacao, partesEstoque, dataEmissao
               FROM ${database}.t_aereo_cct
               WHERE identificacao = ?
               LIMIT 1
@@ -6903,16 +6881,18 @@ serve(async (req) => {
                   // Skip if already exists from t_cct_eventos_historico
                   if (existingCodes.has(codigoEvento)) continue;
                   
+                  const fallbackEventDate = pe?.dataHora || pe?.data || rfbRows?.[0]?.dataEmissao || events?.[events.length - 1]?.data_hora_evento || '1970-01-01T00:00:00.000Z';
+
                   rfbEvents.push({
                     id: `rfb-${queryAwb}-${codigoEvento}`,
                     awb: queryAwb,
                     codigo_evento: codigoEvento,
                     descricao_evento: `${situacao} (RFB)`,
-                    data_hora_evento: pe?.dataHora || pe?.data || new Date().toISOString(),
+                    data_hora_evento: fallbackEventDate,
                     fonte: 'RFB',
                     aeroporto: pe?.aeroporto || null,
                     nivel_confianca: 'COMPLEMENTAR',
-                    created_at: pe?.dataHora || pe?.data || new Date().toISOString(),
+                    created_at: fallbackEventDate,
                   });
                   existingCodes.add(codigoEvento);
                 }

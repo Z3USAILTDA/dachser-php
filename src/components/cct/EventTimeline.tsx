@@ -19,7 +19,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { CCTEvento, FonteEvento, NivelConfianca } from "@/types/cct";
 import { cn } from "@/lib/utils";
-
+import { compareCCTEventsByRecency } from "@/utils/cctStatusResolver";
 interface EventTimelineProps {
   eventos: CCTEvento[];
 }
@@ -177,7 +177,7 @@ export function EventTimeline({ eventos }: EventTimelineProps) {
   // Para BLOQUEIO/DESBLOQUEIO: manter todos (cada um tem motivo diferente)
   // Para outros: manter apenas a primeira ocorrência de cada código (a mais recente)
   const sortedEventos = [...eventos]
-    .sort((a, b) => new Date(b.data_hora_evento).getTime() - new Date(a.data_hora_evento).getTime())
+    .sort(compareCCTEventsByRecency)
     .filter((evento, index, arr) => {
       const code = evento.codigo_evento?.toUpperCase() || '';
       // Keep all BLOQUEIO/DESBLOQUEIO events (each has a different reason)
