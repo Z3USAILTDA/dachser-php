@@ -3547,7 +3547,7 @@ serve(async (req) => {
             console.log(`[update_vessel_imo] Found IMO ${imo} for "${vessel_name}" from DB`);
           } else {
             // 2. Buscar via API
-            const foundImo = await findVesselImo(vessel_name);
+            const foundImo = await findVesselImo(vessel_name, client);
             if (foundImo) {
               imo = foundImo;
               source = 'api';
