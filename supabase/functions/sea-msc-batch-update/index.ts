@@ -266,10 +266,19 @@ serve(async (req) => {
   
   try {
     const body = await req.json();
-    const { rawText, dryRun } = body;
+    let { rawText, dryRun, storageUrl } = body;
+
+    // If storageUrl provided, fetch text from Supabase Storage
+    if (storageUrl && !rawText) {
+      console.log('[msc-batch] Fetching from storage:', storageUrl);
+      const resp = await fetch(storageUrl);
+      if (!resp.ok) throw new Error(`Failed to fetch from storage: ${resp.status}`);
+      rawText = await resp.text();
+      console.log(`[msc-batch] Fetched ${rawText.length} chars from storage`);
+    }
 
     if (!rawText) {
-      return new Response(JSON.stringify({ error: 'rawText is required' }), {
+      return new Response(JSON.stringify({ error: 'rawText or storageUrl is required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
