@@ -2349,7 +2349,76 @@ serve(async (req) => {
         // Define leasing prefixes for the query (same as LEASING_CONTAINER_PREFIXES below but as string for SQL)
         const leasingPrefixesForQuery = `'BSIU','BEAU','TRHU','TRIU','TCKU','TTNU','TIIU','TLLU','TALU','IPXU','ITLU','TXGU','TEMU','TGHU','TCNU','TGBU','SCZU','SCMU','SCLU','CAAU','CAIU','CARU','CXRU','FCIU','FBIU','FCGU','FSCU','SZLU','SEGU','DFSU','DFCU','FDCU','GCXU','GATU','GLDU','HAMU','HCMU','ILAU','ITEU','UASU','UESU','UFCU','FANU','FBLU','FYCU','FUJU','GESU','BMOU','CSXU','CBLU','CLIU','CLXU','FTAU','BBCU','SMCU','SMLU','LCRU','LGEU','CXIC','CXNI'`;
         
-        if (forceRefresh) {
+        if (forceAll) {
+          // Force ALL: Re-track ALL containers regardless of current status
+          // ONE container per MBL, and deduplicate: same container across multiple MBLs = 1 API call
+          // Uses a larger batch size since we want to cover all MBLs
+          const forceAllBatchSize = parseInt(url.searchParams.get('batch_size') || '50');
+          
+          // Step 1: Get one representative container per MBL (preferring non-leasing)
+          const allRepresentatives = await client.query(`
+            SELECT t.id, t.mbl_id, t.container, t.shipping_line, t.navio, t.last_error
+            FROM dados_dachser.t_tracking_sea t
+            INNER JOIN (
+              SELECT 
+                mbl_id,
+                MIN(
+                  CASE 
+                    WHEN UPPER(LEFT(container, 4)) NOT IN (${leasingPrefixesForQuery}) THEN CONCAT('0_', id)
+                    ELSE CONCAT('1_', id)
+                  END
+                ) as priority_id
+              FROM dados_dachser.t_tracking_sea
+              WHERE active = 1
+                AND container IS NOT NULL
+                AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
+                AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
+                AND mbl_id IS NOT NULL AND mbl_id != ''
+                ${carrierSqlClause}
+              GROUP BY mbl_id
+            ) representative ON t.mbl_id = representative.mbl_id 
+              AND CONCAT(
+                CASE 
+                  WHEN UPPER(LEFT(t.container, 4)) NOT IN (${leasingPrefixesForQuery}) THEN '0_'
+                  ELSE '1_'
+                END, 
+                t.id
+              ) = representative.priority_id
+            WHERE t.active = 1
+            ORDER BY t.last_check ASC
+          `);
+          
+          // Step 2: Deduplicate by container - if same container appears in multiple MBLs, track once
+          const seenContainers = new Set<string>();
+          const deduplicatedContainers: any[] = [];
+          const containerToMbls = new Map<string, string[]>(); // container -> list of MBL IDs
+          
+          for (const row of allRepresentatives) {
+            const container = String(row.container || '').toUpperCase();
+            if (!seenContainers.has(container)) {
+              seenContainers.add(container);
+              deduplicatedContainers.push(row);
+              containerToMbls.set(container, [row.mbl_id]);
+            } else {
+              // Track which MBLs share this container for later propagation
+              const mbls = containerToMbls.get(container) || [];
+              mbls.push(row.mbl_id);
+              containerToMbls.set(container, mbls);
+            }
+          }
+          
+          console.log(`[refresh_sea_tracking] FORCE_ALL: ${allRepresentatives.length} MBLs → ${deduplicatedContainers.length} unique containers to track (${allRepresentatives.length - deduplicatedContainers.length} deduplicated)`);
+          
+          // Apply batch limit
+          containers = deduplicatedContainers.slice(0, forceAllBatchSize);
+          
+          // Store containerToMbls for later sibling propagation across MBLs
+          // @ts-ignore - attaching to response context
+          containers.__containerToMbls = containerToMbls;
+          containers.__totalMbls = allRepresentatives.length;
+          containers.__totalUniqueContainers = deduplicatedContainers.length;
+          
+        } else if (forceRefresh) {
           // Force refresh: get one representative container per MBL (preferring non-leasing)
           containers = await client.query(`
             SELECT t.id, t.mbl_id, t.container, t.shipping_line, t.navio, t.last_error
