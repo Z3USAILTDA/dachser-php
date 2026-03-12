@@ -1,40 +1,28 @@
 
 
-## Correção: Loop infinito no enriquecimento de containers
+# Fix: Documentos não aparecem no dialog de visualização
 
-### Problema
+## Causa raiz
 
-O enriquecimento por armador fica preso re-tentando containers que falham (ex: `AXIU2194982` retorna erro 500 da API). O loop nunca para porque containers com `last_error` continuam sendo re-selecionados.
-
-### Correções
-
-**1. Backend — `supabase/functions/olimpo-proxy/index.ts`**
-
-Na query de seleção do `refresh_sea_tracking` com `carrier_filter`, excluir containers que erraram recentemente:
-
-```sql
-AND NOT (last_error IS NOT NULL AND last_check > DATE_SUB(NOW(), INTERVAL 24 HOUR))
+O edge function `get_voucher_anexos` retorna a estrutura:
+```json
+{ "success": true, "data": [ ...anexos... ] }
 ```
 
-Isso evita re-tentar containers que falharam nas últimas 24h.
+Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
 
-**2. Frontend — `src/pages/ContainerTracking.tsx`**
+## Correção
 
-No loop do `handleCarrierEnrich`, detectar quando não há progresso (containers processados mas nenhum atualizado) e parar após 3 tentativas consecutivas sem sucesso:
+### `src/components/esteira/PagamentosTab.tsx` — linha 862
 
+Trocar:
 ```typescript
-if (data.updated === 0 && data.processed > 0) {
-  consecutiveNoProgress++;
-  if (consecutiveNoProgress >= 3) break;
-} else {
-  consecutiveNoProgress = 0;
-}
+setAnexosDialog(data?.anexos || []);
+```
+Por:
+```typescript
+setAnexosDialog(data?.data || []);
 ```
 
-### Arquivos modificados
-
-| Arquivo | Alteração |
-|---|---|
-| `supabase/functions/olimpo-proxy/index.ts` | Excluir containers com erro recente da seleção |
-| `src/pages/ContainerTracking.tsx` | Parar loop quando não houver progresso |
+Uma única linha corrige o problema.
 
