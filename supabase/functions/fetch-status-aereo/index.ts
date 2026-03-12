@@ -757,10 +757,10 @@ serve(async (req) => {
     if (search && search.trim() !== '') {
       const searchPattern = `%${search.trim()}%`;
       wsQuery = `${baseWsQuery}
-        WHERE (w.awb LIKE ? OR w.last_status_code LIKE ? OR w.last_status_description LIKE ?)
+        WHERE (w.awb LIKE ? OR w.last_status_code LIKE ?)
         ORDER BY w.scraped_at DESC
         LIMIT 500`;
-      wsParams = [searchPattern, searchPattern, searchPattern];
+      wsParams = [searchPattern, searchPattern];
     } else {
       wsQuery = `${baseWsQuery} ORDER BY w.scraped_at DESC LIMIT 500`;
     }
