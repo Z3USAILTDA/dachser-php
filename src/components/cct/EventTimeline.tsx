@@ -243,19 +243,39 @@ export function EventTimeline({ eventos }: EventTimelineProps) {
                     </div>
                   </div>
                   
-                  {/* Description */}
-                  {evento.descricao && evento.descricao !== evento.codigo_evento && (
-                    <p className={cn(
-                      "text-sm mt-2",
-                      evento.codigo_evento?.toUpperCase() === 'BLOQUEIO' 
-                        ? "text-red-400 font-medium" 
-                        : evento.codigo_evento?.toUpperCase() === 'DESBLOQUEIO'
-                          ? "text-emerald-400 font-medium"
+                  {/* Description - structured for bloqueio/desbloqueio */}
+                  {evento.descricao && evento.descricao !== evento.codigo_evento && (() => {
+                    const isBloqueio = evento.codigo_evento?.toUpperCase() === 'BLOQUEIO';
+                    const isDesbloqueio = evento.codigo_evento?.toUpperCase() === 'DESBLOQUEIO';
+                    const hasPipe = evento.descricao.includes(' | ');
+                    
+                    if ((isBloqueio || isDesbloqueio) && hasPipe) {
+                      const parts = evento.descricao.split(' | ');
+                      const motivo = parts[0];
+                      const extras = parts.slice(1);
+                      const colorClass = isBloqueio ? 'text-red-400' : 'text-emerald-400';
+                      
+                      return (
+                        <div className="mt-2 space-y-1">
+                          <p className={cn("text-sm font-medium", colorClass)}>{motivo}</p>
+                          {extras.map((extra, i) => (
+                            <p key={i} className="text-xs text-[#888]">{extra}</p>
+                          ))}
+                        </div>
+                      );
+                    }
+                    
+                    return (
+                      <p className={cn(
+                        "text-sm mt-2",
+                        isBloqueio ? "text-red-400 font-medium" 
+                          : isDesbloqueio ? "text-emerald-400 font-medium"
                           : "text-[#aaa]"
-                    )}>
-                      {evento.descricao}
-                    </p>
-                  )}
+                      )}>
+                        {evento.descricao}
+                      </p>
+                    );
+                  })()}
                   
                   {/* Motivo do bloqueio - fallback when descricao equals codigo */}
                   {evento.codigo_evento?.toUpperCase() === 'BLOQUEIO' && (!evento.descricao || evento.descricao === evento.codigo_evento || evento.descricao === 'BLOQUEIO') && (
