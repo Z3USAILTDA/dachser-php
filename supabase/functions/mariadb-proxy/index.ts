@@ -12592,23 +12592,9 @@ serve(async (req) => {
           let orderBy = 'ORDER BY m.data_insert DESC';
           
           if (prioritizePending) {
-            // Exclude HAWBs already delivered (ENTREGUE) - they don't need re-consultation
-            // Apply 4h cooldown for successful enrichments (avoid querying every minute)
-            // Keep failed HAWBs in queue but deprioritize them
-            extraWhere = `AND COALESCE(cct.status_cct_oficial, '') != 'ENTREGUE'
-            AND NOT EXISTS (
-              SELECT 1 FROM ${database}.t_leadcomex_enrichment_logs lel
-              WHERE TRIM(lel.hawb) COLLATE utf8mb4_unicode_ci = TRIM(m.hawb) COLLATE utf8mb4_unicode_ci
-              AND lel.success = 1
-              AND lel.created_at >= NOW() - INTERVAL 4 HOUR
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM ${database}.t_leadcomex_enrichment_logs lel2
-              WHERE TRIM(lel2.hawb) COLLATE utf8mb4_unicode_ci = TRIM(m.hawb) COLLATE utf8mb4_unicode_ci
-              AND lel2.success = 0
-              AND lel2.created_at >= NOW() - INTERVAL 1 HOUR
-            )`;
-            // Prioritize: never-tried first, then by oldest insert
+            // Continuous polling: only exclude delivered HAWBs, no cooldowns
+            extraWhere = `AND COALESCE(cct.status_cct_oficial, '') != 'ENTREGUE'`;
+            // Rotate: oldest insert first for fair distribution
             orderBy = `ORDER BY m.data_insert ASC`;
           } else if (!processAll) {
             extraWhere = 'AND (cct.peso_declarado IS NULL OR cct.cnpj_consignatario IS NULL)';
@@ -12616,7 +12602,7 @@ serve(async (req) => {
           
           const failCountJoin = '';
           
-          console.log(`[get_cct_pending_hawbs] Fetching HAWBs from t_master_dados (${processAll ? 'ALL' : 'pending'}${prioritizePending ? ', with 4h success cooldown + 1h failure cooldown' : ''})...`);
+          console.log(`[get_cct_pending_hawbs] Fetching HAWBs from t_master_dados (${processAll ? 'ALL' : 'pending'}${prioritizePending ? ', continuous polling, no cooldown' : ''})...`);
           
           // Step 2: Get HAWBs from t_master_dados for these AWBs
           rows = await client.query(`
