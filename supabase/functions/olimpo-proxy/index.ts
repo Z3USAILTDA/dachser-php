@@ -2298,7 +2298,7 @@ serve(async (req) => {
         }
         if (allPrefixes.length > 0) {
           const prefixList = allPrefixes.map(p => `'${p}'`).join(',');
-          carrierSqlClause = `AND UPPER(LEFT(t_inner.mbl_id, 4)) IN (${prefixList})`;
+          carrierSqlClause = `AND UPPER(LEFT(mbl_id, 4)) IN (${prefixList})`;
           console.log(`[refresh_sea_tracking] Carrier filter active: ${carrierFilter} → ${allPrefixes.length} prefixes`);
         }
       }
