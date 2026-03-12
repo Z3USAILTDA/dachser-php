@@ -8594,6 +8594,131 @@ serve(async (req) => {
       }
     }
 
+    // ===== SEA TRACKING: List containers by carrier (read-only) =====
+    if (action === 'list_containers_by_carrier') {
+      const carriersParam = url.searchParams.get('carriers') || 'MSC,ONE,EVERGREEN,MAERSK';
+      const carriers = carriersParam.split(',').map(c => c.trim().toUpperCase());
+      
+      const CARRIER_PREFIX_MAP_LIST: Record<string, string[]> = {
+        'MSC': ['MSCU','MEDU','MSCM','MSDU','MSCB','MSCR'],
+        'ONE': ['ONEY','ONEU','NYKU','MOLU','KKFU','MOAU','KKLU'],
+        'EVERGREEN': ['EISU','EITU','EGSU','EGHU','EMCU','EGLV'],
+        'MAERSK': ['MAEU','MRKU','MSKU','PONU','SEAU'],
+        'HAPAG_LLOYD': ['HLCU','HLXU','HLBU'],
+        'CMA_CGM': ['CMAU','CGMU','CMDU','CXDU','APLU','APHU','ANLU','ANRM'],
+        'COSCO': ['COSU','CSNU','CBHU','OOLU','CSLU','CCLU'],
+        'HAMBURG_SUD': ['SUDU','HASL','HSUD'],
+        'YANG_MING': ['YMLU','YMMU','YMPU'],
+        'HMM': ['HDMU','HMMU','HMCU','KMTU'],
+        'ZIM': ['ZIMU','ZCSU'],
+      };
+
+      const allPrefixes: string[] = [];
+      const validCarriers: string[] = [];
+      for (const carrier of carriers) {
+        if (CARRIER_PREFIX_MAP_LIST[carrier]) {
+          allPrefixes.push(...CARRIER_PREFIX_MAP_LIST[carrier]);
+          validCarriers.push(carrier);
+        }
+      }
+
+      if (allPrefixes.length === 0) {
+        return new Response(JSON.stringify({ error: 'No valid carriers specified', valid_carriers: Object.keys(CARRIER_PREFIX_MAP_LIST) }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        const prefixList = allPrefixes.map(p => `'${p}'`).join(',');
+        const rows = await client.query(`
+          SELECT mbl_id, container, enrichment_status, container_status, navio, last_event, last_check, shipping_line
+          FROM dados_dachser.t_tracking_sea
+          WHERE active = 1
+            AND container IS NOT NULL
+            AND container NOT IN ('PENDENTE','NAO_ENCONTRADO','IGNORADO','')
+            AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
+            AND UPPER(LEFT(mbl_id, 4)) IN (${prefixList})
+          ORDER BY mbl_id, container
+        `);
+
+        await client.close();
+
+        // Reverse lookup: prefix -> carrier
+        const prefixToCarrier: Record<string, string> = {};
+        for (const [carrier, prefixes] of Object.entries(CARRIER_PREFIX_MAP_LIST)) {
+          for (const p of prefixes) {
+            prefixToCarrier[p] = carrier;
+          }
+        }
+
+        // Group by carrier -> mbl -> containers
+        const grouped: Record<string, Record<string, any[]>> = {};
+        const containerSet = new Set<string>();
+        for (const carrier of validCarriers) grouped[carrier] = {};
+
+        for (const row of rows) {
+          const mbl = row.mbl_id || '';
+          const prefix4 = mbl.substring(0, 4).toUpperCase();
+          const carrier = prefixToCarrier[prefix4] || 'UNKNOWN';
+          if (!grouped[carrier]) continue;
+          if (!grouped[carrier][mbl]) grouped[carrier][mbl] = [];
+          const cid = row.container;
+          if (!containerSet.has(`${carrier}:${cid}`)) {
+            containerSet.add(`${carrier}:${cid}`);
+            grouped[carrier][mbl].push({
+              container: cid,
+              status: row.container_status || row.enrichment_status || 'unknown',
+              navio: row.navio || null,
+              last_event: row.last_event || null,
+              last_check: row.last_check || null,
+              shipping_line: row.shipping_line || null,
+            });
+          }
+        }
+
+        // Summary
+        const summary: Record<string, { mbls: number; unique_containers: number }> = {};
+        for (const [carrier, mbls] of Object.entries(grouped)) {
+          const mblCount = Object.keys(mbls).length;
+          let containerCount = 0;
+          for (const containers of Object.values(mbls)) containerCount += containers.length;
+          summary[carrier] = { mbls: mblCount, unique_containers: containerCount };
+        }
+
+        console.log(`[list_containers_by_carrier] Summary:`, JSON.stringify(summary));
+
+        return new Response(JSON.stringify({ success: true, summary, data: grouped }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[list_containers_by_carrier] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     return new Response(JSON.stringify({ error: 'Ação não reconhecida' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
