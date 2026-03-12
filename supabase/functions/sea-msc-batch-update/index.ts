@@ -321,7 +321,16 @@ serve(async (req) => {
 
     for (const mbl of parsed) {
       if (mbl.noInfo) {
-        results.push({ mbl: mbl.mbl, status: 'skipped', reason: 'sem informação' });
+        // Mark as NAO_ENCONTRADO instead of skipping
+        try {
+          await conn.execute(
+            `UPDATE dados_dachser.t_tracking_sea SET container_status = 'NAO_ENCONTRADO', last_event = 'Sem informação no armador', updated_at = NOW() WHERE mbl_id = ?`,
+            [mbl.mbl]
+          );
+          results.push({ mbl: mbl.mbl, status: 'ok_sia', reason: 'sem informação → NAO_ENCONTRADO' });
+        } catch (err: any) {
+          results.push({ mbl: mbl.mbl, status: 'error', error: err.message });
+        }
         continue;
       }
 
