@@ -226,6 +226,22 @@ const getReportStatus = (lastEvent: string | null, containerStatus?: string | nu
   if (lastEvent.toLowerCase().includes('sem informação') || lastEvent.toLowerCase().includes('sem informacao')) {
     return REPORT_STATUSES.SIA;
   }
+  // MSC-specific description matching (last_event contains freeform text like "Export Loaded on Vessel - SANTOS")
+  const lowerEvent = lastEvent.toLowerCase();
+  if (lowerEvent.includes('loaded on vessel')) return REPORT_STATUSES.CRG;
+  if (lowerEvent.includes('received at cy') || lowerEvent.includes('received at origin') || lowerEvent.includes('at barge yard')) return REPORT_STATUSES.GIO;
+  if (lowerEvent.includes('loaded on rail') || lowerEvent.includes('loaded on barge')) return REPORT_STATUSES.CRG;
+  if (lowerEvent.includes('rail departure')) return REPORT_STATUSES.DEP;
+  if (lowerEvent.includes('transshipment')) return REPORT_STATUSES.TSP;
+  if (lowerEvent.includes('discharged from vessel') || lowerEvent.includes('import discharged')) return REPORT_STATUSES.DCH;
+  if (lowerEvent.includes('available for delivery') || lowerEvent.includes('carrier release')) return REPORT_STATUSES.INS;
+  if (lowerEvent.includes('import to consignee') || lowerEvent.includes('to consignee')) return REPORT_STATUSES.GOD;
+  if (lowerEvent.includes('empty received') || lowerEvent.includes('end import cycle')) return REPORT_STATUSES.DLV;
+  if (lowerEvent.includes('empty to shipper')) return REPORT_STATUSES.CLT;
+  if (lowerEvent.includes('start export cycle')) return REPORT_STATUSES.BKG;
+  if (lowerEvent.includes('arrived at destination')) return REPORT_STATUSES.ARR;
+  if (lowerEvent.includes('unloaded from rail') || lowerEvent.includes('discharged from barge')) return REPORT_STATUSES.DCH;
+
   const normalizedEvent = lastEvent.toUpperCase().replace(/[\s-]/g, '_');
   if (EVENT_TO_REPORT_STATUS[normalizedEvent]) {
     return REPORT_STATUSES[EVENT_TO_REPORT_STATUS[normalizedEvent]];
