@@ -6881,16 +6881,18 @@ serve(async (req) => {
                   // Skip if already exists from t_cct_eventos_historico
                   if (existingCodes.has(codigoEvento)) continue;
                   
+                  const fallbackEventDate = pe?.dataHora || pe?.data || rfbRows?.[0]?.dataEmissao || events?.[events.length - 1]?.data_hora_evento || '1970-01-01T00:00:00.000Z';
+
                   rfbEvents.push({
                     id: `rfb-${queryAwb}-${codigoEvento}`,
                     awb: queryAwb,
                     codigo_evento: codigoEvento,
                     descricao_evento: `${situacao} (RFB)`,
-                    data_hora_evento: pe?.dataHora || pe?.data || new Date().toISOString(),
+                    data_hora_evento: fallbackEventDate,
                     fonte: 'RFB',
                     aeroporto: pe?.aeroporto || null,
                     nivel_confianca: 'COMPLEMENTAR',
-                    created_at: pe?.dataHora || pe?.data || new Date().toISOString(),
+                    created_at: fallbackEventDate,
                   });
                   existingCodes.add(codigoEvento);
                 }
