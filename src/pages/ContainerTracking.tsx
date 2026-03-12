@@ -372,6 +372,7 @@ const ContainerTracking = () => {
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [isRunningRetryNaoEncontrado, setIsRunningRetryNaoEncontrado] = useState(false);
   const [isRunningHapagDiscover, setIsRunningHapagDiscover] = useState(false);
+  const [isRunningCarrierEnrich, setIsRunningCarrierEnrich] = useState(false);
 
   // Expansion state
   const [expandedMbl, setExpandedMbl] = useState<string | null>(null);
