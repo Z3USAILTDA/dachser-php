@@ -3443,6 +3443,54 @@ serve(async (req) => {
       }
     }
 
+    // ===== UPDATE VESSEL IMO =====
+    if (action === 'update_vessel_imo') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+
+      let client: any = null;
+      try {
+        const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+        client = await new Client().connect({
+          hostname: mariadbHost!, port: parseInt(mariadbPort),
+          username: mariadbUser!, password: mariadbPass!, db: mariadbDb!
+        });
+
+        const vessel_name = url.searchParams.get('vessel_name') || '';
+        const imo = url.searchParams.get('imo') || '';
+        if (!vessel_name || !imo) {
+          await client.close();
+          return new Response(JSON.stringify({ error: 'vessel_name e imo são obrigatórios' }), {
+            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        const result = await client.execute(`
+          UPDATE dados_dachser.t_tracking_sea 
+          SET vessel_imo = ? 
+          WHERE navio LIKE ? AND (vessel_imo IS NULL OR vessel_imo = '')
+        `, [imo, `%${vessel_name}%`]);
+
+        await client.close();
+        return new Response(JSON.stringify({ 
+          success: true, 
+          vessel_name, 
+          imo, 
+          rows_updated: result.affectedRows || 0 
+        }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        if (client) await client.close();
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
 
     if (action === 'enrich_sea_containers') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');
@@ -5912,66 +5960,6 @@ serve(async (req) => {
       }
     }
 
-    // ===== SEA TRACKING: Update vessel IMO for MBL =====
-    if (action === 'update_vessel_imo') {
-      const body = await req.json();
-      const { mbl_id, vessel_imo } = body;
-
-      if (!mbl_id) {
-        return new Response(JSON.stringify({ error: 'mbl_id obrigatório' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-
-      if (!mariadbHost || !mariadbUser || !mariadbPass) {
-        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-
-      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
-      const client = await new Client().connect({
-        hostname: mariadbHost,
-        port: parseInt(mariadbPort, 10),
-        username: mariadbUser,
-        password: mariadbPass,
-        db: 'dados_dachser',
-      });
-
-      try {
-        // Update vessel_imo for all containers in this MBL
-        const result = await client.execute(`
-          UPDATE dados_dachser.t_tracking_sea 
-          SET vessel_imo = ?
-          WHERE mbl_id = ?
-        `, [vessel_imo || null, mbl_id]);
-
-        await client.close();
-        
-        console.log(`[update_vessel_imo] Updated ${result.affectedRows} rows for MBL ${mbl_id} with IMO ${vessel_imo}`);
-
-        return new Response(JSON.stringify({ 
-          success: true, 
-          updated: result.affectedRows || 0,
-          message: `IMO atualizado para ${result.affectedRows} containers`
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      } catch (e: any) {
-        await client.close();
-        console.error('[update_vessel_imo] Error:', e);
-        return new Response(JSON.stringify({ error: e.message }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-    }
 
     // ===== SETUP: Add sibling sync columns to t_tracking_sea =====
     if (action === 'setup_sibling_sync_columns') {
