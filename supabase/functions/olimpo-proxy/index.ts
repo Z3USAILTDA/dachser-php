@@ -339,55 +339,96 @@ const vesselImoCache = new Map<string, string | null>();
 
 async function findVesselImo(vesselName: string, dbClient?: any): Promise<string | null> {
   if (!vesselName) return null;
-  
+
   // Normaliza o nome do navio
-  const normalizedName = vesselName.toUpperCase().trim();
-  
+  const normalizedName = vesselName.toUpperCase().replace(/\s+/g, ' ').trim();
+
   // Verifica cache primeiro
   if (vesselImoCache.has(normalizedName)) {
     const cached = vesselImoCache.get(normalizedName);
     console.log(`[findVesselImo] Cache hit for "${vesselName}": ${cached || 'null'}`);
     return cached || null;
   }
-  
-  // PRIORIDADE 1: Verificar se já existe IMO na própria tabela t_tracking_sea para esse navio
-  if (dbClient) {
-    try {
-      const existingRows = await dbClient.query(`
-        SELECT vessel_imo FROM dados_dachser.t_tracking_sea 
-        WHERE navio = ? AND vessel_imo IS NOT NULL AND vessel_imo != ''
-        LIMIT 1
-      `, [normalizedName]);
-      
-      if (existingRows && existingRows.length > 0 && existingRows[0].vessel_imo) {
-        const dbImo = existingRows[0].vessel_imo;
-        vesselImoCache.set(normalizedName, dbImo);
-        console.log(`[findVesselImo] Found IMO ${dbImo} for "${vesselName}" from DB (no API call needed)`);
-        return dbImo;
-      }
-    } catch (dbErr: any) {
-      console.warn(`[findVesselImo] DB lookup failed for "${vesselName}":`, dbErr.message);
+
+  const lookupImoInDb = async (client: any): Promise<string | null> => {
+    const existingRows = await client.query(`
+      SELECT vessel_imo
+      FROM dados_dachser.t_tracking_sea
+      WHERE vessel_imo IS NOT NULL
+        AND TRIM(vessel_imo) <> ''
+        AND (
+          UPPER(TRIM(navio)) = ?
+          OR UPPER(TRIM(navio)) LIKE CONCAT('%', ?, '%')
+          OR ? LIKE CONCAT('%', UPPER(TRIM(navio)), '%')
+        )
+      ORDER BY last_check DESC
+      LIMIT 1
+    `, [normalizedName, normalizedName, normalizedName]);
+
+    if (existingRows && existingRows.length > 0 && existingRows[0].vessel_imo) {
+      return String(existingRows[0].vessel_imo).trim();
     }
+
+    return null;
+  };
+
+  // PRIORIDADE 1: buscar IMO já existente no banco (sem API)
+  try {
+    let dbImo: string | null = null;
+
+    if (dbClient) {
+      dbImo = await lookupImoInDb(dbClient);
+    } else {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+
+      if (mariadbHost && mariadbUser && mariadbPass) {
+        const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+        const tempClient = await new Client().connect({
+          hostname: mariadbHost,
+          port: parseInt(mariadbPort, 10),
+          username: mariadbUser,
+          password: mariadbPass,
+          db: mariadbDb,
+        });
+
+        try {
+          dbImo = await lookupImoInDb(tempClient);
+        } finally {
+          await tempClient.close();
+        }
+      }
+    }
+
+    if (dbImo) {
+      vesselImoCache.set(normalizedName, dbImo);
+      console.log(`[findVesselImo] Found IMO ${dbImo} for "${vesselName}" from DB (no API call needed)`);
+      return dbImo;
+    }
+  } catch (dbErr: any) {
+    console.warn(`[findVesselImo] DB lookup failed for "${vesselName}":`, dbErr.message || dbErr);
   }
-  
+
   // PRIORIDADE 2: Buscar via API JsonCargo
   try {
     console.log(`[findVesselImo] Searching IMO for vessel "${vesselName}" via API...`);
-    
-    const res = await jcJson('http://api.jsoncargo.com/api/v1/vessel/finder', { 
-      name: normalizedName, 
-      fuzzy: '1' 
+
+    const res = await jcJson('http://api.jsoncargo.com/api/v1/vessel/finder', {
+      name: normalizedName,
+      fuzzy: '1'
     }, 10000);
-    
+
     if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-      // Pega o primeiro resultado
       const vessel = res.data[0];
       const imo = vessel.imo || vessel.vessel_imo || vessel.IMO || null;
       vesselImoCache.set(normalizedName, imo);
       console.log(`[findVesselImo] Found IMO ${imo} for vessel "${vesselName}" via API (${res.data.length} results)`);
       return imo;
     }
-    
+
     vesselImoCache.set(normalizedName, null);
     console.log(`[findVesselImo] No IMO found for vessel "${vesselName}"`);
     return null;
@@ -2851,7 +2892,7 @@ serve(async (req) => {
             // PRIORIDADE 1: Buscar IMO pelo nome do navio (mais confiável)
             if (vesselName) {
               console.log(`[refresh_sea_tracking] Searching IMO by vessel name "${vesselName}" for ${containerId}...`);
-              const foundImo = await findVesselImo(vesselName);
+              const foundImo = await findVesselImo(vesselName, client);
               if (foundImo) {
                 vesselImo = foundImo;
                 imoLookups++;
@@ -3506,7 +3547,7 @@ serve(async (req) => {
             console.log(`[update_vessel_imo] Found IMO ${imo} for "${vessel_name}" from DB`);
           } else {
             // 2. Buscar via API
-            const foundImo = await findVesselImo(vessel_name);
+            const foundImo = await findVesselImo(vessel_name, client);
             if (foundImo) {
               imo = foundImo;
               source = 'api';
@@ -6136,7 +6177,7 @@ serve(async (req) => {
           }
           
           const vesselName = row.navio;
-          const imo = await findVesselImo(vesselName);
+          const imo = await findVesselImo(vesselName, client);
           processed++;
           
           if (imo) {
@@ -6921,7 +6962,7 @@ serve(async (req) => {
           
           try {
             // Buscar IMO pelo nome usando vessel/finder
-            const foundImo = await findVesselImo(vesselName);
+            const foundImo = await findVesselImo(vesselName, client);
             
             if (foundImo && foundImo !== currentImo) {
               // Atualizar com nova IMO
