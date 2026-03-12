@@ -757,7 +757,7 @@ export default function OlimpoCobranca() {
                       )}
                       {/* Grand Total */}
                       {totals && (
-                        <tr className="border-t-2 border-primary/40 bg-primary/5 sticky bottom-0">
+                        <tr className="border-t-2 border-primary/40 bg-card sticky bottom-0 z-10 shadow-[0_-2px_6px_rgba(0,0,0,0.3)]">
                           <td className="py-3 px-4 font-bold text-primary">Grand Total</td>
                           {agingKeys.map((k) => (
                             <td key={k} className="py-3 px-3 text-right tabular-nums font-bold" style={{ color: AGING_COLORS[k] }}>
