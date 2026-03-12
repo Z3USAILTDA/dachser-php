@@ -1497,6 +1497,16 @@ const ContainerTracking = () => {
         if (successEl) successEl.textContent = String(totalSuccess);
         if (errorsEl) errorsEl.textContent = String(totalErrors);
         hasMore = (result.processed || 0) > 0;
+        // Detect stuck loop: processed > 0 but updated === 0
+        if ((result.updated === 0 || result.success === 0) && (result.processed || 0) > 0) {
+          consecutiveNoProgress++;
+          if (consecutiveNoProgress >= 3) {
+            console.log('[carrier-enrich] Stopping: 3 consecutive batches with no progress');
+            hasMore = false;
+          }
+        } else {
+          consecutiveNoProgress = 0;
+        }
         if (hasMore) await new Promise(r => setTimeout(r, 3000));
       }
       await fetchMblData();
