@@ -8651,7 +8651,7 @@ serve(async (req) => {
       try {
         const prefixList = allPrefixes.map(p => `'${p}'`).join(',');
         const rows = await client.query(`
-          SELECT mbl_id, container, enrichment_status, container_status, navio, last_event, last_check, shipping_line
+          SELECT mbl_id, container, container_status, navio, last_event, last_check, shipping_line
           FROM dados_dachser.t_tracking_sea
           WHERE active = 1
             AND container IS NOT NULL
