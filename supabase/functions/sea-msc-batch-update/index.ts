@@ -284,8 +284,9 @@ serve(async (req) => {
     }
 
     console.log('[msc-batch] Parsing text...');
-    const parsed = parseMscText(rawText);
-    console.log(`[msc-batch] Parsed ${parsed.length} MBLs`);
+    const allParsed = parseMscText(rawText);
+    console.log(`[msc-batch] Parsed ${allParsed.length} MBLs total, processing offset=${offset} limit=${limit}`);
+    const parsed = allParsed.slice(offset, offset + limit);
 
     if (dryRun) {
       return new Response(JSON.stringify({
