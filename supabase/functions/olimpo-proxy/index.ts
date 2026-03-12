@@ -2416,6 +2416,7 @@ serve(async (req) => {
                 AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
                 AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
                 AND mbl_id IS NOT NULL AND mbl_id != ''
+                ${carrierSqlClause}
                 -- Exclude final statuses (DELIVERED, COMPLETED, etc.)
                 AND (container_status IS NULL OR UPPER(container_status) NOT IN (${finalStatusList}))
                 AND (last_event IS NULL OR UPPER(last_event) NOT REGEXP 'DELIVERED|EMPTY.?RETURN')
