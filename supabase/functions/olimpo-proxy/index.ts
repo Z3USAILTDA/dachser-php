@@ -2376,8 +2376,8 @@ serve(async (req) => {
                   OR last_event IS NULL 
                   OR last_event = '' 
                   OR last_event LIKE '%Aguardando%'
-                  OR (last_error IS NOT NULL AND (last_check IS NULL OR last_check < DATE_SUB(NOW(), INTERVAL 24 HOUR)))
                 )
+                AND NOT (last_error IS NOT NULL AND last_check > DATE_SUB(NOW(), INTERVAL 24 HOUR))
               GROUP BY mbl_id
             ) representative ON t.mbl_id = representative.mbl_id 
               AND CONCAT(
