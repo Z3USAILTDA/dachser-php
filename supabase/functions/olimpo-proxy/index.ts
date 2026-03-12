@@ -2368,6 +2368,7 @@ serve(async (req) => {
                 AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
                 AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
                 AND mbl_id IS NOT NULL AND mbl_id != ''
+                ${carrierSqlClause}
                 AND (
                   container_status IS NULL 
                   OR container_status = '' 
