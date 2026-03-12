@@ -221,26 +221,56 @@ const EVENT_TO_REPORT_STATUS: Record<string, string> = {
 const getReportStatus = (lastEvent: string | null, containerStatus?: string | null): ReportStatus => {
   // Check container_status first for NAO_ENCONTRADO
   if (containerStatus === 'NAO_ENCONTRADO') return REPORT_STATUSES.SIA;
+  
+  // Try to resolve from container_status first (comes from API or manual update)
+  if (containerStatus) {
+    // Direct match with internal codes
+    const upperStatus = containerStatus.toUpperCase().trim();
+    if (REPORT_STATUSES[upperStatus as keyof typeof REPORT_STATUSES]) {
+      return REPORT_STATUSES[upperStatus as keyof typeof REPORT_STATUSES];
+    }
+    // Try normalized match via EVENT_TO_REPORT_STATUS
+    const normalizedStatus = upperStatus.replace(/[\s-]/g, '_');
+    if (EVENT_TO_REPORT_STATUS[normalizedStatus]) {
+      return REPORT_STATUSES[EVENT_TO_REPORT_STATUS[normalizedStatus]];
+    }
+    // Pattern matching on container_status text (API freeform values)
+    const lowerStatus = containerStatus.toLowerCase();
+    if (lowerStatus.includes('delivered') || lowerStatus.includes('empty return') || lowerStatus.includes('empty received')) return REPORT_STATUSES.DLV;
+    if (lowerStatus.includes('gate out') || lowerStatus.includes('gate-out') || lowerStatus.includes('to consignee')) return REPORT_STATUSES.GOD;
+    if (lowerStatus.includes('customs') || lowerStatus.includes('released') || lowerStatus.includes('available for delivery') || lowerStatus.includes('carrier release')) return REPORT_STATUSES.INS;
+    if (lowerStatus.includes('discharged') || lowerStatus.includes('discharge') || lowerStatus.includes('unloaded')) return REPORT_STATUSES.DCH;
+    if (lowerStatus.includes('arrived') || lowerStatus.includes('arrival')) return REPORT_STATUSES.ARR;
+    if (lowerStatus.includes('transship') || lowerStatus.includes('t/s')) return REPORT_STATUSES.TSP;
+    if (lowerStatus.includes('in transit') || lowerStatus.includes('in-transit') || lowerStatus.includes('on rail')) return REPORT_STATUSES.DEP;
+    if (lowerStatus.includes('departed') || lowerStatus.includes('departure') || lowerStatus.includes('vessel sailed')) return REPORT_STATUSES.DEP;
+    if (lowerStatus.includes('loaded') || lowerStatus.includes('on board')) return REPORT_STATUSES.CRG;
+    if (lowerStatus.includes('gate in') || lowerStatus.includes('gate-in') || lowerStatus.includes('received for')) return REPORT_STATUSES.GIO;
+    if (lowerStatus.includes('picked up') || lowerStatus.includes('empty to shipper') || lowerStatus.includes('pick up')) return REPORT_STATUSES.CLT;
+    if (lowerStatus.includes('booked') || lowerStatus.includes('booking') || lowerStatus.includes('pending')) return REPORT_STATUSES.BKG;
+  }
+
   if (!lastEvent) return REPORT_STATUSES.AGD;
   // Check for "Sem informação" in last_event
   if (lastEvent.toLowerCase().includes('sem informação') || lastEvent.toLowerCase().includes('sem informacao')) {
     return REPORT_STATUSES.SIA;
   }
-  // MSC-specific description matching (last_event contains freeform text like "Export Loaded on Vessel - SANTOS")
+  // Freeform description matching (MSC, Hapag, ONE, etc.)
   const lowerEvent = lastEvent.toLowerCase();
-  if (lowerEvent.includes('loaded on vessel')) return REPORT_STATUSES.CRG;
-  if (lowerEvent.includes('received at cy') || lowerEvent.includes('received at origin') || lowerEvent.includes('at barge yard')) return REPORT_STATUSES.GIO;
+  if (lowerEvent.includes('loaded on vessel') || lowerEvent.includes('on board')) return REPORT_STATUSES.CRG;
+  if (lowerEvent.includes('received at cy') || lowerEvent.includes('received at origin') || lowerEvent.includes('at barge yard') || lowerEvent.includes('gate in') || lowerEvent.includes('gate-in')) return REPORT_STATUSES.GIO;
   if (lowerEvent.includes('loaded on rail') || lowerEvent.includes('loaded on barge')) return REPORT_STATUSES.CRG;
-  if (lowerEvent.includes('rail departure')) return REPORT_STATUSES.DEP;
-  if (lowerEvent.includes('transshipment')) return REPORT_STATUSES.TSP;
-  if (lowerEvent.includes('discharged from vessel') || lowerEvent.includes('import discharged')) return REPORT_STATUSES.DCH;
-  if (lowerEvent.includes('available for delivery') || lowerEvent.includes('carrier release')) return REPORT_STATUSES.INS;
-  if (lowerEvent.includes('import to consignee') || lowerEvent.includes('to consignee')) return REPORT_STATUSES.GOD;
-  if (lowerEvent.includes('empty received') || lowerEvent.includes('end import cycle')) return REPORT_STATUSES.DLV;
-  if (lowerEvent.includes('empty to shipper')) return REPORT_STATUSES.CLT;
-  if (lowerEvent.includes('start export cycle')) return REPORT_STATUSES.BKG;
-  if (lowerEvent.includes('arrived at destination')) return REPORT_STATUSES.ARR;
+  if (lowerEvent.includes('rail departure') || lowerEvent.includes('departed') || lowerEvent.includes('vessel sailed') || lowerEvent.includes('in transit')) return REPORT_STATUSES.DEP;
+  if (lowerEvent.includes('transshipment') || lowerEvent.includes('t/s')) return REPORT_STATUSES.TSP;
+  if (lowerEvent.includes('discharged from vessel') || lowerEvent.includes('import discharged') || lowerEvent.includes('discharge')) return REPORT_STATUSES.DCH;
+  if (lowerEvent.includes('available for delivery') || lowerEvent.includes('carrier release') || lowerEvent.includes('customs') || lowerEvent.includes('released')) return REPORT_STATUSES.INS;
+  if (lowerEvent.includes('import to consignee') || lowerEvent.includes('to consignee') || lowerEvent.includes('gate out') || lowerEvent.includes('gate-out')) return REPORT_STATUSES.GOD;
+  if (lowerEvent.includes('empty received') || lowerEvent.includes('end import cycle') || lowerEvent.includes('delivered') || lowerEvent.includes('empty return')) return REPORT_STATUSES.DLV;
+  if (lowerEvent.includes('empty to shipper') || lowerEvent.includes('picked up') || lowerEvent.includes('pick up')) return REPORT_STATUSES.CLT;
+  if (lowerEvent.includes('start export cycle') || lowerEvent.includes('booking') || lowerEvent.includes('booked')) return REPORT_STATUSES.BKG;
+  if (lowerEvent.includes('arrived at destination') || lowerEvent.includes('arrived') || lowerEvent.includes('arrival')) return REPORT_STATUSES.ARR;
   if (lowerEvent.includes('unloaded from rail') || lowerEvent.includes('discharged from barge')) return REPORT_STATUSES.DCH;
+  if (lowerEvent.includes('loaded')) return REPORT_STATUSES.CRG;
 
   const normalizedEvent = lastEvent.toUpperCase().replace(/[\s-]/g, '_');
   if (EVENT_TO_REPORT_STATUS[normalizedEvent]) {
