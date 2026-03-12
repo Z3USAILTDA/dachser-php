@@ -2892,7 +2892,7 @@ serve(async (req) => {
             // PRIORIDADE 1: Buscar IMO pelo nome do navio (mais confiável)
             if (vesselName) {
               console.log(`[refresh_sea_tracking] Searching IMO by vessel name "${vesselName}" for ${containerId}...`);
-              const foundImo = await findVesselImo(vesselName);
+              const foundImo = await findVesselImo(vesselName, client);
               if (foundImo) {
                 vesselImo = foundImo;
                 imoLookups++;
