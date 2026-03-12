@@ -163,14 +163,28 @@ interface LeadComexCarga {
   // Keep backwards compatibility with old field name
   conhecimentoCargaDetalhado?: {
     bloqueiosAtivos?: Array<{
-      codigo: string;
-      descricao: string;
-      dataHoraBloqueio: string;
+      codigo?: string;
+      descricao?: string;
+      codigoBloqueio?: string;
+      descricaoBloqueio?: string;
+      motivoBloqueio?: string;
+      justificativaBloqueio?: string;
+      tipoBloqueio?: string;
+      alcanceBloqueio?: string;
+      responsavelBloqueio?: string | null;
+      dataHoraBloqueio?: string;
     }>;
     bloqueiosBaixados?: Array<{
-      codigo: string;
-      descricao: string;
-      dataHoraDesbloqueio: string;
+      codigo?: string;
+      descricao?: string;
+      codigoBloqueio?: string;
+      descricaoBloqueio?: string;
+      motivoBloqueio?: string;
+      justificativaBloqueio?: string;
+      tipoBloqueio?: string;
+      alcanceBloqueio?: string;
+      responsavelBloqueio?: string | null;
+      dataHoraDesbloqueio?: string;
     }>;
     divergencias?: Array<{
       campo: string;
