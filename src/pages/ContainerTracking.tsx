@@ -2819,6 +2819,22 @@ const ContainerTracking = () => {
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button onClick={() => {
+                      handleCarrierEnrich();
+                      setShowAdminModal(false);
+                    }} disabled={isRunningCarrierEnrich || !!autoSyncStatus} className="h-9 px-4 rounded-lg bg-[rgba(6,182,212,.2)] text-cyan-400 text-sm font-medium flex items-center gap-2 border border-cyan-500/30 hover:bg-[rgba(6,182,212,.3)] transition disabled:opacity-50">
+                        {isRunningCarrierEnrich ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ship className="w-4 h-4" />}
+                        Enrich MSC/ONE/EVG/MAE
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Enriquecer containers não rastreados de MSC, ONE, Evergreen, Maersk (em lotes)</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </div>
             
