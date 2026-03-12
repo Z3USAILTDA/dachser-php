@@ -32,7 +32,7 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ProcessoCCT, CCTEvento } from "@/types/cct";
-import { STATUS_MAPPING } from "@/types/cct";
+import { getLatestTimelineStatus } from "@/utils/cctStatusResolver";
 
 
 export default function ProcessoTimeline() {
