@@ -1426,7 +1426,93 @@ const ContainerTracking = () => {
     }
   };
 
-  // Reset NAO_ENCONTRADO containers to PENDENTE for retry
+  // Enrich specific carriers (MSC, ONE, EVERGREEN, MAERSK) in batches
+  const handleCarrierEnrich = async () => {
+    if (!isAdmin) return;
+    const carriers = 'MSC,ONE,EVERGREEN,MAERSK';
+    const confirmResult = await Swal.fire({
+      title: 'Enriquecer Armadores Específicos',
+      html: `<p class="text-sm">Buscar status de containers não enriquecidos dos armadores:<br><strong>MSC, ONE, Evergreen, Maersk</strong></p><p class="text-xs text-gray-500 mt-2">Processamento em lotes de 15 com intervalo de 3s</p>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Iniciar',
+      cancelButtonText: 'Cancelar',
+    });
+    if (!confirmResult.isConfirmed) return;
+    setIsRunningCarrierEnrich(true);
+    let totalProcessed = 0, totalSuccess = 0, totalErrors = 0, iteration = 0;
+    const maxIterations = 50;
+    Swal.fire({
+      title: 'Enriquecendo Armadores...',
+      html: `
+        <div class="text-left">
+          <div class="w-full bg-gray-200 rounded-full h-2 mb-3">
+            <div class="bg-cyan-500 h-2 rounded-full transition-all" style="width: 0%" id="carrier-progress"></div>
+          </div>
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="bg-gray-100 rounded p-2">
+              <div class="text-lg font-bold text-cyan-600" id="carrier-processed">0</div>
+              <div class="text-xs text-gray-500">Processados</div>
+            </div>
+            <div class="bg-gray-100 rounded p-2">
+              <div class="text-lg font-bold text-green-600" id="carrier-success">0</div>
+              <div class="text-xs text-gray-500">Sucesso</div>
+            </div>
+            <div class="bg-gray-100 rounded p-2">
+              <div class="text-lg font-bold text-red-600" id="carrier-errors">0</div>
+              <div class="text-xs text-gray-500">Erros</div>
+            </div>
+          </div>
+          <p class="text-sm text-gray-500 mt-2" id="carrier-batch">Batch 0/${maxIterations}</p>
+        </div>
+      `,
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => { Swal.showLoading(); }
+    });
+    try {
+      let hasMore = true;
+      while (hasMore && iteration < maxIterations) {
+        iteration++;
+        const progressEl = document.getElementById('carrier-progress');
+        const processedEl = document.getElementById('carrier-processed');
+        const successEl = document.getElementById('carrier-success');
+        const errorsEl = document.getElementById('carrier-errors');
+        const batchEl = document.getElementById('carrier-batch');
+        if (progressEl) progressEl.style.width = `${iteration / maxIterations * 100}%`;
+        if (batchEl) batchEl.textContent = `Batch ${iteration}/${maxIterations}`;
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=15&carrier_filter=${carriers}&force=1`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        const result = await res.json();
+        totalProcessed += result.processed || 0;
+        totalSuccess += result.success || 0;
+        totalErrors += result.errors || 0;
+        if (processedEl) processedEl.textContent = String(totalProcessed);
+        if (successEl) successEl.textContent = String(totalSuccess);
+        if (errorsEl) errorsEl.textContent = String(totalErrors);
+        hasMore = (result.processed || 0) > 0;
+        if (hasMore) await new Promise(r => setTimeout(r, 3000));
+      }
+      await fetchMblData();
+      Swal.fire({
+        icon: 'success',
+        title: 'Enriquecimento Concluído!',
+        html: `<div class="text-left"><p><strong>${totalProcessed}</strong> containers processados</p><p><strong>${totalSuccess}</strong> sucesso / <strong>${totalErrors}</strong> erros</p><p class="text-xs text-gray-500 mt-1">${iteration} batches executados</p></div>`,
+        confirmButtonText: 'OK',
+      });
+    } catch (err: any) {
+      Swal.fire({ icon: 'error', title: 'Erro', text: err.message });
+    } finally {
+      setIsRunningCarrierEnrich(false);
+    }
+  };
+
+
   const handleRetryNaoEncontrado = async (mblId?: string) => {
     if (!isAdmin) return;
     setIsRunningRetryNaoEncontrado(true);
