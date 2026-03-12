@@ -66,65 +66,11 @@ export default function ProcessoTimeline() {
     return eventosHistorico.length > 0 ? eventosHistorico : fallback;
   }, [processo, eventosHistorico]);
 
-  // Derive effective status: use the MOST ADVANCED status across all sources (timeline is supreme)
+  // Derive effective status: always follow the most recent mapped event from timeline
   const effectiveStatus = useMemo(() => {
     if (isLoadingEvents) return null;
     const baseStatus = processo?.status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
-    
-    if (allEventos.length === 0) return baseStatus;
-    
-    const CCT_EVENT_TO_STATUS: Record<string, string> = {
-      'AREA_TRANSFERENCIA': 'EM_AREA_TRANSFERENCIA',
-      'MANIFESTADO': 'MANIFESTADA',
-      'RECEPCIONADO': 'RECEPCIONADA',
-      'CHEGADA_INFORMADA': 'INFORMADA',
-      'CHEGADA_AERONAVE': 'INFORMADA',
-      'EM_TRANSITO': 'EM_TRANSITO_TERRESTRE',
-      'ENTREGUE': 'ENTREGUE',
-      'BLOQUEIO': 'BLOQUEIO',
-      'DESEMBARACO': 'ENTREGUE',
-      'LIBERADO': 'ENTREGUE',
-      'DESBLOQUEIO': 'RECEPCIONADA',
-      ...Object.fromEntries(
-        Object.entries(STATUS_MAPPING).map(([k, v]) => [k, v])
-      ),
-    };
-    
-    const CCT_STATUS_ORDER: Record<string, number> = {
-      'AGUARDANDO_MANIFESTACAO': 0, 'AGUARDANDO_CONSULTA': 0,
-      'INFORMADA': 1, 'MANIFESTADA': 2,
-      'EM_AREA_TRANSFERENCIA': 3, 'RECEPCIONADA': 4,
-      'EM_TRANSITO_TERRESTRE': 5, 'ENTREGUE': 6,
-      'BLOQUEIO': 99,
-    };
-    
-    // Check if DESBLOQUEIO exists (block was resolved)
-    const hasDesbloqueio = allEventos.some(evt => 
-      (evt.codigo_evento?.toUpperCase() || '') === 'DESBLOQUEIO'
-    );
-    
-    // Find the MOST ADVANCED status from all timeline events (hierarchy wins, not chronology)
-    let bestTimelineStatus = baseStatus;
-    let bestTimelineOrder = CCT_STATUS_ORDER[baseStatus] || 0;
-    
-    for (const evt of allEventos) {
-      const code = evt.codigo_evento?.toUpperCase() || '';
-      const mapped = CCT_EVENT_TO_STATUS[code];
-      if (mapped) {
-        // Skip BLOQUEIO if a DESBLOQUEIO exists (block was resolved)
-        if (mapped === 'BLOQUEIO' && hasDesbloqueio) continue;
-        
-        const order = CCT_STATUS_ORDER[mapped] || 0;
-        if (order > bestTimelineOrder) {
-          bestTimelineStatus = mapped;
-          bestTimelineOrder = order;
-        }
-      }
-    }
-    
-    // Use the most advanced between backend and timeline
-    const backendOrder = CCT_STATUS_ORDER[baseStatus] || 0;
-    return bestTimelineOrder >= backendOrder ? bestTimelineStatus : baseStatus;
+    return getLatestTimelineStatus(allEventos, baseStatus);
   }, [allEventos, processo, isLoadingEvents]);
 
   // Initialize form values when processo loads - use useEffect to properly update state

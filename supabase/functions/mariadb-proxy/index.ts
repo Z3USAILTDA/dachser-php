@@ -6841,7 +6841,7 @@ serve(async (req) => {
               created_at
             FROM ${database}.t_cct_eventos_historico
             WHERE TRIM(awb) = TRIM(?)
-            ORDER BY data_hora_evento DESC
+            ORDER BY data_hora_evento DESC, created_at DESC, id DESC
             LIMIT 100
           `, [queryAwb]);
 
