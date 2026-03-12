@@ -3481,25 +3481,63 @@ serve(async (req) => {
         });
 
         const vessel_name = url.searchParams.get('vessel_name') || '';
-        const imo = url.searchParams.get('imo') || '';
-        if (!vessel_name || !imo) {
+        let imo = url.searchParams.get('imo') || '';
+        
+        if (!vessel_name) {
           await client.close();
-          return new Response(JSON.stringify({ error: 'vessel_name e imo são obrigatórios' }), {
+          return new Response(JSON.stringify({ error: 'vessel_name é obrigatório' }), {
             status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        // Se IMO não foi fornecido, tentar encontrar no próprio banco ou via API
+        let source = 'param';
+        if (!imo) {
+          // 1. Verificar se já existe IMO no banco para esse navio
+          const existingRows = await client.query(`
+            SELECT vessel_imo FROM dados_dachser.t_tracking_sea 
+            WHERE UPPER(navio) = UPPER(?) AND vessel_imo IS NOT NULL AND vessel_imo != ''
+            LIMIT 1
+          `, [vessel_name.trim()]);
+          
+          if (existingRows && existingRows.length > 0 && existingRows[0].vessel_imo) {
+            imo = existingRows[0].vessel_imo;
+            source = 'db';
+            console.log(`[update_vessel_imo] Found IMO ${imo} for "${vessel_name}" from DB`);
+          } else {
+            // 2. Buscar via API
+            const foundImo = await findVesselImo(vessel_name);
+            if (foundImo) {
+              imo = foundImo;
+              source = 'api';
+              console.log(`[update_vessel_imo] Found IMO ${imo} for "${vessel_name}" from API`);
+            }
+          }
+        }
+
+        if (!imo) {
+          await client.close();
+          return new Response(JSON.stringify({ 
+            success: false, 
+            vessel_name,
+            message: 'IMO não encontrado no banco nem na API' 
+          }), {
+            status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
         }
 
         const result = await client.execute(`
           UPDATE dados_dachser.t_tracking_sea 
           SET vessel_imo = ? 
-          WHERE navio LIKE ? AND (vessel_imo IS NULL OR vessel_imo = '')
-        `, [imo, `%${vessel_name}%`]);
+          WHERE UPPER(navio) LIKE UPPER(?) AND (vessel_imo IS NULL OR vessel_imo = '')
+        `, [imo, `%${vessel_name.trim()}%`]);
 
         await client.close();
         return new Response(JSON.stringify({ 
           success: true, 
           vessel_name, 
-          imo, 
+          imo,
+          source,
           rows_updated: result.affectedRows || 0 
         }), {
           status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
