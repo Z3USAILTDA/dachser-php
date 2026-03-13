@@ -657,6 +657,16 @@ REGRAS DE CONTEÚDO DA TABELA
    - Incoterms diferentes (ex.: CFR × FOB) → 🔴
    - Incoterm coerente mas rótulo faltante → 🟨
 
+   🔴🔴🔴 REGRA DE CONSISTÊNCIA — INCOTERM vs TIPO DE FRETE (VALIDAÇÃO CRUZADA OBRIGATÓRIA):
+   - FCA, EXW, FOB → frete tipicamente COLLECT (comprador paga/organiza o frete)
+   - CIF, CFR, CPT, CIP, DDP, DAP → frete tipicamente PREPAID (vendedor paga o frete)
+   
+   VALIDAÇÃO CRUZADA:
+   - Se BL/AWB mostra frete "Prepaid" mas Incoterm é FCA/EXW/FOB → 🔴 CRÍTICO (contradição: vendedor pagou frete mas Incoterm indica que comprador deveria pagar)
+   - Se BL/AWB mostra frete "Collect" mas Incoterm é CIF/CFR/CPT/CIP/DDP/DAP → 🔴 CRÍTICO (contradição: comprador pagando frete mas Incoterm indica que vendedor deveria pagar)
+   - Registrar na tabela com status 🔴 E nas observações com 🔴 explicando a contradição
+   - Esta validação tem PRIORIDADE MÁXIMA — mesmo que cada campo individualmente esteja correto, a COMBINAÇÃO pode ser inconsistente
+
 7) VALORES — REGRAS CRÍTICAS (ATENÇÃO MÁXIMA — DIFERENCIE CLARAMENTE):
 
    ⚠️ EXISTEM TRÊS VALORES DISTINTOS — NÃO CONFUNDA!
