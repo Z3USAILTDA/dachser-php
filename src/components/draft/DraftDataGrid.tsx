@@ -282,6 +282,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
   const exportToCSV = () => {
     const exportData = filteredData.map((item, index) => ({
       '#': index + 1,
+      'Armador': detectCarrier(item.mbl_id).name,
       'MBL ID': item.mbl_id,
       'Shipper': item.shipper || '-',
       'Booking': item.trackingData?.booking || '-',
