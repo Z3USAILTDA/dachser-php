@@ -7814,7 +7814,6 @@ serve(async (req) => {
 
       try {
         await client.execute(`
-        await client.execute(`
           CREATE TABLE IF NOT EXISTS ${database}.t_cadastro_aereo (
             id INT AUTO_INCREMENT PRIMARY KEY,
             cadastro_id VARCHAR(50) NOT NULL,
@@ -7945,8 +7944,7 @@ serve(async (req) => {
       });
 
       try {
-        // Ensure table exists
-        await client.execute(`
+        // ALTER TABLE for existing tables — add new columns if missing
         // ALTER TABLE for existing tables — add new columns if missing
         const newCols = [
           "mode VARCHAR(10)", "po_number VARCHAR(100)", "green_light_date DATE", "pickup_date DATE",
