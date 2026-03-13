@@ -1,5 +1,6 @@
-import { useState, useCallback, useRef } from "react";
-import { FilePlus, Upload, Loader2, Save, Search, User, Calendar, RefreshCw, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, Plane, Package } from "lucide-react";
+import { useState, useCallback, useRef, useMemo } from "react";
+import { FilePlus, Upload, Loader2, Save, Search, User, Calendar, RefreshCw, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, Plane, Package, Copy, Check } from "lucide-react";
+import { copyToClipboard } from "@/utils/clipboard";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -202,6 +203,36 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
   const [clerkOpen, setClerkOpen] = useState(false);
   const clerkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [copied, setCopied] = useState(false);
+
+  const formatDateForTitle = (dateStr: string) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
+  };
+
+  const preAlertTitle = useMemo(() => {
+    const parts: string[] = ['Dachser Pre-Alert AIR'];
+    if (form.po_number) parts.push(`PO: ${form.po_number};`);
+    if (form.consignee_customer_number) parts.push(form.consignee_customer_number);
+    if (form.awb_number) parts.push(`AWB: ${form.awb_number}`);
+    if (form.hawb_number) parts.push(`HAWB: ${form.hawb_number}`);
+    if (form.consignee_nome) parts.push(form.consignee_nome);
+    if (form.consignee_nome) parts.push(`Consignee: ${form.consignee_nome}`);
+    if (form.airport_destination) parts.push(form.airport_destination);
+    const etdFmt = formatDateForTitle(form.etd);
+    if (etdFmt) parts.push(`ETD: ${etdFmt}`);
+    const etaFmt = formatDateForTitle(form.eta);
+    if (etaFmt) parts.push(`ETA: ${etaFmt}`);
+    return parts.join(' - ');
+  }, [form.po_number, form.consignee_customer_number, form.awb_number, form.hawb_number, form.consignee_nome, form.airport_destination, form.etd, form.eta]);
+
+  const handleCopyTitle = async () => {
+    const ok = await copyToClipboard(preAlertTitle);
+    if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); toast.success("Título copiado!"); }
+  };
+
   const updateField = (field: keyof FormData, value: string | boolean) => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
@@ -397,7 +428,9 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Erro ao salvar");
       
-      toast.success("Cadastro salvo!", { description: `ID: ${cadastroId}` });
+      // Auto-copy pre-alert title
+      await copyToClipboard(preAlertTitle);
+      toast.success("Cadastro salvo! Título Pre-Alert copiado.", { description: `ID: ${cadastroId}` });
       setForm({ ...emptyForm });
       setFileName("");
       setConsigneeSearch("");
@@ -854,6 +887,26 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
               <Field label="Signature Place" field="signature_place" />
             </div>
           </CollapsibleCard>
+
+          {/* Pre-Alert Title Preview */}
+          <div className="rounded-xl border border-[rgba(255,200,0,.25)] bg-[rgba(255,200,0,.06)] p-4 space-y-2">
+            <Label className="text-xs text-[#ffc800] font-semibold block">Título Pre-Alert (assunto do e-mail)</Label>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-[rgba(0,0,0,.3)] border border-[rgba(255,255,255,.1)] rounded-lg px-3 py-2 text-sm text-[#ccc] select-all break-all min-h-[36px]">
+                {preAlertTitle || <span className="text-[#666] italic">Preencha os campos para gerar o título...</span>}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={handleCopyTitle}
+                disabled={!preAlertTitle || preAlertTitle === 'Dachser Pre-Alert AIR'}
+                className="shrink-0 h-9 w-9 border-[rgba(255,255,255,.15)] hover:bg-[rgba(255,200,0,.15)]"
+              >
+                {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4 text-[#aaa]" />}
+              </Button>
+            </div>
+          </div>
 
           {/* Save Button */}
           <div className="flex justify-end">

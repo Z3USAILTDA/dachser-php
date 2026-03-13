@@ -1,5 +1,6 @@
-import { useState, useCallback, useRef } from "react";
-import { FilePlus, Loader2, Save, Search, User, Calendar, Ship, Package, Anchor } from "lucide-react";
+import { useState, useCallback, useRef, useMemo } from "react";
+import { FilePlus, Loader2, Save, Search, User, Calendar, Ship, Package, Anchor, Copy, Check } from "lucide-react";
+import { copyToClipboard } from "@/utils/clipboard";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -245,7 +246,9 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Erro ao salvar");
 
-      toast.success("Cadastro marítimo salvo!", { description: `ID: ${cadastroId}` });
+      // Auto-copy pre-alert title
+      await copyToClipboard(preAlertTitle);
+      toast.success("Cadastro marítimo salvo! Título Pre-Alert copiado.", { description: `ID: ${cadastroId}` });
       setForm({ ...emptySeaForm });
       setConsigneeSearch("");
       setClerkSearch("");
@@ -255,6 +258,39 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
       toast.error("Erro ao salvar", { description: e.message });
     }
     setIsSaving(false);
+  };
+
+  const [copied, setCopied] = useState(false);
+
+  const formatDateForTitle = (dateStr: string) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
+  };
+
+  const preAlertTitle = useMemo(() => {
+    const parts: string[] = ['Dachser Pre-Alert SE'];
+    if (form.po_number) parts.push(`PO: ${form.po_number};`);
+    if (form.consignee_customer_number) parts.push(form.consignee_customer_number);
+    if (form.hbl_number) parts.push(`HBL: ${form.hbl_number}`);
+    if (form.master_number) parts.push(`MBL: ${form.master_number}`);
+    const consignee = form.mode === 'expo' ? form.consignee_expo : form.consignee_nome;
+    if (consignee) parts.push(consignee);
+    if (form.mode === 'expo' && form.consignee_expo) parts.push(`Consignee: ${form.consignee_expo}`);
+    if (form.mode === 'impo' && form.consignee_nome) parts.push(`Consignee: ${form.consignee_nome}`);
+    const port = form.mode === 'impo' ? form.port_destination : form.port_origin;
+    if (port) parts.push(port);
+    const etdFmt = formatDateForTitle(form.etd);
+    if (etdFmt) parts.push(`ETD: ${etdFmt}`);
+    const etaFmt = formatDateForTitle(form.eta);
+    if (etaFmt) parts.push(`ETA: ${etaFmt}`);
+    return parts.join(' - ');
+  }, [form.po_number, form.consignee_customer_number, form.hbl_number, form.master_number, form.consignee_nome, form.consignee_expo, form.port_destination, form.port_origin, form.etd, form.eta, form.mode]);
+
+  const handleCopyTitle = async () => {
+    const ok = await copyToClipboard(preAlertTitle);
+    if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); toast.success("Título copiado!"); }
   };
 
   const inputCls = "h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white placeholder:text-[#666]";
@@ -577,6 +613,26 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
               </div>
             </div>
           )}
+
+          {/* Pre-Alert Title Preview */}
+          <div className="rounded-xl border border-[rgba(255,200,0,.25)] bg-[rgba(255,200,0,.06)] p-4 space-y-2">
+            <Label className="text-xs text-[#ffc800] font-semibold block">Título Pre-Alert (assunto do e-mail)</Label>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-[rgba(0,0,0,.3)] border border-[rgba(255,255,255,.1)] rounded-lg px-3 py-2 text-sm text-[#ccc] select-all break-all min-h-[36px]">
+                {preAlertTitle || <span className="text-[#666] italic">Preencha os campos para gerar o título...</span>}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={handleCopyTitle}
+                disabled={!preAlertTitle || preAlertTitle === 'Dachser Pre-Alert SE'}
+                className="shrink-0 h-9 w-9 border-[rgba(255,255,255,.15)] hover:bg-[rgba(255,200,0,.15)]"
+              >
+                {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4 text-[#aaa]" />}
+              </Button>
+            </div>
+          </div>
 
           {/* Save Button */}
           <div className="flex justify-end pt-2">
