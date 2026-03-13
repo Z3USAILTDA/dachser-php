@@ -7814,7 +7814,6 @@ serve(async (req) => {
 
       try {
         await client.execute(`
-        await client.execute(`
           CREATE TABLE IF NOT EXISTS ${database}.t_cadastro_aereo (
             id INT AUTO_INCREMENT PRIMARY KEY,
             cadastro_id VARCHAR(50) NOT NULL,
