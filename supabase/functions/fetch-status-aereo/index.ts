@@ -1416,7 +1416,10 @@ serve(async (req) => {
       const awb = (row['awb'] || '').trim();
 
       // 0. AWBs manualmente ocultos
-      if (HIDDEN_AWBS.has(awb)) return false;
+      if (HIDDEN_AWBS.has(awb)) {
+        if (awb.startsWith('047-3291')) console.log(`[visibility] ${awb}: HIDDEN`);
+        return false;
+      }
 
       // 1. Nunca mostrar DLV
       if (status === 'DLV' || status === 'DELIVERED') return false;
