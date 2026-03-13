@@ -67,12 +67,17 @@ export interface HapagEvent {
   facilityName?: string;
   vesselName?: string | null;
   vesselIMO?: string | null;
+  vesselFlag?: string | null;
+  vesselFlagName?: string | null;
   voyageNumber?: string | null;
   containerNo?: string;
   containerType?: string;
   emptyIndicator?: string;
   documentId?: string | null;
   documentType?: string | null;
+  description?: string | null;
+  statusCode?: string | null;
+  order?: number | null;
 }
 
 // Informações de container (campos da API Hapag-Lloyd)
