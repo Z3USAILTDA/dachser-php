@@ -470,7 +470,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
                 </TableRow>
               ) : paginatedData.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center py-12 text-[#aaaaaa]">
+                  <TableCell colSpan={14} className="text-center py-12 text-[#aaaaaa]">
                     {searchTerm ? `Nenhum resultado para "${searchTerm}"` : 'Nenhum dado disponível'}
                   </TableCell>
                 </TableRow>
