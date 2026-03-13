@@ -1439,6 +1439,8 @@ serve(async (req) => {
       '020-65055196', '865-14762381', '369-96183415', '045-13300626', '047-32916251',
       '074-04751843', '016-95200022', '087-08279331', '006-45285166', '047-35319384',
       '827-08279331',
+      // Batch removido via screenshot 2026-03-13
+      '045-13300781', '724-76422835', '045-21167510',
     ]);
 
     // AWBs com override manual NUNCA devem ser filtrados
@@ -1468,6 +1470,17 @@ serve(async (req) => {
 
       return true;
     });
+
+    // Mark AWBs with "NI" as "AWB Invalido"
+    for (const row of visibleRows) {
+      const awb = (row['awb'] || '').trim().toUpperCase();
+      if (awb === 'NI') {
+        row['awb'] = 'AWB Invalido';
+        row['último_status'] = 'ERRO';
+        row['status_info'] = 'AWB não informado no sistema';
+        row['tracking_failed'] = true;
+      }
+    }
 
     const filteredOut = processedRows.length - visibleRows.length;
     if (filteredOut > 0) {
