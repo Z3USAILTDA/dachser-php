@@ -3243,7 +3243,10 @@ serve(async (req) => {
           LIMIT 1000
         `);
         
-        const mawbList = (validAwbs || []).map((r: any) => r.awb).filter((m: string) => m && m.trim() !== '');
+        // AWBs manualmente excluídos da visualização CCT
+        const CCT_HIDDEN_AWBS = new Set(['057-58595305']);
+        
+        const mawbList = (validAwbs || []).map((r: any) => r.awb).filter((m: string) => m && m.trim() !== '' && !CCT_HIDDEN_AWBS.has(m));
         // Build status lookup from t_aereo_ws_firecrawl for JS-side merge
         // Helper: extract real DEP date from timeline_json
         function extractDepDateFromTimeline(timelineJson: any): string | null {
