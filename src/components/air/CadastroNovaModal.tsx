@@ -1,5 +1,6 @@
-import { useState, useCallback, useRef } from "react";
-import { FilePlus, Upload, Loader2, Save, Search, User, Calendar, RefreshCw, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, Plane, Package } from "lucide-react";
+import { useState, useCallback, useRef, useMemo } from "react";
+import { FilePlus, Upload, Loader2, Save, Search, User, Calendar, RefreshCw, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, Plane, Package, Copy, Check } from "lucide-react";
+import { copyToClipboard } from "@/utils/clipboard";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
