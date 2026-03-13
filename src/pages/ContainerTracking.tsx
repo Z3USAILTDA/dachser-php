@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Search, RefreshCw, Ship, Trash2, Mail, Check, ArrowLeft, Loader2, Anchor, AlertTriangle, HelpCircle, ChevronDown, ChevronUp, Package, Clock, Bell, Play, Database, Radar, RotateCcw, Sun, Moon, FileSpreadsheet, BoxIcon, ArrowLeftRight, Hash, Plus } from "lucide-react";
+import { Search, RefreshCw, Ship, Trash2, Mail, Check, ArrowLeft, Loader2, Anchor, AlertTriangle, HelpCircle, ChevronDown, ChevronUp, Package, Clock, Bell, Play, Database, Radar, RotateCcw, Sun, Moon, FileSpreadsheet, BoxIcon, ArrowLeftRight, Hash, Plus, FilePlus } from "lucide-react";
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -32,6 +32,7 @@ import Swal from 'sweetalert2';
 import { useTheme } from "@/hooks/useTheme";
 import { detectCarrierFromMbl, SHIPPING_LINE_INFO, ShippingLineCode, getTrackableCarriers, MBL_PREFIX_MAP, LCL_PREFIXES, ROUTE_FORMAT_PREFIXES, NUMERIC_MBL_INFO, INTERNAL_PREFIXES } from "@/lib/shippingLineMapping";
 import { Separator } from "@/components/ui/separator";
+import { CadastroMaritimoModal } from "@/components/sea/CadastroMaritimoModal";
 
 // Alias map for shipping_line values from DB → ShippingLineCode
 const SHIPPING_LINE_ALIAS_MAP: Record<string, ShippingLineCode> = {
@@ -473,6 +474,7 @@ const ContainerTracking = () => {
 
   // Admin modal state
   const [showAdminModal, setShowAdminModal] = useState(false);
+  const [cadastroMaritimoOpen, setCadastroMaritimoOpen] = useState(false);
 
   // LCL cadastro dialog state
   const [showLclDialog, setShowLclDialog] = useState(false);
@@ -2093,6 +2095,11 @@ const ContainerTracking = () => {
               ADM
             </button>}
           
+          {isAdmin && <button onClick={() => setCadastroMaritimoOpen(true)} className="px-3 py-1.5 rounded-full border border-[#ffc800]/50 flex items-center gap-1.5 bg-[#ffc800]/20 text-[#ffc800] hover:bg-[#ffc800]/30 transition font-medium text-xs uppercase tracking-wide" title="Novo Processo Marítimo">
+              <FilePlus className="w-3.5 h-3.5" />
+              Novo Processo
+            </button>}
+          
           <button onClick={() => navigate("/sea/tracking/notificacoes")} className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition" title="Regras de Notificação">
             <Bell className="w-4 h-4" />
           </button>
@@ -3434,6 +3441,8 @@ const ContainerTracking = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CadastroMaritimoModal open={cadastroMaritimoOpen} onOpenChange={setCadastroMaritimoOpen} onSuccess={() => fetchMblData()} />
     </div>;
 };
 export default ContainerTracking;
