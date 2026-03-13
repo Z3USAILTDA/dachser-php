@@ -2994,7 +2994,7 @@ const Index = () => {
                                         if (DISCREPANCY_AWBS.includes(awb.awb)) {
                                           return "Discrepância Peças";
                                         }
-                                        const STALENESS_AWBS = ["139-47195164", "139-47195142"];
+                                        const STALENESS_AWBS = ["139-47195164", "139-47195142", "020-22473334"];
                                         if (STALENESS_AWBS.includes(awb.awb)) {
                                           const lastDate = awb.last_event_date;
                                           if (lastDate) {
