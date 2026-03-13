@@ -188,7 +188,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
 
   // Mapeamento de código de status bruto → código IATA
   const statusMap: Record<string, string> = {
-    'DLV': 'DLV', 'DELIVERED': 'DLV',
+    'DLV': 'DLV', 'DELIVERED': 'DLV', 'DELIVERY': 'DLV',
     'DEP': 'DEP', 'DEPARTED': 'DEP',
     'ARR': 'ARR', 'ARRIVED': 'ARR',
     'RCF': 'RCF', 'RECEIVED FROM FLIGHT': 'RCF',
