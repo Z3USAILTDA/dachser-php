@@ -3366,6 +3366,13 @@ const Index = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Cadastro NOVA Modal */}
+      <CadastroNovaModal
+        open={cadastroNovaOpen}
+        onOpenChange={setCadastroNovaOpen}
+        onSuccess={fetchStatusAereoData}
+      />
     </div>
   );
 };
