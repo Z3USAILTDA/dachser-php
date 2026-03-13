@@ -1,4 +1,4 @@
-import { createClient } from "npm:mysql2@3.11.3/promise";
+import mysql from "npm:mysql2@3.11.3/promise";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 
 const corsHeaders = {
@@ -34,7 +34,7 @@ interface StuckAWB {
 }
 
 async function getConnection() {
-  const conn = await createClient({
+  const conn = await mysql.createConnection({
     host: Deno.env.get("MARIADB_HOST") || "",
     port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
     user: Deno.env.get("MARIADB_USER") || "",
