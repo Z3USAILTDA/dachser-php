@@ -2673,7 +2673,7 @@ const Index = () => {
                       const isAwbInvalid = awb.status === "AWB_INVALID" || awb.last_event === "AWB_INVALID";
                       const isFalhaConsulta = isErroStatus || isCompanyNotRegistered;
                       // AWBs críticos específicos com destaque vermelho piscante (inclui discrepância de peças)
-                      const CRITICAL_AWBS = ["045-21167274"];
+                      const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142"];
                       const isCriticalAwb = CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true;
 
                       return (
