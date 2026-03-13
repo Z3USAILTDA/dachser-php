@@ -8153,7 +8153,7 @@ serve(async (req) => {
       });
 
       try {
-        // Ensure table exists
+        // Ensure table exists + add new columns for retrocompatibility
         await client.execute(`
           CREATE TABLE IF NOT EXISTS ${database}.t_cadastro_maritimo (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -8196,6 +8196,38 @@ serve(async (req) => {
             created_by VARCHAR(100),
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            mode VARCHAR(10),
+            po_number VARCHAR(100),
+            green_light_date DATE,
+            booking_confirmed TINYINT(1) DEFAULT 0,
+            dep TINYINT(1) DEFAULT 0,
+            eta_ata_confirmed TINYINT(1) DEFAULT 0,
+            ec_merchant VARCHAR(255),
+            port_destination VARCHAR(255),
+            pre_alert_date DATE,
+            pre_alert_comexpert DATE,
+            dta TINYINT(1) DEFAULT 0,
+            dachser_trucking TINYINT(1) DEFAULT 0,
+            hbl_number VARCHAR(100),
+            master_number VARCHAR(100),
+            customer_order VARCHAR(255),
+            accrual TINYINT(1) DEFAULT 0,
+            courier VARCHAR(255),
+            oea_checklist TINYINT(1) DEFAULT 0,
+            remarks_1 TEXT,
+            remarks_2 TEXT,
+            consignee_expo VARCHAR(255),
+            port_origin VARCHAR(255),
+            drafts_available TINYINT(1) DEFAULT 0,
+            drafts_sent TINYINT(1) DEFAULT 0,
+            deadline_draft_vgm DATETIME,
+            deadline_load DATE,
+            free_time VARCHAR(100),
+            cargo_departed TINYINT(1) DEFAULT 0,
+            pre_alert_sent TINYINT(1) DEFAULT 0,
+            d_term VARCHAR(10),
+            pod_available TINYINT(1) DEFAULT 0,
+            dn_available TINYINT(1) DEFAULT 0,
             UNIQUE KEY uk_cadastro_id (cadastro_id),
             INDEX idx_bl (bl_number),
             INDEX idx_clerk (clerk),
@@ -8203,6 +8235,45 @@ serve(async (req) => {
             INDEX idx_created (created_at)
           ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
         `);
+
+        // ALTER TABLE for retrocompatibility with existing tables
+        const alterCols = [
+          "ADD COLUMN IF NOT EXISTS mode VARCHAR(10)",
+          "ADD COLUMN IF NOT EXISTS po_number VARCHAR(100)",
+          "ADD COLUMN IF NOT EXISTS green_light_date DATE",
+          "ADD COLUMN IF NOT EXISTS booking_confirmed TINYINT(1) DEFAULT 0",
+          "ADD COLUMN IF NOT EXISTS dep TINYINT(1) DEFAULT 0",
+          "ADD COLUMN IF NOT EXISTS eta_ata_confirmed TINYINT(1) DEFAULT 0",
+          "ADD COLUMN IF NOT EXISTS ec_merchant VARCHAR(255)",
+          "ADD COLUMN IF NOT EXISTS port_destination VARCHAR(255)",
+          "ADD COLUMN IF NOT EXISTS pre_alert_date DATE",
+          "ADD COLUMN IF NOT EXISTS pre_alert_comexpert DATE",
+          "ADD COLUMN IF NOT EXISTS dta TINYINT(1) DEFAULT 0",
+          "ADD COLUMN IF NOT EXISTS dachser_trucking TINYINT(1) DEFAULT 0",
+          "ADD COLUMN IF NOT EXISTS hbl_number VARCHAR(100)",
+          "ADD COLUMN IF NOT EXISTS master_number VARCHAR(100)",
+          "ADD COLUMN IF NOT EXISTS customer_order VARCHAR(255)",
+          "ADD COLUMN IF NOT EXISTS accrual TINYINT(1) DEFAULT 0",
+          "ADD COLUMN IF NOT EXISTS courier VARCHAR(255)",
+          "ADD COLUMN IF NOT EXISTS oea_checklist TINYINT(1) DEFAULT 0",
+          "ADD COLUMN IF NOT EXISTS remarks_1 TEXT",
+          "ADD COLUMN IF NOT EXISTS remarks_2 TEXT",
+          "ADD COLUMN IF NOT EXISTS consignee_expo VARCHAR(255)",
+          "ADD COLUMN IF NOT EXISTS port_origin VARCHAR(255)",
+          "ADD COLUMN IF NOT EXISTS drafts_available TINYINT(1) DEFAULT 0",
+          "ADD COLUMN IF NOT EXISTS drafts_sent TINYINT(1) DEFAULT 0",
+          "ADD COLUMN IF NOT EXISTS deadline_draft_vgm DATETIME",
+          "ADD COLUMN IF NOT EXISTS deadline_load DATE",
+          "ADD COLUMN IF NOT EXISTS free_time VARCHAR(100)",
+          "ADD COLUMN IF NOT EXISTS cargo_departed TINYINT(1) DEFAULT 0",
+          "ADD COLUMN IF NOT EXISTS pre_alert_sent TINYINT(1) DEFAULT 0",
+          "ADD COLUMN IF NOT EXISTS d_term VARCHAR(10)",
+          "ADD COLUMN IF NOT EXISTS pod_available TINYINT(1) DEFAULT 0",
+          "ADD COLUMN IF NOT EXISTS dn_available TINYINT(1) DEFAULT 0",
+        ];
+        for (const col of alterCols) {
+          try { await client.execute(`ALTER TABLE ${database}.t_cadastro_maritimo ${col}`); } catch {}
+        }
 
         const result = await client.execute(`
           INSERT INTO ${database}.t_cadastro_maritimo (
@@ -8214,8 +8285,16 @@ serve(async (req) => {
             nature_of_goods, hs_code, gross_weight_kg, volume_cbm, pieces, packaging,
             freight_charges, freight_payment, service_type, total_prepaid, total_collect,
             num_original_bls, shipped_on_board_date, place_date_issue, issued_by,
-            clerk, clerk_email, etd, eta, created_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            clerk, clerk_email, etd, eta, created_by,
+            mode, po_number, green_light_date, booking_confirmed, dep, eta_ata_confirmed,
+            ec_merchant, port_destination, pre_alert_date, pre_alert_comexpert,
+            dta, dachser_trucking, hbl_number, master_number, customer_order,
+            accrual, courier, oea_checklist, remarks_1, remarks_2,
+            consignee_expo, port_origin, drafts_available, drafts_sent,
+            deadline_draft_vgm, deadline_load, free_time,
+            cargo_departed, pre_alert_sent, d_term, pod_available, dn_available
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           d.cadastro_id, d.bl_number, d.shipper_name, d.shipper_address,
           d.consignee_nome, d.consignee_cnpj, d.consignee_customer_number,
@@ -8226,6 +8305,14 @@ serve(async (req) => {
           d.freight_charges, d.freight_payment, d.service_type, d.total_prepaid || null, d.total_collect || null,
           d.num_original_bls || null, d.shipped_on_board_date, d.place_date_issue, d.issued_by,
           d.clerk, d.clerk_email, d.etd || null, d.eta || null, d.created_by,
+          d.mode || null, d.po_number || null, d.green_light_date || null,
+          d.booking_confirmed ? 1 : 0, d.dep ? 1 : 0, d.eta_ata_confirmed ? 1 : 0,
+          d.ec_merchant || null, d.port_destination || null, d.pre_alert_date || null, d.pre_alert_comexpert || null,
+          d.dta ? 1 : 0, d.dachser_trucking ? 1 : 0, d.hbl_number || null, d.master_number || null, d.customer_order || null,
+          d.accrual ? 1 : 0, d.courier || null, d.oea_checklist ? 1 : 0, d.remarks_1 || null, d.remarks_2 || null,
+          d.consignee_expo || null, d.port_origin || null, d.drafts_available ? 1 : 0, d.drafts_sent ? 1 : 0,
+          d.deadline_draft_vgm || null, d.deadline_load || null, d.free_time || null,
+          d.cargo_departed ? 1 : 0, d.pre_alert_sent ? 1 : 0, d.d_term || null, d.pod_available ? 1 : 0, d.dn_available ? 1 : 0,
         ]);
 
         await client.close();
