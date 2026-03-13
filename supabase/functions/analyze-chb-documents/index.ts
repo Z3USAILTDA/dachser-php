@@ -982,8 +982,9 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
     3. Confirme que o STATUS da linha CORRESPONDE ao ícone da observação
     4. Se não corresponder, CORRIJA a tabela antes de gerar a saída
     5. CONFIRME que "Valor Mercadoria" está com ✅ na tabela (SEMPRE conforme!)
-    6. CONFIRME que observações sobre Valor Mercadoria usam ℹ️ (informativo), NUNCA 🟨 ou 🔴
-    7. CONFIRME que "Valor Total Frete" só contém valores de linhas EXPLICITAMENTE rotuladas como frete
+     6. CONFIRME que observações sobre Valor Mercadoria usam ℹ️ (informativo), NUNCA 🟨 ou 🔴
+     7. CONFIRME que "Valor Total Frete" só contém valores de linhas EXPLICITAMENTE rotuladas como frete
+     8. CONFIRME consistência entre Incoterm e tipo de frete (Prepaid/Collect) — se BL é Prepaid mas Incoterm é FCA/EXW/FOB → 🔴 CRÍTICO
     
     Esta verificação é OBRIGATÓRIA. Inconsistências entre tabela e observações
     indicam erro no processamento e devem ser corrigidas antes da saída final.
