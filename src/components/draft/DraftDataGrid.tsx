@@ -54,6 +54,14 @@ interface DraftDataGridProps {
 
 const ITEMS_PER_PAGE = 15;
 const BATCH_SIZE = 5;
+
+const detectCarrier = (mblId: string): { name: string; color: string } => {
+  const id = mblId.toUpperCase();
+  if (id.includes('MEDU') || id.includes('MSC')) return { name: 'MSC', color: '#00B4D8' };
+  if (id.includes('ONEY') || id.includes('ONE')) return { name: 'ONE', color: '#FF6B9D' };
+  if (id.includes('HLC')) return { name: 'HAPAG', color: '#ffc800' };
+  return { name: '-', color: '#888' };
+};
 const BATCH_DELAY_MS = 35000;
 
 export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStatusFilterChange }: DraftDataGridProps) => {
