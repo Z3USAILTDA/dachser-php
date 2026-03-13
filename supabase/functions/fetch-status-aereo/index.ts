@@ -1289,8 +1289,17 @@ serve(async (req) => {
     const now = Date.now();
     const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
 
+    // AWBs manualmente excluídos da visualização
+    const HIDDEN_AWBS = new Set([
+      '549-43063871',
+    ]);
+
     const visibleRows = processedRows.filter((row: any) => {
       const status = (row['último_status'] || '').toUpperCase().trim();
+      const awb = (row['awb'] || '').trim();
+
+      // 0. AWBs manualmente ocultos
+      if (HIDDEN_AWBS.has(awb)) return false;
 
       // 1. Nunca mostrar DLV
       if (status === 'DLV' || status === 'DELIVERED') return false;
