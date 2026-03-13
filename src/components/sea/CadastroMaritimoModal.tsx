@@ -258,6 +258,39 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
     setIsSaving(false);
   };
 
+  const [copied, setCopied] = useState(false);
+
+  const formatDateForTitle = (dateStr: string) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
+  };
+
+  const preAlertTitle = useMemo(() => {
+    const parts: string[] = ['Dachser Pre-Alert SE'];
+    if (form.po_number) parts.push(`PO: ${form.po_number};`);
+    if (form.consignee_customer_number) parts.push(form.consignee_customer_number);
+    if (form.hbl_number) parts.push(`HBL: ${form.hbl_number}`);
+    if (form.master_number) parts.push(`MBL: ${form.master_number}`);
+    const consignee = form.mode === 'expo' ? form.consignee_expo : form.consignee_nome;
+    if (consignee) parts.push(consignee);
+    if (form.mode === 'expo' && form.consignee_expo) parts.push(`Consignee: ${form.consignee_expo}`);
+    if (form.mode === 'impo' && form.consignee_nome) parts.push(`Consignee: ${form.consignee_nome}`);
+    const port = form.mode === 'impo' ? form.port_destination : form.port_origin;
+    if (port) parts.push(port);
+    const etdFmt = formatDateForTitle(form.etd);
+    if (etdFmt) parts.push(`ETD: ${etdFmt}`);
+    const etaFmt = formatDateForTitle(form.eta);
+    if (etaFmt) parts.push(`ETA: ${etaFmt}`);
+    return parts.join(' - ');
+  }, [form.po_number, form.consignee_customer_number, form.hbl_number, form.master_number, form.consignee_nome, form.consignee_expo, form.port_destination, form.port_origin, form.etd, form.eta, form.mode]);
+
+  const handleCopyTitle = async () => {
+    const ok = await copyToClipboard(preAlertTitle);
+    if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); toast.success("Título copiado!"); }
+  };
+
   const inputCls = "h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white placeholder:text-[#666]";
   const labelCls = "text-xs text-[#aaa] mb-1 block";
   const checkCls = "text-xs cursor-pointer text-[#ccc]";
