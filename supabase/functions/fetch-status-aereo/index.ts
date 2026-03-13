@@ -211,7 +211,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     'FFM': 'FFM',
     'AUD': 'AUD',
     'RCT': 'RCT',
-    'AWR': 'AWR', 'DOCUMENTS RECEIVED': 'AWR',
+    'AWR': 'AWR', 'DOCUMENTS RECEIVED': 'RCD',
   };
 
   // Known IATA codes for extraction from description prefix (e.g. "DIS - GRU, ...")
