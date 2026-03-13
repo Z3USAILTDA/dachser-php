@@ -57,10 +57,10 @@ const BATCH_SIZE = 5;
 
 const detectCarrier = (mblId: string): { name: string; color: string } => {
   const id = mblId.toUpperCase();
-  if (id.includes('MEDU') || id.includes('MSC')) return { name: 'MSC', color: '#00B4D8' };
-  if (id.includes('ONEY') || id.includes('ONE')) return { name: 'ONE', color: '#FF6B9D' };
-  if (id.includes('HLC')) return { name: 'HAPAG', color: '#ffc800' };
-  return { name: '-', color: '#888' };
+  if (id.startsWith('MEDU') || id.startsWith('MSC')) return { name: 'MSC', color: '#00B4D8' };
+  if (id.startsWith('ONEY')) return { name: 'ONE', color: '#FF6B9D' };
+  if (id.startsWith('HLC')) return { name: 'HAPAG', color: '#ffc800' };
+  return { name: 'OUTRO', color: '#888' };
 };
 const BATCH_DELAY_MS = 35000;
 
