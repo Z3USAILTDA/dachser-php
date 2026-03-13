@@ -521,7 +521,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
               ) : (
                 paginatedData.map((item, index) => (
                   <TableRow 
-                    key={item.mbl_id} 
+                    key={`${item.mbl_id}-${(currentPage - 1) * ITEMS_PER_PAGE + index}`}
                     className={`border-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.03)] ${index % 2 === 0 ? "bg-[rgba(255,255,255,0.02)]" : ""}`}
                   >
                     <TableCell className="text-[#888] text-[0.85rem]">
