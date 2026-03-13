@@ -322,3 +322,9 @@ verify_jwt = false
 
 [functions.hapag-batch-discover]
 verify_jwt = false
+
+[functions.draft-track-msc]
+verify_jwt = false
+
+[functions.draft-track-one]
+verify_jwt = false
