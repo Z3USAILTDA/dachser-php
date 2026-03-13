@@ -2,6 +2,7 @@ import { ChbApprovedHistory } from '@/types/chb';
 import { stepTitles } from '@/data/chbMocks';
 import { Clock, Copy, ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
+import { copyHtmlAsText } from '@/utils/clipboard';
 
 interface ChbHistoryPanelProps {
   stepId: number;
