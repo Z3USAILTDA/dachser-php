@@ -394,7 +394,7 @@ function extractLastEventDescription(timelineJson: string | null, etdStr?: strin
       'DEP': 4, 'TFD': 4,
       'RCT': 5, 'TGC': 5,
       'RCF': 6, 'CRC': 6,
-      'AWD': 7, 'AWR': 7,
+      'AWD': 7, 'AWR': 7, 'RCD': 7,
       'NFD': 8,
       'DLV': 9, 'POD': 9,
       'DIS': 3, 'OFLD': 3,
