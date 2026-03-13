@@ -55,9 +55,12 @@ interface DraftDataGridProps {
 const ITEMS_PER_PAGE = 15;
 const BATCH_SIZE = 5;
 
-const detectCarrier = (mblId: string): { name: string; color: string } => {
-  const id = mblId.toUpperCase();
-  if (id.startsWith('MEDU') || id.startsWith('MSC')) return { name: 'MSC', color: '#00B4D8' };
+type CarrierName = 'HAPAG' | 'MSC' | 'ONE' | 'OUTRO';
+type CarrierFilter = 'ALL' | 'HAPAG' | 'MSC' | 'ONE';
+
+const detectCarrier = (mblId: string): { name: CarrierName; color: string } => {
+  const id = mblId.toUpperCase().trim().replace(/^[^A-Z0-9]+/, '');
+  if (id.startsWith('MEDU') || id.startsWith('MSC') || id.startsWith('EBKG')) return { name: 'MSC', color: '#00B4D8' };
   if (id.startsWith('ONEY')) return { name: 'ONE', color: '#FF6B9D' };
   if (id.startsWith('HLC')) return { name: 'HAPAG', color: '#ffc800' };
   return { name: 'OUTRO', color: '#888' };
@@ -73,7 +76,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsData, setDetailsData] = useState<any>(null);
   const [processingMBL, setProcessingMBL] = useState<string | null>(null);
-  const [carrierFilter, setCarrierFilter] = useState<string | null>(null);
+  const [carrierFilter, setCarrierFilter] = useState<CarrierFilter>('ALL');
 
   // Carrier stats
   const carrierStats = useMemo(() => {
@@ -85,7 +88,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
 
   // Data filtered by carrier
   const carrierFilteredData = useMemo(() => {
-    if (!carrierFilter) return data;
+    if (carrierFilter === 'ALL') return data;
     return data.filter(d => detectCarrier(d.mbl_id).name === carrierFilter);
   }, [data, carrierFilter]);
 
