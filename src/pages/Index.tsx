@@ -2675,7 +2675,7 @@ const Index = () => {
                       const isAwbInvalid = awb.status === "AWB_INVALID" || awb.last_event === "AWB_INVALID" || awb.last_event === "NI" || (awb['último_status'] || '').toUpperCase() === 'NI';
                       const isFalhaConsulta = isErroStatus || isCompanyNotRegistered;
                       // AWBs críticos específicos com destaque vermelho piscante (inclui discrepância de peças)
-                       const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080", "020-22473334"];
+                       const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "020-22473334"];
                       const isCriticalAwb = CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.force_critical === true;
 
                       return (
