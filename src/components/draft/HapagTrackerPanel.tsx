@@ -21,14 +21,39 @@ interface HapagTrackerPanelProps {
 }
 
 type SearchType = 'booking' | 'BL' | 'container';
+type Carrier = 'auto' | 'hapag' | 'msc' | 'one';
+
+const CARRIER_LABELS: Record<Carrier, string> = {
+  auto: 'Auto-detectar',
+  hapag: 'Hapag-Lloyd',
+  msc: 'MSC',
+  one: 'ONE',
+};
+
+function detectCarrier(value: string): 'hapag' | 'msc' | 'one' {
+  const upper = value.trim().toUpperCase();
+  if (upper.startsWith('MEDU') || upper.startsWith('EBKG') || upper.startsWith('MSC')) return 'msc';
+  if (upper.startsWith('ONEY')) return 'one';
+  return 'hapag';
+}
+
+function getEdgeFunctionName(carrier: 'hapag' | 'msc' | 'one'): string {
+  switch (carrier) {
+    case 'msc': return 'draft-track-msc';
+    case 'one': return 'draft-track-one';
+    default: return 'draft-track-hapag-multi';
+  }
+}
 
 export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
   const [searchType, setSearchType] = useState<SearchType>('booking');
-  const [searchValue, setSearchValue] = useState("14387297");
+  const [searchValue, setSearchValue] = useState("");
+  const [carrier, setCarrier] = useState<Carrier>('auto');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [result, setResult] = useState<TrackingApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [detectedCarrier, setDetectedCarrier] = useState<'hapag' | 'msc' | 'one' | null>(null);
 
   const handleSearch = async () => {
     if (!searchValue.trim()) {
@@ -40,8 +65,12 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
     setError(null);
     setResult(null);
 
+    const resolvedCarrier = carrier === 'auto' ? detectCarrier(searchValue) : carrier;
+    setDetectedCarrier(resolvedCarrier);
+    const fnName = getEdgeFunctionName(resolvedCarrier);
+
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('draft-track-hapag-multi', {
+      const { data, error: fnError } = await supabase.functions.invoke(fnName, {
         body: { searchType, searchValue: searchValue.trim() }
       });
 
@@ -49,7 +78,7 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
 
       if (data?.success) {
         setResult(data as TrackingApiResponse);
-        toast.success('Consulta realizada com sucesso');
+        toast.success(`Consulta ${CARRIER_LABELS[resolvedCarrier]} realizada com sucesso`);
       } else {
         setError(data?.error || 'Erro desconhecido');
         toast.error(data?.error || 'Erro ao consultar');
@@ -92,7 +121,8 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
             etd: result.bookingInfo.etd,
             eta: result.bookingInfo.eta,
             status_armador: result.bookingInfo.documentStatus,
-            transaction_id: result.apiMetadata?.transactionId
+            transaction_id: result.apiMetadata?.transactionId,
+            carrier: detectedCarrier?.toUpperCase() || 'HAPAG',
           }
         }
       });
@@ -125,15 +155,31 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
     }
   };
 
-  // Stats from results
-  const containersCount = result?.containers?.length || 0;
-  const inTransitCount = result?.containers?.filter(c => c.status?.toLowerCase().includes('transit'))?.length || 0;
-  const deliveredCount = result?.containers?.filter(c => c.status?.toLowerCase().includes('gate out') || c.status?.toLowerCase().includes('delivered'))?.length || 0;
-  const alertsCount = result?.containers?.filter(c => c.status?.toLowerCase().includes('hold') || c.status?.toLowerCase().includes('exception'))?.length || 0;
-
   return (
     <div className="space-y-6">
-      {/* Search Input - Dachser Style */}
+      {/* Carrier Selector */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {(Object.keys(CARRIER_LABELS) as Carrier[]).map((c) => (
+          <button
+            key={c}
+            onClick={() => setCarrier(c)}
+            className={`px-4 py-1.5 rounded-full text-[0.78rem] font-semibold transition-all ${
+              carrier === c
+                ? 'bg-[#ffc800] text-black shadow-[0_0_14px_rgba(255,200,0,0.35)]'
+                : 'bg-[rgba(255,255,255,0.06)] text-[#aaa] border border-[rgba(255,255,255,0.12)] hover:border-[rgba(255,200,0,0.4)] hover:text-white'
+            }`}
+          >
+            {CARRIER_LABELS[c]}
+          </button>
+        ))}
+        {detectedCarrier && carrier === 'auto' && result && (
+          <span className="text-[0.72rem] text-[#888] ml-2">
+            → Detectado: <strong className="text-[#ffc800]">{CARRIER_LABELS[detectedCarrier]}</strong>
+          </span>
+        )}
+      </div>
+
+      {/* Search Input */}
       <div className="flex flex-col sm:flex-row items-center gap-3">
         <Select value={searchType} onValueChange={(v) => setSearchType(v as SearchType)}>
           <SelectTrigger className="w-[140px] h-10 rounded-full bg-[#13141a] border-[rgba(255,255,255,0.14)] text-[0.82rem] text-white">
@@ -188,7 +234,7 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
         </Button>
       </div>
 
-      {/* Error State - Dachser Style */}
+      {/* Error State */}
       {error && (
         <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 flex items-center gap-3 backdrop-blur-[18px]">
           <AlertCircle className="h-5 w-5 text-rose-400" />
@@ -199,23 +245,19 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
       {/* Results */}
       {result && result.bookingInfo && (
         <div className="space-y-4">
-          {/* Booking Info Card */}
           <BookingResultCard 
             bookingInfo={result.bookingInfo} 
             apiMetadata={result.apiMetadata}
           />
 
-          {/* Containers Table */}
           {result.containers && result.containers.length > 0 && (
             <ContainersTable containers={result.containers} />
           )}
 
-          {/* Events Timeline */}
           {result.events && result.events.length > 0 && (
             <EventsTable events={result.events as HapagEvent[]} />
           )}
 
-          {/* Save Button - Dachser Style */}
           <div className="flex justify-end">
             <Button 
               onClick={handleSave} 
@@ -233,7 +275,7 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
         </div>
       )}
 
-      {/* Empty State - Dachser Style */}
+      {/* Empty State */}
       {!isLoading && !result && !error && (
         <div 
           className="rounded-2xl py-20 text-center backdrop-blur-[18px]"
@@ -245,10 +287,10 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
         >
           <Ship className="h-16 w-16 mx-auto mb-4 text-[#ffc800]/50" />
           <p className="text-[#888] text-[0.9rem]">
-            Selecione o tipo de busca e digite o número para consultar
+            Selecione o armador e digite o número para consultar
           </p>
           <p className="text-[#666] text-[0.78rem] mt-2">
-            Booking, BL ou Container Number
+            Hapag-Lloyd • MSC • ONE — Booking, BL ou Container
           </p>
         </div>
       )}
