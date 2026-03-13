@@ -1296,7 +1296,13 @@ serve(async (req) => {
     // Overrides manuais para AWBs específicos com problemas de resolução automática
     const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean; force_timeline?: any[]; force_critical?: boolean; last_event_date?: string }> = {
       '057-03764530': { skip_first_event: true }, // Último evento incorreto, usar penúltimo
-      '047-32916273': { status: 'DEP', status_info: 'Boarded the flight on Helsinki (Vantaa) - Flight TP7004S, 22 vols, 2658.9kg, HEL→FRA 13/03 18:00, ETA 15/03 11:00' },
+      '047-32916273': { 
+        status: 'DEP', 
+        status_info: 'Boarded the flight on Helsinki (Vantaa) - Flight TP7004S, 22 vols, 2658.9kg, HEL→FRA 13/03 18:00, ETA 15/03 11:00',
+        force_timeline: [
+          { status: 'DEP', description: 'Boarded the flight on Helsinki (Vantaa) - Flight TP7004S, 22 vols, 2658.9kg, HEL→FRA 13/03 18:00, ETA 15/03 11:00', date: '13 MAR 2026 18:00', pieces: '22', weight: '2658.9 kg' }
+        ]
+      },
       '020-65055410': { force_nfd: true, status: 'NFD' }, // Considerar NFD como mais recente
       '996-14389491': { status: 'NIF', status_info: 'Sem informação na companhia aérea' },
       '577-11063080': { status: 'DEP' }, // Último evento na timeline é DEP
