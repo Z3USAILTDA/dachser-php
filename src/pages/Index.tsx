@@ -592,6 +592,7 @@ const Index = () => {
           last_event_date: item.last_event_date || null,
           in_transit: item.in_transit || false,
           tracking_failed: item.tracking_failed || false,
+          is_ground_transport: item.is_ground_transport || false,
         }));
 
         const deduplicatedData = convertedData.reduce((acc: AWBData[], current: AWBData) => {
