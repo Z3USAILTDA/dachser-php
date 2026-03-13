@@ -7814,6 +7814,7 @@ serve(async (req) => {
 
       try {
         await client.execute(`
+        await client.execute(`
           CREATE TABLE IF NOT EXISTS ${database}.t_cadastro_aereo (
             id INT AUTO_INCREMENT PRIMARY KEY,
             cadastro_id VARCHAR(50) NOT NULL,
@@ -7862,6 +7863,21 @@ serve(async (req) => {
             clerk_email VARCHAR(255),
             etd DATETIME,
             eta DATETIME,
+            mode VARCHAR(10),
+            po_number VARCHAR(100),
+            green_light_date DATE,
+            pickup_date DATE,
+            service_level VARCHAR(50),
+            cct_transmitido TINYINT(1),
+            airport_destination VARCHAR(100),
+            wh_treatment VARCHAR(255),
+            pre_alert_date DATE,
+            customer_order VARCHAR(255),
+            oea_checklist TINYINT(1),
+            d_term VARCHAR(10),
+            pre_alert_sent TINYINT(1),
+            cargo_departed TINYINT(1),
+            pod_dn_available TINYINT(1),
             created_by VARCHAR(100),
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -7872,8 +7888,27 @@ serve(async (req) => {
             INDEX idx_created (created_at)
           ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
         `);
+
+        // ALTER TABLE for existing tables — add new columns if missing
+        const newCols = [
+          "mode VARCHAR(10)", "po_number VARCHAR(100)", "green_light_date DATE", "pickup_date DATE",
+          "service_level VARCHAR(50)", "cct_transmitido TINYINT(1)", "airport_destination VARCHAR(100)",
+          "wh_treatment VARCHAR(255)", "pre_alert_date DATE", "customer_order VARCHAR(255)",
+          "oea_checklist TINYINT(1)", "d_term VARCHAR(10)", "pre_alert_sent TINYINT(1)",
+          "cargo_departed TINYINT(1)", "pod_dn_available TINYINT(1)"
+        ];
+        for (const colDef of newCols) {
+          const colName = colDef.split(' ')[0];
+          try {
+            await client.execute(`ALTER TABLE ${database}.t_cadastro_aereo ADD COLUMN ${colDef} NULL`);
+            console.log(`[setup] Added column ${colName}`);
+          } catch (_e: any) {
+            // Column already exists — ignore
+          }
+        }
+
         await client.close();
-        return new Response(JSON.stringify({ success: true, message: 't_cadastro_aereo created/verified' }), {
+        return new Response(JSON.stringify({ success: true, message: 't_cadastro_aereo created/verified with new columns' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       } catch (e: any) {
