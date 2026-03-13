@@ -238,6 +238,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
   // Regex para extrair código IATA de descrições livres (full-word patterns)
   const descPatterns: Array<[RegExp, string]> = [
     [/\bdelivered\b/i, 'DLV'],
+    [/^delivery$/i, 'DLV'],
     [/^\(AWA\)/i, 'AWD'],
     [/\bdocuments?\s+available\b/i, 'AWD'],
     [/\barrived?\b/i, 'ARR'],
