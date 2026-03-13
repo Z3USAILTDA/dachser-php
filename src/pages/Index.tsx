@@ -138,6 +138,7 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     "055": (iata, awb) => `https://booking.ita-airways-cargo.com/trackAndTrace?awbno=${iata}${awb}`,
     "057": (iata, awb) => `https://www.afklcargo.com/mycargo/shipment/detail/${iata}-${awb}`,
     "074": (iata, awb) => `https://www.afklcargo.com/mycargo/shipment/detail/${iata}-${awb}`,
+    "083": (iata, awb) => `https://www.cma-cgm.com/ebusiness/tracking/air/${iata}${awb}`,
     "075": (iata, awb) => `https://api.tracking.iagcargo.com/tracking/${iata}-${awb}`,
     "125": (iata, awb) => `https://ui.tracking.iagcargo.com/en/${iata}-${awb}?frame=true&loggedIn=false`,
     "139": (iata, awb) => `https://amcargo.aeromexico.com/seguimiento/resultado/${iata}-${awb}`,
@@ -156,6 +157,7 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
       `https://offerandorder.swissworldcargo.com/app/offerandorder/#/shipments/list?type=D&values=${iata}${awb}`,
     "729": (iata, awb) => `https://cargoapps.aviancacargo.com/#/e-tracking/details/${iata}-${awb}`,
     "881": (iata, awb) => `https://www.condor.com/eu/en/cargo/tracking.jsp?awb=${iata}${awb}`,
+    "127": (iata, awb) => `https://golfreteselogistica.gollog.com/rastreamento?awb=${iata}${awb}`,
     "996": (iata, awb) => `https://uxtracking.com/tracking.asp?prefix=${iata}&Serial=${awb}`,
     "235": (iata, awb) =>
       `https://www.turkishcargo.com/en/online-services/shipment-tracking?quick=True&awbInput=${iata}-${awb}`,
