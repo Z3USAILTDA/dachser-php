@@ -1471,6 +1471,17 @@ serve(async (req) => {
       return true;
     });
 
+    // Mark AWBs with "NI" as "AWB Invalido"
+    for (const row of visibleRows) {
+      const awb = (row['awb'] || '').trim().toUpperCase();
+      if (awb === 'NI') {
+        row['awb'] = 'AWB Invalido';
+        row['último_status'] = 'ERRO';
+        row['status_info'] = 'AWB não informado no sistema';
+        row['tracking_failed'] = true;
+      }
+    }
+
     const filteredOut = processedRows.length - visibleRows.length;
     if (filteredOut > 0) {
       console.log(`Visibility filter: removed ${filteredOut} rows (DLV or expired ARR-DESTINO)`);
