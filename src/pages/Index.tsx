@@ -206,7 +206,7 @@ const getStatusCode = (lastEvent: string | null): string => {
     return "Processando";
   }
 
-  if (lastEvent === "AWB_INVALID") {
+  if (lastEvent === "AWB_INVALID" || lastEvent === "NI") {
     return "AWB Inválido";
   }
 
