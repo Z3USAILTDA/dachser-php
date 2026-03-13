@@ -32,6 +32,7 @@ import Swal from 'sweetalert2';
 import { useTheme } from "@/hooks/useTheme";
 import { detectCarrierFromMbl, SHIPPING_LINE_INFO, ShippingLineCode, getTrackableCarriers, MBL_PREFIX_MAP, LCL_PREFIXES, ROUTE_FORMAT_PREFIXES, NUMERIC_MBL_INFO, INTERNAL_PREFIXES } from "@/lib/shippingLineMapping";
 import { Separator } from "@/components/ui/separator";
+import { CadastroMaritimoModal } from "@/components/sea/CadastroMaritimoModal";
 
 // Alias map for shipping_line values from DB → ShippingLineCode
 const SHIPPING_LINE_ALIAS_MAP: Record<string, ShippingLineCode> = {
