@@ -246,7 +246,9 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Erro ao salvar");
 
-      toast.success("Cadastro marítimo salvo!", { description: `ID: ${cadastroId}` });
+      // Auto-copy pre-alert title
+      await copyToClipboard(preAlertTitle);
+      toast.success("Cadastro marítimo salvo! Título Pre-Alert copiado.", { description: `ID: ${cadastroId}` });
       setForm({ ...emptySeaForm });
       setConsigneeSearch("");
       setClerkSearch("");
