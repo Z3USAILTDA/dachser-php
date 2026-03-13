@@ -73,19 +73,34 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsData, setDetailsData] = useState<any>(null);
   const [processingMBL, setProcessingMBL] = useState<string | null>(null);
+  const [carrierFilter, setCarrierFilter] = useState<string | null>(null);
 
-  // Calculate stats
-  const stats = useMemo(() => {
-    const completed = data.filter(d => d.status === 'Completed').length;
-    const inTransit = data.filter(d => d.status === 'In Progress').length;
-    const pending = data.filter(d => d.status === 'Pending' || d.status === 'Nunca Consultado').length;
-    const errors = data.filter(d => d.status === 'Error').length;
-    return { total: data.length, completed, inTransit, pending, errors };
+  // Carrier stats
+  const carrierStats = useMemo(() => {
+    const hapag = data.filter(d => detectCarrier(d.mbl_id).name === 'HAPAG').length;
+    const msc = data.filter(d => detectCarrier(d.mbl_id).name === 'MSC').length;
+    const one = data.filter(d => detectCarrier(d.mbl_id).name === 'ONE').length;
+    return { hapag, msc, one };
   }, [data]);
+
+  // Data filtered by carrier
+  const carrierFilteredData = useMemo(() => {
+    if (!carrierFilter) return data;
+    return data.filter(d => detectCarrier(d.mbl_id).name === carrierFilter);
+  }, [data, carrierFilter]);
+
+  // Calculate stats from carrier-filtered data
+  const stats = useMemo(() => {
+    const completed = carrierFilteredData.filter(d => d.status === 'Completed').length;
+    const inTransit = carrierFilteredData.filter(d => d.status === 'In Progress').length;
+    const pending = carrierFilteredData.filter(d => d.status === 'Pending' || d.status === 'Nunca Consultado').length;
+    const errors = carrierFilteredData.filter(d => d.status === 'Error').length;
+    return { total: carrierFilteredData.length, completed, inTransit, pending, errors };
+  }, [carrierFilteredData]);
 
   // Filter data based on search term and status filter
   const filteredData = useMemo(() => {
-    let filtered = data;
+    let filtered = carrierFilteredData;
     
     // Apply status filter
     if (statusFilter) {
@@ -96,7 +111,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
       }
     }
     
-    // Apply search filter (including shipper)
+    // Apply search filter
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(item => 
@@ -108,7 +123,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
       );
     }
     
-    // Sort: filled rows first (with trackingData), then by MBL
+    // Sort: filled rows first
     filtered = [...filtered].sort((a, b) => {
       const aHasData = a.trackingData !== null ? 1 : 0;
       const bHasData = b.trackingData !== null ? 1 : 0;
@@ -117,7 +132,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
     });
     
     return filtered;
-  }, [data, searchTerm, statusFilter]);
+  }, [carrierFilteredData, searchTerm, statusFilter]);
 
   // Paginate data
   const paginatedData = useMemo(() => {
@@ -371,7 +386,32 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
         </Card>
       </div>
 
-      {/* Actions Bar */}
+      {/* Carrier Filter Chips */}
+      <div className="flex items-center gap-2">
+        <span className="text-[0.75rem] text-[#888] uppercase tracking-wider mr-1">Armador:</span>
+        {[
+          { key: null, label: 'Todos', count: data.length, color: 'hsl(var(--info))' },
+          { key: 'HAPAG', label: 'Hapag-Lloyd', count: carrierStats.hapag, color: '#ffc800' },
+          { key: 'MSC', label: 'MSC', count: carrierStats.msc, color: '#00B4D8' },
+          { key: 'ONE', label: 'ONE', count: carrierStats.one, color: '#FF6B9D' },
+        ].map((c) => (
+          <button
+            key={c.label}
+            onClick={() => { setCarrierFilter(c.key); setCurrentPage(1); }}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[0.78rem] font-medium transition-all border ${
+              carrierFilter === c.key
+                ? 'border-current shadow-[0_0_12px_rgba(255,255,255,0.15)]'
+                : 'border-[rgba(255,255,255,0.12)] bg-[rgba(5,6,18,0.8)] text-[#aaa] hover:text-white hover:bg-[rgba(5,6,18,1)]'
+            }`}
+            style={carrierFilter === c.key ? { color: c.color, borderColor: c.color, background: `${c.color}15` } : {}}
+          >
+            <span className="w-2 h-2 rounded-full" style={{ background: c.color }} />
+            {c.label}
+            <span className="text-[0.7rem] opacity-70">({c.count})</span>
+          </button>
+        ))}
+      </div>
+
       <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
