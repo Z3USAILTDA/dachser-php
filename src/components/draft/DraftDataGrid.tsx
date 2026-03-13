@@ -483,6 +483,9 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
                     <TableCell className="text-[#888] text-[0.85rem]">
                       {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
                     </TableCell>
+                    <TableCell className="text-[0.8rem] font-semibold" style={{ color: detectCarrier(item.mbl_id).color }}>
+                      {detectCarrier(item.mbl_id).name}
+                    </TableCell>
                     <TableCell className="font-mono text-primary text-[0.85rem]">{item.mbl_id}</TableCell>
                     <TableCell className="text-[#aaaaaa] text-[0.85rem] hidden lg:table-cell max-w-[180px] truncate" title={item.shipper || '-'}>
                       {item.shipper || '-'}
