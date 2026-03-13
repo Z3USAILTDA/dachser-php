@@ -53,7 +53,7 @@ serve(async (req) => {
       WHERE 
         tmd.tipo_processo = 'SEA EXPORT'
         AND (tmd.mawb LIKE 'HLC%' OR tmd.mawb LIKE 'MSC%' OR tmd.mawb LIKE 'MEDU%' OR tmd.mawb LIKE 'ONEY%')
-        AND tmd.data_insert >= '2026-01-04'
+        AND tmd.data_insert >= '2026-02-01'
       ORDER BY tmd.etd DESC, tmd.mawb
     `;
 
