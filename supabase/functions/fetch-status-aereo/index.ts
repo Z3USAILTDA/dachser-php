@@ -1299,6 +1299,7 @@ serve(async (req) => {
       '047-32916273': { status: 'DEP', status_info: 'Boarded the flight on Helsinki (Vantaa) - Flight TP7004S, 22 vols, 2658.9kg, HEL→FRA 13/03 18:00, ETA 15/03 11:00' },
       '020-65055410': { force_nfd: true, status: 'NFD' }, // Considerar NFD como mais recente
       '996-14389491': { status: 'NIF', status_info: 'Sem informação na companhia aérea' },
+      '577-11063080': { status: 'DEP' }, // Último evento na timeline é DEP
       '020-22473334': {
         status: 'UNK',
         status_info: 'Sem atualização',

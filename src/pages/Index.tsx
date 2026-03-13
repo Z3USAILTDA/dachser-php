@@ -2076,7 +2076,7 @@ const Index = () => {
             return status === "DIS" || !!awb.data_atraso;
           case "criticos":
             // OFLD agora é crítico junto com NIL e NIF, AWBs críticos específicos, e discrepância de peças
-            const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080", "020-22473334"];
+            const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "020-22473334"];
             return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.force_critical === true;
           default:
             return true;
@@ -2409,7 +2409,7 @@ const Index = () => {
               if (excludedStatuses.includes(awb.status || "")) return false;
               const status = getStatusCode(awb.last_event).toUpperCase();
               // OFLD agora é crítico junto com NIL e NIF, AWBs críticos específicos, e discrepância de peças
-               const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080", "020-22473334"];
+               const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "020-22473334"];
               return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.force_critical === true;
             }).length
           }
@@ -2675,7 +2675,7 @@ const Index = () => {
                       const isAwbInvalid = awb.status === "AWB_INVALID" || awb.last_event === "AWB_INVALID" || awb.last_event === "NI" || (awb['último_status'] || '').toUpperCase() === 'NI';
                       const isFalhaConsulta = isErroStatus || isCompanyNotRegistered;
                       // AWBs críticos específicos com destaque vermelho piscante (inclui discrepância de peças)
-                       const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080", "020-22473334"];
+                       const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "020-22473334"];
                       const isCriticalAwb = CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.force_critical === true;
 
                       return (
@@ -2977,7 +2977,7 @@ const Index = () => {
                                 }
 
                                 // Verificar se é crítico (NIL, NIF, OFLD, AWBs críticos específicos, ou discrepância de peças)
-                                const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080", "020-22473334"];
+                                const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "020-22473334"];
                                 const isCritical =
                                   statusCode === "NIL" ||
                                   statusCode === "NIF" ||
@@ -2991,7 +2991,7 @@ const Index = () => {
                                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
                                       <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
                                        {awb.pieces_discrepancy ? `Discrepância Peças (${awb.baseline_pieces})` : awb.has_dis_event ? "DIS - Discrepância" : (() => {
-                                        const DISCREPANCY_AWBS = ["577-11063080"];
+                                        const DISCREPANCY_AWBS: string[] = [];
                                         if (DISCREPANCY_AWBS.includes(awb.awb)) {
                                           return "Discrepância Peças";
                                         }
