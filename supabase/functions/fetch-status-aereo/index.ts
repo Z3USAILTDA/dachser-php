@@ -1137,12 +1137,54 @@ serve(async (req) => {
         last_flight: ws.last_flight || null,
         is_ground_transport: (() => {
           // Detect ground transport: flight code ends with "-T" or "X" (e.g. "LA 5252-T", "LX-9950X")
+          const flightFields = ['Flight', 'flight', 'voo', 'Voo', 'flight_number', 'flightNumber', 'numero_voo'];
+          function checkFlight(val: string | null | undefined): boolean {
+            if (!val) return false;
+            const clean = String(val).trim().replace(/,\s*$/, '');
+            if (!clean) return false;
+            return /[-]T$/i.test(clean) || /\d[Xx]$/.test(clean);
+          }
           try {
+            // Check ws.last_flight first
+            if (checkFlight(ws.last_flight)) {
+              console.log(`[ground] ${awb}: DETECTED via ws.last_flight="${ws.last_flight}"`);
+              return true;
+            }
             if (timelineStr) {
               const tlEvents = JSON.parse(timelineStr);
-              if (Array.isArray(tlEvents) && tlEvents.length > 0) {
-                const lastFlight = String(tlEvents[0]?.Flight || tlEvents[0]?.flight || tlEvents[0]?.voo || '').trim().replace(/,\s*$/, '');
-                if (lastFlight && (/\-T$/i.test(lastFlight) || /X$/i.test(lastFlight))) return true;
+              if (Array.isArray(tlEvents)) {
+                // Check ALL events, not just the first one
+                for (const ev of tlEvents) {
+                  for (const field of flightFields) {
+                    if (checkFlight(ev[field])) {
+                      console.log(`[ground] ${awb}: DETECTED via timeline field "${field}"="${ev[field]}"`);
+                      return true;
+                    }
+                  }
+                  // Also check in details/description for flight patterns like "LX-9950X"
+                  const desc = String(ev.Description || ev.description || ev.details || '').trim();
+                  const flightMatch = desc.match(/\b([A-Z]{2}\s*[-]?\s*\d{3,5}[A-Za-z]?)\b/);
+                  if (flightMatch && checkFlight(flightMatch[1])) {
+                    console.log(`[ground] ${awb}: DETECTED via description flight pattern="${flightMatch[1]}" in "${desc.substring(0, 80)}"`);
+                    return true;
+                  }
+                }
+                // Log first few flight fields for debugging (only if not found)
+                if (tlEvents.length > 0) {
+                  const sample = tlEvents.slice(0, 3).map((ev: any) => {
+                    const vals: Record<string, any> = {};
+                    for (const field of flightFields) { if (ev[field]) vals[field] = ev[field]; }
+                    // Check all keys that might contain flight info
+                    for (const key of Object.keys(ev)) {
+                      if (/flight|voo|vol/i.test(key)) vals[key] = ev[key];
+                    }
+                    return vals;
+                  });
+                  const hasAny = sample.some((s: any) => Object.keys(s).length > 0);
+                  if (hasAny) {
+                    console.log(`[ground-debug] ${awb}: flight fields in first 3 events: ${JSON.stringify(sample)}`);
+                  }
+                }
               }
             }
           } catch (_) {}
