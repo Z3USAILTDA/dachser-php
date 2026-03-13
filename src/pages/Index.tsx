@@ -450,6 +450,7 @@ const Index = () => {
   const [cardFilter, setCardFilter] = useState<CardFilterType>("all");
   const [showUnregisteredModal, setShowUnregisteredModal] = useState(false);
   const [showMonitoredModal, setShowMonitoredModal] = useState(false);
+  const [cadastroNovaOpen, setCadastroNovaOpen] = useState(false);
   const [dbStats, setDbStats] = useState<DbStats | null>(null);
   const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
   const [regrasDialogOpen, setRegrasDialogOpen] = useState(false);
