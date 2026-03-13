@@ -200,6 +200,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     'DIS': 'DIS', 'DISCREPANCY': 'DIS',
     'OFLD': 'OFLD', 'OFFLOADED': 'OFLD',
     'NIL': 'NIL',
+    'NI': 'AWB_INVALID',
     'FOH': 'FOH', 'FREIGHT ON HAND': 'FOH',
     'BKD': 'BKD', 'BOOKED': 'BKD', 'RECEIVED': 'RCF',
     'PRE': 'PRE', 'PRE-ADVISED': 'PRE',

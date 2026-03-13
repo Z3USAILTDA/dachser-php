@@ -2670,7 +2670,7 @@ const Index = () => {
                       const isNilStatus = awb.last_event === "NIL" || awb.last_event === "NIF";
                       const isErroStatus = awb.status === "ERRO" || awb.last_event === "ERRO";
                       const isCompanyNotRegistered = awb.status === "COMPANY_NOT_REGISTERED";
-                      const isAwbInvalid = awb.status === "AWB_INVALID" || awb.last_event === "AWB_INVALID";
+                      const isAwbInvalid = awb.status === "AWB_INVALID" || awb.last_event === "AWB_INVALID" || awb.last_event === "NI" || (awb['último_status'] || '').toUpperCase() === 'NI';
                       const isFalhaConsulta = isErroStatus || isCompanyNotRegistered;
                       // AWBs críticos específicos com destaque vermelho piscante (inclui discrepância de peças)
                        const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080"];
