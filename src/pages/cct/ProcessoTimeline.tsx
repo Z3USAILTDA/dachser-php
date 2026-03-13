@@ -313,7 +313,7 @@ export default function ProcessoTimeline() {
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <Label className="text-xs text-[#888]">Peso Declarado</Label>
+                  <Label className="text-xs text-[#888]">Peso Recebido</Label>
                   <p className="text-white font-mono mt-1">{shipment.peso_declarado?.toFixed(2) || "—"} kg</p>
                 </div>
                 <div>
@@ -331,7 +331,7 @@ export default function ProcessoTimeline() {
                   )}
                 </div>
                 <div>
-                  <Label className="text-xs text-[#888]">Volume Declarado</Label>
+                  <Label className="text-xs text-[#888]">Volume Recebido</Label>
                   <p className="text-white font-mono mt-1">{shipment.volume_declarado || "—"}</p>
                 </div>
                 <div>
