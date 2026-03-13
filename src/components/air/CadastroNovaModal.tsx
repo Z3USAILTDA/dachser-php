@@ -428,7 +428,9 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Erro ao salvar");
       
-      toast.success("Cadastro salvo!", { description: `ID: ${cadastroId}` });
+      // Auto-copy pre-alert title
+      await copyToClipboard(preAlertTitle);
+      toast.success("Cadastro salvo! Título Pre-Alert copiado.", { description: `ID: ${cadastroId}` });
       setForm({ ...emptyForm });
       setFileName("");
       setConsigneeSearch("");
