@@ -2975,7 +2975,7 @@ const Index = () => {
                                 }
 
                                 // Verificar se é crítico (NIL, NIF, OFLD, AWBs críticos específicos, ou discrepância de peças)
-                                const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080"];
+                                const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080", "020-22473334"];
                                 const isCritical =
                                   statusCode === "NIL" ||
                                   statusCode === "NIF" ||
