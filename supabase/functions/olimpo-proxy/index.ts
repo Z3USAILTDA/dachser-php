@@ -7947,64 +7947,21 @@ serve(async (req) => {
       try {
         // Ensure table exists
         await client.execute(`
-          CREATE TABLE IF NOT EXISTS ${database}.t_cadastro_aereo (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            cadastro_id VARCHAR(50) NOT NULL,
-            awb_number VARCHAR(100),
-            hawb_number VARCHAR(100),
-            airport_departure VARCHAR(255),
-            shipper_name VARCHAR(255),
-            shipper_address TEXT,
-            shipper_account VARCHAR(100),
-            consignee_nome VARCHAR(255),
-            consignee_cnpj VARCHAR(50),
-            consignee_customer_number VARCHAR(100),
-            issuing_agent VARCHAR(255),
-            agent_city VARCHAR(255),
-            agent_iata_code VARCHAR(100),
-            agent_account VARCHAR(100),
-            nie_code VARCHAR(100),
-            nif_code VARCHAR(100),
-            routing_destination VARCHAR(255),
-            currency VARCHAR(10),
-            chgs_wt_val VARCHAR(20),
-            declared_value_carriage VARCHAR(50),
-            declared_value_customs VARCHAR(50),
-            handling_references TEXT,
-            handling_info TEXT,
-            pieces INT,
-            gross_weight_kg DECIMAL(10,2),
-            rate_class VARCHAR(20),
-            chargeable_weight DECIMAL(10,2),
-            rate DECIMAL(10,4),
-            total_charge DECIMAL(12,2),
-            nature_of_goods TEXT,
-            itn_number VARCHAR(100),
-            packaging TEXT,
-            hs_code VARCHAR(50),
-            volume_cbm DECIMAL(10,4),
-            dimensions VARCHAR(255),
-            other_charges_agent DECIMAL(12,2),
-            other_charges_carrier TEXT,
-            signature_name VARCHAR(255),
-            signature_date VARCHAR(50),
-            signature_place VARCHAR(255),
-            total_prepaid DECIMAL(12,2),
-            total_collect DECIMAL(12,2),
-            clerk VARCHAR(255),
-            clerk_email VARCHAR(255),
-            etd DATETIME,
-            eta DATETIME,
-            created_by VARCHAR(100),
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY uk_cadastro_id (cadastro_id),
-            INDEX idx_awb (awb_number),
-            INDEX idx_clerk (clerk),
-            INDEX idx_consignee (consignee_nome),
-            INDEX idx_created (created_at)
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-        `);
+        // ALTER TABLE for existing tables — add new columns if missing
+        const newCols = [
+          "mode VARCHAR(10)", "po_number VARCHAR(100)", "green_light_date DATE", "pickup_date DATE",
+          "service_level VARCHAR(50)", "cct_transmitido TINYINT(1)", "airport_destination VARCHAR(100)",
+          "wh_treatment VARCHAR(255)", "pre_alert_date DATE", "customer_order VARCHAR(255)",
+          "oea_checklist TINYINT(1)", "d_term VARCHAR(10)", "pre_alert_sent TINYINT(1)",
+          "cargo_departed TINYINT(1)", "pod_dn_available TINYINT(1)"
+        ];
+        for (const colDef of newCols) {
+          const colName = colDef.split(' ')[0];
+          try {
+            await client.execute(`ALTER TABLE ${database}.t_cadastro_aereo ADD COLUMN ${colDef} NULL`);
+            console.log(`[create_cadastro] Added column ${colName}`);
+          } catch (_e: any) { /* already exists */ }
+        }
 
         const result = await client.execute(`
           INSERT INTO ${database}.t_cadastro_aereo (
@@ -8019,8 +7976,12 @@ serve(async (req) => {
             other_charges_agent, other_charges_carrier,
             signature_name, signature_date, signature_place,
             total_prepaid, total_collect,
-            clerk, clerk_email, etd, eta, created_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            clerk, clerk_email, etd, eta,
+            mode, po_number, green_light_date, pickup_date, service_level,
+            cct_transmitido, airport_destination, wh_treatment, pre_alert_date,
+            customer_order, oea_checklist, d_term, pre_alert_sent, cargo_departed, pod_dn_available,
+            created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           d.cadastro_id, d.awb_number, d.hawb_number, d.airport_departure, d.shipper_name, d.shipper_address, d.shipper_account,
           d.consignee_nome, d.consignee_cnpj, d.consignee_customer_number,
@@ -8033,7 +7994,11 @@ serve(async (req) => {
           d.other_charges_agent || null, d.other_charges_carrier,
           d.signature_name, d.signature_date, d.signature_place,
           d.total_prepaid || null, d.total_collect || null,
-          d.clerk, d.clerk_email, d.etd || null, d.eta || null, d.created_by,
+          d.clerk, d.clerk_email, d.etd || null, d.eta || null,
+          d.mode || null, d.po_number || null, d.green_light_date || null, d.pickup_date || null, d.service_level || null,
+          d.cct_transmitido ? 1 : 0, d.airport_destination || null, d.wh_treatment || null, d.pre_alert_date || null,
+          d.customer_order || null, d.oea_checklist ? 1 : 0, d.d_term || null, d.pre_alert_sent ? 1 : 0, d.cargo_departed ? 1 : 0, d.pod_dn_available ? 1 : 0,
+          d.created_by,
         ]);
 
         await client.close();
