@@ -386,7 +386,32 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
         </Card>
       </div>
 
-      {/* Actions Bar */}
+      {/* Carrier Filter Chips */}
+      <div className="flex items-center gap-2">
+        <span className="text-[0.75rem] text-[#888] uppercase tracking-wider mr-1">Armador:</span>
+        {[
+          { key: null, label: 'Todos', count: data.length, color: 'hsl(var(--info))' },
+          { key: 'HAPAG', label: 'Hapag-Lloyd', count: carrierStats.hapag, color: '#ffc800' },
+          { key: 'MSC', label: 'MSC', count: carrierStats.msc, color: '#00B4D8' },
+          { key: 'ONE', label: 'ONE', count: carrierStats.one, color: '#FF6B9D' },
+        ].map((c) => (
+          <button
+            key={c.label}
+            onClick={() => { setCarrierFilter(c.key); setCurrentPage(1); }}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[0.78rem] font-medium transition-all border ${
+              carrierFilter === c.key
+                ? 'border-current shadow-[0_0_12px_rgba(255,255,255,0.15)]'
+                : 'border-[rgba(255,255,255,0.12)] bg-[rgba(5,6,18,0.8)] text-[#aaa] hover:text-white hover:bg-[rgba(5,6,18,1)]'
+            }`}
+            style={carrierFilter === c.key ? { color: c.color, borderColor: c.color, background: `${c.color}15` } : {}}
+          >
+            <span className="w-2 h-2 rounded-full" style={{ background: c.color }} />
+            {c.label}
+            <span className="text-[0.7rem] opacity-70">({c.count})</span>
+          </button>
+        ))}
+      </div>
+
       <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
