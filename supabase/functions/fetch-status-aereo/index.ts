@@ -1292,6 +1292,35 @@ serve(async (req) => {
     console.log(`tipo_processo distribution: IMPORT=${importCount}, EXPORT=${exportCount}, null=${nullCount}`);
     console.log(`Pieces discrepancy detected in ${discrepancyCount} AWBs`);
 
+    // ========== INJECT SYNTHETIC ROWS for AWBs not in firecrawl but needing manual override ==========
+    const existingAwbs = new Set(processedRows.map((r: any) => (r.awb || '').trim()));
+    const SYNTHETIC_AWBS: Record<string, any> = {
+      '047-32916273': {
+        id: 0, awb: '047-32916273', origem: 'HEL', destino: 'GRU',
+        'último_status': 'DEP', tracking_failed: false, status_info: null,
+        'última atualização': new Date().toString(), last_flight: null,
+        pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false,
+        master_changed: false, in_transit: true, last_event_date: null,
+        is_ground_transport: false, days_in_transit: null, source: 'synthetic',
+        hawb: 'HEL-48119210', destinatário: null, nome_analista: null,
+        email_analista: null, email_cliente: null, tipo_servico: null, tipo_processo: 'AIR IMPORT',
+      },
+    };
+    for (const [sAwb, sRow] of Object.entries(SYNTHETIC_AWBS)) {
+      if (!existingAwbs.has(sAwb)) {
+        // Try to get master data
+        const masters = masterMultiMap.get(sAwb);
+        if (masters && masters.length > 0) {
+          for (const master of masters) {
+            processedRows.push({ ...sRow, hawb: String(master.hawb || '').trim(), destinatário: master.cliente || null, nome_analista: master.nome_analista || null, email_analista: master.email_analista || null, email_cliente: master.emails_cliente || null, tipo_processo: master.tipo_processo || 'AIR IMPORT' });
+          }
+        } else {
+          processedRows.push(sRow);
+        }
+        console.log(`[synthetic] Injected ${sAwb} into processedRows`);
+      }
+    }
+
     // ========== MANUAL OVERRIDES ==========
     // Overrides manuais para AWBs específicos com problemas de resolução automática
     const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean; force_timeline?: any[]; force_critical?: boolean; last_event_date?: string }> = {
