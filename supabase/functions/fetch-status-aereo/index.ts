@@ -255,6 +255,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     [/\btransferred?\b/i, 'TFD'],
     [/\bdeparted?\b/i, 'DEP'],
     [/\bconsignee\s+informed\b/i, 'NFD'],
+    [/\bconfirmed\b/i, 'NFD'],
     [/\bnotified\b/i, 'NFD'],
     [/\bproof\s+of\s+delivery\b/i, 'POD'],
     [/\bnot\s+found\b/i, 'NIF'],
