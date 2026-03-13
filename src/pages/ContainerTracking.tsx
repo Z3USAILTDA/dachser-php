@@ -474,6 +474,7 @@ const ContainerTracking = () => {
 
   // Admin modal state
   const [showAdminModal, setShowAdminModal] = useState(false);
+  const [cadastroMaritimoOpen, setCadastroMaritimoOpen] = useState(false);
 
   // LCL cadastro dialog state
   const [showLclDialog, setShowLclDialog] = useState(false);
