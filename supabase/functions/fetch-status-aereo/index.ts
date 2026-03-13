@@ -1291,6 +1291,56 @@ serve(async (req) => {
     console.log(`tipo_processo distribution: IMPORT=${importCount}, EXPORT=${exportCount}, null=${nullCount}`);
     console.log(`Pieces discrepancy detected in ${discrepancyCount} AWBs`);
 
+    // ========== MANUAL OVERRIDES ==========
+    // Overrides manuais para AWBs específicos com problemas de resolução automática
+    const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean }> = {
+      '057-03764530': { skip_first_event: true }, // Último evento incorreto, usar penúltimo
+      '047-32916273': { status: 'DEP', status_info: 'Boarded the flight on Helsinki (Vantaa) - Flight TP7004S, 22 vols, 2658.9kg, HEL→FRA 13/03 18:00, ETA 15/03 11:00' },
+      '020-65055410': { force_nfd: true, status: 'NFD' }, // Considerar NFD como mais recente
+    };
+
+    for (const row of processedRows) {
+      const awb = (row.awb || '').trim();
+      const override = MANUAL_OVERRIDES[awb];
+      if (!override) continue;
+
+      if (override.skip_first_event) {
+        // Re-resolve status skipping the first timeline event
+        const timelineStr = (() => {
+          // Find the ws entry for this AWB
+          const ws = wsList.find((w: any) => String(w.awb || '').trim() === awb);
+          return ws?.timeline_json ? String(ws.timeline_json) : null;
+        })();
+        if (timelineStr) {
+          try {
+            const events = JSON.parse(timelineStr);
+            if (Array.isArray(events) && events.length > 1) {
+              // Remove the first event (most recent) and re-resolve
+              const withoutFirst = events.slice(1);
+              const newTimeline = JSON.stringify(withoutFirst);
+              const newStatus = resolveUnkFromTimeline(newTimeline, awb);
+              const newDesc = extractLastEventDescription(newTimeline);
+              if (newStatus) {
+                row['último_status'] = newStatus;
+                row.tracking_failed = false;
+                console.log(`[manualOverride] ${awb}: skipped first event, new status="${newStatus}"`);
+              }
+              if (newDesc) row.status_info = newDesc;
+            }
+          } catch (_e) { /* ignore */ }
+        }
+      }
+
+      if (override.status) {
+        row['último_status'] = override.status;
+        row.tracking_failed = false;
+        console.log(`[manualOverride] ${awb}: forced status="${override.status}"`);
+      }
+      if (override.status_info) {
+        row.status_info = override.status_info;
+      }
+    }
+
     // ========== FILTRO DE VISIBILIDADE ==========
     // 1. Remover DLV/DELIVERED
     // 2. ARR - DESTINO: manter por 5 dias após última atualização, depois ocultar
