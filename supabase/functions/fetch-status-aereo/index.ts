@@ -200,6 +200,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     'DIS': 'DIS', 'DISCREPANCY': 'DIS',
     'OFLD': 'OFLD', 'OFFLOADED': 'OFLD',
     'NIL': 'NIL',
+    'NI': 'AWB_INVALID',
     'FOH': 'FOH', 'FREIGHT ON HAND': 'FOH',
     'BKD': 'BKD', 'BOOKED': 'BKD', 'RECEIVED': 'RCF',
     'PRE': 'PRE', 'PRE-ADVISED': 'PRE',
@@ -1293,10 +1294,38 @@ serve(async (req) => {
 
     // ========== MANUAL OVERRIDES ==========
     // Overrides manuais para AWBs específicos com problemas de resolução automática
-    const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean }> = {
+    const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean; force_timeline?: any[]; force_critical?: boolean; last_event_date?: string }> = {
       '057-03764530': { skip_first_event: true }, // Último evento incorreto, usar penúltimo
       '047-32916273': { status: 'DEP', status_info: 'Boarded the flight on Helsinki (Vantaa) - Flight TP7004S, 22 vols, 2658.9kg, HEL→FRA 13/03 18:00, ETA 15/03 11:00' },
       '020-65055410': { force_nfd: true, status: 'NFD' }, // Considerar NFD como mais recente
+      '996-14389491': { status: 'NIF', status_info: 'Sem informação na companhia aérea' },
+      '020-22473334': {
+        status: 'UNK',
+        status_info: 'Sem atualização',
+        force_critical: true,
+        last_event_date: '2026-03-07T11:36:00',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - HEL (Helsinki)', date: '05 MAR / 22:20', pieces: '2', weight: '11 kg' },
+          { status: 'RCS', description: 'RCS - HEL (Helsinki)', date: '04 MAR / 07:00', pieces: '2', weight: '11 kg' },
+          { status: 'DIS', description: 'DIS - HEL (Helsinki)', date: '05 MAR / 10:00', pieces: '2', weight: '11 kg' },
+          { status: 'DIS', description: 'DIS - HEL (Helsinki)', date: '05 MAR / 10:00', pieces: '2', weight: '11 kg' },
+          { status: 'MAN', description: 'LH851 (HEL→FRA) - MAN - HEL (Helsinki)', date: '04 MAR / 15:56', pieces: '2', weight: '11 kg' },
+          { status: 'DEP', description: 'LH851 (HEL→FRA) - DEP - HEL (Helsinki)', date: '04 MAR / 17:54', pieces: '2', weight: '11 kg' },
+          { status: 'ARR', description: 'LH851 (HEL→FRA) - ARR - FRA (Frankfurt)', date: '04 MAR / 19:14', pieces: '2', weight: '11 kg' },
+          { status: 'RCF', description: 'LH851 (HEL→FRA) - RCF - FRA (Frankfurt)', date: '05 MAR / 20:59', pieces: '2', weight: '11 kg' },
+          { status: 'DIS', description: 'DIS - FRA (Frankfurt)', date: '05 MAR / 09:48', pieces: '2', weight: '11 kg' },
+          { status: 'MAN', description: 'LH851 (HEL→FRA) 05 MAR - MAN - HEL (Helsinki)', date: '05 MAR / 10:00', pieces: '2', weight: '11 kg' },
+          { status: 'MAN', description: 'LH849 (HEL→FRA) - MAN - HEL (Helsinki)', date: '05 MAR / 10:00', pieces: '2', weight: '11 kg' },
+          { status: 'DEP', description: 'LH849 (HEL→FRA) - DEP - HEL (Helsinki)', date: '05 MAR / 14:13', pieces: '2', weight: '11 kg' },
+          { status: 'ARR', description: 'LH849 (HEL→FRA) - ARR - FRA (Frankfurt)', date: '05 MAR / 15:37', pieces: '2', weight: '11 kg' },
+          { status: 'RCF', description: 'LH849 (HEL→FRA) - RCF - FRA (Frankfurt)', date: '05 MAR / 20:59', pieces: '2', weight: '11 kg' },
+          { status: 'MAN', description: 'LH506 (FRA→GRU) - MAN - FRA (Frankfurt)', date: '06 MAR / 20:27', pieces: '2', weight: '11 kg' },
+          { status: 'DEP', description: 'LH506 (FRA→GRU) - DEP - FRA (Frankfurt)', date: '06 MAR / 22:04', pieces: '2', weight: '11 kg' },
+          { status: 'ARR', description: 'LH506 (FRA→GRU) - ARR - GRU (Guarulhos)', date: '07 MAR / 06:11', pieces: '2', weight: '11 kg' },
+          { status: 'RCF', description: 'LH506 (FRA→GRU) - RCF - GRU (Guarulhos)', date: '07 MAR / 11:36', pieces: '2', weight: '11 kg' },
+          { status: 'NFD', description: 'NFD - GRU (Guarulhos)', date: '07 MAR / 11:36', pieces: '2', weight: '11 kg' },
+        ]
+      },
     };
 
     for (const row of processedRows) {
@@ -1338,6 +1367,16 @@ serve(async (req) => {
       }
       if (override.status_info) {
         row.status_info = override.status_info;
+        row.last_event = override.status_info;
+      }
+      if (override.force_critical) {
+        row.force_critical = true;
+      }
+      if (override.last_event_date) {
+        row.last_event_date = override.last_event_date;
+      }
+      if (override.force_timeline) {
+        row.timeline_json = JSON.stringify(override.force_timeline);
       }
     }
 
@@ -1350,6 +1389,17 @@ serve(async (req) => {
     // AWBs manualmente excluídos da visualização
     const HIDDEN_AWBS = new Set([
       '549-43063871',
+      '020-05761011', '045-13110742', '045-21380704', '016-06977725', '577-11184320',
+      '047-33703040', '235-82805833', '020-05688325', '020-05844230', '045-21167473',
+      '577-11060210', '074-04749264', '047-00566646', '045-21167845', '577-11184526',
+      '996-14364324', '020-34733576', '057-57956662', '577-11184515', '014-39549230',
+      '074-73854550', '020-22473916', '045-13300766', '172-02579861', '172-90555894',
+      '045-21561632', '549-43063801', '020-05761781', '369-84119556', '045-21380612',
+      '127-72327662', '172-90555835', '020-02995952', '020-03394215', '057-03590344',
+      '020-16486175', '045-13300803', '724-86964570', '045-99644381', '996-14370764',
+      '020-65055196', '865-14762381', '369-96183415', '045-13300626', '047-32916251',
+      '074-04751843', '016-95200022', '087-08279331', '006-45285166', '047-35319384',
+      '827-08279331',
     ]);
 
     const visibleRows = processedRows.filter((row: any) => {

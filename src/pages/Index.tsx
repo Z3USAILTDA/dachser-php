@@ -206,7 +206,7 @@ const getStatusCode = (lastEvent: string | null): string => {
     return "Processando";
   }
 
-  if (lastEvent === "AWB_INVALID") {
+  if (lastEvent === "AWB_INVALID" || lastEvent === "NI") {
     return "AWB Inválido";
   }
 
@@ -419,6 +419,7 @@ interface AWBData {
   last_event_date?: string | null; // Data/hora do último evento real da timeline
   in_transit?: boolean; // AWB já teve DEP/MAN/RCF/ARR na timeline do ciclo atual
   is_ground_transport?: boolean; // Último evento tem flight com "-T" (tráfego terrestre)
+  force_critical?: boolean; // Forçado como crítico via override manual
 }
 
 const STORAGE_KEY = "tracked-awbs";
@@ -2075,8 +2076,8 @@ const Index = () => {
             return status === "DIS" || !!awb.data_atraso;
           case "criticos":
             // OFLD agora é crítico junto com NIL e NIF, AWBs críticos específicos, e discrepância de peças
-            const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080"];
-            return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true;
+            const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080", "020-22473334"];
+            return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.force_critical === true;
           default:
             return true;
         }
@@ -2134,6 +2135,7 @@ const Index = () => {
       if (
         status === "AWB_INVALID" ||
         lastEvent === "AWB_INVALID" ||
+        lastEvent === "NI" ||
         lastEventCode === "AWB INVÁLIDO" ||
         status === "NOT_FOUND" ||
         lastEvent === "NOT_FOUND" ||
@@ -2407,8 +2409,8 @@ const Index = () => {
               if (excludedStatuses.includes(awb.status || "")) return false;
               const status = getStatusCode(awb.last_event).toUpperCase();
               // OFLD agora é crítico junto com NIL e NIF, AWBs críticos específicos, e discrepância de peças
-               const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080"];
-              return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true;
+               const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080", "020-22473334"];
+              return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.force_critical === true;
             }).length
           }
           activeFilter={cardFilter}
@@ -2670,11 +2672,11 @@ const Index = () => {
                       const isNilStatus = awb.last_event === "NIL" || awb.last_event === "NIF";
                       const isErroStatus = awb.status === "ERRO" || awb.last_event === "ERRO";
                       const isCompanyNotRegistered = awb.status === "COMPANY_NOT_REGISTERED";
-                      const isAwbInvalid = awb.status === "AWB_INVALID" || awb.last_event === "AWB_INVALID";
+                      const isAwbInvalid = awb.status === "AWB_INVALID" || awb.last_event === "AWB_INVALID" || awb.last_event === "NI" || (awb['último_status'] || '').toUpperCase() === 'NI';
                       const isFalhaConsulta = isErroStatus || isCompanyNotRegistered;
                       // AWBs críticos específicos com destaque vermelho piscante (inclui discrepância de peças)
-                       const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080"];
-                      const isCriticalAwb = CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true;
+                       const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080", "020-22473334"];
+                      const isCriticalAwb = CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.force_critical === true;
 
                       return (
                         <React.Fragment key={`${awb.id}-${index}`}>
@@ -2975,7 +2977,7 @@ const Index = () => {
                                 }
 
                                 // Verificar se é crítico (NIL, NIF, OFLD, AWBs críticos específicos, ou discrepância de peças)
-                                const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080"];
+                                const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142", "577-11063080", "020-22473334"];
                                 const isCritical =
                                   statusCode === "NIL" ||
                                   statusCode === "NIF" ||
@@ -2993,7 +2995,7 @@ const Index = () => {
                                         if (DISCREPANCY_AWBS.includes(awb.awb)) {
                                           return "Discrepância Peças";
                                         }
-                                        const STALENESS_AWBS = ["139-47195164", "139-47195142"];
+                                        const STALENESS_AWBS = ["139-47195164", "139-47195142", "020-22473334"];
                                         if (STALENESS_AWBS.includes(awb.awb)) {
                                           const lastDate = awb.last_event_date;
                                           if (lastDate) {
