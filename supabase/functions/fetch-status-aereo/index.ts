@@ -348,44 +348,20 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     }
 
     // IATA hierarchy: pick the MOST ADVANCED status across ALL events
-    const IATA_HIERARCHY: Record<string, number> = {
-      'BKD': 1, 'RCS': 2, 'MAN': 3, 'PRE': 3, 'FFM': 3,
-      'DEP': 4, 'TFD': 4,
-      'ARR': 5, 'RCF': 6, 'AWR': 7,
-      'NFD': 8, 'AWD': 9, 'POD': 10, 'DLV': 11,
-      // Non-progression statuses get low priority
-      'DIS': 0, 'OFLD': 0, 'NIL': 0, 'FOH': 0, 'CAN': 0, 'NIF': 0,
-      'AUD': 0, 'RCT': 0,
-    };
-
+    // Pick the MOST RECENT event chronologically (filtered[0] is already sorted by date DESC + IATA tiebreaker)
     let bestStatus: string | null = null;
-    let bestOrder = -1;
 
+    // Try to resolve from the most recent event first, then fallback to subsequent ones
     for (const ev of filtered) {
       const resolved = resolveEvent(ev);
       if (resolved) {
-        const order = IATA_HIERARCHY[resolved] ?? 0;
-        if (order > bestOrder) {
-          bestOrder = order;
-          bestStatus = resolved;
-        }
-      }
-    }
-
-    // Special case: if only DIS-class statuses found and nothing advanced, return DIS
-    if (!bestStatus) {
-      // Check if any DIS was found
-      for (const ev of filtered) {
-        const resolved = resolveEvent(ev);
-        if (resolved) {
-          bestStatus = resolved;
-          break;
-        }
+        bestStatus = resolved;
+        break;
       }
     }
 
     if (bestStatus) {
-      console.log(`[resolveUNK] ${awbForDebug || '?'}: "${bestStatus}" (hierarchy-best, order=${bestOrder}${etdCutoff ? ', ETD-filtered' : ''})`);
+      console.log(`[resolveUNK] ${awbForDebug || '?'}: "${bestStatus}" (chronological-first${etdCutoff ? ', ETD-filtered' : ''})`);
     }
     return bestStatus;
   } catch (_e) {
