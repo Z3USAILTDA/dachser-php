@@ -463,7 +463,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center py-12">
+                  <TableCell colSpan={14} className="text-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-primary" />
                     <span className="text-[#aaaaaa] text-[0.85rem]">Carregando...</span>
                   </TableCell>
