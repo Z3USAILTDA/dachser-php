@@ -416,6 +416,7 @@ interface AWBData {
   master_changed?: boolean; // Master (MAWB) foi atualizado via troca de master
   last_event_date?: string | null; // Data/hora do último evento real da timeline
   in_transit?: boolean; // AWB já teve DEP/MAN/RCF/ARR na timeline do ciclo atual
+  is_ground_transport?: boolean; // Último evento tem flight com "-T" (tráfego terrestre)
 }
 
 const STORAGE_KEY = "tracked-awbs";
@@ -591,6 +592,7 @@ const Index = () => {
           last_event_date: item.last_event_date || null,
           in_transit: item.in_transit || false,
           tracking_failed: item.tracking_failed || false,
+          is_ground_transport: item.is_ground_transport || false,
         }));
 
         const deduplicatedData = convertedData.reduce((acc: AWBData[], current: AWBData) => {
@@ -2698,6 +2700,11 @@ const Index = () => {
                                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.62rem] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
                                     <RefreshCw className="w-2.5 h-2.5" />
                                     Novo Master
+                                  </span>
+                                )}
+                                {awb.is_ground_transport && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.62rem] font-bold bg-amber-600/15 text-amber-300 border border-amber-600/30">
+                                    🚚 Terrestre
                                   </span>
                                 )}
                                 {isRetracking && (

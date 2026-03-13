@@ -188,7 +188,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
 
   // Mapeamento de código de status bruto → código IATA
   const statusMap: Record<string, string> = {
-    'DLV': 'DLV', 'DELIVERED': 'DLV',
+    'DLV': 'DLV', 'DELIVERED': 'DLV', 'DELIVERY': 'DLV',
     'DEP': 'DEP', 'DEPARTED': 'DEP',
     'ARR': 'ARR', 'ARRIVED': 'ARR',
     'RCF': 'RCF', 'RECEIVED FROM FLIGHT': 'RCF',
@@ -211,11 +211,11 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     'FFM': 'FFM',
     'AUD': 'AUD',
     'RCT': 'RCT',
-    'AWR': 'AWR', 'DOCUMENTS RECEIVED': 'AWR',
+    'AWR': 'AWR', 'DOCUMENTS RECEIVED': 'RCD',
   };
 
   // Known IATA codes for extraction from description prefix (e.g. "DIS - GRU, ...")
-  const knownIataCodes = ['DEP', 'ARR', 'RCF', 'DLV', 'NFD', 'MAN', 'BKD', 'RCS', 'DIS', 'NIL', 'OFLD', 'FOH', 'TRM', 'PRE', 'AWD', 'CCD', 'TGC', 'DDL', 'AWR', 'POD', 'TFD', 'RCT', 'RCP', 'LOF', 'TDE', 'ASN', 'MIS', 'TFS', 'BKF', 'FWB', 'CAN', 'NIF'];
+  const knownIataCodes = ['DEP', 'ARR', 'RCF', 'DLV', 'NFD', 'MAN', 'BKD', 'RCS', 'DIS', 'NIL', 'OFLD', 'FOH', 'TRM', 'PRE', 'AWD', 'CCD', 'TGC', 'DDL', 'AWR', 'RCD', 'POD', 'TFD', 'RCT', 'RCP', 'LOF', 'TDE', 'ASN', 'MIS', 'TFS', 'BKF', 'FWB', 'CAN', 'NIF'];
 
   // Extract IATA code from description string (mirrors extractStatusCode in mariadb-proxy)
   function extractIataFromDesc(description: string): string | null {
@@ -238,6 +238,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
   // Regex para extrair código IATA de descrições livres (full-word patterns)
   const descPatterns: Array<[RegExp, string]> = [
     [/\bdelivered\b/i, 'DLV'],
+    [/^delivery$/i, 'DLV'],
     [/^\(AWA\)/i, 'AWD'],
     [/\bdocuments?\s+available\b/i, 'AWD'],
     [/\barrived?\b/i, 'ARR'],
@@ -259,7 +260,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     [/\bnot\s+found\b/i, 'NIF'],
     [/\bcancell?ed\b/i, 'CAN'],
     [/\bawb\s+documentation\b/i, 'AWR'],
-    [/\bdocuments?\s+received\b/i, 'AWR'],
+    [/\bdocuments?\s+received\b/i, 'RCD'],
     [/\breceived\b/i, 'RCF'],
   ];
 
@@ -347,44 +348,20 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     }
 
     // IATA hierarchy: pick the MOST ADVANCED status across ALL events
-    const IATA_HIERARCHY: Record<string, number> = {
-      'BKD': 1, 'RCS': 2, 'MAN': 3, 'PRE': 3, 'FFM': 3,
-      'DEP': 4, 'TFD': 4,
-      'ARR': 5, 'RCF': 6, 'AWR': 7,
-      'NFD': 8, 'AWD': 9, 'POD': 10, 'DLV': 11,
-      // Non-progression statuses get low priority
-      'DIS': 0, 'OFLD': 0, 'NIL': 0, 'FOH': 0, 'CAN': 0, 'NIF': 0,
-      'AUD': 0, 'RCT': 0,
-    };
-
+    // Pick the MOST RECENT event chronologically (filtered[0] is already sorted by date DESC + IATA tiebreaker)
     let bestStatus: string | null = null;
-    let bestOrder = -1;
 
+    // Try to resolve from the most recent event first, then fallback to subsequent ones
     for (const ev of filtered) {
       const resolved = resolveEvent(ev);
       if (resolved) {
-        const order = IATA_HIERARCHY[resolved] ?? 0;
-        if (order > bestOrder) {
-          bestOrder = order;
-          bestStatus = resolved;
-        }
-      }
-    }
-
-    // Special case: if only DIS-class statuses found and nothing advanced, return DIS
-    if (!bestStatus) {
-      // Check if any DIS was found
-      for (const ev of filtered) {
-        const resolved = resolveEvent(ev);
-        if (resolved) {
-          bestStatus = resolved;
-          break;
-        }
+        bestStatus = resolved;
+        break;
       }
     }
 
     if (bestStatus) {
-      console.log(`[resolveUNK] ${awbForDebug || '?'}: "${bestStatus}" (hierarchy-best, order=${bestOrder}${etdCutoff ? ', ETD-filtered' : ''})`);
+      console.log(`[resolveUNK] ${awbForDebug || '?'}: "${bestStatus}" (chronological-first${etdCutoff ? ', ETD-filtered' : ''})`);
     }
     return bestStatus;
   } catch (_e) {
@@ -417,7 +394,7 @@ function extractLastEventDescription(timelineJson: string | null, etdStr?: strin
       'DEP': 4, 'TFD': 4,
       'RCT': 5, 'TGC': 5,
       'RCF': 6, 'CRC': 6,
-      'AWD': 7, 'AWR': 7,
+      'AWD': 7, 'AWR': 7, 'RCD': 7,
       'NFD': 8,
       'DLV': 9, 'POD': 9,
       'DIS': 3, 'OFLD': 3,
@@ -1158,6 +1135,20 @@ serve(async (req) => {
         status_info: extractLastEventDescription(timelineStr, etdForTimeline) || ws.last_status_description || null,
         'última atualização': scrapedAt,
         last_flight: ws.last_flight || null,
+        is_ground_transport: (() => {
+          // Detect ground transport: flight code contains "-T" (e.g. "LA 5252-T")
+          try {
+            if (timelineStr) {
+              const tlEvents = JSON.parse(timelineStr);
+              if (Array.isArray(tlEvents) && tlEvents.length > 0) {
+                // Check the most recent event's flight field
+                const lastFlight = tlEvents[0]?.Flight || tlEvents[0]?.flight || tlEvents[0]?.voo || '';
+                if (String(lastFlight).includes('-T')) return true;
+              }
+            }
+          } catch (_) {}
+          return false;
+        })(),
         days_in_transit: (() => {
           // Compute days in transit from ETD to now (or to delivered date)
           const etd = masters && masters.length > 0 ? masters[0].etd : null;
