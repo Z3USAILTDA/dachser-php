@@ -2135,6 +2135,7 @@ const Index = () => {
       if (
         status === "AWB_INVALID" ||
         lastEvent === "AWB_INVALID" ||
+        lastEvent === "NI" ||
         lastEventCode === "AWB INVÁLIDO" ||
         status === "NOT_FOUND" ||
         lastEvent === "NOT_FOUND" ||
