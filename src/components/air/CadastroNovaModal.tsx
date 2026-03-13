@@ -888,6 +888,26 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
             </div>
           </CollapsibleCard>
 
+          {/* Pre-Alert Title Preview */}
+          <div className="rounded-xl border border-[rgba(255,200,0,.25)] bg-[rgba(255,200,0,.06)] p-4 space-y-2">
+            <Label className="text-xs text-[#ffc800] font-semibold block">Título Pre-Alert (assunto do e-mail)</Label>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-[rgba(0,0,0,.3)] border border-[rgba(255,255,255,.1)] rounded-lg px-3 py-2 text-sm text-[#ccc] select-all break-all min-h-[36px]">
+                {preAlertTitle || <span className="text-[#666] italic">Preencha os campos para gerar o título...</span>}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={handleCopyTitle}
+                disabled={!preAlertTitle || preAlertTitle === 'Dachser Pre-Alert AIR'}
+                className="shrink-0 h-9 w-9 border-[rgba(255,255,255,.15)] hover:bg-[rgba(255,200,0,.15)]"
+              >
+                {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4 text-[#aaa]" />}
+              </Button>
+            </div>
+          </div>
+
           {/* Save Button */}
           <div className="flex justify-end">
             <Button onClick={handleSave} disabled={isSaving} className="gap-2 bg-[#ffc800] text-black hover:bg-[#e6b400]">
