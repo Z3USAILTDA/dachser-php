@@ -2075,7 +2075,7 @@ const Index = () => {
             return status === "DIS" || !!awb.data_atraso;
           case "criticos":
             // OFLD agora é crítico junto com NIL e NIF, AWBs críticos específicos, e discrepância de peças
-            const CRITICAL_AWBS = ["045-21167274"];
+            const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142"];
             return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true;
           default:
             return true;
@@ -2407,7 +2407,7 @@ const Index = () => {
               if (excludedStatuses.includes(awb.status || "")) return false;
               const status = getStatusCode(awb.last_event).toUpperCase();
               // OFLD agora é crítico junto com NIL e NIF, AWBs críticos específicos, e discrepância de peças
-              const CRITICAL_AWBS = ["045-21167274"];
+              const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142"];
               return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true;
             }).length
           }
@@ -2673,7 +2673,7 @@ const Index = () => {
                       const isAwbInvalid = awb.status === "AWB_INVALID" || awb.last_event === "AWB_INVALID";
                       const isFalhaConsulta = isErroStatus || isCompanyNotRegistered;
                       // AWBs críticos específicos com destaque vermelho piscante (inclui discrepância de peças)
-                      const CRITICAL_AWBS = ["045-21167274"];
+                      const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142"];
                       const isCriticalAwb = CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true;
 
                       return (
@@ -2975,7 +2975,7 @@ const Index = () => {
                                 }
 
                                 // Verificar se é crítico (NIL, NIF, OFLD, AWBs críticos específicos, ou discrepância de peças)
-                                const CRITICAL_AWBS = ["045-21167274"];
+                                const CRITICAL_AWBS = ["045-21167274", "139-47195164", "139-47195142"];
                                 const isCritical =
                                   statusCode === "NIL" ||
                                   statusCode === "NIF" ||
@@ -2988,7 +2988,22 @@ const Index = () => {
                                   return (
                                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
                                       <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
-                                      {awb.pieces_discrepancy ? `Discrepância Peças (${awb.baseline_pieces})` : awb.has_dis_event ? "DIS - Discrepância" : "Crítico"}
+                                      {awb.pieces_discrepancy ? `Discrepância Peças (${awb.baseline_pieces})` : awb.has_dis_event ? "DIS - Discrepância" : (() => {
+                                        const STALENESS_AWBS = ["139-47195164", "139-47195142"];
+                                        if (STALENESS_AWBS.includes(awb.awb)) {
+                                          const lastDate = awb.last_event_date || awb.last_check;
+                                          if (lastDate) {
+                                            const diffMs = Date.now() - new Date(lastDate).getTime();
+                                            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                                            if (diffHours >= 24) {
+                                              return `Sem atualização ${Math.floor(diffHours / 24)}d`;
+                                            }
+                                            return `Sem atualização ${diffHours}h`;
+                                          }
+                                          return "Sem atualização";
+                                        }
+                                        return "Crítico";
+                                      })()}
                                     </span>
                                   );
                                 }
