@@ -496,7 +496,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
             />
           </div>
           <span className="text-[0.8rem] text-[#aaaaaa] ml-4">
-            {filteredData.length} de {data.length} registros
+            {filteredData.length} de {uniqueData.length} registros
           </span>
         </div>
 
