@@ -488,9 +488,13 @@ function extractLastEventDate(timelineJson: string | null, etdStr?: string | nul
         })
       : sorted;
 
-    // Filter out future events
+    // Filter out future events and planned events
     const now = new Date();
     for (const ev of filtered) {
+      // Skip events with descriptions ending in [planned]
+      const desc = (ev.description || ev.Description || ev.descricao_evento || ev.status || ev.Status || '').toString().trim();
+      if (desc.toLowerCase().endsWith('[planned]')) continue;
+
       const ts = ev.date || ev.Date || ev.timestamp || ev.Timestamp || ev.time || ev.datetime || ev.dataEvento || null;
       if (!ts) continue;
       const eventDate = parseFlexibleDate(String(ts));
