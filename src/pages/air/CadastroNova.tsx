@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { FilePlus, Upload, Loader2, Save, Search, User, Calendar, RefreshCw, CheckCircle2, AlertTriangle } from "lucide-react";
+import { FilePlus, Upload, Loader2, Save, Search, User, Calendar, RefreshCw, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, Plane, Package } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,11 @@ import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@
 import { PageLayout } from "@/components/layout/PageLayout";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
 interface ConsigneeSuggestion {
   nome_cliente: string;
   cnpj: string;
@@ -69,6 +74,22 @@ interface FormData {
   clerk_email: string;
   etd: string;
   eta: string;
+  // New fields
+  mode: 'impo' | 'expo';
+  po_number: string;
+  green_light_date: string;
+  pickup_date: string;
+  service_level: string;
+  cct_transmitido: boolean;
+  airport_destination: string;
+  wh_treatment: string;
+  pre_alert_date: string;
+  customer_order: string;
+  oea_checklist: boolean;
+  d_term: string;
+  pre_alert_sent: boolean;
+  cargo_departed: boolean;
+  pod_dn_available: boolean;
 }
 
 const emptyForm: FormData = {
@@ -84,7 +105,21 @@ const emptyForm: FormData = {
   signature_name: "", signature_date: "", signature_place: "",
   total_prepaid: "", total_collect: "",
   clerk: "", clerk_email: "", etd: "", eta: "",
+  mode: 'impo',
+  po_number: "", green_light_date: "", pickup_date: "", service_level: "",
+  cct_transmitido: false, airport_destination: "", wh_treatment: "",
+  pre_alert_date: "", customer_order: "", oea_checklist: false,
+  d_term: "", pre_alert_sent: false, cargo_departed: false, pod_dn_available: false,
 };
+
+const WH_TREATMENT_OPTIONS = [
+  { value: "TC1", label: "TC1 - Liberação Imediata | RECOF" },
+  { value: "TC4", label: "TC4 - Remoção Expressa | Recinto Aduaneiro" },
+  { value: "PEA", label: "PEA: -18°C a 0 | FRO - Produtos Congelados" },
+  { value: "PEB", label: "PEB: 2°C a 8°C | COL - Mercadoria resfriada" },
+  { value: "PEC", label: "PEC: 9°C a 15°C | ERT - Temp. ambiente estendida" },
+  { value: "PED", label: "PED: 16°C a 22°C | CRT - Controle temp. ambiente" },
+];
 
 interface ManifestHawb {
   hawb_number: string;
@@ -94,8 +129,47 @@ interface ManifestHawb {
   dep_des?: string;
   pieces?: number;
   weight?: number;
-  old_mawb?: string; // filled after DB lookup
+  old_mawb?: string;
 }
+
+// Collapsible card section with field counter
+const CollapsibleCard = ({ title, fields, form, children, defaultOpen = false }: {
+  title: string;
+  fields: (keyof FormData)[];
+  form: FormData;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) => {
+  const [open, setOpen] = useState(defaultOpen);
+  const filled = fields.filter(f => {
+    const v = form[f];
+    if (typeof v === 'boolean') return v;
+    return !!v;
+  }).length;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <CollapsibleTrigger asChild>
+          <button className="w-full flex items-center justify-between p-4 hover:bg-accent/5 transition-colors">
+            <h3 className="text-sm font-semibold text-primary">{title}</h3>
+            <div className="flex items-center gap-2">
+              <Badge variant={filled > 0 ? "default" : "outline"} className="text-xs font-mono">
+                {filled}/{fields.length}
+              </Badge>
+              {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+            </div>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="px-4 pb-4 space-y-4">
+            {children}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
+};
 
 const CadastroNova = () => {
   const navigate = useNavigate();
@@ -135,7 +209,7 @@ const CadastroNova = () => {
     if (parsed.is_admin !== 1) { navigate("/dashboard"); }
   }, [navigate]);
 
-  const updateField = (field: keyof FormData, value: string) => {
+  const updateField = (field: keyof FormData, value: string | boolean) => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
@@ -298,6 +372,21 @@ const CadastroNova = () => {
         total_collect: form.total_collect ? parseFloat(form.total_collect) : null,
         etd: form.etd || null,
         eta: form.eta || null,
+        mode: form.mode,
+        po_number: form.po_number || null,
+        green_light_date: form.green_light_date || null,
+        pickup_date: form.pickup_date || null,
+        service_level: form.service_level || null,
+        cct_transmitido: form.cct_transmitido,
+        airport_destination: form.airport_destination || null,
+        wh_treatment: form.wh_treatment || null,
+        pre_alert_date: form.pre_alert_date || null,
+        customer_order: form.customer_order || null,
+        oea_checklist: form.oea_checklist,
+        d_term: form.d_term || null,
+        pre_alert_sent: form.pre_alert_sent,
+        cargo_departed: form.cargo_departed,
+        pod_dn_available: form.pod_dn_available,
         created_by: user.username || "unknown",
       };
 
@@ -393,7 +482,6 @@ const CadastroNova = () => {
 
       setSwapResult({ updated: result.updated || [], notFound: result.not_found || [] });
 
-      // Update old_mawbs in preview
       if (result.old_mawbs) {
         setSwapHawbs(prev => prev.map(h => ({
           ...h,
@@ -426,16 +514,52 @@ const CadastroNova = () => {
       <Label className="text-xs text-muted-foreground mb-1 block">{label}</Label>
       <Input
         type={type}
-        value={form[field]}
+        value={form[field] as string}
         onChange={e => updateField(field, e.target.value)}
         className="h-8 text-sm rounded-lg"
       />
     </div>
   );
 
+  // Section field lists for counters
+  const awbShipperFields: (keyof FormData)[] = ['awb_number', 'hawb_number', 'airport_departure', 'shipper_name', 'shipper_address', 'shipper_account'];
+  const agentRoutingFields: (keyof FormData)[] = ['issuing_agent', 'agent_city', 'agent_iata_code', 'agent_account', 'nie_code', 'nif_code', 'routing_destination'];
+  const chargesFields: (keyof FormData)[] = ['currency', 'chgs_wt_val', 'declared_value_carriage', 'declared_value_customs', 'pieces', 'gross_weight_kg', 'rate_class', 'chargeable_weight', 'rate', 'total_charge', 'other_charges_agent', 'other_charges_carrier', 'total_prepaid', 'total_collect'];
+  const goodsFields: (keyof FormData)[] = ['nature_of_goods', 'hs_code', 'itn_number', 'packaging', 'volume_cbm', 'dimensions'];
+  const handlingFields: (keyof FormData)[] = ['handling_references', 'handling_info', 'signature_name', 'signature_date', 'signature_place'];
+
   return (
     <PageLayout title="DACHSER" subtitle="Cadastro NOVA" backTo="/dashboard">
       <div className="space-y-6">
+
+        {/* Mode Toggle */}
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center gap-1 bg-card border border-border rounded-full p-1">
+            <button
+              onClick={() => updateField('mode', 'impo')}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                form.mode === 'impo'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Plane className="h-3.5 w-3.5 rotate-[-45deg]" />
+              Importação
+            </button>
+            <button
+              onClick={() => updateField('mode', 'expo')}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                form.mode === 'expo'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Package className="h-3.5 w-3.5" />
+              Exportação
+            </button>
+          </div>
+        </div>
+
         {/* Upload Zone */}
         <div
           onDragOver={e => e.preventDefault()}
@@ -467,50 +591,14 @@ const CadastroNova = () => {
           )}
         </div>
 
-        {/* Manual Fields: Consignee, Clerk, ETD, ETA */}
+        {/* Manual Fields Section */}
         <div className="rounded-xl border border-border bg-card p-4 space-y-4">
           <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
-            <User className="h-4 w-4" /> Campos Manuais
+            <User className="h-4 w-4" /> Campos Manuais — {form.mode === 'impo' ? 'Importação' : 'Exportação'}
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Consignee */}
-            <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">Consignee *</Label>
-              <Popover open={consigneeOpen} onOpenChange={setConsigneeOpen}>
-                <PopoverTrigger asChild>
-                  <div className="relative">
-                    <Input
-                      value={consigneeSearch || form.consignee_nome}
-                      onChange={e => handleConsigneeInput(e.target.value)}
-                      placeholder="Digite para buscar cliente..."
-                      className="h-8 text-sm rounded-lg pr-8"
-                    />
-                    {isSearchingConsignee && <Loader2 className="absolute right-2 top-1.5 h-4 w-4 animate-spin text-muted-foreground" />}
-                    {!isSearchingConsignee && <Search className="absolute right-2 top-1.5 h-4 w-4 text-muted-foreground" />}
-                  </div>
-                </PopoverTrigger>
-                {consigneeSuggestions.length > 0 && (
-                  <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
-                    <Command>
-                      <CommandList>
-                        <CommandGroup>
-                          {consigneeSuggestions.map((c, i) => (
-                            <CommandItem key={i} onSelect={() => selectConsignee(c)} className="cursor-pointer">
-                              <div className="flex flex-col">
-                                <span className="text-sm font-medium">{c.nome_cliente}</span>
-                                <span className="text-xs text-muted-foreground">{c.cnpj} {c.cidade_uf ? `• ${c.cidade_uf}` : ""}</span>
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                )}
-              </Popover>
-            </div>
 
-            {/* Clerk */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Clerk — both modes */}
             <div>
               <Label className="text-xs text-muted-foreground mb-1 block">Clerk (Analista) *</Label>
               <Popover open={clerkOpen} onOpenChange={setClerkOpen}>
@@ -547,37 +635,204 @@ const CadastroNova = () => {
               </Popover>
             </div>
 
-            {/* ETD */}
+            {/* Consignee — both modes */}
             <div>
-              <Label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1">
-                <Calendar className="h-3 w-3" /> ETD
-              </Label>
-              <Input
-                type="datetime-local"
-                value={form.etd}
-                onChange={e => updateField("etd", e.target.value)}
-                className="h-8 text-sm rounded-lg"
-              />
+              <Label className="text-xs text-muted-foreground mb-1 block">Consignee *</Label>
+              <Popover open={consigneeOpen} onOpenChange={setConsigneeOpen}>
+                <PopoverTrigger asChild>
+                  <div className="relative">
+                    <Input
+                      value={consigneeSearch || form.consignee_nome}
+                      onChange={e => handleConsigneeInput(e.target.value)}
+                      placeholder="Digite para buscar cliente..."
+                      className="h-8 text-sm rounded-lg pr-8"
+                    />
+                    {isSearchingConsignee && <Loader2 className="absolute right-2 top-1.5 h-4 w-4 animate-spin text-muted-foreground" />}
+                    {!isSearchingConsignee && <Search className="absolute right-2 top-1.5 h-4 w-4 text-muted-foreground" />}
+                  </div>
+                </PopoverTrigger>
+                {consigneeSuggestions.length > 0 && (
+                  <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                    <Command>
+                      <CommandList>
+                        <CommandGroup>
+                          {consigneeSuggestions.map((c, i) => (
+                            <CommandItem key={i} onSelect={() => selectConsignee(c)} className="cursor-pointer">
+                              <div className="flex flex-col">
+                                <span className="text-sm font-medium">{c.nome_cliente}</span>
+                                <span className="text-xs text-muted-foreground">{c.cnpj} {c.cidade_uf ? `• ${c.cidade_uf}` : ""}</span>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                )}
+              </Popover>
             </div>
 
-            {/* ETA */}
+            {/* Customer No — both */}
+            <Field label="Customer No." field="consignee_customer_number" />
+
+            {/* P.O. — both */}
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">P.O.</Label>
+              <Input value={form.po_number} onChange={e => updateField('po_number', e.target.value)} className="h-8 text-sm rounded-lg" />
+            </div>
+
+            {/* HAWB & Master — both */}
+            <Field label="HAWB No." field="hawb_number" />
+            <Field label="Master No. (MAWB) *" field="awb_number" />
+
+            {/* ETD — both */}
             <div>
               <Label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1">
-                <Calendar className="h-3 w-3" /> ETA
+                <Calendar className="h-3 w-3" /> E.T.D.
               </Label>
-              <Input
-                type="datetime-local"
-                value={form.eta}
-                onChange={e => updateField("eta", e.target.value)}
-                className="h-8 text-sm rounded-lg"
-              />
+              <Input type="datetime-local" value={form.etd} onChange={e => updateField("etd", e.target.value)} className="h-8 text-sm rounded-lg" />
             </div>
+
+            {/* ETA — both */}
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1">
+                <Calendar className="h-3 w-3" /> E.T.A. / A.T.A.
+              </Label>
+              <Input type="datetime-local" value={form.eta} onChange={e => updateField("eta", e.target.value)} className="h-8 text-sm rounded-lg" />
+            </div>
+
+            {/* ===== IMPO-ONLY FIELDS ===== */}
+            {form.mode === 'impo' && (
+              <>
+                {/* Shipper */}
+                <Field label="Shipper" field="shipper_name" />
+
+                {/* Green Light Sent Date */}
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Green Light Sent Date</Label>
+                  <Input type="date" value={form.green_light_date} onChange={e => updateField('green_light_date', e.target.value)} className="h-8 text-sm rounded-lg" />
+                </div>
+
+                {/* Pickup Date */}
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Pickup Date</Label>
+                  <Input type="date" value={form.pickup_date} onChange={e => updateField('pickup_date', e.target.value)} className="h-8 text-sm rounded-lg" />
+                </div>
+
+                {/* Service Level */}
+                <div className="col-span-1 md:col-span-2 lg:col-span-3">
+                  <Label className="text-xs text-muted-foreground mb-2 block">Service Level</Label>
+                  <RadioGroup
+                    value={form.service_level}
+                    onValueChange={v => updateField('service_level', v)}
+                    className="flex flex-wrap gap-4"
+                  >
+                    {['Own Consol', 'Standard', 'Priority', 'Flash/BXO'].map(opt => (
+                      <div key={opt} className="flex items-center gap-1.5">
+                        <RadioGroupItem value={opt} id={`sl-${opt}`} />
+                        <Label htmlFor={`sl-${opt}`} className="text-xs cursor-pointer">{opt}</Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
+                </div>
+
+                {/* CCT Transmitido */}
+                <div className="flex items-center gap-2">
+                  <Checkbox checked={form.cct_transmitido} onCheckedChange={v => updateField('cct_transmitido', !!v)} id="cct_transmitido" />
+                  <Label htmlFor="cct_transmitido" className="text-xs cursor-pointer">CCT Transmitido</Label>
+                </div>
+
+                {/* Airport at Destination */}
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Airport at Destination</Label>
+                  <Input value={form.airport_destination} onChange={e => updateField('airport_destination', e.target.value)} className="h-8 text-sm rounded-lg" />
+                </div>
+
+                {/* WH Treatment */}
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">WH Treatment</Label>
+                  <Select value={form.wh_treatment} onValueChange={v => updateField('wh_treatment', v)}>
+                    <SelectTrigger className="h-8 text-sm rounded-lg">
+                      <SelectValue placeholder="Selecionar..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {WH_TREATMENT_OPTIONS.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Pre-Alert Date */}
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Pre-Alert Date</Label>
+                  <Input type="date" value={form.pre_alert_date} onChange={e => updateField('pre_alert_date', e.target.value)} className="h-8 text-sm rounded-lg" />
+                </div>
+
+                {/* Customer Order */}
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Customer Order</Label>
+                  <Input value={form.customer_order} onChange={e => updateField('customer_order', e.target.value)} className="h-8 text-sm rounded-lg" />
+                </div>
+
+                {/* OEA Checklist */}
+                <div className="flex items-center gap-2">
+                  <Checkbox checked={form.oea_checklist} onCheckedChange={v => updateField('oea_checklist', !!v)} id="oea_checklist" />
+                  <Label htmlFor="oea_checklist" className="text-xs cursor-pointer">OEA Check List Documental</Label>
+                </div>
+              </>
+            )}
+
+            {/* ===== EXPO-ONLY FIELDS ===== */}
+            {form.mode === 'expo' && (
+              <>
+                {/* D-Term */}
+                <div className="col-span-1 md:col-span-2 lg:col-span-3">
+                  <Label className="text-xs text-muted-foreground mb-2 block">D-Term</Label>
+                  <RadioGroup
+                    value={form.d_term}
+                    onValueChange={v => updateField('d_term', v)}
+                    className="flex flex-wrap gap-4"
+                  >
+                    {['DAP', 'DPU', 'DDP'].map(opt => (
+                      <div key={opt} className="flex items-center gap-1.5">
+                        <RadioGroupItem value={opt} id={`dt-${opt}`} />
+                        <Label htmlFor={`dt-${opt}`} className="text-xs cursor-pointer">{opt}</Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
+                </div>
+
+                {/* Pre-Alert Sent */}
+                <div className="flex items-center gap-2">
+                  <Checkbox checked={form.pre_alert_sent} onCheckedChange={v => updateField('pre_alert_sent', !!v)} id="pre_alert_sent" />
+                  <Label htmlFor="pre_alert_sent" className="text-xs cursor-pointer">Pre-Alert Sent</Label>
+                </div>
+
+                {/* Cargo Departed */}
+                <div className="flex items-center gap-2">
+                  <Checkbox checked={form.cargo_departed} onCheckedChange={v => updateField('cargo_departed', !!v)} id="cargo_departed" />
+                  <Label htmlFor="cargo_departed" className="text-xs cursor-pointer">Cargo Departed</Label>
+                </div>
+
+                {/* POD & DN Available */}
+                <div className="flex items-center gap-2">
+                  <Checkbox checked={form.pod_dn_available} onCheckedChange={v => updateField('pod_dn_available', !!v)} id="pod_dn_available" />
+                  <Label htmlFor="pod_dn_available" className="text-xs cursor-pointer">POD & DN Available</Label>
+                </div>
+
+                {/* OEA Checklist */}
+                <div className="flex items-center gap-2">
+                  <Checkbox checked={form.oea_checklist} onCheckedChange={v => updateField('oea_checklist', !!v)} id="oea_checklist_expo" />
+                  <Label htmlFor="oea_checklist_expo" className="text-xs cursor-pointer">OEA Check List Documental</Label>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Extracted Fields */}
-        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-          <h3 className="text-sm font-semibold text-primary">AWB & Shipper</h3>
+        {/* Extracted Fields — Collapsible Cards */}
+        <CollapsibleCard title="AWB & Shipper" fields={awbShipperFields} form={form}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Field label="MAWB Number *" field="awb_number" />
             <Field label="HAWB Number" field="hawb_number" />
@@ -586,10 +841,9 @@ const CadastroNova = () => {
             <Field label="Shipper Address" field="shipper_address" span2 />
             <Field label="Shipper Account" field="shipper_account" />
           </div>
-        </div>
+        </CollapsibleCard>
 
-        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-          <h3 className="text-sm font-semibold text-primary">Agent & Routing</h3>
+        <CollapsibleCard title="Agent & Routing" fields={agentRoutingFields} form={form}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Field label="Issuing Agent" field="issuing_agent" />
             <Field label="Agent City" field="agent_city" />
@@ -599,10 +853,9 @@ const CadastroNova = () => {
             <Field label="NIF Code" field="nif_code" />
             <Field label="Routing / Destination" field="routing_destination" />
           </div>
-        </div>
+        </CollapsibleCard>
 
-        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-          <h3 className="text-sm font-semibold text-primary">Charges & Values</h3>
+        <CollapsibleCard title="Charges & Values" fields={chargesFields} form={form}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Field label="Currency" field="currency" />
             <Field label="CHGS WT/VAL" field="chgs_wt_val" />
@@ -619,10 +872,9 @@ const CadastroNova = () => {
             <Field label="Total Prepaid" field="total_prepaid" type="number" />
             <Field label="Total Collect" field="total_collect" type="number" />
           </div>
-        </div>
+        </CollapsibleCard>
 
-        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-          <h3 className="text-sm font-semibold text-primary">Goods & Packaging</h3>
+        <CollapsibleCard title="Goods & Packaging" fields={goodsFields} form={form}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Field label="Nature of Goods" field="nature_of_goods" span2 />
             <Field label="HS Code" field="hs_code" />
@@ -631,10 +883,9 @@ const CadastroNova = () => {
             <Field label="Volume (cbm)" field="volume_cbm" type="number" />
             <Field label="Dimensions" field="dimensions" />
           </div>
-        </div>
+        </CollapsibleCard>
 
-        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-          <h3 className="text-sm font-semibold text-primary">Handling & Signature</h3>
+        <CollapsibleCard title="Handling & Signature" fields={handlingFields} form={form}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Field label="Handling References" field="handling_references" span2 />
             <Field label="Handling Info" field="handling_info" span2 />
@@ -642,7 +893,7 @@ const CadastroNova = () => {
             <Field label="Signature Date" field="signature_date" />
             <Field label="Signature Place" field="signature_place" />
           </div>
-        </div>
+        </CollapsibleCard>
 
         {/* Save Button */}
         <div className="flex justify-end">
@@ -753,7 +1004,6 @@ const CadastroNova = () => {
                   </Table>
                 </div>
 
-                {/* Swap result summary */}
                 {swapResult && (
                   <div className="flex gap-3 text-xs">
                     {swapResult.updated.length > 0 && (
@@ -765,7 +1015,6 @@ const CadastroNova = () => {
                   </div>
                 )}
 
-                {/* Confirm button */}
                 {!swapResult && (
                   <div className="flex justify-end">
                     <Button
