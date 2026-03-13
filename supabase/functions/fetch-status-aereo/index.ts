@@ -1340,6 +1340,8 @@ serve(async (req) => {
       const override = MANUAL_OVERRIDES[awb];
       if (!override) continue;
 
+      console.log(`[manualOverride] Processing AWB "${awb}", override keys: ${Object.keys(override).join(',')}`);
+
       if (override.skip_first_event) {
         // Re-resolve status skipping the first timeline event
         const timelineStr = (() => {
