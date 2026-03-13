@@ -16,6 +16,7 @@ import { useChbItems, ChbItem } from "@/hooks/useChbData";
 import { supabase } from "@/integrations/supabase/client";
 import { exportChbHistoryToPDF } from "@/utils/chbPdfExport";
 import { ChbClientConfigDialog } from "@/components/chb/ChbClientConfigDialog";
+import { copyHtmlAsText } from "@/utils/clipboard";
 interface HistoryEntry {
   id: number;
   etapa: string;
