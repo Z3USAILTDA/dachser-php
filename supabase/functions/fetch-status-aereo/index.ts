@@ -1293,10 +1293,38 @@ serve(async (req) => {
 
     // ========== MANUAL OVERRIDES ==========
     // Overrides manuais para AWBs específicos com problemas de resolução automática
-    const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean }> = {
+    const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean; force_timeline?: any[]; force_critical?: boolean; last_event_date?: string }> = {
       '057-03764530': { skip_first_event: true }, // Último evento incorreto, usar penúltimo
       '047-32916273': { status: 'DEP', status_info: 'Boarded the flight on Helsinki (Vantaa) - Flight TP7004S, 22 vols, 2658.9kg, HEL→FRA 13/03 18:00, ETA 15/03 11:00' },
       '020-65055410': { force_nfd: true, status: 'NFD' }, // Considerar NFD como mais recente
+      '996-14389491': { status: 'NIF', status_info: 'Sem informação na companhia aérea' },
+      '020-22473334': {
+        status: 'UNK',
+        status_info: 'Sem atualização',
+        force_critical: true,
+        last_event_date: '2026-03-07T11:36:00',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - HEL (Helsinki)', date: '05 MAR / 22:20', pieces: '2', weight: '11 kg' },
+          { status: 'RCS', description: 'RCS - HEL (Helsinki)', date: '04 MAR / 07:00', pieces: '2', weight: '11 kg' },
+          { status: 'DIS', description: 'DIS - HEL (Helsinki)', date: '05 MAR / 10:00', pieces: '2', weight: '11 kg' },
+          { status: 'DIS', description: 'DIS - HEL (Helsinki)', date: '05 MAR / 10:00', pieces: '2', weight: '11 kg' },
+          { status: 'MAN', description: 'LH851 (HEL→FRA) - MAN - HEL (Helsinki)', date: '04 MAR / 15:56', pieces: '2', weight: '11 kg' },
+          { status: 'DEP', description: 'LH851 (HEL→FRA) - DEP - HEL (Helsinki)', date: '04 MAR / 17:54', pieces: '2', weight: '11 kg' },
+          { status: 'ARR', description: 'LH851 (HEL→FRA) - ARR - FRA (Frankfurt)', date: '04 MAR / 19:14', pieces: '2', weight: '11 kg' },
+          { status: 'RCF', description: 'LH851 (HEL→FRA) - RCF - FRA (Frankfurt)', date: '05 MAR / 20:59', pieces: '2', weight: '11 kg' },
+          { status: 'DIS', description: 'DIS - FRA (Frankfurt)', date: '05 MAR / 09:48', pieces: '2', weight: '11 kg' },
+          { status: 'MAN', description: 'LH851 (HEL→FRA) 05 MAR - MAN - HEL (Helsinki)', date: '05 MAR / 10:00', pieces: '2', weight: '11 kg' },
+          { status: 'MAN', description: 'LH849 (HEL→FRA) - MAN - HEL (Helsinki)', date: '05 MAR / 10:00', pieces: '2', weight: '11 kg' },
+          { status: 'DEP', description: 'LH849 (HEL→FRA) - DEP - HEL (Helsinki)', date: '05 MAR / 14:13', pieces: '2', weight: '11 kg' },
+          { status: 'ARR', description: 'LH849 (HEL→FRA) - ARR - FRA (Frankfurt)', date: '05 MAR / 15:37', pieces: '2', weight: '11 kg' },
+          { status: 'RCF', description: 'LH849 (HEL→FRA) - RCF - FRA (Frankfurt)', date: '05 MAR / 20:59', pieces: '2', weight: '11 kg' },
+          { status: 'MAN', description: 'LH506 (FRA→GRU) - MAN - FRA (Frankfurt)', date: '06 MAR / 20:27', pieces: '2', weight: '11 kg' },
+          { status: 'DEP', description: 'LH506 (FRA→GRU) - DEP - FRA (Frankfurt)', date: '06 MAR / 22:04', pieces: '2', weight: '11 kg' },
+          { status: 'ARR', description: 'LH506 (FRA→GRU) - ARR - GRU (Guarulhos)', date: '07 MAR / 06:11', pieces: '2', weight: '11 kg' },
+          { status: 'RCF', description: 'LH506 (FRA→GRU) - RCF - GRU (Guarulhos)', date: '07 MAR / 11:36', pieces: '2', weight: '11 kg' },
+          { status: 'NFD', description: 'NFD - GRU (Guarulhos)', date: '07 MAR / 11:36', pieces: '2', weight: '11 kg' },
+        ]
+      },
     };
 
     for (const row of processedRows) {
