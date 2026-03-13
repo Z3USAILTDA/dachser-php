@@ -58,11 +58,18 @@ const BATCH_SIZE = 5;
 type CarrierName = 'HAPAG' | 'MSC' | 'ONE' | 'OUTRO';
 type CarrierFilter = 'ALL' | 'HAPAG' | 'MSC' | 'ONE';
 
+const normalizeMblId = (mblId: string): string =>
+  mblId
+    .toUpperCase()
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/^[^A-Z0-9]+/, '');
+
 const detectCarrier = (mblId: string): { name: CarrierName; color: string } => {
-  const id = mblId.toUpperCase().trim().replace(/^[^A-Z0-9]+/, '');
-  if (id.startsWith('MEDU') || id.startsWith('MSC') || id.startsWith('EBKG')) return { name: 'MSC', color: '#00B4D8' };
-  if (id.startsWith('ONEY')) return { name: 'ONE', color: '#FF6B9D' };
-  if (id.startsWith('HLC')) return { name: 'HAPAG', color: '#ffc800' };
+  const id = normalizeMblId(mblId);
+  if (/^(MEDU|MSC|EBKG)/.test(id)) return { name: 'MSC', color: '#00B4D8' };
+  if (/^ONEY/.test(id)) return { name: 'ONE', color: '#FF6B9D' };
+  if (/^HLC/.test(id)) return { name: 'HAPAG', color: '#ffc800' };
   return { name: 'OUTRO', color: '#888' };
 };
 const BATCH_DELAY_MS = 35000;
@@ -78,19 +85,29 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
   const [processingMBL, setProcessingMBL] = useState<string | null>(null);
   const [carrierFilter, setCarrierFilter] = useState<CarrierFilter>('ALL');
 
+  // Remove duplicados por MBL para evitar vazamento entre filtros
+  const uniqueData = useMemo(() => {
+    const map = new Map<string, CombinedMBLData>();
+    data.forEach((item) => {
+      const key = normalizeMblId(item.mbl_id);
+      if (!map.has(key)) map.set(key, item);
+    });
+    return Array.from(map.values());
+  }, [data]);
+
   // Carrier stats
   const carrierStats = useMemo(() => {
-    const hapag = data.filter(d => detectCarrier(d.mbl_id).name === 'HAPAG').length;
-    const msc = data.filter(d => detectCarrier(d.mbl_id).name === 'MSC').length;
-    const one = data.filter(d => detectCarrier(d.mbl_id).name === 'ONE').length;
+    const hapag = uniqueData.filter(d => detectCarrier(d.mbl_id).name === 'HAPAG').length;
+    const msc = uniqueData.filter(d => detectCarrier(d.mbl_id).name === 'MSC').length;
+    const one = uniqueData.filter(d => detectCarrier(d.mbl_id).name === 'ONE').length;
     return { hapag, msc, one };
-  }, [data]);
+  }, [uniqueData]);
 
   // Data filtered by carrier
   const carrierFilteredData = useMemo(() => {
-    if (carrierFilter === 'ALL') return data;
-    return data.filter(d => detectCarrier(d.mbl_id).name === carrierFilter);
-  }, [data, carrierFilter]);
+    if (carrierFilter === 'ALL') return uniqueData;
+    return uniqueData.filter(d => detectCarrier(d.mbl_id).name === carrierFilter);
+  }, [uniqueData, carrierFilter]);
 
   // Calculate stats from carrier-filtered data
   const stats = useMemo(() => {
