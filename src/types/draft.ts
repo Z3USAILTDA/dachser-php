@@ -154,9 +154,12 @@ export interface ApiMetadata {
 // Response da API de tracking
 export interface TrackingApiResponse {
   success: boolean;
+  carrier?: string;
+  bookingNumber?: string;
   bookingInfo?: BookingInfo;
   containers?: ContainerInfo[];
   events?: HapagEvent[];
+  totalEvents?: number;
   error?: string;
   apiMetadata?: ApiMetadata;
 }
