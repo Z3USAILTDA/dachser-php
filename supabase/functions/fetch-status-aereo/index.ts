@@ -1366,6 +1366,16 @@ serve(async (req) => {
       }
       if (override.status_info) {
         row.status_info = override.status_info;
+        row.last_event = override.status_info;
+      }
+      if (override.force_critical) {
+        row.force_critical = true;
+      }
+      if (override.last_event_date) {
+        row.last_event_date = override.last_event_date;
+      }
+      if (override.force_timeline) {
+        row.timeline_json = JSON.stringify(override.force_timeline);
       }
     }
 
