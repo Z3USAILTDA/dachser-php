@@ -142,13 +142,13 @@ export default function ChbAnalises() {
       }));
     }
   };
-  const handleCopyResult = (content: string) => {
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = content;
-    // Remove excessive whitespace
-    const text = (tempDiv.textContent || tempDiv.innerText || content).replace(/\n{3,}/g, '\n\n').trim();
-    navigator.clipboard.writeText(text);
-    toast.success("Resultado copiado!");
+  const handleCopyResult = async (content: string) => {
+    const ok = await copyHtmlAsText(content);
+    if (ok) {
+      toast.success("Resultado copiado!");
+    } else {
+      toast.error("Não foi possível copiar. Tente selecionar o texto manualmente.");
+    }
   };
   const handleDelete = async (itemId: number) => {
     await deleteItem(itemId);

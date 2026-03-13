@@ -26,11 +26,13 @@ interface ChbAnalysisPanelProps {
   corrections?: ChbCorrection[];
 }
 
-const copyAnalysisResult = (html: string) => {
-  const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = html;
-  navigator.clipboard.writeText(tempDiv.textContent || tempDiv.innerText || '');
-  toast.success('Resultado copiado para a área de transferência');
+const copyAnalysisResult = async (html: string) => {
+  const ok = await copyHtmlAsText(html);
+  if (ok) {
+    toast.success('Resultado copiado para a área de transferência');
+  } else {
+    toast.error('Não foi possível copiar. Tente selecionar o texto manualmente.');
+  }
 };
 
 export function ChbAnalysisPanel({ 
