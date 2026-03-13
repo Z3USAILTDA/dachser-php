@@ -1136,13 +1136,53 @@ serve(async (req) => {
         'última atualização': scrapedAt,
         last_flight: ws.last_flight || null,
         is_ground_transport: (() => {
-          // Detect ground transport: flight code ends with "-T" or "X" (e.g. "LA 5252-T", "LX-9950X")
+          // Detect ground transport: flight code ends with "-T" or ends with digit+X
+          function isGroundFlight(val: string): boolean {
+            const clean = val.trim().replace(/,\s*$/, '');
+            if (!clean) return false;
+            return /[-]T$/i.test(clean) || /\d[Xx]$/.test(clean);
+          }
+          // Extract flight codes from text: "Flight LX-9950X", "Flight M3-8485", "LA 5252-T"
+          function extractFlightsFromText(text: string): string[] {
+            if (!text) return [];
+            const flights: string[] = [];
+            // "Flight XX-1234X" or "Flight XX 1234X"
+            const flightPattern = /Flight\s+([A-Z0-9]{2}[\s-]?\d{3,5}[A-Za-z]?)/gi;
+            let m;
+            while ((m = flightPattern.exec(text)) !== null) flights.push(m[1]);
+            return flights;
+          }
           try {
+            // Check ws.last_flight first
+            if (ws.last_flight && isGroundFlight(String(ws.last_flight))) {
+              console.log(`[ground] ${awb}: DETECTED via ws.last_flight="${ws.last_flight}"`);
+              return true;
+            }
             if (timelineStr) {
               const tlEvents = JSON.parse(timelineStr);
-              if (Array.isArray(tlEvents) && tlEvents.length > 0) {
-                const lastFlight = String(tlEvents[0]?.Flight || tlEvents[0]?.flight || tlEvents[0]?.voo || '').trim().replace(/,\s*$/, '');
-                if (lastFlight && (/\-T$/i.test(lastFlight) || /X$/i.test(lastFlight))) return true;
+              if (Array.isArray(tlEvents)) {
+                const flightFields = ['Flight', 'flight', 'voo', 'Voo', 'flight_number', 'flightNumber', 'numero_voo'];
+                for (const ev of tlEvents) {
+                  // Check dedicated flight fields
+                  for (const field of flightFields) {
+                    if (ev[field] && isGroundFlight(String(ev[field]))) {
+                      console.log(`[ground] ${awb}: DETECTED via field "${field}"="${ev[field]}"`);
+                      return true;
+                    }
+                  }
+                  // Extract flight codes from ALL text fields (status, Description, details, title)
+                  for (const textField of ['status', 'Status', 'Description', 'description', 'details', 'title']) {
+                    const text = ev[textField];
+                    if (!text) continue;
+                    const flights = extractFlightsFromText(String(text));
+                    for (const f of flights) {
+                      if (isGroundFlight(f)) {
+                        console.log(`[ground] ${awb}: DETECTED flight "${f}" in "${textField}": "${String(text).substring(0, 100)}"`);
+                        return true;
+                      }
+                    }
+                  }
+                }
               }
             }
           } catch (_) {}
