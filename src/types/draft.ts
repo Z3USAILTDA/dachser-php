@@ -90,6 +90,8 @@ export interface BookingInfo {
   transportDocumentReference: string;
   vesselName: string;
   vesselIMO?: string;
+  vesselFlag?: string | null;
+  vesselFlagName?: string | null;
   voyageNumber: string;
   originLocation: string;
   originCode: string;
@@ -100,6 +102,7 @@ export interface BookingInfo {
   documentStatus: string;
   bookingCreationDate?: string;
   containerType?: string;
+  numberOfContainers?: number | null;
   commodity?: string | null;
   yourReference?: string | null;
 }
