@@ -657,6 +657,16 @@ REGRAS DE CONTEÚDO DA TABELA
    - Incoterms diferentes (ex.: CFR × FOB) → 🔴
    - Incoterm coerente mas rótulo faltante → 🟨
 
+   🔴🔴🔴 REGRA DE CONSISTÊNCIA — INCOTERM vs TIPO DE FRETE (VALIDAÇÃO CRUZADA OBRIGATÓRIA):
+   - FCA, EXW, FOB → frete tipicamente COLLECT (comprador paga/organiza o frete)
+   - CIF, CFR, CPT, CIP, DDP, DAP → frete tipicamente PREPAID (vendedor paga o frete)
+   
+   VALIDAÇÃO CRUZADA:
+   - Se BL/AWB mostra frete "Prepaid" mas Incoterm é FCA/EXW/FOB → 🔴 CRÍTICO (contradição: vendedor pagou frete mas Incoterm indica que comprador deveria pagar)
+   - Se BL/AWB mostra frete "Collect" mas Incoterm é CIF/CFR/CPT/CIP/DDP/DAP → 🔴 CRÍTICO (contradição: comprador pagando frete mas Incoterm indica que vendedor deveria pagar)
+   - Registrar na tabela com status 🔴 E nas observações com 🔴 explicando a contradição
+   - Esta validação tem PRIORIDADE MÁXIMA — mesmo que cada campo individualmente esteja correto, a COMBINAÇÃO pode ser inconsistente
+
 7) VALORES — REGRAS CRÍTICAS (ATENÇÃO MÁXIMA — DIFERENCIE CLARAMENTE):
 
    ⚠️ EXISTEM TRÊS VALORES DISTINTOS — NÃO CONFUNDA!
@@ -972,8 +982,9 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
     3. Confirme que o STATUS da linha CORRESPONDE ao ícone da observação
     4. Se não corresponder, CORRIJA a tabela antes de gerar a saída
     5. CONFIRME que "Valor Mercadoria" está com ✅ na tabela (SEMPRE conforme!)
-    6. CONFIRME que observações sobre Valor Mercadoria usam ℹ️ (informativo), NUNCA 🟨 ou 🔴
-    7. CONFIRME que "Valor Total Frete" só contém valores de linhas EXPLICITAMENTE rotuladas como frete
+     6. CONFIRME que observações sobre Valor Mercadoria usam ℹ️ (informativo), NUNCA 🟨 ou 🔴
+     7. CONFIRME que "Valor Total Frete" só contém valores de linhas EXPLICITAMENTE rotuladas como frete
+     8. CONFIRME consistência entre Incoterm e tipo de frete (Prepaid/Collect) — se BL é Prepaid mas Incoterm é FCA/EXW/FOB → 🔴 CRÍTICO
     
     Esta verificação é OBRIGATÓRIA. Inconsistências entre tabela e observações
     indicam erro no processamento e devem ser corrigidas antes da saída final.

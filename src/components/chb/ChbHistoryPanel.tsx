@@ -2,6 +2,7 @@ import { ChbApprovedHistory } from '@/types/chb';
 import { stepTitles } from '@/data/chbMocks';
 import { Clock, Copy, ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
+import { copyHtmlAsText } from '@/utils/clipboard';
 
 interface ChbHistoryPanelProps {
   stepId: number;
@@ -9,12 +10,14 @@ interface ChbHistoryPanelProps {
 }
 
 export function ChbHistoryPanel({ stepId, approvedHistory }: ChbHistoryPanelProps) {
-  const copyResult = (entry: ChbApprovedHistory) => {
+  const copyResult = async (entry: ChbApprovedHistory) => {
     const parecerHtml = extractParecer(entry.detailedSummary || entry.summary);
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = parecerHtml;
-    navigator.clipboard.writeText(tempDiv.textContent || tempDiv.innerText || '');
-    toast.success('Parecer copiado para a área de transferência');
+    const ok = await copyHtmlAsText(parecerHtml);
+    if (ok) {
+      toast.success('Parecer copiado para a área de transferência');
+    } else {
+      toast.error('Não foi possível copiar. Tente selecionar o texto manualmente.');
+    }
   };
 
   const stepNames: Record<number, string> = {
