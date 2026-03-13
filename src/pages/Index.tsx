@@ -2991,7 +2991,7 @@ const Index = () => {
                                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
                                       <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
                                        {awb.pieces_discrepancy ? `Discrepância Peças (${awb.baseline_pieces})` : awb.has_dis_event ? "DIS - Discrepância" : (() => {
-                                        const DISCREPANCY_AWBS = ["577-11063080"];
+                                        const DISCREPANCY_AWBS: string[] = [];
                                         if (DISCREPANCY_AWBS.includes(awb.awb)) {
                                           return "Discrepância Peças";
                                         }
