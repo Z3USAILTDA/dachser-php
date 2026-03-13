@@ -1135,6 +1135,20 @@ serve(async (req) => {
         status_info: extractLastEventDescription(timelineStr, etdForTimeline) || ws.last_status_description || null,
         'última atualização': scrapedAt,
         last_flight: ws.last_flight || null,
+        is_ground_transport: (() => {
+          // Detect ground transport: flight code contains "-T" (e.g. "LA 5252-T")
+          try {
+            if (timelineStr) {
+              const tlEvents = JSON.parse(timelineStr);
+              if (Array.isArray(tlEvents) && tlEvents.length > 0) {
+                // Check the most recent event's flight field
+                const lastFlight = tlEvents[0]?.Flight || tlEvents[0]?.flight || tlEvents[0]?.voo || '';
+                if (String(lastFlight).includes('-T')) return true;
+              }
+            }
+          } catch (_) {}
+          return false;
+        })(),
         days_in_transit: (() => {
           // Compute days in transit from ETD to now (or to delivered date)
           const etd = masters && masters.length > 0 ? masters[0].etd : null;
