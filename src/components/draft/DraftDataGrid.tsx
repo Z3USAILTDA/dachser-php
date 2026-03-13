@@ -410,7 +410,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
       <div className="flex items-center gap-2">
         <span className="text-[0.75rem] text-[#888] uppercase tracking-wider mr-1">Armador:</span>
         {[
-          { key: 'ALL' as CarrierFilter, label: 'Todos', count: data.length, color: 'hsl(var(--info))' },
+          { key: 'ALL' as CarrierFilter, label: 'Todos', count: uniqueData.length, color: 'hsl(var(--info))' },
           { key: 'HAPAG' as CarrierFilter, label: 'Hapag-Lloyd', count: carrierStats.hapag, color: '#ffc800' },
           { key: 'MSC' as CarrierFilter, label: 'MSC', count: carrierStats.msc, color: '#00B4D8' },
           { key: 'ONE' as CarrierFilter, label: 'ONE', count: carrierStats.one, color: '#FF6B9D' },
