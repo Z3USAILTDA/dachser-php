@@ -2095,6 +2095,11 @@ const ContainerTracking = () => {
               ADM
             </button>}
           
+          {isAdmin && <button onClick={() => setCadastroMaritimoOpen(true)} className="px-3 py-1.5 rounded-full border border-[#ffc800]/50 flex items-center gap-1.5 bg-[#ffc800]/20 text-[#ffc800] hover:bg-[#ffc800]/30 transition font-medium text-xs uppercase tracking-wide" title="Novo Processo Marítimo">
+              <FilePlus className="w-3.5 h-3.5" />
+              Novo Processo
+            </button>}
+          
           <button onClick={() => navigate("/sea/tracking/notificacoes")} className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition" title="Regras de Notificação">
             <Bell className="w-4 h-4" />
           </button>
