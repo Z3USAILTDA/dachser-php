@@ -445,6 +445,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
             <TableHeader>
               <TableRow className="hover:bg-transparent border-[rgba(255,255,255,0.08)]">
                 <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium w-12">#</TableHead>
+                <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Armador</TableHead>
                 <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">MBL ID</TableHead>
                 <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium hidden lg:table-cell">Shipper</TableHead>
                 <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Booking</TableHead>
