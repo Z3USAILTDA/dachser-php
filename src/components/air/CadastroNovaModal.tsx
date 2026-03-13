@@ -203,6 +203,36 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
   const [clerkOpen, setClerkOpen] = useState(false);
   const clerkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [copied, setCopied] = useState(false);
+
+  const formatDateForTitle = (dateStr: string) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
+  };
+
+  const preAlertTitle = useMemo(() => {
+    const parts: string[] = ['Dachser Pre-Alert AIR'];
+    if (form.po_number) parts.push(`PO: ${form.po_number};`);
+    if (form.consignee_customer_number) parts.push(form.consignee_customer_number);
+    if (form.awb_number) parts.push(`AWB: ${form.awb_number}`);
+    if (form.hawb_number) parts.push(`HAWB: ${form.hawb_number}`);
+    if (form.consignee_nome) parts.push(form.consignee_nome);
+    if (form.consignee_nome) parts.push(`Consignee: ${form.consignee_nome}`);
+    if (form.airport_destination) parts.push(form.airport_destination);
+    const etdFmt = formatDateForTitle(form.etd);
+    if (etdFmt) parts.push(`ETD: ${etdFmt}`);
+    const etaFmt = formatDateForTitle(form.eta);
+    if (etaFmt) parts.push(`ETA: ${etaFmt}`);
+    return parts.join(' - ');
+  }, [form.po_number, form.consignee_customer_number, form.awb_number, form.hawb_number, form.consignee_nome, form.airport_destination, form.etd, form.eta]);
+
+  const handleCopyTitle = async () => {
+    const ok = await copyToClipboard(preAlertTitle);
+    if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); toast.success("Título copiado!"); }
+  };
+
   const updateField = (field: keyof FormData, value: string | boolean) => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
