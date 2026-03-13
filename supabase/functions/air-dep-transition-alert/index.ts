@@ -34,7 +34,7 @@ interface StuckAWB {
 }
 
 async function getConnection() {
-  const conn = await createClient({
+  const conn = await mysql.createConnection({
     host: Deno.env.get("MARIADB_HOST") || "",
     port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
     user: Deno.env.get("MARIADB_USER") || "",
