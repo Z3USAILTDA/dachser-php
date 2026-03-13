@@ -1292,11 +1292,46 @@ serve(async (req) => {
     console.log(`tipo_processo distribution: IMPORT=${importCount}, EXPORT=${exportCount}, null=${nullCount}`);
     console.log(`Pieces discrepancy detected in ${discrepancyCount} AWBs`);
 
+    // ========== INJECT SYNTHETIC ROWS for AWBs not in firecrawl but needing manual override ==========
+    const existingAwbs = new Set(processedRows.map((r: any) => (r.awb || '').trim()));
+    const SYNTHETIC_AWBS: Record<string, any> = {
+      '047-32916273': {
+        id: 0, awb: '047-32916273', origem: 'HEL', destino: 'GRU',
+        'último_status': 'DEP', tracking_failed: false, status_info: null,
+        'última atualização': new Date().toString(), last_flight: null,
+        pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false,
+        master_changed: false, in_transit: true, last_event_date: null,
+        is_ground_transport: false, days_in_transit: null, source: 'synthetic',
+        hawb: 'HEL-48119210', destinatário: null, nome_analista: null,
+        email_analista: null, email_cliente: null, tipo_servico: null, tipo_processo: 'AIR IMPORT',
+      },
+    };
+    for (const [sAwb, sRow] of Object.entries(SYNTHETIC_AWBS)) {
+      if (!existingAwbs.has(sAwb)) {
+        // Try to get master data
+        const masters = masterMultiMap.get(sAwb);
+        if (masters && masters.length > 0) {
+          for (const master of masters) {
+            processedRows.push({ ...sRow, hawb: String(master.hawb || '').trim(), destinatário: master.cliente || null, nome_analista: master.nome_analista || null, email_analista: master.email_analista || null, email_cliente: master.emails_cliente || null, tipo_processo: master.tipo_processo || 'AIR IMPORT' });
+          }
+        } else {
+          processedRows.push(sRow);
+        }
+        console.log(`[synthetic] Injected ${sAwb} into processedRows`);
+      }
+    }
+
     // ========== MANUAL OVERRIDES ==========
     // Overrides manuais para AWBs específicos com problemas de resolução automática
     const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean; force_timeline?: any[]; force_critical?: boolean; last_event_date?: string }> = {
       '057-03764530': { skip_first_event: true }, // Último evento incorreto, usar penúltimo
-      '047-32916273': { status: 'DEP', status_info: 'Boarded the flight on Helsinki (Vantaa) - Flight TP7004S, 22 vols, 2658.9kg, HEL→FRA 13/03 18:00, ETA 15/03 11:00' },
+      '047-32916273': { 
+        status: 'DEP', 
+        status_info: 'Boarded the flight on Helsinki (Vantaa) - Flight TP7004S, 22 vols, 2658.9kg, HEL→FRA 13/03 18:00, ETA 15/03 11:00',
+        force_timeline: [
+          { status: 'DEP', description: 'Boarded the flight on Helsinki (Vantaa) - Flight TP7004S, 22 vols, 2658.9kg, HEL→FRA 13/03 18:00, ETA 15/03 11:00', date: '13 MAR 2026 18:00', pieces: '22', weight: '2658.9 kg' }
+        ]
+      },
       '020-65055410': { force_nfd: true, status: 'NFD' }, // Considerar NFD como mais recente
       '996-14389491': { status: 'NIF', status_info: 'Sem informação na companhia aérea' },
       '577-11063080': { status: 'DEP' }, // Último evento na timeline é DEP
@@ -1329,10 +1364,13 @@ serve(async (req) => {
       },
     };
 
+    // v2: override loop with debug
     for (const row of processedRows) {
       const awb = (row.awb || '').trim();
       const override = MANUAL_OVERRIDES[awb];
       if (!override) continue;
+
+      console.log(`[OVERRIDE] AWB="${awb}" keys=${Object.keys(override).join(',')}`);
 
       if (override.skip_first_event) {
         // Re-resolve status skipping the first timeline event
@@ -1403,9 +1441,15 @@ serve(async (req) => {
       '827-08279331',
     ]);
 
+    // AWBs com override manual NUNCA devem ser filtrados
+    const OVERRIDE_PROTECTED = new Set(Object.keys(MANUAL_OVERRIDES));
+
     const visibleRows = processedRows.filter((row: any) => {
       const status = (row['último_status'] || '').toUpperCase().trim();
       const awb = (row['awb'] || '').trim();
+
+      // Override-protected AWBs are always visible
+      if (OVERRIDE_PROTECTED.has(awb)) return true;
 
       // 0. AWBs manualmente ocultos
       if (HIDDEN_AWBS.has(awb)) return false;
@@ -1416,7 +1460,7 @@ serve(async (req) => {
       // 2. ARR - DESTINO: manter por 5 dias
       if (status === 'ARR - DESTINO') {
         const updatedAt = row['última atualização'];
-        if (!updatedAt) return true; // sem data, manter por segurança
+        if (!updatedAt) return true;
         const updatedTime = new Date(updatedAt).getTime();
         if (isNaN(updatedTime)) return true;
         return (now - updatedTime) <= FIVE_DAYS_MS;
