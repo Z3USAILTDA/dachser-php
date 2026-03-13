@@ -2991,7 +2991,7 @@ const Index = () => {
                                       {awb.pieces_discrepancy ? `Discrepância Peças (${awb.baseline_pieces})` : awb.has_dis_event ? "DIS - Discrepância" : (() => {
                                         const STALENESS_AWBS = ["139-47195164", "139-47195142"];
                                         if (STALENESS_AWBS.includes(awb.awb)) {
-                                          const lastDate = awb.last_event_date || awb.last_check;
+                                          const lastDate = awb.last_event_date;
                                           if (lastDate) {
                                             const diffMs = Date.now() - new Date(lastDate).getTime();
                                             const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
