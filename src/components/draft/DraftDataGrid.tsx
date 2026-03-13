@@ -54,6 +54,14 @@ interface DraftDataGridProps {
 
 const ITEMS_PER_PAGE = 15;
 const BATCH_SIZE = 5;
+
+const detectCarrier = (mblId: string): { name: string; color: string } => {
+  const id = mblId.toUpperCase();
+  if (id.includes('MEDU') || id.includes('MSC')) return { name: 'MSC', color: '#00B4D8' };
+  if (id.includes('ONEY') || id.includes('ONE')) return { name: 'ONE', color: '#FF6B9D' };
+  if (id.includes('HLC')) return { name: 'HAPAG', color: '#ffc800' };
+  return { name: '-', color: '#888' };
+};
 const BATCH_DELAY_MS = 35000;
 
 export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStatusFilterChange }: DraftDataGridProps) => {
@@ -274,6 +282,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
   const exportToCSV = () => {
     const exportData = filteredData.map((item, index) => ({
       '#': index + 1,
+      'Armador': detectCarrier(item.mbl_id).name,
       'MBL ID': item.mbl_id,
       'Shipper': item.shipper || '-',
       'Booking': item.trackingData?.booking || '-',
@@ -437,6 +446,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
             <TableHeader>
               <TableRow className="hover:bg-transparent border-[rgba(255,255,255,0.08)]">
                 <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium w-12">#</TableHead>
+                <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Armador</TableHead>
                 <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">MBL ID</TableHead>
                 <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium hidden lg:table-cell">Shipper</TableHead>
                 <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Booking</TableHead>
@@ -454,14 +464,14 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center py-12">
+                  <TableCell colSpan={14} className="text-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-primary" />
                     <span className="text-[#aaaaaa] text-[0.85rem]">Carregando...</span>
                   </TableCell>
                 </TableRow>
               ) : paginatedData.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center py-12 text-[#aaaaaa]">
+                  <TableCell colSpan={14} className="text-center py-12 text-[#aaaaaa]">
                     {searchTerm ? `Nenhum resultado para "${searchTerm}"` : 'Nenhum dado disponível'}
                   </TableCell>
                 </TableRow>
@@ -473,6 +483,9 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
                   >
                     <TableCell className="text-[#888] text-[0.85rem]">
                       {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
+                    </TableCell>
+                    <TableCell className="text-[0.8rem] font-semibold" style={{ color: detectCarrier(item.mbl_id).color }}>
+                      {detectCarrier(item.mbl_id).name}
                     </TableCell>
                     <TableCell className="font-mono text-primary text-[0.85rem]">{item.mbl_id}</TableCell>
                     <TableCell className="text-[#aaaaaa] text-[0.85rem] hidden lg:table-cell max-w-[180px] truncate" title={item.shipper || '-'}>
