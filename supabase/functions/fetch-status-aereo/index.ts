@@ -260,7 +260,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     [/\bnot\s+found\b/i, 'NIF'],
     [/\bcancell?ed\b/i, 'CAN'],
     [/\bawb\s+documentation\b/i, 'AWR'],
-    [/\bdocuments?\s+received\b/i, 'AWR'],
+    [/\bdocuments?\s+received\b/i, 'RCD'],
     [/\breceived\b/i, 'RCF'],
   ];
 
