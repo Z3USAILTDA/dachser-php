@@ -596,7 +596,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
         <div className="p-4 border-t border-[rgba(255,255,255,0.08)]">
           <div className="flex items-center justify-between">
             <span className="text-[0.8rem] text-[#aaaaaa]">
-              {filteredData.length} de {data.length} registros
+              {filteredData.length} de {uniqueData.length} registros
             </span>
             <TablePagination
               currentPage={currentPage}
