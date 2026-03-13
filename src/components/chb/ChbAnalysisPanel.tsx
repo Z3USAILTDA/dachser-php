@@ -6,6 +6,9 @@ import { ChbComparisonGrid } from './ChbComparisonGrid';
 import { exportChbHistoryToPDF } from '@/utils/chbPdfExport';
 import { createCorrectedHistoryEntries } from '@/utils/chbPdfCorrections';
 import { ChbCorrection } from '@/hooks/useChbCorrections';
+import { copyHtmlAsText } from '@/utils/clipboard';
+import { createCorrectedHistoryEntries } from '@/utils/chbPdfCorrections';
+import { ChbCorrection } from '@/hooks/useChbCorrections';
 
 interface ChbAnalysisPanelProps {
   stepId: number;
