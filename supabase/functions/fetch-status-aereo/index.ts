@@ -301,6 +301,9 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
         })
       : sorted
     ).filter(ev => {
+      // Exclude [planned] events – they are predictions, not confirmed
+      const desc = (ev.Description || ev.description || ev.title || ev.details || ev.status || ev.Status || '').toString().trim();
+      if (desc.toLowerCase().endsWith('[planned]')) return false;
       // Exclude future events (predictions, not real statuses)
       const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
       if (!ts) return true;
