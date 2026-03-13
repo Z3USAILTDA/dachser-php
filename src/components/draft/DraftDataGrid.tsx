@@ -100,7 +100,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
 
   // Filter data based on search term and status filter
   const filteredData = useMemo(() => {
-    let filtered = data;
+    let filtered = carrierFilteredData;
     
     // Apply status filter
     if (statusFilter) {
@@ -111,7 +111,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
       }
     }
     
-    // Apply search filter (including shipper)
+    // Apply search filter
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(item => 
@@ -123,7 +123,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
       );
     }
     
-    // Sort: filled rows first (with trackingData), then by MBL
+    // Sort: filled rows first
     filtered = [...filtered].sort((a, b) => {
       const aHasData = a.trackingData !== null ? 1 : 0;
       const bHasData = b.trackingData !== null ? 1 : 0;
@@ -132,7 +132,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
     });
     
     return filtered;
-  }, [data, searchTerm, statusFilter]);
+  }, [carrierFilteredData, searchTerm, statusFilter]);
 
   // Paginate data
   const paginatedData = useMemo(() => {
