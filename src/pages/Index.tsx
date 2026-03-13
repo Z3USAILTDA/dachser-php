@@ -2563,6 +2563,16 @@ const Index = () => {
                   CIAs Monitoradas ({monitoredAirlinesData.totalAirlines})
                 </button>
 
+                {isZ3usAdmin() && (
+                  <button
+                    onClick={() => setCadastroNovaOpen(true)}
+                    className="h-8 px-4 rounded-full bg-emerald-500/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-emerald-400/80 transition border border-emerald-400/50 shadow-[0_0_15px_rgba(16,185,129,.2)]"
+                  >
+                    <FilePlus className="w-3.5 h-3.5" />
+                    Novo Processo
+                  </button>
+                )}
+
                 <button
                   onClick={handleRefresh}
                   className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)]"
