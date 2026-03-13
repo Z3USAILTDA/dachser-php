@@ -58,11 +58,18 @@ const BATCH_SIZE = 5;
 type CarrierName = 'HAPAG' | 'MSC' | 'ONE' | 'OUTRO';
 type CarrierFilter = 'ALL' | 'HAPAG' | 'MSC' | 'ONE';
 
+const normalizeMblId = (mblId: string): string =>
+  mblId
+    .toUpperCase()
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/^[^A-Z0-9]+/, '');
+
 const detectCarrier = (mblId: string): { name: CarrierName; color: string } => {
-  const id = mblId.toUpperCase().trim().replace(/^[^A-Z0-9]+/, '');
-  if (id.startsWith('MEDU') || id.startsWith('MSC') || id.startsWith('EBKG')) return { name: 'MSC', color: '#00B4D8' };
-  if (id.startsWith('ONEY')) return { name: 'ONE', color: '#FF6B9D' };
-  if (id.startsWith('HLC')) return { name: 'HAPAG', color: '#ffc800' };
+  const id = normalizeMblId(mblId);
+  if (/^(MEDU|MSC|EBKG)/.test(id)) return { name: 'MSC', color: '#00B4D8' };
+  if (/^ONEY/.test(id)) return { name: 'ONE', color: '#FF6B9D' };
+  if (/^HLC/.test(id)) return { name: 'HAPAG', color: '#ffc800' };
   return { name: 'OUTRO', color: '#888' };
 };
 const BATCH_DELAY_MS = 35000;
@@ -78,19 +85,29 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
   const [processingMBL, setProcessingMBL] = useState<string | null>(null);
   const [carrierFilter, setCarrierFilter] = useState<CarrierFilter>('ALL');
 
+  // Remove duplicados por MBL para evitar vazamento entre filtros
+  const uniqueData = useMemo(() => {
+    const map = new Map<string, CombinedMBLData>();
+    data.forEach((item) => {
+      const key = normalizeMblId(item.mbl_id);
+      if (!map.has(key)) map.set(key, item);
+    });
+    return Array.from(map.values());
+  }, [data]);
+
   // Carrier stats
   const carrierStats = useMemo(() => {
-    const hapag = data.filter(d => detectCarrier(d.mbl_id).name === 'HAPAG').length;
-    const msc = data.filter(d => detectCarrier(d.mbl_id).name === 'MSC').length;
-    const one = data.filter(d => detectCarrier(d.mbl_id).name === 'ONE').length;
+    const hapag = uniqueData.filter(d => detectCarrier(d.mbl_id).name === 'HAPAG').length;
+    const msc = uniqueData.filter(d => detectCarrier(d.mbl_id).name === 'MSC').length;
+    const one = uniqueData.filter(d => detectCarrier(d.mbl_id).name === 'ONE').length;
     return { hapag, msc, one };
-  }, [data]);
+  }, [uniqueData]);
 
   // Data filtered by carrier
   const carrierFilteredData = useMemo(() => {
-    if (carrierFilter === 'ALL') return data;
-    return data.filter(d => detectCarrier(d.mbl_id).name === carrierFilter);
-  }, [data, carrierFilter]);
+    if (carrierFilter === 'ALL') return uniqueData;
+    return uniqueData.filter(d => detectCarrier(d.mbl_id).name === carrierFilter);
+  }, [uniqueData, carrierFilter]);
 
   // Calculate stats from carrier-filtered data
   const stats = useMemo(() => {
@@ -393,7 +410,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
       <div className="flex items-center gap-2">
         <span className="text-[0.75rem] text-[#888] uppercase tracking-wider mr-1">Armador:</span>
         {[
-          { key: 'ALL' as CarrierFilter, label: 'Todos', count: data.length, color: 'hsl(var(--info))' },
+          { key: 'ALL' as CarrierFilter, label: 'Todos', count: uniqueData.length, color: 'hsl(var(--info))' },
           { key: 'HAPAG' as CarrierFilter, label: 'Hapag-Lloyd', count: carrierStats.hapag, color: '#ffc800' },
           { key: 'MSC' as CarrierFilter, label: 'MSC', count: carrierStats.msc, color: '#00B4D8' },
           { key: 'ONE' as CarrierFilter, label: 'ONE', count: carrierStats.one, color: '#FF6B9D' },
@@ -479,7 +496,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
             />
           </div>
           <span className="text-[0.8rem] text-[#aaaaaa] ml-4">
-            {filteredData.length} de {data.length} registros
+            {filteredData.length} de {uniqueData.length} registros
           </span>
         </div>
 
@@ -579,7 +596,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
         <div className="p-4 border-t border-[rgba(255,255,255,0.08)]">
           <div className="flex items-center justify-between">
             <span className="text-[0.8rem] text-[#aaaaaa]">
-              {filteredData.length} de {data.length} registros
+              {filteredData.length} de {uniqueData.length} registros
             </span>
             <TablePagination
               currentPage={currentPage}
