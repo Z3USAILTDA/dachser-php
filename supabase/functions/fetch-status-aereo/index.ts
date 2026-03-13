@@ -1136,14 +1136,13 @@ serve(async (req) => {
         'última atualização': scrapedAt,
         last_flight: ws.last_flight || null,
         is_ground_transport: (() => {
-          // Detect ground transport: flight code contains "-T" (e.g. "LA 5252-T")
+          // Detect ground transport: flight code ends with "-T" or "X" (e.g. "LA 5252-T", "LX-9950X")
           try {
             if (timelineStr) {
               const tlEvents = JSON.parse(timelineStr);
               if (Array.isArray(tlEvents) && tlEvents.length > 0) {
-                // Check the most recent event's flight field
-                const lastFlight = tlEvents[0]?.Flight || tlEvents[0]?.flight || tlEvents[0]?.voo || '';
-                if (String(lastFlight).includes('-T')) return true;
+                const lastFlight = String(tlEvents[0]?.Flight || tlEvents[0]?.flight || tlEvents[0]?.voo || '').trim().replace(/,\s*$/, '');
+                if (lastFlight && (/\-T$/i.test(lastFlight) || /X$/i.test(lastFlight))) return true;
               }
             }
           } catch (_) {}
