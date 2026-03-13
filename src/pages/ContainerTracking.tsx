@@ -3441,6 +3441,8 @@ const ContainerTracking = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CadastroMaritimoModal open={cadastroMaritimoOpen} onOpenChange={setCadastroMaritimoOpen} onSuccess={() => fetchMblData()} />
     </div>;
 };
 export default ContainerTracking;
