@@ -73,15 +73,30 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsData, setDetailsData] = useState<any>(null);
   const [processingMBL, setProcessingMBL] = useState<string | null>(null);
+  const [carrierFilter, setCarrierFilter] = useState<string | null>(null);
 
-  // Calculate stats
-  const stats = useMemo(() => {
-    const completed = data.filter(d => d.status === 'Completed').length;
-    const inTransit = data.filter(d => d.status === 'In Progress').length;
-    const pending = data.filter(d => d.status === 'Pending' || d.status === 'Nunca Consultado').length;
-    const errors = data.filter(d => d.status === 'Error').length;
-    return { total: data.length, completed, inTransit, pending, errors };
+  // Carrier stats
+  const carrierStats = useMemo(() => {
+    const hapag = data.filter(d => detectCarrier(d.mbl_id).name === 'HAPAG').length;
+    const msc = data.filter(d => detectCarrier(d.mbl_id).name === 'MSC').length;
+    const one = data.filter(d => detectCarrier(d.mbl_id).name === 'ONE').length;
+    return { hapag, msc, one };
   }, [data]);
+
+  // Data filtered by carrier
+  const carrierFilteredData = useMemo(() => {
+    if (!carrierFilter) return data;
+    return data.filter(d => detectCarrier(d.mbl_id).name === carrierFilter);
+  }, [data, carrierFilter]);
+
+  // Calculate stats from carrier-filtered data
+  const stats = useMemo(() => {
+    const completed = carrierFilteredData.filter(d => d.status === 'Completed').length;
+    const inTransit = carrierFilteredData.filter(d => d.status === 'In Progress').length;
+    const pending = carrierFilteredData.filter(d => d.status === 'Pending' || d.status === 'Nunca Consultado').length;
+    const errors = carrierFilteredData.filter(d => d.status === 'Error').length;
+    return { total: carrierFilteredData.length, completed, inTransit, pending, errors };
+  }, [carrierFilteredData]);
 
   // Filter data based on search term and status filter
   const filteredData = useMemo(() => {
