@@ -1412,15 +1412,18 @@ serve(async (req) => {
       '827-08279331',
     ]);
 
+    // AWBs com override manual NUNCA devem ser filtrados
+    const OVERRIDE_PROTECTED = new Set(Object.keys(MANUAL_OVERRIDES));
+
     const visibleRows = processedRows.filter((row: any) => {
       const status = (row['último_status'] || '').toUpperCase().trim();
       const awb = (row['awb'] || '').trim();
 
+      // Override-protected AWBs are always visible
+      if (OVERRIDE_PROTECTED.has(awb)) return true;
+
       // 0. AWBs manualmente ocultos
-      if (HIDDEN_AWBS.has(awb)) {
-        if (awb.startsWith('047-3291')) console.log(`[visibility] ${awb}: HIDDEN`);
-        return false;
-      }
+      if (HIDDEN_AWBS.has(awb)) return false;
 
       // 1. Nunca mostrar DLV
       if (status === 'DLV' || status === 'DELIVERED') return false;
@@ -1428,7 +1431,7 @@ serve(async (req) => {
       // 2. ARR - DESTINO: manter por 5 dias
       if (status === 'ARR - DESTINO') {
         const updatedAt = row['última atualização'];
-        if (!updatedAt) return true; // sem data, manter por segurança
+        if (!updatedAt) return true;
         const updatedTime = new Date(updatedAt).getTime();
         if (isNaN(updatedTime)) return true;
         return (now - updatedTime) <= FIVE_DAYS_MS;
