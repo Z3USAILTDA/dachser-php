@@ -416,6 +416,7 @@ interface AWBData {
   master_changed?: boolean; // Master (MAWB) foi atualizado via troca de master
   last_event_date?: string | null; // Data/hora do último evento real da timeline
   in_transit?: boolean; // AWB já teve DEP/MAN/RCF/ARR na timeline do ciclo atual
+  is_ground_transport?: boolean; // Último evento tem flight com "-T" (tráfego terrestre)
 }
 
 const STORAGE_KEY = "tracked-awbs";
