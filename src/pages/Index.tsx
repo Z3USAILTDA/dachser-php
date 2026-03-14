@@ -2732,7 +2732,7 @@ const Index = () => {
                                 )}
                                 {awb.is_ground_transport && (
                                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.62rem] font-bold bg-amber-600/15 text-amber-300 border border-amber-600/30">
-                                    🚚 Terrestre
+                                    🚚
                                   </span>
                                 )}
                                 {isRetracking && (

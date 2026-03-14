@@ -7237,6 +7237,67 @@ serve(async (req) => {
               mkForcedEvent('016-45294826', 11, 'RCD', 'Documents Received at GRU', '2026-03-14T10:59:00', 'GRU', null, null),
             ],
           },
+          '172-81711184': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('172-81711184', 1, 'FWB', 'CPT: FWB DATA CAPTURE', '2026-03-10T14:08:00', 'CPH', 7, null),
+              mkForcedEvent('172-81711184', 2, 'FOH', 'FOH: 7 PCS ON HAND', '2026-03-12T15:38:00', 'CPH', 7, null),
+              mkForcedEvent('172-81711184', 3, 'RCS', 'RCS: 7 PCS READY FOR CARRIAGE', '2026-03-12T15:38:00', 'CPH', 7, null),
+              mkForcedEvent('172-81711184', 4, 'DEP', 'DEP: 7 PCS DEPARTED ON CV0392C', '2026-03-12T02:46:00', 'CPH', 7, null),
+              mkForcedEvent('172-81711184', 5, 'ARR', 'ARR: 7 PCS ARRIVED ON CV0392C', '2026-03-14T05:53:00', 'LUX', 7, null),
+            ],
+          },
+          '045-13002500': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('045-13002500', 1, 'BKD', 'Booking Confirmed on LA 5785-T at LAX', '2026-03-09T19:52:00', 'LAX', 3, '44.20 kg'),
+              mkForcedEvent('045-13002500', 2, 'BKD', 'Booking Confirmed on M3 8485 MIA-MAO at MIA', '2026-03-09T22:48:00', 'MIA', 3, '44.20 kg'),
+              mkForcedEvent('045-13002500', 3, 'BKD', 'Booking Confirmed on JL 0060 KIX-LAX at KIX', '2026-03-12T13:08:00', 'KIX', 3, '44.20 kg'),
+            ],
+          },
+          '045-12580094': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('045-12580094', 1, 'BKD', 'Booking Confirmed on LA 8065 MAD-GRU', '2026-03-10T11:35:00', 'MAD', 3, '171.00 kg'),
+              mkForcedEvent('045-12580094', 2, 'RCS', 'Shipment Received at MAD', '2026-03-10T20:57:00', 'MAD', 3, '171.00 kg'),
+              mkForcedEvent('045-12580094', 3, 'MAN', 'Flight Manifested on LA 8065 MAD-GRU', '2026-03-11T18:56:00', 'MAD', 3, '171.00 kg'),
+              mkForcedEvent('045-12580094', 4, 'DEP', 'Flight Departed on LA 8065 MAD-GRU', '2026-03-11T23:10:00', 'MAD', 3, '171.00 kg'),
+              mkForcedEvent('045-12580094', 5, 'ARR', 'Flight Arrived on LA 8065 MAD-GRU', '2026-03-12T05:26:00', 'GRU', 3, '171.00 kg'),
+              mkForcedEvent('045-12580094', 6, 'RCF', 'Received from Flight on LA 8065 MAD-GRU', '2026-03-12T10:58:00', 'GRU', 3, '171.00 kg'),
+              mkForcedEvent('045-12580094', 7, 'NFD', 'Agent Notified at GRU', '2026-03-12T10:58:00', 'GRU', 3, '171.00 kg'),
+            ],
+          },
+          '045-12579383': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('045-12579383', 1, 'BKD', 'Booking Confirmed on LA 8065 MAD-GRU', '2026-03-09T11:43:00', 'MAD', 1, '188.00 kg'),
+              mkForcedEvent('045-12579383', 2, 'RCS', 'Shipment Received at MAD', '2026-03-09T15:21:00', 'MAD', 1, '182.00 kg'),
+              mkForcedEvent('045-12579383', 3, 'MAN', 'Flight Manifested on LA 8065 MAD-GRU', '2026-03-09T21:29:00', 'MAD', 1, '182.00 kg'),
+              mkForcedEvent('045-12579383', 4, 'DEP', 'Flight Departed on LA 8065 MAD-GRU', '2026-03-09T23:10:00', 'MAD', 1, '182.00 kg'),
+              mkForcedEvent('045-12579383', 5, 'ARR', 'Flight Arrived on LA 8065 MAD-GRU', '2026-03-10T05:17:00', 'GRU', 1, '182.00 kg'),
+              mkForcedEvent('045-12579383', 6, 'RCF', 'Received from Flight on LA 8065 MAD-GRU', '2026-03-10T10:05:00', 'GRU', 1, '182.00 kg'),
+              mkForcedEvent('045-12579383', 7, 'NFD', 'Agent Notified at GRU', '2026-03-10T10:05:00', 'GRU', 1, '182.00 kg'),
+            ],
+          },
+          '020-65055432': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('020-65055432', 1, 'BKD', 'Booking Confirmed at PVG', '2026-03-12T18:05:00', 'PVG', 2, null),
+              mkForcedEvent('020-65055432', 2, 'RCS', 'Shipment Received at PVG', '2026-03-12T19:53:00', 'PVG', 2, null),
+              mkForcedEvent('020-65055432', 3, 'DEP', 'Departed on LH8401 from PVG', '2026-03-13T10:15:00', 'PVG', 2, null),
+              mkForcedEvent('020-65055432', 4, 'ARR', 'Arrived at FRA', '2026-03-13T16:17:00', 'FRA', 2, null),
+            ],
+          },
+          '020-22270216': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('020-22270216', 1, 'RCS', 'Shipment Received at MUC', '2026-03-12T17:59:00', 'MUC', 7, null),
+              mkForcedEvent('020-22270216', 2, 'DEP', 'Departed on LH7261S from MUC', '2026-03-13T13:18:00', 'MUC', 7, null),
+              mkForcedEvent('020-22270216', 3, 'ARR', 'Arrived at FRA', '2026-03-13T19:46:00', 'FRA', 7, null),
+              mkForcedEvent('020-22270216', 4, 'BKD', 'Booking Confirmed at MUC', '2026-03-14T14:24:00', 'MUC', 7, null),
+              mkForcedEvent('020-22270216', 5, 'DEP', 'Departed on LH8262 from FRA', '2026-03-14T12:12:00', 'FRA', 3, null),
+            ],
+          },
         };
 
         const cleanAwbForForce = queryAwb.trim();
