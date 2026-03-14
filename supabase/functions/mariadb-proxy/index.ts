@@ -7298,6 +7298,45 @@ serve(async (req) => {
               mkForcedEvent('020-22270216', 5, 'DEP', 'Departed on LH8262 from FRA', '2026-03-14T12:12:00', 'FRA', 3, null),
             ],
           },
+          '045-21167764': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('045-21167764', 1, 'BKD', 'Booking Confirmed FOR LA 4697 FOR-GRU - 99 / 800.00KGS', '2026-02-18T16:41:00', 'FOR', 99, '800.00KGS'),
+              mkForcedEvent('045-21167764', 2, 'BKD', 'Booking Confirmed LIS LA 8151 LIS-FOR - 99 / 2000.00KGS', '2026-03-09T15:43:00', 'LIS', 99, '2000.00KGS'),
+              mkForcedEvent('045-21167764', 3, 'BKD', 'Booking Confirmed FRA LA 5462-T - 7 / 1100.00KGS', '2026-03-12T16:42:00', 'FRA', 7, '1100.00KGS'),
+              mkForcedEvent('045-21167764', 4, 'FOH', 'Freight on Hand at FRA - 6 / 870.80KGS', '2026-03-13T11:28:00', 'FRA', 6, '870.80KGS'),
+              mkForcedEvent('045-21167764', 5, 'RCS', 'Shipment Received at FRA - 6 / 870.80KGS', '2026-03-13T11:36:00', 'FRA', 6, '870.80KGS'),
+              mkForcedEvent('045-21167764', 6, 'DEP', 'LA 5462-T (FRA→?) - 6 / 870.80KGS (TRANSPORTE TERRESTRE)', '2026-03-13T16:56:00', 'FRA', 6, '870.80KGS'),
+            ],
+          },
+          '045-13110775': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('045-13110775', 1, 'BKD', 'Booking Confirmed GRU LA 3416 GRU-POA - 1 / 8.60KGS', '2026-03-12T07:28:00', 'GRU', 1, '8.60KGS'),
+              mkForcedEvent('045-13110775', 2, 'BKD', 'Booking Confirmed FRA LA 8071 FRA-GRU - 1 / 8.60KGS', '2026-03-13T13:24:00', 'FRA', 1, '8.60KGS'),
+              mkForcedEvent('045-13110775', 3, 'FOH', 'Freight on Hand at FRA - 1 / 8.60KGS', '2026-03-14T00:44:00', 'FRA', 1, '8.60KGS'),
+              mkForcedEvent('045-13110775', 4, 'RCS', 'Shipment Received at FRA - 1 / 8.60KGS', '2026-03-14T06:44:00', 'FRA', 1, '8.60KGS'),
+            ],
+          },
+          '020-50019572': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('020-50019572', 1, 'BKD', '1 pcs booked', '2026-03-12T12:03:00', 'SWK', 1, null),
+            ],
+          },
+          '020-16486190': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('020-16486190', 1, 'BKD', '1 pcs booked at IST', '2026-03-14T16:28:00', 'IST', 1, null),
+              mkForcedEvent('020-16486190', 2, 'RCS', '1 pcs received at IST', '2026-03-14T16:28:00', 'IST', 1, null),
+            ],
+          },
+          '020-06280901': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('020-06280901', 1, 'BKD', '20 pcs booked at GRU', '2026-03-11T12:27:00', 'GRU', 20, null),
+            ],
+          },
         };
 
         const cleanAwbForForce = queryAwb.trim();
