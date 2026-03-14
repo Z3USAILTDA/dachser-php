@@ -2034,6 +2034,101 @@ serve(async (req) => {
           { status: 'BKD', description: 'BKD - 20 pcs booked at GRU', date: '2026-03-11T12:27:00', pieces: '20', weight: '' },
         ]
       },
+      '074-04834174': {
+        status: 'DEP',
+        status_info: 'DEP - 1 piece departed from BUD on KL8772',
+        last_event_date: '2026-03-14T11:47:00',
+        force_origem: 'BUD',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKG - 1 piece booked at BUD', date: '2026-03-11T11:56:00', pieces: '1', weight: '' },
+          { status: 'FWB', description: 'FWB - Customer FWB processed (1 piece)', date: '2026-03-13T12:46:00', pieces: '1', weight: '' },
+          { status: 'FOH', description: 'FOH - 1 piece on hand at BUD', date: '2026-03-13T19:06:00', pieces: '1', weight: '' },
+          { status: 'RCS', description: 'RCS - 1 piece received at BUD', date: '2026-03-13T22:42:00', pieces: '1', weight: '' },
+          { status: 'DEP', description: 'KL8772 (BUD→?) - DEP - 1 piece departed from BUD', date: '2026-03-14T11:47:00', pieces: '1', weight: '' },
+        ]
+      },
+      '047-31409884': {
+        status: 'DEP',
+        status_info: 'DEP - 4 pcs 69.0 kg boarded TP089 (LIS→GRU)',
+        last_event_date: '2026-03-14T12:30:00',
+        force_origem: 'FRA',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'DEP', description: 'TP4000F (CDG→LIS) - DEP - 4 pcs 69.0 kg departed from CDG', date: '2026-03-11T20:00:00', pieces: '4', weight: '69.0 kg' },
+          { status: 'ARR', description: 'TP4000F (CDG→LIS) - ARR - 4 pcs 69.0 kg arrived at LIS', date: '2026-03-13T09:00:00', pieces: '4', weight: '69.0 kg' },
+          { status: 'RCF', description: 'TP4000F (CDG→LIS) - RCF - 4 pcs 69.0 kg received at LIS', date: '2026-03-13T09:00:00', pieces: '4', weight: '69.0 kg' },
+          { status: 'DEP', description: 'TP089 (LIS→GRU) - DEP - 4 pcs 69.0 kg boarded at LIS', date: '2026-03-14T12:30:00', pieces: '4', weight: '69.0 kg' },
+        ]
+      },
+      '045-21167716': {
+        status: 'NFD',
+        status_info: 'NFD - Agent Notified at GRU - 20 / 637.50KGS',
+        last_event_date: '2026-03-10T17:01:00',
+        force_origem: 'FRA',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booking Confirmed FRA LA 5462-T - 99 / 629.00KGS', date: '2026-03-03T17:48:00', pieces: '99', weight: '629.00KGS' },
+          { status: 'RCS', description: 'RCS - Shipment Received at FRA - 20 / 637.50KGS', date: '2026-03-04T15:06:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'FOH', description: 'FOH - Freight on Hand at FRA - 20 / 637.50KGS', date: '2026-03-04T15:06:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'DIS', description: 'DIS at FRA - 20 / 637.50KGS', date: '2026-03-04T15:09:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'BKD', description: 'BKD - Booking Confirmed FRA - 20 / 637.50KGS', date: '2026-03-04T19:02:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'DIS', description: 'DIS at FRA - 40 / 1275.00KGS', date: '2026-03-06T19:00:00', pieces: '40', weight: '1275.00KGS' },
+          { status: 'DEP', description: 'LA 5462-T (FRA→LIS) - DEP - 20 / 637.50KGS (TRANSPORTE TERRESTRE)', date: '2026-03-07T23:19:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'DEP', description: 'LA 5462-T (FRA→LIS) - DEP - 20 / 637.50KGS (TRANSPORTE TERRESTRE)', date: '2026-03-08T00:09:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'RCF', description: 'LA 5462-T - RCF - Received at LIS - 20 / 637.50KGS', date: '2026-03-09T10:34:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'BKD', description: 'BKD - Booking Confirmed FOR LA 4697 FOR-GRU - 20 / 637.50KGS', date: '2026-03-09T19:47:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'MAN', description: 'LA 8151 (LIS→FOR) - MAN - 20 / 637.50KGS', date: '2026-03-09T20:57:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'DEP', description: 'LA 8151 (LIS→FOR) - DEP - 20 / 637.50KGS', date: '2026-03-09T22:47:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'RCF', description: 'LA 8151 (LIS→FOR) - RCF - Received at FOR - 20 / 637.50KGS', date: '2026-03-09T23:12:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'MAN', description: 'LA 4697 (FOR→GRU) - MAN - 20 / 637.50KGS', date: '2026-03-09T23:28:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'DEP', description: 'LA 5462-T (FRA→?) - DEP - 20 / 637.50KGS', date: '2026-03-09T23:47:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'DEP', description: 'LA 4697 (FOR→GRU) - DEP - 20 / 637.50KGS', date: '2026-03-10T01:59:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'ARR', description: 'LA 4697 (FOR→GRU) - ARR - Flight Arrived at GRU - 20 / 637.50KGS', date: '2026-03-10T05:08:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'ARR', description: 'LA 8151 (LIS→FOR) - ARR - Flight Arrived at FOR - 20 / 637.50KGS', date: '2026-03-10T22:05:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'RCF', description: 'LA 4697 (FOR→GRU) - RCF - Received from Flight at GRU - 20 / 637.50KGS', date: '2026-03-10T17:01:00', pieces: '20', weight: '637.50KGS' },
+          { status: 'NFD', description: 'NFD - Agent Notified at GRU - 20 / 637.50KGS', date: '2026-03-10T17:01:00', pieces: '20', weight: '637.50KGS' },
+        ]
+      },
+      '016-16426966': {
+        status: 'RCF',
+        status_info: 'RCF - Received from Flight at GRU',
+        last_event_date: '2026-03-14T06:49:00',
+        force_origem: 'ORD',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booking confirmed at ORD', date: '2026-03-10T22:00:00', pieces: '', weight: '' },
+          { status: 'RCS', description: 'RCS - Received from Shipper at ORD', date: '2026-03-10T22:00:00', pieces: '', weight: '' },
+          { status: 'MAN', description: 'MAN - Manifested at ORD', date: '2026-03-11T13:47:00', pieces: '', weight: '' },
+          { status: 'DEP', description: 'DEP - Departed from ORD', date: '2026-03-11T13:50:00', pieces: '', weight: '' },
+          { status: 'ARR', description: 'ARR - Arrived at IAH', date: '2026-03-12T10:55:00', pieces: '', weight: '' },
+          { status: 'RCF', description: 'RCF - Received from Flight at IAH', date: '2026-03-12T10:55:00', pieces: '', weight: '' },
+          { status: 'RCD', description: 'RCD - Documents Received at IAH', date: '2026-03-12T10:55:00', pieces: '', weight: '' },
+          { status: 'MAN', description: 'MAN - Manifested at IAH', date: '2026-03-12T21:47:00', pieces: '', weight: '' },
+          { status: 'DEP', description: 'DEP - Departed from IAH', date: '2026-03-12T21:47:00', pieces: '', weight: '' },
+          { status: 'ARR', description: 'ARR - Arrived at GRU', date: '2026-03-13T09:17:00', pieces: '', weight: '' },
+          { status: 'RCD', description: 'RCD - Documents Received at GRU', date: '2026-03-13T12:48:00', pieces: '', weight: '' },
+          { status: 'RCF', description: 'RCF - Received from Flight at GRU', date: '2026-03-14T06:49:00', pieces: '', weight: '' },
+        ]
+      },
+      '016-06977740': {
+        status: 'DEP',
+        status_info: 'DEP - Departed from ORD',
+        last_event_date: '2026-03-14T12:03:00',
+        force_origem: 'ORD',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booking confirmed at ORD', date: '2026-03-13T21:27:00', pieces: '', weight: '' },
+          { status: 'RCS', description: 'RCS - Received from Shipper at ORD', date: '2026-03-13T21:27:00', pieces: '', weight: '' },
+          { status: 'MAN', description: 'MAN - Manifested at ORD', date: '2026-03-14T11:36:00', pieces: '', weight: '' },
+          { status: 'DEP', description: 'DEP - Departed from ORD', date: '2026-03-14T12:03:00', pieces: '', weight: '' },
+        ]
+      },
     };
 
     // v2: override loop with debug
@@ -2129,6 +2224,7 @@ serve(async (req) => {
       '074-67409506', '047-09933663', '045-13293545', '016-06977736', '006-45285155', '001-22828956',
       '016-04639165', '014-78876932',
       '045-13110786', '016-58370933',
+      '996-14370720', '125-21258182',
     ]);
 
     // AWBs com override manual NUNCA devem ser filtrados
