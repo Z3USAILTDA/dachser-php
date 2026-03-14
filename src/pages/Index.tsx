@@ -1861,6 +1861,7 @@ const Index = () => {
         RCF: "Carga recebida pela cia aérea",
         DLV: "Chegou em seu destino final",
         NFD: "Agente notificado",
+        BCB: "Embarcado no voo",
       };
       return statusMap[code] || "-";
     }

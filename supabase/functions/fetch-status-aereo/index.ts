@@ -1448,11 +1448,6 @@ serve(async (req) => {
 
     // AWBs com override manual NUNCA devem ser filtrados
     const OVERRIDE_PROTECTED = new Set(Object.keys(MANUAL_OVERRIDES));
-    console.log(`[DEBUG] OVERRIDE_PROTECTED AWBs: ${[...OVERRIDE_PROTECTED].join(', ')}`);
-    
-    // Debug: check if 047-32916273 is in processedRows
-    const debugAwb = processedRows.filter((r: any) => (r.awb || '').trim() === '047-32916273');
-    console.log(`[DEBUG] 047-32916273 in processedRows: ${debugAwb.length} rows, statuses: ${debugAwb.map((r: any) => r['último_status']).join(', ')}`);
 
     const visibleRows = processedRows.filter((row: any) => {
       const status = (row['último_status'] || '').toUpperCase().trim();
