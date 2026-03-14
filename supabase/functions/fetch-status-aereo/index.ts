@@ -1323,13 +1323,13 @@ serve(async (req) => {
 
     // ========== MANUAL OVERRIDES ==========
     // Overrides manuais para AWBs específicos com problemas de resolução automática
-    const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean; force_timeline?: any[]; force_critical?: boolean; last_event_date?: string }> = {
+    const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean; force_timeline?: any[]; force_critical?: boolean; last_event_date?: string; disable_discrepancy?: boolean }> = {
       '057-03764530': { skip_first_event: true }, // Último evento incorreto, usar penúltimo
-      '047-32916273': { 
-        status: 'DEP', 
+      '047-32916273': {
+        status: 'DEP',
         status_info: 'Boarded the flight on Helsinki (Vantaa)',
+        disable_discrepancy: true,
       },
-      '020-65055410': { force_nfd: true, status: 'NFD' }, // Considerar NFD como mais recente
       '996-14389491': { status: 'NIF', status_info: 'Sem informação na companhia aérea' },
       '577-11063080': { status: 'DEP' }, // Último evento na timeline é DEP
       '020-22473334': {
@@ -1411,12 +1411,14 @@ serve(async (req) => {
       if (override.last_event_date) {
         row.last_event_date = override.last_event_date;
       }
-      // For AWBs with explicit status override and no force_critical, ensure no false positives
-      if (override.status && !override.force_critical) {
-        row.pieces_discrepancy = false;
-        row.force_critical = false;
-      }
+      if (override.force_timeline) {
         row.timeline_json = JSON.stringify(override.force_timeline);
+      }
+      if (override.disable_discrepancy) {
+        row.pieces_discrepancy = false;
+        row.baseline_pieces = null;
+        row.has_dis_event = false;
+        row.force_critical = false;
       }
     }
 
