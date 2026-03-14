@@ -7059,6 +7059,29 @@ serve(async (req) => {
               mkForcedEvent('074-70304695', 11, 'BKD', 'BKD - 57 pieces booked at BOM', '2026-03-05T16:17:00', 'BOM', 57, null),
             ],
           },
+          '020-22473334': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('020-22473334', 1, 'NFD', 'NFD - GRU (Guarulhos) - 2 pcs 11 kg', '2026-03-07T21:50:00', 'GRU', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 2, 'RCF', 'LH506 (FRA→GRU) - RCF - GRU (Guarulhos) - 2 pcs 11 kg', '2026-03-07T11:36:00', 'GRU', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 3, 'ARR', 'LH506 (FRA→GRU) - ARR - GRU (Guarulhos) - 2 pcs 11 kg', '2026-03-07T06:11:00', 'GRU', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 4, 'DEP', 'LH506 (FRA→GRU) - DEP - FRA (Frankfurt) - 2 pcs 11 kg', '2026-03-06T22:04:00', 'FRA', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 5, 'MAN', 'LH506 (FRA→GRU) - MAN - FRA (Frankfurt) - 2 pcs 11 kg', '2026-03-06T20:27:00', 'FRA', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 6, 'RCF', 'LH849 (HEL→FRA) - RCF - FRA (Frankfurt) - 2 pcs 11 kg', '2026-03-05T20:59:00', 'FRA', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 7, 'RCF', 'RCF - FRA (Frankfurt) - 2 pcs 11 kg', '2026-03-05T20:40:00', 'FRA', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 8, 'ARR', 'LH849 (HEL→FRA) - ARR - FRA (Frankfurt) - 2 pcs 11 kg', '2026-03-05T15:37:00', 'FRA', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 9, 'DEP', 'LH849 (HEL→FRA) - DEP - HEL (Helsinki) - 2 pcs 11 kg', '2026-03-05T14:13:00', 'HEL', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 10, 'MAN', 'LH849 (HEL→FRA) - MAN - HEL (Helsinki) - 2 pcs 11 kg', '2026-03-05T10:00:02', 'HEL', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 11, 'MAN', 'LH851 (HEL→FRA) 05 MAR - MAN - HEL (Helsinki) - 2 pcs 11 kg', '2026-03-05T10:00:01', 'HEL', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 12, 'DIS', 'DIS - HEL (Helsinki) - 2 pcs 11 kg', '2026-03-05T10:00:00', 'HEL', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 13, 'DIS', 'DIS - FRA (Frankfurt) - 2 pcs 11 kg', '2026-03-05T09:48:00', 'FRA', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 14, 'BKD', 'BKD - HEL (Helsinki) - 2 pcs 11 kg', '2026-03-05T22:20:00', 'HEL', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 15, 'ARR', 'LH851 (HEL→FRA) - ARR - FRA (Frankfurt) - 2 pcs 11 kg', '2026-03-04T19:14:00', 'FRA', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 16, 'DEP', 'LH851 (HEL→FRA) - DEP - HEL (Helsinki) - 2 pcs 11 kg', '2026-03-04T17:54:00', 'HEL', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 17, 'MAN', 'LH851 (HEL→FRA) - MAN - HEL (Helsinki) - 2 pcs 11 kg', '2026-03-04T15:56:00', 'HEL', 2, '11 kg'),
+              mkForcedEvent('020-22473334', 18, 'RCS', 'RCS - HEL (Helsinki) - 2 pcs 11 kg', '2026-03-04T07:00:00', 'HEL', 2, '11 kg'),
+            ],
+          },
         };
 
         const cleanAwbForForce = queryAwb.trim();
