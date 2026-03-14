@@ -1431,7 +1431,7 @@ serve(async (req) => {
       '724-20906771': {
         status: 'RCF',
         status_info: 'RCF - Received at ZRH from Flight LX-0093 - 1 Pieces 16.5 K',
-        last_event_date: '2026-03-14T08:54:00',
+        last_event_date: '2026-03-14T12:45:00',
         force_origem: 'GRU',
         force_destino: 'LHR',
         force_timeline: [
