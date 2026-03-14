@@ -75,11 +75,6 @@ const menuItems: MenuItem[] = [
     subtitle: "Operações Aéreas",
     children: [
       {
-        label: "Cadastro NOVA",
-        href: "/air/cadastro-nova",
-        z3usOnly: true,
-      },
-      {
         label: "Check AWB x CNPJ",
         href: "/air/check",
       },
