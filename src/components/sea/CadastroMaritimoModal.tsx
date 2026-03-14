@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from "react";
-import { FilePlus, Loader2, Save, Search, User, Calendar, Ship, Package, Anchor, Copy, Check } from "lucide-react";
+import { FilePlus, Loader2, Save, Search, User, Calendar, Ship, Package, Anchor, Copy, Check, Upload, ChevronDown, ChevronRight } from "lucide-react";
 import { copyToClipboard } from "@/utils/clipboard";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface ConsigneeSuggestion {
   nome_cliente: string;
@@ -67,6 +68,34 @@ interface SeaFormData {
   d_term: string;
   pod_available: boolean;
   dn_available: boolean;
+  // BL extracted fields
+  bl_number: string;
+  shipper_address: string;
+  notify_party: string;
+  delivery_agent: string;
+  port_loading: string;
+  port_discharge: string;
+  vessel_voyage: string;
+  place_receipt: string;
+  place_delivery: string;
+  container_numbers: string;
+  seal_numbers: string;
+  marks_numbers: string;
+  nature_of_goods: string;
+  hs_code: string;
+  gross_weight_kg: string;
+  volume_cbm: string;
+  pieces: string;
+  packaging: string;
+  freight_charges: string;
+  freight_payment: string;
+  service_type: string;
+  total_prepaid: string;
+  total_collect: string;
+  num_original_bls: string;
+  shipped_on_board_date: string;
+  place_date_issue: string;
+  issued_by: string;
 }
 
 const emptySeaForm: SeaFormData = {
@@ -85,6 +114,13 @@ const emptySeaForm: SeaFormData = {
   deadline_draft_vgm: '', deadline_load: '', free_time: '',
   cargo_departed: false, pre_alert_sent: false, d_term: '',
   pod_available: false, dn_available: false,
+  // BL fields
+  bl_number: '', shipper_address: '', notify_party: '', delivery_agent: '',
+  port_loading: '', port_discharge: '', vessel_voyage: '', place_receipt: '', place_delivery: '',
+  container_numbers: '', seal_numbers: '', marks_numbers: '',
+  nature_of_goods: '', hs_code: '', gross_weight_kg: '', volume_cbm: '', pieces: '', packaging: '',
+  freight_charges: '', freight_payment: '', service_type: '', total_prepaid: '', total_collect: '',
+  num_original_bls: '', shipped_on_board_date: '', place_date_issue: '', issued_by: '',
 };
 
 interface CadastroMaritimoModalProps {
@@ -93,9 +129,52 @@ interface CadastroMaritimoModalProps {
   onSuccess?: () => void;
 }
 
+// Collapsible section with fill counter
+const CollapsibleSection = ({ title, icon, fields, form, children }: {
+  title: string;
+  icon?: React.ReactNode;
+  fields: (keyof SeaFormData)[];
+  form: SeaFormData;
+  children: React.ReactNode;
+}) => {
+  const [open, setOpen] = useState(false);
+  const filled = fields.filter(f => {
+    const v = form[f];
+    return v !== '' && v !== false && v !== null && v !== undefined;
+  }).length;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <button className="w-full flex items-center justify-between rounded-xl border border-[rgba(255,255,255,.1)] bg-[rgba(255,255,255,.03)] px-4 py-3 hover:bg-[rgba(255,255,255,.06)] transition-colors">
+          <span className="text-sm font-semibold text-[#ffc800] flex items-center gap-2">
+            {icon}
+            {title}
+          </span>
+          <span className="flex items-center gap-2">
+            <span className={`text-xs px-2 py-0.5 rounded-full ${filled > 0 ? 'bg-[rgba(255,200,0,.2)] text-[#ffc800]' : 'bg-[rgba(255,255,255,.08)] text-[#666]'}`}>
+              {filled}/{fields.length}
+            </span>
+            {open ? <ChevronDown className="h-4 w-4 text-[#aaa]" /> : <ChevronRight className="h-4 w-4 text-[#aaa]" />}
+          </span>
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="rounded-b-xl border border-t-0 border-[rgba(255,255,255,.1)] bg-[rgba(255,255,255,.03)] px-4 pb-4 pt-3 -mt-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {children}
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+};
+
 export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: CadastroMaritimoModalProps) => {
   const [form, setForm] = useState<SeaFormData>({ ...emptySeaForm });
   const [isSaving, setIsSaving] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [fileName, setFileName] = useState("");
 
   // Consignee autocomplete
   const [consigneeSearch, setConsigneeSearch] = useState("");
@@ -113,6 +192,67 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
 
   const updateField = (field: keyof SeaFormData, value: string | boolean) => {
     setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  // === PDF Upload & Extraction ===
+  const handleFileUpload = async (file: File) => {
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      toast.error("Apenas arquivos PDF são aceitos.");
+      return;
+    }
+    setFileName(file.name);
+    setIsExtracting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-bl-cadastro`,
+        { method: "POST", headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` }, body: fd }
+      );
+      const result = await res.json();
+      if (!res.ok || !result.success) throw new Error(result.error || "Erro na extração");
+      const d = result.data;
+      setForm(prev => ({
+        ...prev,
+        bl_number: d.bl_number || prev.bl_number,
+        shipper_name: d.shipper_name || prev.shipper_name,
+        shipper_address: d.shipper_address || prev.shipper_address,
+        notify_party: d.notify_party || prev.notify_party,
+        delivery_agent: d.delivery_agent || prev.delivery_agent,
+        port_loading: d.port_loading || prev.port_loading,
+        port_discharge: d.port_discharge || prev.port_discharge,
+        vessel_voyage: d.vessel_voyage || prev.vessel_voyage,
+        place_receipt: d.place_receipt || prev.place_receipt,
+        place_delivery: d.place_delivery || prev.place_delivery,
+        container_numbers: d.container_numbers || prev.container_numbers,
+        seal_numbers: d.seal_numbers || prev.seal_numbers,
+        marks_numbers: d.marks_numbers || prev.marks_numbers,
+        nature_of_goods: d.nature_of_goods || prev.nature_of_goods,
+        hs_code: d.hs_code || prev.hs_code,
+        gross_weight_kg: d.gross_weight_kg != null ? String(d.gross_weight_kg) : prev.gross_weight_kg,
+        volume_cbm: d.volume_cbm != null ? String(d.volume_cbm) : prev.volume_cbm,
+        pieces: d.pieces != null ? String(d.pieces) : prev.pieces,
+        packaging: d.packaging || prev.packaging,
+        freight_charges: d.freight_charges || prev.freight_charges,
+        freight_payment: d.freight_payment || prev.freight_payment,
+        service_type: d.service_type || prev.service_type,
+        total_prepaid: d.total_prepaid != null ? String(d.total_prepaid) : prev.total_prepaid,
+        total_collect: d.total_collect != null ? String(d.total_collect) : prev.total_collect,
+        num_original_bls: d.num_original_bls != null ? String(d.num_original_bls) : prev.num_original_bls,
+        shipped_on_board_date: d.shipped_on_board_date || prev.shipped_on_board_date,
+        place_date_issue: d.place_date_issue || prev.place_date_issue,
+        issued_by: d.issued_by || prev.issued_by,
+      }));
+      if (d.consignee_name) {
+        updateField("consignee_nome", d.consignee_name);
+        setConsigneeSearch(d.consignee_name);
+      }
+      if (d.consignee_cnpj) updateField("consignee_cnpj", d.consignee_cnpj);
+      toast.success(`Dados extraídos de ${file.name}`, { description: `${result.processingTimeMs}ms` });
+    } catch (e: any) {
+      toast.error("Erro na extração", { description: e.message });
+    }
+    setIsExtracting(false);
   };
 
   // === Consignee autocomplete ===
@@ -229,6 +369,34 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
         d_term: form.d_term || null,
         pod_available: form.pod_available,
         dn_available: form.dn_available,
+        // BL extracted fields
+        bl_number: form.bl_number || null,
+        shipper_address: form.shipper_address || null,
+        notify_party: form.notify_party || null,
+        delivery_agent: form.delivery_agent || null,
+        port_loading: form.port_loading || null,
+        port_discharge: form.port_discharge || null,
+        vessel_voyage: form.vessel_voyage || null,
+        place_receipt: form.place_receipt || null,
+        place_delivery: form.place_delivery || null,
+        container_numbers: form.container_numbers || null,
+        seal_numbers: form.seal_numbers || null,
+        marks_numbers: form.marks_numbers || null,
+        nature_of_goods: form.nature_of_goods || null,
+        hs_code: form.hs_code || null,
+        gross_weight_kg: form.gross_weight_kg ? parseFloat(form.gross_weight_kg) : null,
+        volume_cbm: form.volume_cbm ? parseFloat(form.volume_cbm) : null,
+        pieces: form.pieces ? parseInt(form.pieces) : null,
+        packaging: form.packaging || null,
+        freight_charges: form.freight_charges || null,
+        freight_payment: form.freight_payment || null,
+        service_type: form.service_type || null,
+        total_prepaid: form.total_prepaid ? parseFloat(form.total_prepaid) : null,
+        total_collect: form.total_collect ? parseFloat(form.total_collect) : null,
+        num_original_bls: form.num_original_bls ? parseInt(form.num_original_bls) : null,
+        shipped_on_board_date: form.shipped_on_board_date || null,
+        place_date_issue: form.place_date_issue || null,
+        issued_by: form.issued_by || null,
         created_by: user.username || "unknown",
       };
 
@@ -246,12 +414,12 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.error || "Erro ao salvar");
 
-      // Auto-copy pre-alert title
       await copyToClipboard(preAlertTitle);
       toast.success("Cadastro marítimo salvo! Título Pre-Alert copiado.", { description: `ID: ${cadastroId}` });
       setForm({ ...emptySeaForm });
       setConsigneeSearch("");
       setClerkSearch("");
+      setFileName("");
       onOpenChange(false);
       onSuccess?.();
     } catch (e: any) {
@@ -297,6 +465,18 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
   const labelCls = "text-xs text-[#aaa] mb-1 block";
   const checkCls = "text-xs cursor-pointer text-[#ccc]";
 
+  const Field = ({ label, field, type = "text", span2 = false }: { label: string; field: keyof SeaFormData; type?: string; span2?: boolean }) => (
+    <div className={span2 ? "col-span-1 md:col-span-2" : ""}>
+      <Label className={labelCls}>{label}</Label>
+      <Input
+        type={type}
+        value={form[field] as string}
+        onChange={e => updateField(field, e.target.value)}
+        className={inputCls}
+      />
+    </div>
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-[rgba(5,6,18,.97)] border-[rgba(255,255,255,.12)] text-white">
@@ -308,6 +488,42 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
         </DialogHeader>
 
         <div className="space-y-5">
+          {/* PDF Upload Zone */}
+          <div
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => {
+              e.preventDefault();
+              const file = e.dataTransfer.files[0];
+              if (file) handleFileUpload(file);
+            }}
+            className="border-2 border-dashed border-[rgba(255,200,0,.3)] rounded-xl p-6 text-center hover:border-[rgba(255,200,0,.6)] transition-colors cursor-pointer bg-[rgba(255,200,0,.03)]"
+            onClick={() => {
+              const input = document.createElement("input");
+              input.type = "file";
+              input.accept = ".pdf";
+              input.onchange = e => {
+                const file = (e.target as HTMLInputElement).files?.[0];
+                if (file) handleFileUpload(file);
+              };
+              input.click();
+            }}
+          >
+            {isExtracting ? (
+              <div className="flex flex-col items-center gap-2">
+                <Loader2 className="h-8 w-8 animate-spin text-[#ffc800]" />
+                <p className="text-sm text-[#aaa]">Extraindo dados do BL...</p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2">
+                <Upload className="h-8 w-8 text-[rgba(255,200,0,.5)]" />
+                <p className="text-sm text-[#aaa]">
+                  {fileName ? `Arquivo: ${fileName}` : "Arraste um PDF de Bill of Lading ou clique para selecionar"}
+                </p>
+                <p className="text-xs text-[#666]">A extração automática preenche os campos abaixo</p>
+              </div>
+            )}
+          </div>
+
           {/* Mode Toggle */}
           <div className="flex items-center gap-2">
             <div className="inline-flex items-center gap-1 bg-[rgba(255,255,255,.06)] border border-[rgba(255,255,255,.1)] rounded-full p-1">
@@ -416,6 +632,80 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
               </div>
             </div>
           </div>
+
+          {/* BL Collapsible Sections */}
+          <CollapsibleSection
+            title="BL & Shipper"
+            icon={<Anchor className="h-4 w-4" />}
+            fields={['bl_number', 'shipper_name', 'shipper_address', 'notify_party', 'delivery_agent']}
+            form={form}
+          >
+            <Field label="BL Number" field="bl_number" />
+            <Field label="Shipper Name" field="shipper_name" />
+            <Field label="Shipper Address" field="shipper_address" span2 />
+            <Field label="Notify Party" field="notify_party" span2 />
+            <Field label="Delivery Agent" field="delivery_agent" span2 />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Vessel & Routing"
+            icon={<Ship className="h-4 w-4" />}
+            fields={['vessel_voyage', 'port_loading', 'port_discharge', 'place_receipt', 'place_delivery']}
+            form={form}
+          >
+            <Field label="Vessel / Voyage" field="vessel_voyage" />
+            <Field label="Port of Loading" field="port_loading" />
+            <Field label="Port of Discharge" field="port_discharge" />
+            <Field label="Place of Receipt" field="place_receipt" />
+            <Field label="Place of Delivery" field="place_delivery" />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Containers"
+            icon={<Package className="h-4 w-4" />}
+            fields={['container_numbers', 'seal_numbers', 'marks_numbers']}
+            form={form}
+          >
+            <Field label="Container Numbers" field="container_numbers" span2 />
+            <Field label="Seal Numbers" field="seal_numbers" span2 />
+            <Field label="Marks and Numbers" field="marks_numbers" span2 />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Charges & Freight"
+            fields={['freight_charges', 'freight_payment', 'service_type', 'total_prepaid', 'total_collect']}
+            form={form}
+          >
+            <Field label="Freight Charges" field="freight_charges" span2 />
+            <Field label="Freight Payment (Prepaid/Collect)" field="freight_payment" />
+            <Field label="Service Type (LCL/FCL)" field="service_type" />
+            <Field label="Total Prepaid" field="total_prepaid" type="number" />
+            <Field label="Total Collect" field="total_collect" type="number" />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Goods & Packaging"
+            fields={['nature_of_goods', 'hs_code', 'gross_weight_kg', 'volume_cbm', 'pieces', 'packaging']}
+            form={form}
+          >
+            <Field label="Nature of Goods" field="nature_of_goods" span2 />
+            <Field label="HS Code / NCM" field="hs_code" />
+            <Field label="Gross Weight (kg)" field="gross_weight_kg" type="number" />
+            <Field label="Volume (CBM)" field="volume_cbm" type="number" />
+            <Field label="Pieces" field="pieces" type="number" />
+            <Field label="Packaging" field="packaging" span2 />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Issuance"
+            fields={['shipped_on_board_date', 'place_date_issue', 'issued_by', 'num_original_bls']}
+            form={form}
+          >
+            <Field label="Shipped on Board Date" field="shipped_on_board_date" />
+            <Field label="Place and Date of Issue" field="place_date_issue" />
+            <Field label="Issued By" field="issued_by" />
+            <Field label="No. of Original BLs" field="num_original_bls" type="number" />
+          </CollapsibleSection>
 
           {/* IMPO Fields */}
           {form.mode === 'impo' && (
