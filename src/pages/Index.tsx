@@ -499,12 +499,12 @@ const Index = () => {
         item.awb === awbNumber ? { ...item, tracking_failed: failed } : item
       )
     );
-    // Also persist to localStorage keyed by AWB for survival across refreshes
+    // Persist to localStorage with timestamp for auto-expiry
     try {
       const stored = localStorage.getItem("tracking-failed-flags") || "{}";
-      const flags = JSON.parse(stored);
+      const flags: Record<string, { ts: number }> = JSON.parse(stored);
       if (failed) {
-        flags[awbNumber] = true;
+        flags[awbNumber] = { ts: Date.now() };
       } else {
         delete flags[awbNumber];
       }
