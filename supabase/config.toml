@@ -328,3 +328,6 @@ verify_jwt = false
 
 [functions.draft-track-one]
 verify_jwt = false
+
+[functions.air-tracking-failed-alert]
+verify_jwt = false
