@@ -327,7 +327,6 @@ const getTimelineProgress = (lastEvent: string | null): number => {
     MNF: 50,
 
     // DEP e variações (75%)
-    BCBP: 75,
     DEP: 75,
     DEPARTED: 75,
     DEPARTURE: 75,
