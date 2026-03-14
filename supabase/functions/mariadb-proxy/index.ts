@@ -6928,20 +6928,135 @@ serve(async (req) => {
         console.log('Fetching AWB tracking events from t_aereo_ws_firecrawl.timeline_json:', queryAwb);
 
         // ── Manual forced timelines ──
+        const mkForcedEvent = (
+          awb: string,
+          idx: number,
+          codigo: string,
+          descricao: string,
+          dataHoraIso: string,
+          aeroporto: string,
+          pecas: number | null = null,
+          peso: string | null = null,
+        ) => ({
+          id: `forced-${awb}-${idx}`,
+          awb,
+          codigo_evento: codigo,
+          descricao_evento: descricao,
+          data_hora_evento: dataHoraIso,
+          aeroporto,
+          fonte: 'MANUAL',
+          nivel_confianca: 'PRIMARIA',
+          created_at: dataHoraIso,
+          pecas,
+          peso,
+        });
+
         const FORCED_TIMELINES: Record<string, { events: any[]; tracking_failed: boolean }> = {
           '047-32916273': {
             tracking_failed: false,
             events: [
-              {
-                id: 'forced-047-32916273-1',
-                codigo_evento: 'BCBP',
-                descricao_evento: 'Boarded the flight on Helsinki (Vantaa)',
-                data_hora_evento: '2025-03-13T18:00:00Z',
-                aeroporto: 'HEL',
-                fonte: 'manual',
-                pecas: 22,
-                peso: '2658.9 kg',
-              },
+              mkForcedEvent('047-32916273', 1, 'BCBP', 'Boarded the flight on Helsinki (Vantaa)', '2026-03-13T18:00:00', 'HEL', 22, '2658.9 kg'),
+            ],
+          },
+          '020-03272743': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('020-03272743', 1, 'BKD', 'BKD - 1 pcs', '2026-03-11T22:47:00', 'FRA', 1, null),
+              mkForcedEvent('020-03272743', 2, 'RCS', 'RCS - 1 pcs', '2026-03-11T19:47:00', 'FRA', 1, null),
+            ],
+          },
+          '724-86221435': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('724-86221435', 1, 'RCS', 'RCS - Ready for Carriage at ZRH, 2 Pieces 37.4 K', '2026-03-13T10:50:00', 'ZRH', 2, '37.4 K'),
+              mkForcedEvent('724-86221435', 2, 'BKD', 'BKD - Booked on Flight LX-0092, ZRH-GRU - 2 Pieces 37.4 K', '2026-03-09T12:02:00', 'ZRH', 2, '37.4 K'),
+            ],
+          },
+          '724-86221424': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('724-86221424', 1, 'RCS', 'RCS - Ready for Carriage at ZRH, 1 Pieces 1.8k', '2026-03-13T10:48:00', 'ZRH', 1, '1.8k'),
+              mkForcedEvent('724-86221424', 2, 'BKD', 'BKD - Booked on Flight LX-0092, ZRH-GRU - 1 Pieces 1.8k', '2026-03-05T16:40:00', 'ZRH', 1, '1.8k'),
+            ],
+          },
+          '724-85006051': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('724-85006051', 1, 'DEP', 'DEP - Departed to ZRH on Flight LX-6401C, CDG-ZRH', '2026-03-13T21:00:00', 'CDG', 2, '12 K'),
+              mkForcedEvent('724-85006051', 2, 'RCS', 'RCS - Ready for Carriage at CDG', '2026-03-13T16:18:00', 'CDG', 2, '12 K'),
+              mkForcedEvent('724-85006051', 3, 'FOH', 'FOH - Received in Warehouse at CDG', '2026-03-13T15:48:00', 'CDG', 2, '12 K'),
+              mkForcedEvent('724-85006051', 4, 'BKD', 'BKD - Booked on Flight LX-6401C, CDG-ZRH', '2026-03-12T18:04:00', 'CDG', 2, '12 K'),
+              mkForcedEvent('724-85006051', 5, 'BKD', 'BKD - Booked on Flight LX-0092, ZRH-GRU', '2026-03-12T15:34:00', 'ZRH', 2, '12 K'),
+            ],
+          },
+          '724-20906771': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('724-20906771', 1, 'ARR', 'ARR - Arrived at ZRH on Flight LX-0093, GRU-ZRH', '2026-03-14T10:34:00', 'ZRH', 1, '16.5 K'),
+              mkForcedEvent('724-20906771', 2, 'DEP', 'DEP - Departed to ZRH on Flight LX-0093, GRU-ZRH', '2026-03-13T19:21:00', 'GRU', 1, '16.5 K'),
+              mkForcedEvent('724-20906771', 3, 'RCS', 'RCS - Ready for Carriage at GRU', '2026-03-13T11:28:00', 'GRU', 1, '16.5 K'),
+              mkForcedEvent('724-20906771', 4, 'BKD', 'BKD - Booked on Flight LX-0093, GRU-ZRH', '2026-03-13T11:26:00', 'GRU', 1, '16.5 K'),
+              mkForcedEvent('724-20906771', 5, 'BKD', 'BKD - Booked on Flight LX-0340, ZRH-LHR', '2026-03-10T13:42:00', 'ZRH', 1, '16.5 K'),
+            ],
+          },
+          '724-07461451': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('724-07461451', 1, 'BKD', 'BKD - Booked on Flight LX-0092, ZRH-GRU', '2026-03-12T17:17:00', 'ZRH', 1, '22.3 K'),
+            ],
+          },
+          '549-42692926': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('549-42692926', 1, 'BKD', 'BKD - Booking Confirmed VCP-BOG', '2026-03-14T05:54:00', 'VCP', 1, '40.00 KGS'),
+              mkForcedEvent('549-42692926', 2, 'FOH', 'FOH - Freight on Hand', '2026-03-12T15:28:00', 'VCP', 1, '40.00 KGS'),
+              mkForcedEvent('549-42692926', 3, 'RCS', 'RCS - Shipment Received', '2026-03-12T15:28:00', 'VCP', 1, '40.00 KGS'),
+            ],
+          },
+          '172-02171035': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('172-02171035', 1, 'AWD', 'AWD: DOCUMENTS DELIVERED', '2026-03-14T06:40:00', 'VCP', 3, null),
+              mkForcedEvent('172-02171035', 2, 'NFD', 'NFD: 3 PCS READY FOR PICKUP', '2026-03-14T06:40:00', 'VCP', 3, null),
+              mkForcedEvent('172-02171035', 3, 'ARR', 'ARR: 3 PCS ARRIVED ON CV6225', '2026-03-14T05:57:00', 'VCP', 3, null),
+              mkForcedEvent('172-02171035', 4, 'RCF', 'RCF: 3 PCS RECEIVED FROM FLIGHT ON CV6225', '2026-03-14T05:29:00', 'VCP', 3, null),
+              mkForcedEvent('172-02171035', 5, 'DEP', 'DEP: 3 PCS DEPARTED ON CV6225', '2026-03-13T22:23:00', 'LUX', 3, null),
+              mkForcedEvent('172-02171035', 6, 'RCF', 'RCF: 3 PCS RECEIVED FROM FLIGHT ON CV8201A', '2026-03-12T23:25:00', 'LUX', 3, null),
+              mkForcedEvent('172-02171035', 7, 'ARR', 'ARR: 3 PCS ARRIVED ON CV8201A', '2026-03-12T19:13:00', 'LUX', 3, null),
+              mkForcedEvent('172-02171035', 8, 'DEP', 'DEP: 3 PCS DEPARTED ON CV8201A', '2026-03-12T12:32:00', 'AMS', 3, null),
+              mkForcedEvent('172-02171035', 9, 'RCS', 'RCS: 3 PCS READY FOR CARRIAGE', '2026-03-11T21:14:00', 'AMS', 3, null),
+              mkForcedEvent('172-02171035', 10, 'FOH', 'FOH: 3 PCS ON HAND', '2026-03-11T21:14:00', 'AMS', 3, null),
+              mkForcedEvent('172-02171035', 11, 'FWB', 'CPT: FWB DATA CAPTURE', '2026-03-11T11:55:00', 'AMS', 3, null),
+            ],
+          },
+          '083-60697361': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('083-60697361', 1, 'DEP', 'Departed 4 pcs 369.5 kg on 8083 at PER', '2026-03-13T11:28:00', 'PER', 4, '369.5 kg'),
+              mkForcedEvent('083-60697361', 2, 'ARR', 'Arrived 8 pcs 739 kg on 0280 at PER', '2026-03-11T12:34:00', 'PER', 8, '739 kg'),
+              mkForcedEvent('083-60697361', 3, 'DEP', 'Departed 4 pcs 369.5 kg on 0280 at JNB', '2026-03-10T20:46:00', 'JNB', 4, '369.5 kg'),
+              mkForcedEvent('083-60697361', 4, 'MAN', 'Manifested 4 pcs 369.5 kg for 0280 at JNB', '2026-03-10T18:48:00', 'JNB', 4, '369.5 kg'),
+              mkForcedEvent('083-60697361', 5, 'OFLD', 'Offloaded 4 pcs 369.5 kg for 0280 at JNB', '2026-03-10T18:45:00', 'JNB', 4, '369.5 kg'),
+              mkForcedEvent('083-60697361', 6, 'MAN', 'Manifested 4 pcs 369.5 kg for 0223 at GRU', '2026-03-09T18:37:00', 'GRU', 4, '369.5 kg'),
+              mkForcedEvent('083-60697361', 7, 'DEP', 'Departed 4 pcs 369.5 kg on 0223 at GRU', '2026-03-09T18:29:00', 'GRU', 4, '369.5 kg'),
+              mkForcedEvent('083-60697361', 8, 'RCS', 'Accepted 4 pcs 369.5 kg at GRU', '2026-03-09T12:13:00', 'GRU', 4, '369.5 kg'),
+              mkForcedEvent('083-60697361', 9, 'BKD', 'Booked 4 pcs 369.5 kg at JNB for 0280', '2026-03-06T21:42:00', 'JNB', 4, '369.5 kg'),
+            ],
+          },
+          '074-70304695': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('074-70304695', 1, 'NFD', 'NFD - 57 pieces ready to be picked up at GRU', '2026-03-11T07:45:00', 'GRU', 57, null),
+              mkForcedEvent('074-70304695', 2, 'RCF', 'AF0454 (CDG→GRU) - RCF - 57 pieces received at GRU', '2026-03-11T07:43:00', 'GRU', 57, null),
+              mkForcedEvent('074-70304695', 3, 'ARR', 'AF0454 (CDG→GRU) - ARR - 57 pieces arrived at GRU', '2026-03-11T07:26:00', 'GRU', 57, null),
+              mkForcedEvent('074-70304695', 4, 'DEP', 'AF0454 (CDG→GRU) - DEP - 57 pieces departed from CDG', '2026-03-10T23:57:00', 'CDG', 57, null),
+              mkForcedEvent('074-70304695', 5, 'RCF', 'AF0217 (BOM→CDG) - RCF - 57 pieces received at CDG', '2026-03-10T02:36:00', 'CDG', 57, null),
+              mkForcedEvent('074-70304695', 6, 'ARR', 'AF0217 (BOM→CDG) - ARR - 57 pieces arrived at CDG', '2026-03-09T07:51:00', 'CDG', 57, null),
+              mkForcedEvent('074-70304695', 7, 'DEP', 'AF0217 (BOM→CDG) - DEP - 57 pieces departed from BOM', '2026-03-09T03:05:00', 'BOM', 57, null),
+              mkForcedEvent('074-70304695', 8, 'RCS', 'RCS - 57 pieces received at BOM', '2026-03-08T19:55:00', 'BOM', 57, null),
+              mkForcedEvent('074-70304695', 9, 'FOH', 'FOH - 57 pieces on hand at BOM', '2026-03-08T12:47:00', 'BOM', 57, null),
+              mkForcedEvent('074-70304695', 10, 'FWB', 'FWB - Customer FWB processed at BOM', '2026-03-07T13:20:00', 'BOM', 57, null),
+              mkForcedEvent('074-70304695', 11, 'BKD', 'BKD - 57 pieces booked at BOM', '2026-03-05T16:17:00', 'BOM', 57, null),
             ],
           },
         };
@@ -6949,8 +7064,8 @@ serve(async (req) => {
         const cleanAwbForForce = queryAwb.trim();
         if (FORCED_TIMELINES[cleanAwbForForce]) {
           const forced = FORCED_TIMELINES[cleanAwbForForce];
-          console.log(`Using FORCED timeline for AWB ${cleanAwbForForce}`);
-          result = { success: true, data: forced.events, tracking_failed: forced.tracking_failed };
+          console.log(`Using FORCED timeline for AWB ${cleanAwbForForce} with ${forced.events.length} events`);
+          result = { success: true, data: forced.events, tracking_failed: false };
           break;
         }
 
