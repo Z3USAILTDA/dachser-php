@@ -301,6 +301,8 @@ const getTimelineProgress = (lastEvent: string | null): number => {
 
   // Mapeamento de status para a nova régua: BKD → RCF → MAN → DEP → ARR
   const progressMap: Record<string, number> = {
+    // Pré-BKD
+    BCBP: 0,
     // BKD e variações (0%)
     UNK: 0,
     BKD: 0,
