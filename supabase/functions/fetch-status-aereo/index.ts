@@ -1514,6 +1514,16 @@ serve(async (req) => {
           { status: 'RFC', description: 'RFC - Ready for Carriage at CDG', date: '2026-03-13T23:49:00', pieces: '', weight: '' },
         ]
       },
+      '020-02593301': {
+        status: 'BKD',
+        status_info: 'BKD - Booked at HAM (Hamburg) - 4 Pieces 135.5 kg',
+        last_event_date: '2026-03-12T13:07:00',
+        force_origem: 'HAM',
+        force_destino: 'VCP',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booked at HAM (Hamburg) - 4 Pieces 135.5 kg', date: '2026-03-12T13:07:00', pieces: '4', weight: '135.5 kg' },
+        ]
+      },
     };
 
     // v2: override loop with debug
