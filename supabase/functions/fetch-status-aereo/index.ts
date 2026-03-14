@@ -1146,11 +1146,11 @@ serve(async (req) => {
         'última atualização': scrapedAt,
         last_flight: ws.last_flight || null,
         is_ground_transport: (() => {
-          // Detect ground transport: flight code ends with "-T" or ends with digit+X
+          // Detect ground transport: flight code ends with "-T", digit+X, or digit+D
           function isGroundFlight(val: string): boolean {
             const clean = val.trim().replace(/,\s*$/, '');
             if (!clean) return false;
-            return /[-]T$/i.test(clean) || /\d[Xx]$/.test(clean);
+            return /[-]T$/i.test(clean) || /\d[Xx]$/.test(clean) || /\d[Dd]$/.test(clean);
           }
           // Extract flight codes from text: "Flight LX-9950X", "Flight M3-8485", "LA 5252-T"
           function extractFlightsFromText(text: string): string[] {
