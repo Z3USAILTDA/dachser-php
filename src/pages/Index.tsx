@@ -2365,7 +2365,7 @@ const Index = () => {
           </button>
           <div
             className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800]"
-            title="Rastreio de AWBs"
+            title="Monitoramento Pré-Embarque"
           >
             <Plane className="w-4 h-4" />
           </div>

@@ -95,11 +95,6 @@ const menuItems: MenuItem[] = [
     subtitle: "Operações Marítimas",
     children: [
       {
-        label: "Cadastro BL",
-        href: "/sea/cadastro-bl",
-        z3usOnly: true,
-      },
-      {
         label: "Análise Documental SEA",
         href: "/sea/analysis",
       },
