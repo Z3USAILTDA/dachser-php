@@ -1332,6 +1332,24 @@ serve(async (req) => {
       },
       '996-14389491': { status: 'NIF', status_info: 'Sem informação na companhia aérea' },
       '577-11063080': { status: 'DEP' }, // Último evento na timeline é DEP
+      '074-70304695': {
+        status: 'NFD',
+        status_info: 'NFD - 57 pieces ready to be picked up at GRU',
+        last_event_date: '2026-03-11T07:45:00',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - 57 pieces booked at BOM', date: '05 MAR / 16:17', pieces: '57', weight: '' },
+          { status: 'FWB', description: 'FWB - Customer FWB processed at BOM (57 pieces)', date: '07 MAR / 13:20', pieces: '57', weight: '' },
+          { status: 'FOH', description: 'FOH - 57 pieces on hand at BOM', date: '08 MAR / 12:47', pieces: '57', weight: '' },
+          { status: 'RCS', description: 'RCS - 57 pieces received at BOM', date: '08 MAR / 19:55', pieces: '57', weight: '' },
+          { status: 'DEP', description: 'AF0217 (BOM→CDG) - DEP - 57 pieces departed from BOM', date: '09 MAR / 03:05', pieces: '57', weight: '' },
+          { status: 'ARR', description: 'AF0217 (BOM→CDG) - ARR - 57 pieces arrived at CDG', date: '09 MAR / 07:51', pieces: '57', weight: '' },
+          { status: 'RCF', description: 'AF0217 (BOM→CDG) - RCF - 57 pieces received at CDG', date: '10 MAR / 02:36', pieces: '57', weight: '' },
+          { status: 'DEP', description: 'AF0454 (CDG→GRU) - DEP - 57 pieces departed from CDG', date: '10 MAR / 23:57', pieces: '57', weight: '' },
+          { status: 'ARR', description: 'AF0454 (CDG→GRU) - ARR - 57 pieces arrived at GRU', date: '11 MAR / 07:26', pieces: '57', weight: '' },
+          { status: 'RCF', description: 'AF0454 (CDG→GRU) - RCF - 57 pieces received at GRU', date: '11 MAR / 07:43', pieces: '57', weight: '' },
+          { status: 'NFD', description: 'NFD - 57 pieces ready to be picked up at GRU', date: '11 MAR / 07:45', pieces: '57', weight: '' },
+        ]
+      },
       '020-22473334': {
         status: 'UNK',
         status_info: 'Sem atualização',
