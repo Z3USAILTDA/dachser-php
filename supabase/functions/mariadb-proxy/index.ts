@@ -6927,6 +6927,33 @@ serve(async (req) => {
 
         console.log('Fetching AWB tracking events from t_aereo_ws_firecrawl.timeline_json:', queryAwb);
 
+        // ── Manual forced timelines ──
+        const FORCED_TIMELINES: Record<string, { events: any[]; tracking_failed: boolean }> = {
+          '047-32916273': {
+            tracking_failed: false,
+            events: [
+              {
+                id: 'forced-047-32916273-1',
+                codigo_evento: 'DEP',
+                descricao_evento: 'Boarded the flight on Helsinki (Vantaa)',
+                data_hora_evento: '2025-03-13T18:00:00Z',
+                aeroporto: 'HEL',
+                fonte: 'manual',
+                pecas: 22,
+                peso: '2658.9 kg',
+              },
+            ],
+          },
+        };
+
+        const cleanAwbForForce = queryAwb.trim();
+        if (FORCED_TIMELINES[cleanAwbForForce]) {
+          const forced = FORCED_TIMELINES[cleanAwbForForce];
+          console.log(`Using FORCED timeline for AWB ${cleanAwbForForce}`);
+          result = { success: true, data: forced.events, tracking_failed: forced.tracking_failed };
+          break;
+        }
+
         try {
           // Get the most recent record for this AWB from t_aereo_ws_firecrawl
           const wsRows = await client.query(`
