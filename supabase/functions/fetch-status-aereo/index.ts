@@ -1324,14 +1324,14 @@ serve(async (req) => {
     // ========== MANUAL OVERRIDES ==========
     // Overrides manuais para AWBs específicos com problemas de resolução automática
     const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean; force_timeline?: any[]; force_critical?: boolean; last_event_date?: string; disable_discrepancy?: boolean; force_origem?: string; force_destino?: string }> = {
-      '057-03764530': { skip_first_event: true }, // Último evento incorreto, usar penúltimo
+      '057-03764530': { skip_first_event: true },
       '047-32916273': {
         status: 'BCBP',
         status_info: 'BCBP - Boarded the flight on Helsinki (Vantaa)',
         disable_discrepancy: true,
       },
       '996-14389491': { status: 'NIF', status_info: 'Sem informação na companhia aérea' },
-      '577-11063080': { status: 'DEP' }, // Último evento na timeline é DEP
+      '577-11063080': { status: 'DEP' },
       '074-70304695': {
         status: 'NFD',
         status_info: 'NFD - 57 pieces ready to be picked up at GRU',
@@ -1377,6 +1377,130 @@ serve(async (req) => {
           { status: 'ARR', description: 'LH506 (FRA→GRU) - ARR - GRU (Guarulhos)', date: '07 MAR / 06:11', pieces: '2', weight: '11 kg' },
           { status: 'RCF', description: 'LH506 (FRA→GRU) - RCF - GRU (Guarulhos)', date: '07 MAR / 11:36', pieces: '2', weight: '11 kg' },
           { status: 'NFD', description: 'NFD - GRU (Guarulhos)', date: '07 MAR / 11:36', pieces: '2', weight: '11 kg' },
+        ]
+      },
+      // === Novos overrides 2026-03-14 ===
+      '020-03272743': {
+        status: 'RCS',
+        status_info: 'RCS - 1 pcs received at FRA',
+        last_event_date: '2026-03-11T22:47:00',
+        force_origem: 'FRA',
+        force_destino: 'VCP',
+        force_timeline: [
+          { status: 'RCS', description: 'RCS - 1 pcs', date: '2026-03-11T19:47:00', pieces: '1', weight: '' },
+          { status: 'BKD', description: 'BKD - 1 pcs', date: '2026-03-11T22:47:00', pieces: '1', weight: '' },
+        ]
+      },
+      '724-86221435': {
+        status: 'RCS',
+        status_info: 'RCS - Ready for Carriage at ZRH - 2 Pieces 37.4 K',
+        last_event_date: '2026-03-13T10:50:00',
+        force_origem: 'ZRH',
+        force_destino: 'GRU',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booked on Flight LX-0092, ZRH-GRU - 2 Pieces 37.4 K', date: '2026-03-09T12:02:00', pieces: '2', weight: '37.4 K' },
+          { status: 'RCS', description: 'RCS - Ready for Carriage at ZRH - 2 Pieces 37.4 K', date: '2026-03-13T10:50:00', pieces: '2', weight: '37.4 K' },
+        ]
+      },
+      '724-86221424': {
+        status: 'RCS',
+        status_info: 'RCS - Ready for Carriage at ZRH - 1 Pieces 1.8k',
+        last_event_date: '2026-03-13T10:48:00',
+        force_origem: 'ZRH',
+        force_destino: 'GRU',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booked on Flight LX-0092, ZRH-GRU - 1 Pieces 1.8k', date: '2026-03-05T16:40:00', pieces: '1', weight: '1.8k' },
+          { status: 'RCS', description: 'RCS - Ready for Carriage at ZRH - 1 Pieces 1.8k', date: '2026-03-13T10:48:00', pieces: '1', weight: '1.8k' },
+        ]
+      },
+      '724-85006051': {
+        status: 'DEP',
+        status_info: 'DEP - Departed to ZRH on Flight LX-6401C, CDG-ZRH - 2 Pieces 12 K',
+        last_event_date: '2026-03-13T21:00:00',
+        force_origem: 'CDG',
+        force_destino: 'GRU',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booked on Flight LX-0092, ZRH-GRU - 2 Pieces 12 K', date: '2026-03-12T15:34:00', pieces: '2', weight: '12 K' },
+          { status: 'BKD', description: 'BKD - Booked on Flight LX-6401C, CDG-ZRH - 2 Pieces 12 K', date: '2026-03-12T18:04:00', pieces: '2', weight: '12 K' },
+          { status: 'FOH', description: 'FOH - Received in Warehouse at CDG - 2 Pieces 12 K', date: '2026-03-13T15:48:00', pieces: '2', weight: '12 K' },
+          { status: 'RCS', description: 'RCS - Ready for Carriage at CDG - 2 Pieces 12 K', date: '2026-03-13T16:18:00', pieces: '2', weight: '12 K' },
+          { status: 'DEP', description: 'DEP - Departed to ZRH on Flight LX-6401C, CDG-ZRH - 2 Pieces 12 K', date: '2026-03-13T21:00:00', pieces: '2', weight: '12 K' },
+        ]
+      },
+      '724-20906771': {
+        status: 'ARR',
+        status_info: 'ARR - Arrived at ZRH on Flight LX-0093, GRU-ZRH - 1 Pieces 16.5 K',
+        last_event_date: '2026-03-14T10:34:00',
+        force_origem: 'GRU',
+        force_destino: 'LHR',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booked on Flight LX-0340, ZRH-LHR - 1 Pieces 16.5 K', date: '2026-03-10T13:42:00', pieces: '1', weight: '16.5 K' },
+          { status: 'BKD', description: 'BKD - Booked on Flight LX-0093, GRU-ZRH - 1 Pieces 16.5 K', date: '2026-03-13T11:26:00', pieces: '1', weight: '16.5 K' },
+          { status: 'RCS', description: 'RCS - Ready for Carriage at GRU - 1 Pieces 16.5 K', date: '2026-03-13T11:28:00', pieces: '1', weight: '16.5 K' },
+          { status: 'DEP', description: 'DEP - Departed to ZRH on Flight LX-0093, GRU-ZRH - 1 Pieces 16.5 K', date: '2026-03-13T19:21:00', pieces: '1', weight: '16.5 K' },
+          { status: 'ARR', description: 'ARR - Arrived at ZRH on Flight LX-0093, GRU-ZRH - 1 Pieces 16.5 K', date: '2026-03-14T10:34:00', pieces: '1', weight: '16.5 K' },
+        ]
+      },
+      '724-07461451': {
+        status: 'BKD',
+        status_info: 'BKD - Booked on Flight LX-0092, ZRH-GRU - 1 Pieces 22.3 K',
+        last_event_date: '2026-03-12T17:17:00',
+        force_origem: 'ZRH',
+        force_destino: 'GRU',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booked on Flight LX-0092, ZRH-GRU - 1 Pieces 22.3 K', date: '2026-03-12T17:17:00', pieces: '1', weight: '22.3 K' },
+        ]
+      },
+      '549-42692926': {
+        status: 'BKD',
+        status_info: 'BKD - Booking Confirmed VCP L7 2531 VCP-BOG - 1 / 40.00KGS',
+        last_event_date: '2026-03-14T05:54:00',
+        force_origem: 'VCP',
+        force_destino: 'BOG',
+        force_timeline: [
+          { status: 'RCS', description: 'RCS - Shipment Received at VCP - 1 / 40.00KGS', date: '2026-03-12T15:28:00', pieces: '1', weight: '40.00KGS' },
+          { status: 'FOH', description: 'FOH - Freight on Hand at VCP - 1 / 40.00KGS', date: '2026-03-12T15:28:00', pieces: '1', weight: '40.00KGS' },
+          { status: 'BKD', description: 'BKD - Booking Confirmed VCP L7 2531 VCP-BOG - 1 / 40.00KGS', date: '2026-03-14T05:54:00', pieces: '1', weight: '40.00KGS' },
+        ]
+      },
+      '172-02171035': {
+        status: 'AWD',
+        status_info: 'AWD - Documents Delivered at VCP - 3 PCS',
+        last_event_date: '2026-03-14T06:40:00',
+        force_origem: 'AMS',
+        force_destino: 'VCP',
+        force_timeline: [
+          { status: 'FWB', description: 'CPT: FWB DATA CAPTURE at AMS', date: '2026-03-11T11:55:00', pieces: '3', weight: '' },
+          { status: 'FOH', description: 'FOH: 3 PCS ON HAND at AMS', date: '2026-03-11T21:14:00', pieces: '3', weight: '' },
+          { status: 'RCS', description: 'RCS: 3 PCS READY FOR CARRIAGE at AMS', date: '2026-03-11T21:14:00', pieces: '3', weight: '' },
+          { status: 'DEP', description: 'DEP: 3 PCS DEPARTED ON CV8201A from AMS', date: '2026-03-12T12:32:00', pieces: '3', weight: '' },
+          { status: 'ARR', description: 'ARR: 3 PCS ARRIVED ON CV8201A at LUX', date: '2026-03-12T19:13:00', pieces: '3', weight: '' },
+          { status: 'RCF', description: 'RCF: 3 PCS RECEIVED FROM FLIGHT ON CV8201A at LUX', date: '2026-03-12T23:25:00', pieces: '3', weight: '' },
+          { status: 'DEP', description: 'DEP: 3 PCS DEPARTED ON CV6225 from LUX', date: '2026-03-13T22:23:00', pieces: '3', weight: '' },
+          { status: 'ARR', description: 'ARR: 3 PCS ARRIVED ON CV6225 at VCP', date: '2026-03-14T05:57:00', pieces: '3', weight: '' },
+          { status: 'RCF', description: 'RCF: 3 PCS RECEIVED FROM FLIGHT ON CV6225 at VCP', date: '2026-03-14T05:29:00', pieces: '3', weight: '' },
+          { status: 'NFD', description: 'NFD: 3 PCS READY FOR PICKUP at VCP', date: '2026-03-14T06:40:00', pieces: '3', weight: '' },
+          { status: 'AWD', description: 'AWD: DOCUMENTS DELIVERED at VCP', date: '2026-03-14T06:40:00', pieces: '3', weight: '' },
+        ]
+      },
+      '083-60697361': {
+        status: 'DEP',
+        status_info: 'DEP - Departed 4 pcs 369.5 kg on 8083 from PER',
+        last_event_date: '2026-03-13T11:28:00',
+        force_origem: 'GRU',
+        force_destino: 'MEL',
+        force_timeline: [
+          { status: 'BKD', description: 'Booked 4 pcs 369.5 kg at JNB for 0227, 7 Mar 2026', date: '2026-03-06T21:42:00', pieces: '4', weight: '369.5 kg' },
+          { status: 'BKD', description: 'Booked 4 pcs 369.5 kg at JNB for 0314, 8 Mar 2026', date: '2026-03-06T21:42:00', pieces: '4', weight: '369.5 kg' },
+          { status: 'BKD', description: 'Booked 4 pcs 369.5 kg at JNB for 0280, 10 Mar 2026', date: '2026-03-06T21:42:00', pieces: '4', weight: '369.5 kg' },
+          { status: 'BKD', description: 'Booked 4 pcs 369.5 kg at JNB for 5810, 13 Mar 2026', date: '2026-03-06T21:42:00', pieces: '4', weight: '369.5 kg' },
+          { status: 'RCS', description: 'Accepted 4 pcs 369.5 kg at GRU', date: '2026-03-09T12:13:00', pieces: '4', weight: '369.5 kg' },
+          { status: 'MAN', description: 'Manifested 1 pcs 92.4 kg for 0223 at GRU', date: '2026-03-09T13:25:00', pieces: '1', weight: '92.4 kg' },
+          { status: 'MAN', description: 'Manifested 3 pcs 277.1 kg for 0223 at GRU', date: '2026-03-09T13:25:00', pieces: '3', weight: '277.1 kg' },
+          { status: 'DEP', description: 'Departed 4 pcs 369.5 kg on 0223 from GRU', date: '2026-03-09T18:29:00', pieces: '4', weight: '369.5 kg' },
+          { status: 'MAN', description: 'Manifested 4 pcs 369.5 kg for 0223 at GRU', date: '2026-03-09T18:37:00', pieces: '4', weight: '369.5 kg' },
+          { status: 'ARR', description: 'Arrived 8 pcs 739 kg on 0280 at PER (via JNB)', date: '2026-03-11T12:34:00', pieces: '8', weight: '739 kg' },
+          { status: 'DEP', description: 'Departed 4 pcs 369.5 kg on 8083 from PER', date: '2026-03-13T11:28:00', pieces: '4', weight: '369.5 kg' },
         ]
       },
     };
@@ -1468,8 +1592,8 @@ serve(async (req) => {
       '020-65055196', '865-14762381', '369-96183415', '045-13300626', '047-32916251',
       '074-04751843', '016-95200022', '087-08279331', '006-45285166', '047-35319384',
       '827-08279331',
-      // Batch removido via screenshot 2026-03-13
       '045-13300781', '724-76422835', '045-21167510',
+      '172-90556211',
     ]);
 
     // AWBs com override manual NUNCA devem ser filtrados
