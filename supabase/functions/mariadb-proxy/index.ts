@@ -7244,8 +7244,9 @@ serve(async (req) => {
             }
             
             // t_aereo_ws_firecrawl format
-            const description = entry.Description || entry.description || '';
+            const description = entry.Description || entry.description || entry.status || '';
             const codigoEvento = extractStatusCode(description);
+            const eventDateTime = entry.Timestamp || entry.timestamp || entry.date || entry.Date || entry.datetime || entry.dataEvento || entry.time || null;
             
             return {
               id: idx + 1,
@@ -7253,11 +7254,11 @@ serve(async (req) => {
               hawb: null,
               codigo_evento: codigoEvento,
               descricao_evento: description,
-              data_hora_evento: entry.Timestamp || entry.timestamp || null,
+              data_hora_evento: eventDateTime,
               fonte: entry.Carrier || entry.carrier || 'TRACKING',
-              aeroporto: entry.Location || entry.location || null,
+              aeroporto: entry.Location || entry.location || entry.aeroporto || null,
               nivel_confianca: 'PRIMARIA',
-              created_at: entry.Timestamp || entry.timestamp || null,
+              created_at: eventDateTime,
               pecas: entry._pecas ? Number(entry._pecas) : extractPiecesFromDesc(description),
               peso: entry._peso && entry._peso !== 'N/A' ? String(entry._peso) : extractWeightFromDesc(description),
             };
