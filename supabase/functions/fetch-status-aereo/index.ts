@@ -6,6 +6,50 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ======== IATA HIERARCHY (shared tiebreaker for same-timestamp events) ========
+// Higher number = more advanced in the shipment lifecycle
+const IATA_HIERARCHY: Record<string, number> = {
+  // 1. Planning & Pre-Receipt
+  BKD: 1, TKG: 2, LAT: 3, FWB: 4, BKG: 1,
+  // 2. Origin & Ground Processing
+  RCS: 10, RCT: 11, DOC: 12, RFC: 13, ECC: 14, SCR: 15, FOH: 9,
+  // 3. Handling & Departure
+  PRE: 20, MAN: 21, RDP: 22, DEP: 23, FFM: 21,
+  // 4. Transit & Connection
+  TFD: 30, TRM: 31, TRA: 32, TGC: 30,
+  // 5. Arrival & Destination
+  ARR: 40, RCF: 41, NFD: 42, AWD: 43, AWR: 44, RCD: 44, CCD: 45, DLV: 46, POD: 47,
+  // 6. Exceptions & Discrepancies
+  MSCA: 50, FDCA: 51, OVCD: 52, SSPD: 53, DMG: 54, DIS: 55, RET: 56, BUP: 57, OFLD: 53,
+};
+
+// Get event date string from any event object
+function getEventDateStr(ev: any): string {
+  return ev.date || ev.Date || ev.timestamp || ev.Timestamp || ev.time || ev.datetime || ev.dataEvento || '';
+}
+
+// Get event IATA status code from any event object
+function getEventStatusCode(ev: any): string {
+  return (ev.Status || ev.status || ev.codigo_evento || ev.code || '').toString().trim().toUpperCase();
+}
+
+// Sort events descending by date, with IATA_HIERARCHY as tiebreaker for same timestamps
+function sortEventsDesc(events: any[]): any[] {
+  return [...events].sort((a, b) => {
+    const dateA = getEventDateStr(a);
+    const dateB = getEventDateStr(b);
+    if (!dateA && !dateB) return 0;
+    if (!dateA) return 1;
+    if (!dateB) return -1;
+    const cmp = String(dateB).localeCompare(String(dateA));
+    if (cmp !== 0) return cmp;
+    // Same timestamp: higher hierarchy rank = more advanced = comes first
+    const orderA = IATA_HIERARCHY[getEventStatusCode(a)] ?? 0;
+    const orderB = IATA_HIERARCHY[getEventStatusCode(b)] ?? 0;
+    return orderB - orderA;
+  });
+}
+
 // Extract pieces count from event description
 function extractPieces(text: string): number | null {
   if (!text) return null;
