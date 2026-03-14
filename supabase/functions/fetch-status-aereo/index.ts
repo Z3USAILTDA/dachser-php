@@ -6,6 +6,50 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ======== IATA HIERARCHY (shared tiebreaker for same-timestamp events) ========
+// Higher number = more advanced in the shipment lifecycle
+const IATA_HIERARCHY: Record<string, number> = {
+  // 1. Planning & Pre-Receipt
+  BKD: 1, TKG: 2, LAT: 3, FWB: 4, BKG: 1,
+  // 2. Origin & Ground Processing
+  RCS: 10, RCT: 11, DOC: 12, RFC: 13, ECC: 14, SCR: 15, FOH: 9,
+  // 3. Handling & Departure
+  PRE: 20, MAN: 21, RDP: 22, DEP: 23, FFM: 21,
+  // 4. Transit & Connection
+  TFD: 30, TRM: 31, TRA: 32, TGC: 30,
+  // 5. Arrival & Destination
+  ARR: 40, RCF: 41, NFD: 42, AWD: 43, AWR: 44, RCD: 44, CCD: 45, DLV: 46, POD: 47,
+  // 6. Exceptions & Discrepancies
+  MSCA: 50, FDCA: 51, OVCD: 52, SSPD: 53, DMG: 54, DIS: 55, RET: 56, BUP: 57, OFLD: 53,
+};
+
+// Get event date string from any event object
+function getEventDateStr(ev: any): string {
+  return ev.date || ev.Date || ev.timestamp || ev.Timestamp || ev.time || ev.datetime || ev.dataEvento || '';
+}
+
+// Get event IATA status code from any event object
+function getEventStatusCode(ev: any): string {
+  return (ev.Status || ev.status || ev.codigo_evento || ev.code || '').toString().trim().toUpperCase();
+}
+
+// Sort events descending by date, with IATA_HIERARCHY as tiebreaker for same timestamps
+function sortEventsDesc(events: any[]): any[] {
+  return [...events].sort((a, b) => {
+    const dateA = getEventDateStr(a);
+    const dateB = getEventDateStr(b);
+    if (!dateA && !dateB) return 0;
+    if (!dateA) return 1;
+    if (!dateB) return -1;
+    const cmp = String(dateB).localeCompare(String(dateA));
+    if (cmp !== 0) return cmp;
+    // Same timestamp: higher hierarchy rank = more advanced = comes first
+    const orderA = IATA_HIERARCHY[getEventStatusCode(a)] ?? 0;
+    const orderB = IATA_HIERARCHY[getEventStatusCode(b)] ?? 0;
+    return orderB - orderA;
+  });
+}
+
 // Extract pieces count from event description
 function extractPieces(text: string): number | null {
   if (!text) return null;
@@ -33,8 +77,9 @@ function extractLastStatusFromTimeline(timelineJson: string | null): string | nu
   try {
     const events = JSON.parse(timelineJson);
     if (!Array.isArray(events) || events.length === 0) return null;
-    // Events are typically DESC (newest first)
-    const last = events[0];
+    // Sort with IATA hierarchy tiebreaker for same-timestamp events
+    const sorted = sortEventsDesc(events);
+    const last = sorted[0];
     const code = (last.status || last.Status || '').trim().toUpperCase();
     if (code && code !== 'UNK' && code !== 'UNKNOWN') return code;
     // Fallback: try to get something from description
@@ -280,15 +325,8 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
       }
     }
 
-    // Ordenar eventos por data DESC (mais recente primeiro)
-    const sorted = [...events].sort((a, b) => {
-      const dateA = a.date || a.Date || a.timestamp || a.Timestamp || a.time || a.datetime || a.dataEvento || '';
-      const dateB = b.date || b.Date || b.timestamp || b.Timestamp || b.time || b.datetime || b.dataEvento || '';
-      if (!dateA && !dateB) return 0;
-      if (!dateA) return 1;
-      if (!dateB) return -1;
-      return String(dateB).localeCompare(String(dateA));
-    });
+    // Ordenar eventos por data DESC com desempate por hierarquia IATA
+    const sorted = sortEventsDesc(events);
 
     const now = new Date();
 
@@ -393,37 +431,7 @@ function extractLastEventDescription(timelineJson: string | null, etdStr?: strin
     }
 
     const now = new Date();
-    // IATA hierarchy for tiebreaking when events share the same timestamp
-    const IATA_ORDER: Record<string, number> = {
-      'BKD': 1, 'RCS': 2, 'MAN': 3, 'PRE': 3, 'FFM': 3,
-      'DEP': 4, 'TFD': 4,
-      'RCT': 5, 'TGC': 5,
-      'RCF': 6, 'CRC': 6,
-      'AWD': 7, 'AWR': 7, 'RCD': 7,
-      'NFD': 8,
-      'DLV': 9, 'POD': 9,
-      'DIS': 3, 'OFLD': 3,
-      'ARR': 10,
-    };
-
-    const getEventStatus = (ev: any): string => {
-      const raw = ev.Status || ev.status || ev.codigo_evento || ev.code || '';
-      return String(raw).trim().toUpperCase();
-    };
-
-    const sorted = [...events].sort((a: any, b: any) => {
-      const dateA = a.date || a.Date || a.timestamp || a.Timestamp || a.time || a.datetime || a.dataEvento || '';
-      const dateB = b.date || b.Date || b.timestamp || b.Timestamp || b.time || b.datetime || b.dataEvento || '';
-      if (!dateA && !dateB) return 0;
-      if (!dateA) return 1;
-      if (!dateB) return -1;
-      const cmp = String(dateB).localeCompare(String(dateA));
-      if (cmp !== 0) return cmp;
-      // Same timestamp: use IATA hierarchy as tiebreaker (higher = more advanced)
-      const orderA = IATA_ORDER[getEventStatus(a)] ?? 0;
-      const orderB = IATA_ORDER[getEventStatus(b)] ?? 0;
-      return orderB - orderA;
-    });
+    const sorted = sortEventsDesc(events);
 
     const filtered = (etdCutoff
       ? sorted.filter((ev: any) => {
@@ -472,15 +480,8 @@ function extractLastEventDate(timelineJson: string | null, etdStr?: string | nul
       }
     }
 
-    // Sort DESC by date
-    const sorted = [...events].sort((a, b) => {
-      const dateA = a.date || a.Date || a.timestamp || a.Timestamp || a.time || a.datetime || a.dataEvento || '';
-      const dateB = b.date || b.Date || b.timestamp || b.Timestamp || b.time || b.datetime || b.dataEvento || '';
-      if (!dateA && !dateB) return 0;
-      if (!dateA) return 1;
-      if (!dateB) return -1;
-      return String(dateB).localeCompare(String(dateA));
-    });
+    // Sort DESC by date with IATA hierarchy tiebreaker
+    const sorted = sortEventsDesc(events);
 
     // Filter by ETD cutoff
     const filtered = etdCutoff
