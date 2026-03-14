@@ -1504,6 +1504,15 @@ serve(async (req) => {
           { status: 'DEP', description: 'Departed 4 pcs 369.5 kg on 8083 from PER', date: '2026-03-13T11:28:00', pieces: '4', weight: '369.5 kg' },
         ]
       },
+      '996-14370731': {
+        status: 'RCS',
+        status_info: 'RCS - Ready for Carriage at CDG',
+        last_event_date: '2026-03-13T23:49:00',
+        force_timeline: [
+          { status: 'FOH', description: 'FOH - Freight on Hands at CDG', date: '2026-03-13T23:49:00', pieces: '', weight: '' },
+          { status: 'RCS', description: 'RCS - Ready for Carriage at CDG', date: '2026-03-13T23:49:00', pieces: '', weight: '' },
+        ]
+      },
     };
 
     // v2: override loop with debug

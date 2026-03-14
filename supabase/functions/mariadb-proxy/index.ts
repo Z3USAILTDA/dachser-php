@@ -7082,6 +7082,13 @@ serve(async (req) => {
               mkForcedEvent('020-22473334', 18, 'RCS', 'RCS - HEL (Helsinki) - 2 pcs 11 kg', '2026-03-04T07:00:00', 'HEL', 2, '11 kg'),
             ],
           },
+          '996-14370731': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('996-14370731', 1, 'RCS', 'RCS - Ready for Carriage at CDG', '2026-03-13T23:49:00', 'CDG', null, null),
+              mkForcedEvent('996-14370731', 2, 'FOH', 'FOH - Freight on Hands at CDG', '2026-03-13T23:49:00', 'CDG', null, null),
+            ],
+          },
         };
 
         const cleanAwbForForce = queryAwb.trim();
