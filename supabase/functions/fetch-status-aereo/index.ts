@@ -1326,7 +1326,7 @@ serve(async (req) => {
     const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean; force_timeline?: any[]; force_critical?: boolean; last_event_date?: string; disable_discrepancy?: boolean }> = {
       '057-03764530': { skip_first_event: true }, // Último evento incorreto, usar penúltimo
       '047-32916273': {
-        status: 'DEP',
+        status: 'BCBP',
         status_info: 'Boarded the flight on Helsinki (Vantaa)',
         disable_discrepancy: true,
       },
