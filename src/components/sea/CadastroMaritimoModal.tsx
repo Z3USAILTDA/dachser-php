@@ -633,81 +633,7 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
             </div>
           </div>
 
-          {/* BL Collapsible Sections */}
-          <CollapsibleSection
-            title="BL & Shipper"
-            icon={<Anchor className="h-4 w-4" />}
-            fields={['bl_number', 'shipper_name', 'shipper_address', 'notify_party', 'delivery_agent']}
-            form={form}
-          >
-            <Field label="BL Number" field="bl_number" />
-            <Field label="Shipper Name" field="shipper_name" />
-            <Field label="Shipper Address" field="shipper_address" span2 />
-            <Field label="Notify Party" field="notify_party" span2 />
-            <Field label="Delivery Agent" field="delivery_agent" span2 />
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title="Vessel & Routing"
-            icon={<Ship className="h-4 w-4" />}
-            fields={['vessel_voyage', 'port_loading', 'port_discharge', 'place_receipt', 'place_delivery']}
-            form={form}
-          >
-            <Field label="Vessel / Voyage" field="vessel_voyage" />
-            <Field label="Port of Loading" field="port_loading" />
-            <Field label="Port of Discharge" field="port_discharge" />
-            <Field label="Place of Receipt" field="place_receipt" />
-            <Field label="Place of Delivery" field="place_delivery" />
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title="Containers"
-            icon={<Package className="h-4 w-4" />}
-            fields={['container_numbers', 'seal_numbers', 'marks_numbers']}
-            form={form}
-          >
-            <Field label="Container Numbers" field="container_numbers" span2 />
-            <Field label="Seal Numbers" field="seal_numbers" span2 />
-            <Field label="Marks and Numbers" field="marks_numbers" span2 />
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title="Charges & Freight"
-            fields={['freight_charges', 'freight_payment', 'service_type', 'total_prepaid', 'total_collect']}
-            form={form}
-          >
-            <Field label="Freight Charges" field="freight_charges" span2 />
-            <Field label="Freight Payment (Prepaid/Collect)" field="freight_payment" />
-            <Field label="Service Type (LCL/FCL)" field="service_type" />
-            <Field label="Total Prepaid" field="total_prepaid" type="number" />
-            <Field label="Total Collect" field="total_collect" type="number" />
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title="Goods & Packaging"
-            fields={['nature_of_goods', 'hs_code', 'gross_weight_kg', 'volume_cbm', 'pieces', 'packaging']}
-            form={form}
-          >
-            <Field label="Nature of Goods" field="nature_of_goods" span2 />
-            <Field label="HS Code / NCM" field="hs_code" />
-            <Field label="Gross Weight (kg)" field="gross_weight_kg" type="number" />
-            <Field label="Volume (CBM)" field="volume_cbm" type="number" />
-            <Field label="Pieces" field="pieces" type="number" />
-            <Field label="Packaging" field="packaging" span2 />
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title="Issuance"
-            fields={['shipped_on_board_date', 'place_date_issue', 'issued_by', 'num_original_bls']}
-            form={form}
-          >
-            <Field label="Shipped on Board Date" field="shipped_on_board_date" />
-            <Field label="Place and Date of Issue" field="place_date_issue" />
-            <Field label="Issued By" field="issued_by" />
-            <Field label="No. of Original BLs" field="num_original_bls" type="number" />
-          </CollapsibleSection>
-
-          {/* IMPO Fields */}
+          {/* IMPO Fields (manual - first) */}
           {form.mode === 'impo' && (
             <div className="rounded-xl border border-[rgba(255,255,255,.1)] bg-[rgba(255,255,255,.03)] p-4 space-y-4">
               <h3 className="text-sm font-semibold text-[#ffc800] flex items-center gap-2">
@@ -806,7 +732,7 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
             </div>
           )}
 
-          {/* EXPO Fields */}
+          {/* EXPO Fields (manual - first) */}
           {form.mode === 'expo' && (
             <div className="rounded-xl border border-[rgba(255,255,255,.1)] bg-[rgba(255,255,255,.03)] p-4 space-y-4">
               <h3 className="text-sm font-semibold text-[#ffc800] flex items-center gap-2">
@@ -903,6 +829,80 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
               </div>
             </div>
           )}
+
+          {/* BL Collapsible Sections (auto-filled by PDF) */}
+          <CollapsibleSection
+            title="BL & Shipper"
+            icon={<Anchor className="h-4 w-4" />}
+            fields={['bl_number', 'shipper_name', 'shipper_address', 'notify_party', 'delivery_agent']}
+            form={form}
+          >
+            <Field label="BL Number" field="bl_number" />
+            <Field label="Shipper Name" field="shipper_name" />
+            <Field label="Shipper Address" field="shipper_address" span2 />
+            <Field label="Notify Party" field="notify_party" span2 />
+            <Field label="Delivery Agent" field="delivery_agent" span2 />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Vessel & Routing"
+            icon={<Ship className="h-4 w-4" />}
+            fields={['vessel_voyage', 'port_loading', 'port_discharge', 'place_receipt', 'place_delivery']}
+            form={form}
+          >
+            <Field label="Vessel / Voyage" field="vessel_voyage" />
+            <Field label="Port of Loading" field="port_loading" />
+            <Field label="Port of Discharge" field="port_discharge" />
+            <Field label="Place of Receipt" field="place_receipt" />
+            <Field label="Place of Delivery" field="place_delivery" />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Containers"
+            icon={<Package className="h-4 w-4" />}
+            fields={['container_numbers', 'seal_numbers', 'marks_numbers']}
+            form={form}
+          >
+            <Field label="Container Numbers" field="container_numbers" span2 />
+            <Field label="Seal Numbers" field="seal_numbers" span2 />
+            <Field label="Marks and Numbers" field="marks_numbers" span2 />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Charges & Freight"
+            fields={['freight_charges', 'freight_payment', 'service_type', 'total_prepaid', 'total_collect']}
+            form={form}
+          >
+            <Field label="Freight Charges" field="freight_charges" span2 />
+            <Field label="Freight Payment (Prepaid/Collect)" field="freight_payment" />
+            <Field label="Service Type (LCL/FCL)" field="service_type" />
+            <Field label="Total Prepaid" field="total_prepaid" type="number" />
+            <Field label="Total Collect" field="total_collect" type="number" />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Goods & Packaging"
+            fields={['nature_of_goods', 'hs_code', 'gross_weight_kg', 'volume_cbm', 'pieces', 'packaging']}
+            form={form}
+          >
+            <Field label="Nature of Goods" field="nature_of_goods" span2 />
+            <Field label="HS Code / NCM" field="hs_code" />
+            <Field label="Gross Weight (kg)" field="gross_weight_kg" type="number" />
+            <Field label="Volume (CBM)" field="volume_cbm" type="number" />
+            <Field label="Pieces" field="pieces" type="number" />
+            <Field label="Packaging" field="packaging" span2 />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Issuance"
+            fields={['shipped_on_board_date', 'place_date_issue', 'issued_by', 'num_original_bls']}
+            form={form}
+          >
+            <Field label="Shipped on Board Date" field="shipped_on_board_date" />
+            <Field label="Place and Date of Issue" field="place_date_issue" />
+            <Field label="Issued By" field="issued_by" />
+            <Field label="No. of Original BLs" field="num_original_bls" type="number" />
+          </CollapsibleSection>
 
           {/* Pre-Alert Title Preview */}
           <div className="rounded-xl border border-[rgba(255,200,0,.25)] bg-[rgba(255,200,0,.06)] p-4 space-y-2">
