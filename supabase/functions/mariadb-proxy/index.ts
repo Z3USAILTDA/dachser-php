@@ -6992,7 +6992,7 @@ serve(async (req) => {
           '724-20906771': {
             tracking_failed: false,
             events: [
-              mkForcedEvent('724-20906771', 1, 'RCF', 'RCF - Received at ZRH from Flight LX-0093, GRU-ZRH', '2026-03-14T08:54:00', 'ZRH', 1, '16.5 K'),
+              mkForcedEvent('724-20906771', 1, 'RCF', 'RCF - Received at ZRH from Flight LX-0093, GRU-ZRH', '2026-03-14T12:45:00', 'ZRH', 1, '16.5 K'),
               mkForcedEvent('724-20906771', 2, 'ARR', 'ARR - Arrived at ZRH on Flight LX-0093, GRU-ZRH', '2026-03-14T10:34:00', 'ZRH', 1, '16.5 K'),
               mkForcedEvent('724-20906771', 3, 'DEP', 'DEP - Departed to ZRH on Flight LX-0093, GRU-ZRH', '2026-03-13T19:21:00', 'GRU', 1, '16.5 K'),
               mkForcedEvent('724-20906771', 4, 'RCS', 'RCS - Ready for Carriage at GRU', '2026-03-13T11:28:00', 'GRU', 1, '16.5 K'),
