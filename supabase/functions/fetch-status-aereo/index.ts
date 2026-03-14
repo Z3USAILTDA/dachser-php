@@ -1323,7 +1323,7 @@ serve(async (req) => {
 
     // ========== MANUAL OVERRIDES ==========
     // Overrides manuais para AWBs específicos com problemas de resolução automática
-    const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean; force_timeline?: any[]; force_critical?: boolean; last_event_date?: string; disable_discrepancy?: boolean }> = {
+    const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean; force_timeline?: any[]; force_critical?: boolean; last_event_date?: string; disable_discrepancy?: boolean; force_origem?: string; force_destino?: string }> = {
       '057-03764530': { skip_first_event: true }, // Último evento incorreto, usar penúltimo
       '047-32916273': {
         status: 'BCBP',
@@ -1336,6 +1336,8 @@ serve(async (req) => {
         status: 'NFD',
         status_info: 'NFD - 57 pieces ready to be picked up at GRU',
         last_event_date: '2026-03-11T07:45:00',
+        force_origem: 'BOM',
+        force_destino: 'GRU',
         force_timeline: [
           { status: 'BKD', description: 'BKD - 57 pieces booked at BOM', date: '05 MAR / 16:17', pieces: '57', weight: '' },
           { status: 'FWB', description: 'FWB - Customer FWB processed at BOM (57 pieces)', date: '07 MAR / 13:20', pieces: '57', weight: '' },
@@ -1431,6 +1433,12 @@ serve(async (req) => {
       }
       if (override.force_timeline) {
         row.timeline_json = JSON.stringify(override.force_timeline);
+      }
+      if (override.force_origem) {
+        row.origem = override.force_origem;
+      }
+      if (override.force_destino) {
+        row.destino = override.force_destino;
       }
       if (override.disable_discrepancy) {
         row.pieces_discrepancy = false;
