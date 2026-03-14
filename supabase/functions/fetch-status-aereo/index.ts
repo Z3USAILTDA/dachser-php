@@ -325,15 +325,8 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
       }
     }
 
-    // Ordenar eventos por data DESC (mais recente primeiro)
-    const sorted = [...events].sort((a, b) => {
-      const dateA = a.date || a.Date || a.timestamp || a.Timestamp || a.time || a.datetime || a.dataEvento || '';
-      const dateB = b.date || b.Date || b.timestamp || b.Timestamp || b.time || b.datetime || b.dataEvento || '';
-      if (!dateA && !dateB) return 0;
-      if (!dateA) return 1;
-      if (!dateB) return -1;
-      return String(dateB).localeCompare(String(dateA));
-    });
+    // Ordenar eventos por data DESC com desempate por hierarquia IATA
+    const sorted = sortEventsDesc(events);
 
     const now = new Date();
 
