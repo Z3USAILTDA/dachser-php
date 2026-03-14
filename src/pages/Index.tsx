@@ -2334,7 +2334,7 @@ const Index = () => {
 
           <header>
             <h1 className="text-[1.6rem] tracking-[0.24em] uppercase text-[#f5f5f5]">DACHSER</h1>
-            <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">Intelligent Logistics – Rastreio de AWBs</p>
+            <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">Intelligent Logistics – Monitoramento Pré-Embarque</p>
             <div className="flex gap-1.5 mt-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
               <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
