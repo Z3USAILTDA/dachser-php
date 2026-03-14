@@ -1,28 +1,17 @@
 
 
-# Fix: Documentos não aparecem no dialog de visualização
+## Plano: Alterar cron do alerta de falha de rastreio para 10 em 10 minutos
 
-## Causa raiz
+### Situação atual
+O cron job `air-tracking-failed-alert` (jobid: 22) está configurado para rodar a cada **30 minutos** (`*/30 * * * *`).
 
-O edge function `get_voucher_anexos` retorna a estrutura:
-```json
-{ "success": true, "data": [ ...anexos... ] }
+### Alteração
+Atualizar o schedule do cron job existente para rodar a cada **10 minutos** (`*/10 * * * *`).
+
+Será executado via SQL:
+```sql
+SELECT cron.alter_job(22, schedule := '*/10 * * * *');
 ```
 
-Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
-
-## Correção
-
-### `src/components/esteira/PagamentosTab.tsx` — linha 862
-
-Trocar:
-```typescript
-setAnexosDialog(data?.anexos || []);
-```
-Por:
-```typescript
-setAnexosDialog(data?.data || []);
-```
-
-Uma única linha corrige o problema.
+Uma única query, sem alteração de código.
 
