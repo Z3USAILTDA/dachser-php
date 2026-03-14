@@ -1411,12 +1411,14 @@ serve(async (req) => {
       if (override.last_event_date) {
         row.last_event_date = override.last_event_date;
       }
-      // For AWBs with explicit status override and no force_critical, ensure no false positives
-      if (override.status && !override.force_critical) {
-        row.pieces_discrepancy = false;
-        row.force_critical = false;
-      }
+      if (override.force_timeline) {
         row.timeline_json = JSON.stringify(override.force_timeline);
+      }
+      if (override.disable_discrepancy) {
+        row.pieces_discrepancy = false;
+        row.baseline_pieces = null;
+        row.has_dis_event = false;
+        row.force_critical = false;
       }
     }
 
