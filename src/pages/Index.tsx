@@ -258,6 +258,7 @@ const getStatusCode = (lastEvent: string | null): string => {
     "ARRT",
     "CAN",
     "DISCREPANCY",
+    "BCBP",
     "ARR - DESTINO",
     "ARR - CONEXÃO",
   ];
