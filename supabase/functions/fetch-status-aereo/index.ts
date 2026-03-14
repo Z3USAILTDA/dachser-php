@@ -1440,7 +1440,7 @@ serve(async (req) => {
           { status: 'RCS', description: 'RCS - Ready for Carriage at GRU - 1 Pieces 16.5 K', date: '2026-03-13T11:28:00', pieces: '1', weight: '16.5 K' },
           { status: 'DEP', description: 'DEP - Departed to ZRH on Flight LX-0093, GRU-ZRH - 1 Pieces 16.5 K', date: '2026-03-13T19:21:00', pieces: '1', weight: '16.5 K' },
           { status: 'ARR', description: 'ARR - Arrived at ZRH on Flight LX-0093, GRU-ZRH - 1 Pieces 16.5 K', date: '2026-03-14T10:34:00', pieces: '1', weight: '16.5 K' },
-          { status: 'RCF', description: 'RCF - Received at ZRH from Flight LX-0093, GRU-ZRH - 1 Pieces 16.5 K', date: '2026-03-14T08:54:00', pieces: '1', weight: '16.5 K' },
+          { status: 'RCF', description: 'RCF - Received at ZRH from Flight LX-0093, GRU-ZRH - 1 Pieces 16.5 K', date: '2026-03-14T12:45:00', pieces: '1', weight: '16.5 K' },
         ]
       },
       '724-07461451': {
