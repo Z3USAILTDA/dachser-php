@@ -1710,6 +1710,218 @@ serve(async (req) => {
           { status: 'RCD', description: 'RCD - Documents Received at GRU', date: '2026-03-14T10:59:00', pieces: '', weight: '' },
         ]
       },
+      // === Novos overrides 2026-03-14 (batch 2) ===
+      '074-04838536': {
+        status: 'RCF',
+        status_info: 'RCF - 7 pieces received at AMS from KL8420',
+        last_event_date: '2026-03-14T07:09:00',
+        force_origem: 'HAM',
+        force_destino: 'GRU',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - 6 pieces booked at HAM', date: '2026-03-11T15:19:00', pieces: '6', weight: '' },
+          { status: 'FWB', description: 'FWB - Customer FWB processed (7 pieces)', date: '2026-03-12T10:07:00', pieces: '7', weight: '' },
+          { status: 'FOH', description: 'FOH - 7 pieces on hand at HAM', date: '2026-03-12T12:50:00', pieces: '7', weight: '' },
+          { status: 'RCS', description: 'RCS - 7 pieces received at HAM', date: '2026-03-12T17:26:00', pieces: '7', weight: '' },
+          { status: 'DEP', description: 'KL8420 (HAM→AMS) - DEP - 7 pieces departed from HAM', date: '2026-03-13T22:15:00', pieces: '7', weight: '' },
+          { status: 'ARR', description: 'KL8420 (HAM→AMS) - ARR - 7 pieces arrived at AMS', date: '2026-03-14T04:37:00', pieces: '7', weight: '' },
+          { status: 'RCF', description: 'KL8420 (HAM→AMS) - RCF - 7 pieces received at AMS', date: '2026-03-14T07:09:00', pieces: '7', weight: '' },
+        ]
+      },
+      '074-04803864': {
+        status: 'NFD',
+        status_info: 'NFD - 2 pieces ready to be picked up at GRU',
+        last_event_date: '2026-03-13T19:16:00',
+        force_origem: 'LNZ',
+        force_destino: 'GRU',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - 2 pieces booked at LNZ', date: '2026-03-06T15:43:00', pieces: '2', weight: '' },
+          { status: 'FWB', description: 'FWB - Customer FWB processed (2 pieces)', date: '2026-03-09T22:04:00', pieces: '2', weight: '' },
+          { status: 'FOH', description: 'FOH - 2 pieces on hand at LNZ', date: '2026-03-09T22:04:00', pieces: '2', weight: '' },
+          { status: 'RCS', description: 'RCS - 2 pieces received at LNZ', date: '2026-03-09T22:13:00', pieces: '2', weight: '' },
+          { status: 'DEP', description: 'KL8510 (LNZ→AMS) - DEP - 2 pieces departed from LNZ', date: '2026-03-11T09:55:00', pieces: '2', weight: '' },
+          { status: 'ARR', description: 'KL8510 (LNZ→AMS) - ARR - 2 pieces arrived at AMS', date: '2026-03-12T03:04:00', pieces: '2', weight: '' },
+          { status: 'RCF', description: 'KL8510 (LNZ→AMS) - RCF - 2 pieces received at AMS', date: '2026-03-12T07:46:00', pieces: '2', weight: '' },
+          { status: 'DEP', description: 'KL0791 (AMS→GRU) - DEP - 2 pieces departed from AMS', date: '2026-03-13T11:21:00', pieces: '2', weight: '' },
+          { status: 'ARR', description: 'KL0791 (AMS→GRU) - ARR - 2 pieces arrived at GRU', date: '2026-03-13T18:56:00', pieces: '2', weight: '' },
+          { status: 'RCF', description: 'KL0791 (AMS→GRU) - RCF - 2 pieces received at GRU', date: '2026-03-13T19:14:00', pieces: '2', weight: '' },
+          { status: 'NFD', description: 'NFD - 2 pieces ready to be picked up at GRU', date: '2026-03-13T19:16:00', pieces: '2', weight: '' },
+        ]
+      },
+      '045-21167370': {
+        status: 'BKD',
+        status_info: 'BKD - Booking Confirmed LA 8071 FRA-GRU - 99 / 1810.00KGS',
+        last_event_date: '2026-03-13T18:04:00',
+        force_origem: 'FRA',
+        force_destino: 'GRU',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booking Confirmed LA 8071 FRA-GRU - 99 / 1810.00KGS', date: '2026-03-13T18:04:00', pieces: '99', weight: '1810.00KGS' },
+        ]
+      },
+      '045-15957771': {
+        status: 'AWD',
+        status_info: 'AWD - Document Delivered at CWB - 13 / 714.50KGS',
+        last_event_date: '2026-03-10T09:36:00',
+        force_origem: 'FRA',
+        force_destino: 'CWB',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booking Confirmed BRU UC 3611 BRU-CWB - 13 / 714.50KGS', date: '2026-03-04T15:06:00', pieces: '13', weight: '714.50KGS' },
+          { status: 'BKD', description: 'BKD - Booking Confirmed FRA LA 5126-T - 13 / 714.50KGS', date: '2026-03-07T14:42:00', pieces: '13', weight: '714.50KGS' },
+          { status: 'RCF', description: 'LA 5126-T - RCF - Received from Flight at BRU - 13 / 714.50KGS', date: '2026-03-09T00:19:00', pieces: '13', weight: '714.50KGS' },
+          { status: 'MAN', description: 'UC 3611 (BRU→CWB) - MAN - Flight Manifested at BRU - 13 / 714.50KGS', date: '2026-03-09T01:38:00', pieces: '13', weight: '714.50KGS' },
+          { status: 'DEP', description: 'UC 3611 (BRU→CWB) - DEP - Flight Departed from BRU - 13 / 714.50KGS', date: '2026-03-09T12:04:00', pieces: '13', weight: '714.50KGS' },
+          { status: 'ARR', description: 'UC 3611 (BRU→CWB) - ARR - Flight Arrived at CWB - 13 / 714.50KGS', date: '2026-03-09T19:30:00', pieces: '13', weight: '714.50KGS' },
+          { status: 'RCF', description: 'UC 3611 (BRU→CWB) - RCF - Received from Flight at CWB - 13 / 714.50KGS', date: '2026-03-09T19:53:00', pieces: '13', weight: '714.50KGS' },
+          { status: 'NFD', description: 'NFD - Agent Notified at CWB - 13 / 714.50KGS', date: '2026-03-09T20:00:00', pieces: '13', weight: '714.50KGS' },
+          { status: 'AWD', description: 'AWD - Document Delivered at CWB - 13 / 714.50KGS', date: '2026-03-10T09:36:00', pieces: '13', weight: '714.50KGS' },
+        ]
+      },
+      '045-13300906': {
+        status: 'DEP',
+        status_info: 'DEP - LA 5252-T - 2 / 165.00KGS departed from HEL (TRANSPORTE TERRESTRE)',
+        last_event_date: '2026-03-13T13:29:00',
+        force_origem: 'HEL',
+        force_destino: 'CWB',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booking Confirmed BRU UC 3611 BRU-CWB - 2 / 165.00KGS', date: '2026-03-11T10:11:00', pieces: '2', weight: '165.00KGS' },
+          { status: 'BKD', description: 'BKD - Booking Confirmed HEL LA 5252-T - 2 / 165.00KGS', date: '2026-03-11T11:12:00', pieces: '2', weight: '165.00KGS' },
+          { status: 'FOH', description: 'FOH - Freight on Hand at HEL - 2 / 165.00KGS', date: '2026-03-13T10:05:00', pieces: '2', weight: '165.00KGS' },
+          { status: 'RCS', description: 'RCS - Shipment Received at HEL - 2 / 165.00KGS', date: '2026-03-13T10:35:00', pieces: '2', weight: '165.00KGS' },
+          { status: 'DEP', description: 'LA 5252-T (HEL→?) - DEP - 2 / 165.00KGS departed from HEL (TRANSPORTE TERRESTRE)', date: '2026-03-13T13:29:00', pieces: '2', weight: '165.00KGS' },
+        ]
+      },
+      '045-13300840': {
+        status: 'MAN',
+        status_info: 'MAN - M3 8516 BRU-CWB - 8 / 148.50KGS (TRANSPORTE TERRESTRE)',
+        last_event_date: '2026-03-14T11:57:00',
+        force_origem: 'HEL',
+        force_destino: 'CWB',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booking Confirmed BRU M3 8516 BRU-CWB - 8 / 148.50KGS', date: '2026-03-06T11:21:00', pieces: '8', weight: '148.50KGS' },
+          { status: 'FOH', description: 'FOH - Freight on Hand at HEL - 8 / 148.50KGS', date: '2026-03-09T16:54:00', pieces: '8', weight: '148.50KGS' },
+          { status: 'BKD', description: 'BKD - Booking Confirmed HEL LA 5252-T - 8 / 148.50KGS', date: '2026-03-09T13:26:00', pieces: '8', weight: '148.50KGS' },
+          { status: 'RCS', description: 'RCS - Shipment Received at HEL - 8 / 148.50KGS', date: '2026-03-10T09:01:00', pieces: '8', weight: '148.50KGS' },
+          { status: 'DEP', description: 'LA 5252-T (HEL→BRU) - DEP - 8 / 148.50KGS (TRANSPORTE TERRESTRE)', date: '2026-03-10T12:19:00', pieces: '8', weight: '148.50KGS' },
+          { status: 'RCF', description: 'LA 5252-T - RCF - Received from Flight at BRU - 8 / 148.50KGS', date: '2026-03-12T09:07:00', pieces: '8', weight: '148.50KGS' },
+          { status: 'MAN', description: 'M3 8516 (BRU→CWB) - MAN - Flight Manifested at BRU - 8 / 148.50KGS (TRANSPORTE TERRESTRE)', date: '2026-03-14T11:57:00', pieces: '8', weight: '148.50KGS' },
+        ]
+      },
+      '045-13110764': {
+        status: 'AWD',
+        status_info: 'AWD - Document Delivered at POA - 1 / 6.00KGS',
+        last_event_date: '2026-03-12T11:31:00',
+        force_origem: 'FRA',
+        force_destino: 'POA',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booking Confirmed FRA LA 8071 FRA-GRU - 1 / 6.00KGS', date: '2026-03-04T17:47:00', pieces: '1', weight: '6.00KGS' },
+          { status: 'BKD', description: 'BKD - Booking Confirmed GRU LA 3416 GRU-POA - 1 / 6.00KGS', date: '2026-03-09T11:01:00', pieces: '1', weight: '6.00KGS' },
+          { status: 'FOH', description: 'FOH - Freight on Hand at FRA - 1 / 6.00KGS', date: '2026-03-10T06:56:00', pieces: '1', weight: '6.00KGS' },
+          { status: 'RCS', description: 'RCS - Shipment Received at FRA - 1 / 6.00KGS', date: '2026-03-10T07:24:00', pieces: '1', weight: '6.00KGS' },
+          { status: 'DEP', description: 'LA 8071 (FRA→GRU) - DEP - 1 / 6.00KGS', date: '2026-03-10T22:08:00', pieces: '1', weight: '6.00KGS' },
+          { status: 'ARR', description: 'LA 8071 (FRA→GRU) - ARR - Flight Arrived at GRU - 1 / 6.00KGS', date: '2026-03-11T04:36:00', pieces: '1', weight: '6.00KGS' },
+          { status: 'RCF', description: 'LA 8071 (FRA→GRU) - RCF - Received from Flight at GRU - 1 / 6.00KGS', date: '2026-03-11T11:11:00', pieces: '1', weight: '6.00KGS' },
+          { status: 'MAN', description: 'LA 3416 (GRU→POA) - MAN - Flight Manifested at GRU - 1 / 6.00KGS', date: '2026-03-11T21:24:00', pieces: '1', weight: '6.00KGS' },
+          { status: 'DEP', description: 'LA 3416 (GRU→POA) - DEP - Flight Departed from GRU - 1 / 6.00KGS', date: '2026-03-12T07:40:00', pieces: '1', weight: '6.00KGS' },
+          { status: 'ARR', description: 'LA 3416 (GRU→POA) - ARR - Flight Arrived at POA - 1 / 6.00KGS', date: '2026-03-12T09:29:00', pieces: '1', weight: '6.00KGS' },
+          { status: 'RCF', description: 'LA 3416 (GRU→POA) - RCF - Received from Flight at POA - 1 / 6.00KGS', date: '2026-03-12T09:41:00', pieces: '1', weight: '6.00KGS' },
+          { status: 'NFD', description: 'NFD - Agent Notified at POA - 1 / 6.00KGS', date: '2026-03-12T10:13:00', pieces: '1', weight: '6.00KGS' },
+          { status: 'AWD', description: 'AWD - Document Delivered at POA - 1 / 6.00KGS', date: '2026-03-12T11:31:00', pieces: '1', weight: '6.00KGS' },
+        ]
+      },
+      '045-12579394': {
+        status: 'BKD',
+        status_info: 'BKD - Booking Confirmed LA 8065 MAD-GRU - 3 / 3186.00KGS (TERRESTRE)',
+        last_event_date: '2026-03-14T09:05:00',
+        force_origem: 'BCN',
+        force_destino: 'GRU',
+        force_timeline: [
+          { status: 'FOH', description: 'FOH - Freight on Hand at BCN - 3 / 3186.00KGS', date: '2026-03-12T18:44:00', pieces: '3', weight: '3186.00KGS' },
+          { status: 'RCS', description: 'RCS - Shipment Received at BCN - 3 / 3186.00KGS', date: '2026-03-12T20:14:00', pieces: '3', weight: '3186.00KGS' },
+          { status: 'MAN', description: 'LA 5280-T (BCN→MAD) - MAN - Flight Manifested at BCN - 3 / 3186.00KGS', date: '2026-03-13T15:52:00', pieces: '3', weight: '3186.00KGS' },
+          { status: 'DEP', description: 'LA 5280-T (BCN→MAD) - DEP - 3 / 3186.00KGS (TERRESTRE)', date: '2026-03-13T18:02:00', pieces: '3', weight: '3186.00KGS' },
+          { status: 'RCF', description: 'LA 5280-T - RCF - Received from Flight at MAD - 3 / 3186.00KGS', date: '2026-03-14T05:59:00', pieces: '3', weight: '3186.00KGS' },
+          { status: 'BKD', description: 'BKD - Booking Confirmed LA 8065 MAD-GRU - 3 / 3186.00KGS', date: '2026-03-14T09:05:00', pieces: '3', weight: '3186.00KGS' },
+        ]
+      },
+      '020-20982640': {
+        status: 'BKD',
+        status_info: 'BKD - Booking Confirmed at GRU - 1 / 119 kg',
+        last_event_date: '2026-03-12T16:51:00',
+        force_origem: 'GRU',
+        force_destino: 'MUC',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booking Confirmed at GRU - 1 / 119 kg', date: '2026-03-12T16:51:00', pieces: '1', weight: '119 kg' },
+        ]
+      },
+      '020-17606046': {
+        status: 'DEP',
+        status_info: 'DEP - 1 pcs departed from FCO on AZ759',
+        last_event_date: '2026-03-14T10:30:00',
+        force_origem: 'BKK',
+        force_destino: 'GRU',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - 1 pcs booked at BKK', date: '2026-03-13T13:38:00', pieces: '1', weight: '' },
+          { status: 'RCS', description: 'RCS - 1 pcs received at BKK', date: '2026-03-13T11:21:00', pieces: '1', weight: '' },
+          { status: 'DEP', description: 'AZ759 (BKK→FCO) - DEP - 1 pcs departed from BKK', date: '2026-03-13T12:22:00', pieces: '1', weight: '' },
+          { status: 'ARR', description: 'AZ759 (BKK→FCO) - ARR - 1 pcs arrived at FCO', date: '2026-03-13T18:41:00', pieces: '1', weight: '' },
+          { status: 'DEP', description: 'DEP - 1 pcs departed from FCO', date: '2026-03-14T10:30:00', pieces: '1', weight: '' },
+        ]
+      },
+      '020-06353815': {
+        status: 'BKD',
+        status_info: 'BKD - 2 pcs booked at VCP',
+        last_event_date: '2026-03-13T16:20:00',
+        force_origem: 'VCP',
+        force_destino: 'FRA',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - 2 pcs booked at VCP', date: '2026-03-13T16:20:00', pieces: '2', weight: '' },
+        ]
+      },
+      '020-03171232': {
+        status: 'BKD',
+        status_info: 'BKD - 2 pcs booked at FRA',
+        last_event_date: '2026-03-14T11:02:00',
+        force_origem: 'FRA',
+        force_destino: 'VCP',
+        force_timeline: [
+          { status: 'RCS', description: 'RCS - 2 pcs received at FRA', date: '2026-03-11T19:47:00', pieces: '2', weight: '' },
+          { status: 'BKD', description: 'BKD - 2 pcs booked at FRA', date: '2026-03-14T11:02:00', pieces: '2', weight: '' },
+        ]
+      },
+      '020-01086245': {
+        status: 'DIS',
+        status_info: 'DIS OFLD - 1 piece offloaded from flight LH8345/14 Mar',
+        last_event_date: '2026-03-14T12:00:00',
+        force_origem: 'IST',
+        force_destino: 'GRU',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - 1 pcs booked at IST', date: '2026-03-12T17:50:00', pieces: '1', weight: '' },
+          { status: 'RCS', description: 'RCS - 1 pcs received at IST', date: '2026-03-12T17:50:00', pieces: '1', weight: '' },
+          { status: 'DIS', description: 'DIS OFLD - 1 piece offloaded from flight LH8345/14 Mar 26', date: '2026-03-14T12:00:00', pieces: '1', weight: '' },
+        ]
+      },
+      '016-98880062': {
+        status: 'RCF',
+        status_info: 'RCF - Received from Flight at GRU',
+        last_event_date: '2026-03-14T06:52:00',
+        force_origem: 'BKK',
+        force_destino: 'GRU',
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booking confirmed at NRT', date: '2026-03-09T16:10:00', pieces: '', weight: '' },
+          { status: 'BKD', description: 'BKD - Booking confirmed at NRT', date: '2026-03-09T16:10:00', pieces: '', weight: '' },
+          { status: 'RCF', description: 'RCF - Received from Other Airline at NRT', date: '2026-03-09T16:16:00', pieces: '', weight: '' },
+          { status: 'MAN', description: 'MAN - Manifested at NRT', date: '2026-03-10T12:03:00', pieces: '', weight: '' },
+          { status: 'DEP', description: 'DEP - Departed from NRT', date: '2026-03-10T17:50:00', pieces: '', weight: '' },
+          { status: 'ARR', description: 'ARR - Arrived at IAH', date: '2026-03-10T15:29:00', pieces: '', weight: '' },
+          { status: 'RCF', description: 'RCF - Received from Flight at IAH', date: '2026-03-10T17:22:00', pieces: '', weight: '' },
+          { status: 'RCD', description: 'RCD - Documents Received at IAH', date: '2026-03-10T17:31:00', pieces: '', weight: '' },
+          { status: 'BKD', description: 'BKD - Booking confirmed at IAH', date: '2026-03-12T16:41:00', pieces: '', weight: '' },
+          { status: 'MAN', description: 'MAN - Manifested at IAH', date: '2026-03-12T16:42:00', pieces: '', weight: '' },
+          { status: 'DEP', description: 'DEP - Departed from IAH', date: '2026-03-12T21:47:00', pieces: '', weight: '' },
+          { status: 'ARR', description: 'ARR - Arrived at GRU', date: '2026-03-13T09:17:00', pieces: '', weight: '' },
+          { status: 'RCD', description: 'RCD - Documents Received at GRU', date: '2026-03-13T12:50:00', pieces: '', weight: '' },
+          { status: 'RCF', description: 'RCF - Received from Flight at GRU', date: '2026-03-14T06:52:00', pieces: '', weight: '' },
+        ]
+      },
     };
 
     // v2: override loop with debug
