@@ -9,7 +9,7 @@ export const airlineTrackingLinks: Record<string, string> = {
   "020": "https://www.lufthansa-cargo.com/tracking/awb?AWB_PREFIX=020&AWB_SUFFIX=${awb}",
   "695": "https://ecom.klmcargo.com/ecobff/routingInfo?airWaybillPrefix=074&airWaybillSuffix=${awb}&source=trackingSearch",
   "057": "https://www.afklcargo.com/mycargo/shipment/detail/${pr}-${awb}",
-  "083": "https://www.cma-cgm.com/ebusiness/tracking/air/${pr}${awb}",
+  "083": "https://saa.ibsplc.aero/icargoneoportal/app/main/#/app",
   "127": "https://golfreteselogistica.gollog.com/rastreamento?awb=${pr}${awb}",
   "157": "https://www.qrcargo.com/s/track-your-shipment",
   "618": "https://www.qrcargo.com/tracking?AWB=618-${awb}",
