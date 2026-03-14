@@ -77,8 +77,9 @@ function extractLastStatusFromTimeline(timelineJson: string | null): string | nu
   try {
     const events = JSON.parse(timelineJson);
     if (!Array.isArray(events) || events.length === 0) return null;
-    // Events are typically DESC (newest first)
-    const last = events[0];
+    // Sort with IATA hierarchy tiebreaker for same-timestamp events
+    const sorted = sortEventsDesc(events);
+    const last = sorted[0];
     const code = (last.status || last.Status || '').trim().toUpperCase();
     if (code && code !== 'UNK' && code !== 'UNKNOWN') return code;
     // Fallback: try to get something from description
