@@ -1336,6 +1336,8 @@ serve(async (req) => {
         status: 'NFD',
         status_info: 'NFD - 57 pieces ready to be picked up at GRU',
         last_event_date: '2026-03-11T07:45:00',
+        force_origem: 'BOM',
+        force_destino: 'GRU',
         force_timeline: [
           { status: 'BKD', description: 'BKD - 57 pieces booked at BOM', date: '05 MAR / 16:17', pieces: '57', weight: '' },
           { status: 'FWB', description: 'FWB - Customer FWB processed at BOM (57 pieces)', date: '07 MAR / 13:20', pieces: '57', weight: '' },
