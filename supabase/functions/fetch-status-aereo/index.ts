@@ -1297,7 +1297,7 @@ serve(async (req) => {
     const SYNTHETIC_AWBS: Record<string, any> = {
       '047-32916273': {
         id: 0, awb: '047-32916273', origem: 'HEL', destino: 'GRU',
-        'último_status': 'DEP', tracking_failed: false, status_info: null,
+        'último_status': 'BCBP', tracking_failed: false, status_info: 'Boarded the flight on Helsinki (Vantaa)',
         'última atualização': new Date().toString(), last_flight: null,
         pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false,
         master_changed: false, in_transit: true, last_event_date: null,
@@ -1326,7 +1326,7 @@ serve(async (req) => {
     const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean; force_timeline?: any[]; force_critical?: boolean; last_event_date?: string; disable_discrepancy?: boolean }> = {
       '057-03764530': { skip_first_event: true }, // Último evento incorreto, usar penúltimo
       '047-32916273': {
-        status: 'DEP',
+        status: 'BCBP',
         status_info: 'Boarded the flight on Helsinki (Vantaa)',
         disable_discrepancy: true,
       },

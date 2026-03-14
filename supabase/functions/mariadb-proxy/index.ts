@@ -6934,7 +6934,7 @@ serve(async (req) => {
             events: [
               {
                 id: 'forced-047-32916273-1',
-                codigo_evento: 'DEP',
+                codigo_evento: 'BCBP',
                 descricao_evento: 'Boarded the flight on Helsinki (Vantaa)',
                 data_hora_evento: '2025-03-13T18:00:00Z',
                 aeroporto: 'HEL',
