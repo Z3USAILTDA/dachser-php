@@ -1297,7 +1297,7 @@ serve(async (req) => {
     const SYNTHETIC_AWBS: Record<string, any> = {
       '047-32916273': {
         id: 0, awb: '047-32916273', origem: 'HEL', destino: 'GRU',
-        'último_status': 'DEP', tracking_failed: false, status_info: null,
+        'último_status': 'BCBP', tracking_failed: false, status_info: 'Boarded the flight on Helsinki (Vantaa)',
         'última atualização': new Date().toString(), last_flight: null,
         pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false,
         master_changed: false, in_transit: true, last_event_date: null,
