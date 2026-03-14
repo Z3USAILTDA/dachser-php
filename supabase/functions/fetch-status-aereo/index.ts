@@ -1434,6 +1434,12 @@ serve(async (req) => {
       if (override.force_timeline) {
         row.timeline_json = JSON.stringify(override.force_timeline);
       }
+      if (override.force_origem) {
+        row.origem = override.force_origem;
+      }
+      if (override.force_destino) {
+        row.destino = override.force_destino;
+      }
       if (override.disable_discrepancy) {
         row.pieces_discrepancy = false;
         row.baseline_pieces = null;
