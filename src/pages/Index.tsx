@@ -301,6 +301,8 @@ const getTimelineProgress = (lastEvent: string | null): number => {
 
   // Mapeamento de status para a nova régua: BKD → RCF → MAN → DEP → ARR
   const progressMap: Record<string, number> = {
+    // Pré-BKD
+    BCBP: 0,
     // BKD e variações (0%)
     UNK: 0,
     BKD: 0,
@@ -327,7 +329,6 @@ const getTimelineProgress = (lastEvent: string | null): number => {
     MNF: 50,
 
     // DEP e variações (75%)
-    BCBP: 75,
     DEP: 75,
     DEPARTED: 75,
     DEPARTURE: 75,
@@ -1848,11 +1849,12 @@ const Index = () => {
 
     const eventLower = lastEvent.toLowerCase();
 
-    // Extract status code (first 3 letters, with or without parentheses)
-    const codeMatch = lastEvent.match(/^\(?([A-Z]{3})\)?/);
+    // Extract status code (first letters, with or without parentheses)
+    const codeMatch = lastEvent.match(/^\(?([A-Z]{3,4})\)?/);
     if (codeMatch) {
       const code = codeMatch[1];
       const statusMap: Record<string, string> = {
+        BCBP: "Boarding pass emitido",
         BKD: "Reserva confirmada",
         FOH: "Carga recebida pela cia aérea",
         MAN: "Carga manifestada",
@@ -1861,7 +1863,6 @@ const Index = () => {
         RCF: "Carga recebida pela cia aérea",
         DLV: "Chegou em seu destino final",
         NFD: "Agente notificado",
-        BCB: "Embarcado no voo",
       };
       return statusMap[code] || "-";
     }
