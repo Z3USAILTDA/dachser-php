@@ -622,10 +622,12 @@ const Index = () => {
 
         console.log(`AWB Deduplication: ${convertedData.length} -> ${deduplicatedData.length} records`);
 
-        // Restore tracking_failed flags from localStorage, but never override valid backend status
+        // Restore tracking_failed flags from localStorage with expiry and cleanup
         try {
           const stored = localStorage.getItem("tracking-failed-flags") || "{}";
-          const flags: Record<string, boolean> = JSON.parse(stored);
+          const rawFlags: Record<string, any> = JSON.parse(stored);
+          const MAX_AGE_MS = 48 * 60 * 60 * 1000; // 48h auto-expiry
+          const now = Date.now();
 
           const hasValidStatus = (item: AWBData) => {
             const status = (item.status || "").trim();
@@ -636,12 +638,29 @@ const Index = () => {
             );
           };
 
-          const cleanedFlags: Record<string, boolean> = { ...flags };
-          const withFlags = deduplicatedData.map((item: AWBData) => {
-            const flagged = !!flags[item.awb];
-            if (!flagged) return item;
+          // Build set of current AWBs for orphan cleanup
+          const currentAwbs = new Set(deduplicatedData.map((item: AWBData) => item.awb));
 
-            // If backend already has status info, stale flag must be ignored and removed
+          // Clean: remove expired flags (>48h), orphaned AWBs (not in dataset), and migrate old format
+          const cleanedFlags: Record<string, { ts: number }> = {};
+          for (const [awb, val] of Object.entries(rawFlags)) {
+            // Migrate old boolean format → skip (treat as expired)
+            if (typeof val === "boolean") continue;
+            const ts = val?.ts || 0;
+            // Remove if expired or AWB no longer in dataset
+            if ((now - ts) > MAX_AGE_MS) continue;
+            if (!currentAwbs.has(awb)) continue;
+            cleanedFlags[awb] = val;
+          }
+
+          const withFlags = deduplicatedData.map((item: AWBData) => {
+            // Backend tracking_failed is authoritative — trust it first
+            if (item.tracking_failed === true) return item;
+
+            const flag = cleanedFlags[item.awb];
+            if (!flag) return item;
+
+            // If backend has valid status now, remove stale localStorage flag
             if (hasValidStatus(item)) {
               delete cleanedFlags[item.awb];
               return { ...item, tracking_failed: false };
@@ -651,6 +670,7 @@ const Index = () => {
           });
 
           localStorage.setItem("tracking-failed-flags", JSON.stringify(cleanedFlags));
+          console.log(`[tracking-flags] ${Object.keys(rawFlags).length} stored → ${Object.keys(cleanedFlags).length} after cleanup`);
           // Filtrar para 2027 se não for Z3US admin
           const filtered2027 = isZ3usAdmin() ? withFlags : withFlags.filter(item => {
             const dateStr = item.last_check || item.created_at || '';
