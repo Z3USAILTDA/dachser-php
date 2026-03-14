@@ -1505,12 +1505,12 @@ serve(async (req) => {
         ]
       },
       '996-14370731': {
-        status: 'RCS',
-        status_info: 'RCS - Ready for Carriage at CDG',
+        status: 'RFC',
+        status_info: 'RFC - Ready for Carriage at CDG',
         last_event_date: '2026-03-13T23:49:00',
         force_timeline: [
           { status: 'FOH', description: 'FOH - Freight on Hands at CDG', date: '2026-03-13T23:49:00', pieces: '', weight: '' },
-          { status: 'RCS', description: 'RCS - Ready for Carriage at CDG', date: '2026-03-13T23:49:00', pieces: '', weight: '' },
+          { status: 'RFC', description: 'RFC - Ready for Carriage at CDG', date: '2026-03-13T23:49:00', pieces: '', weight: '' },
         ]
       },
     };
