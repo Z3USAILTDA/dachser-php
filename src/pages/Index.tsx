@@ -1849,11 +1849,12 @@ const Index = () => {
 
     const eventLower = lastEvent.toLowerCase();
 
-    // Extract status code (first 3 letters, with or without parentheses)
-    const codeMatch = lastEvent.match(/^\(?([A-Z]{3})\)?/);
+    // Extract status code (first letters, with or without parentheses)
+    const codeMatch = lastEvent.match(/^\(?([A-Z]{3,4})\)?/);
     if (codeMatch) {
       const code = codeMatch[1];
       const statusMap: Record<string, string> = {
+        BCBP: "Boarding pass emitido",
         BKD: "Reserva confirmada",
         FOH: "Carga recebida pela cia aérea",
         MAN: "Carga manifestada",
@@ -1862,7 +1863,6 @@ const Index = () => {
         RCF: "Carga recebida pela cia aérea",
         DLV: "Chegou em seu destino final",
         NFD: "Agente notificado",
-        BCB: "Embarcado no voo",
       };
       return statusMap[code] || "-";
     }
