@@ -7085,7 +7085,7 @@ serve(async (req) => {
           '996-14370731': {
             tracking_failed: false,
             events: [
-              mkForcedEvent('996-14370731', 1, 'RCS', 'RCS - Ready for Carriage at CDG', '2026-03-13T23:49:00', 'CDG', null, null),
+              mkForcedEvent('996-14370731', 1, 'RFC', 'RFC - Ready for Carriage at CDG', '2026-03-13T23:49:00', 'CDG', null, null),
               mkForcedEvent('996-14370731', 2, 'FOH', 'FOH - Freight on Hands at CDG', '2026-03-13T23:49:00', 'CDG', null, null),
             ],
           },
