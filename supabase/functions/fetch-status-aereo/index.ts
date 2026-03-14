@@ -480,15 +480,8 @@ function extractLastEventDate(timelineJson: string | null, etdStr?: string | nul
       }
     }
 
-    // Sort DESC by date
-    const sorted = [...events].sort((a, b) => {
-      const dateA = a.date || a.Date || a.timestamp || a.Timestamp || a.time || a.datetime || a.dataEvento || '';
-      const dateB = b.date || b.Date || b.timestamp || b.Timestamp || b.time || b.datetime || b.dataEvento || '';
-      if (!dateA && !dateB) return 0;
-      if (!dateA) return 1;
-      if (!dateB) return -1;
-      return String(dateB).localeCompare(String(dateA));
-    });
+    // Sort DESC by date with IATA hierarchy tiebreaker
+    const sorted = sortEventsDesc(events);
 
     // Filter by ETD cutoff
     const filtered = etdCutoff
