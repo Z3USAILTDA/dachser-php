@@ -7090,6 +7090,12 @@ serve(async (req) => {
               mkForcedEvent('996-14370731', 2, 'FOH', 'FOH - Freight on Hands at CDG', '2026-03-13T23:49:00', 'CDG', null, null),
             ],
           },
+          '020-02593301': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('020-02593301', 1, 'BKD', 'BKD - Booked at HAM (Hamburg) - 4 Pieces 135.5 kg', '2026-03-12T13:07:00', 'HAM', 4, '135.5 kg'),
+            ],
+          },
         };
 
         const cleanAwbForForce = queryAwb.trim();
