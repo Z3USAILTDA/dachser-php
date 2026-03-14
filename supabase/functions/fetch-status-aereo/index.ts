@@ -1922,6 +1922,54 @@ serve(async (req) => {
           { status: 'RCF', description: 'RCF - Received from Flight at GRU', date: '2026-03-14T06:52:00', pieces: '', weight: '' },
         ]
       },
+      '172-81711184': {
+        status: 'ARR',
+        status_info: 'ARR: 7 PCS ARRIVED ON CV0392C at LUX',
+        last_event_date: '2026-03-14T05:53:00',
+        force_origem: 'CPH',
+        force_destino: 'VCP',
+        disable_discrepancy: true,
+      },
+      '045-13002500': {
+        status: 'BKD',
+        status_info: 'Booking Confirmed on JL 0060 KIX-LAX',
+        last_event_date: '2026-03-12T13:08:00',
+        force_origem: 'KIX',
+        force_destino: 'MAO',
+        disable_discrepancy: true,
+      },
+      '045-12580094': {
+        status: 'NFD',
+        status_info: 'Agent Notified at GRU',
+        last_event_date: '2026-03-12T10:58:00',
+        force_origem: 'MAD',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+      },
+      '045-12579383': {
+        status: 'NFD',
+        status_info: 'Agent Notified at GRU',
+        last_event_date: '2026-03-10T10:05:00',
+        force_origem: 'MAD',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+      },
+      '020-65055432': {
+        status: 'ARR',
+        status_info: 'Arrived at FRA on LH8401',
+        last_event_date: '2026-03-13T16:17:00',
+        force_origem: 'PVG',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+      },
+      '020-22270216': {
+        status: 'DEP',
+        status_info: 'Departed on LH8262 from FRA',
+        last_event_date: '2026-03-14T12:12:00',
+        force_origem: 'MUC',
+        force_destino: 'VCP',
+        disable_discrepancy: true,
+      },
     };
 
     // v2: override loop with debug
