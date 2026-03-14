@@ -7054,7 +7054,7 @@ serve(async (req) => {
               for (const fcEvt of timelineData) {
                 const fcDesc = (fcEvt.Description || fcEvt.description || '').toUpperCase();
                 const fcLoc = (fcEvt.Location || fcEvt.location || '').toUpperCase();
-                const fcDate = fcEvt.Timestamp || fcEvt.timestamp;
+                const fcDate = fcEvt.Timestamp || fcEvt.timestamp || fcEvt.date || fcEvt.Date || fcEvt.datetime || fcEvt.dataEvento || fcEvt.time;
                 const fcTime = fcDate ? new Date(fcDate).getTime() : 0;
 
                 const statusMatch = fcDesc.includes(apiStatus) || fcLoc.includes(apiAirport);
