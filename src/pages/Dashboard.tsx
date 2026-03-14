@@ -75,11 +75,6 @@ const menuItems: MenuItem[] = [
     subtitle: "Operações Aéreas",
     children: [
       {
-        label: "Cadastro NOVA",
-        href: "/air/cadastro-nova",
-        z3usOnly: true,
-      },
-      {
         label: "Check AWB x CNPJ",
         href: "/air/check",
       },
@@ -99,11 +94,6 @@ const menuItems: MenuItem[] = [
     label: "SEA",
     subtitle: "Operações Marítimas",
     children: [
-      {
-        label: "Cadastro BL",
-        href: "/sea/cadastro-bl",
-        z3usOnly: true,
-      },
       {
         label: "Análise Documental SEA",
         href: "/sea/analysis",

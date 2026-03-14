@@ -139,7 +139,7 @@ export default function CCTDashboard() {
       case "excecoes": return "Gestão de Exceções — Monitoramento e Tratativas";
       case "regras": return "Regras de Notificação — Sistema Hermes";
       case "console": return "Console Técnico — Sistema Hermes";
-      default: return "Intelligent Logistics — Robô CCT";
+      default: return "Intelligent Logistics — Monitoramento Pós-Embarque";
     }
   };
 
