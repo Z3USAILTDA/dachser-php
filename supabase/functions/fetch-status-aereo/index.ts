@@ -1327,7 +1327,7 @@ serve(async (req) => {
       '057-03764530': { skip_first_event: true }, // Último evento incorreto, usar penúltimo
       '047-32916273': {
         status: 'BCBP',
-        status_info: 'Boarded the flight on Helsinki (Vantaa)',
+        status_info: 'BCBP - Boarded the flight on Helsinki (Vantaa)',
         disable_discrepancy: true,
       },
       '996-14389491': { status: 'NIF', status_info: 'Sem informação na companhia aérea' },

@@ -258,6 +258,7 @@ const getStatusCode = (lastEvent: string | null): string => {
     "ARRT",
     "CAN",
     "DISCREPANCY",
+    "BCBP",
     "ARR - DESTINO",
     "ARR - CONEXÃO",
   ];
@@ -326,6 +327,7 @@ const getTimelineProgress = (lastEvent: string | null): number => {
     MNF: 50,
 
     // DEP e variações (75%)
+    BCBP: 75,
     DEP: 75,
     DEPARTED: 75,
     DEPARTURE: 75,
@@ -1859,6 +1861,7 @@ const Index = () => {
         RCF: "Carga recebida pela cia aérea",
         DLV: "Chegou em seu destino final",
         NFD: "Agente notificado",
+        BCB: "Embarcado no voo",
       };
       return statusMap[code] || "-";
     }
