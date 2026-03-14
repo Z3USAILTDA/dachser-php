@@ -1970,6 +1970,70 @@ serve(async (req) => {
         force_destino: 'VCP',
         disable_discrepancy: true,
       },
+      '045-21167764': {
+        status: 'DEP',
+        status_info: 'DEP - LA 5462-T - 6 / 870.80KGS departed from FRA (TRANSPORTE TERRESTRE)',
+        last_event_date: '2026-03-13T16:56:00',
+        force_origem: 'FRA',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booking Confirmed FOR LA 4697 FOR-GRU - 99 / 800.00KGS', date: '2026-02-18T16:41:00', pieces: '99', weight: '800.00KGS' },
+          { status: 'BKD', description: 'BKD - Booking Confirmed LIS LA 8151 LIS-FOR - 99 / 2000.00KGS', date: '2026-03-09T15:43:00', pieces: '99', weight: '2000.00KGS' },
+          { status: 'BKD', description: 'BKD - Booking Confirmed FRA LA 5462-T - 7 / 1100.00KGS', date: '2026-03-12T16:42:00', pieces: '7', weight: '1100.00KGS' },
+          { status: 'FOH', description: 'FOH - Freight on Hand at FRA - 6 / 870.80KGS', date: '2026-03-13T11:28:00', pieces: '6', weight: '870.80KGS' },
+          { status: 'RCS', description: 'RCS - Shipment Received at FRA - 6 / 870.80KGS', date: '2026-03-13T11:36:00', pieces: '6', weight: '870.80KGS' },
+          { status: 'DEP', description: 'LA 5462-T (FRA→?) - DEP - 6 / 870.80KGS (TRANSPORTE TERRESTRE)', date: '2026-03-13T16:56:00', pieces: '6', weight: '870.80KGS' },
+        ]
+      },
+      '045-13110775': {
+        status: 'RCS',
+        status_info: 'RCS - Shipment Received at FRA - 1 / 8.60KGS',
+        last_event_date: '2026-03-14T06:44:00',
+        force_origem: 'FRA',
+        force_destino: 'POA',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booking Confirmed GRU LA 3416 GRU-POA - 1 / 8.60KGS', date: '2026-03-12T07:28:00', pieces: '1', weight: '8.60KGS' },
+          { status: 'BKD', description: 'BKD - Booking Confirmed FRA LA 8071 FRA-GRU - 1 / 8.60KGS', date: '2026-03-13T13:24:00', pieces: '1', weight: '8.60KGS' },
+          { status: 'FOH', description: 'FOH - Freight on Hand at FRA - 1 / 8.60KGS', date: '2026-03-14T00:44:00', pieces: '1', weight: '8.60KGS' },
+          { status: 'RCS', description: 'RCS - Shipment Received at FRA - 1 / 8.60KGS', date: '2026-03-14T06:44:00', pieces: '1', weight: '8.60KGS' },
+        ]
+      },
+      '020-50019572': {
+        status: 'BKD',
+        status_info: 'BKD - 1 pcs booked at SWK',
+        last_event_date: '2026-03-12T12:03:00',
+        force_origem: 'SWK',
+        force_destino: 'CWB',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - 1 pcs booked', date: '2026-03-12T12:03:00', pieces: '1', weight: '' },
+        ]
+      },
+      '020-16486190': {
+        status: 'RCS',
+        status_info: 'RCS - 1 pcs received at IST',
+        last_event_date: '2026-03-14T16:28:00',
+        force_origem: 'IST',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - 1 pcs booked at IST', date: '2026-03-14T16:28:00', pieces: '1', weight: '' },
+          { status: 'RCS', description: 'RCS - 1 pcs received at IST', date: '2026-03-14T16:28:00', pieces: '1', weight: '' },
+        ]
+      },
+      '020-06280901': {
+        status: 'BKD',
+        status_info: 'BKD - 20 pcs booked at GRU',
+        last_event_date: '2026-03-11T12:27:00',
+        force_origem: 'GRU',
+        force_destino: 'FRA',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - 20 pcs booked at GRU', date: '2026-03-11T12:27:00', pieces: '20', weight: '' },
+        ]
+      },
     };
 
     // v2: override loop with debug
