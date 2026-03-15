@@ -2129,6 +2129,22 @@ serve(async (req) => {
           { status: 'DEP', description: 'DEP - Departed from ORD', date: '2026-03-14T12:03:00', pieces: '', weight: '' },
         ]
       },
+      '020-34618216': {
+        status: 'RCF',
+        status_info: 'RCF - 8 pcs 41 kg received at FRA from LH8461',
+        last_event_date: '2026-03-13T15:44:00',
+        force_origem: 'HKG',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - 8 pcs 44 kg booked at HKG', date: '2026-03-12T16:26:00', pieces: '8', weight: '44 kg' },
+          { status: 'RCS', description: 'RCS - 8 pcs 41 kg received at HKG', date: '2026-03-11T21:26:00', pieces: '8', weight: '41 kg' },
+          { status: 'MAN', description: 'LH8461 (HKG→FRA) - MAN - 8 pcs 41 kg manifested at HKG', date: '2026-03-12T19:25:00', pieces: '8', weight: '41 kg' },
+          { status: 'DEP', description: 'LH8461 (HKG→FRA) - DEP - 8 pcs 41 kg departed from HKG', date: '2026-03-12T19:23:00', pieces: '8', weight: '41 kg' },
+          { status: 'ARR', description: 'LH8461 (HKG→FRA) - ARR - 8 pcs 41 kg arrived at FRA', date: '2026-03-13T05:11:00', pieces: '8', weight: '41 kg' },
+          { status: 'RCF', description: 'LH8461 (HKG→FRA) - RCF - 8 pcs 41 kg received at FRA', date: '2026-03-13T15:44:00', pieces: '8', weight: '41 kg' },
+        ]
+      },
     };
 
     // v2: override loop with debug
