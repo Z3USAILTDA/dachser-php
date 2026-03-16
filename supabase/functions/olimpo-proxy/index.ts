@@ -1752,7 +1752,7 @@ serve(async (req) => {
                 WHERE mawb IS NOT NULL
                   AND TRIM(mawb) != ''
                   AND tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
-                  AND data_insert >= '2026-02-04 09:55:11'
+                  
                 GROUP BY TRIM(mawb)
               ),
               -- CTE 2: Navio/vessel_imo mais recente por mbl (ranking)
