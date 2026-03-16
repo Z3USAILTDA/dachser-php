@@ -1905,7 +1905,30 @@ serve(async (req) => {
               )
             SELECT 
               ts.mbl_id,
-              COALESCE(MAX(mdn.tipo_processo), MAX(ts.tipo_processo), 'SEA IMPORT') as tipo_processo,
+              COALESCE(
+                MAX(mdn.tipo_processo),
+                CASE 
+                  WHEN UPPER(COALESCE(MAX(ts.destino), '')) LIKE 'BR%' 
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%BRAZIL%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%BRASIL%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%, BR'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%SANTOS%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%PARANAGU%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%NAVEGANTES%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%ITAJA%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%ITAPO%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%RIO GRANDE%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%SUAPE%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%PECEM%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%MANAUS%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%SALVADOR%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%VITORIA%'
+                  THEN 'SEA IMPORT'
+                  WHEN MAX(ts.destino) IS NOT NULL AND TRIM(MAX(ts.destino)) != ''
+                  THEN 'SEA EXPORT'
+                  ELSE 'SEA IMPORT'
+                END
+              ) as tipo_processo,
               MAX(ts.consignee) as consignee,
               MAX(ts.shipping_line) as shipping_line,
               MAX(ts.origem) as origem,
