@@ -14591,13 +14591,25 @@ serve(async (req) => {
   } catch (error: unknown) {
     console.error('MariaDB Proxy Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Detect transient connection errors and return 503 so frontend can retry
+    const isTransient = errorMessage.includes('Connection reset by peer') ||
+      errorMessage.includes('ETIMEDOUT') ||
+      errorMessage.includes('connection was forcibly closed') ||
+      errorMessage.includes('max_user_connections');
+    
+    const statusCode = isTransient ? 503 : 500;
+    const userMessage = isTransient 
+      ? 'Servidor temporariamente indisponível. Tente novamente em alguns segundos.'
+      : 'Erro interno do servidor';
+    
     return new Response(
-      JSON.stringify({ error: 'Erro interno do servidor', details: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: userMessage, details: errorMessage, retryable: isTransient }),
+      { status: statusCode, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } finally {
     if (client) {
-      await client.close();
+      try { await client.close(); } catch (_) { /* ignore close errors */ }
     }
   }
 });
