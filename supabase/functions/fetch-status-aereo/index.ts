@@ -2306,13 +2306,25 @@ serve(async (req) => {
       },
     };
 
-    // v2: override loop with debug
+    // v2: override loop with conditional application (auto > manual = skip)
     for (const row of processedRows) {
       const awb = (row.awb || '').trim();
       const override = MANUAL_OVERRIDES[awb];
       if (!override) continue;
 
-      console.log(`[OVERRIDE] AWB="${awb}" keys=${Object.keys(override).join(',')}`);
+      // Compare automatic status vs manual override using IATA hierarchy
+      const autoStatus = (row['último_status'] || '').trim().toUpperCase();
+      const manualStatus = (override.status || '').trim().toUpperCase();
+      const autoWeight = IATA_HIERARCHY[autoStatus] || 0;
+      const manualWeight = IATA_HIERARCHY[manualStatus] || 0;
+
+      // If automatic status is more advanced than manual, skip the override entirely
+      if (autoStatus && !row.tracking_failed && autoWeight > manualWeight) {
+        console.log(`[OVERRIDE SKIP] ${awb}: auto="${autoStatus}"(${autoWeight}) > manual="${manualStatus}"(${manualWeight})`);
+        continue;
+      }
+
+      console.log(`[OVERRIDE APPLY] AWB="${awb}" auto="${autoStatus}"(${autoWeight}) <= manual="${manualStatus}"(${manualWeight})`);
 
       if (override.skip_first_event) {
         // Re-resolve status skipping the first timeline event
