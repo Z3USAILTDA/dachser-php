@@ -1905,7 +1905,7 @@ serve(async (req) => {
               )
             SELECT 
               ts.mbl_id,
-              COALESCE(MAX(ts.tipo_processo), MAX(mdn.tipo_processo), 'SEA IMPORT') as tipo_processo,
+              COALESCE(MAX(mdn.tipo_processo), MAX(ts.tipo_processo), 'SEA IMPORT') as tipo_processo,
               MAX(ts.consignee) as consignee,
               MAX(ts.shipping_line) as shipping_line,
               MAX(ts.origem) as origem,
@@ -2238,12 +2238,15 @@ serve(async (req) => {
         const candidatesSeaMaster = await client.query(`
           SELECT
             TRIM(sm.master) AS mbl_id,
-            'SEA IMPORT' AS tipo_processo,
+            COALESCE(MAX(md.tipo_processo), 'SEA IMPORT') AS tipo_processo,
             'PENDENTE' AS container,
             sm.customer_no AS consignee,
             sm.nome_analista AS email_analista,
             NULL AS email_cliente
           FROM dados_dachser.t_sea_master sm
+          LEFT JOIN dados_dachser.t_master_dados md 
+            ON TRIM(md.mawb) = TRIM(sm.master) 
+            AND md.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
           WHERE sm.master IS NOT NULL
             AND TRIM(sm.master) != ''
             AND (
@@ -2252,7 +2255,7 @@ serve(async (req) => {
             )
             AND LEFT(TRIM(sm.master), 4) NOT IN ('EBKG', 'BKNG', 'GLNL', 'GLSL', 'GLDL', 'BRSA')
             AND TRIM(sm.master) NOT REGEXP '^BR[A-Za-z]{3}'
-          GROUP BY TRIM(sm.master)
+          GROUP BY TRIM(sm.master), sm.customer_no, sm.nome_analista
           LIMIT 500
         `);
         console.log(`[sync_sea_tracking] Found ${(candidatesSeaMaster as any[]).length} candidates from t_sea_master`);
@@ -2315,13 +2318,33 @@ serve(async (req) => {
           }
         }
 
+        // Step 6: Retroactive fix - update existing records with wrong tipo_processo
+        let retroFixed = 0;
+        try {
+          const [retroResult] = await client.execute(`
+            UPDATE dados_dachser.t_tracking_sea ts
+            INNER JOIN dados_dachser.t_master_dados md 
+              ON TRIM(md.mawb) = TRIM(ts.mbl_id)
+              AND md.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
+            SET ts.tipo_processo = md.tipo_processo
+            WHERE ts.tipo_processo != md.tipo_processo
+          `);
+          retroFixed = (retroResult as any)?.affectedRows || 0;
+          if (retroFixed > 0) {
+            console.log(`[sync_sea_tracking] Retroactive fix: updated tipo_processo for ${retroFixed} records`);
+          }
+        } catch (retroErr: any) {
+          console.warn(`[sync_sea_tracking] Retroactive fix error: ${retroErr.message}`);
+        }
+
         await client.close();
         
-        console.log(`[sync_sea_tracking] Synced ${synced} rows (${syncedFromSeaMaster} from t_sea_master, ${syncedFromMasterDados} from t_master_dados)`);
+        console.log(`[sync_sea_tracking] Synced ${synced} rows (${syncedFromSeaMaster} from t_sea_master, ${syncedFromMasterDados} from t_master_dados), retroFixed ${retroFixed}`);
         
         return new Response(JSON.stringify({ 
           success: true, 
           synced,
+          retroFixed,
           sources: {
             t_sea_master: syncedFromSeaMaster,
             t_master_dados: syncedFromMasterDados
