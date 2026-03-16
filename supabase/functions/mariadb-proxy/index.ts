@@ -7406,7 +7406,8 @@ serve(async (req) => {
                     const d = e.Timestamp || e.timestamp || e.date || e.Date || e.datetime || e.dataEvento || e.time || e.data_hora_evento || '';
                     return parseFlexDate(d);
                   }).filter((t: number) => !isNaN(t)));
-                  if (autoMaxDate > forcedMaxDate) {
+                  console.log(`[FORCED_TIMELINE DEBUG] ${cleanAwbForForce}: autoMaxDate=${autoMaxDate} (${isNaN(autoMaxDate) ? 'NaN' : new Date(autoMaxDate).toISOString()}), forcedMaxDate=${forcedMaxDate} (${new Date(forcedMaxDate).toISOString()}), rawTlLen=${rawTl.length}, firstTimestamp=${rawTl[0]?.Timestamp || rawTl[0]?.date || 'none'}`);
+                  if (!isNaN(autoMaxDate) && autoMaxDate > forcedMaxDate) {
                     console.log(`[FORCED_TIMELINE SKIP] ${cleanAwbForForce}: auto event date newer than forced (${new Date(autoMaxDate).toISOString()} > ${new Date(forcedMaxDate).toISOString()})`);
                     useForced = false;
                   }
