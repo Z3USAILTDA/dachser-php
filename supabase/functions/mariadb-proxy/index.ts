@@ -6962,8 +6962,10 @@ serve(async (req) => {
           '020-03272743': {
             tracking_failed: false,
             events: [
-              mkForcedEvent('020-03272743', 1, 'BKD', 'BKD - 1 pcs', '2026-03-11T22:47:00', 'FRA', 1, null),
-              mkForcedEvent('020-03272743', 2, 'RCS', 'RCS - 1 pcs', '2026-03-11T19:47:00', 'FRA', 1, null),
+              mkForcedEvent('020-03272743', 1, 'ARR', 'ARR - 1 pcs arrived on LH8264 at VCP', '2026-03-16T03:41:00', 'VCP', 1, null),
+              mkForcedEvent('020-03272743', 2, 'DEP', 'DEP - 1 pcs departed on LH8264 from VCP', '2026-03-15T19:52:00', 'VCP', 1, null),
+              mkForcedEvent('020-03272743', 3, 'BKD', 'BKD - 1 pcs', '2026-03-11T22:47:00', 'FRA', 1, null),
+              mkForcedEvent('020-03272743', 4, 'RCS', 'RCS - 1 pcs', '2026-03-11T19:47:00', 'FRA', 1, null),
             ],
           },
           '724-86221435': {
