@@ -1484,15 +1484,18 @@ serve(async (req) => {
         ]
       },
       '549-42692926': {
-        status: 'BKD',
-        status_info: 'BKD - Booking Confirmed VCP L7 2531 VCP-BOG - 1 / 40.00KGS',
-        last_event_date: '2026-03-14T05:54:00',
+        status: 'ARR',
+        status_info: 'ARR - Flight Arrived at BOG (L7 2538 VCP-BOG) - 1 / 40.00KGS',
+        last_event_date: '2026-03-15T17:23:00',
         force_origem: 'VCP',
         force_destino: 'BOG',
         force_timeline: [
           { status: 'RCS', description: 'RCS - Shipment Received at VCP - 1 / 40.00KGS', date: '2026-03-12T15:28:00', pieces: '1', weight: '40.00KGS' },
           { status: 'FOH', description: 'FOH - Freight on Hand at VCP - 1 / 40.00KGS', date: '2026-03-12T15:28:00', pieces: '1', weight: '40.00KGS' },
           { status: 'BKD', description: 'BKD - Booking Confirmed VCP L7 2531 VCP-BOG - 1 / 40.00KGS', date: '2026-03-14T05:54:00', pieces: '1', weight: '40.00KGS' },
+          { status: 'MAN', description: 'MAN - Flight Manifested at VCP (L7 2538 VCP-BOG) - 1 / 40.00KGS', date: '2026-03-15T12:28:00', pieces: '1', weight: '40.00KGS' },
+          { status: 'DEP', description: 'DEP - Flight Departed from VCP (L7 2538 VCP-BOG) - 1 / 40.00KGS', date: '2026-03-15T13:09:00', pieces: '1', weight: '40.00KGS' },
+          { status: 'ARR', description: 'ARR - Flight Arrived at BOG (L7 2538 VCP-BOG) - 1 / 40.00KGS', date: '2026-03-15T17:23:00', pieces: '1', weight: '40.00KGS' },
         ]
       },
       '172-02171035': {
