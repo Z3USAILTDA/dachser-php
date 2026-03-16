@@ -1905,7 +1905,7 @@ serve(async (req) => {
               )
             SELECT 
               ts.mbl_id,
-              MAX(ts.tipo_processo) as tipo_processo,
+              COALESCE(MAX(ts.tipo_processo), MAX(mdn.tipo_processo), 'SEA IMPORT') as tipo_processo,
               MAX(ts.consignee) as consignee,
               MAX(ts.shipping_line) as shipping_line,
               MAX(ts.origem) as origem,
