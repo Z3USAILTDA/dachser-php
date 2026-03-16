@@ -671,13 +671,7 @@ const Index = () => {
 
           localStorage.setItem("tracking-failed-flags", JSON.stringify(cleanedFlags));
           console.log(`[tracking-flags] ${Object.keys(rawFlags).length} stored → ${Object.keys(cleanedFlags).length} after cleanup`);
-          // Filtrar para 2027 se não for Z3US admin
-          const filtered2027 = isZ3usAdmin() ? withFlags : withFlags.filter(item => {
-            const dateStr = item.last_check || item.created_at || '';
-            if (!dateStr) return false;
-            return new Date(dateStr).getFullYear() === 2027;
-          });
-          setStatusAereoData(filtered2027);
+          setStatusAereoData(withFlags);
         } catch (_) {
           const filtered2027 = isZ3usAdmin() ? deduplicatedData : deduplicatedData.filter(item => {
             const dateStr = item.last_check || item.created_at || '';
