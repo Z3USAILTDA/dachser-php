@@ -2429,6 +2429,27 @@ serve(async (req) => {
       '996-14370775', '057-58595305', '045-12571333', '045-21241076', '045-12571204',
     ]);
 
+    // Carregar AWBs persistidos como ocultos (DLV permanente) do banco de dados
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+      const supabaseClient = createClient(supabaseUrl, supabaseKey);
+      
+      const { data: hiddenFromDb } = await supabaseClient
+        .from('air_hidden_awbs')
+        .select('awb');
+      
+      if (hiddenFromDb && hiddenFromDb.length > 0) {
+        for (const row of hiddenFromDb) {
+          HIDDEN_AWBS.add(row.awb);
+        }
+        console.log(`Loaded ${hiddenFromDb.length} permanently hidden AWBs from database`);
+      }
+    } catch (err) {
+      console.error('Failed to load hidden AWBs from database:', err);
+    }
+
+
     // AWBs com override manual NUNCA devem ser filtrados
     const OVERRIDE_PROTECTED = new Set(Object.keys(MANUAL_OVERRIDES));
 
