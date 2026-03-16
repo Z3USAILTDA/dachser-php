@@ -28,6 +28,16 @@ import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { Filter as FilterIcon } from "lucide-react";
 import VesselFinderMap from "@/components/tracking/VesselFinderMap";
+
+/** Parse a datetime string from MariaDB (no TZ info) as UTC */
+function parseUtcDate(dateStr: string | null | undefined): Date | null {
+  if (!dateStr) return null;
+  const s = String(dateStr).trim();
+  // If already has Z or offset, parse directly
+  if (s.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(s)) return new Date(s);
+  // Append Z to treat as UTC
+  return new Date(s.replace(' ', 'T') + 'Z');
+}
 import Swal from 'sweetalert2';
 import { useTheme } from "@/hooks/useTheme";
 import { detectCarrierFromMbl, SHIPPING_LINE_INFO, ShippingLineCode, getTrackableCarriers, MBL_PREFIX_MAP, LCL_PREFIXES, ROUTE_FORMAT_PREFIXES, NUMERIC_MBL_INFO, INTERNAL_PREFIXES } from "@/lib/shippingLineMapping";
