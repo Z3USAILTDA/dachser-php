@@ -2323,7 +2323,8 @@ const ContainerTracking = () => {
                 {(() => {
                   const maxLastCheck = mblList.reduce((max, m) => {
                     if (!m.last_check) return max;
-                    const d = new Date(m.last_check).getTime();
+                    const parsed = parseUtcDate(m.last_check);
+                    const d = parsed ? parsed.getTime() : 0;
                     return d > max ? d : max;
                   }, 0);
                   if (maxLastCheck === 0) return null;
