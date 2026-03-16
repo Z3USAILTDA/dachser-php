@@ -2247,7 +2247,7 @@ serve(async (req) => {
         const candidatesSeaMaster = await client.query(`
           SELECT
             TRIM(sm.master) AS mbl_id,
-            COALESCE(MAX(md.tipo_processo), 'SEA IMPORT') AS tipo_processo,
+            COALESCE(NULLIF(MAX(md.tipo_processo), ''), 'SEA IMPORT') AS tipo_processo,
             'PENDENTE' AS container,
             sm.customer_no AS consignee,
             sm.nome_analista AS email_analista,
