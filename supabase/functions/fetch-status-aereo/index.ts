@@ -1331,6 +1331,22 @@ serve(async (req) => {
         status_info: 'BCBP - Boarded the flight on Helsinki (Vantaa)',
         disable_discrepancy: true,
       },
+      '020-22434031': {
+        status: 'DEP',
+        status_info: 'DEP - Departed from FRA',
+        tracking_failed: false,
+        last_event_date: '2026-03-15T19:52:00',
+        force_origem: 'ZRH',
+        force_destino: 'VCP',
+        force_timeline: [
+          { codigo_evento: 'BKD', descricao_evento: 'Booking Confirmed at ZRH', data_hora_evento: '2026-03-14T10:16:00', aeroporto: 'ZRH', pecas: 1 },
+          { codigo_evento: 'RCS', descricao_evento: 'Shipment Received at ZRH', data_hora_evento: '2026-03-12T10:43:00', aeroporto: 'ZRH', pecas: 1 },
+          { codigo_evento: 'DEP', descricao_evento: 'Departed from ZRH on LH7591S', data_hora_evento: '2026-03-12T20:30:00', aeroporto: 'ZRH', pecas: 1 },
+          { codigo_evento: 'ARR', descricao_evento: 'Arrived at FRA', data_hora_evento: '2026-03-13T03:28:00', aeroporto: 'FRA', pecas: 1 },
+          { codigo_evento: 'DEP', descricao_evento: 'Departed from FRA', data_hora_evento: '2026-03-15T19:52:00', aeroporto: 'FRA', pecas: 1 },
+        ],
+        disable_discrepancy: true,
+      },
       '996-14389491': { status: 'NIF', status_info: 'Sem informação na companhia aérea' },
       '577-11063080': { status: 'DEP' },
       '074-70304695': {
