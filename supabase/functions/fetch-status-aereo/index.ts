@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createConnection } from "npm:mysql2@3.11.3/promise";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -2428,6 +2429,27 @@ serve(async (req) => {
       '996-14370775', '057-58595305', '045-12571333', '045-21241076', '045-12571204',
     ]);
 
+    // Carregar AWBs persistidos como ocultos (DLV permanente) do banco de dados
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+      const supabaseClient = createClient(supabaseUrl, supabaseKey);
+      
+      const { data: hiddenFromDb } = await supabaseClient
+        .from('air_hidden_awbs')
+        .select('awb');
+      
+      if (hiddenFromDb && hiddenFromDb.length > 0) {
+        for (const row of hiddenFromDb) {
+          HIDDEN_AWBS.add(row.awb);
+        }
+        console.log(`Loaded ${hiddenFromDb.length} permanently hidden AWBs from database`);
+      }
+    } catch (err) {
+      console.error('Failed to load hidden AWBs from database:', err);
+    }
+
+
     // AWBs com override manual NUNCA devem ser filtrados
     const OVERRIDE_PROTECTED = new Set(Object.keys(MANUAL_OVERRIDES));
 
@@ -2469,7 +2491,38 @@ serve(async (req) => {
 
     const filteredOut = processedRows.length - visibleRows.length;
     if (filteredOut > 0) {
-      console.log(`Visibility filter: removed ${filteredOut} rows (DLV or expired ARR-DESTINO)`);
+      console.log(`Visibility filter: removed ${filteredOut} rows (DLV, hidden, or expired ARR-DESTINO)`);
+    }
+
+    // Persistir AWBs com DLV/DELIVERED para ocultação permanente
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+      const supabaseClient = createClient(supabaseUrl, supabaseKey);
+      
+      const dlvAwbs: string[] = [];
+      for (const row of processedRows) {
+        const status = (row['último_status'] || '').toUpperCase().trim();
+        const awb = (row['awb'] || '').trim();
+        if ((status === 'DLV' || status === 'DELIVERED') && awb && !OVERRIDE_PROTECTED.has(awb) && !HIDDEN_AWBS.has(awb)) {
+          dlvAwbs.push(awb);
+        }
+      }
+      
+      if (dlvAwbs.length > 0) {
+        const rows = dlvAwbs.map(awb => ({ awb, reason: 'DLV' }));
+        const { error } = await supabaseClient
+          .from('air_hidden_awbs')
+          .upsert(rows, { onConflict: 'awb', ignoreDuplicates: true });
+        
+        if (error) {
+          console.error('Failed to persist DLV AWBs:', error.message);
+        } else {
+          console.log(`Persisted ${dlvAwbs.length} DLV AWBs as permanently hidden: ${dlvAwbs.join(', ')}`);
+        }
+      }
+    } catch (err) {
+      console.error('Error persisting DLV AWBs:', err);
     }
 
     return new Response(

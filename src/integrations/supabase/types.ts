@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      air_hidden_awbs: {
+        Row: {
+          awb: string
+          created_at: string | null
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          awb: string
+          created_at?: string | null
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          awb?: string
+          created_at?: string | null
+          id?: string
+          reason?: string | null
+        }
+        Relationships: []
+      }
       analise_documental_historico: {
         Row: {
           analysis: Json | null
