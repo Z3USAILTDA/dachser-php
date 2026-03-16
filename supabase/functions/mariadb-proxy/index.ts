@@ -6955,7 +6955,8 @@ serve(async (req) => {
           '047-32916273': {
             tracking_failed: false,
             events: [
-              mkForcedEvent('047-32916273', 1, 'BCBP', 'Boarded the flight on Helsinki (Vantaa)', '2026-03-13T18:00:00', 'HEL', 22, '2658.9 kg'),
+              mkForcedEvent('047-32916273', 1, 'DEP', 'Boarded the flight on Frankfurt am Main (TP5002D FRA-LIS)', '2026-03-15T15:00:00', 'FRA', 22, '2658.9 kg'),
+              mkForcedEvent('047-32916273', 2, 'BCBP', 'Boarded the flight on Helsinki (Vantaa)', '2026-03-13T18:00:00', 'HEL', 22, '2658.9 kg'),
             ],
           },
           '020-03272743': {
