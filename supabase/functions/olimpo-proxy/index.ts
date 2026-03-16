@@ -1752,7 +1752,7 @@ serve(async (req) => {
                 WHERE mawb IS NOT NULL
                   AND TRIM(mawb) != ''
                   AND tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
-                  AND data_insert >= '2026-02-04 09:55:11'
+                  
                 GROUP BY TRIM(mawb)
               ),
               -- CTE 2: Navio/vessel_imo mais recente por mbl (ranking)
@@ -1905,7 +1905,30 @@ serve(async (req) => {
               )
             SELECT 
               ts.mbl_id,
-              COALESCE(MAX(mdn.tipo_processo), MAX(ts.tipo_processo), 'SEA IMPORT') as tipo_processo,
+              COALESCE(
+                MAX(mdn.tipo_processo),
+                CASE 
+                  WHEN UPPER(COALESCE(MAX(ts.destino), '')) LIKE 'BR%' 
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%BRAZIL%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%BRASIL%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%, BR'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%SANTOS%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%PARANAGU%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%NAVEGANTES%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%ITAJA%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%ITAPO%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%RIO GRANDE%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%SUAPE%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%PECEM%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%MANAUS%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%SALVADOR%'
+                    OR UPPER(COALESCE(MAX(ts.destino), '')) LIKE '%VITORIA%'
+                  THEN 'SEA IMPORT'
+                  WHEN MAX(ts.destino) IS NOT NULL AND TRIM(MAX(ts.destino)) != ''
+                  THEN 'SEA EXPORT'
+                  ELSE 'SEA IMPORT'
+                END
+              ) as tipo_processo,
               MAX(ts.consignee) as consignee,
               MAX(ts.shipping_line) as shipping_line,
               MAX(ts.origem) as origem,
@@ -2321,6 +2344,7 @@ serve(async (req) => {
         // Step 6: Retroactive fix - update existing records with wrong tipo_processo
         let retroFixed = 0;
         try {
+          // 6a: Fix from t_master_dados (source of truth)
           const [retroResult] = await client.execute(`
             UPDATE dados_dachser.t_tracking_sea ts
             INNER JOIN dados_dachser.t_master_dados md 
@@ -2331,10 +2355,50 @@ serve(async (req) => {
           `);
           retroFixed = (retroResult as any)?.affectedRows || 0;
           if (retroFixed > 0) {
-            console.log(`[sync_sea_tracking] Retroactive fix: updated tipo_processo for ${retroFixed} records`);
+            console.log(`[sync_sea_tracking] Retroactive fix (master_dados): updated ${retroFixed} records`);
           }
         } catch (retroErr: any) {
           console.warn(`[sync_sea_tracking] Retroactive fix error: ${retroErr.message}`);
+        }
+
+        // 6b: Fix by destination fallback (for records without t_master_dados match)
+        let retroFixedDest = 0;
+        try {
+          const [retroDestResult] = await client.execute(`
+            UPDATE dados_dachser.t_tracking_sea ts
+            SET ts.tipo_processo = CASE 
+              WHEN UPPER(COALESCE(ts.destino, '')) LIKE 'BR%' 
+                OR UPPER(COALESCE(ts.destino, '')) LIKE '%BRAZIL%'
+                OR UPPER(COALESCE(ts.destino, '')) LIKE '%BRASIL%'
+                OR UPPER(COALESCE(ts.destino, '')) LIKE '%, BR'
+                OR UPPER(COALESCE(ts.destino, '')) LIKE '%SANTOS%'
+                OR UPPER(COALESCE(ts.destino, '')) LIKE '%PARANAGU%'
+                OR UPPER(COALESCE(ts.destino, '')) LIKE '%NAVEGANTES%'
+                OR UPPER(COALESCE(ts.destino, '')) LIKE '%ITAJA%'
+                OR UPPER(COALESCE(ts.destino, '')) LIKE '%ITAPO%'
+                OR UPPER(COALESCE(ts.destino, '')) LIKE '%RIO GRANDE%'
+                OR UPPER(COALESCE(ts.destino, '')) LIKE '%SUAPE%'
+                OR UPPER(COALESCE(ts.destino, '')) LIKE '%PECEM%'
+                OR UPPER(COALESCE(ts.destino, '')) LIKE '%MANAUS%'
+                OR UPPER(COALESCE(ts.destino, '')) LIKE '%SALVADOR%'
+                OR UPPER(COALESCE(ts.destino, '')) LIKE '%VITORIA%'
+              THEN 'SEA IMPORT'
+              ELSE 'SEA EXPORT'
+            END
+            WHERE ts.destino IS NOT NULL 
+              AND TRIM(ts.destino) != ''
+              AND NOT EXISTS (
+                SELECT 1 FROM dados_dachser.t_master_dados md 
+                WHERE TRIM(md.mawb) = TRIM(ts.mbl_id) 
+                  AND md.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
+              )
+          `);
+          retroFixedDest = (retroDestResult as any)?.affectedRows || 0;
+          if (retroFixedDest > 0) {
+            console.log(`[sync_sea_tracking] Retroactive fix (destination fallback): updated ${retroFixedDest} records`);
+          }
+        } catch (retroDestErr: any) {
+          console.warn(`[sync_sea_tracking] Retroactive fix (destination) error: ${retroDestErr.message}`);
         }
 
         await client.close();
