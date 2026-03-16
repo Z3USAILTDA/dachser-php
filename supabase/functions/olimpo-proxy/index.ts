@@ -2318,6 +2318,25 @@ serve(async (req) => {
           }
         }
 
+        // Step 6: Retroactive fix - update existing records with wrong tipo_processo
+        let retroFixed = 0;
+        try {
+          const [retroResult] = await client.execute(`
+            UPDATE dados_dachser.t_tracking_sea ts
+            INNER JOIN dados_dachser.t_master_dados md 
+              ON TRIM(md.mawb) = TRIM(ts.mbl_id)
+              AND md.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
+            SET ts.tipo_processo = md.tipo_processo
+            WHERE ts.tipo_processo != md.tipo_processo
+          `);
+          retroFixed = (retroResult as any)?.affectedRows || 0;
+          if (retroFixed > 0) {
+            console.log(`[sync_sea_tracking] Retroactive fix: updated tipo_processo for ${retroFixed} records`);
+          }
+        } catch (retroErr: any) {
+          console.warn(`[sync_sea_tracking] Retroactive fix error: ${retroErr.message}`);
+        }
+
         await client.close();
         
         console.log(`[sync_sea_tracking] Synced ${synced} rows (${syncedFromSeaMaster} from t_sea_master, ${syncedFromMasterDados} from t_master_dados)`);
