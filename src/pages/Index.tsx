@@ -673,12 +673,7 @@ const Index = () => {
           console.log(`[tracking-flags] ${Object.keys(rawFlags).length} stored → ${Object.keys(cleanedFlags).length} after cleanup`);
           setStatusAereoData(withFlags);
         } catch (_) {
-          const filtered2027 = isZ3usAdmin() ? deduplicatedData : deduplicatedData.filter(item => {
-            const dateStr = item.last_check || item.created_at || '';
-            if (!dateStr) return false;
-            return new Date(dateStr).getFullYear() === 2027;
-          });
-          setStatusAereoData(filtered2027);
+          setStatusAereoData(deduplicatedData);
         }
       }
     } catch (error) {
