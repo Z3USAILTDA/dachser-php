@@ -7388,9 +7388,23 @@ serve(async (req) => {
                   ? JSON.parse(autoCheckRows[0].timeline_json)
                   : autoCheckRows[0].timeline_json;
                 if (Array.isArray(rawTl) && rawTl.length > 0) {
+                  const parseFlexDate = (raw: string): number => {
+                    if (!raw) return NaN;
+                    // Try native parse first
+                    let t = new Date(raw).getTime();
+                    if (!isNaN(t)) return t;
+                    // Handle "15 Mar 2026 10:52" format
+                    const m = raw.match(/^(\d{1,2})\s+(\w{3})\s+(\d{4})\s+(\d{1,2}):(\d{2})$/);
+                    if (m) {
+                      const months: Record<string, number> = { Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11 };
+                      t = new Date(Number(m[3]), months[m[2]] ?? 0, Number(m[1]), Number(m[4]), Number(m[5])).getTime();
+                      if (!isNaN(t)) return t;
+                    }
+                    return NaN;
+                  };
                   const autoMaxDate = Math.max(...rawTl.map((e: any) => {
                     const d = e.Timestamp || e.timestamp || e.date || e.Date || e.datetime || e.dataEvento || e.time || e.data_hora_evento || '';
-                    return new Date(d).getTime();
+                    return parseFlexDate(d);
                   }).filter((t: number) => !isNaN(t)));
                   if (autoMaxDate > forcedMaxDate) {
                     console.log(`[FORCED_TIMELINE SKIP] ${cleanAwbForForce}: auto event date newer than forced (${new Date(autoMaxDate).toISOString()} > ${new Date(forcedMaxDate).toISOString()})`);
