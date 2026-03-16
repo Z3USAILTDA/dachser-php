@@ -237,7 +237,7 @@ export default function CCTDashboard() {
               </button>
               <button 
                 onClick={() => {
-                  const count = exportCCTWithoutDepDateToExcel(filteredProcessos);
+                  const count = exportCCTWithoutDepDateToExcel(processos);
                   if (count > 0) {
                     toast.success(`${count} AWBs sem data de decolagem exportadas`);
                   } else {
