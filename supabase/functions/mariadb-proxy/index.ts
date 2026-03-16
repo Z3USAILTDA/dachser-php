@@ -7389,7 +7389,7 @@ serve(async (req) => {
                   : autoCheckRows[0].timeline_json;
                 if (Array.isArray(rawTl) && rawTl.length > 0) {
                   const autoMaxDate = Math.max(...rawTl.map((e: any) => {
-                    const d = e.date || e.data_hora_evento || '';
+                    const d = e.Timestamp || e.timestamp || e.date || e.Date || e.datetime || e.dataEvento || e.time || e.data_hora_evento || '';
                     return new Date(d).getTime();
                   }).filter((t: number) => !isNaN(t)));
                   if (autoMaxDate > forcedMaxDate) {
