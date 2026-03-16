@@ -86,13 +86,13 @@ export default function CCTDashboard() {
   const [metricFilter, setMetricFilter] = useState<MetricFilterType>(null);
   
   const metrics = useMemo(() => {
-    const total = filteredProcessos.length;
-    const emTransito = filteredProcessos.filter(p => p.status_atual?.status_cct_oficial === "INFORMADA" || p.status_atual?.status_cct_oficial === "MANIFESTADA").length;
-    const alerta = filteredProcessos.filter(p => p.status_atual?.sla_status === "ALERTA").length;
-    const critico = filteredProcessos.filter(p => 
+    const total = processos.length;
+    const emTransito = processos.filter(p => p.status_atual?.status_cct_oficial === "INFORMADA" || p.status_atual?.status_cct_oficial === "MANIFESTADA").length;
+    const alerta = processos.filter(p => p.status_atual?.sla_status === "ALERTA").length;
+    const critico = processos.filter(p => 
       p.status_atual?.sla_status === "CRITICO" || p.status_atual?.sla_status === "VENCIDO"
     ).length;
-    const eventos24h = filteredProcessos.reduce((acc, p) => {
+    const eventos24h = processos.reduce((acc, p) => {
       const recent = p.eventos.filter(e => {
         const eventDate = new Date(e.data_hora_evento);
         const now = new Date();
@@ -101,7 +101,7 @@ export default function CCTDashboard() {
       return acc + recent.length;
     }, 0);
     return { total, emTransito, alerta, critico, eventos24h };
-  }, [filteredProcessos]);
+  }, [processos]);
 
   const excecoesStats = useMemo(() => ({
     abertas: excecoes.filter(e => e.status_excecao === "ABERTA").length,
