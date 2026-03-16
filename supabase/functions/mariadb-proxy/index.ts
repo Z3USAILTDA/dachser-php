@@ -6968,6 +6968,16 @@ serve(async (req) => {
               mkForcedEvent('020-03272743', 4, 'RCS', 'RCS - 1 pcs', '2026-03-11T19:47:00', 'FRA', 1, null),
             ],
           },
+          '127-72327673': {
+            tracking_failed: false,
+            disable_discrepancy: true,
+            events: [
+              mkForcedEvent('127-72327673', 1, 'NFD', 'NFD - Liberado para retirada em ASU', '2026-03-13T13:41:00', 'ASU', 3, '36.8'),
+              mkForcedEvent('127-72327673', 2, 'ARR', 'ARR - Desembarcado no destino ASU', '2026-03-13T13:41:00', 'ASU', 3, '36.8'),
+              mkForcedEvent('127-72327673', 3, 'DEP', 'DEP - Em trânsito GRU→ASU', '2026-03-13T10:13:00', 'GRU', 3, '36.8'),
+              mkForcedEvent('127-72327673', 4, 'RCS', 'RCS - GRU, Pieces: 3, Weight: 36.8', '2026-03-11T10:18:00', 'GRU', 3, '36.8'),
+            ],
+          },
           '724-86221435': {
             tracking_failed: false,
             events: [
