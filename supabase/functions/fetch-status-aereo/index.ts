@@ -1426,15 +1426,20 @@ serve(async (req) => {
         disable_discrepancy: true,
       },
       '724-86221424': {
-        status: 'RCS',
-        status_info: 'RCS - Ready for Carriage at ZRH - 1 Pieces 1.8k',
-        last_event_date: '2026-03-13T10:48:00',
+        status: 'NFD',
+        status_info: 'NFD - Agent Notified at GRU - 2 Pieces 37.4 K',
+        last_event_date: '2026-03-15T08:20:00',
         force_origem: 'ZRH',
         force_destino: 'GRU',
         force_timeline: [
           { status: 'BKD', description: 'BKD - Booked on Flight LX-0092, ZRH-GRU - 1 Pieces 1.8k', date: '2026-03-05T16:40:00', pieces: '1', weight: '1.8k' },
           { status: 'RCS', description: 'RCS - Ready for Carriage at ZRH - 1 Pieces 1.8k', date: '2026-03-13T10:48:00', pieces: '1', weight: '1.8k' },
-        ]
+          { status: 'DEP', description: 'DEP - Departed to GRU on Flight LX-0092, ZRH-GRU - 2 Pieces 37.4 K', date: '2026-03-14T22:48:00', pieces: '2', weight: '37.4 K' },
+          { status: 'ARR', description: 'ARR - Arrived at GRU on Flight LX-0092, ZRH-GRU - 2 Pieces 37.4 K', date: '2026-03-15T06:54:00', pieces: '2', weight: '37.4 K' },
+          { status: 'AWR', description: 'AWR - AWB Documentation received at GRU - 2 Pieces 37.4 K', date: '2026-03-15T08:17:00', pieces: '2', weight: '37.4 K' },
+          { status: 'NFD', description: 'NFD - Agent Notified of arrival at GRU - 2 Pieces', date: '2026-03-15T08:20:00', pieces: '2' },
+        ],
+        disable_discrepancy: true,
       },
       '724-85006051': {
         status: 'DEP',
