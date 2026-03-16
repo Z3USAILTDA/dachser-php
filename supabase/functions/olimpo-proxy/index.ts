@@ -2339,11 +2339,12 @@ serve(async (req) => {
 
         await client.close();
         
-        console.log(`[sync_sea_tracking] Synced ${synced} rows (${syncedFromSeaMaster} from t_sea_master, ${syncedFromMasterDados} from t_master_dados)`);
+        console.log(`[sync_sea_tracking] Synced ${synced} rows (${syncedFromSeaMaster} from t_sea_master, ${syncedFromMasterDados} from t_master_dados), retroFixed ${retroFixed}`);
         
         return new Response(JSON.stringify({ 
           success: true, 
           synced,
+          retroFixed,
           sources: {
             t_sea_master: syncedFromSeaMaster,
             t_master_dados: syncedFromMasterDados
