@@ -1402,14 +1402,16 @@ serve(async (req) => {
       },
       // === Novos overrides 2026-03-14 ===
       '020-03272743': {
-        status: 'RCS',
-        status_info: 'RCS - 1 pcs received at FRA',
-        last_event_date: '2026-03-11T22:47:00',
+        status: 'ARR',
+        status_info: 'ARR - 1 pcs arrived at VCP on LH8264',
+        last_event_date: '2026-03-16T03:41:00',
         force_origem: 'FRA',
         force_destino: 'VCP',
         force_timeline: [
           { status: 'RCS', description: 'RCS - 1 pcs', date: '2026-03-11T19:47:00', pieces: '1', weight: '' },
           { status: 'BKD', description: 'BKD - 1 pcs', date: '2026-03-11T22:47:00', pieces: '1', weight: '' },
+          { status: 'DEP', description: 'DEP - 1 pcs departed on LH8264 from VCP', date: '2026-03-15T19:52:00', pieces: '1', weight: '' },
+          { status: 'ARR', description: 'ARR - 1 pcs arrived on LH8264 at VCP', date: '2026-03-16T03:41:00', pieces: '1', weight: '' },
         ]
       },
       '724-86221435': {
