@@ -1298,11 +1298,11 @@ serve(async (req) => {
     const existingAwbs = new Set(processedRows.map((r: any) => (r.awb || '').trim()));
     const SYNTHETIC_AWBS: Record<string, any> = {
       '047-32916273': {
-        id: 0, awb: '047-32916273', origem: 'HEL', destino: 'GRU',
-        'último_status': 'BCBP', tracking_failed: false, status_info: 'Boarded the flight on Helsinki (Vantaa)',
-        'última atualização': new Date().toString(), last_flight: null,
-        pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false,
-        master_changed: false, in_transit: true, last_event_date: null,
+        id: 0, awb: '047-32916273', origem: 'FRA', destino: 'GRU',
+        'último_status': 'DEP', tracking_failed: false, status_info: 'Boarded the flight on Frankfurt am Main',
+        'última atualização': '2026-03-15T15:00:00', last_flight: 'TP5002D',
+        pieces_discrepancy: false, baseline_pieces: 22, has_dis_event: false,
+        master_changed: false, in_transit: true, last_event_date: '2026-03-15T15:00:00',
         is_ground_transport: false, days_in_transit: null, source: 'synthetic',
         hawb: 'HEL-48119210', destinatário: null, nome_analista: null,
         email_analista: null, email_cliente: null, tipo_servico: null, tipo_processo: 'AIR IMPORT',
