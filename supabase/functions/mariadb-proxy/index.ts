@@ -7412,9 +7412,11 @@ serve(async (req) => {
                     useForced = false;
                   }
                 }
-              } catch (_e) { /* parse error, use forced */ }
+              } catch (_e) { console.log(`[FORCED_TIMELINE] parse error for ${cleanAwbForForce}: ${_e}`); }
+            } else {
+              console.log(`[FORCED_TIMELINE] No firecrawl data found for ${cleanAwbForForce}, autoCheckRows=${autoCheckRows?.length || 0}, has_tl=${!!autoCheckRows?.[0]?.timeline_json}`);
             }
-          } catch (_e) { /* query error, use forced */ }
+          } catch (_e) { console.log(`[FORCED_TIMELINE] query error for ${cleanAwbForForce}: ${_e}`); }
 
           if (useForced) {
             console.log(`Using FORCED timeline for AWB ${cleanAwbForForce} with ${forced.events.length} events`);
