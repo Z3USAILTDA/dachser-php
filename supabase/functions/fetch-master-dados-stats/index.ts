@@ -51,6 +51,39 @@ const airlineNames: Record<string, string> = {
   "999": "Air China Cargo",
 };
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function connectWithRetry(maxRetries = 3) {
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[fetch-master-dados-stats] Connection attempt ${attempt}/${maxRetries}...`);
+      const connection = await mysql.createConnection({
+        host: Deno.env.get("MARIADB_HOST") || "",
+        user: Deno.env.get("MARIADB_USER") || "",
+        password: Deno.env.get("MARIADB_PASSWORD") || "",
+        database: Deno.env.get("MARIADB_DATABASE") || "",
+        port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
+        connectTimeout: 10000,
+      });
+      console.log(`[fetch-master-dados-stats] Connected on attempt ${attempt}`);
+      return connection;
+    } catch (error: unknown) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      const msg = lastError.message.toLowerCase();
+      const isTransient = msg.includes("etimedout") || msg.includes("connection reset") || msg.includes("os error 104") || msg.includes("broken pipe") || msg.includes("timed out") || msg.includes("connection refused");
+      if (isTransient && attempt < maxRetries) {
+        const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        console.log(`[fetch-master-dados-stats] Transient error, retrying in ${backoffMs}ms: ${lastError.message}`);
+        await sleep(backoffMs);
+      } else {
+        if (attempt >= maxRetries) throw lastError;
+      }
+    }
+  }
+  throw lastError || new Error("Failed to connect after retries");
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -59,18 +92,7 @@ serve(async (req) => {
   let connection: any = null;
 
   try {
-    console.log("Iniciando busca de estatísticas do t_master_dados...");
-
-    connection = await mysql.createConnection({
-      host: Deno.env.get("MARIADB_HOST") || "",
-      user: Deno.env.get("MARIADB_USER") || "",
-      password: Deno.env.get("MARIADB_PASSWORD") || "",
-      database: Deno.env.get("MARIADB_DATABASE") || "",
-      port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
-      connectTimeout: 10000,
-    });
-
-    console.log("Conectado ao MariaDB");
+    connection = await connectWithRetry(3);
 
     const [lastUpdateRows] = await connection.query(`
       SELECT MAX(data_insert) as last_update
