@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
+import mysql from "npm:mysql2@3.11.3/promise";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,33 +37,31 @@ interface DatabaseStats {
   fetchedAt: string;
 }
 
-// Helper to sleep for exponential backoff
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Connect with retry logic for transient network errors
-async function connectWithRetry(maxRetries = 3): Promise<Client> {
+async function connectWithRetry(maxRetries = 3) {
   let lastError: Error | null = null;
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`[fetch-database-stats] Connection attempt ${attempt}/${maxRetries}...`);
       
-      const client = await new Client().connect({
-        hostname: Deno.env.get("MARIADB_HOST") || "",
+      const connection = await mysql.createConnection({
+        host: Deno.env.get("MARIADB_HOST") || "",
         port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
-        username: Deno.env.get("MARIADB_USER") || "",
+        user: Deno.env.get("MARIADB_USER") || "",
         password: Deno.env.get("MARIADB_PASSWORD") || "",
-        db: Deno.env.get("MARIADB_DATABASE") || "",
+        database: Deno.env.get("MARIADB_DATABASE") || "",
+        connectTimeout: 10000,
       });
       
       console.log(`[fetch-database-stats] Connected successfully on attempt ${attempt}`);
-      return client;
+      return connection;
       
     } catch (error: unknown) {
       lastError = error instanceof Error ? error : new Error(String(error));
       const errorMessage = lastError.message.toLowerCase();
       
-      // Check if it's a transient network error worth retrying
       const isTransient = 
         errorMessage.includes("connection reset") ||
         errorMessage.includes("os error 104") ||
@@ -77,9 +75,7 @@ async function connectWithRetry(maxRetries = 3): Promise<Client> {
         await sleep(backoffMs);
       } else {
         console.error(`[fetch-database-stats] Connection failed on attempt ${attempt}: ${lastError.message}`);
-        if (attempt >= maxRetries) {
-          throw lastError;
-        }
+        if (attempt >= maxRetries) throw lastError;
       }
     }
   }
@@ -92,14 +88,13 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  let client: Client | null = null;
+  let connection: any = null;
 
   try {
-    client = await connectWithRetry(3);
+    connection = await connectWithRetry(3);
     console.log(`[fetch-database-stats] Fetching stats...`);
 
-    // Query 1: t_master_dados - general stats with recent inserts (last 24h)
-    const masterGeneral = await client.query(`
+    const [masterGeneral] = await connection.query(`
       SELECT 
         MAX(data_insert) as last_update, 
         COUNT(*) as total_records,
@@ -108,8 +103,7 @@ serve(async (req) => {
       WHERE active = 1
     `);
 
-    // Query 2: t_master_dados - by modal and tipo_processo with recent inserts
-    const masterByModal = await client.query(`
+    const [masterByModal] = await connection.query(`
       SELECT 
         CASE 
           WHEN tipo_processo IN ('AIR IMPORT', 'AIR EXPORT') THEN 'AIR'
@@ -127,8 +121,7 @@ serve(async (req) => {
       ORDER BY modal, tipo_processo
     `);
 
-    // Query 3: t_dados_financeiro_nfs with recent inserts
-    const finNfs = await client.query(`
+    const [finNfs] = await connection.query(`
       SELECT 
         MAX(data_insert) as last_update, 
         COUNT(*) as total_records,
@@ -136,8 +129,7 @@ serve(async (req) => {
       FROM t_dados_financeiro_nfs
     `);
 
-    // Query 4: t_dados_financeiro_voucher with recent inserts
-    const finVoucher = await client.query(`
+    const [finVoucher] = await connection.query(`
       SELECT 
         MAX(data_insert) as last_update, 
         COUNT(*) as total_records,
@@ -145,8 +137,7 @@ serve(async (req) => {
       FROM t_dados_financeiro_voucher
     `);
 
-    // Query 5: tbaixas with recent inserts
-    const baixas = await client.query(`
+    const [baixas] = await connection.query(`
       SELECT 
         MAX(data_insert) as last_update, 
         COUNT(*) as total_records,
@@ -154,9 +145,8 @@ serve(async (req) => {
       FROM tbaixas
     `);
 
-    // Query 6: Unique inserts by tipo_processo (MAWB+HAWB combinations that never existed before last 24h)
     console.log("[fetch-database-stats] Querying unique inserts...");
-    const uniqueInsertsQuery = await client.query(`
+    const [uniqueInsertsRows] = await connection.query(`
       SELECT 
         tipo_processo,
         COUNT(*) as unique_inserts
@@ -178,22 +168,17 @@ serve(async (req) => {
       GROUP BY tipo_processo
     `);
 
-    // Build unique inserts map
     const uniqueInsertsMap: Record<string, number> = {};
-    for (const row of uniqueInsertsQuery as any[]) {
+    for (const row of uniqueInsertsRows as any[]) {
       uniqueInsertsMap[row.tipo_processo] = Number(row.unique_inserts || 0);
     }
     console.log("[fetch-database-stats] Unique inserts map:", uniqueInsertsMap);
 
-    await client.close();
-    client = null;
+    await connection.end();
+    connection = null;
 
-    // Process master data by modal
     const airBreakdown: ModalBreakdown = {
-      lastUpdate: null,
-      totalRecords: 0,
-      recentInserts: 0,
-      uniqueInserts: 0,
+      lastUpdate: null, totalRecords: 0, recentInserts: 0, uniqueInserts: 0,
       breakdown: {
         "AIR IMPORT": { lastUpdate: null, count: 0, recentInserts: 0, uniqueInserts: 0 },
         "AIR EXPORT": { lastUpdate: null, count: 0, recentInserts: 0, uniqueInserts: 0 },
@@ -201,10 +186,7 @@ serve(async (req) => {
     };
 
     const seaBreakdown: ModalBreakdown = {
-      lastUpdate: null,
-      totalRecords: 0,
-      recentInserts: 0,
-      uniqueInserts: 0,
+      lastUpdate: null, totalRecords: 0, recentInserts: 0, uniqueInserts: 0,
       breakdown: {
         "SEA IMPORT": { lastUpdate: null, count: 0, recentInserts: 0, uniqueInserts: 0 },
         "SEA EXPORT": { lastUpdate: null, count: 0, recentInserts: 0, uniqueInserts: 0 },
@@ -227,24 +209,18 @@ serve(async (req) => {
         airBreakdown.recentInserts += recentInserts;
         airBreakdown.uniqueInserts += uniqueInserts;
         airBreakdown.breakdown[tipoProcesso] = { lastUpdate, count, recentInserts, uniqueInserts };
-        
         if (row.last_update) {
           const d = new Date(row.last_update);
-          if (!airMaxDate || d > airMaxDate) {
-            airMaxDate = d;
-          }
+          if (!airMaxDate || d > airMaxDate) airMaxDate = d;
         }
       } else if (modal === "SEA") {
         seaBreakdown.totalRecords += count;
         seaBreakdown.recentInserts += recentInserts;
         seaBreakdown.uniqueInserts += uniqueInserts;
         seaBreakdown.breakdown[tipoProcesso] = { lastUpdate, count, recentInserts, uniqueInserts };
-        
         if (row.last_update) {
           const d = new Date(row.last_update);
-          if (!seaMaxDate || d > seaMaxDate) {
-            seaMaxDate = d;
-          }
+          if (!seaMaxDate || d > seaMaxDate) seaMaxDate = d;
         }
       }
     }
@@ -254,39 +230,32 @@ serve(async (req) => {
 
     const stats: DatabaseStats = {
       t_master_dados: {
-        lastUpdate: (masterGeneral as any[])[0]?.last_update 
-          ? new Date((masterGeneral as any[])[0].last_update).toISOString() 
-          : null,
-        totalRecords: Number((masterGeneral as any[])[0]?.total_records || 0),
-        recentInserts: Number((masterGeneral as any[])[0]?.recent_inserts || 0),
+        lastUpdate: masterGeneral[0]?.last_update 
+          ? new Date(masterGeneral[0].last_update).toISOString() : null,
+        totalRecords: Number(masterGeneral[0]?.total_records || 0),
+        recentInserts: Number(masterGeneral[0]?.recent_inserts || 0),
         applications: ["AIR", "SEA", "CCT", "TRACKING", "OLIMPO"],
-        byModal: {
-          AIR: airBreakdown,
-          SEA: seaBreakdown,
-        },
+        byModal: { AIR: airBreakdown, SEA: seaBreakdown },
       },
       t_dados_financeiro_nfs: {
-        lastUpdate: (finNfs as any[])[0]?.last_update 
-          ? new Date((finNfs as any[])[0].last_update).toISOString() 
-          : null,
-        totalRecords: Number((finNfs as any[])[0]?.total_records || 0),
-        recentInserts: Number((finNfs as any[])[0]?.recent_inserts || 0),
+        lastUpdate: finNfs[0]?.last_update 
+          ? new Date(finNfs[0].last_update).toISOString() : null,
+        totalRecords: Number(finNfs[0]?.total_records || 0),
+        recentInserts: Number(finNfs[0]?.recent_inserts || 0),
         applications: ["REGUA"],
       },
       t_dados_financeiro_voucher: {
-        lastUpdate: (finVoucher as any[])[0]?.last_update 
-          ? new Date((finVoucher as any[])[0].last_update).toISOString() 
-          : null,
-        totalRecords: Number((finVoucher as any[])[0]?.total_records || 0),
-        recentInserts: Number((finVoucher as any[])[0]?.recent_inserts || 0),
+        lastUpdate: finVoucher[0]?.last_update 
+          ? new Date(finVoucher[0].last_update).toISOString() : null,
+        totalRecords: Number(finVoucher[0]?.total_records || 0),
+        recentInserts: Number(finVoucher[0]?.recent_inserts || 0),
         applications: ["ESTEIRA"],
       },
       tbaixas: {
-        lastUpdate: (baixas as any[])[0]?.last_update 
-          ? new Date((baixas as any[])[0].last_update).toISOString() 
-          : null,
-        totalRecords: Number((baixas as any[])[0]?.total_records || 0),
-        recentInserts: Number((baixas as any[])[0]?.recent_inserts || 0),
+        lastUpdate: baixas[0]?.last_update 
+          ? new Date(baixas[0].last_update).toISOString() : null,
+        totalRecords: Number(baixas[0]?.total_records || 0),
+        recentInserts: Number(baixas[0]?.recent_inserts || 0),
         applications: ["ESTEIRA"],
       },
       fetchedAt: new Date().toISOString(),
@@ -300,21 +269,13 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     console.error(`[fetch-database-stats] Error:`, error);
-    
-    if (client) {
-      try {
-        await client.close();
-      } catch {}
+    if (connection) {
+      try { await connection.end(); } catch {}
     }
-
     const errorMessage = error instanceof Error ? error.message : "Failed to fetch database stats";
-
     return new Response(
       JSON.stringify({ error: errorMessage }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
