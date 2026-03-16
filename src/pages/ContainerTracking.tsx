@@ -2729,7 +2729,7 @@ const ContainerTracking = () => {
                                                   {mbl.eta_master ? new Date(mbl.eta_master).toLocaleDateString('pt-BR') : "—"}
                                                 </td>
                                                 <td className="px-3 py-2 text-[#aaaaaa]">
-                                                  {mbl.last_check ? format(parseUtcDate(mbl.last_check) || new Date(mbl.last_check), 'dd/MM/yyyy HH:mm') : "—"}
+                                                  {mbl.last_check ? formatSaoPaulo(parseMariaDBLocalDate(mbl.last_check) || new Date(mbl.last_check)) : "—"}
                                                 </td>
                                               </tr>;
                                 })}
