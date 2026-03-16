@@ -8,7 +8,7 @@ O monitoramento aéreo utiliza 'MANUAL_OVERRIDES' e 'FORCED_TIMELINES' para gere
 Tanto no `fetch-status-aereo` quanto no `mariadb-proxy`, antes de aplicar um override manual ou timeline forçada:
 1. Extrai-se a `last_event_date` do registro automático do MariaDB
 2. Compara-se com a `last_event_date` do override manual
-3. Se a data automática for **estritamente mais recente** e o status automático **não for** `tracking_failed`, o override é **ignorado** e os dados automáticos prevalecem
+3. Se a data automática for **estritamente mais recente**, o override é **ignorado** e os dados automáticos prevalecem (independentemente de `tracking_failed` — a existência de `last_event_date` já comprova dados automáticos válidos)
 4. Se o peso IATA automático for maior que o manual, o override também é ignorado (regra pré-existente)
 
 Isso elimina a necessidade de remover manualmente os overrides quando o rastreio automático progride.
