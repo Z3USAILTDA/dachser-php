@@ -1905,7 +1905,16 @@ serve(async (req) => {
               )
             SELECT 
               ts.mbl_id,
-              COALESCE(MAX(mdn.tipo_processo), MAX(ts.tipo_processo), 'SEA IMPORT') as tipo_processo,
+              COALESCE(
+                NULLIF(MAX(mdn.tipo_processo), ''),
+                CASE 
+                  WHEN UPPER(COALESCE(MAX(ts.destino), '')) REGEXP 'BR[A-Z]{3}|SANTOS|PARANAGU|ITAJA|NAVEGANTES|ITAPOA|RIO GRANDE|RIO DE JANEIRO|VITORIA|SALVADOR|SUAPE|PECEM|MANAUS|SAO FRANCISCO|IMBITUBA|SAO LUIS|BELEM|FORTALEZA|RECIFE|PORTO ALEGRE|FLORIANOPOLIS|CURITIBA|BRAZIL|BRASIL'
+                  THEN 'SEA IMPORT'
+                  WHEN COALESCE(MAX(ts.destino), '') = '' 
+                  THEN 'SEA IMPORT'
+                  ELSE 'SEA EXPORT'
+                END
+              ) as tipo_processo,
               MAX(ts.consignee) as consignee,
               MAX(ts.shipping_line) as shipping_line,
               MAX(ts.origem) as origem,
@@ -2238,7 +2247,7 @@ serve(async (req) => {
         const candidatesSeaMaster = await client.query(`
           SELECT
             TRIM(sm.master) AS mbl_id,
-            COALESCE(MAX(md.tipo_processo), 'SEA IMPORT') AS tipo_processo,
+            COALESCE(NULLIF(MAX(md.tipo_processo), ''), 'SEA IMPORT') AS tipo_processo,
             'PENDENTE' AS container,
             sm.customer_no AS consignee,
             sm.nome_analista AS email_analista,
