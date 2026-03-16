@@ -1328,11 +1328,25 @@ serve(async (req) => {
     const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean; force_timeline?: any[]; force_critical?: boolean; last_event_date?: string; disable_discrepancy?: boolean; force_origem?: string; force_destino?: string }> = {
       // '057-03764530' now has full override below
       '047-32916273': {
-        status: 'DEP',
-        status_info: 'DEP - Boarded the flight on Frankfurt am Main (TP5002D)',
+        status: 'BCBP',
+        status_info: 'BCBP - Boarded the flight',
         disable_discrepancy: true,
         last_event_date: '2026-03-15T15:00:00',
         force_origem: 'FRA',
+      },
+      '047-30188421': {
+        status: 'DEP',
+        status_info: 'DEP - Boarded the flight on Lisbon (TP057 LIS-BSB)',
+        disable_discrepancy: true,
+        last_event_date: '2026-03-10T16:34:00',
+        force_origem: 'ORD',
+        force_destino: 'VCP',
+        force_timeline: [
+          { status: 'RCF', description: 'TP244 (ORD→LIS) - RCF - Received from the flight on Lisbon - 3 pcs 849.7 kg', date: '2026-03-09T10:09:00', pieces: '3', weight: '849.7 kg' },
+          { status: 'DEP', description: 'TP244 (ORD→LIS) - DEP - Departed from Chicago - 3 pcs 849.7 kg', date: '2026-03-08T22:06:00', pieces: '3', weight: '849.7 kg' },
+          { status: 'DEP', description: 'TP057 (LIS→BSB) - DEP - Boarded the flight on Lisbon - 3 pcs 849.7 kg', date: '2026-03-10T16:34:00', pieces: '3', weight: '849.7 kg' },
+          { status: 'BKD', description: 'TP9700B (BSB→VCP) - BKD - Booked - 3 pcs 849.7 kg', date: '2026-03-12T18:00:00', pieces: '3', weight: '849.7 kg' },
+        ]
       },
       '020-22434031': {
         status: 'DEP',
