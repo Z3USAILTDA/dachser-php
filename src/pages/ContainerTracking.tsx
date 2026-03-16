@@ -2351,7 +2351,6 @@ const ContainerTracking = () => {
                       <Clock className="w-3.5 h-3.5" />
                       Último rastreio: {formatSaoPaulo(new Date(maxLastCheck))}
                     </div>
-                    </div>
                   );
                 })()}
               </div>
