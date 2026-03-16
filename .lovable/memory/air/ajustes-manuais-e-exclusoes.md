@@ -12,3 +12,7 @@ Tanto no `fetch-status-aereo` quanto no `mariadb-proxy`, antes de aplicar um ove
 4. Se o peso IATA automático for maior que o manual, o override também é ignorado (regra pré-existente)
 
 Isso elimina a necessidade de remover manualmente os overrides quando o rastreio automático progride.
+
+## Detecção de data flexível (implementada 2026-03-16)
+
+A comparação de datas no `mariadb-proxy` (FORCED_TIMELINES) utiliza `parseFlexDate` que suporta múltiplos formatos: ISO 8601 nativo e formato textual `"DD Mon YYYY HH:MM"` (ex: "15 Mar 2026 10:52") usado pelo Firecrawl/Lufthansa. Os aliases de campo verificados são: `Timestamp`, `timestamp`, `date`, `Date`, `datetime`, `dataEvento`, `time`, `data_hora_evento`.
