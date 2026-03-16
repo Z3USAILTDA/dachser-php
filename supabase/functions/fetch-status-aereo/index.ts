@@ -1539,12 +1539,18 @@ serve(async (req) => {
         ]
       },
       '996-14370731': {
-        status: 'RFC',
-        status_info: 'RFC - Ready for Carriage at CDG',
-        last_event_date: '2026-03-13T23:49:00',
+        status: 'RCF',
+        status_info: 'Received MAD GHA - 26 pcs 741.7 kg',
+        last_event_date: '2026-03-16T11:33:00',
+        force_origem: 'CDG',
+        force_destino: 'GRU',
         force_timeline: [
           { status: 'FOH', description: 'FOH - Freight on Hands at CDG', date: '2026-03-13T23:49:00', pieces: '', weight: '' },
           { status: 'RFC', description: 'RFC - Ready for Carriage at CDG', date: '2026-03-13T23:49:00', pieces: '', weight: '' },
+          { status: 'MAN', description: 'MAN - Pre-manifested UX634T (CDG→MAD) - 26 pcs 741.7 kg', date: '2026-03-14T13:23:00', pieces: '26', weight: '741.7 kg' },
+          { status: 'MAN', description: 'MAN - Manifested UX634T (CDG→MAD) - 26 pcs 741.7 kg', date: '2026-03-14T13:23:00', pieces: '26', weight: '741.7 kg' },
+          { status: 'DEP', description: 'DEP - Departed CDG on UX634T (CDG→MAD) - 26 pcs 741.7 kg', date: '2026-03-14T15:13:00', pieces: '26', weight: '741.7 kg' },
+          { status: 'RCF', description: 'RCF - Received MAD GHA - 26 pcs 741.7 kg', date: '2026-03-16T11:33:00', pieces: '26', weight: '741.7 kg' },
         ]
       },
       '020-02593301': {
