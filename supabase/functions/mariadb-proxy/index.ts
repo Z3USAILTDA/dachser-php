@@ -6955,8 +6955,17 @@ serve(async (req) => {
           '047-32916273': {
             tracking_failed: false,
             events: [
-              mkForcedEvent('047-32916273', 1, 'DEP', 'Boarded the flight on Frankfurt am Main (TP5002D FRA-LIS)', '2026-03-15T15:00:00', 'FRA', 22, '2658.9 kg'),
+              mkForcedEvent('047-32916273', 1, 'BCBP', 'Boarded the flight on Frankfurt am Main (TP5002D FRA-LIS)', '2026-03-15T15:00:00', 'FRA', 22, '2658.9 kg'),
               mkForcedEvent('047-32916273', 2, 'BCBP', 'Boarded the flight on Helsinki (Vantaa)', '2026-03-13T18:00:00', 'HEL', 22, '2658.9 kg'),
+            ],
+          },
+          '047-30188421': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('047-30188421', 1, 'BKD', 'TP9700B (BSB→VCP) - Booked - 3 pcs 849.7 kg', '2026-03-12T18:00:00', 'BSB', 3, '849.7 kg'),
+              mkForcedEvent('047-30188421', 2, 'DEP', 'TP057 (LIS→BSB) - Boarded the flight on Lisbon - 3 pcs 849.7 kg', '2026-03-10T16:34:00', 'LIS', 3, '849.7 kg'),
+              mkForcedEvent('047-30188421', 3, 'RCF', 'TP244 (ORD→LIS) - Received from the flight on Lisbon - 3 pcs 849.7 kg', '2026-03-09T10:09:00', 'LIS', 3, '849.7 kg'),
+              mkForcedEvent('047-30188421', 4, 'DEP', 'TP244 (ORD→LIS) - Departed from Chicago - 3 pcs 849.7 kg', '2026-03-08T22:06:00', 'ORD', 3, '849.7 kg'),
             ],
           },
           '020-03272743': {
