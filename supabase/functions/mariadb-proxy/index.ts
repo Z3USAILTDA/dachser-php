@@ -6962,8 +6962,20 @@ serve(async (req) => {
           '020-03272743': {
             tracking_failed: false,
             events: [
-              mkForcedEvent('020-03272743', 1, 'BKD', 'BKD - 1 pcs', '2026-03-11T22:47:00', 'FRA', 1, null),
-              mkForcedEvent('020-03272743', 2, 'RCS', 'RCS - 1 pcs', '2026-03-11T19:47:00', 'FRA', 1, null),
+              mkForcedEvent('020-03272743', 1, 'ARR', 'ARR - 1 pcs arrived on LH8264 at VCP', '2026-03-16T03:41:00', 'VCP', 1, null),
+              mkForcedEvent('020-03272743', 2, 'DEP', 'DEP - 1 pcs departed on LH8264 from VCP', '2026-03-15T19:52:00', 'VCP', 1, null),
+              mkForcedEvent('020-03272743', 3, 'BKD', 'BKD - 1 pcs', '2026-03-11T22:47:00', 'FRA', 1, null),
+              mkForcedEvent('020-03272743', 4, 'RCS', 'RCS - 1 pcs', '2026-03-11T19:47:00', 'FRA', 1, null),
+            ],
+          },
+          '127-72327673': {
+            tracking_failed: false,
+            disable_discrepancy: true,
+            events: [
+              mkForcedEvent('127-72327673', 1, 'NFD', 'NFD - Liberado para retirada em ASU', '2026-03-13T13:41:00', 'ASU', 3, '36.8'),
+              mkForcedEvent('127-72327673', 2, 'ARR', 'ARR - Desembarcado no destino ASU', '2026-03-13T13:41:00', 'ASU', 3, '36.8'),
+              mkForcedEvent('127-72327673', 3, 'DEP', 'DEP - Em trânsito GRU→ASU', '2026-03-13T10:13:00', 'GRU', 3, '36.8'),
+              mkForcedEvent('127-72327673', 4, 'RCS', 'RCS - GRU, Pieces: 3, Weight: 36.8', '2026-03-11T10:18:00', 'GRU', 3, '36.8'),
             ],
           },
           '724-86221435': {
@@ -7010,9 +7022,12 @@ serve(async (req) => {
           '549-42692926': {
             tracking_failed: false,
             events: [
-              mkForcedEvent('549-42692926', 1, 'BKD', 'BKD - Booking Confirmed VCP-BOG', '2026-03-14T05:54:00', 'VCP', 1, '40.00 KGS'),
-              mkForcedEvent('549-42692926', 2, 'FOH', 'FOH - Freight on Hand', '2026-03-12T15:28:00', 'VCP', 1, '40.00 KGS'),
-              mkForcedEvent('549-42692926', 3, 'RCS', 'RCS - Shipment Received', '2026-03-12T15:28:00', 'VCP', 1, '40.00 KGS'),
+              mkForcedEvent('549-42692926', 1, 'ARR', 'ARR - Flight Arrived at BOG (L7 2538 VCP-BOG)', '2026-03-15T17:23:00', 'BOG', 1, '40.00 KGS'),
+              mkForcedEvent('549-42692926', 2, 'DEP', 'DEP - Flight Departed from VCP (L7 2538 VCP-BOG)', '2026-03-15T13:09:00', 'VCP', 1, '40.00 KGS'),
+              mkForcedEvent('549-42692926', 3, 'MAN', 'MAN - Flight Manifested at VCP (L7 2538 VCP-BOG)', '2026-03-15T12:28:00', 'VCP', 1, '40.00 KGS'),
+              mkForcedEvent('549-42692926', 4, 'BKD', 'BKD - Booking Confirmed VCP-BOG', '2026-03-14T05:54:00', 'VCP', 1, '40.00 KGS'),
+              mkForcedEvent('549-42692926', 5, 'FOH', 'FOH - Freight on Hand', '2026-03-12T15:28:00', 'VCP', 1, '40.00 KGS'),
+              mkForcedEvent('549-42692926', 6, 'RCS', 'RCS - Shipment Received', '2026-03-12T15:28:00', 'VCP', 1, '40.00 KGS'),
             ],
           },
           '172-02171035': {
@@ -7087,8 +7102,12 @@ serve(async (req) => {
           '996-14370731': {
             tracking_failed: false,
             events: [
-              mkForcedEvent('996-14370731', 1, 'RFC', 'RFC - Ready for Carriage at CDG', '2026-03-13T23:49:00', 'CDG', null, null),
-              mkForcedEvent('996-14370731', 2, 'FOH', 'FOH - Freight on Hands at CDG', '2026-03-13T23:49:00', 'CDG', null, null),
+              mkForcedEvent('996-14370731', 1, 'RCF', 'RCF - Received MAD GHA - 26 pcs 741.7 kg', '2026-03-16T11:33:00', 'MAD', 26, '741.7 kg'),
+              mkForcedEvent('996-14370731', 2, 'DEP', 'DEP - Departed CDG on UX634T (CDG→MAD) - 26 pcs 741.7 kg', '2026-03-14T15:13:00', 'CDG', 26, '741.7 kg'),
+              mkForcedEvent('996-14370731', 3, 'MAN', 'MAN - Manifested UX634T (CDG→MAD) - 26 pcs 741.7 kg', '2026-03-14T13:23:00', 'CDG', 26, '741.7 kg'),
+              mkForcedEvent('996-14370731', 4, 'MAN', 'MAN - Pre-manifested UX634T (CDG→MAD) - 26 pcs 741.7 kg', '2026-03-14T13:23:00', 'CDG', 26, '741.7 kg'),
+              mkForcedEvent('996-14370731', 5, 'RFC', 'RFC - Ready for Carriage at CDG', '2026-03-13T23:49:00', 'CDG', null, null),
+              mkForcedEvent('996-14370731', 6, 'FOH', 'FOH - Freight on Hands at CDG', '2026-03-13T23:49:00', 'CDG', null, null),
             ],
           },
           '020-02593301': {

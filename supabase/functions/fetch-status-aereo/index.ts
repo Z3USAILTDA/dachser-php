@@ -1402,14 +1402,29 @@ serve(async (req) => {
       },
       // === Novos overrides 2026-03-14 ===
       '020-03272743': {
-        status: 'RCS',
-        status_info: 'RCS - 1 pcs received at FRA',
-        last_event_date: '2026-03-11T22:47:00',
+        status: 'ARR',
+        status_info: 'ARR - 1 pcs arrived at VCP on LH8264',
+        last_event_date: '2026-03-16T03:41:00',
         force_origem: 'FRA',
         force_destino: 'VCP',
         force_timeline: [
           { status: 'RCS', description: 'RCS - 1 pcs', date: '2026-03-11T19:47:00', pieces: '1', weight: '' },
           { status: 'BKD', description: 'BKD - 1 pcs', date: '2026-03-11T22:47:00', pieces: '1', weight: '' },
+          { status: 'DEP', description: 'DEP - 1 pcs departed on LH8264 from VCP', date: '2026-03-15T19:52:00', pieces: '1', weight: '' },
+          { status: 'ARR', description: 'ARR - 1 pcs arrived on LH8264 at VCP', date: '2026-03-16T03:41:00', pieces: '1', weight: '' },
+        ]
+      },
+      '127-72327673': {
+        status: 'NFD',
+        status_info: 'NFD - Liberado para retirada em ASU',
+        last_event_date: '2026-03-13T13:41:00',
+        force_origem: 'GRU',
+        force_destino: 'ASU',
+        force_timeline: [
+          { status: 'RCS', description: 'RCS - GRU, Pieces: 3, Weight: 36.8', date: '2026-03-11T10:18:00', pieces: '3', weight: '36.8' },
+          { status: 'DEP', description: 'DEP - Em trânsito GRU→ASU', date: '2026-03-13T10:13:00', pieces: '3', weight: '36.8' },
+          { status: 'ARR', description: 'ARR - Desembarcado no destino ASU', date: '2026-03-13T13:41:00', pieces: '3', weight: '36.8' },
+          { status: 'NFD', description: 'NFD - Liberado para retirada em ASU', date: '2026-03-13T13:41:00', pieces: '3', weight: '36.8' },
         ]
       },
       '724-86221435': {
@@ -1484,15 +1499,18 @@ serve(async (req) => {
         ]
       },
       '549-42692926': {
-        status: 'BKD',
-        status_info: 'BKD - Booking Confirmed VCP L7 2531 VCP-BOG - 1 / 40.00KGS',
-        last_event_date: '2026-03-14T05:54:00',
+        status: 'ARR',
+        status_info: 'ARR - Flight Arrived at BOG (L7 2538 VCP-BOG) - 1 / 40.00KGS',
+        last_event_date: '2026-03-15T17:23:00',
         force_origem: 'VCP',
         force_destino: 'BOG',
         force_timeline: [
           { status: 'RCS', description: 'RCS - Shipment Received at VCP - 1 / 40.00KGS', date: '2026-03-12T15:28:00', pieces: '1', weight: '40.00KGS' },
           { status: 'FOH', description: 'FOH - Freight on Hand at VCP - 1 / 40.00KGS', date: '2026-03-12T15:28:00', pieces: '1', weight: '40.00KGS' },
           { status: 'BKD', description: 'BKD - Booking Confirmed VCP L7 2531 VCP-BOG - 1 / 40.00KGS', date: '2026-03-14T05:54:00', pieces: '1', weight: '40.00KGS' },
+          { status: 'MAN', description: 'MAN - Flight Manifested at VCP (L7 2538 VCP-BOG) - 1 / 40.00KGS', date: '2026-03-15T12:28:00', pieces: '1', weight: '40.00KGS' },
+          { status: 'DEP', description: 'DEP - Flight Departed from VCP (L7 2538 VCP-BOG) - 1 / 40.00KGS', date: '2026-03-15T13:09:00', pieces: '1', weight: '40.00KGS' },
+          { status: 'ARR', description: 'ARR - Flight Arrived at BOG (L7 2538 VCP-BOG) - 1 / 40.00KGS', date: '2026-03-15T17:23:00', pieces: '1', weight: '40.00KGS' },
         ]
       },
       '172-02171035': {
@@ -1536,12 +1554,18 @@ serve(async (req) => {
         ]
       },
       '996-14370731': {
-        status: 'RFC',
-        status_info: 'RFC - Ready for Carriage at CDG',
-        last_event_date: '2026-03-13T23:49:00',
+        status: 'RCF',
+        status_info: 'Received MAD GHA - 26 pcs 741.7 kg',
+        last_event_date: '2026-03-16T11:33:00',
+        force_origem: 'CDG',
+        force_destino: 'GRU',
         force_timeline: [
           { status: 'FOH', description: 'FOH - Freight on Hands at CDG', date: '2026-03-13T23:49:00', pieces: '', weight: '' },
           { status: 'RFC', description: 'RFC - Ready for Carriage at CDG', date: '2026-03-13T23:49:00', pieces: '', weight: '' },
+          { status: 'MAN', description: 'MAN - Pre-manifested UX634T (CDG→MAD) - 26 pcs 741.7 kg', date: '2026-03-14T13:23:00', pieces: '26', weight: '741.7 kg' },
+          { status: 'MAN', description: 'MAN - Manifested UX634T (CDG→MAD) - 26 pcs 741.7 kg', date: '2026-03-14T13:23:00', pieces: '26', weight: '741.7 kg' },
+          { status: 'DEP', description: 'DEP - Departed CDG on UX634T (CDG→MAD) - 26 pcs 741.7 kg', date: '2026-03-14T15:13:00', pieces: '26', weight: '741.7 kg' },
+          { status: 'RCF', description: 'RCF - Received MAD GHA - 26 pcs 741.7 kg', date: '2026-03-16T11:33:00', pieces: '26', weight: '741.7 kg' },
         ]
       },
       '020-02593301': {
@@ -2429,6 +2453,7 @@ serve(async (req) => {
       '045-13110786', '016-58370933',
       '996-14370720', '125-21258182',
       '996-14370775', '057-58595305', '045-12571333', '045-21241076', '045-12571204',
+      '020-03520366', '020-03521011',
     ]);
 
     // Carregar AWBs persistidos como ocultos (DLV permanente) do banco de dados
