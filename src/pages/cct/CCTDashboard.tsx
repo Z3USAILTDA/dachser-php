@@ -80,28 +80,19 @@ export default function CCTDashboard() {
   const { data: profiles = [] } = useProfiles();
   const { data: excecoes = [] } = useExcecoes();
 
-  // Filtrar processos para 2027 se não for Z3US admin
-  const filteredProcessos = useMemo(() => {
-    if (isZ3usAdmin()) return processos;
-    return processos.filter(p => {
-      const dateStr = p.shipment?.data_decolagem_ultimo_trecho || p.shipment?.created_at || '';
-      if (!dateStr) return false;
-      return new Date(dateStr).getFullYear() === 2027;
-    });
-  }, [processos]);
   
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedProcesso, setSelectedProcesso] = useState<ProcessoCCT | null>(null);
   const [metricFilter, setMetricFilter] = useState<MetricFilterType>(null);
   
   const metrics = useMemo(() => {
-    const total = filteredProcessos.length;
-    const emTransito = filteredProcessos.filter(p => p.status_atual?.status_cct_oficial === "INFORMADA" || p.status_atual?.status_cct_oficial === "MANIFESTADA").length;
-    const alerta = filteredProcessos.filter(p => p.status_atual?.sla_status === "ALERTA").length;
-    const critico = filteredProcessos.filter(p => 
+    const total = processos.length;
+    const emTransito = processos.filter(p => p.status_atual?.status_cct_oficial === "INFORMADA" || p.status_atual?.status_cct_oficial === "MANIFESTADA").length;
+    const alerta = processos.filter(p => p.status_atual?.sla_status === "ALERTA").length;
+    const critico = processos.filter(p => 
       p.status_atual?.sla_status === "CRITICO" || p.status_atual?.sla_status === "VENCIDO"
     ).length;
-    const eventos24h = filteredProcessos.reduce((acc, p) => {
+    const eventos24h = processos.reduce((acc, p) => {
       const recent = p.eventos.filter(e => {
         const eventDate = new Date(e.data_hora_evento);
         const now = new Date();
@@ -110,7 +101,7 @@ export default function CCTDashboard() {
       return acc + recent.length;
     }, 0);
     return { total, emTransito, alerta, critico, eventos24h };
-  }, [filteredProcessos]);
+  }, [processos]);
 
   const excecoesStats = useMemo(() => ({
     abertas: excecoes.filter(e => e.status_excecao === "ABERTA").length,
@@ -246,7 +237,7 @@ export default function CCTDashboard() {
               </button>
               <button 
                 onClick={() => {
-                  const count = exportCCTWithoutDepDateToExcel(filteredProcessos);
+                  const count = exportCCTWithoutDepDateToExcel(processos);
                   if (count > 0) {
                     toast.success(`${count} AWBs sem data de decolagem exportadas`);
                   } else {
@@ -400,12 +391,12 @@ export default function CCTDashboard() {
               {isLoading ? (
                 <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
               ) : (
-                <ProcessosTable processos={filteredProcessos} onAssignAnalista={handleOpenAssignDialog} metricFilter={metricFilter} />
+                <ProcessosTable processos={processos} onAssignAnalista={handleOpenAssignDialog} metricFilter={metricFilter} />
               )}
             </>
           )}
 
-          {activeTab === "analytics" && <AnalyticsContent processos={filteredProcessos} isLoading={isLoading} refetch={refetch} isRefetching={isRefetching} />}
+          {activeTab === "analytics" && <AnalyticsContent processos={processos} isLoading={isLoading} refetch={refetch} isRefetching={isRefetching} />}
           {activeTab === "excecoes" && <ExcecoesContent />}
           {activeTab === "regras" && <RegrasContent />}
           {activeTab === "console" && <ConsoleContent />}
