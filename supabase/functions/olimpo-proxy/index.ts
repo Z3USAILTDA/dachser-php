@@ -2238,12 +2238,15 @@ serve(async (req) => {
         const candidatesSeaMaster = await client.query(`
           SELECT
             TRIM(sm.master) AS mbl_id,
-            'SEA IMPORT' AS tipo_processo,
+            COALESCE(MAX(md.tipo_processo), 'SEA IMPORT') AS tipo_processo,
             'PENDENTE' AS container,
             sm.customer_no AS consignee,
             sm.nome_analista AS email_analista,
             NULL AS email_cliente
           FROM dados_dachser.t_sea_master sm
+          LEFT JOIN dados_dachser.t_master_dados md 
+            ON TRIM(md.mawb) = TRIM(sm.master) 
+            AND md.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
           WHERE sm.master IS NOT NULL
             AND TRIM(sm.master) != ''
             AND (
@@ -2252,7 +2255,7 @@ serve(async (req) => {
             )
             AND LEFT(TRIM(sm.master), 4) NOT IN ('EBKG', 'BKNG', 'GLNL', 'GLSL', 'GLDL', 'BRSA')
             AND TRIM(sm.master) NOT REGEXP '^BR[A-Za-z]{3}'
-          GROUP BY TRIM(sm.master)
+          GROUP BY TRIM(sm.master), sm.customer_no, sm.nome_analista
           LIMIT 500
         `);
         console.log(`[sync_sea_tracking] Found ${(candidatesSeaMaster as any[]).length} candidates from t_sea_master`);
