@@ -1328,9 +1328,11 @@ serve(async (req) => {
     const MANUAL_OVERRIDES: Record<string, { status?: string; status_info?: string; skip_first_event?: boolean; force_nfd?: boolean; force_timeline?: any[]; force_critical?: boolean; last_event_date?: string; disable_discrepancy?: boolean; force_origem?: string; force_destino?: string }> = {
       // '057-03764530' now has full override below
       '047-32916273': {
-        status: 'BCBP',
-        status_info: 'BCBP - Boarded the flight on Helsinki (Vantaa)',
+        status: 'DEP',
+        status_info: 'DEP - Boarded the flight on Frankfurt am Main (TP5002D)',
         disable_discrepancy: true,
+        last_event_date: '2026-03-15T15:00:00',
+        force_origem: 'FRA',
       },
       '020-22434031': {
         status: 'DEP',
