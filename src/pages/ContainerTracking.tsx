@@ -2341,7 +2341,7 @@ const ContainerTracking = () => {
                 {(() => {
                   const maxLastCheck = mblList.reduce((max, m) => {
                     if (!m.last_check) return max;
-                    const parsed = parseUtcDate(m.last_check);
+                    const parsed = parseMariaDBLocalDate(m.last_check);
                     const d = parsed ? parsed.getTime() : 0;
                     return d > max ? d : max;
                   }, 0);
@@ -2349,7 +2349,8 @@ const ContainerTracking = () => {
                   return (
                     <div className="flex items-center gap-1.5 text-xs text-[#666]">
                       <Clock className="w-3.5 h-3.5" />
-                      Último rastreio: {format(new Date(maxLastCheck), 'dd/MM/yyyy HH:mm')}
+                      Último rastreio: {formatSaoPaulo(new Date(maxLastCheck))}
+                    </div>
                     </div>
                   );
                 })()}
