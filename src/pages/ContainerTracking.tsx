@@ -29,14 +29,32 @@ import { TablePagination } from "@/components/layout/TablePagination";
 import { Filter as FilterIcon } from "lucide-react";
 import VesselFinderMap from "@/components/tracking/VesselFinderMap";
 
-/** Parse a datetime string from MariaDB (no TZ info) as UTC */
-function parseUtcDate(dateStr: string | null | undefined): Date | null {
+/** Parse a datetime string from MariaDB (stored in São Paulo UTC-3) */
+function parseMariaDBLocalDate(dateStr: string | null | undefined): Date | null {
   if (!dateStr) return null;
   const s = String(dateStr).trim();
-  // If already has Z or offset, parse directly
-  if (s.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(s)) return new Date(s);
-  // Append Z to treat as UTC
-  return new Date(s.replace(' ', 'T') + 'Z');
+  // If already has Z suffix from JSON serialization, the value is actually São Paulo time
+  // Remove Z and treat as São Paulo timezone
+  if (s.endsWith('Z') || s.endsWith('.000Z')) {
+    const withoutZ = s.replace(/\.000Z$/, '').replace(/Z$/, '');
+    return new Date(withoutZ + '-03:00');
+  }
+  // If already has explicit offset, parse directly
+  if (/[+-]\d{2}:\d{2}$/.test(s)) return new Date(s);
+  // No TZ info: MariaDB local time = São Paulo (UTC-3)
+  return new Date(s.replace(' ', 'T') + '-03:00');
+}
+
+/** Format a MariaDB date for display in São Paulo timezone */
+function formatSaoPaulo(date: Date): string {
+  return date.toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 import Swal from 'sweetalert2';
 import { useTheme } from "@/hooks/useTheme";
