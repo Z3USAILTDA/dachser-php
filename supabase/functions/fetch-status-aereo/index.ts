@@ -2304,6 +2304,19 @@ serve(async (req) => {
           { status: 'NFD', description: 'NFD - 2 pieces ready for pick up at GRU', date: '2026-03-15T09:32:00', pieces: '2', weight: '' },
         ]
       },
+      '057-58242435': {
+        status: 'FWB',
+        status_info: 'FWB - Customer FWB processed (2 pieces)',
+        last_event_date: '2026-03-16T12:49:00',
+        force_origem: 'MUC',
+        force_destino: 'GRU',
+        tracking_failed: false,
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - 2 pieces booked at MUC', date: '2026-03-12T18:43:00', pieces: '2', weight: '' },
+          { status: 'FWB', description: 'FWB - Customer FWB processed (2 pieces)', date: '2026-03-16T12:49:00', pieces: '2', weight: '' },
+        ]
+      },
     };
 
     // v2: override loop with conditional application (auto > manual = skip)
