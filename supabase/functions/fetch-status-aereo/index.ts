@@ -1414,6 +1414,19 @@ serve(async (req) => {
           { status: 'ARR', description: 'ARR - 1 pcs arrived on LH8264 at VCP', date: '2026-03-16T03:41:00', pieces: '1', weight: '' },
         ]
       },
+      '127-72327673': {
+        status: 'NFD',
+        status_info: 'NFD - Liberado para retirada em ASU',
+        last_event_date: '2026-03-13T13:41:00',
+        force_origem: 'GRU',
+        force_destino: 'ASU',
+        force_timeline: [
+          { status: 'RCS', description: 'RCS - GRU, Pieces: 3, Weight: 36.8', date: '2026-03-11T10:18:00', pieces: '3', weight: '36.8' },
+          { status: 'DEP', description: 'DEP - Em trânsito GRU→ASU', date: '2026-03-13T10:13:00', pieces: '3', weight: '36.8' },
+          { status: 'ARR', description: 'ARR - Desembarcado no destino ASU', date: '2026-03-13T13:41:00', pieces: '3', weight: '36.8' },
+          { status: 'NFD', description: 'NFD - Liberado para retirada em ASU', date: '2026-03-13T13:41:00', pieces: '3', weight: '36.8' },
+        ]
+      },
       '724-86221435': {
         status: 'NFD',
         status_info: 'NFD - Agent Notified at GRU - 2 Pieces 37.4 K',
