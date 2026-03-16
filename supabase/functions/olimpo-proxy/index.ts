@@ -1920,7 +1920,10 @@ serve(async (req) => {
               MAX(ts.origem) as origem,
               MAX(ts.destino) as destino,
               MAX(lv.navio) as navio,
-              MAX(lv.vessel_imo) as vessel_imo,
+              COALESCE(
+                NULLIF(MAX(lv.vessel_imo), ''),
+                (SELECT vi.vessel_imo FROM dados_dachser.t_tracking_sea vi WHERE vi.mbl_id = ts.mbl_id AND vi.vessel_imo IS NOT NULL AND vi.vessel_imo != '' LIMIT 1)
+              ) as vessel_imo,
               COALESCE(MAX(md.eta), MAX(mdn.eta), MAX(ts.eta)) as eta,
               COALESCE(MAX(md.eta), MAX(mdn.eta)) as eta_master,
               COALESCE(MAX(md.nome_analista), MAX(mdn.nome_analista)) as nome_analista,
