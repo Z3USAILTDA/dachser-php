@@ -2145,6 +2145,139 @@ serve(async (req) => {
           { status: 'RCF', description: 'LH8461 (HKG→FRA) - RCF - 8 pcs 41 kg received at FRA', date: '2026-03-13T15:44:00', pieces: '8', weight: '41 kg' },
         ]
       },
+      // === Novos overrides 2026-03-16 ===
+      '724-15817583': {
+        status: 'DEP',
+        status_info: 'DEP - 1 Piece 24 K departed from ZRH on LX-0092 (ZRH→GRU)',
+        last_event_date: '2026-03-15T22:45:00',
+        force_origem: 'LHR',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booked on Flight LX-0092, ZRH-GRU - 1 Pieces 24 K', date: '2026-03-13T13:05:00', pieces: '1', weight: '24 K' },
+          { status: 'FOH', description: 'FOH - Received in Warehouse at LHR - 1 Pieces 24 K', date: '2026-03-14T01:02:00', pieces: '1', weight: '24 K' },
+          { status: 'RCS', description: 'RCS - Ready for Carriage at LHR - 1 Pieces 24 K', date: '2026-03-14T01:25:00', pieces: '1', weight: '24 K' },
+          { status: 'BKD', description: 'BKD - Booked on Flight LX-0345, LHR-ZRH - 1 Pieces 24 K', date: '2026-03-15T07:14:00', pieces: '1', weight: '24 K' },
+          { status: 'DEP', description: 'LX-0345 (LHR→ZRH) - DEP - 1 Pieces 24 K departed from LHR', date: '2026-03-15T06:03:00', pieces: '1', weight: '24 K' },
+          { status: 'ARR', description: 'LX-0345 (LHR→ZRH) - ARR - 1 Pieces 24 K arrived at ZRH', date: '2026-03-15T08:31:00', pieces: '1', weight: '24 K' },
+          { status: 'RCF', description: 'LX-0345 (LHR→ZRH) - RCF - 1 Pieces 24 K received at ZRH', date: '2026-03-15T10:15:00', pieces: '1', weight: '24 K' },
+          { status: 'DEP', description: 'LX-0092 (ZRH→GRU) - DEP - 1 Pieces 24 K departed from ZRH', date: '2026-03-15T22:45:00', pieces: '1', weight: '24 K' },
+        ]
+      },
+      '235-96469553': {
+        status: 'NFD',
+        status_info: 'NFD - 2 pcs 212 kg notified for delivery at GRU',
+        last_event_date: '2026-03-15T14:52:00',
+        force_origem: 'MNL',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - 2 pcs 212 kg booked at MNL on TK0085', date: '2026-03-14T08:07:00', pieces: '2', weight: '212 kg' },
+          { status: 'RCS', description: 'RCS - 2 pcs 212 kg accepted at MNL', date: '2026-03-13T15:04:00', pieces: '2', weight: '212 kg' },
+          { status: 'DEP', description: 'TK0085 (MNL→IST) - DEP - 2 pcs 212 kg departed from MNL', date: '2026-03-13T21:37:00', pieces: '2', weight: '212 kg' },
+          { status: 'RCF', description: 'TK0085 (MNL→IST) - RCF - 2 pcs 212 kg received at IST', date: '2026-03-14T10:26:00', pieces: '2', weight: '212 kg' },
+          { status: 'BKD', description: 'BKD - 2 pcs 212 kg booked at IST on TK0015', date: '2026-03-14T08:07:00', pieces: '2', weight: '212 kg' },
+          { status: 'DEP', description: 'TK0015 (IST→GRU) - DEP - 2 pcs 212 kg departed from IST', date: '2026-03-15T10:04:00', pieces: '2', weight: '212 kg' },
+          { status: 'NFD', description: 'NFD - 2 pcs 212 kg notified for delivery at GRU', date: '2026-03-15T14:52:00', pieces: '2', weight: '212 kg' },
+        ]
+      },
+      '235-82805844': {
+        status: 'NFD',
+        status_info: 'NFD - 2 pcs 160 kg notified for delivery at BOM',
+        last_event_date: '2026-03-16T02:44:00',
+        force_origem: 'GRU',
+        force_destino: 'BOM',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'RCS', description: 'RCS - 2 pcs 160 kg accepted at GRU', date: '2026-03-13T18:13:00', pieces: '2', weight: '160 kg' },
+          { status: 'BKD', description: 'BKD - 2 pcs 160 kg booked at GRU on TK6050', date: '2026-03-15T04:43:00', pieces: '2', weight: '160 kg' },
+          { status: 'DEP', description: 'TK6050 (GRU→IST) - DEP - 2 pcs 160 kg departed from GRU', date: '2026-03-14T06:00:00', pieces: '2', weight: '160 kg' },
+          { status: 'RCF', description: 'TK6050 (GRU→IST) - RCF - 2 pcs 160 kg received at IST', date: '2026-03-15T03:50:00', pieces: '2', weight: '160 kg' },
+          { status: 'BKD', description: 'BKD - 2 pcs 160 kg booked at IST on TK6110', date: '2026-03-15T04:43:00', pieces: '2', weight: '160 kg' },
+          { status: 'DEP', description: 'TK6110 (IST→BOM) - DEP - 2 pcs 160 kg departed from IST', date: '2026-03-15T17:39:00', pieces: '2', weight: '160 kg' },
+          { status: 'RCF', description: 'TK6110 (IST→BOM) - RCF - 2 pcs 160 kg received at BOM', date: '2026-03-16T02:42:00', pieces: '2', weight: '160 kg' },
+          { status: 'NFD', description: 'NFD - 2 pcs 160 kg notified for delivery at BOM', date: '2026-03-16T02:44:00', pieces: '2', weight: '160 kg' },
+        ]
+      },
+      '020-44926851': {
+        status: 'BKD',
+        status_info: 'BKD - 1 pcs booked at NRT',
+        last_event_date: '2026-03-13T11:32:00',
+        force_origem: 'NRT',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'RCS', description: 'RCS - 1 pcs received at NRT', date: '2026-03-12T09:18:00', pieces: '1', weight: '' },
+          { status: 'BKD', description: 'BKD - 1 pcs booked at NRT', date: '2026-03-13T11:32:00', pieces: '1', weight: '' },
+        ]
+      },
+      '020-20982636': {
+        status: 'BKD',
+        status_info: 'BKD - 2 pcs booked at GRU',
+        last_event_date: '2026-03-12T12:35:00',
+        force_origem: 'GRU',
+        force_destino: 'HEL',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - 2 pcs booked at GRU', date: '2026-03-12T12:35:00', pieces: '2', weight: '' },
+        ]
+      },
+      '016-83197494': {
+        status: 'RCF',
+        status_info: 'RCF - Received from Flight at ATL',
+        last_event_date: '2026-03-14T12:49:00',
+        force_origem: 'GRU',
+        force_destino: 'ATL',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - Booking confirmed at GRU', date: '2026-03-12T12:06:00', pieces: '', weight: '' },
+          { status: 'RCS', description: 'RCS - Received from Shipper at GRU', date: '2026-03-12T18:24:00', pieces: '', weight: '' },
+          { status: 'MAN', description: 'MAN - Manifested at GRU', date: '2026-03-12T19:44:00', pieces: '', weight: '' },
+          { status: 'DEP', description: 'DEP - Departed from GRU', date: '2026-03-12T22:23:00', pieces: '', weight: '' },
+          { status: 'ARR', description: 'ARR - Arrived at EWR', date: '2026-03-13T07:07:00', pieces: '', weight: '' },
+          { status: 'RCF', description: 'RCF - Received from Flight at EWR', date: '2026-03-13T08:20:00', pieces: '', weight: '' },
+          { status: 'BKD', description: 'BKD - Booking confirmed at EWR', date: '2026-03-13T08:16:00', pieces: '', weight: '' },
+          { status: 'RCD', description: 'RCD - Documents Received at EWR', date: '2026-03-13T10:17:00', pieces: '', weight: '' },
+          { status: 'MAN', description: 'MAN - Manifested at EWR', date: '2026-03-13T20:20:00', pieces: '', weight: '' },
+          { status: 'DEP', description: 'DEP - Departed from EWR', date: '2026-03-13T20:13:00', pieces: '', weight: '' },
+          { status: 'ARR', description: 'ARR - Arrived at ATL', date: '2026-03-14T11:54:00', pieces: '', weight: '' },
+          { status: 'RCF', description: 'RCF - Received from Flight at ATL', date: '2026-03-14T12:49:00', pieces: '', weight: '' },
+        ]
+      },
+      '001-17578621': {
+        status: 'NFD',
+        status_info: 'NFD - 1 piece ready for pick up at GRU',
+        last_event_date: '2026-03-13T22:20:00',
+        force_origem: 'JFK',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - 1 piece booked on AA 951 JFK→GRU', date: '2026-03-12T15:49:00', pieces: '1', weight: '' },
+          { status: 'RCS', description: 'RCS - 1 piece accepted at JFK', date: '2026-03-12T15:49:00', pieces: '1', weight: '' },
+          { status: 'MAN', description: 'MAN - 1 piece prepared for loading on AA 951 JFK→GRU', date: '2026-03-12T19:30:00', pieces: '1', weight: '' },
+          { status: 'DEP', description: 'AA 951 (JFK→GRU) - DEP - 1 piece departed from JFK', date: '2026-03-13T09:36:00', pieces: '1', weight: '' },
+          { status: 'ARR', description: 'AA 951 (JFK→GRU) - ARR - 1 piece arrived at GRU', date: '2026-03-13T20:13:00', pieces: '1', weight: '' },
+          { status: 'RCF', description: 'RCF - 1 piece received from flight at GRU', date: '2026-03-13T22:19:00', pieces: '1', weight: '' },
+          { status: 'NFD', description: 'NFD - 1 piece ready for pick up at GRU', date: '2026-03-13T22:20:00', pieces: '1', weight: '' },
+        ]
+      },
+      '001-14016586': {
+        status: 'NFD',
+        status_info: 'NFD - 2 pieces ready for pick up at GRU',
+        last_event_date: '2026-03-15T09:32:00',
+        force_origem: 'DFW',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'BKD', description: 'BKD - 2 pieces booked on AA 963 DFW→GRU', date: '2026-03-14T06:42:00', pieces: '2', weight: '' },
+          { status: 'RCS', description: 'RCS - 2 pieces accepted at DFW', date: '2026-03-14T06:42:00', pieces: '2', weight: '' },
+          { status: 'MAN', description: 'MAN - 2 pieces prepared for loading on AA 963 DFW→GRU', date: '2026-03-14T20:10:00', pieces: '2', weight: '' },
+          { status: 'DEP', description: 'AA 963 (DFW→GRU) - DEP - 2 pieces departed from DFW', date: '2026-03-14T20:13:00', pieces: '2', weight: '' },
+          { status: 'ARR', description: 'AA 963 (DFW→GRU) - ARR - 2 pieces arrived at GRU', date: '2026-03-15T08:32:00', pieces: '2', weight: '' },
+          { status: 'RCF', description: 'RCF - 2 pieces received from flight at GRU', date: '2026-03-15T09:28:00', pieces: '2', weight: '' },
+          { status: 'NFD', description: 'NFD - 2 pieces ready for pick up at GRU', date: '2026-03-15T09:32:00', pieces: '2', weight: '' },
+        ]
+      },
     };
 
     // v2: override loop with debug
@@ -2241,6 +2374,7 @@ serve(async (req) => {
       '016-04639165', '014-78876932',
       '045-13110786', '016-58370933',
       '996-14370720', '125-21258182',
+      '996-14370775', '057-58595305', '045-12571333', '045-21241076', '045-12571204',
     ]);
 
     // AWBs com override manual NUNCA devem ser filtrados
