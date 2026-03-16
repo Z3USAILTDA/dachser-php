@@ -7371,9 +7371,41 @@ serve(async (req) => {
         const cleanAwbForForce = queryAwb.trim();
         if (FORCED_TIMELINES[cleanAwbForForce]) {
           const forced = FORCED_TIMELINES[cleanAwbForForce];
-          console.log(`Using FORCED timeline for AWB ${cleanAwbForForce} with ${forced.events.length} events`);
-          result = { success: true, data: forced.events, tracking_failed: false };
-          break;
+          // Find the most recent date in the forced timeline
+          const forcedMaxDate = Math.max(...forced.events.map((e: any) => new Date(e.data_hora_evento || 0).getTime()).filter((t: number) => !isNaN(t)));
+
+          // Check if automatic data has more recent events before using forced timeline
+          let useForced = true;
+          try {
+            const autoCheckRows = await client.query(`
+              SELECT timeline_json FROM ${database}.t_aereo_ws_firecrawl
+              WHERE TRIM(awb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
+              ORDER BY id DESC LIMIT 1
+            `, [queryAwb]);
+            if (autoCheckRows && autoCheckRows.length > 0 && autoCheckRows[0].timeline_json) {
+              try {
+                const rawTl = typeof autoCheckRows[0].timeline_json === 'string'
+                  ? JSON.parse(autoCheckRows[0].timeline_json)
+                  : autoCheckRows[0].timeline_json;
+                if (Array.isArray(rawTl) && rawTl.length > 0) {
+                  const autoMaxDate = Math.max(...rawTl.map((e: any) => {
+                    const d = e.date || e.data_hora_evento || '';
+                    return new Date(d).getTime();
+                  }).filter((t: number) => !isNaN(t)));
+                  if (autoMaxDate > forcedMaxDate) {
+                    console.log(`[FORCED_TIMELINE SKIP] ${cleanAwbForForce}: auto event date newer than forced (${new Date(autoMaxDate).toISOString()} > ${new Date(forcedMaxDate).toISOString()})`);
+                    useForced = false;
+                  }
+                }
+              } catch (_e) { /* parse error, use forced */ }
+            }
+          } catch (_e) { /* query error, use forced */ }
+
+          if (useForced) {
+            console.log(`Using FORCED timeline for AWB ${cleanAwbForForce} with ${forced.events.length} events`);
+            result = { success: true, data: forced.events, tracking_failed: false };
+            break;
+          }
         }
 
         try {
