@@ -2379,7 +2379,7 @@ serve(async (req) => {
       }
 
       // If automatic data has a more recent event date than the manual override, skip the override
-      if (override.last_event_date && row.last_event_date && !row.tracking_failed) {
+      if (override.last_event_date && row.last_event_date) {
         const autoDate = new Date(row.last_event_date).getTime();
         const manualDate = new Date(override.last_event_date).getTime();
         if (!isNaN(autoDate) && !isNaN(manualDate) && autoDate > manualDate) {
