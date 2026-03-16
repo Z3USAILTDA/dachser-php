@@ -1513,8 +1513,8 @@ serve(async (req) => {
         ]
       },
       '549-42692926': {
-        status: 'ARR',
-        status_info: 'ARR - Flight Arrived at BOG (L7 2538 VCP-BOG) - 1 / 40.00KGS',
+        status: 'ARR - Destino',
+        status_info: 'ARR - Destino - Flight Arrived at BOG (L7 2538 VCP-BOG) - 1 / 40.00KGS',
         last_event_date: '2026-03-15T17:23:00',
         force_origem: 'VCP',
         force_destino: 'BOG',

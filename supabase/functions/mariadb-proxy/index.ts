@@ -7031,7 +7031,7 @@ serve(async (req) => {
           '549-42692926': {
             tracking_failed: false,
             events: [
-              mkForcedEvent('549-42692926', 1, 'ARR', 'ARR - Flight Arrived at BOG (L7 2538 VCP-BOG)', '2026-03-15T17:23:00', 'BOG', 1, '40.00 KGS'),
+              mkForcedEvent('549-42692926', 1, 'ARR - Destino', 'ARR - Destino - Flight Arrived at BOG (L7 2538 VCP-BOG)', '2026-03-15T17:23:00', 'BOG', 1, '40.00 KGS'),
               mkForcedEvent('549-42692926', 2, 'DEP', 'DEP - Flight Departed from VCP (L7 2538 VCP-BOG)', '2026-03-15T13:09:00', 'VCP', 1, '40.00 KGS'),
               mkForcedEvent('549-42692926', 3, 'MAN', 'MAN - Flight Manifested at VCP (L7 2538 VCP-BOG)', '2026-03-15T12:28:00', 'VCP', 1, '40.00 KGS'),
               mkForcedEvent('549-42692926', 4, 'BKD', 'BKD - Booking Confirmed VCP-BOG', '2026-03-14T05:54:00', 'VCP', 1, '40.00 KGS'),
