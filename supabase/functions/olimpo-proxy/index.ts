@@ -6376,10 +6376,10 @@ serve(async (req) => {
             ts.last_check,
             ts.shipping_line,
             CASE 
-              WHEN COALESCE(MAX(sm.eta), MAX(mdn.eta)) IS NOT NULL 
+              WHEN COALESCE(MAX(sm.eta_ata), MAX(mdn.eta)) IS NOT NULL 
                 AND MAX(ts.eta) IS NOT NULL
-                AND MAX(ts.eta) > COALESCE(MAX(sm.eta), MAX(mdn.eta))
-                AND DATEDIFF(MAX(ts.eta), COALESCE(MAX(sm.eta), MAX(mdn.eta))) >= 3
+                AND MAX(ts.eta) > COALESCE(MAX(sm.eta_ata), MAX(mdn.eta))
+                AND DATEDIFF(MAX(ts.eta), COALESCE(MAX(sm.eta_ata), MAX(mdn.eta))) >= 3
               THEN 1 ELSE 0 
             END AS is_eta_delayed,
             MAX(ot.origem_lat) as origem_lat,
