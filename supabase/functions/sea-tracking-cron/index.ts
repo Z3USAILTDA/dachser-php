@@ -146,6 +146,52 @@ serve(async (req) => {
     }
   }
 
+  // ===== PASSO 3: Enriquecer coordenadas faltantes via enrich_missing_coords =====
+  const ENRICH_BATCHES = 2;
+  const ENRICH_DELAY_MS = 2000;
+  const enrichResults: any[] = [];
+
+  console.log('[sea-tracking-cron] Passo 3: Enriquecendo coordenadas faltantes...');
+
+  for (let batch = 1; batch <= ENRICH_BATCHES; batch++) {
+    try {
+      console.log(`[sea-tracking-cron] Enrich batch ${batch}/${ENRICH_BATCHES}...`);
+      const enrichRes = await fetch(
+        `${supabaseUrl}/functions/v1/olimpo-proxy?action=enrich_missing_coords&limit=50`,
+        {
+          headers: {
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      const enrichText = await enrichRes.text();
+      let enrichData: any = {};
+      try { enrichData = JSON.parse(enrichText); } catch { enrichData = { raw: enrichText, status: enrichRes.status }; }
+
+      enrichResults.push({ batch, status: enrichRes.status, enriched: enrichData.total_enriched || 0, missing: enrichData.total_missing || 0 });
+      console.log(`[sea-tracking-cron] Enrich batch ${batch}: ${enrichData.total_enriched || 0} enriched, ${enrichData.total_missing || 0} missing`);
+
+      // Se não há mais containers sem coordenadas, parar
+      if ((enrichData.total_missing || 0) === 0 || (enrichData.total_enriched || 0) === 0) {
+        console.log('[sea-tracking-cron] Coordenadas atualizadas, parando enrich.');
+        break;
+      }
+
+      if (batch < ENRICH_BATCHES) {
+        await new Promise(r => setTimeout(r, ENRICH_DELAY_MS));
+      }
+    } catch (e: any) {
+      const errMsg = `Enrich batch ${batch} erro: ${e.message}`;
+      stats.errors.push(errMsg);
+      console.error('[sea-tracking-cron]', errMsg);
+      break;
+    }
+  }
+
+  (stats as any).enrich_coords = enrichResults;
+
   stats.duration_ms = Date.now() - startTime;
   
   console.log('[sea-tracking-cron] Concluído:', {
@@ -153,6 +199,7 @@ serve(async (req) => {
     total_api_calls: stats.total_api_calls,
     total_cache_hits: stats.total_cache_hits,
     batches: stats.sea_seed_batches.length,
+    enrich_batches: enrichResults.length,
     errors: stats.errors.length
   });
 

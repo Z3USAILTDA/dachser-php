@@ -961,6 +961,8 @@ serve(async (req) => {
         });
       }
 
+      const requestLimit = parseInt(url.searchParams.get('limit') || '50', 10);
+
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
       const client = await new Client().connect({
         hostname: mariadbHost,
@@ -968,21 +970,23 @@ serve(async (req) => {
         username: mariadbUser,
         password: mariadbPass,
         db: 'dados_dachser',
+        timeout: 15000,
       });
 
       try {
-        // Buscar containers ativos sem latitude/longitude
+        // Buscar containers ativos sem latitude/longitude (limitado para evitar timeout)
         const rows = await client.query(`
           SELECT ts.mbl_id, ts.container, ts.navio, ts.origem, ts.destino, ts.shipping_line
           FROM dados_dachser.t_tracking_sea ts
           WHERE ts.active = 1
             AND (ts.latitude IS NULL OR ts.latitude = '' OR ts.longitude IS NULL OR ts.longitude = '')
           ORDER BY ts.eta ASC
+          LIMIT ${requestLimit}
         `);
 
-        console.log(`[enrich_missing_coords] Found ${rows.length} containers missing coordinates`);
+        console.log(`[enrich_missing_coords] Found ${rows.length} containers missing coordinates (limit=${requestLimit})`);
 
-        const MAX_API_CALLS = 15;
+        const MAX_API_CALLS = 10;
         let apiCalls = 0;
         let enrichedLocal = 0;
         let enrichedApi = 0;
