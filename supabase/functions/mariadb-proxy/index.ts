@@ -13087,8 +13087,8 @@ serve(async (req) => {
           let orderBy = 'ORDER BY m.data_insert DESC';
           
           if (prioritizePending) {
-            // Continuous polling: only exclude delivered HAWBs, no cooldowns
-            extraWhere = `AND COALESCE(cct.status_cct_oficial, '') != 'ENTREGUE'`;
+            // Continuous polling: query ALL processes including delivered, no cooldowns
+            extraWhere = '';
             // Rotate: oldest insert first for fair distribution
             orderBy = `ORDER BY m.data_insert ASC`;
           } else if (!processAll) {
