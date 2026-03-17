@@ -2509,8 +2509,9 @@ serve(async (req) => {
       const status = (row['último_status'] || '').toUpperCase().trim();
       const awb = (row['awb'] || '').trim();
 
-      // Override-protected AWBs are always visible
-      if (OVERRIDE_PROTECTED.has(awb)) return true;
+      // Override-protected AWBs are visible ONLY if the override was effectively applied
+      // (i.e., the final status is NOT DLV/DELIVERED — if it is, the automatic data prevailed)
+      if (OVERRIDE_PROTECTED.has(awb) && status !== 'DLV' && status !== 'DELIVERED') return true;
 
       // 0. AWBs manualmente ocultos
       if (HIDDEN_AWBS.has(awb)) return false;
