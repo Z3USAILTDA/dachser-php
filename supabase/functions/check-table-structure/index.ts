@@ -13,52 +13,66 @@ serve(async (req) => {
 
   let client;
   try {
+    console.log('Checking table structure...');
+
     client = await new Client().connect({
       hostname: Deno.env.get('MARIADB_HOST') || '',
       port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
       username: Deno.env.get('MARIADB_USER') || '',
       password: Deno.env.get('MARIADB_PASSWORD') || '',
-      db: 'dados_dachser',
+      db: Deno.env.get('MARIADB_DATABASE') || '',
     });
 
-    const tables = ['t_tracking_sea', 't_sea_master', 't_master_dados', 't_olimpo_tracking'];
-    const result: Record<string, any[]> = {};
+    console.log('Connected to MariaDB');
 
-    for (const table of tables) {
-      try {
-        const cols = await client.query(`
-          SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE
-          FROM INFORMATION_SCHEMA.COLUMNS 
-          WHERE TABLE_SCHEMA = 'dados_dachser' AND TABLE_NAME = '${table}'
-          ORDER BY ORDINAL_POSITION
-        `);
-        result[table] = cols;
-      } catch (e: any) {
-        // Try ai_agente schema
-        try {
-          const cols = await client.query(`
-            SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_SCHEMA = 'ai_agente' AND TABLE_NAME = '${table}'
-            ORDER BY ORDINAL_POSITION
-          `);
-          result[table] = cols;
-        } catch {
-          result[table] = [{ error: e.message }];
-        }
-      }
-    }
+    // Get column names from t_master_dados
+    const masterColumns = await client.query(`
+      SHOW COLUMNS FROM t_master_dados
+    `);
+
+    // Get column names from t_status_aereo
+    const statusColumns = await client.query(`
+      SHOW COLUMNS FROM t_status_aereo
+    `);
+
+    // Get sample data from t_master_dados
+    const masterSample = await client.query(`
+      SELECT * FROM t_master_dados 
+      WHERE tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
+      LIMIT 1
+    `);
 
     await client.close();
 
-    return new Response(JSON.stringify(result, null, 2), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({
+        t_master_dados: {
+          columns: masterColumns,
+          sample: masterSample[0] || null
+        },
+        t_status_aereo: {
+          columns: statusColumns
+        }
+      }, null, 2),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
   } catch (error) {
-    if (client) try { await client.close(); } catch {}
+    console.error('Error checking structure:', error);
+    if (client) {
+      try {
+        await client.close();
+      } catch (closeError) {
+        console.error('Error closing connection:', closeError);
+      }
+    }
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
     );
   }
 });
