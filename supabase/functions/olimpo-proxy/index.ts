@@ -1023,7 +1023,7 @@ serve(async (req) => {
                     destino_lat = COALESCE(destino_lat, ?), destino_lon = COALESCE(destino_lon, ?),
                     current_lat = COALESCE(current_lat, ?), current_lon = COALESCE(current_lon, ?),
                     updated_at = NOW()
-                WHERE mode = 'sea' AND asset COLLATE utf8mb4_general_ci = ? COLLATE utf8mb4_general_ci
+                WHERE mode = 'sea' AND asset = ?
               `, [
                 origemCoords?.lat || null, origemCoords?.lon || null,
                 destinoCoords?.lat || null, destinoCoords?.lon || null,
