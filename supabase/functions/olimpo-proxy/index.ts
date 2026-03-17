@@ -6499,6 +6499,13 @@ serve(async (req) => {
       });
 
       try {
+        // Garantir que origem_code e destino_code comportam dados longos
+        await client.execute(`
+          ALTER TABLE dados_dachser.t_olimpo_tracking 
+            MODIFY COLUMN origem_code VARCHAR(255) DEFAULT NULL,
+            MODIFY COLUMN destino_code VARCHAR(255) DEFAULT NULL
+        `);
+
         // Inserir/atualizar MBLs ativos do t_tracking_sea no t_olimpo_tracking
         // Truncar origem_code e destino_code para evitar erro de coluna muito longa
         const result = await client.execute(`
