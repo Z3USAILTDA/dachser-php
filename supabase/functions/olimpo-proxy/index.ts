@@ -982,113 +982,86 @@ serve(async (req) => {
 
         console.log(`[enrich_missing_coords] Found ${rows.length} containers missing coordinates`);
 
-        const MAX_API_CALLS = 30; // Limite por execução
+        const MAX_API_CALLS = 15;
         let apiCalls = 0;
-        let enriched = 0;
+        let enrichedLocal = 0;
+        let enrichedApi = 0;
         let errors = 0;
-        const results: any[] = [];
+        const needsApi: any[] = [];
 
-        // Agrupar por mbl_id para evitar chamadas duplicadas
-        const mblMap = new Map<string, any[]>();
+        // ===== FASE 1: Resolver via dicionário local (instantâneo, sem API) =====
+        const mblMap = new Map<string, any>();
         for (const row of rows) {
           const mbl = (row.mbl_id || '').trim();
-          if (!mbl) continue;
-          if (!mblMap.has(mbl)) mblMap.set(mbl, []);
-          mblMap.get(mbl)!.push(row);
+          if (!mbl || mblMap.has(mbl)) continue;
+          mblMap.set(mbl, row);
         }
 
-        console.log(`[enrich_missing_coords] ${mblMap.size} unique MBLs to process`);
+        console.log(`[enrich_missing_coords] Phase 1: ${mblMap.size} unique MBLs, resolving from local dictionary...`);
 
-        for (const [mblId, containers] of mblMap) {
-          if (apiCalls >= MAX_API_CALLS) {
-            console.log(`[enrich_missing_coords] Rate limit reached (${MAX_API_CALLS} calls), stopping.`);
-            break;
-          }
-
-          const firstContainer = containers[0];
-          const containerId = (firstContainer.container || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        for (const [mblId, row] of mblMap) {
+          const origem = (row.origem || '').trim();
+          const destino = (row.destino || '').trim();
           
-          // Skip containers com ID inválido (PENDENTE, etc)
-          if (containerId.length < 7 || containerId === 'PENDENTE') {
-            // Para containers sem tracking, tentar resolver coordenadas pelos nomes dos portos
-            const origem = (firstContainer.origem || '').trim();
-            const destino = (firstContainer.destino || '').trim();
+          const origemCoords = getPortCoordinates(origem);
+          const destinoCoords = getPortCoordinates(destino);
+          
+          if (origemCoords || destinoCoords) {
+            const lat = destinoCoords?.lat || origemCoords?.lat;
+            const lon = destinoCoords?.lon || origemCoords?.lon;
             
-            let origemLat: number | null = null, origemLon: number | null = null;
-            let destinoLat: number | null = null, destinoLon: number | null = null;
+            await client.execute(`
+              UPDATE dados_dachser.t_tracking_sea 
+              SET latitude = ?, longitude = ?
+              WHERE mbl_id = ? AND (latitude IS NULL OR latitude = '')
+            `, [String(lat), String(lon), mblId]);
 
-            if (origem) {
-              // Tentar dicionário local primeiro
-              const portCoords = getPortCoordinates(origem);
-              if (portCoords) {
-                origemLat = portCoords.lat;
-                origemLon = portCoords.lon;
-              } else if (apiCalls < MAX_API_CALLS) {
-                apiCalls++;
-                const prRes = await jcJson('http://api.jsoncargo.com/api/v1/port/find', { name: origem, fuzzy: '1' }, 10000);
-                const p = Array.isArray(prRes?.data) ? prRes.data[0] : null;
-                if (p && +p.lat && +p.lon) {
-                  origemLat = +p.lat;
-                  origemLon = +p.lon;
-                }
-                await new Promise(r => setTimeout(r, 200));
-              }
-            }
-
-            if (destino) {
-              const portCoords = getPortCoordinates(destino);
-              if (portCoords) {
-                destinoLat = portCoords.lat;
-                destinoLon = portCoords.lon;
-              } else if (apiCalls < MAX_API_CALLS) {
-                apiCalls++;
-                const prRes = await jcJson('http://api.jsoncargo.com/api/v1/port/find', { name: destino, fuzzy: '1' }, 10000);
-                const p = Array.isArray(prRes?.data) ? prRes.data[0] : null;
-                if (p && +p.lat && +p.lon) {
-                  destinoLat = +p.lat;
-                  destinoLon = +p.lon;
-                }
-                await new Promise(r => setTimeout(r, 200));
-              }
-            }
-
-            // Se conseguiu pelo menos origem, salvar como latitude/longitude do MBL
-            if (origemLat && origemLon) {
-              // Usar coordenadas de destino como "posição" se destino disponível, senão usar origem
-              const lat = destinoLat || origemLat;
-              const lon = destinoLon || origemLon;
-              
-              await client.execute(`
-                UPDATE dados_dachser.t_tracking_sea 
-                SET latitude = ?, longitude = ?
-                WHERE mbl_id = ? AND (latitude IS NULL OR latitude = '')
-              `, [String(lat), String(lon), mblId]);
-
-              // Atualizar olimpo_tracking com coordenadas de rota
+            if (origemCoords || destinoCoords) {
               await client.execute(`
                 UPDATE dados_dachser.t_olimpo_tracking
-                SET origem_lat = ?, origem_lon = ?,
+                SET origem_lat = COALESCE(origem_lat, ?), origem_lon = COALESCE(origem_lon, ?),
                     destino_lat = COALESCE(destino_lat, ?), destino_lon = COALESCE(destino_lon, ?),
                     current_lat = COALESCE(current_lat, ?), current_lon = COALESCE(current_lon, ?),
                     updated_at = NOW()
                 WHERE mode = 'sea' AND asset COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
-              `, [origemLat, origemLon, destinoLat, destinoLon, lat, lon, mblId]);
-
-              enriched++;
-              results.push({ mbl_id: mblId, container: containerId, method: 'port_lookup', lat, lon });
+              `, [
+                origemCoords?.lat || null, origemCoords?.lon || null,
+                destinoCoords?.lat || null, destinoCoords?.lon || null,
+                lat, lon, mblId
+              ]);
             }
-            continue;
-          }
 
-          // Container válido → chamar JsonCargo API
+            enrichedLocal++;
+          } else {
+            // Não resolveu localmente → precisa da API
+            const containerId = (row.container || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (containerId.length >= 7 && containerId !== 'PENDENTE') {
+              needsApi.push({ mblId, containerId, origem, destino });
+            }
+          }
+        }
+
+        console.log(`[enrich_missing_coords] Phase 1 done: ${enrichedLocal} resolved locally, ${needsApi.length} need API`);
+
+        // ===== FASE 2: Resolver via JsonCargo API (limitado) =====
+        const apiResults: any[] = [];
+        
+        for (const item of needsApi) {
+          if (apiCalls >= MAX_API_CALLS) break;
+
           apiCalls++;
           try {
-            const cdetRes = await jcJson(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerId)}`, {}, 15000);
+            const cdetRes = await jcJson(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(item.containerId)}`, {}, 12000);
             
             if (cdetRes.__curl_error || cdetRes.__status === 429 || cdetRes.__status >= 500) {
               errors++;
-              results.push({ mbl_id: mblId, container: containerId, error: cdetRes.__curl_error || `status_${cdetRes.__status}` });
-              await new Promise(r => setTimeout(r, 500));
+              apiResults.push({ mbl_id: item.mblId, container: item.containerId, error: cdetRes.__curl_error || `status_${cdetRes.__status}` });
+              // Se API está com 500, parar para não desperdiçar chamadas
+              if (cdetRes.__status >= 500) {
+                console.log(`[enrich_missing_coords] API returning 500, stopping API calls.`);
+                break;
+              }
+              await new Promise(r => setTimeout(r, 300));
               continue;
             }
 
@@ -1099,130 +1072,67 @@ serve(async (req) => {
             const containerStatus = cdet?.container_status || null;
             const etaFinal = cdet?.eta_final_destination || null;
 
-            // Buscar coordenadas de portos
+            // Coordenadas: tentar dicionário local primeiro, depois API
             let originLat: number | null = null, originLon: number | null = null;
             let destLat: number | null = null, destLon: number | null = null;
 
-            if (loadingPort && apiCalls < MAX_API_CALLS) {
-              // Tentar dicionário local primeiro
-              const portCoords = getPortCoordinates(loadingPort);
-              if (portCoords) {
-                originLat = portCoords.lat;
-                originLon = portCoords.lon;
-              } else {
+            if (loadingPort) {
+              const pc = getPortCoordinates(loadingPort);
+              if (pc) { originLat = pc.lat; originLon = pc.lon; }
+              else if (apiCalls < MAX_API_CALLS) {
                 apiCalls++;
-                const prRes = await jcJson('http://api.jsoncargo.com/api/v1/port/find', { name: loadingPort, fuzzy: '1' }, 10000);
+                const prRes = await jcJson('http://api.jsoncargo.com/api/v1/port/find', { name: loadingPort, fuzzy: '1' }, 8000);
                 const p = Array.isArray(prRes?.data) ? prRes.data[0] : null;
-                if (p && +p.lat && +p.lon) {
-                  originLat = +p.lat;
-                  originLon = +p.lon;
-                }
+                if (p && +p.lat && +p.lon) { originLat = +p.lat; originLon = +p.lon; }
               }
             }
 
-            if (dischargingPort && apiCalls < MAX_API_CALLS) {
-              const portCoords = getPortCoordinates(dischargingPort);
-              if (portCoords) {
-                destLat = portCoords.lat;
-                destLon = portCoords.lon;
-              } else {
+            if (dischargingPort) {
+              const pc = getPortCoordinates(dischargingPort);
+              if (pc) { destLat = pc.lat; destLon = pc.lon; }
+              else if (apiCalls < MAX_API_CALLS) {
                 apiCalls++;
-                const prRes = await jcJson('http://api.jsoncargo.com/api/v1/port/find', { name: dischargingPort, fuzzy: '1' }, 10000);
+                const prRes = await jcJson('http://api.jsoncargo.com/api/v1/port/find', { name: dischargingPort, fuzzy: '1' }, 8000);
                 const p = Array.isArray(prRes?.data) ? prRes.data[0] : null;
-                if (p && +p.lat && +p.lon) {
-                  destLat = +p.lat;
-                  destLon = +p.lon;
-                }
+                if (p && +p.lat && +p.lon) { destLat = +p.lat; destLon = +p.lon; }
               }
             }
 
-            // Buscar posição do navio
-            let vesselLat: number | null = null, vesselLon: number | null = null;
-            if (vesselName && apiCalls < MAX_API_CALLS) {
-              apiCalls++;
-              const vfRes = await jcJson('http://api.jsoncargo.com/api/v1/vessel/finder', { name: vesselName, fuzzy: '1' }, 10000);
-              const vRow = Array.isArray(vfRes?.data) ? vfRes.data[0] : null;
-              if (vRow?.uuid && apiCalls < MAX_API_CALLS) {
-                apiCalls++;
-                const vbRes = await jcJson('http://api.jsoncargo.com/api/v1/vessel/basic', { uuid: vRow.uuid }, 10000);
-                const vd = vbRes?.data;
-                if (vd && Number.isFinite(+vd.lat) && Number.isFinite(+vd.lon)) {
-                  vesselLat = +vd.lat;
-                  vesselLon = +vd.lon;
-                }
-              }
-            }
-
-            // Determinar melhor coordenada disponível
-            const bestLat = vesselLat || destLat || originLat;
-            const bestLon = vesselLon || destLon || originLon;
+            const bestLat = destLat || originLat;
+            const bestLon = destLon || originLon;
 
             if (bestLat && bestLon) {
-              // Atualizar t_tracking_sea
               await client.execute(`
                 UPDATE dados_dachser.t_tracking_sea 
                 SET latitude = ?, longitude = ?
                 WHERE mbl_id = ? AND (latitude IS NULL OR latitude = '')
-              `, [String(bestLat), String(bestLon), mblId]);
+              `, [String(bestLat), String(bestLon), item.mblId]);
 
-              // Atualizar t_olimpo_tracking com coordenadas completas
               await client.execute(`
                 UPDATE dados_dachser.t_olimpo_tracking
                 SET origem_lat = COALESCE(origem_lat, ?), origem_lon = COALESCE(origem_lon, ?),
                     destino_lat = COALESCE(destino_lat, ?), destino_lon = COALESCE(destino_lon, ?),
-                    current_lat = ?, current_lon = ?,
+                    current_lat = COALESCE(current_lat, ?), current_lon = COALESCE(current_lon, ?),
                     vessel_name = COALESCE(vessel_name, ?),
                     container_status = COALESCE(NULLIF(container_status, ''), ?),
                     eta = COALESCE(eta, ?),
-                    last_api_update = NOW(),
-                    updated_at = NOW()
+                    last_api_update = NOW(), updated_at = NOW()
                 WHERE mode = 'sea' AND asset COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
               `, [
-                originLat, originLon, destLat, destLon,
-                bestLat, bestLon, vesselName, containerStatus,
-                etaFinal ? new Date(etaFinal) : null, mblId
+                originLat, originLon, destLat, destLon, bestLat, bestLon,
+                vesselName, containerStatus, etaFinal ? new Date(etaFinal) : null, item.mblId
               ]);
 
-              // Atualizar cache também
-              await client.execute(`
-                INSERT INTO ai_agente.t_dachser_sea_tracking_cache 
-                  (container, loading_port, discharging_port, container_status, 
-                   eta_final_destination, origin_lat, origin_lon, dest_lat, dest_lon,
-                   vessel_name, vessel_lat, vessel_lon, last_api_update)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-                ON DUPLICATE KEY UPDATE
-                  loading_port = COALESCE(VALUES(loading_port), loading_port),
-                  discharging_port = COALESCE(VALUES(discharging_port), discharging_port),
-                  container_status = COALESCE(VALUES(container_status), container_status),
-                  eta_final_destination = COALESCE(VALUES(eta_final_destination), eta_final_destination),
-                  origin_lat = COALESCE(VALUES(origin_lat), origin_lat),
-                  origin_lon = COALESCE(VALUES(origin_lon), origin_lon),
-                  dest_lat = COALESCE(VALUES(dest_lat), dest_lat),
-                  dest_lon = COALESCE(VALUES(dest_lon), dest_lon),
-                  vessel_name = COALESCE(VALUES(vessel_name), vessel_name),
-                  vessel_lat = COALESCE(VALUES(vessel_lat), vessel_lat),
-                  vessel_lon = COALESCE(VALUES(vessel_lon), vessel_lon),
-                  last_api_update = NOW()
-              `, [
-                containerId, loadingPort, dischargingPort, containerStatus,
-                etaFinal ? new Date(etaFinal) : null,
-                originLat, originLon, destLat, destLon, vesselName, vesselLat, vesselLon
-              ]);
-
-              enriched++;
-              results.push({ 
-                mbl_id: mblId, container: containerId, method: 'jsoncargo',
-                lat: bestLat, lon: bestLon, vessel: vesselName,
-                origin: loadingPort, dest: dischargingPort
-              });
+              enrichedApi++;
+              apiResults.push({ mbl_id: item.mblId, container: item.containerId, method: 'jsoncargo', lat: bestLat, lon: bestLon });
             } else {
-              results.push({ mbl_id: mblId, container: containerId, method: 'jsoncargo', no_coords: true });
+              apiResults.push({ mbl_id: item.mblId, container: item.containerId, no_coords: true });
             }
 
-            await new Promise(r => setTimeout(r, 300));
+            await new Promise(r => setTimeout(r, 250));
           } catch (e: any) {
             errors++;
-            results.push({ mbl_id: mblId, container: containerId, error: e.message });
+            apiResults.push({ mbl_id: item.mblId, container: item.containerId, error: e.message });
           }
         }
 
@@ -1231,13 +1141,13 @@ serve(async (req) => {
         const summary = {
           total_missing: rows.length,
           unique_mbls: mblMap.size,
-          api_calls: apiCalls,
-          enriched,
-          errors,
-          results
+          phase1_local: enrichedLocal,
+          phase2_api: { enriched: enrichedApi, api_calls: apiCalls, errors, pending: needsApi.length - apiResults.length },
+          total_enriched: enrichedLocal + enrichedApi,
+          api_results: apiResults
         };
 
-        console.log(`[enrich_missing_coords] Done: ${enriched} enriched, ${errors} errors, ${apiCalls} API calls`);
+        console.log(`[enrich_missing_coords] Done: ${enrichedLocal} local + ${enrichedApi} API = ${enrichedLocal + enrichedApi} total enriched`);
 
         return new Response(JSON.stringify(summary), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
