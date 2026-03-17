@@ -942,7 +942,226 @@ serve(async (req) => {
       }
     }
 
-    // ===== SEA: container details =====
+    // ===== ENRICH MISSING COORDS: Busca lat/lon via JsonCargo para containers sem coordenadas =====
+    if (action === 'enrich_missing_coords') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const apiKey = Deno.env.get('JSONCARGO_API_KEY');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      if (!apiKey) {
+        return new Response(JSON.stringify({ error: 'JSONCARGO_API_KEY não configurada' }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // Buscar containers ativos sem latitude/longitude
+        const rows = await client.query(`
+          SELECT ts.mbl_id, ts.container, ts.navio, ts.origem, ts.destino, ts.shipping_line
+          FROM dados_dachser.t_tracking_sea ts
+          WHERE ts.active = 1
+            AND (ts.latitude IS NULL OR ts.latitude = '' OR ts.longitude IS NULL OR ts.longitude = '')
+          ORDER BY ts.eta ASC
+        `);
+
+        console.log(`[enrich_missing_coords] Found ${rows.length} containers missing coordinates`);
+
+        const MAX_API_CALLS = 15;
+        let apiCalls = 0;
+        let enrichedLocal = 0;
+        let enrichedApi = 0;
+        let errors = 0;
+        const needsApi: any[] = [];
+
+        // ===== FASE 1: Resolver via dicionário local (instantâneo, sem API) =====
+        const mblMap = new Map<string, any>();
+        for (const row of rows) {
+          const mbl = (row.mbl_id || '').trim();
+          if (!mbl || mblMap.has(mbl)) continue;
+          mblMap.set(mbl, row);
+        }
+
+        console.log(`[enrich_missing_coords] Phase 1: ${mblMap.size} unique MBLs, resolving from local dictionary...`);
+
+        for (const [mblId, row] of mblMap) {
+          const origem = (row.origem || '').trim();
+          const destino = (row.destino || '').trim();
+          
+          const origemCoords = getPortCoordinates(origem);
+          const destinoCoords = getPortCoordinates(destino);
+          
+          if (origemCoords || destinoCoords) {
+            const lat = destinoCoords?.lat || origemCoords?.lat;
+            const lon = destinoCoords?.lon || origemCoords?.lon;
+            
+            await client.execute(`
+              UPDATE dados_dachser.t_tracking_sea 
+              SET latitude = ?, longitude = ?
+              WHERE mbl_id = ? AND (latitude IS NULL OR latitude = '')
+            `, [String(lat), String(lon), mblId]);
+
+            if (origemCoords || destinoCoords) {
+              await client.execute(`
+                UPDATE dados_dachser.t_olimpo_tracking
+                SET origem_lat = COALESCE(origem_lat, ?), origem_lon = COALESCE(origem_lon, ?),
+                    destino_lat = COALESCE(destino_lat, ?), destino_lon = COALESCE(destino_lon, ?),
+                    current_lat = COALESCE(current_lat, ?), current_lon = COALESCE(current_lon, ?),
+                    updated_at = NOW()
+                WHERE mode = 'sea' AND asset = ?
+              `, [
+                origemCoords?.lat || null, origemCoords?.lon || null,
+                destinoCoords?.lat || null, destinoCoords?.lon || null,
+                lat, lon, mblId
+              ]);
+            }
+
+            enrichedLocal++;
+          } else {
+            // Não resolveu localmente → precisa da API
+            const containerId = (row.container || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (containerId.length >= 7 && containerId !== 'PENDENTE') {
+              needsApi.push({ mblId, containerId, origem, destino });
+            }
+          }
+        }
+
+        console.log(`[enrich_missing_coords] Phase 1 done: ${enrichedLocal} resolved locally, ${needsApi.length} need API`);
+
+        // ===== FASE 2: Resolver via JsonCargo API (limitado) =====
+        const apiResults: any[] = [];
+        
+        for (const item of needsApi) {
+          if (apiCalls >= MAX_API_CALLS) break;
+
+          apiCalls++;
+          try {
+            const cdetRes = await jcJson(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(item.containerId)}`, {}, 12000);
+            
+            if (cdetRes.__curl_error || cdetRes.__status === 429 || cdetRes.__status >= 500) {
+              errors++;
+              apiResults.push({ mbl_id: item.mblId, container: item.containerId, error: cdetRes.__curl_error || `status_${cdetRes.__status}` });
+              // Se API está com 500, parar para não desperdiçar chamadas
+              if (cdetRes.__status >= 500) {
+                console.log(`[enrich_missing_coords] API returning 500, stopping API calls.`);
+                break;
+              }
+              await new Promise(r => setTimeout(r, 300));
+              continue;
+            }
+
+            const cdet = cdetRes?.data || cdetRes;
+            const loadingPort = cdet?.loading_port || cdet?.shipped_from || null;
+            const dischargingPort = cdet?.discharging_port || cdet?.shipped_to || null;
+            const vesselName = cdet?.current_vessel_name || cdet?.last_vessel_name || null;
+            const containerStatus = cdet?.container_status || null;
+            const etaFinal = cdet?.eta_final_destination || null;
+
+            // Coordenadas: tentar dicionário local primeiro, depois API
+            let originLat: number | null = null, originLon: number | null = null;
+            let destLat: number | null = null, destLon: number | null = null;
+
+            if (loadingPort) {
+              const pc = getPortCoordinates(loadingPort);
+              if (pc) { originLat = pc.lat; originLon = pc.lon; }
+              else if (apiCalls < MAX_API_CALLS) {
+                apiCalls++;
+                const prRes = await jcJson('http://api.jsoncargo.com/api/v1/port/find', { name: loadingPort, fuzzy: '1' }, 8000);
+                const p = Array.isArray(prRes?.data) ? prRes.data[0] : null;
+                if (p && +p.lat && +p.lon) { originLat = +p.lat; originLon = +p.lon; }
+              }
+            }
+
+            if (dischargingPort) {
+              const pc = getPortCoordinates(dischargingPort);
+              if (pc) { destLat = pc.lat; destLon = pc.lon; }
+              else if (apiCalls < MAX_API_CALLS) {
+                apiCalls++;
+                const prRes = await jcJson('http://api.jsoncargo.com/api/v1/port/find', { name: dischargingPort, fuzzy: '1' }, 8000);
+                const p = Array.isArray(prRes?.data) ? prRes.data[0] : null;
+                if (p && +p.lat && +p.lon) { destLat = +p.lat; destLon = +p.lon; }
+              }
+            }
+
+            const bestLat = destLat || originLat;
+            const bestLon = destLon || originLon;
+
+            if (bestLat && bestLon) {
+              await client.execute(`
+                UPDATE dados_dachser.t_tracking_sea 
+                SET latitude = ?, longitude = ?
+                WHERE mbl_id = ? AND (latitude IS NULL OR latitude = '')
+              `, [String(bestLat), String(bestLon), item.mblId]);
+
+              await client.execute(`
+                UPDATE dados_dachser.t_olimpo_tracking
+                SET origem_lat = COALESCE(origem_lat, ?), origem_lon = COALESCE(origem_lon, ?),
+                    destino_lat = COALESCE(destino_lat, ?), destino_lon = COALESCE(destino_lon, ?),
+                    current_lat = COALESCE(current_lat, ?), current_lon = COALESCE(current_lon, ?),
+                    vessel_name = COALESCE(vessel_name, ?),
+                    container_status = COALESCE(NULLIF(container_status, ''), ?),
+                    eta = COALESCE(eta, ?),
+                    last_api_update = NOW(), updated_at = NOW()
+                WHERE mode = 'sea' AND asset = ?
+              `, [
+                originLat, originLon, destLat, destLon, bestLat, bestLon,
+                vesselName, containerStatus, etaFinal ? new Date(etaFinal) : null, item.mblId
+              ]);
+
+              enrichedApi++;
+              apiResults.push({ mbl_id: item.mblId, container: item.containerId, method: 'jsoncargo', lat: bestLat, lon: bestLon });
+            } else {
+              apiResults.push({ mbl_id: item.mblId, container: item.containerId, no_coords: true });
+            }
+
+            await new Promise(r => setTimeout(r, 250));
+          } catch (e: any) {
+            errors++;
+            apiResults.push({ mbl_id: item.mblId, container: item.containerId, error: e.message });
+          }
+        }
+
+        await client.close();
+
+        const summary = {
+          total_missing: rows.length,
+          unique_mbls: mblMap.size,
+          phase1_local: enrichedLocal,
+          phase2_api: { enriched: enrichedApi, api_calls: apiCalls, errors, pending: needsApi.length - apiResults.length },
+          total_enriched: enrichedLocal + enrichedApi,
+          api_results: apiResults
+        };
+
+        console.log(`[enrich_missing_coords] Done: ${enrichedLocal} local + ${enrichedApi} API = ${enrichedLocal + enrichedApi} total enriched`);
+
+        return new Response(JSON.stringify(summary), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[enrich_missing_coords] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+
     if (action === 'jc_container') {
       const id = url.searchParams.get('id') || '';
       if (!id) {
