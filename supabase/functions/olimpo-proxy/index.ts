@@ -6397,7 +6397,7 @@ serve(async (req) => {
           LEFT JOIN dados_dachser.t_master_dados mdn
             ON TRIM(mdn.mawb) COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             AND mdn.tipo_processo IN ('SI', 'SE')
-            AND mdn.data_abertura >= '2026-02-01'
+            AND mdn.data_insert >= '2026-02-01'
           WHERE ts.active = 1
             AND NOT (
               UPPER(ts.container_status) IN ('DELIVERED', 'DLV', 'GOD', 'EMPTY_RETURNED')
