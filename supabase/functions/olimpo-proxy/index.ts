@@ -6376,10 +6376,10 @@ serve(async (req) => {
             ts.last_check,
             ts.shipping_line,
             CASE 
-              WHEN COALESCE(MAX(sm.eta), MAX(mdn.eta)) IS NOT NULL 
+              WHEN COALESCE(MAX(sm.eta_ata), MAX(mdn.eta)) IS NOT NULL 
                 AND MAX(ts.eta) IS NOT NULL
-                AND MAX(ts.eta) > COALESCE(MAX(sm.eta), MAX(mdn.eta))
-                AND DATEDIFF(MAX(ts.eta), COALESCE(MAX(sm.eta), MAX(mdn.eta))) >= 3
+                AND MAX(ts.eta) > COALESCE(MAX(sm.eta_ata), MAX(mdn.eta))
+                AND DATEDIFF(MAX(ts.eta), COALESCE(MAX(sm.eta_ata), MAX(mdn.eta))) >= 3
               THEN 1 ELSE 0 
             END AS is_eta_delayed,
             MAX(ot.origem_lat) as origem_lat,
@@ -6499,6 +6499,13 @@ serve(async (req) => {
       });
 
       try {
+        // Garantir que origem_code e destino_code comportam dados longos
+        await client.execute(`
+          ALTER TABLE dados_dachser.t_olimpo_tracking 
+            MODIFY COLUMN origem_code VARCHAR(255) DEFAULT NULL,
+            MODIFY COLUMN destino_code VARCHAR(255) DEFAULT NULL
+        `);
+
         // Inserir/atualizar MBLs ativos do t_tracking_sea no t_olimpo_tracking
         // Truncar origem_code e destino_code para evitar erro de coluna muito longa
         const result = await client.execute(`
@@ -6513,8 +6520,8 @@ serve(async (req) => {
             ts.mbl_id AS asset,
             LEFT(ts.consignee, 255) AS cliente,
             ts.tipo_processo,
-            LEFT(ts.origem, 100) AS origem_code,
-            LEFT(ts.destino, 100) AS destino_code,
+            LEFT(ts.origem, 255) AS origem_code,
+            LEFT(ts.destino, 255) AS destino_code,
             CASE 
               WHEN ts.eta IS NOT NULL AND ts.eta < DATE_SUB(NOW(), INTERVAL 3 DAY) THEN 'Atraso'
               WHEN UPPER(ts.container_status) IN ('DELIVERED', 'DLV', 'GOD', 'EMPTY_RETURNED') THEN 'Entregue'
