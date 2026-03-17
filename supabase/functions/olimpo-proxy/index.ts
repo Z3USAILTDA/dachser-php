@@ -1117,7 +1117,7 @@ serve(async (req) => {
                     container_status = COALESCE(NULLIF(container_status, ''), ?),
                     eta = COALESCE(eta, ?),
                     last_api_update = NOW(), updated_at = NOW()
-                WHERE mode = 'sea' AND asset COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                WHERE mode = 'sea' AND asset COLLATE utf8mb4_general_ci = ? COLLATE utf8mb4_general_ci
               `, [
                 originLat, originLon, destLat, destLon, bestLat, bestLon,
                 vesselName, containerStatus, etaFinal ? new Date(etaFinal) : null, item.mblId
