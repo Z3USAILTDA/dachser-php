@@ -1,41 +1,28 @@
 
 
-## Plano: Remover filtro de exclusão de processos ENTREGUE no cron
+# Fix: Documentos não aparecem no dialog de visualização
 
-### Problema
-Na query `get_cct_pending_hawbs` do `mariadb-proxy`, quando `prioritize_pending=true` (modo usado pelo cron), existe este filtro na linha 13091:
+## Causa raiz
 
-```sql
-AND COALESCE(cct.status_cct_oficial, '') != 'ENTREGUE'
+O edge function `get_voucher_anexos` retorna a estrutura:
+```json
+{ "success": true, "data": [ ...anexos... ] }
 ```
 
-Isso impede que processos já marcados como ENTREGUE sejam reconsultados.
+Mas o frontend está lendo `data?.anexos` (linha 862), que é `undefined`. O campo correto é `data?.data`.
 
-### Solução
+## Correção
 
-**Arquivo:** `supabase/functions/mariadb-proxy/index.ts`
+### `src/components/esteira/PagamentosTab.tsx` — linha 862
 
-Remover a condição `!= 'ENTREGUE'` do bloco `prioritizePending`. O trecho:
-
+Trocar:
 ```typescript
-if (prioritizePending) {
-  extraWhere = `AND COALESCE(cct.status_cct_oficial, '') != 'ENTREGUE'`;
-  orderBy = `ORDER BY m.data_insert ASC`;
-}
+setAnexosDialog(data?.anexos || []);
 ```
-
-Passa a ser:
-
+Por:
 ```typescript
-if (prioritizePending) {
-  // Continuous polling: query ALL processes, including delivered
-  extraWhere = '';
-  orderBy = `ORDER BY m.data_insert ASC`;
-}
+setAnexosDialog(data?.data || []);
 ```
 
-Isso garante que **todos** os processos ativos na janela de 30 dias do firecrawl sejam reconsultados continuamente, independentemente do status CCT.
-
-### Deploy
-- Redeploy `mariadb-proxy`
+Uma única linha corrige o problema.
 
