@@ -17,15 +17,12 @@ import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 interface VoucherSearchResult {
-  id: string;
-  numero_spo: string;
+  processo: string;
   fornecedor?: string;
   cnpj_fornecedor?: string;
   valor?: number;
   moeda?: string;
   vencimento?: string;
-  etapa_atual?: string;
-  filial?: string;
 }
 
 interface VoucherMasterFormProps {
