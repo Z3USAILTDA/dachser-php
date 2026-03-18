@@ -10470,7 +10470,7 @@ serve(async (req) => {
                  v.processo_id
           FROM dados_dachser.t_vouchers v
           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
-            ON dfv.nd = v.numero_spo
+            ON dfv.nd COLLATE utf8mb4_unicode_ci = v.numero_spo COLLATE utf8mb4_unicode_ci
           WHERE (
             v.numero_spo LIKE ? 
             OR v.fornecedor LIKE ? 
