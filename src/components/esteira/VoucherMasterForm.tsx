@@ -120,7 +120,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
 
       // Filter out already selected vouchers
       const results = (data?.data || []).filter(
-        (v: VoucherSearchResult) => !selectedVouchers.some(s => s.id === v.id)
+        (v: VoucherSearchResult) => !selectedVouchers.some(s => s.processo === v.processo)
       );
       
       setSearchResults(results);
