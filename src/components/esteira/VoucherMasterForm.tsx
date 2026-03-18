@@ -74,7 +74,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
   useEffect(() => {
     const timer = setTimeout(() => {
       const trimmed = searchQuery.trim();
-      if (trimmed.length >= 2) {
+      if (trimmed.length >= 6) {
         searchVouchers(trimmed);
       } else {
         setSearchResults([]);
