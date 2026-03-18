@@ -93,7 +93,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
 
       form.setValue("fornecedor", first.fornecedor || "");
       form.setValue("cnpjFornecedor", first.cnpj_fornecedor || "");
-      form.setValue("filial", first.filial || "");
+      form.setValue("filial", "");
       form.setValue("valorTotal", totalValor.toFixed(2).replace(".", ","));
       form.setValue("moeda", first.moeda || "BRL");
       
