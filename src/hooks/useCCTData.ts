@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { filterByYearIfNotZ3us } from "@/utils/adminAccess";
 import type { 
   ProcessoCCT, 
   CCTExcecao, 
@@ -217,8 +218,10 @@ export function useProcessosCCT() {
         throw new Error(data?.error || 'Erro ao buscar processos CCT');
       }
 
-      const processos = (data.data || []).map(mapRowToProcessoCCT);
-      console.log(`CCT: Loaded ${processos.length} processos from MariaDB`);
+      const allProcessos: ProcessoCCT[] = (data.data || []).map(mapRowToProcessoCCT);
+      // Filtro de ano: não-Z3US admin vê apenas processos de 2027+
+      const processos = filterByYearIfNotZ3us<ProcessoCCT>(allProcessos, (p) => p.shipment.created_at);
+      console.log(`CCT: Loaded ${processos.length} processos from MariaDB (total: ${allProcessos.length})`);
       return processos;
     },
     staleTime: 30000,

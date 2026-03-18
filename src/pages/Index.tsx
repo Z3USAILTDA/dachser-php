@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { filterByYearIfNotZ3us, isZ3usAdmin } from "@/utils/adminAccess";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DatabaseStatsPanel, DbStats } from "@/components/DatabaseStatsPanel";
@@ -58,18 +59,7 @@ const EMAIL_SENDING_ENABLED = false;
 const ARR_RETENTION_HOURS = 120; // 5 dias para AWBs em ARR permanecerem visíveis
 const ARR_RETENTION_MS = ARR_RETENTION_HOURS * 60 * 60 * 1000;
 
-// Usuários DACHSER (não são Z3US admins)
-const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
-
-const isZ3usAdmin = (): boolean => {
-  try {
-    const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
-    if (!storedUser) return false;
-    const parsed = JSON.parse(storedUser);
-    const isAdmin = parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
-    return isAdmin && !DACHSER_ADMIN_USERS.includes(parsed.username);
-  } catch { return false; }
-};
+// isZ3usAdmin importado de @/utils/adminAccess
 
 // AWBs excluídos manualmente da visualização
 const EXCLUDED_AWBS = [
@@ -2076,6 +2066,9 @@ const Index = () => {
 
     // Filtrar AWBs excluídos manualmente
     awbs = awbs.filter((awb) => !EXCLUDED_AWBS.includes(awb.awb));
+
+    // Filtro de ano: não-Z3US admin vê apenas processos de 2027+
+    awbs = filterByYearIfNotZ3us(awbs, (awb) => awb.etd || awb.last_check || awb.created_at);
 
     // Apply card filter (don't include COMPANY_NOT_REGISTERED in filtered results)
     if (cardFilter !== "all") {
