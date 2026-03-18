@@ -220,7 +220,7 @@ export function useProcessosCCT() {
 
       const allProcessos: ProcessoCCT[] = (data.data || []).map(mapRowToProcessoCCT);
       // Filtro de ano: não-Z3US admin vê apenas processos de 2027+
-      const processos = filterByYearIfNotZ3us<ProcessoCCT>(allProcessos, (p) => p.created_at);
+      const processos = filterByYearIfNotZ3us<ProcessoCCT>(allProcessos, (p) => p.shipment.created_at);
       console.log(`CCT: Loaded ${processos.length} processos from MariaDB (total: ${allProcessos.length})`);
       return processos;
     },
