@@ -10458,7 +10458,7 @@ serve(async (req) => {
         const { search } = body as { search?: string };
         console.log('Searching vouchers for master consolidation:', search);
         
-        if (!search || search.length < 2) {
+        if (!search || search.length < 6) {
           result = { success: true, data: [] };
           break;
         }
@@ -10470,7 +10470,7 @@ serve(async (req) => {
                  v.processo_id
           FROM dados_dachser.t_vouchers v
           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
-            ON dfv.nd COLLATE utf8mb4_unicode_ci = v.numero_spo COLLATE utf8mb4_unicode_ci
+            ON dfv.nd = v.numero_spo
           WHERE (
             v.numero_spo LIKE ? 
             OR v.fornecedor LIKE ? 
@@ -10483,7 +10483,7 @@ serve(async (req) => {
           AND (v.etapa_atual != 'CANCELADO' OR v.etapa_atual IS NULL)
           ORDER BY v.created_at DESC
           LIMIT 50
-        `, [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, search, `%${search}%`]);
+        `, [`%${search}`, `%${search}`, `%${search}`, `%${search}`, `%${search}`, search, `%${search}`]);
         console.log(`[search_vouchers_for_master] query took ${Date.now() - t0}ms, results: ${(vouchers as any[])?.length ?? 0}`);
         
         result = { success: true, data: vouchers || [] };
