@@ -10472,7 +10472,7 @@ serve(async (req) => {
           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
             ON dfv.nd = v.numero_spo
           WHERE (
-            v.numero_spo LIKE ? 
+            v.numero_spo = ? 
             OR v.fornecedor LIKE ? 
             OR v.cnpj_fornecedor LIKE ?
             OR v.processo_id LIKE ?
@@ -10482,8 +10482,7 @@ serve(async (req) => {
           )
           AND (v.etapa_atual != 'CANCELADO' OR v.etapa_atual IS NULL)
           ORDER BY v.created_at DESC
-          LIMIT 50
-        `, [`%${search}`, `%${search}`, `%${search}`, `%${search}`, `%${search}`, search, `%${search}`]);
+        `, [search, `%${search}`, `%${search}`, `%${search}`, `%${search}`, search, `%${search}`]);
         console.log(`[search_vouchers_for_master] query took ${Date.now() - t0}ms, results: ${(vouchers as any[])?.length ?? 0}`);
         
         result = { success: true, data: vouchers || [] };
