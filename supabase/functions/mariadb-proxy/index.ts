@@ -10539,36 +10539,43 @@ serve(async (req) => {
         const randomSuffix = Math.random().toString(36).substring(2, 10).toUpperCase();
         const numeroSpoMaster = `MASTER-${randomSuffix}`;
 
+        // voucher_ids now contains "processo" values (numero_spo), not UUIDs
+        // First, resolve the actual UUIDs from t_vouchers by numero_spo
+        const resolvedChildren = await client.query(`
+          SELECT id, numero_spo, valor, vencimento, origem_processo, processo_id
+          FROM dados_dachser.t_vouchers 
+          WHERE numero_spo IN (${voucher_ids.map(() => '?').join(',')})
+        `, voucher_ids);
+
+        const resolvedIds = (resolvedChildren || []).map((c: any) => c.id);
+        console.log(`Resolved ${resolvedIds.length} child voucher IDs from ${voucher_ids.length} processo values`);
+
         // Calculate total value from children if not provided
         let totalValor = valor_total;
         if (!totalValor) {
-          const childVouchers = await client.query(`
-            SELECT SUM(valor) as total FROM dados_dachser.t_vouchers WHERE id IN (${voucher_ids.map(() => '?').join(',')})
-          `, voucher_ids);
-          totalValor = childVouchers?.[0]?.total || 0;
+          const total = (resolvedChildren || []).reduce((sum: number, c: any) => sum + (parseFloat(c.valor) || 0), 0);
+          totalValor = total;
         }
 
         // Get earliest vencimento, origem_processo and processo_ids from children if not provided
         let venc = vencimento;
         let origemProcesso = null;
         let processoId = null;
-        const childData = await client.query(`
-          SELECT MIN(vencimento) as min_venc, origem_processo, processo_id 
-          FROM dados_dachser.t_vouchers 
-          WHERE id IN (${voucher_ids.map(() => '?').join(',')})
-          GROUP BY origem_processo, processo_id
-        `, voucher_ids);
-        if (!venc) {
-          venc = childData?.[0]?.min_venc || new Date().toISOString().split('T')[0];
-        }
-        origemProcesso = childData?.[0]?.origem_processo || null;
         
-        // Collect unique processo_ids from all children
-        const processoIds = childData
-          ?.map((c: any) => c.processo_id)
-          .filter((p: any) => p && p.trim())
-          .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
-        processoId = processoIds?.length > 0 ? processoIds.join(', ') : null;
+        if (resolvedChildren && resolvedChildren.length > 0) {
+          if (!venc) {
+            const dates = resolvedChildren.map((c: any) => c.vencimento).filter(Boolean);
+            venc = dates.length > 0 ? dates.sort()[0] : new Date().toISOString().split('T')[0];
+          }
+          origemProcesso = resolvedChildren[0]?.origem_processo || null;
+          
+          // Collect unique processo_ids from all children
+          const processoIdsList = resolvedChildren
+            .map((c: any) => c.processo_id)
+            .filter((p: any) => p && p.toString().trim())
+            .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
+          processoId = processoIdsList.length > 0 ? processoIdsList.join(', ') : null;
+        }
         
         // Format vencimento as YYYY-MM-DD for MariaDB DATE column
         const formatDateForMariaDB = (dateValue: any): string => {
@@ -10616,12 +10623,14 @@ serve(async (req) => {
           processoId
         ]);
 
-        // Update all child vouchers with the master ID
-        await client.execute(`
-          UPDATE dados_dachser.t_vouchers 
-          SET voucher_master_id = ?, updated_at = NOW()
-          WHERE id IN (${voucher_ids.map(() => '?').join(',')})
-        `, [masterId, ...voucher_ids]);
+        // Update all child vouchers with the master ID (using resolved UUIDs)
+        if (resolvedIds.length > 0) {
+          await client.execute(`
+            UPDATE dados_dachser.t_vouchers 
+            SET voucher_master_id = ?, updated_at = NOW()
+            WHERE id IN (${resolvedIds.map(() => '?').join(',')})
+          `, [masterId, ...resolvedIds]);
+        }
 
         // Log the master creation
         await client.execute(`
