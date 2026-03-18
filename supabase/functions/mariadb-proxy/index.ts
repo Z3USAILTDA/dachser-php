@@ -10226,7 +10226,7 @@ serve(async (req) => {
           rm.cnpj,
           rm.valor_nf || 0,
           rm.moeda || 'BRL',
-          toMySQLDateSafe(rm.data_vencimento) || new Date().toISOString().split('T')[0],
+          toMySQLDateSafe(rm.data_vencimento),
           toMySQLDateSafe(rm.data_emissao),
           mapFormaPag(rm.forma_pag),
           mapTipoDoc(rm.tipo_pag),
