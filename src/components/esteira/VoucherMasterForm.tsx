@@ -201,7 +201,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
       const { data: masterResult, error: masterError } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "create_voucher_master",
-          voucher_ids: selectedVouchers.map(v => v.id),
+          voucher_ids: selectedVouchers.map(v => v.processo),
           nome_master: values.nomeMaster || null,
           fornecedor: values.fornecedor || null,
           cnpj_fornecedor: values.cnpjFornecedor || null,
