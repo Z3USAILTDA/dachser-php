@@ -10467,41 +10467,27 @@ serve(async (req) => {
         const vouchers = await client.query(`
           SELECT * FROM (
             SELECT
-              v.id,
               v.numero_spo COLLATE utf8mb4_general_ci AS processo,
-              v.numero_spo,
               v.fornecedor COLLATE utf8mb4_general_ci AS fornecedor,
               v.cnpj_fornecedor COLLATE utf8mb4_general_ci AS cnpj_fornecedor,
               v.valor,
               v.moeda COLLATE utf8mb4_general_ci AS moeda,
-              v.vencimento,
-              v.etapa_atual,
-              v.filial,
-              v.voucher_master_id,
-              v.is_master,
-              v.processo_id
+              v.vencimento
             FROM dados_dachser.t_vouchers v
 
             UNION ALL
 
             SELECT
-              NULL AS id,
               a.nd COLLATE utf8mb4_general_ci AS processo,
-              a.nd AS numero_spo,
               a.razao_social COLLATE utf8mb4_general_ci AS fornecedor,
               a.cnpj COLLATE utf8mb4_general_ci AS cnpj_fornecedor,
               a.valor_nf AS valor,
               a.moeda COLLATE utf8mb4_general_ci AS moeda,
-              a.data_vencimento AS vencimento,
-              NULL AS etapa_atual,
-              NULL AS filial,
-              NULL AS voucher_master_id,
-              NULL AS is_master,
-              NULL AS processo_id
+              a.data_vencimento AS vencimento
             FROM dados_dachser.t_dados_financeiro_voucher a
           ) x
-          WHERE x.processo = ?
-        `, [search]);
+          WHERE x.processo LIKE ?
+        `, [`%${search}`]);
         console.log(`[search_vouchers_for_master] query took ${Date.now() - t0}ms, results: ${(vouchers as any[])?.length ?? 0}`);
         
         result = { success: true, data: vouchers || [] };
