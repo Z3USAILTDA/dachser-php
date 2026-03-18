@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Maximize2, Minimize2, Globe, X, Plane, Ship, LogOut } from "lucide-react";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
