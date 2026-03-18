@@ -10689,8 +10689,10 @@ serve(async (req) => {
         
         // Format vencimento as YYYY-MM-DD for MariaDB DATE column
         const formatDateForMariaDB = (dateValue: any): string => {
-          if (!dateValue) return new Date().toISOString().split('T')[0];
+          const fallback = new Date().toISOString().split('T')[0];
+          if (!dateValue) return fallback;
           const s = String(dateValue).trim();
+          if (!s || s === 'null' || s === 'undefined' || s === 'Invalid Date') return fallback;
           // Already YYYY-MM-DD
           if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
           // ISO with T
