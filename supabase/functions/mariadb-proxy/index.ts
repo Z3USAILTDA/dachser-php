@@ -10551,6 +10551,7 @@ serve(async (req) => {
         } = body as any;
 
         console.log('Creating voucher master with children:', voucher_ids);
+        console.log('Vencimento recebido:', vencimento, '| Tipo:', typeof vencimento);
 
         if (!voucher_ids || !Array.isArray(voucher_ids) || voucher_ids.length < 2) {
           return new Response(
@@ -10606,20 +10607,20 @@ serve(async (req) => {
           for (const row of (financialRows || [])) {
             const mirrorId = crypto.randomUUID();
             const mirrorVenc = (() => {
-              const fallback = new Date().toISOString().split('T')[0];
+              const fallback = new Date().toISOString().split('T')[0] + ' 00:00:00.000';
               if (!row.data_vencimento) return fallback;
               const s = String(row.data_vencimento).trim();
               if (!s || s === 'null' || s === 'undefined' || s === 'Invalid Date') return fallback;
-              if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-              if (s.includes('T')) return s.split('T')[0];
+              if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s} 00:00:00.000`;
+              if (s.includes('T')) return `${s.split('T')[0]} 00:00:00.000`;
               const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-              if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+              if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]} 00:00:00.000`;
               const parsed = new Date(s.replace(/\bGM$/, 'GMT'));
               if (!isNaN(parsed.getTime())) {
                 const y = parsed.getFullYear();
                 const m = String(parsed.getMonth() + 1).padStart(2, '0');
                 const dd = String(parsed.getDate()).padStart(2, '0');
-                return `${y}-${m}-${dd}`;
+                return `${y}-${m}-${dd} 00:00:00.000`;
               }
               return fallback;
             })();
@@ -10712,6 +10713,7 @@ serve(async (req) => {
         };
         
         const vencFormatted = formatDateForMariaDB(venc);
+        console.log('Vencimento formatado para INSERT:', vencFormatted);
 
         // Create the master voucher
         await client.execute(`
