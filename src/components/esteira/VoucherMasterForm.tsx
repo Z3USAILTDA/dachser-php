@@ -399,17 +399,17 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
             <div className="flex flex-wrap gap-2">
               {selectedVouchers.map((voucher) => (
                 <Badge
-                  key={voucher.id}
+                  key={voucher.processo}
                   variant="secondary"
                   className="gap-2 py-2 px-3 bg-purple-500/10 text-purple-400 border-purple-500/30"
                 >
-                  <span className="font-mono">{voucher.numero_spo}</span>
+                  <span className="font-mono">{voucher.processo}</span>
                   <span className="text-xs opacity-75">
                     ({voucher.moeda || 'BRL'} {Number(voucher.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
                   </span>
                   <button
                     type="button"
-                    onClick={() => handleRemoveVoucher(voucher.id)}
+                    onClick={() => handleRemoveVoucher(voucher.processo)}
                     className="ml-1 hover:text-destructive"
                   >
                     <X className="h-3 w-3" />
