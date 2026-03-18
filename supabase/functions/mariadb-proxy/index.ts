@@ -5629,11 +5629,27 @@ serve(async (req) => {
         // Generate UUID for id
         const voucherId = voucherData.id || crypto.randomUUID();
         
-        // Helper to convert ISO date to MySQL format (YYYY-MM-DD)
+        // Helper to convert any date to MySQL format (YYYY-MM-DD)
         const toMySQLDate = (isoDate: string | null): string | null => {
           if (!isoDate) return null;
           try {
-            return isoDate.split('T')[0];
+            const s = String(isoDate).trim();
+            // Already YYYY-MM-DD
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+            // ISO with T
+            if (s.includes('T')) return s.split('T')[0];
+            // DD/MM/YYYY
+            const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+            if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+            // Fallback: parse with Date object and extract local components
+            const parsed = new Date(s);
+            if (!isNaN(parsed.getTime())) {
+              const y = parsed.getFullYear();
+              const m = String(parsed.getMonth() + 1).padStart(2, '0');
+              const d = String(parsed.getDate()).padStart(2, '0');
+              return `${y}-${m}-${d}`;
+            }
+            return null;
           } catch {
             return null;
           }
