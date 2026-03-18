@@ -10689,29 +10689,26 @@ serve(async (req) => {
           processoId = processoIdsList.length > 0 ? processoIdsList.join(', ') : null;
         }
         
-        // Format vencimento as YYYY-MM-DD for MariaDB DATE column
+        // Format vencimento as YYYY-MM-DD HH:MM:SS.000 for MariaDB DATETIME column
         const formatDateForMariaDB = (dateValue: any): string => {
-          const fallback = new Date().toISOString().split('T')[0];
+          const now = new Date();
+          const fallback = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} 00:00:00.000`;
           if (!dateValue) return fallback;
           const s = String(dateValue).trim();
           if (!s || s === 'null' || s === 'undefined' || s === 'Invalid Date') return fallback;
-          // Already YYYY-MM-DD
-          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-          // ISO with T
-          if (s.includes('T')) return s.split('T')[0];
-          // DD/MM/YYYY
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s} 00:00:00.000`;
+          if (s.includes('T')) return `${s.split('T')[0]} 00:00:00.000`;
           const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-          if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-          // Try parsing (fix truncated timezone like 'GM' -> 'GMT')
+          if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]} 00:00:00.000`;
           const fixedTz = s.replace(/\bGM$/, 'GMT');
           const parsed = new Date(fixedTz);
           if (!isNaN(parsed.getTime())) {
             const y = parsed.getFullYear();
             const m = String(parsed.getMonth() + 1).padStart(2, '0');
             const d = String(parsed.getDate()).padStart(2, '0');
-            return `${y}-${m}-${d}`;
+            return `${y}-${m}-${d} 00:00:00.000`;
           }
-          return new Date().toISOString().split('T')[0];
+          return fallback;
         };
         
         const vencFormatted = formatDateForMariaDB(venc);
