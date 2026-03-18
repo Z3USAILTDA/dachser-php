@@ -226,7 +226,14 @@ export default function Olimpo() {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const user = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "{}");
+    } catch {
+      console.warn("Failed to parse user from localStorage");
+      return {};
+    }
+  })();
   const isOlimpoOnly = user?.olimpo_only === 1;
 
   const handleLogout = () => {
