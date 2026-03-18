@@ -10193,12 +10193,19 @@ serve(async (req) => {
         // Helper to format date as YYYY-MM-DD for MariaDB
         const toMySQLDateSafe = (d: any): string | null => {
           if (!d) return null;
-          const s = String(d);
+          const s = String(d).trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
           if (s.includes('T')) return s.split('T')[0];
-          // Handle DD/MM/YYYY format
           const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
           if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-          return s.substring(0, 10);
+          const parsed = new Date(s);
+          if (!isNaN(parsed.getTime())) {
+            const y = parsed.getFullYear();
+            const m = String(parsed.getMonth() + 1).padStart(2, '0');
+            const dd = String(parsed.getDate()).padStart(2, '0');
+            return `${y}-${m}-${dd}`;
+          }
+          return null;
         };
 
         // Inserir na t_vouchers
