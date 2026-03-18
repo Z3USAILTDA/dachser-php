@@ -1,35 +1,34 @@
 
 
-## Diagnóstico: Movimentação Global — Tela Preta
+## Correção: Tela Preta no Olimpo (Movimentação Global)
 
-### Causa raiz: MariaDB offline
+### Causa raiz
 
-A página Movimentação Global **não tem bug de código**. O problema é que o servidor MariaDB em **177.70.19.42:3306 está completamente inacessível** desde as edge functions.
+O componente `Olimpo` exporta diretamente a função sem `ErrorBoundary`. As páginas que já tiveram esse problema (FinanceiroDisputa, ReguaCobranca) foram corrigidas com o padrão:
 
-Todos os logs das últimas horas mostram consistentemente:
-- `EHOSTUNREACH` (No route to host — os error 113)
-- `ECONNREFUSED` (Connection refused)
+```typescript
+export default function Page() {
+  return (
+    <ErrorBoundary>
+      <PageContent />
+    </ErrorBoundary>
+  );
+}
+```
 
-### O que acontece na prática
+O Olimpo nunca recebeu essa proteção. Além disso, falta `dedupe` no `vite.config.ts` para evitar instâncias duplicadas de React (mesma causa raiz do problema do Voucher).
 
-1. A página carrega normalmente (background, header, KPIs, legenda)
-2. O token Mapbox é obtido com sucesso -- o mapa renderiza
-3. Mas o mapa usa tema **dark-v11** (fundo escuro/preto)
-4. Sem dados do MariaDB, não há marcadores, rotas, nem KPIs preenchidos
-5. Resultado visual: **mapa preto vazio** = "tela preta"
+### Plano
 
-### Solução
+1. **Adicionar `dedupe` no `vite.config.ts`** — Forçar instância única de React/React-DOM para evitar crash silencioso por dispatcher duplicado.
 
-Não há correção de código necessária. O MariaDB precisa voltar a ficar acessível. Possíveis causas:
-- O servidor MariaDB (177.70.19.42) está desligado ou reiniciando
-- Firewall bloqueando conexões externas na porta 3306
-- Problema de rede/roteamento entre o datacenter do Supabase (eu-central-1) e o IP do MariaDB
+2. **Envolver Olimpo em ErrorBoundary** — Extrair o conteúdo atual para `OlimpoContent`, exportar o default com ErrorBoundary wrapper (mesmo padrão de FinanceiroDisputa/ReguaCobranca).
 
-### Melhoria sugerida (opcional)
+3. **Proteger `JSON.parse` do localStorage** — Linha 228 (`JSON.parse(localStorage.getItem("user") || "{}")`) pode crashar com JSON corrompido. Adicionar try-catch.
 
-Adicionar um indicador visual na página quando o banco está inacessível, em vez de mostrar apenas o mapa vazio. Um banner como "Sem conexão com o banco de dados — dados indisponíveis" ajudaria o usuário a entender o problema.
+4. **Proteger inicialização do Mapbox** — Envolver `new mapboxgl.Map()` em try-catch para não derrubar a árvore React se WebGL falhar.
 
-### Ação imediata
-
-Verifique se o servidor MariaDB em **177.70.19.42** está operacional e aceitando conexões na porta 3306.
+### Arquivos alterados
+- `vite.config.ts` — adicionar `resolve.dedupe`
+- `src/pages/Olimpo.tsx` — ErrorBoundary wrapper + try-catch em pontos críticos
 
