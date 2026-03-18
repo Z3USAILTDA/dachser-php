@@ -240,12 +240,11 @@ export const VoucherActionsMenu = ({
       </Dialog>
 
       {/* Desmembrar Master com seleção de filhos */}
-      {masterId && vouchersFilhos.length > 0 && (
+      {masterId && (
         <DesmembrarMasterDialog
           open={showDisassembleDialog}
           onOpenChange={setShowDisassembleDialog}
           masterId={masterId}
-          vouchersFilhos={vouchersFilhos}
           onConfirm={handleDisassembleConfirm}
           loading={disassembleLoading}
         />
