@@ -218,9 +218,9 @@ export function useProcessosCCT() {
         throw new Error(data?.error || 'Erro ao buscar processos CCT');
       }
 
-      const allProcessos = (data.data || []).map(mapRowToProcessoCCT);
+      const allProcessos: ProcessoCCT[] = (data.data || []).map(mapRowToProcessoCCT);
       // Filtro de ano: não-Z3US admin vê apenas processos de 2027+
-      const processos = filterByYearIfNotZ3us(allProcessos, (p) => p.created_at);
+      const processos = filterByYearIfNotZ3us<ProcessoCCT>(allProcessos, (p) => p.created_at);
       console.log(`CCT: Loaded ${processos.length} processos from MariaDB (total: ${allProcessos.length})`);
       return processos;
     },
