@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { VoucherFilho } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,12 +13,12 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Unlink, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DesmembrarMasterDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   masterId: string;
-  vouchersFilhos: VoucherFilho[];
   onConfirm: (selectedChildIds: string[], keepMaster: boolean) => Promise<void>;
   loading?: boolean;
 }
@@ -27,12 +27,44 @@ export const DesmembrarMasterDialog = ({
   open,
   onOpenChange,
   masterId,
-  vouchersFilhos,
   onConfirm,
   loading = false,
 }: DesmembrarMasterDialogProps) => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
+  const [vouchersFilhos, setVouchersFilhos] = useState<VoucherFilho[]>([]);
+  const [loadingFilhos, setLoadingFilhos] = useState(false);
+
+  useEffect(() => {
+    if (open && masterId) {
+      loadFilhos();
+    }
+  }, [open, masterId]);
+
+  const loadFilhos = async () => {
+    try {
+      setLoadingFilhos(true);
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "get_voucher_filhos", master_id: masterId },
+      });
+      if (error) throw error;
+      if (data?.data) {
+        setVouchersFilhos(data.data.map((f: any) => ({
+          id: f.id,
+          numeroSPO: f.numero_spo,
+          fornecedor: f.fornecedor,
+          valor: f.valor,
+          moeda: f.moeda,
+          vencimento: f.vencimento,
+          etapaAtual: f.etapa_atual,
+        })));
+      }
+    } catch (err) {
+      console.error("Erro ao carregar filhos:", err);
+    } finally {
+      setLoadingFilhos(false);
+    }
+  };
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -68,6 +100,7 @@ export const DesmembrarMasterDialog = ({
     if (!open) {
       setSelectedIds([]);
       setSelectAll(false);
+      setVouchersFilhos([]);
     }
     onOpenChange(open);
   };
@@ -81,71 +114,84 @@ export const DesmembrarMasterDialog = ({
             Desmembrar Voucher/SPO Master
           </DialogTitle>
           <DialogDescription>
-            Selecione os vouchers/SPO filhos que deseja restaurar como individuais.
-            {keepMaster ? (
-              <span className="block mt-1 text-amber-500 font-medium">
-                O master será mantido com os filhos restantes.
+            {loadingFilhos ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Carregando vouchers filhos...
               </span>
-            ) : selectedIds.length === vouchersFilhos.length ? (
-              <span className="block mt-1 text-destructive font-medium">
-                O master será excluído pois todos os filhos serão desmembrados.
-              </span>
-            ) : null}
+            ) : vouchersFilhos.length === 0 ? (
+              <span>Nenhum voucher filho encontrado para este master.</span>
+            ) : (
+              <>
+                Selecione os vouchers/SPO filhos que deseja restaurar como individuais.
+                {keepMaster ? (
+                  <span className="block mt-1 text-amber-500 font-medium">
+                    O master será mantido com os filhos restantes.
+                  </span>
+                ) : selectedIds.length === vouchersFilhos.length ? (
+                  <span className="block mt-1 text-destructive font-medium">
+                    O master será excluído pois todos os filhos serão desmembrados.
+                  </span>
+                ) : null}
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          <div className="flex items-center gap-3 px-1">
-            <Checkbox
-              id="select-all"
-              checked={selectAll}
-              onCheckedChange={handleSelectAll}
-            />
-            <Label htmlFor="select-all" className="font-medium cursor-pointer">
-              Selecionar todos ({vouchersFilhos.length})
-            </Label>
-          </div>
-
-          <ScrollArea className="h-[300px] border rounded-lg">
-            <div className="divide-y divide-border">
-              {vouchersFilhos.map((filho) => (
-                <div
-                  key={filho.id}
-                  className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors"
-                >
-                  <Checkbox
-                    id={`filho-${filho.id}`}
-                    checked={selectedIds.includes(filho.id)}
-                    onCheckedChange={(checked) => handleToggle(filho.id, !!checked)}
-                  />
-                  <label
-                    htmlFor={`filho-${filho.id}`}
-                    className="flex-1 flex items-center justify-between cursor-pointer"
-                  >
-                    <div>
-                      <span className="font-mono font-medium text-sm">
-                        {filho.numeroSPO}
-                      </span>
-                      {filho.fornecedor && (
-                        <span className="text-sm text-muted-foreground ml-2">
-                          - {filho.fornecedor}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-right text-sm">
-                      <span className="font-medium">
-                        {filho.moeda || "BRL"}{" "}
-                        {Number(filho.valor || 0).toLocaleString("pt-BR", {
-                          minimumFractionDigits: 2,
-                        })}
-                      </span>
-                    </div>
-                  </label>
-                </div>
-              ))}
+        {!loadingFilhos && vouchersFilhos.length > 0 && (
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-3 px-1">
+              <Checkbox
+                id="select-all"
+                checked={selectAll}
+                onCheckedChange={handleSelectAll}
+              />
+              <Label htmlFor="select-all" className="font-medium cursor-pointer">
+                Selecionar todos ({vouchersFilhos.length})
+              </Label>
             </div>
-          </ScrollArea>
-        </div>
+
+            <ScrollArea className="h-[300px] border rounded-lg">
+              <div className="divide-y divide-border">
+                {vouchersFilhos.map((filho) => (
+                  <div
+                    key={filho.id}
+                    className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors"
+                  >
+                    <Checkbox
+                      id={`filho-${filho.id}`}
+                      checked={selectedIds.includes(filho.id)}
+                      onCheckedChange={(checked) => handleToggle(filho.id, !!checked)}
+                    />
+                    <label
+                      htmlFor={`filho-${filho.id}`}
+                      className="flex-1 flex items-center justify-between cursor-pointer"
+                    >
+                      <div>
+                        <span className="font-mono font-medium text-sm">
+                          {filho.numeroSPO}
+                        </span>
+                        {filho.fornecedor && (
+                          <span className="text-sm text-muted-foreground ml-2">
+                            - {filho.fornecedor}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-right text-sm">
+                        <span className="font-medium">
+                          {filho.moeda || "BRL"}{" "}
+                          {Number(filho.valor || 0).toLocaleString("pt-BR", {
+                            minimumFractionDigits: 2,
+                          })}
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </div>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => handleClose(false)} disabled={loading}>
@@ -153,7 +199,7 @@ export const DesmembrarMasterDialog = ({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={selectedIds.length === 0 || loading}
+            disabled={selectedIds.length === 0 || loading || loadingFilhos}
             className="bg-orange-600 hover:bg-orange-700"
           >
             {loading ? (
