@@ -10713,6 +10713,7 @@ serve(async (req) => {
         };
         
         const vencFormatted = formatDateForMariaDB(venc);
+        console.log('Vencimento formatado para INSERT:', vencFormatted);
 
         // Create the master voucher
         await client.execute(`
