@@ -10604,8 +10604,10 @@ serve(async (req) => {
           for (const row of (financialRows || [])) {
             const mirrorId = crypto.randomUUID();
             const mirrorVenc = (() => {
-              if (!row.data_vencimento) return new Date().toISOString().split('T')[0];
+              const fallback = new Date().toISOString().split('T')[0];
+              if (!row.data_vencimento) return fallback;
               const s = String(row.data_vencimento).trim();
+              if (!s || s === 'null' || s === 'undefined' || s === 'Invalid Date') return fallback;
               if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
               if (s.includes('T')) return s.split('T')[0];
               const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -10617,7 +10619,7 @@ serve(async (req) => {
                 const dd = String(parsed.getDate()).padStart(2, '0');
                 return `${y}-${m}-${dd}`;
               }
-              return new Date().toISOString().split('T')[0];
+              return fallback;
             })();
 
             await client.execute(`
@@ -10687,8 +10689,10 @@ serve(async (req) => {
         
         // Format vencimento as YYYY-MM-DD for MariaDB DATE column
         const formatDateForMariaDB = (dateValue: any): string => {
-          if (!dateValue) return new Date().toISOString().split('T')[0];
+          const fallback = new Date().toISOString().split('T')[0];
+          if (!dateValue) return fallback;
           const s = String(dateValue).trim();
+          if (!s || s === 'null' || s === 'undefined' || s === 'Invalid Date') return fallback;
           // Already YYYY-MM-DD
           if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
           // ISO with T
