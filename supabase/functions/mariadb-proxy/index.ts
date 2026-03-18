@@ -10174,6 +10174,17 @@ serve(async (req) => {
           return mapping[(tp || '').toUpperCase()] || 'FATURA';
         };
 
+        // Helper to format date as YYYY-MM-DD for MariaDB
+        const toMySQLDateSafe = (d: any): string | null => {
+          if (!d) return null;
+          const s = String(d);
+          if (s.includes('T')) return s.split('T')[0];
+          // Handle DD/MM/YYYY format
+          const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+          if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+          return s.substring(0, 10);
+        };
+
         // Inserir na t_vouchers
         await client.execute(`
           INSERT INTO dados_dachser.t_vouchers (
@@ -10189,8 +10200,8 @@ serve(async (req) => {
           rm.cnpj,
           rm.valor_nf || 0,
           rm.moeda || 'BRL',
-          rm.data_vencimento,
-          rm.data_emissao,
+          toMySQLDateSafe(rm.data_vencimento) || new Date().toISOString().split('T')[0],
+          toMySQLDateSafe(rm.data_emissao),
           mapFormaPag(rm.forma_pag),
           mapTipoDoc(rm.tipo_pag),
           rm.nome_cobranca === 'CLIENTE' ? 'CLIENTE' : 'DACHSER',
