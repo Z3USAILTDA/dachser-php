@@ -202,7 +202,7 @@ function pointAtFraction(line: [number, number][], t: number): [number, number] 
   return line[line.length - 1];
 }
 
-export default function Olimpo() {
+function OlimpoContent() {
   useUsageLog({ endpoint: "/olimpo" });
   const navigate = useNavigate();
   const mapContainerRef = useRef<HTMLDivElement>(null);
