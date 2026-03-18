@@ -17,15 +17,12 @@ import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 interface VoucherSearchResult {
-  id: string;
-  numero_spo: string;
+  processo: string;
   fornecedor?: string;
   cnpj_fornecedor?: string;
   valor?: number;
   moeda?: string;
   vencimento?: string;
-  etapa_atual?: string;
-  filial?: string;
 }
 
 interface VoucherMasterFormProps {
@@ -96,7 +93,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
 
       form.setValue("fornecedor", first.fornecedor || "");
       form.setValue("cnpjFornecedor", first.cnpj_fornecedor || "");
-      form.setValue("filial", first.filial || "");
+      form.setValue("filial", "");
       form.setValue("valorTotal", totalValor.toFixed(2).replace(".", ","));
       form.setValue("moeda", first.moeda || "BRL");
       
@@ -123,7 +120,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
 
       // Filter out already selected vouchers
       const results = (data?.data || []).filter(
-        (v: VoucherSearchResult) => !selectedVouchers.some(s => s.id === v.id)
+        (v: VoucherSearchResult) => !selectedVouchers.some(s => s.processo === v.processo)
       );
       
       setSearchResults(results);
@@ -142,8 +139,8 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
     setShowDropdown(false);
   };
 
-  const handleRemoveVoucher = (id: string) => {
-    setSelectedVouchers(prev => prev.filter(v => v.id !== id));
+  const handleRemoveVoucher = (processo: string) => {
+    setSelectedVouchers(prev => prev.filter(v => v.processo !== processo));
   };
 
   const handleFaturaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -204,7 +201,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
       const { data: masterResult, error: masterError } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "create_voucher_master",
-          voucher_ids: selectedVouchers.map(v => v.id),
+          voucher_ids: selectedVouchers.map(v => v.processo),
           nome_master: values.nomeMaster || null,
           fornecedor: values.fornecedor || null,
           cnpj_fornecedor: values.cnpjFornecedor || null,
@@ -367,13 +364,13 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
               <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-lg shadow-lg max-h-60 overflow-auto">
                 {searchResults.map((voucher) => (
                   <button
-                    key={voucher.id}
+                    key={voucher.processo}
                     type="button"
                     onClick={() => handleSelectVoucher(voucher)}
                     className="w-full px-4 py-3 text-left hover:bg-primary/10 flex items-center justify-between transition-colors"
                   >
                     <div>
-                      <span className="font-mono font-medium">{voucher.numero_spo}</span>
+                      <span className="font-mono font-medium">{voucher.processo}</span>
                       {voucher.fornecedor && (
                         <span className="text-sm text-muted-foreground ml-2">- {voucher.fornecedor}</span>
                       )}
@@ -382,9 +379,6 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                       <span className="text-sm font-medium">
                         {voucher.moeda || 'BRL'} {Number(voucher.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
-                      <Badge variant="outline" className="ml-2 text-xs">
-                        {voucher.etapa_atual}
-                      </Badge>
                     </div>
                   </button>
                 ))}
@@ -405,17 +399,17 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
             <div className="flex flex-wrap gap-2">
               {selectedVouchers.map((voucher) => (
                 <Badge
-                  key={voucher.id}
+                  key={voucher.processo}
                   variant="secondary"
                   className="gap-2 py-2 px-3 bg-purple-500/10 text-purple-400 border-purple-500/30"
                 >
-                  <span className="font-mono">{voucher.numero_spo}</span>
+                  <span className="font-mono">{voucher.processo}</span>
                   <span className="text-xs opacity-75">
                     ({voucher.moeda || 'BRL'} {Number(voucher.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
                   </span>
                   <button
                     type="button"
-                    onClick={() => handleRemoveVoucher(voucher.id)}
+                    onClick={() => handleRemoveVoucher(voucher.processo)}
                     className="ml-1 hover:text-destructive"
                   >
                     <X className="h-3 w-3" />
