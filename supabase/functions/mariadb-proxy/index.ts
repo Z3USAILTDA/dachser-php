@@ -10478,7 +10478,6 @@ serve(async (req) => {
           )
           AND (v.etapa_atual != 'CANCELADO' OR v.etapa_atual IS NULL)
           ORDER BY v.created_at DESC
-          LIMIT 50
         `, [search, `%${search}`, `%${search}`, `%${search}`, search]);
         console.log(`[search_vouchers_for_master] query took ${Date.now() - t0}ms, results: ${(vouchers as any[])?.length ?? 0}`);
         
