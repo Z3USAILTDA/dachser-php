@@ -2067,6 +2067,9 @@ const Index = () => {
     // Filtrar AWBs excluídos manualmente
     awbs = awbs.filter((awb) => !EXCLUDED_AWBS.includes(awb.awb));
 
+    // Filtro de ano: não-Z3US admin vê apenas processos de 2027+
+    awbs = filterByYearIfNotZ3us(awbs, (awb) => awb.etd || awb.last_check || awb.created_at);
+
     // Apply card filter (don't include COMPANY_NOT_REGISTERED in filtered results)
     if (cardFilter !== "all") {
       awbs = awbs.filter((awb) => {
