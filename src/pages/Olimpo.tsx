@@ -614,25 +614,28 @@ function OlimpoContent() {
 
     mapboxgl.accessToken = mapboxToken;
 
-    const map = new mapboxgl.Map({
-      container: mapContainerRef.current,
-      style: "mapbox://styles/mapbox/dark-v11",
-      center: [-30, 10],
-      zoom: 2,
-      projection: "mercator", // Forçar 2D - projeção flat
-      pitch: 0, // Sem inclinação
-      bearing: 0, // Sem rotação
-    });
+    let map: mapboxgl.Map;
+    try {
+      map = new mapboxgl.Map({
+        container: mapContainerRef.current,
+        style: "mapbox://styles/mapbox/dark-v11",
+        center: [-30, 10],
+        zoom: 2,
+        projection: "mercator",
+        pitch: 0,
+        bearing: 0,
+      });
+    } catch (err) {
+      console.error("Failed to initialize Mapbox:", err);
+      return;
+    }
 
-    // Add navigation controls
     map.addControl(
       new mapboxgl.NavigationControl({
         visualizePitch: false,
       }),
       "top-right"
     );
-
-    // Modo 2D não precisa de rotação
 
     mapRef.current = map;
 
