@@ -5629,11 +5629,27 @@ serve(async (req) => {
         // Generate UUID for id
         const voucherId = voucherData.id || crypto.randomUUID();
         
-        // Helper to convert ISO date to MySQL format (YYYY-MM-DD)
+        // Helper to convert any date to MySQL format (YYYY-MM-DD)
         const toMySQLDate = (isoDate: string | null): string | null => {
           if (!isoDate) return null;
           try {
-            return isoDate.split('T')[0];
+            const s = String(isoDate).trim();
+            // Already YYYY-MM-DD
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+            // ISO with T
+            if (s.includes('T')) return s.split('T')[0];
+            // DD/MM/YYYY
+            const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+            if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+            // Fallback: parse with Date object and extract local components
+            const parsed = new Date(s);
+            if (!isNaN(parsed.getTime())) {
+              const y = parsed.getFullYear();
+              const m = String(parsed.getMonth() + 1).padStart(2, '0');
+              const d = String(parsed.getDate()).padStart(2, '0');
+              return `${y}-${m}-${d}`;
+            }
+            return null;
           } catch {
             return null;
           }
@@ -10177,12 +10193,19 @@ serve(async (req) => {
         // Helper to format date as YYYY-MM-DD for MariaDB
         const toMySQLDateSafe = (d: any): string | null => {
           if (!d) return null;
-          const s = String(d);
+          const s = String(d).trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
           if (s.includes('T')) return s.split('T')[0];
-          // Handle DD/MM/YYYY format
           const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
           if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-          return s.substring(0, 10);
+          const parsed = new Date(s);
+          if (!isNaN(parsed.getTime())) {
+            const y = parsed.getFullYear();
+            const m = String(parsed.getMonth() + 1).padStart(2, '0');
+            const dd = String(parsed.getDate()).padStart(2, '0');
+            return `${y}-${m}-${dd}`;
+          }
+          return null;
         };
 
         // Inserir na t_vouchers
@@ -10579,11 +10602,22 @@ serve(async (req) => {
 
           for (const row of (financialRows || [])) {
             const mirrorId = crypto.randomUUID();
-            const mirrorVenc = row.data_vencimento 
-              ? (typeof row.data_vencimento === 'string' && row.data_vencimento.includes('T') 
-                  ? row.data_vencimento.split('T')[0] 
-                  : String(row.data_vencimento).substring(0, 10))
-              : new Date().toISOString().split('T')[0];
+            const mirrorVenc = (() => {
+              if (!row.data_vencimento) return new Date().toISOString().split('T')[0];
+              const s = String(row.data_vencimento).trim();
+              if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+              if (s.includes('T')) return s.split('T')[0];
+              const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+              if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+              const parsed = new Date(s);
+              if (!isNaN(parsed.getTime())) {
+                const y = parsed.getFullYear();
+                const m = String(parsed.getMonth() + 1).padStart(2, '0');
+                const dd = String(parsed.getDate()).padStart(2, '0');
+                return `${y}-${m}-${dd}`;
+              }
+              return new Date().toISOString().split('T')[0];
+            })();
 
             await client.execute(`
               INSERT INTO dados_dachser.t_vouchers (
@@ -12858,11 +12892,19 @@ serve(async (req) => {
             // Helper to format date as YYYY-MM-DD
             const toDateSafe = (d: any): string | null => {
               if (!d) return null;
-              const s = String(d);
+              const s = String(d).trim();
+              if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
               if (s.includes('T')) return s.split('T')[0];
               const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
               if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-              return s.substring(0, 10);
+              const parsed = new Date(s);
+              if (!isNaN(parsed.getTime())) {
+                const y = parsed.getFullYear();
+                const m = String(parsed.getMonth() + 1).padStart(2, '0');
+                const dd = String(parsed.getDate()).padStart(2, '0');
+                return `${y}-${m}-${dd}`;
+              }
+              return null;
             };
 
             await client.execute(`
