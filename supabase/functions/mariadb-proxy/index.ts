@@ -10544,20 +10544,83 @@ serve(async (req) => {
         const resolvedChildren = await client.query(`
           SELECT id, numero_spo, valor, vencimento, origem_processo, processo_id
           FROM dados_dachser.t_vouchers 
-          WHERE numero_spo IN (${voucher_ids.map(() => '?').join(',')})
+          WHERE numero_spo COLLATE utf8mb4_general_ci IN (${voucher_ids.map(() => '?').join(',')})
         `, voucher_ids);
 
         const resolvedIds = (resolvedChildren || []).map((c: any) => c.id);
+        const resolvedProcessos = (resolvedChildren || []).map((c: any) => c.numero_spo);
         console.log(`Resolved ${resolvedIds.length} child voucher IDs from ${voucher_ids.length} processo values`);
 
-        // Calculate total value from children if not provided
+        // Find processo values NOT found in t_vouchers — these exist only in t_dados_financeiro_voucher
+        const missingProcessos = voucher_ids.filter((p: string) => !resolvedProcessos.includes(p));
+        console.log(`Missing from t_vouchers (need mirror): ${missingProcessos.length}`, missingProcessos);
+
+        // Create mirror records for financial-only items
+        const mirrorIds: string[] = [];
+        if (missingProcessos.length > 0) {
+          const financialRows = await client.query(`
+            SELECT nd, razao_social, cnpj, valor_nf, moeda, data_vencimento, modal, id_rm, created_by, processo_id
+            FROM dados_dachser.t_dados_financeiro_voucher
+            WHERE nd COLLATE utf8mb4_general_ci IN (${missingProcessos.map(() => '?').join(',')})
+          `, missingProcessos);
+
+          console.log(`Found ${(financialRows || []).length} financial rows to mirror`);
+
+          for (const row of (financialRows || [])) {
+            const mirrorId = crypto.randomUUID();
+            const mirrorVenc = row.data_vencimento 
+              ? (typeof row.data_vencimento === 'string' && row.data_vencimento.includes('T') 
+                  ? row.data_vencimento.split('T')[0] 
+                  : String(row.data_vencimento).substring(0, 10))
+              : new Date().toISOString().split('T')[0];
+
+            await client.execute(`
+              INSERT INTO dados_dachser.t_vouchers (
+                id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento,
+                forma_pagamento, etapa_atual, status_baixa, status_financeiro,
+                voucher_master_id, origem_criacao, id_rm, criado_por_dfv, processo_id,
+                created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, 'BOLETO', 'OPERACAO', 'PENDENTE', 'PENDENTE', ?, 'RM', ?, ?, ?, NOW(), NOW())
+            `, [
+              mirrorId,
+              row.nd || null,
+              row.razao_social || null,
+              row.cnpj || null,
+              row.valor_nf || 0,
+              row.moeda || 'BRL',
+              mirrorVenc,
+              masterId,
+              row.id_rm || null,
+              row.created_by || null,
+              row.processo_id || null,
+            ]);
+
+            mirrorIds.push(mirrorId);
+            console.log(`Created mirror voucher ${mirrorId} for processo ${row.nd}`);
+          }
+        }
+
+        // Combine resolved + mirror IDs
+        const allChildIds = [...resolvedIds, ...mirrorIds];
+        console.log(`Total children to link: ${allChildIds.length} (${resolvedIds.length} existing + ${mirrorIds.length} mirrored)`);
+
+        // Calculate total value from ALL children (existing + mirrored)
         let totalValor = valor_total;
         if (!totalValor) {
-          const total = (resolvedChildren || []).reduce((sum: number, c: any) => sum + (parseFloat(c.valor) || 0), 0);
+          // Sum from resolved children
+          let total = (resolvedChildren || []).reduce((sum: number, c: any) => sum + (parseFloat(c.valor) || 0), 0);
+          // Sum from mirrored financial rows
+          if (missingProcessos.length > 0) {
+            const financialRows2 = await client.query(`
+              SELECT valor_nf FROM dados_dachser.t_dados_financeiro_voucher
+              WHERE nd COLLATE utf8mb4_general_ci IN (${missingProcessos.map(() => '?').join(',')})
+            `, missingProcessos);
+            total += (financialRows2 || []).reduce((sum: number, c: any) => sum + (parseFloat(c.valor_nf) || 0), 0);
+          }
           totalValor = total;
         }
 
-        // Get earliest vencimento, origem_processo and processo_ids from children if not provided
+        // Get earliest vencimento, origem_processo and processo_ids from existing children
         let venc = vencimento;
         let origemProcesso = null;
         let processoId = null;
@@ -10569,7 +10632,6 @@ serve(async (req) => {
           }
           origemProcesso = resolvedChildren[0]?.origem_processo || null;
           
-          // Collect unique processo_ids from all children
           const processoIdsList = resolvedChildren
             .map((c: any) => c.processo_id)
             .filter((p: any) => p && p.toString().trim())
@@ -10581,22 +10643,16 @@ serve(async (req) => {
         const formatDateForMariaDB = (dateValue: any): string => {
           if (!dateValue) return new Date().toISOString().split('T')[0];
           if (typeof dateValue === 'string') {
-            // If it's an ISO string, extract just the date part
-            if (dateValue.includes('T')) {
-              return dateValue.split('T')[0];
-            }
-            // Already in YYYY-MM-DD format
+            if (dateValue.includes('T')) return dateValue.split('T')[0];
             return dateValue;
           }
-          if (dateValue instanceof Date) {
-            return dateValue.toISOString().split('T')[0];
-          }
+          if (dateValue instanceof Date) return dateValue.toISOString().split('T')[0];
           return new Date().toISOString().split('T')[0];
         };
         
         const vencFormatted = formatDateForMariaDB(venc);
 
-        // Create the master voucher - starts in OPERACAO for user approval
+        // Create the master voucher
         await client.execute(`
           INSERT INTO dados_dachser.t_vouchers (
             id, numero_spo, nome_master, fornecedor, cnpj_fornecedor, valor, moeda, vencimento,
@@ -10623,7 +10679,7 @@ serve(async (req) => {
           processoId
         ]);
 
-        // Update all child vouchers with the master ID (using resolved UUIDs)
+        // Update existing child vouchers with the master ID
         if (resolvedIds.length > 0) {
           await client.execute(`
             UPDATE dados_dachser.t_vouchers 
