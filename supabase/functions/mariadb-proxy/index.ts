@@ -10190,22 +10190,25 @@ serve(async (req) => {
           return mapping[(tp || '').toUpperCase()] || 'FATURA';
         };
 
-        // Helper to format date as YYYY-MM-DD for MariaDB
-        const toMySQLDateSafe = (d: any): string | null => {
-          if (!d) return null;
+        // Helper to format date as YYYY-MM-DD HH:MM:SS.000 for MariaDB DATETIME
+        const toMySQLDateSafe = (d: any): string => {
+          const now = new Date();
+          const fallback = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} 00:00:00.000`;
+          if (!d) return fallback;
           const s = String(d).trim();
-          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-          if (s.includes('T')) return s.split('T')[0];
+          if (!s || s === 'null' || s === 'undefined' || s === 'Invalid Date') return fallback;
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s} 00:00:00.000`;
+          if (s.includes('T')) return `${s.split('T')[0]} 00:00:00.000`;
           const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-          if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+          if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]} 00:00:00.000`;
           const parsed = new Date(s.replace(/\bGM$/, 'GMT'));
           if (!isNaN(parsed.getTime())) {
             const y = parsed.getFullYear();
             const m = String(parsed.getMonth() + 1).padStart(2, '0');
             const dd = String(parsed.getDate()).padStart(2, '0');
-            return `${y}-${m}-${dd}`;
+            return `${y}-${m}-${dd} 00:00:00.000`;
           }
-          return null;
+          return fallback;
         };
 
         // Inserir na t_vouchers
