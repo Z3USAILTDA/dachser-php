@@ -10559,7 +10559,7 @@ serve(async (req) => {
         const mirrorIds: string[] = [];
         if (missingProcessos.length > 0) {
           const financialRows = await client.query(`
-            SELECT nd, razao_social, cnpj, valor_nf, moeda, data_vencimento, modal, id_rm, created_by, processo_id
+            SELECT nd, razao_social, cnpj, valor_nf, moeda, data_vencimento, modal, id_rm
             FROM dados_dachser.t_dados_financeiro_voucher
             WHERE nd COLLATE utf8mb4_general_ci IN (${missingProcessos.map(() => '?').join(',')})
           `, missingProcessos);
@@ -10578,9 +10578,8 @@ serve(async (req) => {
               INSERT INTO dados_dachser.t_vouchers (
                 id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento,
                 forma_pagamento, etapa_atual, status_baixa, status_financeiro,
-                voucher_master_id, origem_criacao, id_rm, criado_por_dfv, processo_id,
-                created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, 'BOLETO', 'OPERACAO', 'PENDENTE', 'PENDENTE', ?, 'RM', ?, ?, ?, NOW(), NOW())
+                voucher_master_id, id_rm, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, 'BOLETO', 'OPERACAO', 'PENDENTE', 'PENDENTE', ?, ?, NOW(), NOW())
             `, [
               mirrorId,
               row.nd || null,
@@ -10591,8 +10590,6 @@ serve(async (req) => {
               mirrorVenc,
               masterId,
               row.id_rm || null,
-              row.created_by || null,
-              row.processo_id || null,
             ]);
 
             mirrorIds.push(mirrorId);
