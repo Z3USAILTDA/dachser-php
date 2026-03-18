@@ -10551,6 +10551,7 @@ serve(async (req) => {
         } = body as any;
 
         console.log('Creating voucher master with children:', voucher_ids);
+        console.log('Vencimento recebido:', vencimento, '| Tipo:', typeof vencimento);
 
         if (!voucher_ids || !Array.isArray(voucher_ids) || voucher_ids.length < 2) {
           return new Response(
