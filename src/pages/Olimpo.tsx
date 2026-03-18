@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Maximize2, Minimize2, Globe, X, Plane, Ship, LogOut } from "lucide-react";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -201,7 +202,7 @@ function pointAtFraction(line: [number, number][], t: number): [number, number] 
   return line[line.length - 1];
 }
 
-export default function Olimpo() {
+function OlimpoContent() {
   useUsageLog({ endpoint: "/olimpo" });
   const navigate = useNavigate();
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -225,7 +226,14 @@ export default function Olimpo() {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const user = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "{}");
+    } catch {
+      console.warn("Failed to parse user from localStorage");
+      return {};
+    }
+  })();
   const isOlimpoOnly = user?.olimpo_only === 1;
 
   const handleLogout = () => {
@@ -606,25 +614,28 @@ export default function Olimpo() {
 
     mapboxgl.accessToken = mapboxToken;
 
-    const map = new mapboxgl.Map({
-      container: mapContainerRef.current,
-      style: "mapbox://styles/mapbox/dark-v11",
-      center: [-30, 10],
-      zoom: 2,
-      projection: "mercator", // Forçar 2D - projeção flat
-      pitch: 0, // Sem inclinação
-      bearing: 0, // Sem rotação
-    });
+    let map: mapboxgl.Map;
+    try {
+      map = new mapboxgl.Map({
+        container: mapContainerRef.current,
+        style: "mapbox://styles/mapbox/dark-v11",
+        center: [-30, 10],
+        zoom: 2,
+        projection: "mercator",
+        pitch: 0,
+        bearing: 0,
+      });
+    } catch (err) {
+      console.error("Failed to initialize Mapbox:", err);
+      return;
+    }
 
-    // Add navigation controls
     map.addControl(
       new mapboxgl.NavigationControl({
         visualizePitch: false,
       }),
       "top-right"
     );
-
-    // Modo 2D não precisa de rotação
 
     mapRef.current = map;
 
@@ -1450,5 +1461,13 @@ export default function Olimpo() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Olimpo() {
+  return (
+    <ErrorBoundary>
+      <OlimpoContent />
+    </ErrorBoundary>
   );
 }
