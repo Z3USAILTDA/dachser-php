@@ -5629,30 +5629,29 @@ serve(async (req) => {
         // Generate UUID for id
         const voucherId = voucherData.id || crypto.randomUUID();
         
-        // Helper to convert any date to MySQL format (YYYY-MM-DD)
-        const toMySQLDate = (isoDate: string | null): string | null => {
-          if (!isoDate) return null;
+        // Helper to convert any date to MySQL DATETIME format (YYYY-MM-DD HH:MM:SS.000)
+        const toMySQLDate = (dateValue: any): string => {
+          const now = new Date();
+          const fallback = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} 00:00:00.000`;
+          if (!dateValue) return fallback;
           try {
-            const s = String(isoDate).trim();
-            // Already YYYY-MM-DD
-            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-            // ISO with T
-            if (s.includes('T')) return s.split('T')[0];
-            // DD/MM/YYYY
+            const s = String(dateValue).trim();
+            if (!s || s === 'null' || s === 'undefined' || s === 'Invalid Date') return fallback;
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s} 00:00:00.000`;
+            if (s.includes('T')) return `${s.split('T')[0]} 00:00:00.000`;
             const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-            if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-            // Fallback: fix truncated timezone and parse
+            if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]} 00:00:00.000`;
             const fixedTz = s.replace(/\bGM$/, 'GMT');
             const parsed = new Date(fixedTz);
             if (!isNaN(parsed.getTime())) {
               const y = parsed.getFullYear();
               const m = String(parsed.getMonth() + 1).padStart(2, '0');
               const d = String(parsed.getDate()).padStart(2, '0');
-              return `${y}-${m}-${d}`;
+              return `${y}-${m}-${d} 00:00:00.000`;
             }
-            return null;
+            return fallback;
           } catch {
-            return null;
+            return fallback;
           }
         };
         
@@ -10191,22 +10190,25 @@ serve(async (req) => {
           return mapping[(tp || '').toUpperCase()] || 'FATURA';
         };
 
-        // Helper to format date as YYYY-MM-DD for MariaDB
-        const toMySQLDateSafe = (d: any): string | null => {
-          if (!d) return null;
+        // Helper to format date as YYYY-MM-DD HH:MM:SS.000 for MariaDB DATETIME
+        const toMySQLDateSafe = (d: any): string => {
+          const now = new Date();
+          const fallback = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} 00:00:00.000`;
+          if (!d) return fallback;
           const s = String(d).trim();
-          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-          if (s.includes('T')) return s.split('T')[0];
+          if (!s || s === 'null' || s === 'undefined' || s === 'Invalid Date') return fallback;
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s} 00:00:00.000`;
+          if (s.includes('T')) return `${s.split('T')[0]} 00:00:00.000`;
           const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-          if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+          if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]} 00:00:00.000`;
           const parsed = new Date(s.replace(/\bGM$/, 'GMT'));
           if (!isNaN(parsed.getTime())) {
             const y = parsed.getFullYear();
             const m = String(parsed.getMonth() + 1).padStart(2, '0');
             const dd = String(parsed.getDate()).padStart(2, '0');
-            return `${y}-${m}-${dd}`;
+            return `${y}-${m}-${dd} 00:00:00.000`;
           }
-          return null;
+          return fallback;
         };
 
         // Inserir na t_vouchers
@@ -10224,7 +10226,7 @@ serve(async (req) => {
           rm.cnpj,
           rm.valor_nf || 0,
           rm.moeda || 'BRL',
-          toMySQLDateSafe(rm.data_vencimento) || new Date().toISOString().split('T')[0],
+          toMySQLDateSafe(rm.data_vencimento),
           toMySQLDateSafe(rm.data_emissao),
           mapFormaPag(rm.forma_pag),
           mapTipoDoc(rm.tipo_pag),
@@ -10687,29 +10689,26 @@ serve(async (req) => {
           processoId = processoIdsList.length > 0 ? processoIdsList.join(', ') : null;
         }
         
-        // Format vencimento as YYYY-MM-DD for MariaDB DATE column
+        // Format vencimento as YYYY-MM-DD HH:MM:SS.000 for MariaDB DATETIME column
         const formatDateForMariaDB = (dateValue: any): string => {
-          const fallback = new Date().toISOString().split('T')[0];
+          const now = new Date();
+          const fallback = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} 00:00:00.000`;
           if (!dateValue) return fallback;
           const s = String(dateValue).trim();
           if (!s || s === 'null' || s === 'undefined' || s === 'Invalid Date') return fallback;
-          // Already YYYY-MM-DD
-          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-          // ISO with T
-          if (s.includes('T')) return s.split('T')[0];
-          // DD/MM/YYYY
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s} 00:00:00.000`;
+          if (s.includes('T')) return `${s.split('T')[0]} 00:00:00.000`;
           const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-          if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-          // Try parsing (fix truncated timezone like 'GM' -> 'GMT')
+          if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]} 00:00:00.000`;
           const fixedTz = s.replace(/\bGM$/, 'GMT');
           const parsed = new Date(fixedTz);
           if (!isNaN(parsed.getTime())) {
             const y = parsed.getFullYear();
             const m = String(parsed.getMonth() + 1).padStart(2, '0');
             const d = String(parsed.getDate()).padStart(2, '0');
-            return `${y}-${m}-${d}`;
+            return `${y}-${m}-${d} 00:00:00.000`;
           }
-          return new Date().toISOString().split('T')[0];
+          return fallback;
         };
         
         const vencFormatted = formatDateForMariaDB(venc);
