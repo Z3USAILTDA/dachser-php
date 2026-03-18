@@ -1460,3 +1460,11 @@ function OlimpoContent() {
     </div>
   );
 }
+
+export default function Olimpo() {
+  return (
+    <ErrorBoundary>
+      <OlimpoContent />
+    </ErrorBoundary>
+  );
+}
