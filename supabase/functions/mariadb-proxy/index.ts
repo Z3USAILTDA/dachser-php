@@ -10602,11 +10602,22 @@ serve(async (req) => {
 
           for (const row of (financialRows || [])) {
             const mirrorId = crypto.randomUUID();
-            const mirrorVenc = row.data_vencimento 
-              ? (typeof row.data_vencimento === 'string' && row.data_vencimento.includes('T') 
-                  ? row.data_vencimento.split('T')[0] 
-                  : String(row.data_vencimento).substring(0, 10))
-              : new Date().toISOString().split('T')[0];
+            const mirrorVenc = (() => {
+              if (!row.data_vencimento) return new Date().toISOString().split('T')[0];
+              const s = String(row.data_vencimento).trim();
+              if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+              if (s.includes('T')) return s.split('T')[0];
+              const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+              if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+              const parsed = new Date(s);
+              if (!isNaN(parsed.getTime())) {
+                const y = parsed.getFullYear();
+                const m = String(parsed.getMonth() + 1).padStart(2, '0');
+                const dd = String(parsed.getDate()).padStart(2, '0');
+                return `${y}-${m}-${dd}`;
+              }
+              return new Date().toISOString().split('T')[0];
+            })();
 
             await client.execute(`
               INSERT INTO dados_dachser.t_vouchers (
