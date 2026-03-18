@@ -5641,8 +5641,9 @@ serve(async (req) => {
             // DD/MM/YYYY
             const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
             if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-            // Fallback: parse with Date object and extract local components
-            const parsed = new Date(s);
+            // Fallback: fix truncated timezone and parse
+            const fixedTz = s.replace(/\bGM$/, 'GMT');
+            const parsed = new Date(fixedTz);
             if (!isNaN(parsed.getTime())) {
               const y = parsed.getFullYear();
               const m = String(parsed.getMonth() + 1).padStart(2, '0');
