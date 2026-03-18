@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { filterByYearIfNotZ3us, isZ3usAdmin } from "@/utils/adminAccess";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DatabaseStatsPanel, DbStats } from "@/components/DatabaseStatsPanel";
