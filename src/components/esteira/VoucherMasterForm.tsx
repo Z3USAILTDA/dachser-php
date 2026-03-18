@@ -364,13 +364,13 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
               <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-lg shadow-lg max-h-60 overflow-auto">
                 {searchResults.map((voucher) => (
                   <button
-                    key={voucher.id}
+                    key={voucher.processo}
                     type="button"
                     onClick={() => handleSelectVoucher(voucher)}
                     className="w-full px-4 py-3 text-left hover:bg-primary/10 flex items-center justify-between transition-colors"
                   >
                     <div>
-                      <span className="font-mono font-medium">{voucher.numero_spo}</span>
+                      <span className="font-mono font-medium">{voucher.processo}</span>
                       {voucher.fornecedor && (
                         <span className="text-sm text-muted-foreground ml-2">- {voucher.fornecedor}</span>
                       )}
@@ -379,9 +379,6 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                       <span className="text-sm font-medium">
                         {voucher.moeda || 'BRL'} {Number(voucher.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
-                      <Badge variant="outline" className="ml-2 text-xs">
-                        {voucher.etapa_atual}
-                      </Badge>
                     </div>
                   </button>
                 ))}
