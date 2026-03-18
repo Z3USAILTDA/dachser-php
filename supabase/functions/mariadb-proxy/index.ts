@@ -5641,8 +5641,9 @@ serve(async (req) => {
             // DD/MM/YYYY
             const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
             if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-            // Fallback: parse with Date object and extract local components
-            const parsed = new Date(s);
+            // Fallback: fix truncated timezone and parse
+            const fixedTz = s.replace(/\bGM$/, 'GMT');
+            const parsed = new Date(fixedTz);
             if (!isNaN(parsed.getTime())) {
               const y = parsed.getFullYear();
               const m = String(parsed.getMonth() + 1).padStart(2, '0');
@@ -10198,7 +10199,7 @@ serve(async (req) => {
           if (s.includes('T')) return s.split('T')[0];
           const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
           if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-          const parsed = new Date(s);
+          const parsed = new Date(s.replace(/\bGM$/, 'GMT'));
           if (!isNaN(parsed.getTime())) {
             const y = parsed.getFullYear();
             const m = String(parsed.getMonth() + 1).padStart(2, '0');
@@ -10609,7 +10610,7 @@ serve(async (req) => {
               if (s.includes('T')) return s.split('T')[0];
               const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
               if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-              const parsed = new Date(s);
+              const parsed = new Date(s.replace(/\bGM$/, 'GMT'));
               if (!isNaN(parsed.getTime())) {
                 const y = parsed.getFullYear();
                 const m = String(parsed.getMonth() + 1).padStart(2, '0');
@@ -10687,11 +10688,23 @@ serve(async (req) => {
         // Format vencimento as YYYY-MM-DD for MariaDB DATE column
         const formatDateForMariaDB = (dateValue: any): string => {
           if (!dateValue) return new Date().toISOString().split('T')[0];
-          if (typeof dateValue === 'string') {
-            if (dateValue.includes('T')) return dateValue.split('T')[0];
-            return dateValue;
+          const s = String(dateValue).trim();
+          // Already YYYY-MM-DD
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+          // ISO with T
+          if (s.includes('T')) return s.split('T')[0];
+          // DD/MM/YYYY
+          const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+          if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+          // Try parsing (fix truncated timezone like 'GM' -> 'GMT')
+          const fixedTz = s.replace(/\bGM$/, 'GMT');
+          const parsed = new Date(fixedTz);
+          if (!isNaN(parsed.getTime())) {
+            const y = parsed.getFullYear();
+            const m = String(parsed.getMonth() + 1).padStart(2, '0');
+            const d = String(parsed.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
           }
-          if (dateValue instanceof Date) return dateValue.toISOString().split('T')[0];
           return new Date().toISOString().split('T')[0];
         };
         
@@ -12897,7 +12910,7 @@ serve(async (req) => {
               if (s.includes('T')) return s.split('T')[0];
               const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
               if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-              const parsed = new Date(s);
+              const parsed = new Date(s.replace(/\bGM$/, 'GMT'));
               if (!isNaN(parsed.getTime())) {
                 const y = parsed.getFullYear();
                 const m = String(parsed.getMonth() + 1).padStart(2, '0');
