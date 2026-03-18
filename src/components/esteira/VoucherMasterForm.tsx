@@ -139,8 +139,8 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
     setShowDropdown(false);
   };
 
-  const handleRemoveVoucher = (id: string) => {
-    setSelectedVouchers(prev => prev.filter(v => v.id !== id));
+  const handleRemoveVoucher = (processo: string) => {
+    setSelectedVouchers(prev => prev.filter(v => v.processo !== processo));
   };
 
   const handleFaturaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
