@@ -416,12 +416,10 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
 
     // DEBUG: log the top events after sort for specific AWBs
     if (awbForDebug && awbForDebug.includes('85006073')) {
-      const debugLines = filtered.slice(0, 6).map((ev: any, i: number) => {
+      const debugLines = filtered.slice(0, 4).map((ev: any, i: number) => {
         const code = getEventStatusCode(ev);
         const dateStr = getEventDateStr(ev);
-        const ts = parseEventTimestamp(dateStr);
-        const hier = IATA_HIERARCHY[code] ?? 0;
-        return `[${i}]${code}|d=${dateStr}|ts=${ts}|h=${hier}`;
+        return `[${i}]code=${code}|keys=${Object.keys(ev).join(',')}|status=${ev.status}|Status=${ev.Status}|desc=${(ev.description||ev.Description||'').substring(0,40)}`;
       });
       console.log(`[SORT-DEBUG] ${awbForDebug}: ${debugLines.join(' ; ')}`);
     }
