@@ -2732,10 +2732,35 @@ const Index = () => {
                                 {abbreviateName(awb.consignee_name)}
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem]">
-                              <span className="text-[#ffc800]">{awb.origem || "N/A"}</span>
-                              <span className="mx-1">→</span>
-                              <span>{awb.destino || "N/A"}</span>
+                            <td className="px-4 py-3 text-[0.8rem]">
+                              {(() => {
+                                const statusCode = getStatusCode(awb.last_event).toUpperCase();
+                                const isArrConexao = statusCode === "ARR - CONEXÃO" || statusCode === "ARR - CONEXAO";
+                                return (
+                                  <div className="flex items-center gap-1 whitespace-nowrap">
+                                    <span className="text-[#ffc800] font-semibold">{awb.origem || "N/A"}</span>
+                                    {awb.conexao ? (
+                                      <>
+                                        <span className="text-muted-foreground">→</span>
+                                        <span className={`font-semibold ${
+                                          isArrConexao
+                                            ? "text-orange-400 animate-pulse"
+                                            : "text-muted-foreground"
+                                        }`}>
+                                          {awb.conexao}
+                                        </span>
+                                        <span className="text-muted-foreground">→</span>
+                                        <span className="text-[#f5f5f5]">{awb.destino || "N/A"}</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="text-muted-foreground mx-1">→</span>
+                                        <span className="text-[#f5f5f5]">{awb.destino || "N/A"}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td className="px-4 py-3 min-w-[300px]">
                               {(() => {
