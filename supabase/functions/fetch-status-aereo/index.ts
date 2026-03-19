@@ -1659,6 +1659,8 @@ serve(async (req) => {
       '996-14370731': {
         force_origem: 'CDG',
         force_destino: 'GRU',
+        force_discrepancy: true,
+        force_baseline_pieces: 26,
       },
       '020-02593301': {
         status: 'BKD',
@@ -2524,6 +2526,12 @@ serve(async (req) => {
         row.baseline_pieces = null;
         row.has_dis_event = false;
         row.force_critical = false;
+      }
+      if (override.force_discrepancy) {
+        row.pieces_discrepancy = true;
+        row.baseline_pieces = override.force_baseline_pieces || row.baseline_pieces;
+        row.force_critical = true;
+        console.log(`[manualOverride] ${awb}: forced pieces_discrepancy=true, baseline_pieces=${row.baseline_pieces}`);
       }
     }
 
