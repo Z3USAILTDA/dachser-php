@@ -449,7 +449,8 @@ function extractLastEventDescription(timelineJson: string | null, etdStr?: strin
       if (!ts) return true;
       const eventDate = parseFlexibleDate(String(ts));
       if (!eventDate) return true;
-      if (eventDate > now) return false;
+      const futureThreshold = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+      if (eventDate > futureThreshold) return false;
       if (eventDate.getFullYear() < 2020) return false;
       return true;
     });
