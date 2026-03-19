@@ -1,40 +1,28 @@
 
 
-## Plano: Destacar origem para processos pré-embarque com conexão
+## Plano: Corrigir status do processo 724-85006073
 
-### Problema
-Processos que ainda estão na origem (status como `BKD`, `PRE`, `MAN`, `DOC`, `RCS`, `FOH`, `RDP`) estão com a **conexão** destacada em amarelo, quando deveriam ter a **origem** destacada — o cargo ainda não saiu.
+### Diagnóstico
 
-### Solução
-Adicionar uma lista de statuses pré-embarque (`PRE_DEPARTURE`) e verificar **antes** da lógica de conexão. Se o status for pré-embarque, sempre destaca a origem — sem alterar a lógica existente para os demais cenários.
+Investiguei o `timeline_json` do AWB no MariaDB e encontrei:
 
-### Mudança em `src/pages/Index.tsx` (~linha 2751)
+| Timestamp | Status | Descrição |
+|-----------|--------|-----------|
+| 20 Mar 2026 20:10 | DEP | Departed CDG-ZRH (timestamp futuro, filtrado) |
+| 19 Mar 2026 13:15 | RCS | Ready for Carriage at CDG |
+| 19 Mar 2026 13:15 | RCS | Ready for Carriage at CDG (duplicata) |
+| 19 Mar 2026 13:15 | FOH | Received in Warehouse at CDG |
+| 19 Mar 2026 11:13 | BKD | Booked on Flight |
+| 18 Mar 2026 15:31 | BKD | Booked on Flight |
 
-```typescript
-const PRE_DEPARTURE = ['BKD','PRE','MAN','DOC','RCS','RDP','RCT','LAT','TKG','SCR','ECC'];
+Os eventos `RCS` e `FOH` têm **exatamente o mesmo timestamp**. A hierarquia IATA atualizada no código dá `FOH: 16` > `RCS: 10`, portanto `FOH` deveria vencer o desempate. Mas a tela mostra `RCS`.
 
-if (conexoes.length > 0) {
-  if (POST_DESTINO.includes(statusCode)) {
-    highlightDestino = true;
-  } else if (PRE_DEPARTURE.includes(statusCode)) {
-    // Cargo ainda na origem — não destacar conexão
-    highlightOrigin = true;
-  } else if (AT_CONEXAO.includes(statusCode) || statusCode === 'DEP') {
-    highlightConexaoIndex = conexoes.length - 1;
-  } else if (IN_TRANSIT_AT_CONNECTION.includes(statusCode)) {
-    highlightConexaoIndex = conexoes.length - 1;
-  } else {
-    highlightOrigin = true;
-  }
-}
-```
+**Causa raiz**: A edge function `fetch-status-aereo` não foi re-implantada após a última alteração da hierarquia (FOH de 9 para 16). O código fonte está correto mas a versão em produção é a antiga.
 
-### Resultado
-- `BKD`, `PRE`, `MAN`, etc. com conexão → **origem** amarela ✓
-- `DEP` com conexão → **conexão** amarela (mantém comportamento atual) ✓
-- `ARR - CONEXÃO` → **conexão** amarela (sem mudança) ✓
-- `ARR`, `RCF`, `NFD`, etc. → **destino** amarelo (sem mudança) ✓
+### Ação
 
-### Arquivo modificado
-1. `src/pages/Index.tsx` — adicionar checagem `PRE_DEPARTURE` antes da lógica de conexão
+1. **Reimplantar a edge function `fetch-status-aereo`** — sem alteração de código, apenas deploy para que a versão com `FOH: 16` entre em produção.
+
+### Resultado esperado
+- AWB 724-85006073: status muda de `RCS` para `FOH` na tabela principal, alinhando com o banco de dados e a timeline.
 
