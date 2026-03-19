@@ -345,12 +345,13 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
       // Exclude [planned] events – they are predictions, not confirmed
       const desc = (ev.Description || ev.description || ev.title || ev.details || ev.status || ev.Status || '').toString().trim();
       if (desc.toLowerCase().endsWith('[planned]')) return false;
-      // Exclude future events (predictions, not real statuses)
+      // Exclude future events (predictions, not real statuses) — allow 6h buffer for timezone differences
       const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
       if (!ts) return true;
       const eventDate = parseFlexibleDate(String(ts));
       if (!eventDate) return true;
-      if (eventDate > now) return false;
+      const futureThreshold = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+      if (eventDate > futureThreshold) return false;
       if (eventDate.getFullYear() < 2020) return false;
       return true;
     });
