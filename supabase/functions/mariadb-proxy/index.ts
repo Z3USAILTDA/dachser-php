@@ -7901,6 +7901,13 @@ serve(async (req) => {
             }
           }
 
+          // Apply forced discrepancy as fallback if automatic detection didn't find one
+          const forcedDisc = FORCED_DISCREPANCIES[cleanAwbForForce];
+          if (!discrepancy && forcedDisc) {
+            discrepancy = forcedDisc;
+            console.log(`[FORCED_DISCREPANCY] Applied forced discrepancy for AWB ${cleanAwbForForce}: ${JSON.stringify(forcedDisc)}`);
+          }
+
           result = { success: true, data: filteredEvents, ...(discrepancy ? { discrepancy } : {}) };
         } catch (tableErr) {
           console.log('Error fetching from t_aereo_ws_firecrawl:', tableErr);
