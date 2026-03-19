@@ -397,6 +397,8 @@ interface AWBData {
   email_cliente?: string;
   origem?: string;
   destino?: string;
+  conexao?: string; // Connection airport (if any)
+  hours_in_status?: number; // Hours in current status (for SLA)
   fromStatusAereo?: boolean;
   data_atraso?: string | null;
   tipo_servico?: string;
