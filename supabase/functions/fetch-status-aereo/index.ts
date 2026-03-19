@@ -1241,6 +1241,62 @@ serve(async (req) => {
                 etdForTimeline
               ) 
             : null),
+        // Extract connection airport from timeline (first ARR event where airport != destination)
+        conexao: (() => {
+          if (!timelineStr || !destForClassify) return null;
+          try {
+            const events = JSON.parse(timelineStr);
+            if (!Array.isArray(events)) return null;
+            const dest = destForClassify.trim().toUpperCase();
+            // Helper to extract airport code from event
+            function extractAirportFromEvt(ev: any): string | null {
+              const fields = ['station', 'Station', 'airport', 'Airport', 'location', 'Location', 'port', 'Port'];
+              for (const f of fields) {
+                if (ev[f]) {
+                  const val = String(ev[f]).trim().toUpperCase();
+                  if (val.length === 3 && /^[A-Z]{3}$/.test(val)) return val;
+                }
+              }
+              // Check description for airport codes after ARR
+              const desc = String(ev.Description || ev.description || ev.descricao_evento || ev.title || '');
+              const arrMatch = desc.match(/(?:ARR|arrived?)\s*[-–\/\s]+\s*([A-Z]{3})/i);
+              if (arrMatch) return arrMatch[1].toUpperCase();
+              // "at GRU" pattern
+              const atMatch = desc.match(/\bat\s+([A-Z]{3})\b/i);
+              if (atMatch) return atMatch[1].toUpperCase();
+              return null;
+            }
+            // Find connection airports (ARR events where airport != destination)
+            const connectionAirports: string[] = [];
+            for (const ev of events) {
+              const evStatus = (ev.status || ev.Status || ev.codigo_evento || '').toUpperCase();
+              const evDesc = (ev.Description || ev.description || ev.descricao_evento || ev.title || '').toUpperCase();
+              if (evStatus !== 'ARR' && !evDesc.includes('ARR')) continue;
+              const airport = extractAirportFromEvt(ev);
+              if (airport && airport !== dest && !connectionAirports.includes(airport)) {
+                connectionAirports.push(airport);
+              }
+            }
+            return connectionAirports.length > 0 ? connectionAirports[0] : null;
+          } catch { return null; }
+        })(),
+        // Hours in current status (for SLA display)
+        hours_in_status: (() => {
+          const lastDate = extractLastEventDate(timelineStr, etdForTimeline) || 
+            (apiRow?.historico_status 
+              ? extractLastEventDate(
+                  typeof apiRow.historico_status === 'string' 
+                    ? apiRow.historico_status 
+                    : JSON.stringify(apiRow.historico_status), 
+                  etdForTimeline
+                ) 
+              : null);
+          if (!lastDate) return null;
+          const eventTime = new Date(lastDate).getTime();
+          if (isNaN(eventTime)) return null;
+          const now = Date.now();
+          return Math.max(0, (now - eventTime) / (1000 * 60 * 60)); // hours as float
+        })(),
       };
 
       // If this AWB was enriched via t_aereo_api fallback, use that data directly

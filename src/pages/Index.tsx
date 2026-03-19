@@ -397,6 +397,8 @@ interface AWBData {
   email_cliente?: string;
   origem?: string;
   destino?: string;
+  conexao?: string; // Connection airport (if any)
+  hours_in_status?: number; // Hours in current status (for SLA)
   fromStatusAereo?: boolean;
   data_atraso?: string | null;
   tipo_servico?: string;
@@ -569,6 +571,8 @@ const Index = () => {
           email_cliente: item.email_cliente || "",
           origem: item.origem || "N/A",
           destino: item.destino || "N/A",
+          conexao: item.conexao || null,
+          hours_in_status: item.hours_in_status ?? null,
           last_event: item.último_status || "-",
           status: item.último_status || "-",
           status_description: item.status_info || null,
@@ -2650,6 +2654,9 @@ const Index = () => {
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
                         Situação
                       </th>
+                      <th className="px-3 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                        SLA
+                      </th>
                       <th
                         className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
                         onClick={handleAnalystSort}
@@ -2728,10 +2735,35 @@ const Index = () => {
                                 {abbreviateName(awb.consignee_name)}
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem]">
-                              <span className="text-[#ffc800]">{awb.origem || "N/A"}</span>
-                              <span className="mx-1">→</span>
-                              <span>{awb.destino || "N/A"}</span>
+                            <td className="px-4 py-3 text-[0.8rem]">
+                              {(() => {
+                                const statusCode = getStatusCode(awb.last_event).toUpperCase();
+                                const isArrConexao = statusCode === "ARR - CONEXÃO" || statusCode === "ARR - CONEXAO";
+                                return (
+                                  <div className="flex items-center gap-1 whitespace-nowrap">
+                                    <span className="text-[#ffc800] font-semibold">{awb.origem || "N/A"}</span>
+                                    {awb.conexao ? (
+                                      <>
+                                        <span className="text-muted-foreground">→</span>
+                                        <span className={`font-semibold ${
+                                          isArrConexao
+                                            ? "text-orange-400 animate-pulse"
+                                            : "text-muted-foreground"
+                                        }`}>
+                                          {awb.conexao}
+                                        </span>
+                                        <span className="text-muted-foreground">→</span>
+                                        <span className="text-[#f5f5f5]">{awb.destino || "N/A"}</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="text-muted-foreground mx-1">→</span>
+                                        <span className="text-[#f5f5f5]">{awb.destino || "N/A"}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td className="px-4 py-3 min-w-[300px]">
                               {(() => {
@@ -3028,6 +3060,54 @@ const Index = () => {
                                     <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
                                     No Prazo
                                   </span>
+                                );
+                              })()}
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              {(() => {
+                                const statusCode = getStatusCode(awb.last_event).toUpperCase();
+                                const hours = awb.hours_in_status;
+                                
+                                // Post-arrival statuses: no SLA applicable
+                                const POST_ARRIVAL = new Set(['ARR', 'ARR - DESTINO', 'ARR - CONEXAO', 'ARR - CONEXÃO', 'RCF', 'NFD', 'AWD', 'AWR', 'CCD', 'DLV', 'POD']);
+                                if (POST_ARRIVAL.has(statusCode) || awb.tracking_failed) {
+                                  return <span className="text-green-400 text-sm">✓</span>;
+                                }
+                                
+                                if (hours == null) return <span className="text-muted-foreground text-xs">—</span>;
+                                
+                                // SLA thresholds by status
+                                const thresholds: Record<string, number> = { BKD: 12, RCS: 12, MAN: 3, PRE: 6, RCF: 6, DEP: 48, FOH: 12, FWB: 24, RDP: 3, RFC: 6 };
+                                const threshold = thresholds[statusCode] || 24;
+                                const ratio = hours / threshold;
+                                
+                                // Format hours display
+                                const h = Math.floor(hours);
+                                const m = Math.floor((hours - h) * 60);
+                                const display = h >= 24 ? `${Math.floor(h / 24)}d${h % 24}h` : m > 0 ? `${h}h${m.toString().padStart(2, '0')}` : `${h}h`;
+                                
+                                // Color: green < 70%, yellow 70-100%, red > 100%
+                                const color = ratio >= 1 
+                                  ? "text-red-400 bg-red-500/15 border-red-500/30" 
+                                  : ratio >= 0.7 
+                                    ? "text-amber-400 bg-amber-500/15 border-amber-500/30" 
+                                    : "text-green-400 bg-green-500/15 border-green-500/30";
+                                
+                                return (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.7rem] font-semibold border ${color}`}>
+                                          <Clock className="w-3 h-3" />
+                                          {display}
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p className="text-xs">SLA: {statusCode} — limite {threshold}h</p>
+                                        <p className="text-xs text-muted-foreground">{Math.round(ratio * 100)}% do tempo limite</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
                                 );
                               })()}
                             </td>
