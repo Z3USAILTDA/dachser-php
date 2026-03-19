@@ -2452,8 +2452,8 @@ serve(async (req) => {
       const autoWeight = IATA_HIERARCHY[autoStatus] || 0;
       const manualWeight = IATA_HIERARCHY[manualStatus] || 0;
 
-      // If automatic status is more advanced than manual, skip the override entirely
-      if (autoStatus && !row.tracking_failed && autoWeight > manualWeight) {
+      // If automatic status is more advanced than a manual status override, skip only the status override
+      if (manualStatus && autoStatus && !row.tracking_failed && autoWeight > manualWeight) {
         console.log(`[OVERRIDE SKIP] ${awb}: auto="${autoStatus}"(${autoWeight}) > manual="${manualStatus}"(${manualWeight})`);
         continue;
       }
