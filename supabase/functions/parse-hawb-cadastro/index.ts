@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -15,25 +15,25 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   const startTime = Date.now();
 
   try {
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     if (!OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY not configured');
+      throw new Error("OPENAI_API_KEY not configured");
     }
 
     const formData = await req.formData();
-    const file = formData.get('file') as File | null;
+    const file = formData.get("file") as File | null;
 
     if (!file) {
-      return new Response(JSON.stringify({ error: 'PDF file is required (field: file)' }), {
+      return new Response(JSON.stringify({ error: "PDF file is required (field: file)" }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -46,15 +46,35 @@ serve(async (req) => {
 Extract ALL fields from this HAWB PDF and return a JSON object with the following structure.
 If a field is not found, use null.
 
-IMPORTANT DISTINCTION:
-- "awb_number" (also called MAWB - Master Air Waybill): This is the MASTER airway bill number, typically in format XXX-XXXXXXXX (3 digit airline prefix + dash + 8 digits). It is usually found in the "Accounting Information" section, or labeled as "MAWB", "Master AWB", or "Air Waybill No". It references the airline's master document.
-- "hawb_number" (House Air Waybill): This is the HOUSE airway bill number assigned by the freight forwarder. It may appear at the top of the document, in a header, or labeled as "HAWB", "House AWB", "House Airway Bill", or simply as the main document reference number. It is NOT the same as the MAWB.
+## CRITICAL: How to find the MAWB (awb_number)
 
-If the document is a HAWB, the main prominent number on the document is likely the HAWB number, while the MAWB may be referenced inside (e.g. in Accounting Information).
+You MUST attempt BOTH methods below before returning null for awb_number:
 
+### Method 1 — Labeled MAWB
+Look for labels like "MAWB", "Master AWB", "Air Waybill No", or in "Accounting Information" sections. The number format is XXX-XXXXXXXX (3-digit airline prefix + dash + 8 digits).
+
+### Method 2 — Header triple pattern (VERY COMMON, DO NOT SKIP)
+Many HAWB documents have a TOP HEADER with THREE separate fields arranged horizontally:
+  Field 1: 3-digit airline prefix (e.g. "001", "020", "057", "074")
+  Field 2: 3-letter IATA airport code (e.g. "MAD", "GRU", "MIA", "FRA")  
+  Field 3: 7-8 digit number, possibly with spaces (e.g. "2208 4156", "78901234")
+
+These may be separated by vertical bars "|", spaces, or table cell borders.
+Example header: "001 | MAD | 2208 4156"
+→ awb_number = "001-22084156" (prefix + dash + digits without spaces)
+→ airport_departure can be deduced from "MAD" = Madrid Barajas
+
+If you see this pattern, you MUST use it to construct awb_number as: prefix + "-" + number_without_spaces.
+Only return null for awb_number if NEITHER method yields a result.
+
+## HAWB vs MAWB distinction
+- "awb_number" = the MASTER airway bill number (XXX-XXXXXXXX format)
+- "hawb_number" = the HOUSE airway bill number (the forwarder's reference, usually the main/prominent number on a HAWB document)
+
+Return ONLY valid JSON with these fields:
 {
-  "awb_number": "the MAWB/Master Air Waybill number (format: XXX-XXXXXXXX), found in Accounting Information or labeled as MAWB",
-  "hawb_number": "the HAWB/House Air Waybill number, typically the main document reference number",
+  "awb_number": "the MAWB/Master Air Waybill number (format: XXX-XXXXXXXX)",
+  "hawb_number": "the HAWB/House Air Waybill number",
   "airport_departure": "full name of airport of departure",
   "shipper_name": "shipper name",
   "shipper_address": "full shipper address",
@@ -71,91 +91,98 @@ If the document is a HAWB, the main prominent number on the document is likely t
   "declared_value_carriage": "declared value for carriage (e.g. NVD)",
   "declared_value_customs": "declared value for customs (e.g. NCV)",
   "handling_references": "handling information / references",
-  "handling_info": "additional handling info (e.g. export licenses text)",
-  "pieces": number of pieces as integer,
-  "gross_weight_kg": gross weight in kg as number,
+  "handling_info": "additional handling info",
+  "pieces": "number of pieces as integer",
+  "gross_weight_kg": "gross weight in kg as number",
   "rate_class": "rate class code",
-  "chargeable_weight": chargeable weight as number,
-  "rate": rate as number,
-  "total_charge": total charge as number,
+  "chargeable_weight": "chargeable weight as number",
+  "rate": "rate as number",
+  "total_charge": "total charge as number",
   "nature_of_goods": "description of goods",
   "itn_number": "ITN/AES number if present",
   "packaging": "packaging description",
   "hs_code": "HS code if present",
-  "volume_cbm": volume in cbm as number,
-  "dimensions": "dimensions string (e.g. 1/87x87x51cm)",
-  "other_charges_agent": other charges due agent as number,
-  "other_charges_carrier": "other charges due carrier (may be reference numbers)",
+  "volume_cbm": "volume in cbm as number",
+  "dimensions": "dimensions string",
+  "other_charges_agent": "other charges due agent as number",
+  "other_charges_carrier": "other charges due carrier",
   "signature_name": "name in signature field",
   "signature_date": "date of signature",
   "signature_place": "place of signature",
-  "total_prepaid": total prepaid amount as number,
-  "total_collect": total collect amount as number,
-  "consignee_name": "consignee name from document (for reference only)",
+  "total_prepaid": "total prepaid amount as number",
+  "total_collect": "total collect amount as number",
+  "consignee_name": "consignee name from document",
   "consignee_address": "consignee address from document",
   "consignee_cnpj": "consignee CNPJ if present"
 }
 
 Return ONLY valid JSON, no markdown, no explanation.`;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: `data:application/pdf;base64,${base64}` } },
-          ],
-        }],
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64}` } },
+            ],
+          },
+        ],
         max_tokens: 4000,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[parse-hawb-cadastro] OpenAI error:', response.status, errorText);
+      console.error("[parse-hawb-cadastro] OpenAI error:", response.status, errorText);
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: 'Limite de requisições excedido. Tente novamente em alguns minutos.' }), {
-          status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return new Response(
+          JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns minutos." }),
+          {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
       }
       throw new Error(`OpenAI API error: ${response.status}`);
     }
 
     const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content || '';
+    const content = aiResponse.choices?.[0]?.message?.content || "";
 
     if (!content) {
-      throw new Error('Empty response from OpenAI');
+      throw new Error("Empty response from OpenAI");
     }
 
     let extracted: any;
     try {
       // Strip markdown code fences if present
-      const cleaned = content.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '');
+      const cleaned = content.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "");
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       extracted = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(cleaned);
     } catch {
-      console.error('[parse-hawb-cadastro] Failed to parse:', content.substring(0, 500));
-      throw new Error('Falha ao interpretar resposta da IA');
+      console.error("[parse-hawb-cadastro] Failed to parse:", content.substring(0, 500));
+      throw new Error("Falha ao interpretar resposta da IA");
     }
 
     const elapsed = Date.now() - startTime;
     console.log(`[parse-hawb-cadastro] Extraction done in ${elapsed}ms`);
 
     return new Response(JSON.stringify({ success: true, data: extracted, processingTimeMs: elapsed }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error('[parse-hawb-cadastro] Error:', error);
+    console.error("[parse-hawb-cadastro] Error:", error);
     return new Response(JSON.stringify({ error: (error as Error).message }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
