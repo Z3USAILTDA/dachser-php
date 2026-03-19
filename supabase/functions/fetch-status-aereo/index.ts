@@ -2527,6 +2527,12 @@ serve(async (req) => {
         row.has_dis_event = false;
         row.force_critical = false;
       }
+      if (override.force_discrepancy) {
+        row.pieces_discrepancy = true;
+        row.baseline_pieces = override.force_baseline_pieces || row.baseline_pieces;
+        row.force_critical = true;
+        console.log(`[manualOverride] ${awb}: forced pieces_discrepancy=true, baseline_pieces=${row.baseline_pieces}`);
+      }
     }
 
     // ========== FILTRO DE VISIBILIDADE ==========
