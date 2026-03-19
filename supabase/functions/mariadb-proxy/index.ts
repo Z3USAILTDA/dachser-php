@@ -7124,17 +7124,7 @@ serve(async (req) => {
               mkForcedEvent('020-22473334', 18, 'RCS', 'RCS - HEL (Helsinki) - 2 pcs 11 kg', '2026-03-04T07:00:00', 'HEL', 2, '11 kg'),
             ],
           },
-          '996-14370731': {
-            tracking_failed: false,
-            events: [
-              mkForcedEvent('996-14370731', 1, 'RCF', 'RCF - Received MAD GHA - 26 pcs 741.7 kg', '2026-03-16T11:33:00', 'MAD', 26, '741.7 kg'),
-              mkForcedEvent('996-14370731', 2, 'DEP', 'DEP - Departed CDG on UX634T (CDG→MAD) - 26 pcs 741.7 kg', '2026-03-14T15:13:00', 'CDG', 26, '741.7 kg'),
-              mkForcedEvent('996-14370731', 3, 'MAN', 'MAN - Manifested UX634T (CDG→MAD) - 26 pcs 741.7 kg', '2026-03-14T13:23:00', 'CDG', 26, '741.7 kg'),
-              mkForcedEvent('996-14370731', 4, 'MAN', 'MAN - Pre-manifested UX634T (CDG→MAD) - 26 pcs 741.7 kg', '2026-03-14T13:23:00', 'CDG', 26, '741.7 kg'),
-              mkForcedEvent('996-14370731', 5, 'RFC', 'RFC - Ready for Carriage at CDG', '2026-03-13T23:49:00', 'CDG', null, null),
-              mkForcedEvent('996-14370731', 6, 'FOH', 'FOH - Freight on Hands at CDG', '2026-03-13T23:49:00', 'CDG', null, null),
-            ],
-          },
+          // 996-14370731 removed — timeline comes from DB naturally, discrepancy forced via FORCED_DISCREPANCIES
           '020-02593301': {
             tracking_failed: false,
             events: [
