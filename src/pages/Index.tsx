@@ -2738,27 +2738,48 @@ const Index = () => {
                             <td className="px-4 py-3 text-[0.8rem]">
                               {(() => {
                                 const statusCode = getStatusCode(awb.last_event).toUpperCase();
-                                const isArrConexao = statusCode === "ARR - CONEXÃO" || statusCode === "ARR - CONEXAO";
+                                const POST_DESTINO = ['ARR - DESTINO','ARR','RCF','NFD','AWD','DLV','POD','CCD','AWR','FOH'];
+                                const AT_CONEXAO = ['ARR - CONEXÃO','ARR - CONEXAO'];
+
+                                let highlightOrigin = false;
+                                let highlightConexao = false;
+                                let highlightDestino = false;
+
+                                if (awb.conexao) {
+                                  if (POST_DESTINO.includes(statusCode)) {
+                                    highlightDestino = true;
+                                  } else if (AT_CONEXAO.includes(statusCode) || statusCode === 'DEP') {
+                                    highlightConexao = true;
+                                  } else {
+                                    highlightOrigin = true;
+                                  }
+                                } else {
+                                  if (POST_DESTINO.includes(statusCode)) {
+                                    highlightDestino = true;
+                                  } else {
+                                    highlightOrigin = true;
+                                  }
+                                }
+
+                                const activeClass = "text-[#ffc800] font-semibold";
+                                const inactiveClass = "text-muted-foreground";
+
                                 return (
                                   <div className="flex items-center gap-1 whitespace-nowrap">
-                                    <span className="text-[#ffc800] font-semibold">{awb.origem || "N/A"}</span>
+                                    <span className={highlightOrigin ? activeClass : inactiveClass}>{awb.origem || "N/A"}</span>
                                     {awb.conexao ? (
                                       <>
                                         <span className="text-muted-foreground">→</span>
-                                        <span className={`font-semibold ${
-                                          isArrConexao
-                                            ? "text-orange-400 animate-pulse"
-                                            : "text-muted-foreground"
-                                        }`}>
+                                        <span className={highlightConexao ? activeClass : inactiveClass}>
                                           {awb.conexao}
                                         </span>
                                         <span className="text-muted-foreground">→</span>
-                                        <span className="text-[#f5f5f5]">{awb.destino || "N/A"}</span>
+                                        <span className={highlightDestino ? activeClass : inactiveClass}>{awb.destino || "N/A"}</span>
                                       </>
                                     ) : (
                                       <>
                                         <span className="text-muted-foreground mx-1">→</span>
-                                        <span className="text-[#f5f5f5]">{awb.destino || "N/A"}</span>
+                                        <span className={highlightDestino ? activeClass : inactiveClass}>{awb.destino || "N/A"}</span>
                                       </>
                                     )}
                                   </div>
