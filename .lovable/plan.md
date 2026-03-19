@@ -1,35 +1,36 @@
 
 
-## Plano: Combinar detecção ARR + segmentos de rota para conexões
+## Plano: Corrigir ordem das conexões e highlight da rota
 
-### Problema
+### Problemas identificados
 
-Linha 1281 faz `return connectionAirports.join(',')` assim que encontra conexões via eventos ARR. No caso do AWB 724-07783392, encontra apenas GRU (via "Arrived at GRU"). O fallback que extrai ZRH de segmentos como `FRA-ZRH`, `ZRH-GRU` nunca executa.
+**1. Ordem invertida (GRU antes de ZRH)**
+Os eventos estão ordenados DESC (mais recente primeiro). A extração de segmentos de rota (linhas 1284-1302) itera os eventos nessa ordem, então encontra primeiro `GRU-VCP` (do BKD mais recente), depois `ZRH-GRU` (do DEP/ARR), depois `FRA-ZRH` (do RCF). Resultado: `routeAirportsOrdered = [GRU, VCP, ZRH, FRA]` → filtrado: `[GRU, ZRH]` — ordem errada.
 
-### Correção
+**Correção:** Reverter a lista de eventos antes de iterar para extração de segmentos, ou reverter `routeAirportsOrdered` antes de mesclar. Assim os segmentos serão processados na ordem cronológica: `FRA-ZRH` → `ZRH-GRU` → `GRU-VCP`, resultando em `[FRA, ZRH, GRU, VCP]` → filtrado: `[ZRH, GRU]` ✓
 
-**Arquivo:** `supabase/functions/fetch-status-aereo/index.ts` (linhas 1271-1313)
+**2. Origem em amarelo (highlight errado)**
+O status atual do AWB é provavelmente "AWR" ou "BKD" (eventos pós-chegada em GRU). Esses códigos não estão em `POST_DESTINO` nem em `AT_CONEXAO`, então cai no `else` → `highlightOrigin = true`. Mas o cargo ESTÁ em GRU (uma conexão).
 
-1. **Remover o `return` antecipado** da linha 1281
-2. **Sempre executar ambas** as extrações (ARR + segmentos de rota)
-3. **Mesclar resultados**: começar com segmentos de rota (preservam ordem cronológica) e adicionar airports do ARR que não estejam já incluídos
-4. **Filtrar**: remover origem, destino e stopwords
-5. Retornar resultado combinado
+**Correção:** Expandir a lógica de highlight no frontend. Se o AWB tem conexões e o status não é POST_DESTINO, verificar se o cargo já está em trânsito (status como AWR, AWD, BKD, NFD, RCF, CCD que indicam o cargo está em algum ponto intermediário). Se `in_transit === true` ou o status indica movimentação, destacar a última conexão ao invés da origem.
 
-```text
-Antes:
-  ARR loop → [GRU] → return "GRU" (ZRH perdido!)
+### Alterações
 
-Depois:
-  ARR loop → [GRU]
-  Segmentos → [FRA, ZRH, GRU, VCP]
-  Mesclar + filtrar origem(FRA)/destino(VCP) → [ZRH, GRU]
-  Return "ZRH,GRU" ✓
-```
+#### 1. Backend — `supabase/functions/fetch-status-aereo/index.ts`
+- **Linhas 1284-1292**: Reverter a cópia dos eventos antes de iterar: `[...events].reverse()` para processar em ordem cronológica (mais antigo primeiro)
+- Isso garante que `routeAirportsOrdered` siga a ordem real da rota
 
-Resultado: rota exibe `FRA → ZRH → GRU → VCP` (4 localidades).
+#### 2. Frontend — `src/pages/Index.tsx`
+- **Linhas 2746-2757**: Melhorar lógica de highlight:
+  - Definir lista de statuses que indicam "cargo em trânsito/conexão": `AWR, AWD, BKD, NFD, RCF, CCD, DOC, MAN, PRE, TFD, TRM, TRA, RFC`
+  - Se o status está nessa lista E existem conexões E `in_transit === true` → destacar última conexão (não a origem)
+  - Manter lógica atual para POST_DESTINO e AT_CONEXAO
 
-### Arquivo modificado
+### Resultado esperado
+- Rota: `FRA → ZRH → GRU → VCP` (ordem correta)
+- Highlight: GRU em amarelo (última conexão onde o cargo está)
 
-1. `supabase/functions/fetch-status-aereo/index.ts` — remover early return linha 1281, mesclar ambos métodos de detecção
+### Arquivos modificados
+1. `supabase/functions/fetch-status-aereo/index.ts` — reverter eventos para extração cronológica
+2. `src/pages/Index.tsx` — expandir lógica de highlight para statuses pós-chegada em conexão
 
