@@ -6967,6 +6967,11 @@ serve(async (req) => {
           peso,
         });
 
+        // Forced discrepancies: lock the discrepancy alert permanently for specific AWBs
+        const FORCED_DISCREPANCIES: Record<string, { field: string; values: number[]; min: number; max: number }> = {
+          '996-14370731': { field: 'pecas', values: [26, 15, 11, 6, 5], min: 5, max: 26 },
+        };
+
         const FORCED_TIMELINES: Record<string, { events: any[]; tracking_failed: boolean }> = {
           '047-32916273': {
             tracking_failed: false,
