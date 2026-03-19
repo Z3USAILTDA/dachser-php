@@ -1278,11 +1278,8 @@ serve(async (req) => {
                 connectionAirports.push(airport);
               }
             }
-            if (connectionAirports.length > 0) return connectionAirports.join(',');
-            
-            // Fallback: extract connection from route segments in descriptions (e.g. "AMS-ZRH")
+            // Also extract connections from route segments in descriptions (e.g. "AMS-ZRH")
             const origin = (origForClassify || '').trim().toUpperCase();
-            // Use ordered array to preserve chronological appearance
             const routeAirportsOrdered: string[] = [];
             for (const ev of events) {
               const desc = String(ev.Description || ev.description || ev.descricao_evento || ev.title || '');
@@ -1294,7 +1291,6 @@ serve(async (req) => {
                 if (!routeAirportsOrdered.includes(a2)) routeAirportsOrdered.push(a2);
               }
             }
-            // Also check status_info / last_status_description from ws (scraper row)
             const statusInfoStr = String(ws.last_status_description || ws.status_info || '');
             if (statusInfoStr) {
               const siMatches = statusInfoStr.matchAll(/(?<![A-Z])([A-Z]{3})[-→\u2192]([A-Z]{3})(?![A-Z])/gi);
@@ -1305,9 +1301,13 @@ serve(async (req) => {
                 if (!routeAirportsOrdered.includes(a2)) routeAirportsOrdered.push(a2);
               }
             }
-            // Remove origin, destination, and stopwords
+            // Merge: start with route segments (chronological order), add ARR airports not yet included
             const stopWords = new Set(['THE','AND','FOR','NOT','KGS','PCS','QTY','AWB','AWR','BKD','DEP','ARR','MAN','RCS','RCF','NFD','DLV','PRE','DIS','DOC','RFC','ECC','SCR','TFD','TRM','TRA','CCD','POD','DMG','RET','BUP','RDP','AWD','LAT','TKG']);
-            const filteredRoute = routeAirportsOrdered.filter(a => a !== origin && a !== dest && !stopWords.has(a));
+            const mergedAirports = [...routeAirportsOrdered];
+            for (const ap of connectionAirports) {
+              if (!mergedAirports.includes(ap)) mergedAirports.push(ap);
+            }
+            const filteredRoute = mergedAirports.filter(a => a !== origin && a !== dest && !stopWords.has(a));
             if (filteredRoute.length > 0) return filteredRoute.join(',');
             
             return null;
