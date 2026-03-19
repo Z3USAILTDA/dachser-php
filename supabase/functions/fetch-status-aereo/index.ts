@@ -1281,7 +1281,7 @@ serve(async (req) => {
             // Also extract connections from route segments in descriptions (e.g. "AMS-ZRH")
             const origin = (origForClassify || '').trim().toUpperCase();
             const routeAirportsOrdered: string[] = [];
-            for (const ev of events) {
+            for (const ev of [...events].reverse()) {
               const desc = String(ev.Description || ev.description || ev.descricao_evento || ev.title || '');
               const routeMatches = desc.matchAll(/(?<![A-Z])([A-Z]{3})[-→\u2192]([A-Z]{3})(?![A-Z])/gi);
               for (const m of routeMatches) {

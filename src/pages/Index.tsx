@@ -2747,11 +2747,14 @@ const Index = () => {
                                 let highlightDestino = false;
                                 let highlightConexaoIndex = -1; // which conexao to highlight
 
+                                const IN_TRANSIT_AT_CONNECTION = ['AWR','AWD','BKD','NFD','RCF','CCD','DOC','MAN','PRE','TFD','TRM','TRA','RFC','FOH','DIS'];
                                 if (conexoes.length > 0) {
                                   if (POST_DESTINO.includes(statusCode)) {
                                     highlightDestino = true;
                                   } else if (AT_CONEXAO.includes(statusCode) || statusCode === 'DEP') {
-                                    highlightConexaoIndex = conexoes.length - 1; // last reached connection
+                                    highlightConexaoIndex = conexoes.length - 1;
+                                  } else if (IN_TRANSIT_AT_CONNECTION.includes(statusCode)) {
+                                    highlightConexaoIndex = conexoes.length - 1;
                                   } else {
                                     highlightOrigin = true;
                                   }
