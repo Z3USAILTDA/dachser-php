@@ -35,6 +35,18 @@ function getEventStatusCode(ev: any): string {
 }
 
 // Sort events descending by date, with IATA_HIERARCHY as tiebreaker for same timestamps
+// Parse an event date string to a numeric timestamp for reliable comparison
+function parseEventTimestamp(dateStr: string): number {
+  if (!dateStr) return 0;
+  // Try native Date parse first
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) return d.getTime();
+  // Try flexible parse (handles "07 Mar 2026 13:36" etc.)
+  const parsed = parseFlexibleDate(dateStr);
+  if (parsed) return parsed.getTime();
+  return 0;
+}
+
 function sortEventsDesc(events: any[]): any[] {
   return [...events].sort((a, b) => {
     const dateA = getEventDateStr(a);
@@ -42,12 +54,18 @@ function sortEventsDesc(events: any[]): any[] {
     if (!dateA && !dateB) return 0;
     if (!dateA) return 1;
     if (!dateB) return -1;
-    const cmp = String(dateB).localeCompare(String(dateA));
-    if (cmp !== 0) return cmp;
-    // Same timestamp: higher hierarchy rank = more advanced = comes first
+    const tsA = parseEventTimestamp(dateA);
+    const tsB = parseEventTimestamp(dateB);
+    // Consider timestamps within 60 seconds as "same time" for hierarchy tiebreaker
+    if (tsA && tsB && Math.abs(tsB - tsA) > 60000) {
+      return tsB - tsA; // More recent first
+    }
+    // Same timestamp (or within 1 min): higher hierarchy rank = more advanced = comes first
     const orderA = IATA_HIERARCHY[getEventStatusCode(a)] ?? 0;
     const orderB = IATA_HIERARCHY[getEventStatusCode(b)] ?? 0;
-    return orderB - orderA;
+    if (orderB !== orderA) return orderB - orderA;
+    // Final fallback: string comparison
+    return String(dateB).localeCompare(String(dateA));
   });
 }
 
