@@ -6967,6 +6967,11 @@ serve(async (req) => {
           peso,
         });
 
+        // Forced discrepancies: lock the discrepancy alert permanently for specific AWBs
+        const FORCED_DISCREPANCIES: Record<string, { field: string; values: number[]; min: number; max: number }> = {
+          '996-14370731': { field: 'pecas', values: [26, 15, 11, 6, 5], min: 5, max: 26 },
+        };
+
         const FORCED_TIMELINES: Record<string, { events: any[]; tracking_failed: boolean }> = {
           '047-32916273': {
             tracking_failed: false,
@@ -7124,17 +7129,7 @@ serve(async (req) => {
               mkForcedEvent('020-22473334', 18, 'RCS', 'RCS - HEL (Helsinki) - 2 pcs 11 kg', '2026-03-04T07:00:00', 'HEL', 2, '11 kg'),
             ],
           },
-          '996-14370731': {
-            tracking_failed: false,
-            events: [
-              mkForcedEvent('996-14370731', 1, 'RCF', 'RCF - Received MAD GHA - 26 pcs 741.7 kg', '2026-03-16T11:33:00', 'MAD', 26, '741.7 kg'),
-              mkForcedEvent('996-14370731', 2, 'DEP', 'DEP - Departed CDG on UX634T (CDG→MAD) - 26 pcs 741.7 kg', '2026-03-14T15:13:00', 'CDG', 26, '741.7 kg'),
-              mkForcedEvent('996-14370731', 3, 'MAN', 'MAN - Manifested UX634T (CDG→MAD) - 26 pcs 741.7 kg', '2026-03-14T13:23:00', 'CDG', 26, '741.7 kg'),
-              mkForcedEvent('996-14370731', 4, 'MAN', 'MAN - Pre-manifested UX634T (CDG→MAD) - 26 pcs 741.7 kg', '2026-03-14T13:23:00', 'CDG', 26, '741.7 kg'),
-              mkForcedEvent('996-14370731', 5, 'RFC', 'RFC - Ready for Carriage at CDG', '2026-03-13T23:49:00', 'CDG', null, null),
-              mkForcedEvent('996-14370731', 6, 'FOH', 'FOH - Freight on Hands at CDG', '2026-03-13T23:49:00', 'CDG', null, null),
-            ],
-          },
+          // 996-14370731 removed — timeline comes from DB naturally, discrepancy forced via FORCED_DISCREPANCIES
           '020-02593301': {
             tracking_failed: false,
             events: [
@@ -7904,6 +7899,13 @@ serve(async (req) => {
               discrepancy = { field: 'pecas', values: [...new Set(allPieces)], min: minP, max: maxP };
               console.log(`[DISCREPANCY] Pieces discrepancy detected for AWB ${queryAwb}: min=${minP}, max=${maxP}`);
             }
+          }
+
+          // Apply forced discrepancy as fallback if automatic detection didn't find one
+          const forcedDisc = FORCED_DISCREPANCIES[cleanAwbForForce];
+          if (!discrepancy && forcedDisc) {
+            discrepancy = forcedDisc;
+            console.log(`[FORCED_DISCREPANCY] Applied forced discrepancy for AWB ${cleanAwbForForce}: ${JSON.stringify(forcedDisc)}`);
           }
 
           result = { success: true, data: filteredEvents, ...(discrepancy ? { discrepancy } : {}) };
