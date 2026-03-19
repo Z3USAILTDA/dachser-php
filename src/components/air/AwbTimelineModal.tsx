@@ -106,10 +106,23 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
         return event.codigo_evento?.toUpperCase() !== rawEvents[index - 1].codigo_evento?.toUpperCase();
       });
 
+      // IATA hierarchy weights for tiebreaking same-timestamp events
+      const IATA_WEIGHT: Record<string, number> = {
+        BKD: 1, TKG: 2, LAT: 3,
+        RCS: 10, RCT: 11, DOC: 12, RFC: 13, ECC: 14, SCR: 15,
+        PRE: 20, MAN: 21, RDP: 22, DEP: 23,
+        TFD: 30, TRM: 31, TRA: 32,
+        ARR: 40, RCF: 41, NFD: 42, AWD: 43, AWR: 44, CCD: 45, DLV: 46, POD: 47,
+        MSCA: 50, FDCA: 51, OVCD: 52, SSPD: 53, DMG: 54, DIS: 55, 'RCS-P': 56, RET: 57, BUP: 58,
+      };
+
       deduped.sort((a: TimelineEvent, b: TimelineEvent) => {
         const dateA = a.data_hora_evento ? new Date(a.data_hora_evento).getTime() : 0;
         const dateB = b.data_hora_evento ? new Date(b.data_hora_evento).getTime() : 0;
-        return dateB - dateA;
+        const diff = dateB - dateA;
+        if (diff !== 0) return diff;
+        // Same timestamp: higher IATA weight = more advanced = comes first (DESC)
+        return (IATA_WEIGHT[b.codigo_evento?.toUpperCase()] || 0) - (IATA_WEIGHT[a.codigo_evento?.toUpperCase()] || 0);
       });
 
       return {
