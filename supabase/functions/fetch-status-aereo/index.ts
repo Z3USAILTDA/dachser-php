@@ -1284,16 +1284,16 @@ serve(async (req) => {
             const routeAirports = new Set<string>();
             for (const ev of events) {
               const desc = String(ev.Description || ev.description || ev.descricao_evento || ev.title || '');
-              const routeMatches = desc.matchAll(/\b([A-Z]{3})-([A-Z]{3})\b/gi);
+              const routeMatches = desc.matchAll(/(?<![A-Z])([A-Z]{3})[-→\u2192]([A-Z]{3})(?![A-Z])/gi);
               for (const m of routeMatches) {
                 routeAirports.add(m[1].toUpperCase());
                 routeAirports.add(m[2].toUpperCase());
               }
             }
-            // Also check status_info / last_status_description
-            const statusInfoStr = String(apiRow?.last_status_description || apiRow?.status_info || '');
+            // Also check status_info / last_status_description from ws (scraper row)
+            const statusInfoStr = String(ws.last_status_description || ws.status_info || '');
             if (statusInfoStr) {
-              const siMatches = statusInfoStr.matchAll(/\b([A-Z]{3})-([A-Z]{3})\b/gi);
+              const siMatches = statusInfoStr.matchAll(/(?<![A-Z])([A-Z]{3})[-→\u2192]([A-Z]{3})(?![A-Z])/gi);
               for (const m of siMatches) {
                 routeAirports.add(m[1].toUpperCase());
                 routeAirports.add(m[2].toUpperCase());
