@@ -1,40 +1,29 @@
 
 
-## Plano: Amarelo indica localização atual baseada no aeroporto, não no tipo de status
+## Plano: Filtrar origem da detecção de conexão
 
 ### Problema
 
-A origem está sempre amarela. O correto: o amarelo marca **onde o processo está fisicamente**. Se o status (qualquer que seja — BKD, RCS, MAN, ARR, DEP, etc.) aconteceu na conexão, a conexão fica amarela. Se aconteceu na origem, a origem fica amarela. Se no destino, o destino.
+Na linha 1276 do `fetch-status-aereo/index.ts`, a lógica de conexão filtra apenas `airport !== dest`. Mas não filtra `airport !== origin`. Resultado: se um evento ARR acontece no aeroporto de **origem** (ex: AMS), ele é detectado como "conexão" porque `AMS ≠ GRU` — gerando rotas como `AMS → AMS → GRU`.
 
-### Lógica
+### Correção
 
-A localização atual é determinada pela **posição na rota**, não pelo código do status:
+**Arquivo:** `supabase/functions/fetch-status-aereo/index.ts`
 
-1. Se `conexao` existe:
-   - Statuses pós-chegada no destino (`ARR - DESTINO`, `RCF`, `NFD`, `AWD`, `DLV`, `POD`, `CCD`, `AWR`) → **destino** amarelo
-   - Statuses na conexão (`ARR - CONEXÃO` e qualquer status como BKD/MAN/RCS/DEP que ocorre após ARR-CONEXÃO) → **conexão** amarela
-   - Demais (ainda não chegou na conexão) → **origem** amarela
-2. Se `conexao` não existe:
-   - Statuses pós-chegada (`ARR`, `RCF`, `NFD`, `DLV`, etc.) → **destino** amarelo
-   - Demais → **origem** amarela
+**Linha 1276:** Adicionar checagem `airport !== origin` no filtro de conexão:
 
-**Simplificação prática:** Como não temos um campo "localização atual" explícito, usamos o status como proxy:
-- `POST_DESTINO = ['ARR - DESTINO', 'ARR', 'RCF', 'NFD', 'AWD', 'DLV', 'POD', 'CCD', 'AWR']` (quando não há conexão, ARR = destino)
-- `AT_CONEXAO = ['ARR - CONEXÃO', 'ARR - CONEXAO']` + qualquer status que **não** seja pós-destino quando `conexao` existe e o processo já passou pela origem (i.e., status como BKD, MAN, DEP na conexão)
+```typescript
+// Antes:
+if (airport && airport !== dest && !connectionAirports.includes(airport)) {
 
-**Regra final simplificada:**
-- Se status está em `POST_DESTINO` → destino amarelo
-- Se status é `ARR - CONEXÃO/CONEXAO` → conexão amarela
-- Se `conexao` existe e status é `DEP` (saiu da conexão rumo ao destino) → conexão amarela (ainda na rota da conexão)
-- Senão → origem amarela
+// Depois:
+const origin = (origForClassify || '').trim().toUpperCase();
+if (airport && airport !== dest && airport !== origin && !connectionAirports.includes(airport)) {
+```
 
-### Alteração
-
-**Arquivo:** `src/pages/Index.tsx` (linhas 2739-2766)
-
-Substituir a IIFE da rota para usar lógica de highlight dinâmico. Remover `animate-pulse` e `text-orange-400`.
+Nota: a variável `origin` já é declarada na linha 1283, mas precisa ser movida para antes do loop (linha 1270) para estar disponível no primeiro bloco de detecção.
 
 ### Arquivo modificado
 
-1. `src/pages/Index.tsx` — lógica de cores na célula Rota
+1. `supabase/functions/fetch-status-aereo/index.ts` — adicionar filtro `!== origin` na detecção de conexão (linhas 1270-1280)
 
