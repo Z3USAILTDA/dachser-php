@@ -1277,7 +1277,36 @@ serve(async (req) => {
                 connectionAirports.push(airport);
               }
             }
-            return connectionAirports.length > 0 ? connectionAirports[0] : null;
+            if (connectionAirports.length > 0) return connectionAirports[0];
+            
+            // Fallback: extract connection from route segments in descriptions (e.g. "AMS-ZRH")
+            const origin = (origForClassify || '').trim().toUpperCase();
+            const routeAirports = new Set<string>();
+            for (const ev of events) {
+              const desc = String(ev.Description || ev.description || ev.descricao_evento || ev.title || '');
+              const routeMatches = desc.matchAll(/\b([A-Z]{3})-([A-Z]{3})\b/gi);
+              for (const m of routeMatches) {
+                routeAirports.add(m[1].toUpperCase());
+                routeAirports.add(m[2].toUpperCase());
+              }
+            }
+            // Also check status_info / last_status_description
+            const statusInfoStr = String(apiRow?.last_status_description || apiRow?.status_info || '');
+            if (statusInfoStr) {
+              const siMatches = statusInfoStr.matchAll(/\b([A-Z]{3})-([A-Z]{3})\b/gi);
+              for (const m of siMatches) {
+                routeAirports.add(m[1].toUpperCase());
+                routeAirports.add(m[2].toUpperCase());
+              }
+            }
+            // Remove origin, destination, and stopwords (IATA codes that are event codes, not airports)
+            const stopWords = new Set(['THE','AND','FOR','NOT','KGS','PCS','QTY','AWB','AWR','BKD','DEP','ARR','MAN','RCS','RCF','NFD','DLV','PRE','DIS','DOC','RFC','ECC','SCR','TFD','TRM','TRA','CCD','POD','DMG','RET','BUP','RDP','AWD','LAT','TKG']);
+            routeAirports.delete(origin);
+            routeAirports.delete(dest);
+            for (const sw of stopWords) routeAirports.delete(sw);
+            if (routeAirports.size > 0) return [...routeAirports][0];
+            
+            return null;
           } catch { return null; }
         })(),
         // Hours in current status (for SLA display)
