@@ -414,6 +414,19 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     // Pick the MOST RECENT event chronologically (filtered[0] is already sorted by date DESC + IATA tiebreaker)
     let bestStatus: string | null = null;
 
+    // DEBUG: log the top 3 events after sort for specific AWBs
+    if (awbForDebug && (awbForDebug.includes('85006073') || awbForDebug.includes('724-850'))) {
+      console.log(`[resolveUNK-DEBUG] ${awbForDebug}: top events after sort:`);
+      for (let i = 0; i < Math.min(5, filtered.length); i++) {
+        const ev = filtered[i];
+        const code = getEventStatusCode(ev);
+        const dateStr = getEventDateStr(ev);
+        const ts = parseEventTimestamp(dateStr);
+        const hier = IATA_HIERARCHY[code] ?? 0;
+        console.log(`  [${i}] status=${code} date=${dateStr} ts=${ts} hier=${hier}`);
+      }
+    }
+
     // Try to resolve from the most recent event first, then fallback to subsequent ones
     for (const ev of filtered) {
       const resolved = resolveEvent(ev);
