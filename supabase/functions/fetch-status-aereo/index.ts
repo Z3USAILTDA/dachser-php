@@ -1267,13 +1267,14 @@ serve(async (req) => {
               return null;
             }
             // Find connection airports (ARR events where airport != destination)
+            const originUpper = (origForClassify || '').trim().toUpperCase();
             const connectionAirports: string[] = [];
             for (const ev of events) {
               const evStatus = (ev.status || ev.Status || ev.codigo_evento || '').toUpperCase();
               const evDesc = (ev.Description || ev.description || ev.descricao_evento || ev.title || '').toUpperCase();
               if (evStatus !== 'ARR' && !evDesc.includes('ARR')) continue;
               const airport = extractAirportFromEvt(ev);
-              if (airport && airport !== dest && !connectionAirports.includes(airport)) {
+              if (airport && airport !== dest && airport !== originUpper && !connectionAirports.includes(airport)) {
                 connectionAirports.push(airport);
               }
             }
