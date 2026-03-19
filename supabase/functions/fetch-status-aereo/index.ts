@@ -1671,6 +1671,10 @@ serve(async (req) => {
         force_discrepancy: true,
         force_baseline_pieces: 26,
       },
+      '996-12994413': {
+        force_discrepancy: true,
+        force_baseline_pieces: 6,
+      },
       '020-02593301': {
         status: 'BKD',
         status_info: 'BKD - Booked at HAM (Hamburg) - 4 Pieces 135.5 kg',
