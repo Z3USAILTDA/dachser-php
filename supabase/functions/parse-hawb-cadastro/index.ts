@@ -22,9 +22,9 @@ serve(async (req) => {
   const startTime = Date.now();
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY not configured');
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    if (!OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY not configured');
     }
 
     const formData = await req.formData();
@@ -98,14 +98,14 @@ If the document is a HAWB, the main prominent number on the document is likely t
 
 Return ONLY valid JSON, no markdown, no explanation.`;
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'gpt-4o',
         messages: [{
           role: 'user',
           content: [
@@ -119,25 +119,20 @@ Return ONLY valid JSON, no markdown, no explanation.`;
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[parse-hawb-cadastro] AI gateway error:', response.status, errorText);
+      console.error('[parse-hawb-cadastro] OpenAI error:', response.status, errorText);
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: 'Limite de requisições excedido. Tente novamente em alguns minutos.' }), {
           status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: 'Créditos insuficientes. Adicione créditos ao workspace.' }), {
-          status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      throw new Error(`AI gateway error: ${response.status}`);
+      throw new Error(`OpenAI API error: ${response.status}`);
     }
 
     const aiResponse = await response.json();
     const content = aiResponse.choices?.[0]?.message?.content || '';
 
     if (!content) {
-      throw new Error('Empty response from Gemini');
+      throw new Error('Empty response from OpenAI');
     }
 
     let extracted: any;
