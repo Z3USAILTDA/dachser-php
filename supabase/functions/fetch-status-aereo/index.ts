@@ -1274,21 +1274,24 @@ serve(async (req) => {
               const evDesc = (ev.Description || ev.description || ev.descricao_evento || ev.title || '').toUpperCase();
               if (evStatus !== 'ARR' && !evDesc.includes('ARR')) continue;
               const airport = extractAirportFromEvt(ev);
-              if (airport && airport !== dest && airport !== originUpper && !connectionAirports.includes(airport)) {
+              if (airport && airport !== dest && !connectionAirports.includes(airport)) {
                 connectionAirports.push(airport);
               }
             }
-            if (connectionAirports.length > 0) return connectionAirports[0];
+            if (connectionAirports.length > 0) return connectionAirports.join(',');
             
             // Fallback: extract connection from route segments in descriptions (e.g. "AMS-ZRH")
             const origin = (origForClassify || '').trim().toUpperCase();
-            const routeAirports = new Set<string>();
+            // Use ordered array to preserve chronological appearance
+            const routeAirportsOrdered: string[] = [];
             for (const ev of events) {
               const desc = String(ev.Description || ev.description || ev.descricao_evento || ev.title || '');
               const routeMatches = desc.matchAll(/(?<![A-Z])([A-Z]{3})[-→\u2192]([A-Z]{3})(?![A-Z])/gi);
               for (const m of routeMatches) {
-                routeAirports.add(m[1].toUpperCase());
-                routeAirports.add(m[2].toUpperCase());
+                const a1 = m[1].toUpperCase();
+                const a2 = m[2].toUpperCase();
+                if (!routeAirportsOrdered.includes(a1)) routeAirportsOrdered.push(a1);
+                if (!routeAirportsOrdered.includes(a2)) routeAirportsOrdered.push(a2);
               }
             }
             // Also check status_info / last_status_description from ws (scraper row)
@@ -1296,16 +1299,16 @@ serve(async (req) => {
             if (statusInfoStr) {
               const siMatches = statusInfoStr.matchAll(/(?<![A-Z])([A-Z]{3})[-→\u2192]([A-Z]{3})(?![A-Z])/gi);
               for (const m of siMatches) {
-                routeAirports.add(m[1].toUpperCase());
-                routeAirports.add(m[2].toUpperCase());
+                const a1 = m[1].toUpperCase();
+                const a2 = m[2].toUpperCase();
+                if (!routeAirportsOrdered.includes(a1)) routeAirportsOrdered.push(a1);
+                if (!routeAirportsOrdered.includes(a2)) routeAirportsOrdered.push(a2);
               }
             }
-            // Remove origin, destination, and stopwords (IATA codes that are event codes, not airports)
+            // Remove origin, destination, and stopwords
             const stopWords = new Set(['THE','AND','FOR','NOT','KGS','PCS','QTY','AWB','AWR','BKD','DEP','ARR','MAN','RCS','RCF','NFD','DLV','PRE','DIS','DOC','RFC','ECC','SCR','TFD','TRM','TRA','CCD','POD','DMG','RET','BUP','RDP','AWD','LAT','TKG']);
-            routeAirports.delete(origin);
-            routeAirports.delete(dest);
-            for (const sw of stopWords) routeAirports.delete(sw);
-            if (routeAirports.size > 0) return [...routeAirports][0];
+            const filteredRoute = routeAirportsOrdered.filter(a => a !== origin && a !== dest && !stopWords.has(a));
+            if (filteredRoute.length > 0) return filteredRoute.join(',');
             
             return null;
           } catch { return null; }
