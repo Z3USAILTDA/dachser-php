@@ -119,25 +119,20 @@ Return ONLY valid JSON, no markdown, no explanation.`;
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[parse-hawb-cadastro] AI gateway error:', response.status, errorText);
+      console.error('[parse-hawb-cadastro] OpenAI error:', response.status, errorText);
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: 'Limite de requisições excedido. Tente novamente em alguns minutos.' }), {
           status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: 'Créditos insuficientes. Adicione créditos ao workspace.' }), {
-          status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      throw new Error(`AI gateway error: ${response.status}`);
+      throw new Error(`OpenAI API error: ${response.status}`);
     }
 
     const aiResponse = await response.json();
     const content = aiResponse.choices?.[0]?.message?.content || '';
 
     if (!content) {
-      throw new Error('Empty response from Gemini');
+      throw new Error('Empty response from OpenAI');
     }
 
     let extracted: any;
