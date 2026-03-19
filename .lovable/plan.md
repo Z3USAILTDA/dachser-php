@@ -1,35 +1,40 @@
 
 
-## Plano: Corrigir detecção de conexão na rota
+## Plano: Amarelo indica localização atual baseada no aeroporto, não no tipo de status
 
-### Diagnóstico
+### Problema
 
-Identifiquei **3 bugs** na IIFE `conexao` do `fetch-status-aereo/index.ts` que fazem com que AWBs com status `ARR - CONEXÃO` mostrem `conexao: null`:
+A origem está sempre amarela. O correto: o amarelo marca **onde o processo está fisicamente**. Se o status (qualquer que seja — BKD, RCS, MAN, ARR, DEP, etc.) aconteceu na conexão, a conexão fica amarela. Se aconteceu na origem, a origem fica amarela. Se no destino, o destino.
 
-**Bug 1 — Regex não suporta `→` (seta unicode)**
-As descrições de eventos usam `→` (unicode) como separador de rota, ex: `LA 5201-T (FRA→MAD) - DEP`. O regex atual só busca `-` (hífen):
-```
-/\b([A-Z]{3})-([A-Z]{3})\b/gi  ← não captura FRA→MAD
-```
+### Lógica
 
-**Bug 2 — `\b` falha quando número cola no código IATA**
-Descrições como `"Flight LA 8151LIS-FOR"` — o `\b` exige word boundary entre `1` e `L`, mas ambos são `\w`, então `\bLIS` não faz match.
+A localização atual é determinada pela **posição na rota**, não pelo código do status:
 
-**Bug 3 — Campo errado para status_info**
-Linha 1294 usa `apiRow?.last_status_description` e `apiRow?.status_info`, mas o `apiRow` (de `t_aereo_api`) não tem esses campos — tem `ultimo_status`, `historico_status`, etc. Resultado: sempre string vazia. Deveria usar `ws.last_status_description`.
+1. Se `conexao` existe:
+   - Statuses pós-chegada no destino (`ARR - DESTINO`, `RCF`, `NFD`, `AWD`, `DLV`, `POD`, `CCD`, `AWR`) → **destino** amarelo
+   - Statuses na conexão (`ARR - CONEXÃO` e qualquer status como BKD/MAN/RCS/DEP que ocorre após ARR-CONEXÃO) → **conexão** amarela
+   - Demais (ainda não chegou na conexão) → **origem** amarela
+2. Se `conexao` não existe:
+   - Statuses pós-chegada (`ARR`, `RCF`, `NFD`, `DLV`, etc.) → **destino** amarelo
+   - Demais → **origem** amarela
 
-### Exemplo concreto
+**Simplificação prática:** Como não temos um campo "localização atual" explícito, usamos o status como proxy:
+- `POST_DESTINO = ['ARR - DESTINO', 'ARR', 'RCF', 'NFD', 'AWD', 'DLV', 'POD', 'CCD', 'AWR']` (quando não há conexão, ARR = destino)
+- `AT_CONEXAO = ['ARR - CONEXÃO', 'ARR - CONEXAO']` + qualquer status que **não** seja pós-destino quando `conexao` existe e o processo já passou pela origem (i.e., status como BKD, MAN, DEP na conexão)
 
-AWB `045-21167716`: origem=FOR, destino=GRU
-- `status_info`: `"Flight Arrived. Flight LA 8151LIS-FOR, 20 / 637.50KGS"`
-- `classifyArrival` detecta airport=FOR ≠ dest=GRU → `ARR - CONEXAO` ✅
-- `conexao` IIFE falha: regex não captura `LIS-FOR` (por causa de `8151LIS`) e não captura `FRA→MAD` (por causa de `→`)
+**Regra final simplificada:**
+- Se status está em `POST_DESTINO` → destino amarelo
+- Se status é `ARR - CONEXÃO/CONEXAO` → conexão amarela
+- Se `conexao` existe e status é `DEP` (saiu da conexão rumo ao destino) → conexão amarela (ainda na rota da conexão)
+- Senão → origem amarela
 
-### Correções
+### Alteração
 
-**Arquivo:** `supabase/functions/fetch-status-aereo/index.ts` (linhas 1282-1301)
+**Arquivo:** `src/pages/Index.tsx` (linhas 2739-2766)
 
-1. Trocar regex de `\b([A-Z]{3})-([A-Z]{3})\b` para `(?<![A-Z])([A-Z]{3})[-→\u2192]([A-Z]{3})(?![A-Z])` — suporta `→` e não exige word boundary alfabético
-2. Corrigir referência: `apiRow?.last_status_description` → `ws.last_status_description`
-3. Aplicar mesma correção no bloco de `status_info`
+Substituir a IIFE da rota para usar lógica de highlight dinâmico. Remover `animate-pulse` e `text-orange-400`.
+
+### Arquivo modificado
+
+1. `src/pages/Index.tsx` — lógica de cores na célula Rota
 
