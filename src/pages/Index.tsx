@@ -2654,6 +2654,9 @@ const Index = () => {
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
                         Situação
                       </th>
+                      <th className="px-3 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                        SLA
+                      </th>
                       <th
                         className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
                         onClick={handleAnalystSort}
