@@ -1157,10 +1157,16 @@ serve(async (req) => {
           function extractFlightsFromText(text: string): string[] {
             if (!text) return [];
             const flights: string[] = [];
-            // "Flight XX-1234X" or "Flight XX 1234X"
-            const flightPattern = /Flight\s+([A-Z0-9]{2}[\s-]?\d{3,5}[A-Za-z]?)/gi;
             let m;
+            // Pattern 1: "Flight XX-1234X" or "Flight XX 1234X"
+            const flightPattern = /Flight\s+([A-Z0-9]{2}[\s-]?\d{3,5}[A-Za-z]?)/gi;
             while ((m = flightPattern.exec(text)) !== null) flights.push(m[1]);
+            // Pattern 2: standalone codes ending in -T, e.g. "LA 5491-T", "LA5463-T"
+            const dashTPattern = /\b([A-Z]{2}\s?\d{3,5}-T)\b/gi;
+            while ((m = dashTPattern.exec(text)) !== null) flights.push(m[1]);
+            // Pattern 3: standalone codes ending in D or X after digit, e.g. "AF0677D", "LX9950X"
+            const suffixDXPattern = /\b([A-Z0-9]{2}[\s-]?\d{3,5}[DXdx])\b/g;
+            while ((m = suffixDXPattern.exec(text)) !== null) flights.push(m[1]);
             return flights;
           }
           try {
