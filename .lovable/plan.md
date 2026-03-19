@@ -1,23 +1,40 @@
 
 
-## Plano: Forçar discrepância de peças no AWB 996-12994413
+## Plano: Destacar origem para processos pré-embarque com conexão
 
 ### Problema
-O AWB 996-12994413 teve variação de peças (6 → 3 → 6) mas a discrepância não está sendo detectada automaticamente porque os dados de peças não estão presentes na timeline armazenada no banco.
+Processos que ainda estão na origem (status como `BKD`, `PRE`, `MAN`, `DOC`, `RCS`, `FOH`, `RDP`) estão com a **conexão** destacada em amarelo, quando deveriam ter a **origem** destacada — o cargo ainda não saiu.
 
-### Correção em `supabase/functions/fetch-status-aereo/index.ts`
+### Solução
+Adicionar uma lista de statuses pré-embarque (`PRE_DEPARTURE`) e verificar **antes** da lógica de conexão. Se o status for pré-embarque, sempre destaca a origem — sem alterar a lógica existente para os demais cenários.
 
-Adicionar um override para o AWB na seção `MANUAL_OVERRIDES` (~linha 1668):
+### Mudança em `src/pages/Index.tsx` (~linha 2751)
 
 ```typescript
-'996-12994413': {
-  force_discrepancy: true,
-  force_baseline_pieces: 6,
-},
+const PRE_DEPARTURE = ['BKD','PRE','MAN','DOC','RCS','RDP','RCT','LAT','TKG','SCR','ECC'];
+
+if (conexoes.length > 0) {
+  if (POST_DESTINO.includes(statusCode)) {
+    highlightDestino = true;
+  } else if (PRE_DEPARTURE.includes(statusCode)) {
+    // Cargo ainda na origem — não destacar conexão
+    highlightOrigin = true;
+  } else if (AT_CONEXAO.includes(statusCode) || statusCode === 'DEP') {
+    highlightConexaoIndex = conexoes.length - 1;
+  } else if (IN_TRANSIT_AT_CONNECTION.includes(statusCode)) {
+    highlightConexaoIndex = conexoes.length - 1;
+  } else {
+    highlightOrigin = true;
+  }
+}
 ```
 
-Isso ativa o flag `pieces_discrepancy = true` e define o baseline como 6 peças, fazendo o AWB aparecer com o indicador de discrepância na lista.
+### Resultado
+- `BKD`, `PRE`, `MAN`, etc. com conexão → **origem** amarela ✓
+- `DEP` com conexão → **conexão** amarela (mantém comportamento atual) ✓
+- `ARR - CONEXÃO` → **conexão** amarela (sem mudança) ✓
+- `ARR`, `RCF`, `NFD`, etc. → **destino** amarelo (sem mudança) ✓
 
 ### Arquivo modificado
-1. `supabase/functions/fetch-status-aereo/index.ts` — adicionar override com `force_discrepancy` e `force_baseline_pieces`
+1. `src/pages/Index.tsx` — adicionar checagem `PRE_DEPARTURE` antes da lógica de conexão
 
