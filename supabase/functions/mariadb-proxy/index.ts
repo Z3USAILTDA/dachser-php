@@ -7831,8 +7831,9 @@ serve(async (req) => {
               if (e.fonte === 'API') return false;
               return true; // data inválida de outras fontes, manter por segurança
             }
-            // Excluir eventos com data futura (previsões, não eventos reais)
-            if (eventDate > now) return false;
+            // Excluir eventos com data futura >6h (previsões, não eventos reais) — tolerância de 6h para fusos horários
+            const futureThreshold = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+            if (eventDate > futureThreshold) return false;
             // Filtro ETD existente
             if (etdCutoff && eventDate < etdCutoff) return false;
             return true;
