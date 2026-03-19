@@ -13,7 +13,7 @@ const IATA_HIERARCHY: Record<string, number> = {
   // 1. Planning & Pre-Receipt
   BKD: 1, TKG: 2, LAT: 3, FWB: 4, BKG: 1,
   // 2. Origin & Ground Processing
-  RCS: 10, RCT: 11, DOC: 12, RFC: 13, ECC: 14, SCR: 15, FOH: 9,
+  RCS: 10, RCT: 11, DOC: 12, RFC: 13, ECC: 14, SCR: 15, FOH: 16,
   // 3. Handling & Departure
   PRE: 20, MAN: 21, RDP: 22, DEP: 23, FFM: 21,
   // 4. Transit & Connection
