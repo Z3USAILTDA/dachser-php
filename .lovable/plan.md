@@ -1,28 +1,23 @@
 
 
-## Plano: Corrigir status do processo 724-85006073
+## Plano: Corrigir hierarquia FOH no timeline modal e na tabela principal
 
 ### Diagnóstico
 
-Investiguei o `timeline_json` do AWB no MariaDB e encontrei:
+A screenshot mostra o AWB 724-85006073 com **RCS** marcado como "Mais recente" acima de **FOH**, ambos com timestamp 19/03/2026 13:15. O problema está em **dois locais**:
 
-| Timestamp | Status | Descrição |
-|-----------|--------|-----------|
-| 20 Mar 2026 20:10 | DEP | Departed CDG-ZRH (timestamp futuro, filtrado) |
-| 19 Mar 2026 13:15 | RCS | Ready for Carriage at CDG |
-| 19 Mar 2026 13:15 | RCS | Ready for Carriage at CDG (duplicata) |
-| 19 Mar 2026 13:15 | FOH | Received in Warehouse at CDG |
-| 19 Mar 2026 11:13 | BKD | Booked on Flight |
-| 18 Mar 2026 15:31 | BKD | Booked on Flight |
+1. **Timeline Modal (`AwbTimelineModal.tsx`, linha 112)**: O mapa `IATA_WEIGHT` não inclui `FOH`. Sem entrada, FOH recebe peso 0, perdendo para RCS (peso 10) no desempate.
 
-Os eventos `RCS` e `FOH` têm **exatamente o mesmo timestamp**. A hierarquia IATA atualizada no código dá `FOH: 16` > `RCS: 10`, portanto `FOH` deveria vencer o desempate. Mas a tela mostra `RCS`.
+2. **Edge function (`fetch-status-aereo`)**: O código fonte tem `FOH: 16` correto, mas pode não estar deployado. A função precisa ser reimplantada.
 
-**Causa raiz**: A edge function `fetch-status-aereo` não foi re-implantada após a última alteração da hierarquia (FOH de 9 para 16). O código fonte está correto mas a versão em produção é a antiga.
+### Ações
 
-### Ação
+1. **Adicionar FOH ao IATA_WEIGHT no AwbTimelineModal.tsx** (linha 112):
+   - Alterar `SCR: 15,` para `SCR: 15, FOH: 16,`
 
-1. **Reimplantar a edge function `fetch-status-aereo`** — sem alteração de código, apenas deploy para que a versão com `FOH: 16` entre em produção.
+2. **Reimplantar a edge function `fetch-status-aereo`** para garantir que a versão com FOH: 16 esteja em produção.
 
 ### Resultado esperado
-- AWB 724-85006073: status muda de `RCS` para `FOH` na tabela principal, alinhando com o banco de dados e a timeline.
+- Timeline: FOH aparece como "Mais recente" acima de RCS quando ambos têm o mesmo timestamp.
+- Tabela principal: Status resolve para FOH em vez de RCS/BKD.
 
