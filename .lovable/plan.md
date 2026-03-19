@@ -1,38 +1,30 @@
 
 
-## Plano: Fixar alerta de discrepância permanente para 996-14370731
+## Plano: Forçar `pieces_discrepancy` na lista (situação) para 996-14370731
 
-### O que o usuário quer
-- **NÃO** forçar a timeline — deixar os dados virem do banco (firecrawl) naturalmente
-- **SIM** forçar o alerta de discrepância de peças para que apareça sempre, mesmo que os dados mudem
+### Problema
+O `FORCED_DISCREPANCIES` foi adicionado apenas no `mariadb-proxy` (usado pelo modal de timeline). A `fetch-status-aereo` (que alimenta a lista/situação) usa `detectPiecesDiscrepancy()` sobre o `timeline_json` do banco, e essa função não está detectando a discrepância automaticamente. Além disso, o override atual do AWB não força `pieces_discrepancy: true`.
 
-### Problema atual
-1. O override no `fetch-status-aereo` tem `last_event_date: '2026-03-16'`, mas o banco já tem eventos de `2026-03-19` — logo o override é **ignorado** (regra de prevalência cronológica)
-2. O `FORCED_TIMELINES` no `mariadb-proxy` também tem `last_event_date` antiga — é igualmente ignorado
-3. A timeline automática do firecrawl provavelmente não está parseando as peças variáveis (26, 15, 11, 6, 5) corretamente, então a discrepância natural não aparece
+### Correção
 
-### Solução
+#### `supabase/functions/fetch-status-aereo/index.ts`
 
-#### 1. `supabase/functions/mariadb-proxy/index.ts`
-- **Remover** a entrada `996-14370731` do `FORCED_TIMELINES` (não forçar mais a timeline)
-- **Criar** um novo mapa `FORCED_DISCREPANCIES` com uma entrada para esse AWB:
-  ```typescript
-  const FORCED_DISCREPANCIES: Record<string, { field: string; values: number[]; min: number; max: number }> = {
-    '996-14370731': { field: 'pecas', values: [26, 15, 11, 6, 5], min: 5, max: 26 },
-  };
-  ```
-- Na linha ~7909 (construção do resultado), após a detecção automática de discrepância: verificar se o AWB está em `FORCED_DISCREPANCIES` e usar esse valor como fallback (ou override) caso a detecção automática não encontre discrepância
-
-#### 2. `supabase/functions/fetch-status-aereo/index.ts`
-- **Remover** a `force_timeline` e atualizar o override para manter apenas `force_origem: 'CDG'`, `force_destino: 'GRU'` (se necessário para a rota), sem `last_event_date` para que o override de status não interfira com dados automáticos
-- Ou remover completamente o override se o status automático já está correto
+1. **No override do AWB `996-14370731`** (linha 1659): adicionar `force_discrepancy: true` e `baseline_pieces: 26`
+2. **Na lógica de aplicação de overrides** (linha ~2522): adicionar tratamento para `force_discrepancy`:
+   ```typescript
+   if (override.force_discrepancy) {
+     row.pieces_discrepancy = true;
+     row.baseline_pieces = override.baseline_pieces || row.baseline_pieces;
+     row.force_critical = true;
+   }
+   ```
+   Isso garante que na lista, o AWB apareça com o badge vermelho de "Discrepância Peças (26)" e seja classificado como crítico.
 
 ### Resultado esperado
-- Timeline vem do banco naturalmente (dados do firecrawl)
-- Banner âmbar de discrepância: "⚠ Discrepância de peças detectada: valores encontrados 26, 15, 11, 6 e 5"
-- Persiste permanentemente independente de atualizações futuras
+- Na lista (situação): badge vermelho "Discrepância Peças (26)" visível
+- Na timeline (modal): banner âmbar com valores 26, 15, 11, 6 e 5 (já funciona)
+- Persiste permanentemente independente de atualizações do banco
 
-### Arquivos modificados
-1. `supabase/functions/mariadb-proxy/index.ts` — remover forced timeline, adicionar `FORCED_DISCREPANCIES` com fallback na detecção
-2. `supabase/functions/fetch-status-aereo/index.ts` — limpar override (remover timeline forçada)
+### Arquivo modificado
+1. `supabase/functions/fetch-status-aereo/index.ts` — adicionar `force_discrepancy` ao override e à lógica de aplicação
 
