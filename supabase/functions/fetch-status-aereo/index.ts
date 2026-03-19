@@ -345,12 +345,13 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
       // Exclude [planned] events – they are predictions, not confirmed
       const desc = (ev.Description || ev.description || ev.title || ev.details || ev.status || ev.Status || '').toString().trim();
       if (desc.toLowerCase().endsWith('[planned]')) return false;
-      // Exclude future events (predictions, not real statuses)
+      // Exclude future events (predictions, not real statuses) — allow 6h buffer for timezone differences
       const ts = ev.Timestamp || ev.timestamp || ev.dataEvento || ev.date || ev.Date || null;
       if (!ts) return true;
       const eventDate = parseFlexibleDate(String(ts));
       if (!eventDate) return true;
-      if (eventDate > now) return false;
+      const futureThreshold = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+      if (eventDate > futureThreshold) return false;
       if (eventDate.getFullYear() < 2020) return false;
       return true;
     });
@@ -448,7 +449,8 @@ function extractLastEventDescription(timelineJson: string | null, etdStr?: strin
       if (!ts) return true;
       const eventDate = parseFlexibleDate(String(ts));
       if (!eventDate) return true;
-      if (eventDate > now) return false;
+      const futureThreshold = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+      if (eventDate > futureThreshold) return false;
       if (eventDate.getFullYear() < 2020) return false;
       return true;
     });
@@ -506,7 +508,8 @@ function extractLastEventDate(timelineJson: string | null, etdStr?: string | nul
       if (!ts) continue;
       const eventDate = parseFlexibleDate(String(ts));
       if (!eventDate || isNaN(eventDate.getTime())) continue;
-      if (eventDate > now) continue; // skip future dates (predictions)
+      const futureThreshold = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+      if (eventDate > futureThreshold) continue; // skip events >6h in the future (predictions)
       if (eventDate.getFullYear() < 2020) continue; // skip clearly invalid dates
       // Skip API events with no valid status (likely predictions)
       const src = (ev.source || ev.fonte || '').toUpperCase();
