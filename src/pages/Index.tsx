@@ -571,6 +571,8 @@ const Index = () => {
           email_cliente: item.email_cliente || "",
           origem: item.origem || "N/A",
           destino: item.destino || "N/A",
+          conexao: item.conexao || null,
+          hours_in_status: item.hours_in_status ?? null,
           last_event: item.último_status || "-",
           status: item.último_status || "-",
           status_description: item.status_info || null,
