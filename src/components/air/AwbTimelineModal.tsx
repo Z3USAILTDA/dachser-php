@@ -109,7 +109,7 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
       // IATA hierarchy weights for tiebreaking same-timestamp events
       const IATA_WEIGHT: Record<string, number> = {
         BKD: 1, TKG: 2, LAT: 3,
-        RCS: 10, RCT: 11, DOC: 12, RFC: 13, ECC: 14, SCR: 15,
+        RCS: 10, RCT: 11, DOC: 12, RFC: 13, ECC: 14, SCR: 15, FOH: 16,
         PRE: 20, MAN: 21, RDP: 22, DEP: 23,
         TFD: 30, TRM: 31, TRA: 32,
         ARR: 40, RCF: 41, NFD: 42, AWD: 43, AWR: 44, CCD: 45, DLV: 46, POD: 47,
