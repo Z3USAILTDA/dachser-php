@@ -2741,15 +2741,17 @@ const Index = () => {
                                 const POST_DESTINO = ['ARR - DESTINO','ARR','RCF','NFD','AWD','DLV','POD','CCD','AWR','FOH'];
                                 const AT_CONEXAO = ['ARR - CONEXÃO','ARR - CONEXAO'];
 
-                                let highlightOrigin = false;
-                                let highlightConexao = false;
-                                let highlightDestino = false;
+                                const conexoes = awb.conexao ? awb.conexao.split(',').map((c: string) => c.trim()).filter(Boolean) : [];
 
-                                if (awb.conexao) {
+                                let highlightOrigin = false;
+                                let highlightDestino = false;
+                                let highlightConexaoIndex = -1; // which conexao to highlight
+
+                                if (conexoes.length > 0) {
                                   if (POST_DESTINO.includes(statusCode)) {
                                     highlightDestino = true;
                                   } else if (AT_CONEXAO.includes(statusCode) || statusCode === 'DEP') {
-                                    highlightConexao = true;
+                                    highlightConexaoIndex = conexoes.length - 1; // last reached connection
                                   } else {
                                     highlightOrigin = true;
                                   }
@@ -2767,21 +2769,16 @@ const Index = () => {
                                 return (
                                   <div className="flex items-center gap-1 whitespace-nowrap">
                                     <span className={highlightOrigin ? activeClass : inactiveClass}>{awb.origem || "N/A"}</span>
-                                    {awb.conexao ? (
-                                      <>
+                                    {conexoes.map((con: string, idx: number) => (
+                                      <span key={idx} className="flex items-center gap-1">
                                         <span className="text-muted-foreground">→</span>
-                                        <span className={highlightConexao ? activeClass : inactiveClass}>
-                                          {awb.conexao}
+                                        <span className={highlightConexaoIndex === idx ? activeClass : inactiveClass}>
+                                          {con}
                                         </span>
-                                        <span className="text-muted-foreground">→</span>
-                                        <span className={highlightDestino ? activeClass : inactiveClass}>{awb.destino || "N/A"}</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <span className="text-muted-foreground mx-1">→</span>
-                                        <span className={highlightDestino ? activeClass : inactiveClass}>{awb.destino || "N/A"}</span>
-                                      </>
-                                    )}
+                                      </span>
+                                    ))}
+                                    <span className="text-muted-foreground">→</span>
+                                    <span className={highlightDestino ? activeClass : inactiveClass}>{awb.destino || "N/A"}</span>
                                   </div>
                                 );
                               })()}
