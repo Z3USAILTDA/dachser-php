@@ -1659,6 +1659,8 @@ serve(async (req) => {
       '996-14370731': {
         force_origem: 'CDG',
         force_destino: 'GRU',
+        force_discrepancy: true,
+        force_baseline_pieces: 26,
       },
       '020-02593301': {
         status: 'BKD',
