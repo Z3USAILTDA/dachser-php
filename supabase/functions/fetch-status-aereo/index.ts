@@ -31,7 +31,19 @@ function getEventDateStr(ev: any): string {
 
 // Get event IATA status code from any event object
 function getEventStatusCode(ev: any): string {
-  return (ev.Status || ev.status || ev.codigo_evento || ev.code || '').toString().trim().toUpperCase();
+  const direct = (ev.Status || ev.status || ev.codigo_evento || ev.code || '').toString().trim().toUpperCase();
+  if (direct) return direct;
+  // Fallback: extract from Description/description, e.g. "Ready for Carriage at CDG (RCS)"
+  const desc = (ev.Description || ev.description || ev.title || ev.details || '').toString().trim();
+  if (desc) {
+    // Check parenthesized code: "(RCS)", "(FOH)", "(DEP)"
+    const parenMatch = desc.match(/\(([A-Z]{2,5})\)\s*$/);
+    if (parenMatch) return parenMatch[1].toUpperCase();
+    // Check prefix: "RCS - ...", "FOH - ..."
+    const prefixMatch = desc.match(/^([A-Z]{2,5})\s*[-,\s]/);
+    if (prefixMatch) return prefixMatch[1].toUpperCase();
+  }
+  return '';
 }
 
 // Sort events descending by date, with IATA_HIERARCHY as tiebreaker for same timestamps
