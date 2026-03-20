@@ -1,24 +1,23 @@
+## Plano Completo: Correções na Régua de Cobrança e Disputas — IMPLEMENTADO ✅
 
+### 1. ✅ Importação de Planilha — Modal de Duplicados
+- Nova action `check_disputas_planilha` no backend
+- Flag `forceUpdate` em `import_disputas_planilha` 
+- Modal de confirmação com 3 botões: Substituir Todos / Importar apenas novos / Cancelar
 
-## Plano: Corrigir destaque de rota — RCF deve destacar a origem quando há conexões
+### 2. ✅ Observações e Prazo
+- Mapeamento de coluna "prazo"/"vencimento"/"data limite"/"deadline" no parser
+- Fix `update_disputa_observacoes`: check-then-update em vez de UPSERT
 
-### Problema
-AWB 724-85006073 (CDG → ZRH → GRU): o status RCF em ZRH indica que a carga saiu da origem (CDG) e foi recebida na conexão. A origem deveria estar amarela, mas o destino (GRU) está destacado porque `RCF` está na lista `POST_DESTINO` que é verificada primeiro (linha 2753).
+### 3. ✅ Exportação Excel — Sumário
+- Colunas de sumário alinhadas com "Valor (R$)" no índice correto
+- Total Valor como número raw com formato de moeda
 
-### Solução
-Em `src/pages/Index.tsx` (linhas 2752-2764), quando há conexões, reorganizar a ordem de verificação:
+### 4. ✅ Erro ao Editar/Excluir Disputa
+- `update_disputa_observacoes`: SELECT → UPDATE/INSERT com try/catch
+- `delete_disputa`: try/catch + cleanup de t_fin_disputas
 
-1. **Criar lista `FINAL_DESTINO_ONLY`** com status exclusivamente de destino final: `DLV`, `POD`, `ARR - DESTINO`
-2. **Criar lista `ORIGIN_DEPARTURE`** que inclui `RCF` junto com os status pré-embarque — quando há conexões, RCF indica que a carga acabou de sair da origem
-3. **Lógica com conexões passa a ser**:
-   - `FINAL_DESTINO_ONLY` → destacar destino
-   - `PRE_DEPARTURE` ou `RCF` → destacar origem
-   - `AT_CONEXAO` / `DEP` / `IN_TRANSIT_AT_CONNECTION` (sem RCF) → destacar conexão
-   - `POST_DESTINO` restante (`ARR`, `NFD`, `AWD`, `CCD`, `AWR`, `FOH`) → destacar destino
-   - fallback → origem
-
-4. **Lógica sem conexões** permanece inalterada (RCF no destino faz sentido quando não há ponto de trânsito)
-
-### Arquivo alterado
-- `src/pages/Index.tsx` — bloco de highlight de rota (linhas ~2750-2764)
-
+### 5. ✅ E-mails Agrupados
+- `regua-send-aging` migrado para `npm:mysql2/promise` com `connectWithRetry`
+- Erros de DB vs Resend separados
+- Frontend com mensagens específicas (temporário vs permanente)
