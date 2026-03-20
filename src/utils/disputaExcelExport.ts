@@ -199,7 +199,8 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     headers, // Row 4: Headers
     ...dataRows, // Data rows
     ["", "", "", "", "", "", "", "", ""], // Empty row before summary
-    ["", "", "", "", "Total de Registros:", totalRegistros, "Total Valor:", formatMoney(totalValor), ""], // Summary row
+    ["", "", "", "", "", "Total de Registros:", totalRegistros, "", ""], // Summary row 1
+    ["", "", "", "", "", "Total Valor:", totalValor, "", ""], // Summary row 2 (raw number for formatting)
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -245,12 +246,15 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     });
   });
 
-  // Add summary row
-  const summaryRowIdx = dataRows.length + 5;
-  ws[XLSX.utils.encode_cell({ r: summaryRowIdx, c: 4 })] = { v: "Total de Registros:", s: summaryLabelStyle };
-  ws[XLSX.utils.encode_cell({ r: summaryRowIdx, c: 5 })] = { v: totalRegistros, s: summaryValueStyle };
-  ws[XLSX.utils.encode_cell({ r: summaryRowIdx, c: 6 })] = { v: "Total Valor:", s: summaryLabelStyle };
-  ws[XLSX.utils.encode_cell({ r: summaryRowIdx, c: 7 })] = { v: formatMoney(totalValor), s: summaryValueStyle };
+  // Add summary rows
+  const summaryRow1Idx = dataRows.length + 5;
+  const summaryRow2Idx = dataRows.length + 6;
+  // Row 1: Total de Registros
+  ws[XLSX.utils.encode_cell({ r: summaryRow1Idx, c: 5 })] = { v: "Total de Registros:", s: summaryLabelStyle };
+  ws[XLSX.utils.encode_cell({ r: summaryRow1Idx, c: 6 })] = { v: totalRegistros, s: summaryValueStyle };
+  // Row 2: Total Valor (as number with currency format)
+  ws[XLSX.utils.encode_cell({ r: summaryRow2Idx, c: 5 })] = { v: "Total Valor:", s: summaryLabelStyle };
+  ws[XLSX.utils.encode_cell({ r: summaryRow2Idx, c: 6 })] = { v: totalValor, t: 'n', s: { ...summaryValueStyle, numFmt: '"R$"#,##0.00' } };
 
   // Set column widths
   ws["!cols"] = [
@@ -273,7 +277,8 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     { hpt: 24 }, // Header row
     ...dataRows.map(() => ({ hpt: 20 })), // Data rows
     { hpt: 10 }, // Empty row
-    { hpt: 22 }, // Summary row
+    { hpt: 22 }, // Summary row 1
+    { hpt: 22 }, // Summary row 2
   ];
 
   // Add worksheet to workbook

@@ -92,6 +92,12 @@ function FinanceiroDisputaContent() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Duplicate confirmation modal
+  const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
+  const [duplicateItems, setDuplicateItems] = useState<Array<{ nd: string; cliente: string; responsavel: string }>>([]);
+  const [parsedItemsForImport, setParsedItemsForImport] = useState<Array<{ nd: string; descricao: string; departamento: string; responsavel: string; escalation: string }>>([]);
+  const [newItemsNds, setNewItemsNds] = useState<string[]>([]);
+
   // Observações editing state
   const [savingObservacoes, setSavingObservacoes] = useState<Record<string, boolean>>({});
   const [editingObservacoes, setEditingObservacoes] = useState<string | null>(null);
@@ -534,6 +540,7 @@ function FinanceiroDisputaContent() {
         'analista', 'atribuído', 'atribuido'
       );
       const escIdx = findColumnIndex(headerRow, 'escalation', 'escalonamento', 'escalacao');
+      const prazoIdx = findColumnIndex(headerRow, 'prazo', 'vencimento', 'data limite', 'deadline', 'data venc');
       
       // Validate required column
       if (ndIdx === -1) {
@@ -587,6 +594,7 @@ function FinanceiroDisputaContent() {
         'analista', 'atribuído', 'atribuido'
       );
       const escIdx = findColumnIndex(headerCols, 'escalation', 'escalonamento', 'escalacao');
+      const prazoIdx = findColumnIndex(headerCols, 'prazo', 'vencimento', 'data limite', 'deadline', 'data venc');
       
       // Validate required column
       if (ndIdx === -1) {
@@ -638,27 +646,59 @@ function FinanceiroDisputaContent() {
       // Apply observation propagation
       const processedItems = propagateObservations(items);
 
+      // Step 1: Check for duplicates
+      const { data: checkData, error: checkError } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "check_disputas_planilha", items: processedItems.map(i => ({ nd: i.nd })) },
+      });
+
+      if (checkError) throw checkError;
+
+      const existingItems = checkData?.existingItems || [];
+      const newNds = checkData?.newItems || [];
+
+      if (existingItems.length > 0) {
+        // Has duplicates — open confirmation modal
+        setDuplicateItems(existingItems);
+        setParsedItemsForImport(processedItems);
+        setNewItemsNds(newNds);
+        setImportModalOpen(false);
+        setDuplicateModalOpen(true);
+        setImportLoading(false);
+        return;
+      }
+
+      // No duplicates — import directly
+      await executeImport(processedItems, false);
+    } catch (err) {
+      console.error("Erro ao importar:", err);
+      toast({ title: "Erro", description: "Falha ao processar planilha", variant: "destructive" });
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const executeImport = async (items: typeof parsedItemsForImport, forceUpdate: boolean) => {
+    setImportLoading(true);
+    try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "import_disputas_planilha", items: processedItems },
+        body: { action: "import_disputas_planilha", items, forceUpdate },
       });
 
       if (error) throw error;
       
       if (data?.success) {
-        const parts = [`${data.imported} disputa(s) importada(s)`];
-        if (data.skipped > 0) parts.push(`${data.skipped} ignorada(s) (já em disputa)`);
+        const parts = [`${data.imported} nova(s)`];
+        if (data.updated > 0) parts.push(`${data.updated} atualizada(s)`);
+        if (data.skipped > 0) parts.push(`${data.skipped} ignorada(s)`);
         if (data.notFound > 0) parts.push(`${data.notFound} não encontrada(s)`);
         toast({ title: "Importação concluída", description: parts.join(', ') });
         
-        if (data.notFoundItems?.length > 0) {
-          console.log("Documentos não encontrados:", data.notFoundItems);
-        }
-        if (data.skippedItems?.length > 0) {
-          console.log("Documentos ignorados (já em disputa):", data.skippedItems);
-        }
-        
         setImportModalOpen(false);
+        setDuplicateModalOpen(false);
         setImportFile(null);
+        setParsedItemsForImport([]);
+        setDuplicateItems([]);
+        setNewItemsNds([]);
         fetchDisputas();
       } else {
         toast({ title: "Erro", description: data?.error || "Falha na importação", variant: "destructive" });
@@ -669,6 +709,21 @@ function FinanceiroDisputaContent() {
     } finally {
       setImportLoading(false);
     }
+  };
+
+  const handleImportOnlyNew = async () => {
+    // Filter items to only include new ones
+    const onlyNewItems = parsedItemsForImport.filter(i => newItemsNds.includes(i.nd));
+    if (onlyNewItems.length === 0) {
+      toast({ title: "Aviso", description: "Nenhum item novo para importar" });
+      setDuplicateModalOpen(false);
+      return;
+    }
+    await executeImport(onlyNewItems, false);
+  };
+
+  const handleImportReplaceAll = async () => {
+    await executeImport(parsedItemsForImport, true);
   };
 
   const handleExport = () => {
@@ -1260,8 +1315,77 @@ function FinanceiroDisputaContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Duplicate Confirmation Modal */}
+      <Dialog open={duplicateModalOpen} onOpenChange={setDuplicateModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-500">
+              <Flag className="w-5 h-5" />
+              Registros duplicados encontrados
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {duplicateItems.length} registro(s) já existem como disputa. 
+              {newItemsNds.length > 0 && ` ${newItemsNds.length} novo(s) serão importados.`}
+            </p>
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/40">
+                    <th className="px-3 py-2 text-left text-xs uppercase tracking-wider font-semibold text-muted-foreground">ND</th>
+                    <th className="px-3 py-2 text-left text-xs uppercase tracking-wider font-semibold text-muted-foreground">Cliente</th>
+                    <th className="px-3 py-2 text-left text-xs uppercase tracking-wider font-semibold text-muted-foreground">Responsável</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {duplicateItems.slice(0, 20).map((item, idx) => (
+                    <tr key={idx} className="border-t border-border/30">
+                      <td className="px-3 py-2 font-mono text-xs">{item.nd}</td>
+                      <td className="px-3 py-2">{item.cliente}</td>
+                      <td className="px-3 py-2">{item.responsavel}</td>
+                    </tr>
+                  ))}
+                  {duplicateItems.length > 20 && (
+                    <tr className="border-t border-border/30">
+                      <td colSpan={3} className="px-3 py-2 text-center text-muted-foreground text-xs">
+                        ... e mais {duplicateItems.length - 20} registros
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => { setDuplicateModalOpen(false); setParsedItemsForImport([]); setDuplicateItems([]); }}
+            >
+              Cancelar
+            </Button>
+            {newItemsNds.length > 0 && (
+              <Button 
+                variant="secondary" 
+                onClick={handleImportOnlyNew}
+                disabled={importLoading}
+              >
+                {importLoading ? "Importando..." : `Importar apenas novos (${newItemsNds.length})`}
+              </Button>
+            )}
+            <Button 
+              onClick={handleImportReplaceAll}
+              disabled={importLoading}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {importLoading ? "Importando..." : "Substituir Todos"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageLayout>
-  );
+    );
 }
 
 export default function FinanceiroDisputa() {
