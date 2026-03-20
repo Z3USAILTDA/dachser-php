@@ -129,7 +129,7 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     "057": (iata, awb) => `https://www.afklcargo.com/mycargo/shipment/detail/${iata}-${awb}`,
     "074": (iata, awb) => `https://www.afklcargo.com/mycargo/shipment/detail/${iata}-${awb}`,
     "083": () => `https://saa.ibsplc.aero/icargoneoportal/app/main/#/app`,
-    "075": (iata, awb) => `https://api.tracking.iagcargo.com/tracking/${iata}-${awb}`,
+    "075": (iata, awb) => `https://www.iagcargo.com/iagcargo/portlet/en/html/601/main/search?frame=true&awb.cia=${iata}&awb.cod=${awb}`,
     "125": (iata, awb) => `https://ui.tracking.iagcargo.com/en/${iata}-${awb}?frame=true&loggedIn=false`,
     "139": (iata, awb) => `https://amcargo.aeromexico.com/seguimiento/resultado/${iata}-${awb}`,
     "147": () => `https://ebooking.champ.aero/trace/AT/trace.asp`,
