@@ -310,10 +310,18 @@ export default function OlimpoCobranca() {
 
   const displayRows = useMemo(() => {
     if (!data?.data) return [];
-    const rows = viewMode === "product" ? mergeProductRows(data.data) : data.data;
-    if (viewMode === "client" && clientFilter.trim()) {
-      const q = clientFilter.trim().toLowerCase();
-      return rows.filter((r) => r.product.toLowerCase().includes(q));
+    let rows = viewMode === "product" ? mergeProductRows(data.data) : [...data.data];
+    if (viewMode === "client") {
+      // Sort by total overdue (descending)
+      rows.sort((a, b) => {
+        const overdueA = overdueKeys.reduce((s, k) => s + ((a[k] as number) || 0), 0);
+        const overdueB = overdueKeys.reduce((s, k) => s + ((b[k] as number) || 0), 0);
+        return overdueB - overdueA;
+      });
+      if (clientFilter.trim()) {
+        const q = clientFilter.trim().toLowerCase();
+        rows = rows.filter((r) => r.product.toLowerCase().includes(q));
+      }
     }
     return rows;
   }, [data, viewMode, clientFilter]);

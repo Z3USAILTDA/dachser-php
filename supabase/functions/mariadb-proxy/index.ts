@@ -2250,7 +2250,17 @@ serve(async (req) => {
             )
             AND (t.disputa IS NULL OR t.disputa = 0)
           GROUP BY TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))
-          ORDER BY COUNT(*) DESC
+          ORDER BY (
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) +
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 40 THEN t.valor_nf ELSE 0 END) +
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 41 AND 60 THEN t.valor_nf ELSE 0 END) +
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 61 AND 90 THEN t.valor_nf ELSE 0 END) +
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 120 THEN t.valor_nf ELSE 0 END) +
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 121 AND 180 THEN t.valor_nf ELSE 0 END) +
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) +
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 365 THEN t.valor_nf ELSE 0 END) +
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 365 THEN t.valor_nf ELSE 0 END)
+          ) DESC
         `;
         
         const clientAgingRows = await client.query(clientAgingSql);
