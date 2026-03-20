@@ -646,27 +646,59 @@ function FinanceiroDisputaContent() {
       // Apply observation propagation
       const processedItems = propagateObservations(items);
 
+      // Step 1: Check for duplicates
+      const { data: checkData, error: checkError } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "check_disputas_planilha", items: processedItems.map(i => ({ nd: i.nd })) },
+      });
+
+      if (checkError) throw checkError;
+
+      const existingItems = checkData?.existingItems || [];
+      const newNds = checkData?.newItems || [];
+
+      if (existingItems.length > 0) {
+        // Has duplicates — open confirmation modal
+        setDuplicateItems(existingItems);
+        setParsedItemsForImport(processedItems);
+        setNewItemsNds(newNds);
+        setImportModalOpen(false);
+        setDuplicateModalOpen(true);
+        setImportLoading(false);
+        return;
+      }
+
+      // No duplicates — import directly
+      await executeImport(processedItems, false);
+    } catch (err) {
+      console.error("Erro ao importar:", err);
+      toast({ title: "Erro", description: "Falha ao processar planilha", variant: "destructive" });
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const executeImport = async (items: typeof parsedItemsForImport, forceUpdate: boolean) => {
+    setImportLoading(true);
+    try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "import_disputas_planilha", items: processedItems },
+        body: { action: "import_disputas_planilha", items, forceUpdate },
       });
 
       if (error) throw error;
       
       if (data?.success) {
-        const parts = [`${data.imported} disputa(s) importada(s)`];
-        if (data.skipped > 0) parts.push(`${data.skipped} ignorada(s) (já em disputa)`);
+        const parts = [`${data.imported} nova(s)`];
+        if (data.updated > 0) parts.push(`${data.updated} atualizada(s)`);
+        if (data.skipped > 0) parts.push(`${data.skipped} ignorada(s)`);
         if (data.notFound > 0) parts.push(`${data.notFound} não encontrada(s)`);
         toast({ title: "Importação concluída", description: parts.join(', ') });
         
-        if (data.notFoundItems?.length > 0) {
-          console.log("Documentos não encontrados:", data.notFoundItems);
-        }
-        if (data.skippedItems?.length > 0) {
-          console.log("Documentos ignorados (já em disputa):", data.skippedItems);
-        }
-        
         setImportModalOpen(false);
+        setDuplicateModalOpen(false);
         setImportFile(null);
+        setParsedItemsForImport([]);
+        setDuplicateItems([]);
+        setNewItemsNds([]);
         fetchDisputas();
       } else {
         toast({ title: "Erro", description: data?.error || "Falha na importação", variant: "destructive" });
@@ -677,6 +709,21 @@ function FinanceiroDisputaContent() {
     } finally {
       setImportLoading(false);
     }
+  };
+
+  const handleImportOnlyNew = async () => {
+    // Filter items to only include new ones
+    const onlyNewItems = parsedItemsForImport.filter(i => newItemsNds.includes(i.nd));
+    if (onlyNewItems.length === 0) {
+      toast({ title: "Aviso", description: "Nenhum item novo para importar" });
+      setDuplicateModalOpen(false);
+      return;
+    }
+    await executeImport(onlyNewItems, false);
+  };
+
+  const handleImportReplaceAll = async () => {
+    await executeImport(parsedItemsForImport, true);
   };
 
   const handleExport = () => {
