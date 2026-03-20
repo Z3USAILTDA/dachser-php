@@ -1,41 +1,27 @@
 
 
-## Plano: Excel Bonito para Olimpo Cobrança
+## Plano: Excel sempre com abas Product e Client
 
 ### Problema
-O export atual usa `xlsx` (sem estilos), valores como strings (`.toFixed(2)`), sem cores, sem formatação de moeda, sem bordas — gera um Excel "cru".
+O export Excel atualmente usa os dados do `viewMode` ativo (product ou client). O usuário quer que o Excel sempre contenha ambas as visões, independente de qual esteja visualizando.
 
-### Solução
+### Solução (`src/pages/olimpo/OlimpoCobranca.tsx`)
 
-**Trocar `xlsx` por `xlsx-js-style`** (já usado em outros arquivos do projeto como `HistoricoBaixasTab.tsx` e `voucherExcelExport.ts`) e aplicar formatação profissional.
+**Alterar `handleExportExcel`** para:
 
-### Alterações em `src/pages/olimpo/OlimpoCobranca.tsx`
+1. **Buscar ambos os datasets**: Fazer 2 chamadas paralelas ao backend — `get_aging_overview` (product) e `get_aging_by_client` (client) — independente do `viewMode` atual.
 
-**1. Import**: Trocar `import * as XLSX from "xlsx"` por `import * as XLSX from "xlsx-js-style"`
+2. **Gerar 3 abas no Excel**:
+   - **Aba "Aging - Product"**: Dados agrupados por product (usando `mergeProductRows` nos dados de `get_aging_overview`), com toda a formatação profissional existente (título dourado, zebra, Grand Total, % do Total, % Provisão, Valor Provisionado).
+   - **Aba "Aging - Client"**: Dados de `get_aging_by_client`, ordenados por maior vencido (mesma lógica do `displayRows` client), com a mesma formatação profissional.
+   - **Aba "Analítico de Clientes"**: Mantém como está (dados de `get_aging_analitico`).
 
-**2. Aba "Aging" — Estilização completa**:
-- **Título "Brazil Customer Aging Overview"**: Merge de colunas, fonte 16pt bold, fundo dourado (#D4AF37), texto preto
-- **Header das colunas**: Fundo dourado, fonte 11pt bold, bordas finas, alinhamento centralizado
-- **Linhas de dados**: Valores como números raw (não strings), formato de moeda `#,##0.00`, linhas alternadas com fundo cinza claro (#F5F5F5)
-- **Linha "Grand Total"**: Fundo escuro (#1a1a2e), texto branco, fonte bold
-- **Linha "% do Total"**: Formato percentual, fundo levemente diferenciado
-- **Linha "% Provisão"**: Formato percentual, highlight em amarelo claro
-- **Linha "Valor Provisionado"**: Formato moeda, fundo verde claro (#E8F5E9)
-- **Larguras de colunas** ajustadas automaticamente
+3. **Reutilizar lógica de estilização**: Extrair a lógica de criação da aba Aging para uma função auxiliar que recebe `rows[]`, `label` ("Product"/"Client") e `sheetName`, evitando duplicação de código.
 
-**3. Aba "Analítico de Clientes" — Mesma estilização**:
-- Header com fundo dourado e bordas
-- Valores numéricos como números (não strings `.toFixed(2)`)
-- Formato moeda nas colunas de valor/provisão
-- Linha de TOTAL com destaque (fundo escuro, bold)
-- Linhas alternadas com zebra striping
-- Larguras de colunas otimizadas para cada tipo de dado
-
-**4. Propriedades do Workbook**:
-- Title, Author, Subject preenchidos (padrão Z3US.AI)
+4. **Nome do arquivo**: Trocar de `aging_${viewMode}_...` para `aging_report_...` (sem referência ao viewMode).
 
 ### Arquivo alterado
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/pages/olimpo/OlimpoCobranca.tsx` | Trocar xlsx por xlsx-js-style, aplicar estilos profissionais nas 2 abas |
+| `src/pages/olimpo/OlimpoCobranca.tsx` | Refatorar `handleExportExcel` para buscar ambos datasets e gerar 3 abas |
 
