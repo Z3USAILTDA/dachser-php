@@ -246,12 +246,15 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     });
   });
 
-  // Add summary row
-  const summaryRowIdx = dataRows.length + 5;
-  ws[XLSX.utils.encode_cell({ r: summaryRowIdx, c: 4 })] = { v: "Total de Registros:", s: summaryLabelStyle };
-  ws[XLSX.utils.encode_cell({ r: summaryRowIdx, c: 5 })] = { v: totalRegistros, s: summaryValueStyle };
-  ws[XLSX.utils.encode_cell({ r: summaryRowIdx, c: 6 })] = { v: "Total Valor:", s: summaryLabelStyle };
-  ws[XLSX.utils.encode_cell({ r: summaryRowIdx, c: 7 })] = { v: formatMoney(totalValor), s: summaryValueStyle };
+  // Add summary rows
+  const summaryRow1Idx = dataRows.length + 5;
+  const summaryRow2Idx = dataRows.length + 6;
+  // Row 1: Total de Registros
+  ws[XLSX.utils.encode_cell({ r: summaryRow1Idx, c: 5 })] = { v: "Total de Registros:", s: summaryLabelStyle };
+  ws[XLSX.utils.encode_cell({ r: summaryRow1Idx, c: 6 })] = { v: totalRegistros, s: summaryValueStyle };
+  // Row 2: Total Valor (as number with currency format)
+  ws[XLSX.utils.encode_cell({ r: summaryRow2Idx, c: 5 })] = { v: "Total Valor:", s: summaryLabelStyle };
+  ws[XLSX.utils.encode_cell({ r: summaryRow2Idx, c: 6 })] = { v: totalValor, t: 'n', s: { ...summaryValueStyle, numFmt: '"R$"#,##0.00' } };
 
   // Set column widths
   ws["!cols"] = [
