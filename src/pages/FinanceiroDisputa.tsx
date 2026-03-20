@@ -1315,8 +1315,77 @@ function FinanceiroDisputaContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Duplicate Confirmation Modal */}
+      <Dialog open={duplicateModalOpen} onOpenChange={setDuplicateModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-500">
+              <Flag className="w-5 h-5" />
+              Registros duplicados encontrados
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {duplicateItems.length} registro(s) já existem como disputa. 
+              {newItemsNds.length > 0 && ` ${newItemsNds.length} novo(s) serão importados.`}
+            </p>
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/40">
+                    <th className="px-3 py-2 text-left text-xs uppercase tracking-wider font-semibold text-muted-foreground">ND</th>
+                    <th className="px-3 py-2 text-left text-xs uppercase tracking-wider font-semibold text-muted-foreground">Cliente</th>
+                    <th className="px-3 py-2 text-left text-xs uppercase tracking-wider font-semibold text-muted-foreground">Responsável</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {duplicateItems.slice(0, 20).map((item, idx) => (
+                    <tr key={idx} className="border-t border-border/30">
+                      <td className="px-3 py-2 font-mono text-xs">{item.nd}</td>
+                      <td className="px-3 py-2">{item.cliente}</td>
+                      <td className="px-3 py-2">{item.responsavel}</td>
+                    </tr>
+                  ))}
+                  {duplicateItems.length > 20 && (
+                    <tr className="border-t border-border/30">
+                      <td colSpan={3} className="px-3 py-2 text-center text-muted-foreground text-xs">
+                        ... e mais {duplicateItems.length - 20} registros
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => { setDuplicateModalOpen(false); setParsedItemsForImport([]); setDuplicateItems([]); }}
+            >
+              Cancelar
+            </Button>
+            {newItemsNds.length > 0 && (
+              <Button 
+                variant="secondary" 
+                onClick={handleImportOnlyNew}
+                disabled={importLoading}
+              >
+                {importLoading ? "Importando..." : `Importar apenas novos (${newItemsNds.length})`}
+              </Button>
+            )}
+            <Button 
+              onClick={handleImportReplaceAll}
+              disabled={importLoading}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {importLoading ? "Importando..." : "Substituir Todos"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageLayout>
-  );
+    );
 }
 
 export default function FinanceiroDisputa() {
