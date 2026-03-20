@@ -381,9 +381,90 @@ export default function OlimpoCobranca() {
     ];
   }, [totals, totalOverdue, totalReceivable]);
 
-  // Export to Excel with Analítico tab
+  // Helper: build a styled aging worksheet
+  const buildAgingSheet = (rows: AgingRow[], label: string, totalsRow: AgingRow | null, totalOD: number, totalRec: number, STYLE: any, headerStyleFn: Function, cellStyleFn: Function) => {
+    const numCols = agingKeys.length + 2;
+    const wsData: any[][] = [];
+
+    wsData.push([`Brazil Customer Aging Overview — ${label}`, ...Array(numCols).fill("")]);
+    wsData.push([label, ...agingKeys.map(k => AGING_LABELS[k]), "Total Overdue", "Total Receivable"]);
+
+    for (const row of rows) {
+      const rowOverdue = overdueKeys.reduce((s, k) => s + (row[k] as number), 0);
+      const rowTotal = row.not_due + rowOverdue;
+      wsData.push([row.product, ...agingKeys.map(k => Number(row[k]) || 0), rowOverdue, rowTotal]);
+    }
+
+    const grandTotalRowIdx = wsData.length;
+    if (totalsRow) {
+      wsData.push(["Grand Total", ...agingKeys.map(k => Number(totalsRow[k]) || 0), totalOD, totalRec]);
+      wsData.push(["% do Total", ...agingKeys.map(k => totalRec > 0 ? (totalsRow[k] as number) / totalRec : 0), totalRec > 0 ? totalOD / totalRec : 0, 1]);
+      wsData.push(["% Provisão", ...agingKeys.map(k => PROVISION_PCT[k] / 100), "", ""]);
+      wsData.push(["Valor Provisionado", ...agingKeys.map(k => (totalsRow[k] as number) * PROVISION_PCT[k] / 100), "", agingKeys.reduce((s, k) => s + (totalsRow[k] as number) * PROVISION_PCT[k] / 100, 0)]);
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: numCols } }];
+
+    const titleCell = ws[XLSX.utils.encode_cell({ r: 0, c: 0 })];
+    if (titleCell) titleCell.s = { fill: STYLE.gold, font: { bold: true, sz: 16, color: { rgb: "000000" } }, alignment: { horizontal: "center", vertical: "center" }, border: STYLE.border };
+
+    for (let c = 0; c <= numCols; c++) {
+      const addr = XLSX.utils.encode_cell({ r: 1, c });
+      if (ws[addr]) ws[addr].s = headerStyleFn(c === 0 ? "left" : "center");
+    }
+
+    for (let r = 2; r < grandTotalRowIdx; r++) {
+      const isZebra = r % 2 === 0;
+      for (let c = 0; c <= numCols; c++) {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        if (!ws[addr]) continue;
+        ws[addr].s = cellStyleFn(isZebra ? STYLE.zebra : STYLE.white, { align: c === 0 ? "left" : "right", numFmt: c > 0 ? '#,##0.00' : undefined });
+      }
+    }
+
+    if (totalsRow) {
+      for (let c = 0; c <= numCols; c++) {
+        const addr = XLSX.utils.encode_cell({ r: grandTotalRowIdx, c });
+        if (!ws[addr]) continue;
+        ws[addr].s = cellStyleFn(STYLE.dark, { font: { bold: true, color: { rgb: "FFFFFF" } }, align: c === 0 ? "left" : "right", numFmt: c > 0 ? '#,##0.00' : undefined });
+      }
+      const pctRow = grandTotalRowIdx + 1;
+      for (let c = 0; c <= numCols; c++) {
+        const addr = XLSX.utils.encode_cell({ r: pctRow, c });
+        if (!ws[addr]) continue;
+        ws[addr].s = cellStyleFn(STYLE.pctRow, { font: { bold: true }, align: c === 0 ? "left" : "right", numFmt: c > 0 ? '0.0%' : undefined });
+      }
+      const provPctRow = grandTotalRowIdx + 2;
+      for (let c = 0; c <= numCols; c++) {
+        const addr = XLSX.utils.encode_cell({ r: provPctRow, c });
+        if (!ws[addr]) continue;
+        ws[addr].s = cellStyleFn(STYLE.yellowLight, { font: { bold: true }, align: c === 0 ? "left" : "right", numFmt: c > 0 && typeof wsData[provPctRow]?.[c] === "number" ? '0%' : undefined });
+      }
+      const provValRow = grandTotalRowIdx + 3;
+      for (let c = 0; c <= numCols; c++) {
+        const addr = XLSX.utils.encode_cell({ r: provValRow, c });
+        if (!ws[addr]) continue;
+        ws[addr].s = cellStyleFn(STYLE.greenLight, { font: { bold: true }, align: c === 0 ? "left" : "right", numFmt: c > 0 && typeof wsData[provValRow]?.[c] === "number" ? '#,##0.00' : undefined });
+      }
+    }
+
+    ws["!cols"] = [{ wch: 35 }, ...agingKeys.map(() => ({ wch: 14 })), { wch: 16 }, { wch: 16 }];
+    ws["!rows"] = [{ hpt: 30 }, { hpt: 22 }];
+    return ws;
+  };
+
+  // Helper: compute totals from rows
+  const computeTotals = (rows: AgingRow[]): { totals: AgingRow; totalOverdue: number; totalReceivable: number } => {
+    const t: any = { product: "Grand Total", not_due: 0, aging_30: 0, aging_40: 0, aging_60: 0, aging_90: 0, aging_120: 0, aging_180: 0, aging_240: 0, aging_365: 0, aging_366_plus: 0 };
+    for (const row of rows) { for (const k of agingKeys) t[k] += (row[k] as number) || 0; }
+    const totalOD = overdueKeys.reduce((s, k) => s + (t[k] as number), 0);
+    const totalRec = agingKeys.reduce((s, k) => s + (t[k] as number), 0);
+    return { totals: t as AgingRow, totalOverdue: totalOD, totalReceivable: totalRec };
+  };
+
+  // Export to Excel — always includes Product + Client + Analítico tabs
   const handleExportExcel = async () => {
-    if (!displayRows.length) return;
     setExportingExcel(true);
 
     const STYLE = {
@@ -402,14 +483,14 @@ export default function OlimpoCobranca() {
       },
     };
 
-    const headerStyle = (align: string = "center") => ({
+    const headerStyleFn = (align: string = "center") => ({
       fill: STYLE.gold,
       font: { bold: true, sz: 11, color: { rgb: "000000" } },
       alignment: { horizontal: align, vertical: "center" },
       border: STYLE.border,
     });
 
-    const cellStyle = (fill: any, opts: any = {}) => ({
+    const cellStyleFn = (fill: any, opts: any = {}) => ({
       fill,
       font: { sz: 10, ...(opts.font || {}) },
       alignment: { horizontal: opts.align || "right", vertical: "center" },
@@ -418,151 +499,35 @@ export default function OlimpoCobranca() {
     });
 
     try {
-      // ===== ABA 1: AGING =====
-      const numCols = agingKeys.length + 2; // aging cols + Total Overdue + Total Receivable
-      const wsData: any[][] = [];
-
-      // Row 0: Title
-      wsData.push(["Brazil Customer Aging Overview", ...Array(numCols).fill("")]);
-      // Row 1: Headers
-      wsData.push([viewMode === "product" ? "Product" : "Client", ...agingKeys.map(k => AGING_LABELS[k]), "Total Overdue", "Total Receivable"]);
-
-      // Data rows
-      for (const row of displayRows) {
-        const rowOverdue = overdueKeys.reduce((s, k) => s + (row[k] as number), 0);
-        const rowTotal = row.not_due + rowOverdue;
-        wsData.push([
-          row.product,
-          ...agingKeys.map(k => Number(row[k]) || 0),
-          rowOverdue, rowTotal,
-        ]);
-      }
-
-      // Summary rows
-      const grandTotalRowIdx = wsData.length;
-      if (totals) {
-        wsData.push([
-          "Grand Total",
-          ...agingKeys.map(k => Number(totals[k]) || 0),
-          totalOverdue, totalReceivable,
-        ]);
-        wsData.push([
-          "% do Total",
-          ...agingKeys.map(k => totalReceivable > 0 ? (totals[k] as number) / totalReceivable : 0),
-          totalReceivable > 0 ? totalOverdue / totalReceivable : 0,
-          1,
-        ]);
-        wsData.push([
-          "% Provisão",
-          ...agingKeys.map(k => PROVISION_PCT[k] / 100),
-          "", "",
-        ]);
-        wsData.push([
-          "Valor Provisionado",
-          ...agingKeys.map(k => (totals[k] as number) * PROVISION_PCT[k] / 100),
-          "",
-          agingKeys.reduce((s, k) => s + (totals[k] as number) * PROVISION_PCT[k] / 100, 0),
-        ]);
-      }
-
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
-
-      // Merge title row
-      ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: numCols } }];
-
-      // Style title row
-      const titleCell = ws[XLSX.utils.encode_cell({ r: 0, c: 0 })];
-      if (titleCell) titleCell.s = {
-        fill: STYLE.gold,
-        font: { bold: true, sz: 16, color: { rgb: "000000" } },
-        alignment: { horizontal: "center", vertical: "center" },
-        border: STYLE.border,
-      };
-
-      // Style header row (row 1)
-      for (let c = 0; c <= numCols; c++) {
-        const addr = XLSX.utils.encode_cell({ r: 1, c });
-        if (ws[addr]) ws[addr].s = headerStyle(c === 0 ? "left" : "center");
-      }
-
-      // Style data rows (row 2 to grandTotalRowIdx-1)
-      for (let r = 2; r < grandTotalRowIdx; r++) {
-        const isZebra = r % 2 === 0;
-        for (let c = 0; c <= numCols; c++) {
-          const addr = XLSX.utils.encode_cell({ r, c });
-          if (!ws[addr]) continue;
-          ws[addr].s = cellStyle(
-            isZebra ? STYLE.zebra : STYLE.white,
-            { align: c === 0 ? "left" : "right", numFmt: c > 0 ? '#,##0.00' : undefined }
-          );
-        }
-      }
-
-      // Style Grand Total row
-      if (totals) {
-        for (let c = 0; c <= numCols; c++) {
-          const addr = XLSX.utils.encode_cell({ r: grandTotalRowIdx, c });
-          if (!ws[addr]) continue;
-          ws[addr].s = cellStyle(STYLE.dark, {
-            font: { bold: true, color: { rgb: "FFFFFF" } },
-            align: c === 0 ? "left" : "right",
-            numFmt: c > 0 ? '#,##0.00' : undefined,
-          });
-        }
-
-        // % do Total row
-        const pctRow = grandTotalRowIdx + 1;
-        for (let c = 0; c <= numCols; c++) {
-          const addr = XLSX.utils.encode_cell({ r: pctRow, c });
-          if (!ws[addr]) continue;
-          ws[addr].s = cellStyle(STYLE.pctRow, {
-            font: { bold: true },
-            align: c === 0 ? "left" : "right",
-            numFmt: c > 0 ? '0.0%' : undefined,
-          });
-        }
-
-        // % Provisão row
-        const provPctRow = grandTotalRowIdx + 2;
-        for (let c = 0; c <= numCols; c++) {
-          const addr = XLSX.utils.encode_cell({ r: provPctRow, c });
-          if (!ws[addr]) continue;
-          ws[addr].s = cellStyle(STYLE.yellowLight, {
-            font: { bold: true },
-            align: c === 0 ? "left" : "right",
-            numFmt: c > 0 && typeof wsData[provPctRow]?.[c] === "number" ? '0%' : undefined,
-          });
-        }
-
-        // Valor Provisionado row
-        const provValRow = grandTotalRowIdx + 3;
-        for (let c = 0; c <= numCols; c++) {
-          const addr = XLSX.utils.encode_cell({ r: provValRow, c });
-          if (!ws[addr]) continue;
-          ws[addr].s = cellStyle(STYLE.greenLight, {
-            font: { bold: true },
-            align: c === 0 ? "left" : "right",
-            numFmt: c > 0 && typeof wsData[provValRow]?.[c] === "number" ? '#,##0.00' : undefined,
-          });
-        }
-      }
-
-      // Column widths
-      ws["!cols"] = [
-        { wch: 35 }, // Client/Product
-        ...agingKeys.map(() => ({ wch: 14 })),
-        { wch: 16 }, // Total Overdue
-        { wch: 16 }, // Total Receivable
-      ];
-
-      // Row heights
-      ws["!rows"] = [{ hpt: 30 }, { hpt: 22 }];
+      // Fetch both datasets in parallel (independent of current viewMode)
+      const [productResp, clientResp] = await Promise.all([
+        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_aging_overview" } }),
+        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_aging_by_client" } }),
+      ]);
 
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Aging");
 
-      // ===== ABA 2: ANALÍTICO =====
+      // ===== ABA 1: AGING - PRODUCT =====
+      if (productResp.data?.success && productResp.data.data?.length > 0) {
+        const productRows = mergeProductRows(productResp.data.data);
+        const pc = computeTotals(productRows);
+        const wsProduct = buildAgingSheet(productRows, "Product", pc.totals, pc.totalOverdue, pc.totalReceivable, STYLE, headerStyleFn, cellStyleFn);
+        XLSX.utils.book_append_sheet(wb, wsProduct, "Aging - Product");
+      }
+
+      // ===== ABA 2: AGING - CLIENT =====
+      if (clientResp.data?.success && clientResp.data.data?.length > 0) {
+        const clientRows = [...clientResp.data.data].sort((a: AgingRow, b: AgingRow) => {
+          const overdueA = overdueKeys.reduce((s, k) => s + ((a[k] as number) || 0), 0);
+          const overdueB = overdueKeys.reduce((s, k) => s + ((b[k] as number) || 0), 0);
+          return overdueB - overdueA;
+        });
+        const cc = computeTotals(clientRows);
+        const wsClient = buildAgingSheet(clientRows, "Client", cc.totals, cc.totalOverdue, cc.totalReceivable, STYLE, headerStyleFn, cellStyleFn);
+        XLSX.utils.book_append_sheet(wb, wsClient, "Aging - Client");
+      }
+
+      // ===== ABA 3: ANALÍTICO =====
       try {
         const { data: analiticoResp } = await supabase.functions.invoke("mariadb-proxy", {
           body: { action: "get_aging_analitico" },
@@ -618,7 +583,6 @@ export default function OlimpoCobranca() {
             ]);
           }
 
-          const totalRowIdx = anData.length + 1; // +1 for blank row
           anData.push([]);
           anData.push([
             "", "", "", "", "", "", "", "", "",
@@ -628,12 +592,9 @@ export default function OlimpoCobranca() {
           ]);
 
           const ws2 = XLSX.utils.aoa_to_sheet(anData);
-          const range2 = XLSX.utils.decode_range(ws2["!ref"] || "A1");
 
-          // Merge title row
           ws2["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
 
-          // Style title
           const titleCell2 = ws2[XLSX.utils.encode_cell({ r: 0, c: 0 })];
           if (titleCell2) titleCell2.s = {
             fill: STYLE.gold,
@@ -642,43 +603,36 @@ export default function OlimpoCobranca() {
             border: STYLE.border,
           };
 
-          // Style headers (row 2)
           for (let c = 0; c <= 21; c++) {
             const addr = XLSX.utils.encode_cell({ r: 2, c });
-            if (ws2[addr]) ws2[addr].s = headerStyle(c <= 9 ? "center" : "center");
+            if (ws2[addr]) ws2[addr].s = headerStyleFn(c <= 9 ? "center" : "center");
           }
 
-          // Style data rows
           for (let r = 3; r < anData.length - 2; r++) {
             const isZebra = r % 2 === 0;
             for (let c = 0; c <= 21; c++) {
               const addr = XLSX.utils.encode_cell({ r, c });
               if (!ws2[addr]) continue;
               const isMoneyCol = c === 10 || c === 11 || (c >= 16 && c <= 20);
-              ws2[addr].s = cellStyle(
+              ws2[addr].s = cellStyleFn(
                 isZebra ? STYLE.zebra : STYLE.white,
-                {
-                  align: isMoneyCol ? "right" : c <= 9 ? "left" : "right",
-                  numFmt: isMoneyCol && typeof anData[r]?.[c] === "number" ? '#,##0.00' : undefined,
-                }
+                { align: isMoneyCol ? "right" : c <= 9 ? "left" : "right", numFmt: isMoneyCol && typeof anData[r]?.[c] === "number" ? '#,##0.00' : undefined }
               );
             }
           }
 
-          // Style TOTAL row
           const tRow = anData.length - 1;
           for (let c = 0; c <= 21; c++) {
             const addr = XLSX.utils.encode_cell({ r: tRow, c });
             if (!ws2[addr]) continue;
             const isMoneyCol = c >= 16 && c <= 20;
-            ws2[addr].s = cellStyle(STYLE.dark, {
+            ws2[addr].s = cellStyleFn(STYLE.dark, {
               font: { bold: true, color: { rgb: "FFFFFF" } },
               align: c === 9 ? "right" : isMoneyCol ? "right" : "left",
               numFmt: isMoneyCol ? '#,##0.00' : undefined,
             });
           }
 
-          // Column widths
           ws2["!cols"] = [
             { wch: 10 }, { wch: 18 }, { wch: 14 }, { wch: 10 }, { wch: 10 },
             { wch: 13 }, { wch: 13 }, { wch: 14 }, { wch: 35 },
@@ -703,7 +657,7 @@ export default function OlimpoCobranca() {
         CreatedDate: new Date(),
       };
 
-      XLSX.writeFile(wb, `aging_${viewMode}_${new Date().toISOString().slice(0, 10)}.xlsx`, { cellStyles: true });
+      XLSX.writeFile(wb, `aging_report_${new Date().toISOString().slice(0, 10)}.xlsx`, { cellStyles: true });
       toast({ title: "Excel exportado com sucesso" });
     } catch (err: any) {
       toast({ title: "Erro ao exportar", description: err.message, variant: "destructive" });
