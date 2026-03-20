@@ -24,6 +24,7 @@ export const airlineTrackingLinks: Record<string, string> = {
   "996": "https://uxtracking.com/tracking.asp?prefix=996&Serial=${awb}",
    "139": "https://amcargo.aeromexico.com/seguimiento/resultado/${formattedAwb}",
    "172": "https://www.cargolux.com/track-and-Trace#numbers=${pr}-${awb}",
+  "001": "https://www.aacargo.com/mobile/tracking-details.html?awb=${pr}${awb}",
 };
 
 export const getAirlinePrefix = (awbNumber: string): string => {
