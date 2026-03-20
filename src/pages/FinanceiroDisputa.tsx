@@ -92,6 +92,12 @@ function FinanceiroDisputaContent() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Duplicate confirmation modal
+  const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
+  const [duplicateItems, setDuplicateItems] = useState<Array<{ nd: string; cliente: string; responsavel: string }>>([]);
+  const [parsedItemsForImport, setParsedItemsForImport] = useState<Array<{ nd: string; descricao: string; departamento: string; responsavel: string; escalation: string }>>([]);
+  const [newItemsNds, setNewItemsNds] = useState<string[]>([]);
+
   // Observações editing state
   const [savingObservacoes, setSavingObservacoes] = useState<Record<string, boolean>>({});
   const [editingObservacoes, setEditingObservacoes] = useState<string | null>(null);
