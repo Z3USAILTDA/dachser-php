@@ -31,7 +31,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 
 interface AgingRow {
   product: string;
@@ -378,48 +378,183 @@ export default function OlimpoCobranca() {
     if (!displayRows.length) return;
     setExportingExcel(true);
 
+    const STYLE = {
+      gold: { fgColor: { rgb: "D4AF37" } },
+      dark: { fgColor: { rgb: "1A1A2E" } },
+      zebra: { fgColor: { rgb: "F5F5F5" } },
+      white: { fgColor: { rgb: "FFFFFF" } },
+      greenLight: { fgColor: { rgb: "E8F5E9" } },
+      yellowLight: { fgColor: { rgb: "FFFDE7" } },
+      pctRow: { fgColor: { rgb: "F3E5F5" } },
+      border: {
+        top: { style: "thin", color: { rgb: "CCCCCC" } },
+        bottom: { style: "thin", color: { rgb: "CCCCCC" } },
+        left: { style: "thin", color: { rgb: "CCCCCC" } },
+        right: { style: "thin", color: { rgb: "CCCCCC" } },
+      },
+    };
+
+    const headerStyle = (align: string = "center") => ({
+      fill: STYLE.gold,
+      font: { bold: true, sz: 11, color: { rgb: "000000" } },
+      alignment: { horizontal: align, vertical: "center" },
+      border: STYLE.border,
+    });
+
+    const cellStyle = (fill: any, opts: any = {}) => ({
+      fill,
+      font: { sz: 10, ...(opts.font || {}) },
+      alignment: { horizontal: opts.align || "right", vertical: "center" },
+      border: STYLE.border,
+      ...(opts.numFmt ? { numFmt: opts.numFmt } : {}),
+    });
+
     try {
-      const wsData: any[][] = [
-        ["Brazil Customer Aging Overview", "", "", "", "", "", "", "", "", "", "", "", ""],
-        [viewMode === "product" ? "Product" : "Client", ...agingKeys.map(k => AGING_LABELS[k]), "Total Overdue", "Total Receivable"],
-      ];
+      // ===== ABA 1: AGING =====
+      const numCols = agingKeys.length + 2; // aging cols + Total Overdue + Total Receivable
+      const wsData: any[][] = [];
+
+      // Row 0: Title
+      wsData.push(["Brazil Customer Aging Overview", ...Array(numCols).fill("")]);
+      // Row 1: Headers
+      wsData.push([viewMode === "product" ? "Product" : "Client", ...agingKeys.map(k => AGING_LABELS[k]), "Total Overdue", "Total Receivable"]);
+
+      // Data rows
       for (const row of displayRows) {
         const rowOverdue = overdueKeys.reduce((s, k) => s + (row[k] as number), 0);
         const rowTotal = row.not_due + rowOverdue;
         wsData.push([
           row.product,
-          ...agingKeys.map(k => (row[k] as number).toFixed(2)),
-          rowOverdue.toFixed(2), rowTotal.toFixed(2),
+          ...agingKeys.map(k => Number(row[k]) || 0),
+          rowOverdue, rowTotal,
         ]);
       }
+
+      // Summary rows
+      const grandTotalRowIdx = wsData.length;
       if (totals) {
         wsData.push([
           "Grand Total",
-          ...agingKeys.map(k => (totals[k] as number).toFixed(2)),
-          totalOverdue.toFixed(2), totalReceivable.toFixed(2),
+          ...agingKeys.map(k => Number(totals[k]) || 0),
+          totalOverdue, totalReceivable,
         ]);
         wsData.push([
           "% do Total",
-          ...agingKeys.map(k => totalReceivable > 0 ? `${((totals[k] as number) / totalReceivable * 100).toFixed(1)}%` : "0%"),
-          totalReceivable > 0 ? `${(totalOverdue / totalReceivable * 100).toFixed(1)}%` : "0%",
-          "100%",
+          ...agingKeys.map(k => totalReceivable > 0 ? (totals[k] as number) / totalReceivable : 0),
+          totalReceivable > 0 ? totalOverdue / totalReceivable : 0,
+          1,
         ]);
         wsData.push([
-          "% Provisão", ...agingKeys.map(k => `${PROVISION_PCT[k]}%`), "", "",
+          "% Provisão",
+          ...agingKeys.map(k => PROVISION_PCT[k] / 100),
+          "", "",
         ]);
         wsData.push([
           "Valor Provisionado",
-          ...agingKeys.map(k => ((totals[k] as number) * PROVISION_PCT[k] / 100).toFixed(2)),
+          ...agingKeys.map(k => (totals[k] as number) * PROVISION_PCT[k] / 100),
           "",
-          agingKeys.reduce((s, k) => s + (totals[k] as number) * PROVISION_PCT[k] / 100, 0).toFixed(2),
+          agingKeys.reduce((s, k) => s + (totals[k] as number) * PROVISION_PCT[k] / 100, 0),
         ]);
       }
 
-      const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+
+      // Merge title row
+      ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: numCols } }];
+
+      // Style title row
+      const titleCell = ws[XLSX.utils.encode_cell({ r: 0, c: 0 })];
+      if (titleCell) titleCell.s = {
+        fill: STYLE.gold,
+        font: { bold: true, sz: 16, color: { rgb: "000000" } },
+        alignment: { horizontal: "center", vertical: "center" },
+        border: STYLE.border,
+      };
+
+      // Style header row (row 1)
+      for (let c = 0; c <= numCols; c++) {
+        const addr = XLSX.utils.encode_cell({ r: 1, c });
+        if (ws[addr]) ws[addr].s = headerStyle(c === 0 ? "left" : "center");
+      }
+
+      // Style data rows (row 2 to grandTotalRowIdx-1)
+      for (let r = 2; r < grandTotalRowIdx; r++) {
+        const isZebra = r % 2 === 0;
+        for (let c = 0; c <= numCols; c++) {
+          const addr = XLSX.utils.encode_cell({ r, c });
+          if (!ws[addr]) continue;
+          ws[addr].s = cellStyle(
+            isZebra ? STYLE.zebra : STYLE.white,
+            { align: c === 0 ? "left" : "right", numFmt: c > 0 ? '#,##0.00' : undefined }
+          );
+        }
+      }
+
+      // Style Grand Total row
+      if (totals) {
+        for (let c = 0; c <= numCols; c++) {
+          const addr = XLSX.utils.encode_cell({ r: grandTotalRowIdx, c });
+          if (!ws[addr]) continue;
+          ws[addr].s = cellStyle(STYLE.dark, {
+            font: { bold: true, color: { rgb: "FFFFFF" } },
+            align: c === 0 ? "left" : "right",
+            numFmt: c > 0 ? '#,##0.00' : undefined,
+          });
+        }
+
+        // % do Total row
+        const pctRow = grandTotalRowIdx + 1;
+        for (let c = 0; c <= numCols; c++) {
+          const addr = XLSX.utils.encode_cell({ r: pctRow, c });
+          if (!ws[addr]) continue;
+          ws[addr].s = cellStyle(STYLE.pctRow, {
+            font: { bold: true },
+            align: c === 0 ? "left" : "right",
+            numFmt: c > 0 ? '0.0%' : undefined,
+          });
+        }
+
+        // % Provisão row
+        const provPctRow = grandTotalRowIdx + 2;
+        for (let c = 0; c <= numCols; c++) {
+          const addr = XLSX.utils.encode_cell({ r: provPctRow, c });
+          if (!ws[addr]) continue;
+          ws[addr].s = cellStyle(STYLE.yellowLight, {
+            font: { bold: true },
+            align: c === 0 ? "left" : "right",
+            numFmt: c > 0 && typeof wsData[provPctRow]?.[c] === "number" ? '0%' : undefined,
+          });
+        }
+
+        // Valor Provisionado row
+        const provValRow = grandTotalRowIdx + 3;
+        for (let c = 0; c <= numCols; c++) {
+          const addr = XLSX.utils.encode_cell({ r: provValRow, c });
+          if (!ws[addr]) continue;
+          ws[addr].s = cellStyle(STYLE.greenLight, {
+            font: { bold: true },
+            align: c === 0 ? "left" : "right",
+            numFmt: c > 0 && typeof wsData[provValRow]?.[c] === "number" ? '#,##0.00' : undefined,
+          });
+        }
+      }
+
+      // Column widths
+      ws["!cols"] = [
+        { wch: 35 }, // Client/Product
+        ...agingKeys.map(() => ({ wch: 14 })),
+        { wch: 16 }, // Total Overdue
+        { wch: 16 }, // Total Receivable
+      ];
+
+      // Row heights
+      ws["!rows"] = [{ hpt: 30 }, { hpt: 22 }];
+
+      const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Aging");
 
-      // Sheet 2: Analítico de Clientes
+      // ===== ABA 2: ANALÍTICO =====
       try {
         const { data: analiticoResp } = await supabase.functions.invoke("mariadb-proxy", {
           body: { action: "get_aging_analitico" },
@@ -427,18 +562,20 @@ export default function OlimpoCobranca() {
 
         if (analiticoResp?.success && analiticoResp.data?.length > 0) {
           const dataCorte = analiticoResp.dataCorte || new Date().toISOString().slice(0, 10);
-          const analiticoWs: any[][] = [
+          const anHeaders = [
+            "COLIGADA", "NUMERO DOCUMENTO", "NOTA FISCAL", "MODAL", "TIPO DOC.",
+            "DATA EMISSÃO", "VENCTO", "COD. CLIENTE", "RAZÃO SOCIAL CLIENTE",
+            "STATUS FINANCEIRO", "VALOR ORIGINAL", "VALOR LÍQUIDO",
+            "PROCESSO", "MASTER", "HOUSE", "IDLAN",
+            "Provisão ≤90 (1%)", "Provisão 91-180 (25%)", "Provisão 181-240 (50%)",
+            "Provisão 241-365 (75%)", "Provisão >365 (100%)",
+            "Qtd. Dias de Vencimento",
+          ];
+
+          const anData: any[][] = [
             [`DATA DE CORTE: ${dataCorte}`],
             [],
-            [
-              "COLIGADA", "NUMERO DOCUMENTO", "NOTA FISCAL", "MODAL", "TIPO DOC.",
-              "DATA EMISSÃO", "VENCTO", "COD. CLIENTE", "RAZÃO SOCIAL CLIENTE",
-              "STATUS FINANCEIRO", "VALOR ORIGINAL", "VALOR LÍQUIDO",
-              "PROCESSO", "MASTER", "HOUSE", "IDLAN",
-              "Provisão ≤90 (1%)", "Provisão 91-180 (25%)", "Provisão 181-240 (50%)",
-              "Provisão 241-365 (75%)", "Provisão >365 (100%)",
-              "Qtd. Dias de Vencimento",
-            ],
+            anHeaders,
           ];
 
           let totalProv1 = 0, totalProv25 = 0, totalProv50 = 0, totalProv75 = 0, totalProv100 = 0;
@@ -456,56 +593,109 @@ export default function OlimpoCobranca() {
             else if (dias <= 365) p75 = provValue;
             else p100 = provValue;
 
-            totalProv1 += p1;
-            totalProv25 += p25;
-            totalProv50 += p50;
-            totalProv75 += p75;
-            totalProv100 += p100;
+            totalProv1 += p1; totalProv25 += p25; totalProv50 += p50;
+            totalProv75 += p75; totalProv100 += p100;
 
-            analiticoWs.push([
+            anData.push([
               "1",
-              r.documento || "",
-              r.numero_nf || "",
-              r.modal || "",
-              r.tipo_documento || "",
+              r.documento || "", r.numero_nf || "", r.modal || "", r.tipo_documento || "",
               r.data_emissao ? new Date(r.data_emissao).toLocaleDateString('pt-BR') : "",
               r.data_vencimento ? new Date(r.data_vencimento).toLocaleDateString('pt-BR') : "",
-              r.cod_cliente || "",
-              r.razao_social || "",
-              "Em aberto",
-              valor.toFixed(2),
-              (r.valor_liquido || valor).toFixed(2),
-              r.processo || "",
-              r.master || "",
-              r.house || "",
-              r.id_rm || "",
-              p1 > 0 ? p1.toFixed(2) : "",
-              p25 > 0 ? p25.toFixed(2) : "",
-              p50 > 0 ? p50.toFixed(2) : "",
-              p75 > 0 ? p75.toFixed(2) : "",
-              p100 > 0 ? p100.toFixed(2) : "",
+              r.cod_cliente || "", r.razao_social || "", "Em aberto",
+              Number(valor) || 0,
+              Number(r.valor_liquido || valor) || 0,
+              r.processo || "", r.master || "", r.house || "", r.id_rm || "",
+              p1 || "", p25 || "", p50 || "", p75 || "", p100 || "",
               dias > 0 ? dias : 0,
             ]);
           }
 
-          analiticoWs.push([]);
-          analiticoWs.push([
+          const totalRowIdx = anData.length + 1; // +1 for blank row
+          anData.push([]);
+          anData.push([
             "", "", "", "", "", "", "", "", "",
             "TOTAL", "", "",
             "", "", "", "",
-            totalProv1.toFixed(2), totalProv25.toFixed(2), totalProv50.toFixed(2),
-            totalProv75.toFixed(2), totalProv100.toFixed(2),
-            "",
+            totalProv1, totalProv25, totalProv50, totalProv75, totalProv100, "",
           ]);
 
-          const ws2 = XLSX.utils.aoa_to_sheet(analiticoWs);
+          const ws2 = XLSX.utils.aoa_to_sheet(anData);
+          const range2 = XLSX.utils.decode_range(ws2["!ref"] || "A1");
+
+          // Merge title row
+          ws2["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
+
+          // Style title
+          const titleCell2 = ws2[XLSX.utils.encode_cell({ r: 0, c: 0 })];
+          if (titleCell2) titleCell2.s = {
+            fill: STYLE.gold,
+            font: { bold: true, sz: 13, color: { rgb: "000000" } },
+            alignment: { horizontal: "left", vertical: "center" },
+            border: STYLE.border,
+          };
+
+          // Style headers (row 2)
+          for (let c = 0; c <= 21; c++) {
+            const addr = XLSX.utils.encode_cell({ r: 2, c });
+            if (ws2[addr]) ws2[addr].s = headerStyle(c <= 9 ? "center" : "center");
+          }
+
+          // Style data rows
+          for (let r = 3; r < anData.length - 2; r++) {
+            const isZebra = r % 2 === 0;
+            for (let c = 0; c <= 21; c++) {
+              const addr = XLSX.utils.encode_cell({ r, c });
+              if (!ws2[addr]) continue;
+              const isMoneyCol = c === 10 || c === 11 || (c >= 16 && c <= 20);
+              ws2[addr].s = cellStyle(
+                isZebra ? STYLE.zebra : STYLE.white,
+                {
+                  align: isMoneyCol ? "right" : c <= 9 ? "left" : "right",
+                  numFmt: isMoneyCol && typeof anData[r]?.[c] === "number" ? '#,##0.00' : undefined,
+                }
+              );
+            }
+          }
+
+          // Style TOTAL row
+          const tRow = anData.length - 1;
+          for (let c = 0; c <= 21; c++) {
+            const addr = XLSX.utils.encode_cell({ r: tRow, c });
+            if (!ws2[addr]) continue;
+            const isMoneyCol = c >= 16 && c <= 20;
+            ws2[addr].s = cellStyle(STYLE.dark, {
+              font: { bold: true, color: { rgb: "FFFFFF" } },
+              align: c === 9 ? "right" : isMoneyCol ? "right" : "left",
+              numFmt: isMoneyCol ? '#,##0.00' : undefined,
+            });
+          }
+
+          // Column widths
+          ws2["!cols"] = [
+            { wch: 10 }, { wch: 18 }, { wch: 14 }, { wch: 10 }, { wch: 10 },
+            { wch: 13 }, { wch: 13 }, { wch: 14 }, { wch: 35 },
+            { wch: 16 }, { wch: 15 }, { wch: 15 },
+            { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 10 },
+            { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+            { wch: 12 },
+          ];
+
+          ws2["!rows"] = [{ hpt: 28 }, {}, { hpt: 22 }];
+
           XLSX.utils.book_append_sheet(wb, ws2, "Analítico de Clientes");
         }
       } catch (e) {
         console.warn("Could not fetch analítico data:", e);
       }
 
-      XLSX.writeFile(wb, `aging_${viewMode}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      wb.Props = {
+        Title: "Aging Report - Olimpo Cobrança",
+        Subject: "Brazil Customer Aging Overview",
+        Author: "Sistema Z3US.AI",
+        CreatedDate: new Date(),
+      };
+
+      XLSX.writeFile(wb, `aging_${viewMode}_${new Date().toISOString().slice(0, 10)}.xlsx`, { cellStyles: true });
       toast({ title: "Excel exportado com sucesso" });
     } catch (err: any) {
       toast({ title: "Erro ao exportar", description: err.message, variant: "destructive" });
