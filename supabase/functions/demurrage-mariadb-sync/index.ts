@@ -35,7 +35,12 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  console.log("=== Starting Demurrage MariaDB Sync (MariaDB to MariaDB) ===");
+  let bodyParams: any = {};
+  try { bodyParams = await req.json(); } catch {}
+  const batchLimit = bodyParams.limit || 200;
+  const batchOffset = bodyParams.offset || 0;
+
+  console.log(`=== Starting Demurrage MariaDB Sync (limit=${batchLimit}, offset=${batchOffset}) ===`);
   console.log(`Timestamp: ${new Date().toISOString()}`);
 
   let client: Client | null = null;
@@ -95,7 +100,7 @@ serve(async (req) => {
         AND (t.last_event IS NULL OR UPPER(t.last_event) NOT LIKE '%PREFIX NOT FOUND%')
         AND (t.last_event IS NULL OR UPPER(t.last_event) NOT LIKE '%NOT FOUND%')
       ORDER BY t.id DESC
-      LIMIT 1000
+      LIMIT ${batchLimit} OFFSET ${batchOffset}
     `;
 
     console.log("Executing source query...");
