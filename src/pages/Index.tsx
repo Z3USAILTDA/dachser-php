@@ -117,7 +117,7 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     .trim();
 
   const urlBuilders: Record<string, (iata: string, awb: string) => string> = {
-    "001": (iata, awb) => `https://www.aacargo.com/shipping/tracking.jhtml?search=Search&awb=${iata}${awb}`,
+    "001": (iata, awb) => `https://www.aacargo.com/mobile/tracking-details.html?awb=${iata}${awb}`,
     "014": (iata, awb) => `https://cargo.aircanada.com/Tracking?shipmentCode=${iata}${awb}`,
     "006": (iata, awb) =>
       `https://www.deltacargo.com/Cargo/home/trackShipment?awbNumber=${iata}${awb}&timeZoneOffset=180&t=${Date.now()}`,
