@@ -199,7 +199,8 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     headers, // Row 4: Headers
     ...dataRows, // Data rows
     ["", "", "", "", "", "", "", "", ""], // Empty row before summary
-    ["", "", "", "", "Total de Registros:", totalRegistros, "Total Valor:", formatMoney(totalValor), ""], // Summary row
+    ["", "", "", "", "", "Total de Registros:", totalRegistros, "", ""], // Summary row 1
+    ["", "", "", "", "", "Total Valor:", totalValor, "", ""], // Summary row 2 (raw number for formatting)
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);
