@@ -2968,15 +2968,29 @@ serve(async (req) => {
           );
         }
         
-        // Soft delete via t_financeiro_soft_delete
-        const insertSql = `
-          INSERT IGNORE INTO ai_agente.t_financeiro_soft_delete (documento, active)
-          VALUES (?, 0)
-        `;
-        await client.execute(insertSql, [doc_key]);
-        
-        console.log(`Disputa soft-deleted: ${doc_key}`);
-        result = { success: true };
+        try {
+          // Soft delete via t_financeiro_soft_delete
+          await client.execute(
+            `INSERT IGNORE INTO ai_agente.t_financeiro_soft_delete (documento, active) VALUES (?, 0)`,
+            [doc_key]
+          );
+          
+          // Also remove from t_fin_disputas if exists
+          await client.execute(
+            `DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`,
+            [doc_key]
+          );
+          
+          console.log(`Disputa soft-deleted: ${doc_key}`);
+          result = { success: true };
+        } catch (delErr) {
+          console.error(`[delete_disputa] Error for ${doc_key}:`, delErr);
+          const delErrMsg = delErr instanceof Error ? delErr.message : 'Erro desconhecido';
+          return new Response(
+            JSON.stringify({ error: 'Falha ao excluir disputa', details: delErrMsg, success: false }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
         break;
       }
 
