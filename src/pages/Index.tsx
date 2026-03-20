@@ -2749,16 +2749,20 @@ const Index = () => {
 
                                 const PRE_DEPARTURE = ['BKD','PRE','MAN','DOC','RCS','RDP','RCT','LAT','TKG','SCR','ECC'];
                                 const IN_TRANSIT_AT_CONNECTION = ['AWR','AWD','NFD','RCF','CCD','TFD','TRM','TRA','RFC','FOH','DIS'];
+                                const FINAL_DESTINO_ONLY = ['DLV','POD','ARR - DESTINO'];
+                                const IN_TRANSIT_NO_RCF = ['AWR','AWD','NFD','CCD','TFD','TRM','TRA','RFC','FOH','DIS'];
                                 if (conexoes.length > 0) {
-                                  if (POST_DESTINO.includes(statusCode)) {
+                                  if (FINAL_DESTINO_ONLY.includes(statusCode)) {
                                     highlightDestino = true;
-                                  } else if (PRE_DEPARTURE.includes(statusCode)) {
-                                    // Cargo ainda na origem — não destacar conexão
+                                  } else if (PRE_DEPARTURE.includes(statusCode) || statusCode === 'RCF') {
+                                    // RCF com conexões = carga recebida na conexão, saiu da origem
                                     highlightOrigin = true;
                                   } else if (AT_CONEXAO.includes(statusCode) || statusCode === 'DEP') {
                                     highlightConexaoIndex = conexoes.length - 1;
-                                  } else if (IN_TRANSIT_AT_CONNECTION.includes(statusCode)) {
+                                  } else if (IN_TRANSIT_NO_RCF.includes(statusCode)) {
                                     highlightConexaoIndex = conexoes.length - 1;
+                                  } else if (POST_DESTINO.includes(statusCode)) {
+                                    highlightDestino = true;
                                   } else {
                                     highlightOrigin = true;
                                   }
