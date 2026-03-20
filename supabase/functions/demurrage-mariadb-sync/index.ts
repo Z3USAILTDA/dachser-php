@@ -100,7 +100,7 @@ serve(async (req) => {
         AND (t.last_event IS NULL OR UPPER(t.last_event) NOT LIKE '%PREFIX NOT FOUND%')
         AND (t.last_event IS NULL OR UPPER(t.last_event) NOT LIKE '%NOT FOUND%')
       ORDER BY t.id DESC
-      LIMIT 1000
+      LIMIT ${batchLimit} OFFSET ${batchOffset}
     `;
 
     console.log("Executing source query...");
