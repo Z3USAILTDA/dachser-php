@@ -249,11 +249,8 @@ function OlimpoContent() {
     }
   };
 
-  // Filtro de ano: não-Z3US admin vê apenas processos de 2027+
-  const yearFilteredData = filterByYearIfNotZ3us(data, (item) => item.eta_iso);
-
   // Filter data - mais permissivo para mostrar mais itens
-  const filteredData = yearFilteredData.filter((item) => {
+  const filteredData = data.filter((item) => {
     const now = Date.now();
 
     // Precisa ter rota válida (origem → destino)
