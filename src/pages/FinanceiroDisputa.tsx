@@ -540,6 +540,7 @@ function FinanceiroDisputaContent() {
         'analista', 'atribuído', 'atribuido'
       );
       const escIdx = findColumnIndex(headerRow, 'escalation', 'escalonamento', 'escalacao');
+      const prazoIdx = findColumnIndex(headerRow, 'prazo', 'vencimento', 'data limite', 'deadline', 'data venc');
       
       // Validate required column
       if (ndIdx === -1) {
