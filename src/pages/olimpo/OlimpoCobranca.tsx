@@ -31,7 +31,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 
 interface AgingRow {
   product: string;
