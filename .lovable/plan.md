@@ -1,24 +1,73 @@
 
 
-## Plano: Corrigir destaque de rota — RCF deve destacar a origem quando há conexões
+## Plano Completo: Correções na Régua de Cobrança e Disputas
 
-### Problema
-AWB 724-85006073 (CDG → ZRH → GRU): o status RCF em ZRH indica que a carga saiu da origem (CDG) e foi recebida na conexão. A origem deveria estar amarela, mas o destino (GRU) está destacado porque `RCF` está na lista `POST_DESTINO` que é verificada primeiro (linha 2753).
+### 1. Importação de Planilha — Modal de Duplicados
 
-### Solução
-Em `src/pages/Index.tsx` (linhas 2752-2764), quando há conexões, reorganizar a ordem de verificação:
+**Problema**: Ao reimportar planilha, registros existentes são silenciosamente ignorados. Sem feedback ao usuário.
 
-1. **Criar lista `FINAL_DESTINO_ONLY`** com status exclusivamente de destino final: `DLV`, `POD`, `ARR - DESTINO`
-2. **Criar lista `ORIGIN_DEPARTURE`** que inclui `RCF` junto com os status pré-embarque — quando há conexões, RCF indica que a carga acabou de sair da origem
-3. **Lógica com conexões passa a ser**:
-   - `FINAL_DESTINO_ONLY` → destacar destino
-   - `PRE_DEPARTURE` ou `RCF` → destacar origem
-   - `AT_CONEXAO` / `DEP` / `IN_TRANSIT_AT_CONNECTION` (sem RCF) → destacar conexão
-   - `POST_DESTINO` restante (`ARR`, `NFD`, `AWD`, `CCD`, `AWR`, `FOH`) → destacar destino
-   - fallback → origem
+**Solução**:
 
-4. **Lógica sem conexões** permanece inalterada (RCF no destino faz sentido quando não há ponto de trânsito)
+**Backend** (`supabase/functions/mariadb-proxy/index.ts`):
+- Nova action `check_disputas_planilha`: recebe itens parseados, faz SELECT em `t_fin_disputas` para cada ND, retorna `newItems[]`, `existingItems[]`, `notFoundItems[]`
+- Alterar `import_disputas_planilha`: aceitar flag `forceUpdate: boolean` — quando `true`, faz UPDATE em vez de skip
 
-### Arquivo alterado
-- `src/pages/Index.tsx` — bloco de highlight de rota (linhas ~2750-2764)
+**Frontend** (`src/pages/FinanceiroDisputa.tsx`):
+- Alterar `handleImportSpreadsheet`: parsear → chamar `check_disputas_planilha` → se há duplicados, abrir modal; senão importar direto
+- Modal com tabela de duplicados (ND, Cliente, Responsável) e 3 botões: **Substituir Todos** / **Importar apenas novos** / **Cancelar**
+
+---
+
+### 2. Observações e Prazo não sobem da Planilha
+
+**Problema**: `parseSpreadsheet` não mapeia coluna "prazo"/"vencimento"/"deadline".
+
+**Solução** (`src/pages/FinanceiroDisputa.tsx`):
+- Adicionar mapeamento de coluna "prazo", "vencimento", "data limite", "deadline" via `findColumnIndex`
+- Propagar campo `prazo` no item enviado ao backend (UPDATE via `forceUpdate` resolve a persistência)
+
+---
+
+### 3. Exportação Excel — Valor e Total Valor com contagem em vez de soma
+
+**Problema**: Posições de colunas no sumário não batem com os headers.
+
+**Solução** (`src/utils/disputaExcelExport.ts`):
+- Alinhar "Total Valor:" + soma na coluna "Valor (R$)" (índice 6)
+- Garantir que `r.valor` seja número raw nos dados
+
+---
+
+### 4. Erro ao Editar Observação ou Excluir Disputa
+
+**Problema**: `update_disputa_observacoes` pode falhar por mismatch de chave; `delete_disputa` pode ter constraints incompatíveis.
+
+**Solução** (`supabase/functions/mariadb-proxy/index.ts`):
+- `update_disputa_observacoes`: trocar UPSERT por check-then-update (SELECT → UPDATE/INSERT)
+- `delete_disputa`: adicionar try/catch com logging detalhado e retorno de erro específico
+
+---
+
+### 5. E-mails Agrupados não Enviam
+
+**Problema**: `regua-send-aging` usa driver instável `mysql@v2.12.1` (Deno) que causa timeouts.
+
+**Solução** (`supabase/functions/regua-send-aging/index.ts`):
+- Migrar para `npm:mysql2/promise` com `connectWithRetry` (3 tentativas com backoff)
+- Try/catch granular separando erros de DB vs erros de Resend
+
+**Frontend** (`src/pages/ReguaCobranca.tsx`):
+- Melhorar tratamento de erro para exibir mensagem específica
+
+---
+
+### Arquivos alterados
+
+| Arquivo | Alterações |
+|---------|-----------|
+| `supabase/functions/mariadb-proxy/index.ts` | `check_disputas_planilha`, `forceUpdate`, fix observações e delete |
+| `src/pages/FinanceiroDisputa.tsx` | Modal duplicados, mapeamento "prazo" |
+| `src/utils/disputaExcelExport.ts` | Corrigir alinhamento sumário |
+| `supabase/functions/regua-send-aging/index.ts` | Migrar driver, retry |
+| `src/pages/ReguaCobranca.tsx` | Melhor tratamento de erros |
 
