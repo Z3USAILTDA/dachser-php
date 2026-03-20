@@ -336,6 +336,60 @@ function calcularSlaStatus(slaLimite: Date | null): 'OK' | 'ALERTA' | 'CRITICO' 
   return 'OK';
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function isTransientMariaDbErrorMessage(message: string) {
+  const normalized = message.toLowerCase();
+
+  return normalized.includes('connection reset by peer') ||
+    normalized.includes('connection read timed out') ||
+    normalized.includes('read timed out') ||
+    normalized.includes('timed out') ||
+    normalized.includes('etimedout') ||
+    normalized.includes('econnreset') ||
+    normalized.includes('connection was forcibly closed') ||
+    normalized.includes('max_user_connections') ||
+    normalized.includes('ehostunreach') ||
+    normalized.includes('econnrefused');
+}
+
+async function queryWithRetry<T>(
+  operation: () => Promise<T>,
+  options: { label: string; attempts?: number; baseDelayMs?: number }
+): Promise<T> {
+  const attempts = options.attempts ?? 3;
+  const baseDelayMs = options.baseDelayMs ?? 500;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      if (!isTransientMariaDbErrorMessage(errorMessage) || attempt === attempts) {
+        throw error;
+      }
+
+      console.warn(`[${options.label}] transient MariaDB error on attempt ${attempt}/${attempts}: ${errorMessage}`);
+      await sleep(baseDelayMs * attempt);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+function chunkArray<T>(items: T[], chunkSize: number): T[][] {
+  if (items.length === 0) return [];
+
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+  return chunks;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -384,7 +438,7 @@ serve(async (req) => {
         lastError = connError as Error;
         console.warn(`Connection attempt ${attempt}/${maxRetries} failed: ${lastError.message}`);
         if (attempt < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+          await sleep(500 * attempt);
         }
       }
     }
@@ -10953,6 +11007,8 @@ serve(async (req) => {
       // ==================== DEMURRAGE ====================
       case 'demurrage_get_containers': {
         const { search, risk_status, cronos_status, cronos_status_list, cliente, armador, pre_invoice_status, dispute_status, audit_status, limit = 500 } = body as any;
+        const safeLimit = Math.min(Math.max(Number(limit) || 500, 1), 1000);
+        const batchSize = 100;
         console.log('Fetching demurrage containers with filters:', { search, risk_status, cronos_status, cronos_status_list, cliente, armador });
 
         let whereConditions = ['dc.active = 1'];
@@ -10996,29 +11052,39 @@ serve(async (req) => {
         }
 
         // Step 1: Fetch base containers (fast query)
-        const containers = await client.query(`
+        const containers = await queryWithRetry(() => client.query(`
           SELECT dc.*
           FROM dados_dachser.t_dachser_demurrage_containers dc
           WHERE ${whereConditions.join(' AND ')}
           ORDER BY dc.updated_at DESC
           LIMIT ?
-        `, [...params, limit]);
+        `, [...params, safeLimit]), {
+          label: 'demurrage_get_containers_base',
+          attempts: 3,
+        });
 
         // Step 2: Enrich with partner_id, hbl, and pre-invoice in batch
         if (containers && containers.length > 0) {
           const mbls = [...new Set(containers.map((c: any) => c.mbl).filter(Boolean))];
           const clientes = [...new Set(containers.map((c: any) => c.cliente).filter(Boolean))];
+          console.log(`[demurrage_get_containers] Base query returned ${containers.length} containers, ${mbls.length} unique MBLs and ${clientes.length} unique clients`);
 
           // Batch fetch partner_ids
           let partnerMap: Record<string, string> = {};
           if (clientes.length > 0) {
             try {
-              const partnerRows = await client.query(
-                `SELECT nome_cliente, dchr_customer_number FROM dados_dachser.t_clientes_base WHERE nome_cliente IN (${clientes.map(() => '?').join(',')})`,
-                clientes
-              );
-              for (const r of (partnerRows || [])) {
-                partnerMap[r.nome_cliente] = r.dchr_customer_number;
+              for (const clientChunk of chunkArray(clientes, batchSize)) {
+                const partnerRows = await queryWithRetry(() => client.query(
+                  `SELECT nome_cliente, dchr_customer_number FROM dados_dachser.t_clientes_base WHERE nome_cliente IN (${clientChunk.map(() => '?').join(',')})`,
+                  clientChunk
+                ), {
+                  label: 'demurrage_partner_batch',
+                  attempts: 3,
+                });
+
+                for (const r of (partnerRows || [])) {
+                  partnerMap[r.nome_cliente] = r.dchr_customer_number;
+                }
               }
             } catch (e) { console.error('Partner batch error:', e); }
           }
@@ -11027,22 +11093,35 @@ serve(async (req) => {
           let hblMap: Record<string, string> = {};
           if (mbls.length > 0) {
             try {
-              const seaMasterRows = await client.query(
-                `SELECT master, hawb FROM dados_dachser.t_sea_master WHERE master IN (${mbls.map(() => '?').join(',')})`,
-                mbls
-              );
-              for (const r of (seaMasterRows || [])) {
-                if (r.hawb && !hblMap[r.master]) hblMap[r.master] = r.hawb;
+              for (const mblChunk of chunkArray(mbls, batchSize)) {
+                const seaMasterRows = await queryWithRetry(() => client.query(
+                  `SELECT master, hawb FROM dados_dachser.t_sea_master WHERE master IN (${mblChunk.map(() => '?').join(',')})`,
+                  mblChunk
+                ), {
+                  label: 'demurrage_hbl_sea_master_batch',
+                  attempts: 3,
+                });
+
+                for (const r of (seaMasterRows || [])) {
+                  if (r.hawb && !hblMap[r.master]) hblMap[r.master] = r.hawb;
+                }
               }
+
               // Fill missing from t_master_dados
               const missingMbls = mbls.filter(m => !hblMap[m as string]);
               if (missingMbls.length > 0) {
-                const mdRows = await client.query(
-                  `SELECT mawb, hawb FROM dados_dachser.t_master_dados WHERE mawb IN (${missingMbls.map(() => '?').join(',')})`,
-                  missingMbls
-                );
-                for (const r of (mdRows || [])) {
-                  if (r.hawb && !hblMap[r.mawb]) hblMap[r.mawb] = r.hawb;
+                for (const mblChunk of chunkArray(missingMbls, batchSize)) {
+                  const mdRows = await queryWithRetry(() => client.query(
+                    `SELECT mawb, hawb FROM dados_dachser.t_master_dados WHERE mawb IN (${mblChunk.map(() => '?').join(',')})`,
+                    mblChunk
+                  ), {
+                    label: 'demurrage_hbl_master_dados_batch',
+                    attempts: 3,
+                  });
+
+                  for (const r of (mdRows || [])) {
+                    if (r.hawb && !hblMap[r.mawb]) hblMap[r.mawb] = r.hawb;
+                  }
                 }
               }
             } catch (e) { console.error('HBL batch error:', e); }
@@ -11052,18 +11131,24 @@ serve(async (req) => {
           let piMap: Record<string, any> = {};
           if (mbls.length > 0) {
             try {
-              const piRows = await client.query(
-                `SELECT pi.* FROM dados_dachser.t_dachser_demurrage_pre_invoices pi
-                 INNER JOIN (
-                   SELECT shipment_mbl, MAX(created_at) as max_created 
-                   FROM dados_dachser.t_dachser_demurrage_pre_invoices 
-                   WHERE shipment_mbl IN (${mbls.map(() => '?').join(',')})
-                   GROUP BY shipment_mbl
-                 ) latest ON pi.shipment_mbl = latest.shipment_mbl AND pi.created_at = latest.max_created`,
-                mbls
-              );
-              for (const r of (piRows || [])) {
-                piMap[r.shipment_mbl] = r;
+              for (const mblChunk of chunkArray(mbls, batchSize)) {
+                const piRows = await queryWithRetry(() => client.query(
+                  `SELECT pi.* FROM dados_dachser.t_dachser_demurrage_pre_invoices pi
+                   INNER JOIN (
+                     SELECT shipment_mbl, MAX(created_at) as max_created 
+                     FROM dados_dachser.t_dachser_demurrage_pre_invoices 
+                     WHERE shipment_mbl IN (${mblChunk.map(() => '?').join(',')})
+                     GROUP BY shipment_mbl
+                   ) latest ON pi.shipment_mbl = latest.shipment_mbl AND pi.created_at = latest.max_created`,
+                  mblChunk
+                ), {
+                  label: 'demurrage_pre_invoice_batch',
+                  attempts: 3,
+                });
+
+                for (const r of (piRows || [])) {
+                  piMap[r.shipment_mbl] = r;
+                }
               }
             } catch (e) { console.error('PI batch error:', e); }
           }
@@ -14883,10 +14968,7 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     
     // Detect transient connection errors and return 503 so frontend can retry
-    const isTransient = errorMessage.includes('Connection reset by peer') ||
-      errorMessage.includes('ETIMEDOUT') ||
-      errorMessage.includes('connection was forcibly closed') ||
-      errorMessage.includes('max_user_connections');
+    const isTransient = isTransientMariaDbErrorMessage(errorMessage);
     
     const statusCode = isTransient ? 503 : 500;
     const userMessage = isTransient 
