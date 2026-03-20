@@ -1,23 +1,24 @@
 
 
-## Plano: Forçar discrepância para AWB 045-13300630
+## Plano: Corrigir destaque de rota — RCF deve destacar a origem quando há conexões
 
-### Contexto
-A timeline do mariadb-proxy detecta discrepância de peças (11 vs 50) para este AWB, mas o `fetch-status-aereo` não a detecta porque o filtro de ETD-5 dias ou a lógica de resolução por delivery a suprime. O mecanismo `force_discrepancy` já existe no código de aplicação de overrides (linhas 2574-2579).
+### Problema
+AWB 724-85006073 (CDG → ZRH → GRU): o status RCF em ZRH indica que a carga saiu da origem (CDG) e foi recebida na conexão. A origem deveria estar amarela, mas o destino (GRU) está destacado porque `RCF` está na lista `POST_DESTINO` que é verificada primeiro (linha 2753).
 
-### Ações
+### Solução
+Em `src/pages/Index.tsx` (linhas 2752-2764), quando há conexões, reorganizar a ordem de verificação:
 
-1. **Atualizar tipo do MANUAL_OVERRIDES** em `supabase/functions/fetch-status-aereo/index.ts` (linha 1457):
-   - Adicionar `force_discrepancy?: boolean` e `force_baseline_pieces?: number` ao tipo Record
+1. **Criar lista `FINAL_DESTINO_ONLY`** com status exclusivamente de destino final: `DLV`, `POD`, `ARR - DESTINO`
+2. **Criar lista `ORIGIN_DEPARTURE`** que inclui `RCF` junto com os status pré-embarque — quando há conexões, RCF indica que a carga acabou de sair da origem
+3. **Lógica com conexões passa a ser**:
+   - `FINAL_DESTINO_ONLY` → destacar destino
+   - `PRE_DEPARTURE` ou `RCF` → destacar origem
+   - `AT_CONEXAO` / `DEP` / `IN_TRANSIT_AT_CONNECTION` (sem RCF) → destacar conexão
+   - `POST_DESTINO` restante (`ARR`, `NFD`, `AWD`, `CCD`, `AWR`, `FOH`) → destacar destino
+   - fallback → origem
 
-2. **Adicionar entrada de override** para `045-13300630` no objeto MANUAL_OVERRIDES:
-   - `force_discrepancy: true`
-   - `force_baseline_pieces: 50` (valor máximo da discrepância — 50 peças no booking original vs 11 nas atuais)
+4. **Lógica sem conexões** permanece inalterada (RCF no destino faz sentido quando não há ponto de trânsito)
 
-3. **Re-deploy** da edge function para aplicar a mudança em produção
-
-### Resultado
-- A tabela principal exibirá o badge de "Discrepância Peças" para este AWB
-- O AWB aparecerá no card Crítico
-- A timeline continuará mostrando o alerta normalmente
+### Arquivo alterado
+- `src/pages/Index.tsx` — bloco de highlight de rota (linhas ~2750-2764)
 
