@@ -277,7 +277,8 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     { hpt: 24 }, // Header row
     ...dataRows.map(() => ({ hpt: 20 })), // Data rows
     { hpt: 10 }, // Empty row
-    { hpt: 22 }, // Summary row
+    { hpt: 22 }, // Summary row 1
+    { hpt: 22 }, // Summary row 2
   ];
 
   // Add worksheet to workbook

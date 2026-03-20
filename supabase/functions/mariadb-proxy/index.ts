@@ -3038,14 +3038,78 @@ serve(async (req) => {
         break;
       }
 
+      case 'check_disputas_planilha': {
+        const { items: checkItems } = body as { items?: Array<{ nd: string }> };
+        
+        if (!checkItems || !Array.isArray(checkItems) || checkItems.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Lista de itens é obrigatória', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        const newItems: string[] = [];
+        const existingItems: Array<{ nd: string; cliente: string; responsavel: string }> = [];
+        const notFoundCheckItems: string[] = [];
+        
+        for (const item of checkItems) {
+          const nd = item.nd?.toString().trim();
+          if (!nd) continue;
+          
+          // Check if document exists in financial data
+          const docRows = await client.query(`
+            SELECT 
+              COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key,
+              razao_social AS cliente,
+              responsavel_disp AS responsavel
+            FROM dados_dachser.t_dados_financeiro_nfs 
+            WHERE documento = ? OR numero_nf = ? OR nd = ?
+            LIMIT 1
+          `, [nd, nd, nd]);
+          
+          if (!docRows || docRows.length === 0) {
+            notFoundCheckItems.push(nd);
+            continue;
+          }
+          
+          const docKey = docRows[0].doc_key;
+          
+          // Check if already in t_fin_disputas
+          const disputaRows = await client.query(
+            `SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
+            [docKey]
+          );
+          
+          if (disputaRows && disputaRows.length > 0) {
+            existingItems.push({
+              nd,
+              cliente: docRows[0].cliente || 'N/A',
+              responsavel: docRows[0].responsavel || '-',
+            });
+          } else {
+            newItems.push(nd);
+          }
+        }
+        
+        console.log(`[check_disputas_planilha] new=${newItems.length}, existing=${existingItems.length}, notFound=${notFoundCheckItems.length}`);
+        result = { 
+          success: true, 
+          newItems, 
+          existingItems, 
+          notFoundItems: notFoundCheckItems 
+        };
+        break;
+      }
+
       case 'import_disputas_planilha': {
-        const { items } = body as { items?: Array<{
+        const { items, forceUpdate } = body as { items?: Array<{
           nd: string;
           descricao?: string;
           departamento?: string;
           responsavel?: string;
           escalation?: string;
-        }> };
+          prazo?: string;
+        }>; forceUpdate?: boolean };
         
         if (!items || !Array.isArray(items) || items.length === 0) {
           return new Response(
@@ -3057,6 +3121,7 @@ serve(async (req) => {
         let successCount = 0;
         let notFoundCount = 0;
         let skippedCount = 0;
+        let updatedCount = 0;
         const notFoundItems: string[] = [];
         const skippedItems: string[] = [];
         
@@ -3090,17 +3155,41 @@ serve(async (req) => {
           const docKey = docData.doc_key;
           const idRm = docData.id_rm;
           
-          // Check if already exists in t_fin_disputas (skip if exists)
+          // Check if already exists in t_fin_disputas
           const checkDisputaSql = `
             SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1
           `;
           const existingDisputa = await client.query(checkDisputaSql, [docKey]);
           
           if (existingDisputa && existingDisputa.length > 0) {
-            // Already in dispute, skip without overwriting
-            skippedCount++;
-            skippedItems.push(nd);
-            continue;
+            if (forceUpdate) {
+              // Update existing record
+              await client.execute(`
+                UPDATE ai_agente.t_fin_disputas 
+                SET responsavel = ?, departamento = ?, observacoes = ?, escalation = ?, updated_at = NOW()
+                WHERE nf = ?
+              `, [
+                item.responsavel || docData.responsavel_disp || null,
+                item.departamento || null,
+                item.descricao || null,
+                item.escalation || null,
+                docKey
+              ]);
+              
+              // Also update responsavel in source tables
+              await client.execute(`
+                UPDATE dados_dachser.t_dados_financeiro_nfs SET responsavel_disp = ?
+                WHERE documento = ? OR numero_nf = ? OR nd = ?
+              `, [item.responsavel || null, nd, nd, nd]);
+              
+              updatedCount++;
+              continue;
+            } else {
+              // Skip
+              skippedCount++;
+              skippedItems.push(nd);
+              continue;
+            }
           }
           
           // Update to mark as disputa in t_dados_financeiro_nfs
@@ -3139,17 +3228,18 @@ serve(async (req) => {
             docData.tipo || 'À vista',
             item.responsavel || docData.responsavel_disp || null,
             item.departamento || null, 
-            item.descricao || null,  // descricao → observacoes
+            item.descricao || null,
             item.escalation || null
           ]);
           
           successCount++;
         }
         
-        console.log(`Disputas import: ${successCount} success, ${skippedCount} skipped (already in dispute), ${notFoundCount} not found`);
+        console.log(`Disputas import: ${successCount} new, ${updatedCount} updated, ${skippedCount} skipped, ${notFoundCount} not found`);
         result = { 
           success: true, 
           imported: successCount, 
+          updated: updatedCount,
           skipped: skippedCount,
           notFound: notFoundCount,
           notFoundItems: notFoundItems.slice(0, 10),
