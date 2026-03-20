@@ -10995,31 +10995,91 @@ serve(async (req) => {
           params.push(audit_status);
         }
 
+        // Step 1: Fetch base containers (fast query)
         const containers = await client.query(`
-          SELECT dc.*, 
-            cb.dchr_customer_number as partner_id,
-            pi.status_info as pi_status_info,
-            pi.misk as pi_misk,
-            pi.othello_registro as pi_othello_registro,
-            pi.observacao as pi_observacao,
-            pi.exchange_rate as pi_exchange_rate,
-            (
-              SELECT COALESCE(
-                (SELECT sm2.hawb FROM dados_dachser.t_sea_master sm2 WHERE sm2.master COLLATE utf8mb4_unicode_ci = dc.mbl COLLATE utf8mb4_unicode_ci LIMIT 1),
-                (SELECT mdn2.hawb FROM dados_dachser.t_master_dados mdn2 WHERE mdn2.mawb COLLATE utf8mb4_unicode_ci = dc.mbl COLLATE utf8mb4_unicode_ci LIMIT 1)
-              )
-            ) as hbl
+          SELECT dc.*
           FROM dados_dachser.t_dachser_demurrage_containers dc
-          LEFT JOIN dados_dachser.t_clientes_base cb ON dc.cliente = cb.nome_cliente COLLATE utf8mb4_general_ci
-          LEFT JOIN dados_dachser.t_dachser_demurrage_pre_invoices pi ON pi.id = (
-            SELECT id FROM dados_dachser.t_dachser_demurrage_pre_invoices 
-            WHERE shipment_mbl = dc.mbl COLLATE utf8mb4_unicode_ci 
-            ORDER BY created_at DESC LIMIT 1
-          )
           WHERE ${whereConditions.join(' AND ')}
           ORDER BY dc.updated_at DESC
           LIMIT ?
         `, [...params, limit]);
+
+        // Step 2: Enrich with partner_id, hbl, and pre-invoice in batch
+        if (containers && containers.length > 0) {
+          const mbls = [...new Set(containers.map((c: any) => c.mbl).filter(Boolean))];
+          const clientes = [...new Set(containers.map((c: any) => c.cliente).filter(Boolean))];
+
+          // Batch fetch partner_ids
+          let partnerMap: Record<string, string> = {};
+          if (clientes.length > 0) {
+            try {
+              const partnerRows = await client.query(
+                `SELECT nome_cliente, dchr_customer_number FROM dados_dachser.t_clientes_base WHERE nome_cliente IN (${clientes.map(() => '?').join(',')})`,
+                clientes
+              );
+              for (const r of (partnerRows || [])) {
+                partnerMap[r.nome_cliente] = r.dchr_customer_number;
+              }
+            } catch (e) { console.error('Partner batch error:', e); }
+          }
+
+          // Batch fetch HBLs
+          let hblMap: Record<string, string> = {};
+          if (mbls.length > 0) {
+            try {
+              const seaMasterRows = await client.query(
+                `SELECT master, hawb FROM dados_dachser.t_sea_master WHERE master IN (${mbls.map(() => '?').join(',')})`,
+                mbls
+              );
+              for (const r of (seaMasterRows || [])) {
+                if (r.hawb && !hblMap[r.master]) hblMap[r.master] = r.hawb;
+              }
+              // Fill missing from t_master_dados
+              const missingMbls = mbls.filter(m => !hblMap[m as string]);
+              if (missingMbls.length > 0) {
+                const mdRows = await client.query(
+                  `SELECT mawb, hawb FROM dados_dachser.t_master_dados WHERE mawb IN (${missingMbls.map(() => '?').join(',')})`,
+                  missingMbls
+                );
+                for (const r of (mdRows || [])) {
+                  if (r.hawb && !hblMap[r.mawb]) hblMap[r.mawb] = r.hawb;
+                }
+              }
+            } catch (e) { console.error('HBL batch error:', e); }
+          }
+
+          // Batch fetch pre-invoices (latest per mbl)
+          let piMap: Record<string, any> = {};
+          if (mbls.length > 0) {
+            try {
+              const piRows = await client.query(
+                `SELECT pi.* FROM dados_dachser.t_dachser_demurrage_pre_invoices pi
+                 INNER JOIN (
+                   SELECT shipment_mbl, MAX(created_at) as max_created 
+                   FROM dados_dachser.t_dachser_demurrage_pre_invoices 
+                   WHERE shipment_mbl IN (${mbls.map(() => '?').join(',')})
+                   GROUP BY shipment_mbl
+                 ) latest ON pi.shipment_mbl = latest.shipment_mbl AND pi.created_at = latest.max_created`,
+                mbls
+              );
+              for (const r of (piRows || [])) {
+                piMap[r.shipment_mbl] = r;
+              }
+            } catch (e) { console.error('PI batch error:', e); }
+          }
+
+          // Merge enrichment data
+          for (const c of containers) {
+            c.partner_id = partnerMap[c.cliente] || null;
+            c.hbl = hblMap[c.mbl] || null;
+            const pi = piMap[c.mbl];
+            c.pi_status_info = pi?.status_info || null;
+            c.pi_misk = pi?.misk || null;
+            c.pi_othello_registro = pi?.othello_registro || null;
+            c.pi_observacao = pi?.observacao || null;
+            c.pi_exchange_rate = pi?.exchange_rate || null;
+          }
+        }
 
         result = { success: true, data: containers || [] };
         break;
