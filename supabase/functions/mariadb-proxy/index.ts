@@ -2751,16 +2751,37 @@ serve(async (req) => {
           );
         }
         
-        // Upsert: insert if not exists, update if exists
-        const upsertSql = `
-          INSERT INTO ai_agente.t_fin_disputas (nf, observacoes, updated_at)
-          VALUES (?, ?, NOW())
-          ON DUPLICATE KEY UPDATE observacoes = VALUES(observacoes), updated_at = NOW()
-        `;
-        await client.execute(upsertSql, [doc_key, observacoes || '']);
-        
-        console.log(`Disputa observacoes updated for: ${doc_key}`);
-        result = { success: true };
+        try {
+          // Check if record exists first
+          const checkRows = await client.query(
+            `SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
+            [doc_key]
+          );
+          
+          if (checkRows && checkRows.length > 0) {
+            // Record exists — UPDATE
+            await client.execute(
+              `UPDATE ai_agente.t_fin_disputas SET observacoes = ?, updated_at = NOW() WHERE nf = ?`,
+              [observacoes || '', doc_key]
+            );
+          } else {
+            // Record does not exist — INSERT
+            await client.execute(
+              `INSERT INTO ai_agente.t_fin_disputas (nf, observacoes, created_at, updated_at) VALUES (?, ?, NOW(), NOW())`,
+              [doc_key, observacoes || '']
+            );
+          }
+          
+          console.log(`Disputa observacoes updated for: ${doc_key}`);
+          result = { success: true };
+        } catch (obsErr) {
+          console.error(`[update_disputa_observacoes] Error for ${doc_key}:`, obsErr);
+          const obsErrMsg = obsErr instanceof Error ? obsErr.message : 'Erro desconhecido';
+          return new Response(
+            JSON.stringify({ error: 'Falha ao salvar observações', details: obsErrMsg, success: false }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
         break;
       }
 
