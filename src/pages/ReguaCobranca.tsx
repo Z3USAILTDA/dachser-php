@@ -399,13 +399,29 @@ Financeiro Dachser`;
         });
         setSelectedClienteCnpjs(new Set());
       } else {
-        throw new Error(data?.message || "Erro ao enviar e-mail");
+        throw new Error(data?.message || data?.error || "Erro ao enviar e-mail");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao enviar aging agrupado:", err);
+      
+      // Parse edge function error for more specific messages
+      let errorMsg = "Falha ao enviar Aging List";
+      try {
+        if (err?.message) {
+          const parsed = JSON.parse(err.message);
+          if (parsed?.details) {
+            errorMsg = parsed.retryable 
+              ? `Erro temporário de conexão: ${parsed.details}. Tente novamente.`
+              : parsed.details;
+          }
+        }
+      } catch {
+        errorMsg = err instanceof Error ? err.message : errorMsg;
+      }
+      
       toast({
-        title: "Erro",
-        description: err instanceof Error ? err.message : "Falha ao enviar Aging List",
+        title: "Erro ao enviar e-mail",
+        description: errorMsg,
         variant: "destructive",
       });
     } finally {
