@@ -1,17 +1,23 @@
 
 
-## Plano: Remover filtro de ano do Olimpo
+## Plano: Forçar discrepância para AWB 045-13300630
 
-### Problema
-A página `src/pages/Olimpo.tsx` aplica `filterByYearIfNotZ3us` nos dados do mapa (linha 254), restringindo processos por ano para usuários não-Z3US admin. O usuário confirma que **não deve haver nenhum filtro** no Olimpo.
+### Contexto
+A timeline do mariadb-proxy detecta discrepância de peças (11 vs 50) para este AWB, mas o `fetch-status-aereo` não a detecta porque o filtro de ETD-5 dias ou a lógica de resolução por delivery a suprime. O mecanismo `force_discrepancy` já existe no código de aplicação de overrides (linhas 2574-2579).
 
-### Ação
+### Ações
 
-1. **Remover importação e uso de `filterByYearIfNotZ3us`** em `src/pages/Olimpo.tsx`:
-   - Remover `filterByYearIfNotZ3us` do import (linha 3)
-   - Remover a linha 254 que filtra os dados (`const yearFilteredData = filterByYearIfNotZ3us(...)`)
-   - Substituir referências a `yearFilteredData` por `data` diretamente
+1. **Atualizar tipo do MANUAL_OVERRIDES** em `supabase/functions/fetch-status-aereo/index.ts` (linha 1457):
+   - Adicionar `force_discrepancy?: boolean` e `force_baseline_pieces?: number` ao tipo Record
 
-### Resultado esperado
-- Todos os usuários (admin ou não) veem todos os processos no mapa do Olimpo, sem restrição por ano.
+2. **Adicionar entrada de override** para `045-13300630` no objeto MANUAL_OVERRIDES:
+   - `force_discrepancy: true`
+   - `force_baseline_pieces: 50` (valor máximo da discrepância — 50 peças no booking original vs 11 nas atuais)
+
+3. **Re-deploy** da edge function para aplicar a mudança em produção
+
+### Resultado
+- A tabela principal exibirá o badge de "Discrepância Peças" para este AWB
+- O AWB aparecerá no card Crítico
+- A timeline continuará mostrando o alerta normalmente
 
