@@ -676,7 +676,7 @@ export default function OlimpoCobranca() {
           <TabsTrigger value="client" className="text-xs px-3 py-1">Client</TabsTrigger>
         </TabsList>
       </Tabs>
-      <Button size="sm" onClick={handleExportExcel} disabled={loading || exportingExcel || !displayRows.length}
+      <Button size="sm" onClick={handleExportExcel} disabled={loading || exportingExcel}
         className="h-8 border-border bg-card text-muted-foreground hover:text-foreground text-xs">
         <Download className={`h-3.5 w-3.5 mr-1.5 ${exportingExcel ? "animate-spin" : ""}`} /> {exportingExcel ? "Exportando..." : "Excel"}
       </Button>
