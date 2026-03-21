@@ -876,6 +876,7 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
                       </div>
                     ))}
                   </RadioGroup>
+                  {hasError('d_term') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                 </div>
                 <div className="flex items-center gap-2 self-end pb-1">
                   <Checkbox checked={form.pod_available} onCheckedChange={v => updateField('pod_available', !!v)} id="sea_pod" />
