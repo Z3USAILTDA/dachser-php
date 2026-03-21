@@ -233,8 +233,11 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
     if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); toast.success("Título copiado!"); }
   };
 
+  const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
+
   const updateField = (field: keyof FormData, value: string | boolean) => {
     setForm(prev => ({ ...prev, [field]: value }));
+    setValidationErrors(prev => { const n = new Set(prev); n.delete(field); return n; });
   };
 
   // === Consignee autocomplete ===
