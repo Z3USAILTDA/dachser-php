@@ -505,6 +505,7 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
   const inputCls = "h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white placeholder:text-[#666]";
   const labelCls = "text-xs text-[#aaa] mb-1 block";
   const checkCls = "text-xs cursor-pointer text-[#ccc]";
+  const hasError = (field: string) => validationErrors.has(field);
 
   const Field = ({ label, field, type = "text", span2 = false }: { label: string; field: keyof SeaFormData; type?: string; span2?: boolean }) => (
     <div className={span2 ? "col-span-1 md:col-span-2" : ""}>
