@@ -427,7 +427,7 @@ const CadastroBl = () => {
                   </PopoverContent>
                 )}
               </Popover>
-            </div>
+              {hasError('clerk') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
 
             {/* ETD */}
             <div>
