@@ -750,17 +750,19 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
               <Field label="Master No. (MAWB) *" field="awb_number" />
 
               <div>
-                <Label className="text-xs text-[#aaa] mb-1 block flex items-center gap-1">
-                  <Calendar className="h-3 w-3" /> E.T.D.
+                <Label className={`text-xs mb-1 block flex items-center gap-1 ${hasError('etd') ? 'text-red-400' : 'text-[#aaa]'}`}>
+                  <Calendar className="h-3 w-3" /> E.T.D. *
                 </Label>
-                <Input type="datetime-local" value={form.etd} onChange={e => updateField("etd", e.target.value)} className="h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white" />
+                <Input type="datetime-local" value={form.etd} onChange={e => updateField("etd", e.target.value)} className={`h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white ${hasError('etd') ? 'border-red-500' : ''}`} />
+                {hasError('etd') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
               </div>
 
               <div>
-                <Label className="text-xs text-[#aaa] mb-1 block flex items-center gap-1">
-                  <Calendar className="h-3 w-3" /> E.T.A. / A.T.A.
+                <Label className={`text-xs mb-1 block flex items-center gap-1 ${hasError('eta') ? 'text-red-400' : 'text-[#aaa]'}`}>
+                  <Calendar className="h-3 w-3" /> E.T.A. / A.T.A. *
                 </Label>
-                <Input type="datetime-local" value={form.eta} onChange={e => updateField("eta", e.target.value)} className="h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white" />
+                <Input type="datetime-local" value={form.eta} onChange={e => updateField("eta", e.target.value)} className={`h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white ${hasError('eta') ? 'border-red-500' : ''}`} />
+                {hasError('eta') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
               </div>
 
               {/* IMPO-ONLY FIELDS */}
