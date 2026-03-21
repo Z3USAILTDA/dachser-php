@@ -1,53 +1,53 @@
 
 
-## Plano: Validação Visual com Borda Vermelha e Mensagem Inline
+## Plano: Detecção automática de transbordo via last_event vs destino
 
-### Alterações em 3 arquivos
+### Lógica
+Quando o `last_event` contém uma localização (formato "Evento - LOCALIZAÇÃO"), comparar essa localização com o campo `destino`. Se forem diferentes e o `transshipment_port` ainda estiver vazio, gravar automaticamente a localização como porto de transbordo.
 
-**Padrão comum para os 3 arquivos:**
+Exemplo: `last_event = "Vessel departed - YANTIAN"`, `destino = "HAMBURG"` → `transshipment_port = "YANTIAN"`.
 
-1. Adicionar estado `const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());`
+### Onde aplicar
 
-2. Modificar `updateField` para limpar o erro do campo ao digitar:
-   ```typescript
-   const updateField = (field, value) => {
-     setForm(prev => ({ ...prev, [field]: value }));
-     setValidationErrors(prev => { const n = new Set(prev); n.delete(field); return n; });
-   };
-   ```
+**Arquivo: `supabase/functions/olimpo-proxy/index.ts`**
 
-3. Refatorar `handleSave` para coletar todos os campos obrigatórios vazios, setar no `validationErrors`, mostrar toast consolidado, e bloquear salvamento.
+Adicionar um novo bloco de detecção logo após o fallback de transshipment por keywords (linha ~3293), antes do UPDATE final:
 
-4. Modificar o componente `Field` para aceitar validação:
-   - Label fica `text-red-400` se campo no `validationErrors`
-   - Input recebe `border-red-500`
-   - Mensagem inline `<span className="text-[10px] text-red-400">Campo obrigatório</span>` abaixo do input
+1. **Extrair localização do `last_event`**: Usar split no separador ` - ` para pegar a parte após o último hífen.
 
-5. Aplicar mesma lógica nos campos manuais renderizados inline (Clerk, Consignee, datas, etc.) -- não apenas os que usam `Field`.
+2. **Comparar com `destino`**: Normalizar ambos (uppercase, trim, primeiro token) e verificar se são diferentes. Também excluir a `origem` para evitar falsos positivos (ex: "Gate out empty - SANTOS" onde origem é Santos).
 
----
+3. **Só aplicar se `transshipmentPort` ainda for null**: Não sobrescrever detecções anteriores (API, keywords, ou valor já no banco).
 
-### Campos obrigatórios (exceto Remarks, Customer Order, e checkboxes)
+4. **Filtrar eventos relevantes**: Apenas eventos de navegação/movimento devem ser considerados (ex: "Vessel departed", "Arrival in", "Discharged"). Excluir eventos locais como "Gate out empty", "Loaded", etc.
 
-**Aéreo (`CadastroNovaModal.tsx`)**:
-- Ambos modos: `clerk`, `consignee_nome`, `awb_number`, `etd`, `eta`
-- IMPO: `shipper_name`, `green_light_date`, `pickup_date`, `service_level`, `airport_destination`, `wh_treatment`, `pre_alert_date`
-- EXPO: `d_term`
+```text
+Fluxo:
+last_event = "Vessel departed - YANTIAN"
+                                  ↓
+              extrair "YANTIAN" via split(" - ")
+                                  ↓
+              comparar com destino ("HAMBURG") e origem ("NINGBO")
+                                  ↓
+              YANTIAN ≠ HAMBURG e YANTIAN ≠ NINGBO
+                                  ↓
+              transshipment_port = "YANTIAN"
+```
 
-**Marítimo (`CadastroMaritimoModal.tsx`)**:
-- IMPO: `clerk`, `consignee_nome`, `shipper_name`, `po_number`, `green_light_date`, `etd`, `eta`, `ec_merchant`, `port_destination`, `pre_alert_date`, `pre_alert_comexpert`, `master_number`, `hbl_number`, `courier`
-- EXPO: `clerk`, `consignee_nome`, `consignee_expo`, `po_number`, `hbl_number`, `master_number`, `port_origin`, `deadline_draft_vgm`, `deadline_load`, `etd`, `eta`, `free_time`, `d_term`
+### Eventos que ativam a detecção
+- "Vessel departed"
+- "Arrival in" / "Arrived"  
+- "Discharged"
+- "Departure"
 
-**Legado (`CadastroBl.tsx`)**:
-- `bl_number`, `consignee_nome`, `clerk`, `etd`, `eta`
+### Eventos ignorados (localização = origem, não indica transbordo)
+- "Gate out empty"
+- "Loaded"
+- "Gate in"
 
----
-
-### Arquivos alterados
+### Alteração
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/components/air/CadastroNovaModal.tsx` | `validationErrors` state, `updateField` limpa erro, `handleSave` valida todos, `Field` e campos inline com borda vermelha + mensagem |
-| `src/components/sea/CadastroMaritimoModal.tsx` | Mesma lógica |
-| `src/pages/sea/CadastroBl.tsx` | Mesma lógica |
+| `supabase/functions/olimpo-proxy/index.ts` | Adicionar bloco de detecção de transbordo via comparação `last_event` location vs `destino`, após linha ~3293, antes do UPDATE |
 
