@@ -2396,13 +2396,11 @@ const ContainerTracking = () => {
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Consignee</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Coordenador</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Armador/Coloader</th>
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Origem</th>
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Escala</th>
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Destino</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Rota</th>
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium min-w-[180px]">Timeline</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Status</th>
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Situação</th>
-                      <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Ações</th>
+                      <th className="px-4 py-3"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2485,40 +2483,57 @@ const ContainerTracking = () => {
                                   {getShippingLineFromMbl(mbl.mbl_id, mbl.shipping_line)}
                                 </span>}
                             </td>
-                            <td className="px-4 py-3 text-[#aaaaaa] text-sm">{mbl.origem || "-"}</td>
-                            <td className="px-4 py-3 text-[#aaaaaa] text-sm">
-                              {(mbl.transshipment_port || mbl.transshipment_vessel_from) ? <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(249,115,22,.15)] text-orange-400 border border-[rgba(249,115,22,.3)] cursor-help">
-                                        {mbl.transshipment_port 
-                                          ? (mbl.transshipment_port.length > 15 ? mbl.transshipment_port.substring(0, 15) + "..." : mbl.transshipment_port)
-                                          : "Escala"}
-                                      </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="max-w-xs">
-                                      <div className="space-y-1">
-                                        {mbl.transshipment_port && (
-                                          <p className="text-xs font-semibold">Porto de transbordo: {mbl.transshipment_port}</p>
-                                        )}
-                                        {!mbl.transshipment_port && mbl.transshipment_vessel_from && (
-                                          <p className="text-xs font-semibold">Transbordo detectado (troca de navio)</p>
-                                        )}
-                                        {mbl.transshipment_vessel_from && (
-                                          <p className="text-xs text-muted-foreground">🚢 De: <span className="text-foreground font-medium">{mbl.transshipment_vessel_from}</span></p>
-                                        )}
-                                        {mbl.transshipment_vessel_to && (
-                                          <p className="text-xs text-muted-foreground">🚢 Para: <span className="text-foreground font-medium">{mbl.transshipment_vessel_to}</span></p>
-                                        )}
-                                        {mbl.transshipment_date && (
-                                          <p className="text-xs text-muted-foreground">📅 Data: <span className="text-foreground font-medium">{new Date(mbl.transshipment_date).toLocaleDateString('pt-BR')}</span></p>
-                                        )}
-                                      </div>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider> : <span className="text-[#666]">—</span>}
+                            <td className="px-4 py-3 text-sm">
+                              {(() => {
+                                const etapa = reportStatus.etapa;
+                                const escalas = mbl.transshipment_port 
+                                  ? mbl.transshipment_port.split(';').map((s: string) => s.trim()).filter(Boolean) 
+                                  : [];
+                                const isOrigemActive = etapa === 'PRE_EMBARQUE' || etapa === 'EMBARQUE';
+                                const isEscalaActive = etapa === 'TRANSITO';
+                                const isDestinoActive = etapa === 'CHEGADA' || etapa === 'LIBERACAO' || etapa === 'ENTREGA';
+                                const activeClass = "text-[#ffc800] font-semibold";
+                                const inactiveClass = "text-[#aaaaaa]";
+                                const arrowClass = "text-[#555] mx-1";
+                                return (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="inline-flex items-center flex-wrap gap-0 cursor-default whitespace-nowrap text-xs">
+                                          <span className={isOrigemActive ? activeClass : inactiveClass}>{mbl.origem || "—"}</span>
+                                          {escalas.map((escala: string, i: number) => (
+                                            <Fragment key={i}>
+                                              <span className={arrowClass}>→</span>
+                                              <span className={isEscalaActive ? activeClass : inactiveClass}>{escala}</span>
+                                            </Fragment>
+                                          ))}
+                                          <span className={arrowClass}>→</span>
+                                          <span className={isDestinoActive ? activeClass : inactiveClass}>{mbl.destino || "—"}</span>
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs">
+                                        <div className="space-y-1">
+                                          <p className="text-xs"><span className="font-semibold">Origem:</span> {mbl.origem || "—"}</p>
+                                          {escalas.length > 0 && (
+                                            <p className="text-xs"><span className="font-semibold">Escala(s):</span> {escalas.join(' → ')}</p>
+                                          )}
+                                          <p className="text-xs"><span className="font-semibold">Destino:</span> {mbl.destino || "—"}</p>
+                                          {mbl.transshipment_vessel_from && (
+                                            <p className="text-xs text-muted-foreground">🚢 De: <span className="text-foreground font-medium">{mbl.transshipment_vessel_from}</span></p>
+                                          )}
+                                          {mbl.transshipment_vessel_to && (
+                                            <p className="text-xs text-muted-foreground">🚢 Para: <span className="text-foreground font-medium">{mbl.transshipment_vessel_to}</span></p>
+                                          )}
+                                          {mbl.transshipment_date && (
+                                            <p className="text-xs text-muted-foreground">📅 Data: <span className="text-foreground font-medium">{new Date(mbl.transshipment_date).toLocaleDateString('pt-BR')}</span></p>
+                                          )}
+                                        </div>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                );
+                              })()}
                             </td>
-                            <td className="px-4 py-3 text-[#aaaaaa] text-sm">{mbl.destino || "-"}</td>
                             <td className="px-3 py-3 min-w-[280px]">
                               {isSIA ? (
                                 <TooltipProvider>
