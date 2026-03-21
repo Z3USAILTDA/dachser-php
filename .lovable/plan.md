@@ -1,27 +1,53 @@
 
 
-## Plano: Excel sempre com abas Product e Client
+## Plano: Validação Visual com Borda Vermelha e Mensagem Inline
 
-### Problema
-O export Excel atualmente usa os dados do `viewMode` ativo (product ou client). O usuário quer que o Excel sempre contenha ambas as visões, independente de qual esteja visualizando.
+### Alterações em 3 arquivos
 
-### Solução (`src/pages/olimpo/OlimpoCobranca.tsx`)
+**Padrão comum para os 3 arquivos:**
 
-**Alterar `handleExportExcel`** para:
+1. Adicionar estado `const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());`
 
-1. **Buscar ambos os datasets**: Fazer 2 chamadas paralelas ao backend — `get_aging_overview` (product) e `get_aging_by_client` (client) — independente do `viewMode` atual.
+2. Modificar `updateField` para limpar o erro do campo ao digitar:
+   ```typescript
+   const updateField = (field, value) => {
+     setForm(prev => ({ ...prev, [field]: value }));
+     setValidationErrors(prev => { const n = new Set(prev); n.delete(field); return n; });
+   };
+   ```
 
-2. **Gerar 3 abas no Excel**:
-   - **Aba "Aging - Product"**: Dados agrupados por product (usando `mergeProductRows` nos dados de `get_aging_overview`), com toda a formatação profissional existente (título dourado, zebra, Grand Total, % do Total, % Provisão, Valor Provisionado).
-   - **Aba "Aging - Client"**: Dados de `get_aging_by_client`, ordenados por maior vencido (mesma lógica do `displayRows` client), com a mesma formatação profissional.
-   - **Aba "Analítico de Clientes"**: Mantém como está (dados de `get_aging_analitico`).
+3. Refatorar `handleSave` para coletar todos os campos obrigatórios vazios, setar no `validationErrors`, mostrar toast consolidado, e bloquear salvamento.
 
-3. **Reutilizar lógica de estilização**: Extrair a lógica de criação da aba Aging para uma função auxiliar que recebe `rows[]`, `label` ("Product"/"Client") e `sheetName`, evitando duplicação de código.
+4. Modificar o componente `Field` para aceitar validação:
+   - Label fica `text-red-400` se campo no `validationErrors`
+   - Input recebe `border-red-500`
+   - Mensagem inline `<span className="text-[10px] text-red-400">Campo obrigatório</span>` abaixo do input
 
-4. **Nome do arquivo**: Trocar de `aging_${viewMode}_...` para `aging_report_...` (sem referência ao viewMode).
+5. Aplicar mesma lógica nos campos manuais renderizados inline (Clerk, Consignee, datas, etc.) -- não apenas os que usam `Field`.
 
-### Arquivo alterado
+---
+
+### Campos obrigatórios (exceto Remarks, Customer Order, e checkboxes)
+
+**Aéreo (`CadastroNovaModal.tsx`)**:
+- Ambos modos: `clerk`, `consignee_nome`, `awb_number`, `etd`, `eta`
+- IMPO: `shipper_name`, `green_light_date`, `pickup_date`, `service_level`, `airport_destination`, `wh_treatment`, `pre_alert_date`
+- EXPO: `d_term`
+
+**Marítimo (`CadastroMaritimoModal.tsx`)**:
+- IMPO: `clerk`, `consignee_nome`, `shipper_name`, `po_number`, `green_light_date`, `etd`, `eta`, `ec_merchant`, `port_destination`, `pre_alert_date`, `pre_alert_comexpert`, `master_number`, `hbl_number`, `courier`
+- EXPO: `clerk`, `consignee_nome`, `consignee_expo`, `po_number`, `hbl_number`, `master_number`, `port_origin`, `deadline_draft_vgm`, `deadline_load`, `etd`, `eta`, `free_time`, `d_term`
+
+**Legado (`CadastroBl.tsx`)**:
+- `bl_number`, `consignee_nome`, `clerk`, `etd`, `eta`
+
+---
+
+### Arquivos alterados
+
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/pages/olimpo/OlimpoCobranca.tsx` | Refatorar `handleExportExcel` para buscar ambos datasets e gerar 3 abas |
+| `src/components/air/CadastroNovaModal.tsx` | `validationErrors` state, `updateField` limpa erro, `handleSave` valida todos, `Field` e campos inline com borda vermelha + mensagem |
+| `src/components/sea/CadastroMaritimoModal.tsx` | Mesma lógica |
+| `src/pages/sea/CadastroBl.tsx` | Mesma lógica |
 
