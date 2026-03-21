@@ -3281,11 +3281,22 @@ serve(async (req) => {
             // Se a API não retornou dados estruturados de transshipment, tentar detectar via texto
             let transshipmentPort = null;
             // Se já tem transshipment_port no banco, preservar e não recalcular
-            if (row.transshipment_port && row.transshipment_port.trim() !== '') {
-              transshipmentPort = row.transshipment_port; // Preservar valor existente
-              console.log(`[refresh_sea_tracking] Preserving existing transshipment_port for ${containerId}: ${transshipmentPort}`);
-            } else if (uniqueTransshipments.length > 0) {
-              transshipmentPort = uniqueTransshipments.join(', ');
+            if (uniqueTransshipments.length > 0) {
+              const newPorts = uniqueTransshipments.join('; ');
+              if (row.transshipment_port && row.transshipment_port.trim() !== '') {
+                // Acumular: adicionar apenas portos novos que não existem no valor atual
+                const existingUpper = row.transshipment_port.toUpperCase();
+                const trulyNew = uniqueTransshipments.filter(p => !existingUpper.includes(p.trim().toUpperCase()));
+                if (trulyNew.length > 0) {
+                  transshipmentPort = row.transshipment_port.trim() + '; ' + trulyNew.join('; ');
+                  console.log(`[refresh_sea_tracking] Appending transshipment_port for ${containerId}: ${row.transshipment_port} -> ${transshipmentPort}`);
+                } else {
+                  transshipmentPort = row.transshipment_port; // Já contém todos os portos
+                  console.log(`[refresh_sea_tracking] Preserving existing transshipment_port for ${containerId}: ${transshipmentPort}`);
+                }
+              } else {
+                transshipmentPort = newPorts;
+              }
             } else {
               // Fallback: buscar por palavras-chave no container_status ou last_event
               const statusText = (data.container_status || lastEventDescription || '').toUpperCase();
