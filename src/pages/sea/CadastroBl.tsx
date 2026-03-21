@@ -101,8 +101,11 @@ const CadastroBl = () => {
     if (parsed.is_admin !== 1) { navigate("/dashboard"); }
   }, [navigate]);
 
+  const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
+
   const updateField = (field: keyof FormData, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
+    setValidationErrors(prev => { const n = new Set(prev); n.delete(field); return n; });
   };
 
   // === Consignee autocomplete ===
