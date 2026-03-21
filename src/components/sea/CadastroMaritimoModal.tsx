@@ -190,8 +190,11 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
   const [clerkOpen, setClerkOpen] = useState(false);
   const clerkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
+
   const updateField = (field: keyof SeaFormData, value: string | boolean) => {
     setForm(prev => ({ ...prev, [field]: value }));
+    setValidationErrors(prev => { const n = new Set(prev); n.delete(field); return n; });
   };
 
   // === PDF Upload & Extraction ===
