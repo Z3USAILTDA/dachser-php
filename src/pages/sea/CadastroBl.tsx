@@ -402,7 +402,7 @@ const CadastroBl = () => {
                       value={clerkSearch || form.clerk}
                       onChange={e => handleClerkInput(e.target.value)}
                       placeholder="Digite para buscar analista..."
-                      className="h-8 text-sm rounded-lg pr-8"
+                      className={`h-8 text-sm rounded-lg pr-8 ${hasError('clerk') ? 'border-red-500' : ''}`}
                     />
                     {isSearchingClerk && <Loader2 className="absolute right-2 top-1.5 h-4 w-4 animate-spin text-muted-foreground" />}
                     {!isSearchingClerk && <Search className="absolute right-2 top-1.5 h-4 w-4 text-muted-foreground" />}
