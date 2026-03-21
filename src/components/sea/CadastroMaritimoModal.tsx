@@ -320,8 +320,46 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
   };
 
   const handleSave = async () => {
-    if (!form.clerk) { toast.error("Clerk é obrigatório"); return; }
-    if (!form.consignee_nome && form.mode === 'impo') { toast.error("Consignee é obrigatório"); return; }
+    const requiredImpo: { field: keyof SeaFormData; label: string }[] = [
+      { field: 'clerk', label: 'Clerk' },
+      { field: 'consignee_nome', label: 'Consignee' },
+      { field: 'shipper_name', label: 'Shipper' },
+      { field: 'po_number', label: 'P.O.' },
+      { field: 'green_light_date', label: 'Green Light Date' },
+      { field: 'etd', label: 'E.T.D.' },
+      { field: 'eta', label: 'E.T.A.' },
+      { field: 'ec_merchant', label: 'EC Merchant' },
+      { field: 'port_destination', label: 'Port at Destination' },
+      { field: 'pre_alert_date', label: 'Pre-Alert Date' },
+      { field: 'pre_alert_comexpert', label: 'Pre-Alert Comexpert' },
+      { field: 'master_number', label: 'Master No.' },
+      { field: 'hbl_number', label: 'HBL No.' },
+      { field: 'courier', label: 'Courier' },
+    ];
+    const requiredExpo: { field: keyof SeaFormData; label: string }[] = [
+      { field: 'clerk', label: 'Clerk' },
+      { field: 'consignee_nome', label: 'Customer No.' },
+      { field: 'consignee_expo', label: 'Consignee' },
+      { field: 'po_number', label: 'P.O.' },
+      { field: 'hbl_number', label: 'HBL No.' },
+      { field: 'master_number', label: 'Master No.' },
+      { field: 'port_origin', label: 'Port of Origin' },
+      { field: 'deadline_draft_vgm', label: 'Deadline Draft + VGM' },
+      { field: 'deadline_load', label: 'Deadline Load' },
+      { field: 'etd', label: 'E.T.D.' },
+      { field: 'eta', label: 'E.T.A.' },
+      { field: 'free_time', label: 'Free Time' },
+      { field: 'd_term', label: 'D-Term' },
+    ];
+
+    const allRequired = form.mode === 'impo' ? requiredImpo : requiredExpo;
+    const missing = allRequired.filter(r => !form[r.field]);
+    if (missing.length > 0) {
+      setValidationErrors(new Set(missing.map(m => m.field)));
+      toast.error("Preencha todos os campos obrigatórios", { description: missing.map(m => m.label).join(', ') });
+      return;
+    }
+    setValidationErrors(new Set());
 
     setIsSaving(true);
     try {
