@@ -2527,29 +2527,32 @@ const ContainerTracking = () => {
                                 const activeClass = "text-[#ffc800] font-semibold";
                                 const inactiveClass = "text-[#aaaaaa]";
                                 const arrowClass = "text-[#555] mx-1";
+                                const origemCode = mbl.origem_code || null;
+                                const destinoCode = mbl.destino_code || null;
+                                const getEscalaCode = (escala: string) => portCodeMap[escala.toUpperCase().trim()] || null;
                                 return (
                                   <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <span className="inline-flex items-center flex-wrap gap-0 cursor-default whitespace-nowrap text-xs">
-                                          <span className={isOrigemActive ? activeClass : inactiveClass}>{mbl.origem || "—"}</span>
+                                          <span className={isOrigemActive ? activeClass : inactiveClass}>{origemCode || mbl.origem || "—"}</span>
                                           {escalas.map((escala: string, i: number) => (
                                             <Fragment key={i}>
                                               <span className={arrowClass}>→</span>
-                                              <span className={isEscalaActive ? activeClass : inactiveClass}>{escala}</span>
+                                              <span className={isEscalaActive ? activeClass : inactiveClass}>{getEscalaCode(escala) || escala}</span>
                                             </Fragment>
                                           ))}
                                           <span className={arrowClass}>→</span>
-                                          <span className={isDestinoActive ? activeClass : inactiveClass}>{mbl.destino || "—"}</span>
+                                          <span className={isDestinoActive ? activeClass : inactiveClass}>{destinoCode || mbl.destino || "—"}</span>
                                         </span>
                                       </TooltipTrigger>
                                       <TooltipContent className="max-w-xs">
                                         <div className="space-y-1">
-                                          <p className="text-xs"><span className="font-semibold">Origem:</span> {mbl.origem || "—"}</p>
+                                          <p className="text-xs"><span className="font-semibold">Origem:</span> {mbl.origem || "—"}{origemCode ? ` (${origemCode})` : ''}</p>
                                           {escalas.length > 0 && (
-                                            <p className="text-xs"><span className="font-semibold">Escala(s):</span> {escalas.join(' → ')}</p>
+                                            <p className="text-xs"><span className="font-semibold">Escala(s):</span> {escalas.map((e: string) => { const code = getEscalaCode(e); return code ? `${e} (${code})` : e; }).join(' → ')}</p>
                                           )}
-                                          <p className="text-xs"><span className="font-semibold">Destino:</span> {mbl.destino || "—"}</p>
+                                          <p className="text-xs"><span className="font-semibold">Destino:</span> {mbl.destino || "—"}{destinoCode ? ` (${destinoCode})` : ''}</p>
                                           {mbl.transshipment_vessel_from && (
                                             <p className="text-xs text-muted-foreground">🚢 De: <span className="text-foreground font-medium">{mbl.transshipment_vessel_from}</span></p>
                                           )}
