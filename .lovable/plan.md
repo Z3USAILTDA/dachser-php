@@ -1,56 +1,39 @@
 
 
-## Plano: Backfill de transshipment_port via last_event em todos os registros
+## Plano: Reestruturar tabela do monitoramento marítimo com coluna Rota unificada
 
 ### Objetivo
-Atualizar `transshipment_port` em **todos** os registros da `t_tracking_sea` que possuem `last_event` com localização diferente de `destino` e `origem`, usando UPDATE direto no banco (sem depender do refresh container a container).
 
-### Estratégia
+Substituir as 3 colunas separadas (Origem, Escala, Destino) por uma única coluna **Rota** com visual igual ao tracking aéreo, e remover a coluna **Ações** do cabeçalho principal. Colunas finais:
 
-Reescrever a edge function `sea-tracking-transship-backfill` para executar um UPDATE em massa na `t_tracking_sea`, aplicando a mesma lógica de detecção que já existe no `refresh_sea_tracking` e no CTE `transship_last_event`:
+**MBL | Consignee | Coordenador | Armador/Coloader | Rota | Timeline | Status | Situação**
 
-1. Extrair localização do `last_event` via `SUBSTRING_INDEX(last_event, ' - ', -1)`
-2. Filtrar apenas eventos de trânsito (VESSEL DEPARTED, DEPARTURE, ARRIVAL, DISCHARGED)
-3. Excluir eventos locais (GATE OUT, GATE IN, LOADED, EMPTY)
-4. Comparar primeiro token da localização com primeiro token de `destino` e `origem`
-5. Se diferente de ambos → gravar/acumular no `transshipment_port`
+### Coluna Rota — Visual
 
-### Detalhes técnicos
+Exibir como o tracking aéreo: `ORIGEM → ESCALA → DESTINO` em linha, com highlight baseado no status atual:
 
-**UPDATE com acumulação** (mesma lógica do refresh):
-- Se `transshipment_port` é NULL/vazio → gravar a localização detectada
-- Se já tem valor e a localização já está contida → manter como está
-- Se já tem valor e a localização é nova → concatenar com `; `
-
-**SQL do UPDATE direto:**
-```sql
-UPDATE t_tracking_sea ts
-SET transshipment_port = CASE
-  WHEN transshipment_port IS NULL OR transshipment_port = '' 
-    THEN UPPER(TRIM(SUBSTRING_INDEX(last_event, ' - ', -1)))
-  WHEN UPPER(transshipment_port) LIKE CONCAT('%', UPPER(TRIM(SUBSTRING_INDEX(last_event, ' - ', -1))), '%')
-    THEN transshipment_port
-  ELSE CONCAT(transshipment_port, '; ', UPPER(TRIM(SUBSTRING_INDEX(last_event, ' - ', -1))))
-END
-WHERE active = 1
-  AND last_event LIKE '% - %'
-  AND (UPPER(last_event) LIKE 'VESSEL DEPARTED%' OR ...)
-  AND NOT (UPPER(last_event) LIKE 'GATE OUT%' OR ...)
-  AND localização ≠ destino (primeiro token)
-  AND localização ≠ origem (primeiro token)
+```text
+LAEM CHABANG → YANTIAN → SANTOS
+   (inativo)    (ativo)   (inativo)
 ```
 
-**Também incluir detecção por keywords** (TRANSSHIP/T/S) na `t_tracking_sea_history` para extrair location e gravar no `transshipment_port` da `t_tracking_sea`.
+- **Pré-embarque** (BKG, CLT, GIO): highlight na origem
+- **Em trânsito** (CRG, DEP, TSP): highlight na escala (se existir), senão na origem
+- **Chegada/Liberação/Entrega** (ARR, DCH, INS, GOD, DLV): highlight no destino
+- Múltiplas escalas separadas por `; ` no `transshipment_port` → cada uma mostrada como ponto intermediário
+- Sem escala → exibe apenas `ORIGEM → DESTINO`
+- Cor ativa: `text-[#ffc800] font-semibold` / Cor inativa: `text-muted-foreground`
 
 ### Alteração
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `supabase/functions/sea-tracking-transship-backfill/index.ts` | Reescrever para: (1) UPDATE via last_event vs destino/origem na t_tracking_sea, (2) UPDATE via history com keywords de transbordo, (3) Modo dry_run para preview, (4) Acumulação com `; ` |
+| `src/pages/ContainerTracking.tsx` | (1) Substituir `<th>` de Origem + Escala + Destino por uma única `<th>Rota</th>`. (2) Substituir as 3 `<td>` correspondentes por uma única `<td>` com lógica de rota visual (origem → escalas → destino com highlighting). (3) Remover coluna Ações do `<thead>` e mover botões de ação para dentro da linha expandida ou manter como última coluna sem header visível |
 
-### Fluxo da função
+### Detalhes técnicos
 
-1. **PASSO 1**: UPDATE em `t_tracking_sea` via lógica `last_event` (localização ≠ destino ≠ origem)
-2. **PASSO 2**: UPDATE em `t_tracking_sea` via `t_tracking_sea_history` (eventos com keywords TRANSSHIP/T/S, extraindo `location`)
-3. **PASSO 3**: Retornar contagem de registros atualizados e amostra dos resultados
+- Dados disponíveis no objeto `mbl`: `mbl.origem`, `mbl.destino`, `mbl.transshipment_port` (string com `; ` como separador para múltiplas escalas)
+- Status atual via `reportStatus.etapa`: `PRE_EMBARQUE`, `EMBARQUE`, `TRANSITO`, `CHEGADA`, `LIBERACAO`, `ENTREGA`
+- Reutilizar padrão exato do air tracking (Index.tsx linhas 2780-2794) adaptado para contexto marítimo
+- Manter coluna Ações como última coluna (botões de expandir, mapa, etc.) — remover apenas do header se o user quiser, ou manter discreto
 
