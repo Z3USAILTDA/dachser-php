@@ -599,7 +599,7 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Clerk */}
               <div>
-                <Label className={labelCls}>Clerk (Analista) *</Label>
+                <Label className={`text-xs mb-1 block ${hasError('clerk') ? 'text-red-400' : 'text-[#aaa]'}`}>Clerk (Analista) *</Label>
                 <Popover open={clerkOpen} onOpenChange={setClerkOpen}>
                   <PopoverTrigger asChild>
                     <div className="relative">
@@ -607,7 +607,7 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
                         value={clerkSearch || form.clerk}
                         onChange={e => handleClerkInput(e.target.value)}
                         placeholder="Digite para buscar analista..."
-                        className={`${inputCls} pr-8`}
+                        className={`${inputCls} pr-8 ${hasError('clerk') ? 'border-red-500' : ''}`}
                       />
                       {isSearchingClerk ? <Loader2 className="absolute right-2 top-1.5 h-4 w-4 animate-spin text-[#aaa]" /> : <Search className="absolute right-2 top-1.5 h-4 w-4 text-[#666]" />}
                     </div>
@@ -631,6 +631,7 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
                     </PopoverContent>
                   )}
                 </Popover>
+                {hasError('clerk') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
               </div>
 
               {/* Customer No / Consignee */}
