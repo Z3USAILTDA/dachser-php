@@ -3281,11 +3281,22 @@ serve(async (req) => {
             // Se a API não retornou dados estruturados de transshipment, tentar detectar via texto
             let transshipmentPort = null;
             // Se já tem transshipment_port no banco, preservar e não recalcular
-            if (row.transshipment_port && row.transshipment_port.trim() !== '') {
-              transshipmentPort = row.transshipment_port; // Preservar valor existente
-              console.log(`[refresh_sea_tracking] Preserving existing transshipment_port for ${containerId}: ${transshipmentPort}`);
-            } else if (uniqueTransshipments.length > 0) {
-              transshipmentPort = uniqueTransshipments.join(', ');
+            if (uniqueTransshipments.length > 0) {
+              const newPorts = uniqueTransshipments.join('; ');
+              if (row.transshipment_port && row.transshipment_port.trim() !== '') {
+                // Acumular: adicionar apenas portos novos que não existem no valor atual
+                const existingUpper = row.transshipment_port.toUpperCase();
+                const trulyNew = uniqueTransshipments.filter(p => !existingUpper.includes(p.trim().toUpperCase()));
+                if (trulyNew.length > 0) {
+                  transshipmentPort = row.transshipment_port.trim() + '; ' + trulyNew.join('; ');
+                  console.log(`[refresh_sea_tracking] Appending transshipment_port for ${containerId}: ${row.transshipment_port} -> ${transshipmentPort}`);
+                } else {
+                  transshipmentPort = row.transshipment_port; // Já contém todos os portos
+                  console.log(`[refresh_sea_tracking] Preserving existing transshipment_port for ${containerId}: ${transshipmentPort}`);
+                }
+              } else {
+                transshipmentPort = newPorts;
+              }
             } else {
               // Fallback: buscar por palavras-chave no container_status ou last_event
               const statusText = (data.container_status || lastEventDescription || '').toUpperCase();
@@ -3325,7 +3336,7 @@ serve(async (req) => {
             // ===== FALLBACK 2: Detectar transbordo via last_event location vs destino =====
             // Se last_event contém "Evento - LOCALIZAÇÃO" e a localização difere do destino e da origem,
             // então é um porto de transbordo (ex: "Vessel departed - YANTIAN" com destino HAMBURG)
-            if (!transshipmentPort) {
+            {
               const lastEvtText = lastEventDescription || '';
               const dashIdx = lastEvtText.lastIndexOf(' - ');
               if (dashIdx > 0) {
@@ -3345,7 +3356,13 @@ serve(async (req) => {
                   const destinoToken = (row.destino || '').toUpperCase().trim().split(/[\s,]+/)[0];
                   
                   if (locToken && locToken !== origemToken && locToken !== destinoToken) {
-                    transshipmentPort = evtLocation;
+                    // Acumular com valor existente
+                    const existingPort = transshipmentPort || row.transshipment_port || '';
+                    if (!existingPort) {
+                      transshipmentPort = evtLocation;
+                    } else if (!existingPort.toUpperCase().includes(evtLocation)) {
+                      transshipmentPort = existingPort.trim() + '; ' + evtLocation;
+                    }
                     console.log(`[refresh_sea_tracking] Transshipment detected via last_event location for ${containerId}: "${evtLocation}" (destino="${row.destino}", origem="${row.origem}")`);
                   }
                 }
@@ -3372,9 +3389,10 @@ serve(async (req) => {
                 last_event = ?,
                 shipping_line = COALESCE(?, shipping_line),
                 transshipment_port = CASE 
-                  WHEN transshipment_port IS NULL OR transshipment_port = '' 
-                  THEN COALESCE(?, transshipment_port) 
-                  ELSE transshipment_port 
+                  WHEN ? IS NULL THEN transshipment_port
+                  WHEN transshipment_port IS NULL OR transshipment_port = '' THEN ?
+                  WHEN UPPER(transshipment_port) LIKE CONCAT('%', UPPER(?), '%') THEN transshipment_port
+                  ELSE CONCAT(transshipment_port, '; ', ?)
                 END,
                 loading_port = COALESCE(?, loading_port),
                 latitude = COALESCE(?, latitude),
@@ -3391,6 +3409,9 @@ serve(async (req) => {
               vesselImo,
               lastEventDescription,
               shippingLine ? normalizeShippingLine(shippingLine) : null,
+              transshipmentPort,
+              transshipmentPort,
+              transshipmentPort,
               transshipmentPort,
               currentLoadingPort,
               containerLat,
