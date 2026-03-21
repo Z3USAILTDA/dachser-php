@@ -636,7 +636,7 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
 
               {/* Customer No / Consignee */}
               <div>
-                <Label className={labelCls}>{form.mode === 'impo' ? 'Consignee *' : 'Customer No. *'}</Label>
+                <Label className={`text-xs mb-1 block ${hasError('consignee_nome') ? 'text-red-400' : 'text-[#aaa]'}`}>{form.mode === 'impo' ? 'Consignee *' : 'Customer No. *'}</Label>
                 <Popover open={consigneeOpen} onOpenChange={setConsigneeOpen}>
                   <PopoverTrigger asChild>
                     <div className="relative">
@@ -644,7 +644,7 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
                         value={consigneeSearch || form.consignee_nome}
                         onChange={e => handleConsigneeInput(e.target.value)}
                         placeholder="Digite para buscar cliente..."
-                        className={`${inputCls} pr-8`}
+                        className={`${inputCls} pr-8 ${hasError('consignee_nome') ? 'border-red-500' : ''}`}
                       />
                       {isSearchingConsignee ? <Loader2 className="absolute right-2 top-1.5 h-4 w-4 animate-spin text-[#aaa]" /> : <Search className="absolute right-2 top-1.5 h-4 w-4 text-[#666]" />}
                     </div>
@@ -668,6 +668,7 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
                     </PopoverContent>
                   )}
                 </Popover>
+                {hasError('consignee_nome') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
               </div>
 
               <div>
