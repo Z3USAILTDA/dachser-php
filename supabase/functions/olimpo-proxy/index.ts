@@ -2112,6 +2112,35 @@ serve(async (req) => {
                     )
                   GROUP BY tsh2.mbl_id
                 ),
+              -- CTE: Detect transshipment from last_event location vs destino/origem
+              transship_last_event AS (
+                SELECT 
+                  ts_le.mbl_id,
+                  MAX(UPPER(TRIM(SUBSTRING_INDEX(ts_le.last_event, ' - ', -1)))) as transshipment_port
+                FROM dados_dachser.t_tracking_sea ts_le
+                WHERE ts_le.active = 1
+                  AND ts_le.last_event LIKE '% - %'
+                  AND (ts_le.transshipment_port IS NULL OR ts_le.transshipment_port = '')
+                  AND (
+                    UPPER(ts_le.last_event) LIKE 'VESSEL DEPARTED%'
+                    OR UPPER(ts_le.last_event) LIKE 'DEPARTURE%'
+                    OR UPPER(ts_le.last_event) LIKE 'ARRIVAL%'
+                    OR UPPER(ts_le.last_event) LIKE 'ARRIVED%'
+                    OR UPPER(ts_le.last_event) LIKE 'DISCHARGED%'
+                  )
+                  AND UPPER(ts_le.last_event) NOT LIKE 'GATE OUT%'
+                  AND UPPER(ts_le.last_event) NOT LIKE 'GATE IN%'
+                  AND UPPER(ts_le.last_event) NOT LIKE 'LOADED%'
+                  AND UPPER(ts_le.last_event) NOT LIKE 'EMPTY%'
+                  AND ts_le.destino IS NOT NULL
+                  AND UPPER(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(ts_le.last_event, ' - ', -1), ',', 1))) != UPPER(TRIM(SUBSTRING_INDEX(ts_le.destino, ',', 1)))
+                  AND UPPER(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(ts_le.last_event, ' - ', -1), ' ', 1))) != UPPER(TRIM(SUBSTRING_INDEX(ts_le.destino, ' ', 1)))
+                  AND (ts_le.origem IS NULL OR (
+                    UPPER(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(ts_le.last_event, ' - ', -1), ',', 1))) != UPPER(TRIM(SUBSTRING_INDEX(ts_le.origem, ',', 1)))
+                    AND UPPER(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(ts_le.last_event, ' - ', -1), ' ', 1))) != UPPER(TRIM(SUBSTRING_INDEX(ts_le.origem, ' ', 1)))
+                  ))
+                GROUP BY ts_le.mbl_id
+              ),
               -- CTE 5: Free time cadastrado (simplificado)
               has_freetime AS (
                 SELECT DISTINCT
