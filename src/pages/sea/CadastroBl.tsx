@@ -101,8 +101,11 @@ const CadastroBl = () => {
     if (parsed.is_admin !== 1) { navigate("/dashboard"); }
   }, [navigate]);
 
+  const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
+
   const updateField = (field: keyof FormData, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
+    setValidationErrors(prev => { const n = new Set(prev); n.delete(field); return n; });
   };
 
   // === Consignee autocomplete ===
@@ -235,9 +238,20 @@ const CadastroBl = () => {
   };
 
   const handleSave = async () => {
-    if (!form.bl_number) { toast.error("BL Number é obrigatório"); return; }
-    if (!form.consignee_nome) { toast.error("Consignee é obrigatório"); return; }
-    if (!form.clerk) { toast.error("Clerk é obrigatório"); return; }
+    const required: { field: keyof FormData; label: string }[] = [
+      { field: 'bl_number', label: 'BL Number' },
+      { field: 'consignee_nome', label: 'Consignee' },
+      { field: 'clerk', label: 'Clerk' },
+      { field: 'etd', label: 'ETD' },
+      { field: 'eta', label: 'ETA' },
+    ];
+    const missing = required.filter(r => !form[r.field]);
+    if (missing.length > 0) {
+      setValidationErrors(new Set(missing.map(m => m.field)));
+      toast.error("Preencha todos os campos obrigatórios", { description: missing.map(m => m.label).join(', ') });
+      return;
+    }
+    setValidationErrors(new Set());
 
     setIsSaving(true);
     try {
@@ -285,15 +299,18 @@ const CadastroBl = () => {
     setIsSaving(false);
   };
 
+  const hasError = (field: string) => validationErrors.has(field);
+
   const Field = ({ label, field, type = "text", span2 = false }: { label: string; field: keyof FormData; type?: string; span2?: boolean }) => (
     <div className={span2 ? "col-span-1 md:col-span-2" : ""}>
-      <Label className="text-xs text-muted-foreground mb-1 block">{label}</Label>
+      <Label className={`text-xs mb-1 block ${hasError(field) ? 'text-red-400' : 'text-muted-foreground'}`}>{label}</Label>
       <Input
         type={type}
         value={form[field]}
         onChange={e => updateField(field, e.target.value)}
-        className="h-8 text-sm rounded-lg"
+        className={`h-8 text-sm rounded-lg ${hasError(field) ? 'border-red-500' : ''}`}
       />
+      {hasError(field) && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
     </div>
   );
 
@@ -339,7 +356,7 @@ const CadastroBl = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Consignee */}
             <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">Consignee *</Label>
+              <Label className={`text-xs mb-1 block ${hasError('consignee_nome') ? 'text-red-400' : 'text-muted-foreground'}`}>Consignee *</Label>
               <Popover open={consigneeOpen} onOpenChange={setConsigneeOpen}>
                 <PopoverTrigger asChild>
                   <div className="relative">
@@ -347,7 +364,7 @@ const CadastroBl = () => {
                       value={consigneeSearch || form.consignee_nome}
                       onChange={e => handleConsigneeInput(e.target.value)}
                       placeholder="Digite para buscar cliente..."
-                      className="h-8 text-sm rounded-lg pr-8"
+                      className={`h-8 text-sm rounded-lg pr-8 ${hasError('consignee_nome') ? 'border-red-500' : ''}`}
                     />
                     {isSearchingConsignee && <Loader2 className="absolute right-2 top-1.5 h-4 w-4 animate-spin text-muted-foreground" />}
                     {!isSearchingConsignee && <Search className="absolute right-2 top-1.5 h-4 w-4 text-muted-foreground" />}
@@ -372,11 +389,12 @@ const CadastroBl = () => {
                   </PopoverContent>
                 )}
               </Popover>
+              {hasError('consignee_nome') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
             </div>
 
             {/* Clerk */}
             <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">Clerk (Analista) *</Label>
+              <Label className={`text-xs mb-1 block ${hasError('clerk') ? 'text-red-400' : 'text-muted-foreground'}`}>Clerk (Analista) *</Label>
               <Popover open={clerkOpen} onOpenChange={setClerkOpen}>
                 <PopoverTrigger asChild>
                   <div className="relative">
@@ -384,7 +402,7 @@ const CadastroBl = () => {
                       value={clerkSearch || form.clerk}
                       onChange={e => handleClerkInput(e.target.value)}
                       placeholder="Digite para buscar analista..."
-                      className="h-8 text-sm rounded-lg pr-8"
+                      className={`h-8 text-sm rounded-lg pr-8 ${hasError('clerk') ? 'border-red-500' : ''}`}
                     />
                     {isSearchingClerk && <Loader2 className="absolute right-2 top-1.5 h-4 w-4 animate-spin text-muted-foreground" />}
                     {!isSearchingClerk && <Search className="absolute right-2 top-1.5 h-4 w-4 text-muted-foreground" />}
@@ -409,32 +427,35 @@ const CadastroBl = () => {
                   </PopoverContent>
                 )}
               </Popover>
+              {hasError('clerk') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
             </div>
 
             {/* ETD */}
             <div>
-              <Label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1">
-                <Calendar className="h-3 w-3" /> ETD
+              <Label className={`text-xs mb-1 block flex items-center gap-1 ${hasError('etd') ? 'text-red-400' : 'text-muted-foreground'}`}>
+                <Calendar className="h-3 w-3" /> ETD *
               </Label>
               <Input
                 type="datetime-local"
                 value={form.etd}
                 onChange={e => updateField("etd", e.target.value)}
-                className="h-8 text-sm rounded-lg"
+                className={`h-8 text-sm rounded-lg ${hasError('etd') ? 'border-red-500' : ''}`}
               />
+              {hasError('etd') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
             </div>
 
             {/* ETA */}
             <div>
-              <Label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1">
-                <Calendar className="h-3 w-3" /> ETA
+              <Label className={`text-xs mb-1 block flex items-center gap-1 ${hasError('eta') ? 'text-red-400' : 'text-muted-foreground'}`}>
+                <Calendar className="h-3 w-3" /> ETA *
               </Label>
               <Input
                 type="datetime-local"
                 value={form.eta}
                 onChange={e => updateField("eta", e.target.value)}
-                className="h-8 text-sm rounded-lg"
+                className={`h-8 text-sm rounded-lg ${hasError('eta') ? 'border-red-500' : ''}`}
               />
+              {hasError('eta') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
             </div>
           </div>
         </div>

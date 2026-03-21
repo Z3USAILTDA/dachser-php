@@ -233,8 +233,11 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
     if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); toast.success("Título copiado!"); }
   };
 
+  const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
+
   const updateField = (field: keyof FormData, value: string | boolean) => {
     setForm(prev => ({ ...prev, [field]: value }));
+    setValidationErrors(prev => { const n = new Set(prev); n.delete(field); return n; });
   };
 
   // === Consignee autocomplete ===
@@ -371,9 +374,34 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
   };
 
   const handleSave = async () => {
-    if (!form.awb_number) { toast.error("MAWB Number é obrigatório"); return; }
-    if (!form.consignee_nome) { toast.error("Consignee é obrigatório"); return; }
-    if (!form.clerk) { toast.error("Clerk é obrigatório"); return; }
+    const requiredBase: { field: keyof FormData; label: string }[] = [
+      { field: 'clerk', label: 'Clerk' },
+      { field: 'consignee_nome', label: 'Consignee' },
+      { field: 'awb_number', label: 'Master No. (MAWB)' },
+      { field: 'etd', label: 'E.T.D.' },
+      { field: 'eta', label: 'E.T.A.' },
+    ];
+    const requiredImpo: { field: keyof FormData; label: string }[] = [
+      { field: 'shipper_name', label: 'Shipper' },
+      { field: 'green_light_date', label: 'Green Light Date' },
+      { field: 'pickup_date', label: 'Pickup Date' },
+      { field: 'service_level', label: 'Service Level' },
+      { field: 'airport_destination', label: 'Airport at Destination' },
+      { field: 'wh_treatment', label: 'WH Treatment' },
+      { field: 'pre_alert_date', label: 'Pre-Alert Date' },
+    ];
+    const requiredExpo: { field: keyof FormData; label: string }[] = [
+      { field: 'd_term', label: 'D-Term' },
+    ];
+
+    const allRequired = [...requiredBase, ...(form.mode === 'impo' ? requiredImpo : requiredExpo)];
+    const missing = allRequired.filter(r => !form[r.field]);
+    if (missing.length > 0) {
+      setValidationErrors(new Set(missing.map(m => m.field)));
+      toast.error("Preencha todos os campos obrigatórios", { description: missing.map(m => m.label).join(', ') });
+      return;
+    }
+    setValidationErrors(new Set());
 
     setIsSaving(true);
     try {
@@ -537,15 +565,18 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
     setSwapResult(null);
   };
 
+  const hasError = (field: string) => validationErrors.has(field);
+
   const Field = ({ label, field, type = "text", span2 = false }: { label: string; field: keyof FormData; type?: string; span2?: boolean }) => (
     <div className={span2 ? "col-span-1 md:col-span-2" : ""}>
-      <Label className="text-xs text-muted-foreground mb-1 block">{label}</Label>
+      <Label className={`text-xs mb-1 block ${hasError(field) ? 'text-red-400' : 'text-muted-foreground'}`}>{label}</Label>
       <Input
         type={type}
         value={form[field] as string}
         onChange={e => updateField(field, e.target.value)}
-        className="h-8 text-sm rounded-lg"
+        className={`h-8 text-sm rounded-lg ${hasError(field) ? 'border-red-500' : ''}`}
       />
+      {hasError(field) && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
     </div>
   );
 
@@ -634,7 +665,7 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Clerk */}
               <div>
-                <Label className="text-xs text-[#aaa] mb-1 block">Clerk (Analista) *</Label>
+                <Label className={`text-xs mb-1 block ${hasError('clerk') ? 'text-red-400' : 'text-[#aaa]'}`}>Clerk (Analista) *</Label>
                 <Popover open={clerkOpen} onOpenChange={setClerkOpen}>
                   <PopoverTrigger asChild>
                     <div className="relative">
@@ -642,7 +673,7 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
                         value={clerkSearch || form.clerk}
                         onChange={e => handleClerkInput(e.target.value)}
                         placeholder="Digite para buscar analista..."
-                        className="h-8 text-sm rounded-lg pr-8 bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white placeholder:text-[#666]"
+                        className={`h-8 text-sm rounded-lg pr-8 bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white placeholder:text-[#666] ${hasError('clerk') ? 'border-red-500' : ''}`}
                       />
                       {isSearchingClerk && <Loader2 className="absolute right-2 top-1.5 h-4 w-4 animate-spin text-[#aaa]" />}
                       {!isSearchingClerk && <Search className="absolute right-2 top-1.5 h-4 w-4 text-[#666]" />}
@@ -667,11 +698,12 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
                     </PopoverContent>
                   )}
                 </Popover>
+                {hasError('clerk') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
               </div>
 
               {/* Consignee */}
               <div>
-                <Label className="text-xs text-[#aaa] mb-1 block">Consignee *</Label>
+                <Label className={`text-xs mb-1 block ${hasError('consignee_nome') ? 'text-red-400' : 'text-[#aaa]'}`}>Consignee *</Label>
                 <Popover open={consigneeOpen} onOpenChange={setConsigneeOpen}>
                   <PopoverTrigger asChild>
                     <div className="relative">
@@ -679,7 +711,7 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
                         value={consigneeSearch || form.consignee_nome}
                         onChange={e => handleConsigneeInput(e.target.value)}
                         placeholder="Digite para buscar cliente..."
-                        className="h-8 text-sm rounded-lg pr-8 bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white placeholder:text-[#666]"
+                        className={`h-8 text-sm rounded-lg pr-8 bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white placeholder:text-[#666] ${hasError('consignee_nome') ? 'border-red-500' : ''}`}
                       />
                       {isSearchingConsignee && <Loader2 className="absolute right-2 top-1.5 h-4 w-4 animate-spin text-[#aaa]" />}
                       {!isSearchingConsignee && <Search className="absolute right-2 top-1.5 h-4 w-4 text-[#666]" />}
@@ -704,6 +736,7 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
                     </PopoverContent>
                   )}
                 </Popover>
+                {hasError('consignee_nome') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
               </div>
 
               <Field label="Customer No." field="consignee_customer_number" />
@@ -717,33 +750,37 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
               <Field label="Master No. (MAWB) *" field="awb_number" />
 
               <div>
-                <Label className="text-xs text-[#aaa] mb-1 block flex items-center gap-1">
-                  <Calendar className="h-3 w-3" /> E.T.D.
+                <Label className={`text-xs mb-1 block flex items-center gap-1 ${hasError('etd') ? 'text-red-400' : 'text-[#aaa]'}`}>
+                  <Calendar className="h-3 w-3" /> E.T.D. *
                 </Label>
-                <Input type="datetime-local" value={form.etd} onChange={e => updateField("etd", e.target.value)} className="h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white" />
+                <Input type="datetime-local" value={form.etd} onChange={e => updateField("etd", e.target.value)} className={`h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white ${hasError('etd') ? 'border-red-500' : ''}`} />
+                {hasError('etd') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
               </div>
 
               <div>
-                <Label className="text-xs text-[#aaa] mb-1 block flex items-center gap-1">
-                  <Calendar className="h-3 w-3" /> E.T.A. / A.T.A.
+                <Label className={`text-xs mb-1 block flex items-center gap-1 ${hasError('eta') ? 'text-red-400' : 'text-[#aaa]'}`}>
+                  <Calendar className="h-3 w-3" /> E.T.A. / A.T.A. *
                 </Label>
-                <Input type="datetime-local" value={form.eta} onChange={e => updateField("eta", e.target.value)} className="h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white" />
+                <Input type="datetime-local" value={form.eta} onChange={e => updateField("eta", e.target.value)} className={`h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white ${hasError('eta') ? 'border-red-500' : ''}`} />
+                {hasError('eta') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
               </div>
 
               {/* IMPO-ONLY FIELDS */}
               {form.mode === 'impo' && (
                 <>
-                  <Field label="Shipper" field="shipper_name" />
+                  <Field label="Shipper *" field="shipper_name" />
                   <div>
-                    <Label className="text-xs text-[#aaa] mb-1 block">Green Light Sent Date</Label>
-                    <Input type="date" value={form.green_light_date} onChange={e => updateField('green_light_date', e.target.value)} className="h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white" />
+                    <Label className={`text-xs mb-1 block ${hasError('green_light_date') ? 'text-red-400' : 'text-[#aaa]'}`}>Green Light Sent Date *</Label>
+                    <Input type="date" value={form.green_light_date} onChange={e => updateField('green_light_date', e.target.value)} className={`h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white ${hasError('green_light_date') ? 'border-red-500' : ''}`} />
+                    {hasError('green_light_date') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                   </div>
                   <div>
-                    <Label className="text-xs text-[#aaa] mb-1 block">Pickup Date</Label>
-                    <Input type="date" value={form.pickup_date} onChange={e => updateField('pickup_date', e.target.value)} className="h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white" />
+                    <Label className={`text-xs mb-1 block ${hasError('pickup_date') ? 'text-red-400' : 'text-[#aaa]'}`}>Pickup Date *</Label>
+                    <Input type="date" value={form.pickup_date} onChange={e => updateField('pickup_date', e.target.value)} className={`h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white ${hasError('pickup_date') ? 'border-red-500' : ''}`} />
+                    {hasError('pickup_date') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                   </div>
                   <div className="col-span-1 md:col-span-2 lg:col-span-3">
-                    <Label className="text-xs text-[#aaa] mb-2 block">Service Level</Label>
+                    <Label className={`text-xs mb-2 block ${hasError('service_level') ? 'text-red-400' : 'text-[#aaa]'}`}>Service Level *</Label>
                     <RadioGroup value={form.service_level} onValueChange={v => updateField('service_level', v)} className="flex flex-wrap gap-4">
                       {['Own Consol', 'Standard', 'Priority', 'Flash/BXO'].map(opt => (
                         <div key={opt} className="flex items-center gap-1.5">
@@ -752,19 +789,21 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
                         </div>
                       ))}
                     </RadioGroup>
+                    {hasError('service_level') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                   </div>
                   <div className="flex items-center gap-2">
                     <Checkbox checked={form.cct_transmitido} onCheckedChange={v => updateField('cct_transmitido', !!v)} id="modal_cct" />
                     <Label htmlFor="modal_cct" className="text-xs cursor-pointer text-[#ccc]">CCT Transmitido</Label>
                   </div>
                   <div>
-                    <Label className="text-xs text-[#aaa] mb-1 block">Airport at Destination</Label>
-                    <Input value={form.airport_destination} onChange={e => updateField('airport_destination', e.target.value)} className="h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white" />
+                    <Label className={`text-xs mb-1 block ${hasError('airport_destination') ? 'text-red-400' : 'text-[#aaa]'}`}>Airport at Destination *</Label>
+                    <Input value={form.airport_destination} onChange={e => updateField('airport_destination', e.target.value)} className={`h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white ${hasError('airport_destination') ? 'border-red-500' : ''}`} />
+                    {hasError('airport_destination') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                   </div>
                   <div>
-                    <Label className="text-xs text-[#aaa] mb-1 block">WH Treatment</Label>
+                    <Label className={`text-xs mb-1 block ${hasError('wh_treatment') ? 'text-red-400' : 'text-[#aaa]'}`}>WH Treatment *</Label>
                     <Select value={form.wh_treatment} onValueChange={v => updateField('wh_treatment', v)}>
-                      <SelectTrigger className="h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white">
+                      <SelectTrigger className={`h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white ${hasError('wh_treatment') ? 'border-red-500' : ''}`}>
                         <SelectValue placeholder="Selecionar..." />
                       </SelectTrigger>
                       <SelectContent>
@@ -773,10 +812,12 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
                         ))}
                       </SelectContent>
                     </Select>
+                    {hasError('wh_treatment') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                   </div>
                   <div>
-                    <Label className="text-xs text-[#aaa] mb-1 block">Pre-Alert Date</Label>
-                    <Input type="date" value={form.pre_alert_date} onChange={e => updateField('pre_alert_date', e.target.value)} className="h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white" />
+                    <Label className={`text-xs mb-1 block ${hasError('pre_alert_date') ? 'text-red-400' : 'text-[#aaa]'}`}>Pre-Alert Date *</Label>
+                    <Input type="date" value={form.pre_alert_date} onChange={e => updateField('pre_alert_date', e.target.value)} className={`h-8 text-sm rounded-lg bg-[rgba(255,255,255,.06)] border-[rgba(255,255,255,.1)] text-white ${hasError('pre_alert_date') ? 'border-red-500' : ''}`} />
+                    {hasError('pre_alert_date') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                   </div>
                   <div>
                     <Label className="text-xs text-[#aaa] mb-1 block">Customer Order</Label>
@@ -793,7 +834,7 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
               {form.mode === 'expo' && (
                 <>
                   <div className="col-span-1 md:col-span-2 lg:col-span-3">
-                    <Label className="text-xs text-[#aaa] mb-2 block">D-Term</Label>
+                    <Label className={`text-xs mb-2 block ${hasError('d_term') ? 'text-red-400' : 'text-[#aaa]'}`}>D-Term *</Label>
                     <RadioGroup value={form.d_term} onValueChange={v => updateField('d_term', v)} className="flex flex-wrap gap-4">
                       {['DAP', 'DPU', 'DDP'].map(opt => (
                         <div key={opt} className="flex items-center gap-1.5">
@@ -802,6 +843,7 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
                         </div>
                       ))}
                     </RadioGroup>
+                    {hasError('d_term') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                   </div>
                   <div className="flex items-center gap-2">
                     <Checkbox checked={form.pre_alert_sent} onCheckedChange={v => updateField('pre_alert_sent', !!v)} id="modal_pre_alert" />
