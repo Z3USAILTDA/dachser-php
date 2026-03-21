@@ -2370,6 +2370,69 @@ serve(async (req) => {
       });
     }
 
+    // ===== RESOLVE PORT CODES: resolver nomes de portos para UN/LOCODE =====
+    if (action === 'resolve_port_codes') {
+      let portNames: string[] = [];
+      if (bodyData?.port_names) {
+        portNames = bodyData.port_names;
+      } else {
+        const namesParam = url.searchParams.get('port_names');
+        if (namesParam) portNames = namesParam.split(',').map((s: string) => s.trim()).filter(Boolean);
+      }
+
+      if (portNames.length === 0) {
+        return new Response(JSON.stringify({ success: true, data: {} }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: {} }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      try {
+        const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+        const client = await new Client().connect({
+          hostname: mariadbHost,
+          port: parseInt(mariadbPort, 10),
+          username: mariadbUser,
+          password: mariadbPass,
+          db: 'dados_dachser',
+        });
+
+        const placeholders = portNames.map(() => '?').join(',');
+        const upperNames = portNames.map(n => n.toUpperCase().trim());
+        const rows = await client.query(
+          `SELECT port_name, un_locode, country_code FROM dados_dachser.t_ports_world WHERE UPPER(TRIM(port_name)) IN (${placeholders})`,
+          upperNames
+        );
+
+        await client.close();
+
+        const mapping: Record<string, string> = {};
+        for (const row of rows) {
+          mapping[row.port_name?.toUpperCase()?.trim()] = `${row.country_code || ''}${row.un_locode || ''}`;
+        }
+
+        return new Response(JSON.stringify({ success: true, data: mapping }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        console.error('[resolve_port_codes] Error:', e);
+        return new Response(JSON.stringify({ error: e.message, data: {} }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // ===== SEA TRACKING: Get containers for a specific MBL =====
     if (action === 'get_sea_tracking_containers') {
       const mbl_id = url.searchParams.get('mbl_id') || '';
