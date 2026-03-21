@@ -3383,9 +3383,10 @@ serve(async (req) => {
                 last_event = ?,
                 shipping_line = COALESCE(?, shipping_line),
                 transshipment_port = CASE 
-                  WHEN transshipment_port IS NULL OR transshipment_port = '' 
-                  THEN COALESCE(?, transshipment_port) 
-                  ELSE transshipment_port 
+                  WHEN ? IS NULL THEN transshipment_port
+                  WHEN transshipment_port IS NULL OR transshipment_port = '' THEN ?
+                  WHEN UPPER(transshipment_port) LIKE CONCAT('%', UPPER(?), '%') THEN transshipment_port
+                  ELSE CONCAT(transshipment_port, '; ', ?)
                 END,
                 loading_port = COALESCE(?, loading_port),
                 latitude = COALESCE(?, latitude),
