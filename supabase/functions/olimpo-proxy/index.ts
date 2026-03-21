@@ -3336,7 +3336,7 @@ serve(async (req) => {
             // ===== FALLBACK 2: Detectar transbordo via last_event location vs destino =====
             // Se last_event contém "Evento - LOCALIZAÇÃO" e a localização difere do destino e da origem,
             // então é um porto de transbordo (ex: "Vessel departed - YANTIAN" com destino HAMBURG)
-            if (!transshipmentPort) {
+            {
               const lastEvtText = lastEventDescription || '';
               const dashIdx = lastEvtText.lastIndexOf(' - ');
               if (dashIdx > 0) {
@@ -3356,7 +3356,13 @@ serve(async (req) => {
                   const destinoToken = (row.destino || '').toUpperCase().trim().split(/[\s,]+/)[0];
                   
                   if (locToken && locToken !== origemToken && locToken !== destinoToken) {
-                    transshipmentPort = evtLocation;
+                    // Acumular com valor existente
+                    const existingPort = transshipmentPort || row.transshipment_port || '';
+                    if (!existingPort) {
+                      transshipmentPort = evtLocation;
+                    } else if (!existingPort.toUpperCase().includes(evtLocation)) {
+                      transshipmentPort = existingPort.trim() + '; ' + evtLocation;
+                    }
                     console.log(`[refresh_sea_tracking] Transshipment detected via last_event location for ${containerId}: "${evtLocation}" (destino="${row.destino}", origem="${row.origem}")`);
                   }
                 }
