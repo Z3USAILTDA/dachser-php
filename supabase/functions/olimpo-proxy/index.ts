@@ -412,6 +412,55 @@ async function findVesselImo(vesselName: string, dbClient?: any): Promise<string
     console.warn(`[findVesselImo] DB lookup failed for "${vesselName}":`, dbErr.message || dbErr);
   }
 
+  // PRIORIDADE 1B: buscar IMO na tabela dedicada t_ship_imos
+  try {
+    const lookupShipImos = async (client: any) => {
+      const rows = await client.query(`
+        SELECT imo FROM dados_dachser.t_ship_imos 
+        WHERE UPPER(TRIM(ship_name)) = ?
+           OR UPPER(TRIM(ship_name)) LIKE CONCAT('%', ?, '%')
+           OR ? LIKE CONCAT('%', UPPER(TRIM(ship_name)), '%')
+        LIMIT 1
+      `, [normalizedName, normalizedName, normalizedName]);
+      return rows?.[0]?.imo || null;
+    };
+
+    let shipImo: string | null = null;
+    if (dbClient) {
+      shipImo = await lookupShipImos(dbClient);
+    } else {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+
+      if (mariadbHost && mariadbUser && mariadbPass) {
+        const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+        const tempClient = await new Client().connect({
+          hostname: mariadbHost,
+          port: parseInt(mariadbPort, 10),
+          username: mariadbUser,
+          password: mariadbPass,
+          db: mariadbDb,
+        });
+        try {
+          shipImo = await lookupShipImos(tempClient);
+        } finally {
+          await tempClient.close();
+        }
+      }
+    }
+
+    if (shipImo) {
+      vesselImoCache.set(normalizedName, shipImo);
+      console.log(`[findVesselImo] Found IMO ${shipImo} for "${vesselName}" from t_ship_imos`);
+      return shipImo;
+    }
+  } catch (shipImosErr: any) {
+    console.warn(`[findVesselImo] t_ship_imos lookup failed for "${vesselName}":`, shipImosErr.message || shipImosErr);
+  }
+
   // PRIORIDADE 2: Buscar via API JsonCargo
   try {
     console.log(`[findVesselImo] Searching IMO for vessel "${vesselName}" via API...`);
