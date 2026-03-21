@@ -2415,19 +2415,30 @@ serve(async (req) => {
           db: 'dados_dachser',
         });
 
-        const placeholders = portNames.map(() => '?').join(',');
-        const upperNames = portNames.map(n => n.toUpperCase().trim());
-        const rows = await client.query(
-          `SELECT port_name, un_locode, country_code FROM dados_dachser.t_ports_world WHERE UPPER(TRIM(port_name)) IN (${placeholders})`,
-          upperNames
-        );
+        const mapping: Record<string, string> = {};
+
+        for (const portName of portNames) {
+          const cleanName = portName.toUpperCase().trim();
+          // Remove country suffix like ", BR", ", CN"
+          const nameWithoutCountry = cleanName.replace(/,\s*[A-Z]{2}$/, '').trim();
+
+          const rows = await client.query(
+            `SELECT port_name, un_locode, country_code FROM dados_dachser.t_ports_world 
+             WHERE UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                OR UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                OR UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', ? COLLATE utf8mb4_unicode_ci, '%')
+                OR ? COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci, '%')
+             LIMIT 1`,
+            [cleanName, nameWithoutCountry, nameWithoutCountry, nameWithoutCountry]
+          );
+
+          if (rows?.length > 0) {
+            const row = rows[0];
+            mapping[cleanName] = `${row.country_code || ''}${row.un_locode || ''}`;
+          }
+        }
 
         await client.close();
-
-        const mapping: Record<string, string> = {};
-        for (const row of rows) {
-          mapping[row.port_name?.toUpperCase()?.trim()] = `${row.country_code || ''}${row.un_locode || ''}`;
-        }
 
         return new Response(JSON.stringify({ success: true, data: mapping }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
