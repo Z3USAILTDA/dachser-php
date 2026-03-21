@@ -413,6 +413,8 @@ interface MblTrackingData {
   hbl: string | null; // HBL do processo
   etd: string | null; // ETD do t_sea_master
   cliente: string | null; // Cliente do t_master_dados
+  origem_code: string | null; // UN/LOCODE da origem
+  destino_code: string | null; // UN/LOCODE do destino
 }
 
 // Container detail interface (expanded view)
