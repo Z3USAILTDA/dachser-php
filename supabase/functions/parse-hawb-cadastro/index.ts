@@ -22,9 +22,9 @@ serve(async (req) => {
   const startTime = Date.now();
 
   try {
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (!OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY not configured");
     }
 
     const formData = await req.formData();
@@ -118,30 +118,37 @@ Return ONLY valid JSON with these fields:
 
 Return ONLY valid JSON, no markdown, no explanation.`;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64}` } },
-            ],
-          },
-        ],
+        model: "claude-sonnet-4-20250514",
         max_tokens: 4000,
+        temperature: 0,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            {
+              type: "document",
+              source: {
+                type: "base64",
+                media_type: "application/pdf",
+                data: base64,
+              },
+            },
+          ],
+        }],
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[parse-hawb-cadastro] OpenAI error:", response.status, errorText);
+      console.error("[parse-hawb-cadastro] Anthropic error:", response.status, errorText);
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns minutos." }),
@@ -151,14 +158,14 @@ Return ONLY valid JSON, no markdown, no explanation.`;
           },
         );
       }
-      throw new Error(`OpenAI API error: ${response.status}`);
+      throw new Error(`Anthropic API error: ${response.status}`);
     }
 
     const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content || "";
+    const content = aiResponse.content?.[0]?.text || "";
 
     if (!content) {
-      throw new Error("Empty response from OpenAI");
+      throw new Error("Empty response from Anthropic");
     }
 
     let extracted: any;
