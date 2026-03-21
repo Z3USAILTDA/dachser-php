@@ -6346,12 +6346,6 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-        }
-
-        // Fix legacy t_dados_maritimo table if it has cadastro_id as INT
-        try {
-          await client.execute(`ALTER TABLE ${database}.t_dados_maritimo MODIFY COLUMN cadastro_id VARCHAR(50)`);
-        } catch {}
 
 
     // ===== SETUP: Add sibling sync columns to t_tracking_sea =====
