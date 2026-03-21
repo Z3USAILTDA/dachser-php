@@ -2287,8 +2287,16 @@ serve(async (req) => {
             LEFT JOIN has_freetime hf_proc ON hf_proc.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci AND hf_proc.tipo_ft = 'PROCESSO'
             LEFT JOIN transship_last_event tle ON tle.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN has_freetime hf_cont ON hf_cont.cliente_nome COLLATE utf8mb4_unicode_ci = ts.consignee COLLATE utf8mb4_unicode_ci AND hf_cont.tipo_ft = 'CONTRATO'
-            LEFT JOIN dados_dachser.t_ports_world pw_o ON UPPER(TRIM(pw_o.port_name)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(SUBSTRING_INDEX(ts.origem, ',', 1))) COLLATE utf8mb4_unicode_ci
-            LEFT JOIN dados_dachser.t_ports_world pw_d ON UPPER(TRIM(pw_d.port_name)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(SUBSTRING_INDEX(ts.destino, ',', 1))) COLLATE utf8mb4_unicode_ci
+            LEFT JOIN dados_dachser.t_ports_world pw_o ON (
+              UPPER(TRIM(pw_o.port_name)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(SUBSTRING_INDEX(ts.origem, ',', 1))) COLLATE utf8mb4_unicode_ci
+              OR UPPER(TRIM(pw_o.port_name)) COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', UPPER(TRIM(SUBSTRING_INDEX(ts.origem, ',', 1))), '%') COLLATE utf8mb4_unicode_ci
+              OR UPPER(TRIM(SUBSTRING_INDEX(ts.origem, ',', 1))) COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', UPPER(TRIM(pw_o.port_name)), '%') COLLATE utf8mb4_unicode_ci
+            )
+            LEFT JOIN dados_dachser.t_ports_world pw_d ON (
+              UPPER(TRIM(pw_d.port_name)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(SUBSTRING_INDEX(ts.destino, ',', 1))) COLLATE utf8mb4_unicode_ci
+              OR UPPER(TRIM(pw_d.port_name)) COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', UPPER(TRIM(SUBSTRING_INDEX(ts.destino, ',', 1))), '%') COLLATE utf8mb4_unicode_ci
+              OR UPPER(TRIM(SUBSTRING_INDEX(ts.destino, ',', 1))) COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', UPPER(TRIM(pw_d.port_name)), '%') COLLATE utf8mb4_unicode_ci
+            )
             WHERE ts.active = 1
             GROUP BY ts.mbl_id
             HAVING 
@@ -2407,19 +2415,30 @@ serve(async (req) => {
           db: 'dados_dachser',
         });
 
-        const placeholders = portNames.map(() => '?').join(',');
-        const upperNames = portNames.map(n => n.toUpperCase().trim());
-        const rows = await client.query(
-          `SELECT port_name, un_locode, country_code FROM dados_dachser.t_ports_world WHERE UPPER(TRIM(port_name)) IN (${placeholders})`,
-          upperNames
-        );
+        const mapping: Record<string, string> = {};
+
+        for (const portName of portNames) {
+          const cleanName = portName.toUpperCase().trim();
+          // Remove country suffix like ", BR", ", CN"
+          const nameWithoutCountry = cleanName.replace(/,\s*[A-Z]{2}$/, '').trim();
+
+          const rows = await client.query(
+            `SELECT port_name, un_locode, country_code FROM dados_dachser.t_ports_world 
+             WHERE UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                OR UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                OR UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', ? COLLATE utf8mb4_unicode_ci, '%')
+                OR ? COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci, '%')
+             LIMIT 1`,
+            [cleanName, nameWithoutCountry, nameWithoutCountry, nameWithoutCountry]
+          );
+
+          if (rows?.length > 0) {
+            const row = rows[0];
+            mapping[cleanName] = `${row.country_code || ''}${row.un_locode || ''}`;
+          }
+        }
 
         await client.close();
-
-        const mapping: Record<string, string> = {};
-        for (const row of rows) {
-          mapping[row.port_name?.toUpperCase()?.trim()] = `${row.country_code || ''}${row.un_locode || ''}`;
-        }
 
         return new Response(JSON.stringify({ success: true, data: mapping }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
