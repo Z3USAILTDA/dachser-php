@@ -6347,8 +6347,8 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-    }
 
+    }
 
     // ===== SETUP: Add sibling sync columns to t_tracking_sea =====
     if (action === 'setup_sibling_sync_columns') {
@@ -8537,6 +8537,11 @@ serve(async (req) => {
         for (const col of alterCols) {
           try { await client.execute(`ALTER TABLE ${database}.t_cadastro_maritimo ${col}`); } catch {}
         }
+
+        // Fix legacy t_dados_maritimo table if cadastro_id is INT instead of VARCHAR
+        try {
+          await client.execute(`ALTER TABLE ${database}.t_dados_maritimo MODIFY COLUMN cadastro_id VARCHAR(50)`);
+        } catch {}
 
         const result = await client.execute(`
           INSERT INTO ${database}.t_cadastro_maritimo (
