@@ -431,28 +431,30 @@ const CadastroBl = () => {
 
             {/* ETD */}
             <div>
-              <Label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1">
-                <Calendar className="h-3 w-3" /> ETD
+              <Label className={`text-xs mb-1 block flex items-center gap-1 ${hasError('etd') ? 'text-red-400' : 'text-muted-foreground'}`}>
+                <Calendar className="h-3 w-3" /> ETD *
               </Label>
               <Input
                 type="datetime-local"
                 value={form.etd}
                 onChange={e => updateField("etd", e.target.value)}
-                className="h-8 text-sm rounded-lg"
+                className={`h-8 text-sm rounded-lg ${hasError('etd') ? 'border-red-500' : ''}`}
               />
+              {hasError('etd') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
             </div>
 
             {/* ETA */}
             <div>
-              <Label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1">
-                <Calendar className="h-3 w-3" /> ETA
+              <Label className={`text-xs mb-1 block flex items-center gap-1 ${hasError('eta') ? 'text-red-400' : 'text-muted-foreground'}`}>
+                <Calendar className="h-3 w-3" /> ETA *
               </Label>
               <Input
                 type="datetime-local"
                 value={form.eta}
                 onChange={e => updateField("eta", e.target.value)}
-                className="h-8 text-sm rounded-lg"
+                className={`h-8 text-sm rounded-lg ${hasError('eta') ? 'border-red-500' : ''}`}
               />
+              {hasError('eta') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
             </div>
           </div>
         </div>
