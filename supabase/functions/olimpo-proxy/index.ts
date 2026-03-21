@@ -3878,6 +3878,7 @@ serve(async (req) => {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
+    }
 
 
     if (action === 'enrich_sea_containers') {
@@ -6347,6 +6348,7 @@ serve(async (req) => {
         });
       }
 
+    }
 
     // ===== SETUP: Add sibling sync columns to t_tracking_sea =====
     if (action === 'setup_sibling_sync_columns') {
