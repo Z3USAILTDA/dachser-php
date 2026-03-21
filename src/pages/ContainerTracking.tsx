@@ -413,6 +413,8 @@ interface MblTrackingData {
   hbl: string | null; // HBL do processo
   etd: string | null; // ETD do t_sea_master
   cliente: string | null; // Cliente do t_master_dados
+  origem_code: string | null; // UN/LOCODE da origem
+  destino_code: string | null; // UN/LOCODE do destino
 }
 
 // Container detail interface (expanded view)
@@ -852,6 +854,37 @@ const ContainerTracking = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Port code cache for transshipment resolution
+  const [portCodeMap, setPortCodeMap] = useState<Record<string, string>>({});
+
+  // Resolve transshipment port names to UN/LOCODE codes
+  const resolvePortCodes = React.useCallback(async (mbls: any[]) => {
+    const allTransshipmentPorts = new Set<string>();
+    for (const mbl of mbls) {
+      if (mbl.transshipment_port) {
+        mbl.transshipment_port.split(';').map((s: string) => s.trim()).filter(Boolean).forEach((p: string) => allTransshipmentPorts.add(p));
+      }
+    }
+    if (allTransshipmentPorts.size === 0) return;
+
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ action: 'resolve_port_codes', port_names: Array.from(allTransshipmentPorts) })
+      });
+      const result = await res.json();
+      if (result.success && result.data) {
+        setPortCodeMap(prev => ({ ...prev, ...result.data }));
+      }
+    } catch (e) {
+      console.warn('[resolvePortCodes] Error:', e);
+    }
+  }, []);
+
   // Fetch MBL data from t_tracking_sea
   const fetchMblData = React.useCallback(async () => {
     setIsLoadingData(true);
@@ -866,6 +899,7 @@ const ContainerTracking = () => {
       const result = await res.json();
       if (result.success && result.data) {
         setMblList(result.data);
+        resolvePortCodes(result.data);
       } else if (result.error) {
         console.error("Error fetching MBL data:", result.error);
       }
@@ -874,7 +908,7 @@ const ContainerTracking = () => {
     } finally {
       setIsLoadingData(false);
     }
-  }, []);
+  }, [resolvePortCodes]);
 
   // Cleanup orphan PENDENTE containers on initial load, then fetch data
   useEffect(() => {
@@ -2495,29 +2529,32 @@ const ContainerTracking = () => {
                                 const activeClass = "text-[#ffc800] font-semibold";
                                 const inactiveClass = "text-[#aaaaaa]";
                                 const arrowClass = "text-[#555] mx-1";
+                                const origemCode = mbl.origem_code || null;
+                                const destinoCode = mbl.destino_code || null;
+                                const getEscalaCode = (escala: string) => portCodeMap[escala.toUpperCase().trim()] || null;
                                 return (
                                   <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <span className="inline-flex items-center flex-wrap gap-0 cursor-default whitespace-nowrap text-xs">
-                                          <span className={isOrigemActive ? activeClass : inactiveClass}>{mbl.origem || "—"}</span>
+                                          <span className={isOrigemActive ? activeClass : inactiveClass}>{origemCode || mbl.origem || "—"}</span>
                                           {escalas.map((escala: string, i: number) => (
                                             <Fragment key={i}>
                                               <span className={arrowClass}>→</span>
-                                              <span className={isEscalaActive ? activeClass : inactiveClass}>{escala}</span>
+                                              <span className={isEscalaActive ? activeClass : inactiveClass}>{getEscalaCode(escala) || escala}</span>
                                             </Fragment>
                                           ))}
                                           <span className={arrowClass}>→</span>
-                                          <span className={isDestinoActive ? activeClass : inactiveClass}>{mbl.destino || "—"}</span>
+                                          <span className={isDestinoActive ? activeClass : inactiveClass}>{destinoCode || mbl.destino || "—"}</span>
                                         </span>
                                       </TooltipTrigger>
                                       <TooltipContent className="max-w-xs">
                                         <div className="space-y-1">
-                                          <p className="text-xs"><span className="font-semibold">Origem:</span> {mbl.origem || "—"}</p>
+                                          <p className="text-xs"><span className="font-semibold">Origem:</span> {mbl.origem || "—"}{origemCode ? ` (${origemCode})` : ''}</p>
                                           {escalas.length > 0 && (
-                                            <p className="text-xs"><span className="font-semibold">Escala(s):</span> {escalas.join(' → ')}</p>
+                                            <p className="text-xs"><span className="font-semibold">Escala(s):</span> {escalas.map((e: string) => { const code = getEscalaCode(e); return code ? `${e} (${code})` : e; }).join(' → ')}</p>
                                           )}
-                                          <p className="text-xs"><span className="font-semibold">Destino:</span> {mbl.destino || "—"}</p>
+                                          <p className="text-xs"><span className="font-semibold">Destino:</span> {mbl.destino || "—"}{destinoCode ? ` (${destinoCode})` : ''}</p>
                                           {mbl.transshipment_vessel_from && (
                                             <p className="text-xs text-muted-foreground">🚢 De: <span className="text-foreground font-medium">{mbl.transshipment_vessel_from}</span></p>
                                           )}
