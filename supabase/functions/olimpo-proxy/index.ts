@@ -2217,7 +2217,7 @@ serve(async (req) => {
                 THEN DATEDIFF(MAX(ts.eta), COALESCE(MAX(md.eta), MAX(mdn.eta)))
                 ELSE 0 
               END as dias_atraso,
-              COALESCE(MAX(tvc.transshipment_port), MAX(td.transshipment_port), MAX(th.transshipment_port)) as transshipment_port,
+              COALESCE(MAX(tvc.transshipment_port), MAX(td.transshipment_port), MAX(th.transshipment_port), MAX(tle.transshipment_port)) as transshipment_port,
               MAX(tvc.transshipment_vessel_from) as transshipment_vessel_from,
               MAX(tvc.transshipment_vessel_to) as transshipment_vessel_to,
               MAX(tvc.transshipment_date) as transshipment_date,
