@@ -867,7 +867,7 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
                   <Label htmlFor="sea_pre_alert" className={checkCls}>Pre-Alert Sent</Label>
                 </div>
                 <div className="col-span-1 md:col-span-2 lg:col-span-3">
-                  <Label className={`${labelCls} mb-2`}>D-Term</Label>
+                  <Label className={`text-xs mb-2 block ${hasError('d_term') ? 'text-red-400' : 'text-[#aaa]'}`}>D-Term *</Label>
                   <RadioGroup value={form.d_term} onValueChange={v => updateField('d_term', v)} className="flex flex-wrap gap-4">
                     {['DAP', 'DPU', 'DDP'].map(opt => (
                       <div key={opt} className="flex items-center gap-1.5">
