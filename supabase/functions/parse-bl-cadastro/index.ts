@@ -22,9 +22,9 @@ serve(async (req) => {
   const startTime = Date.now();
 
   try {
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY not configured');
+    const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error('ANTHROPIC_API_KEY not configured');
     }
 
     const formData = await req.formData();
@@ -69,7 +69,7 @@ IMPORTANT FIELD DESCRIPTIONS:
 - "volume_cbm": Total volume in CBM as a number.
 - "pieces": Number of packages/pieces as integer.
 - "packaging": Packaging type description (e.g., "WOODEN PALLET", "CARTON").
-- "freight_charges": All freight charges listed, as a single string with line breaks (e.g. "OCEAN FREIGHT: 100 USD\\nORIGIN CHARGES: 50 USD").
+- "freight_charges": All freight charges listed, as a single string with line breaks.
 - "freight_payment": Freight payment terms - "PREPAID" or "COLLECT".
 - "service_type": Service type (e.g., "LCL", "FCL", "LCL/FCL").
 - "total_prepaid": Total prepaid amount as number.
@@ -79,58 +79,33 @@ IMPORTANT FIELD DESCRIPTIONS:
 - "place_date_issue": Place and date of issue as string.
 - "issued_by": Name of the issuer / carrier.
 
-{
-  "bl_number": "string or null",
-  "shipper_name": "string or null",
-  "shipper_address": "string or null",
-  "consignee_name": "string or null",
-  "consignee_address": "string or null",
-  "consignee_cnpj": "string or null",
-  "notify_party": "string or null",
-  "delivery_agent": "string or null",
-  "port_loading": "string or null",
-  "port_discharge": "string or null",
-  "vessel_voyage": "string or null",
-  "place_receipt": "string or null",
-  "place_delivery": "string or null",
-  "container_numbers": "string or null",
-  "seal_numbers": "string or null",
-  "marks_numbers": "string or null",
-  "nature_of_goods": "string or null",
-  "hs_code": "string or null",
-  "gross_weight_kg": number or null,
-  "volume_cbm": number or null,
-  "pieces": integer or null,
-  "packaging": "string or null",
-  "freight_charges": "string or null",
-  "freight_payment": "PREPAID or COLLECT or null",
-  "service_type": "string or null",
-  "total_prepaid": number or null,
-  "total_collect": number or null,
-  "num_original_bls": integer or null,
-  "shipped_on_board_date": "YYYY-MM-DD or null",
-  "place_date_issue": "string or null",
-  "issued_by": "string or null"
-}
-
 Return ONLY valid JSON, no markdown, no explanation.`;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        temperature: 0,
         messages: [{
           role: 'user',
           content: [
             { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: `data:application/pdf;base64,${base64}` } },
+            {
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: 'application/pdf',
+                data: base64,
+              },
+            },
           ],
         }],
-        max_tokens: 4000,
       }),
     });
 
