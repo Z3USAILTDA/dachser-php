@@ -1,95 +1,49 @@
 
 
-## Plano: Detectar transbordo via `last_event` na query de listagem
+## Plano: Acumular portos de transbordo no banco (append, não sobrescrever)
 
-### Problema identificado
+### Problema atual
 
-A detecção de transbordo via `last_event` existe apenas no `refresh_sea_tracking` (processamento por container via API), mas muitos MBLs já possuem `last_event` com localização no banco sem que o refresh tenha rodado após a adição da lógica. Exemplos reais encontrados sem transbordo detectado:
+Na linha 3374-3378 do `olimpo-proxy/index.ts`, o UPDATE do `transshipment_port` usa lógica que **nunca modifica** um valor existente:
 
-- `"Vessel departed - YANTIAN"` | origem: LAEM CHABANG | destino: SANTOS → **YANTIAN deveria ser transbordo**
-- `"Vessel departed - YANTIAN"` | origem: BANG PHLI | destino: SANTOS → **YANTIAN deveria ser transbordo**
-- Pelo menos 4+ MBLs nessa condição (HLCUBKK260143931, HLCUBKK260144320, HLCUBKK260144990, HLCUBKK260145016, HLCUBKK260146220)
+```sql
+CASE 
+  WHEN transshipment_port IS NULL OR transshipment_port = '' 
+  THEN COALESCE(?, transshipment_port) 
+  ELSE transshipment_port  -- valor existente mantido, novo transbordo perdido
+END
+```
 
-Casos que são corretamente ignorados (localização = origem ou destino):
-- `"Vessel departed - VALENCIA"` | origem: VALENCIA → OK, não é transbordo
-- `"Discharged - RIO GRANDE"` | destino: RIO GRANDE → OK, não é transbordo
-- `"Departure from - RIO GRANDE"` | destino: RIO GRANDE → OK, não é transbordo
+Se já existe "YANTIAN" e um novo transbordo "SANTOS" é detectado, o "SANTOS" é descartado.
 
 ### Solução
 
-Adicionar um novo CTE `transship_last_event` na query `get_sea_tracking` que:
+Modificar a lógica do UPDATE para **acumular** portos de transbordo separados por `; `:
 
-1. Filtra containers com `last_event` contendo ` - ` (separador evento-localização)
-2. Extrai o prefixo do evento (antes do ` - `) e a localização (depois do ` - `)
-3. Filtra apenas eventos de trânsito: `VESSEL DEPARTED`, `DEPARTURE`, `ARRIVAL`, `DISCHARGED`
-4. Exclui eventos locais: `GATE OUT`, `GATE IN`, `LOADED`, `EMPTY`
-5. Compara primeiro token da localização com primeiro token de `destino` e `origem`
-6. Se diferente de ambos, considera como transshipment_port
-7. Adiciona como fallback final no COALESCE da linha 2191
+1. Se `transshipment_port` está vazio/null → gravar o novo valor
+2. Se já tem valor e o novo porto **já está contido** no valor existente → manter como está (evitar duplicatas)
+3. Se já tem valor e o novo porto **é diferente** → concatenar: `"YANTIAN; SANTOS"`
 
 ### Alteração
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `supabase/functions/olimpo-proxy/index.ts` | Adicionar CTE `transship_last_event` na query `get_sea_tracking` (~linha 2114) e incluir no COALESCE da linha 2191 como último fallback |
+| `supabase/functions/olimpo-proxy/index.ts` | Modificar SQL do UPDATE (~linha 3374-3378) e lógica JS (~linha 3284-3286) para acumular portos |
 
-### SQL do novo CTE
+### Detalhes técnicos
+
+**JS (linha ~3284-3286)** — Quando já existe `transshipment_port` no banco, em vez de pular a detecção, continuar detectando e comparar com o existente. Se o novo porto não estiver contido no valor atual, concatenar.
+
+**SQL UPDATE (linha ~3374-3378)** — Substituir o CASE por lógica que verifica se o novo valor já está contido no existente:
 
 ```sql
-transship_last_event AS (
-  SELECT 
-    ts_le.mbl_id,
-    MAX(UPPER(TRIM(SUBSTRING_INDEX(ts_le.last_event, ' - ', -1)))) as transshipment_port
-  FROM dados_dachser.t_tracking_sea ts_le
-  WHERE ts_le.active = 1
-    AND ts_le.last_event LIKE '% - %'
-    AND ts_le.transshipment_port IS NULL OR ts_le.transshipment_port = ''
-    -- Apenas eventos de trânsito
-    AND (
-      UPPER(ts_le.last_event) LIKE 'VESSEL DEPARTED%'
-      OR UPPER(ts_le.last_event) LIKE 'DEPARTURE%'
-      OR UPPER(ts_le.last_event) LIKE 'ARRIVAL%'
-      OR UPPER(ts_le.last_event) LIKE 'ARRIVED%'
-      OR UPPER(ts_le.last_event) LIKE 'DISCHARGED%'
-    )
-    -- Excluir eventos locais
-    AND UPPER(ts_le.last_event) NOT LIKE 'GATE OUT%'
-    AND UPPER(ts_le.last_event) NOT LIKE 'GATE IN%'
-    AND UPPER(ts_le.last_event) NOT LIKE 'LOADED%'
-    AND UPPER(ts_le.last_event) NOT LIKE 'EMPTY%'
-    -- Localização != destino (primeiro token)
-    AND ts_le.destino IS NOT NULL
-    AND UPPER(TRIM(SUBSTRING_INDEX(
-          SUBSTRING_INDEX(ts_le.last_event, ' - ', -1), ',', 1
-        ))) != UPPER(TRIM(SUBSTRING_INDEX(ts_le.destino, ',', 1)))
-    AND UPPER(TRIM(SUBSTRING_INDEX(
-          SUBSTRING_INDEX(ts_le.last_event, ' - ', -1), ' ', 1
-        ))) != UPPER(TRIM(SUBSTRING_INDEX(ts_le.destino, ' ', 1)))
-    -- Localização != origem (primeiro token)
-    AND (ts_le.origem IS NULL OR (
-      UPPER(TRIM(SUBSTRING_INDEX(
-            SUBSTRING_INDEX(ts_le.last_event, ' - ', -1), ',', 1
-          ))) != UPPER(TRIM(SUBSTRING_INDEX(ts_le.origem, ',', 1)))
-      AND UPPER(TRIM(SUBSTRING_INDEX(
-            SUBSTRING_INDEX(ts_le.last_event, ' - ', -1), ' ', 1
-          ))) != UPPER(TRIM(SUBSTRING_INDEX(ts_le.origem, ' ', 1)))
-    ))
-  GROUP BY ts_le.mbl_id
-)
+transshipment_port = CASE 
+  WHEN ? IS NULL THEN transshipment_port
+  WHEN transshipment_port IS NULL OR transshipment_port = '' THEN ?
+  WHEN UPPER(transshipment_port) LIKE CONCAT('%', UPPER(?), '%') THEN transshipment_port
+  ELSE CONCAT(transshipment_port, '; ', ?)
+END
 ```
 
-Linha 2191 atualizada:
-```sql
-COALESCE(
-  MAX(tvc.transshipment_port),
-  MAX(td.transshipment_port),
-  MAX(th.transshipment_port),
-  MAX(tle.transshipment_port)  -- novo fallback
-) as transshipment_port,
-```
-
-Novo JOIN (~linha 2208):
-```sql
-LEFT JOIN transship_last_event tle ON tle.mbl_id ... = ts.mbl_id ...
-```
+Isso garante: dado fixo, acumulativo, sem duplicatas.
 
