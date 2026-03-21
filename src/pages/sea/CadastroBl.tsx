@@ -356,7 +356,7 @@ const CadastroBl = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Consignee */}
             <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">Consignee *</Label>
+              <Label className={`text-xs mb-1 block ${hasError('consignee_nome') ? 'text-red-400' : 'text-muted-foreground'}`}>Consignee *</Label>
               <Popover open={consigneeOpen} onOpenChange={setConsigneeOpen}>
                 <PopoverTrigger asChild>
                   <div className="relative">
@@ -364,7 +364,7 @@ const CadastroBl = () => {
                       value={consigneeSearch || form.consignee_nome}
                       onChange={e => handleConsigneeInput(e.target.value)}
                       placeholder="Digite para buscar cliente..."
-                      className="h-8 text-sm rounded-lg pr-8"
+                      className={`h-8 text-sm rounded-lg pr-8 ${hasError('consignee_nome') ? 'border-red-500' : ''}`}
                     />
                     {isSearchingConsignee && <Loader2 className="absolute right-2 top-1.5 h-4 w-4 animate-spin text-muted-foreground" />}
                     {!isSearchingConsignee && <Search className="absolute right-2 top-1.5 h-4 w-4 text-muted-foreground" />}
