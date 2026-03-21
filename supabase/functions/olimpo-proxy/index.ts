@@ -2330,9 +2330,75 @@ serve(async (req) => {
             LIMIT 500
           `);
 
+          // Post-query: resolve port codes in batch
+          const portNames = new Set<string>();
+          for (const r of rows) {
+            if (r.origem_raw) portNames.add(r.origem_raw.toString().split(',')[0].trim().toUpperCase());
+            if (r.destino_raw) portNames.add(r.destino_raw.toString().split(',')[0].trim().toUpperCase());
+          }
+
+          let portMapping: Record<string, string> = {};
+          if (portNames.size > 0) {
+            try {
+              const portClient = await new Client().connect({
+                hostname: mariadbHost,
+                port: parseInt(mariadbPort, 10),
+                username: mariadbUser,
+                password: mariadbPass,
+                db: 'dados_dachser',
+              });
+
+              const namesArr = Array.from(portNames);
+              const placeholders = namesArr.map(() => '?').join(',');
+              const portRows = await portClient.query(
+                `SELECT port_name, un_locode, country_code FROM dados_dachser.t_ports_world 
+                 WHERE UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci IN (${placeholders})`,
+                namesArr
+              );
+
+              for (const pr of portRows) {
+                const key = (pr.port_name || '').toString().trim().toUpperCase();
+                portMapping[key] = `${pr.country_code || ''}${pr.un_locode || ''}`;
+              }
+
+              // Second pass: try without country suffix for unmatched
+              const unmatched = namesArr.filter(n => !portMapping[n]);
+              if (unmatched.length > 0) {
+                const cleanNames = unmatched.map(n => n.replace(/,\s*[A-Z]{2}$/, '').trim());
+                const ph2 = cleanNames.map(() => '?').join(',');
+                const portRows2 = await portClient.query(
+                  `SELECT port_name, un_locode, country_code FROM dados_dachser.t_ports_world 
+                   WHERE UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci IN (${ph2})`,
+                  cleanNames
+                );
+                for (let i = 0; i < unmatched.length; i++) {
+                  const match = portRows2.find((pr: any) => (pr.port_name || '').toString().trim().toUpperCase() === cleanNames[i]);
+                  if (match) {
+                    portMapping[unmatched[i]] = `${match.country_code || ''}${match.un_locode || ''}`;
+                  }
+                }
+              }
+
+              await portClient.close();
+            } catch (portErr: any) {
+              console.warn('[get_sea_tracking] Port resolution failed (non-fatal):', portErr.message);
+            }
+          }
+
+          // Enrich rows with resolved port codes
+          const enrichedRows = rows.map((r: any) => {
+            const origemKey = r.origem_raw ? r.origem_raw.toString().split(',')[0].trim().toUpperCase() : '';
+            const destinoKey = r.destino_raw ? r.destino_raw.toString().split(',')[0].trim().toUpperCase() : '';
+            return {
+              ...r,
+              origem_code: portMapping[origemKey] || null,
+              destino_code: portMapping[destinoKey] || null,
+            };
+          });
+
           await client.close();
-          console.log(`[get_sea_tracking] Returning ${rows.length} MBLs (attempt ${attempt})`);
-          return new Response(JSON.stringify({ success: true, data: rows }), {
+          console.log(`[get_sea_tracking] Returning ${enrichedRows.length} MBLs (attempt ${attempt}), resolved ${Object.keys(portMapping).length} port codes`);
+          return new Response(JSON.stringify({ success: true, data: enrichedRows }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
         } catch (e: any) {
