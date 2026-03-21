@@ -389,11 +389,12 @@ const CadastroBl = () => {
                   </PopoverContent>
                 )}
               </Popover>
+              {hasError('consignee_nome') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
             </div>
 
             {/* Clerk */}
             <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">Clerk (Analista) *</Label>
+              <Label className={`text-xs mb-1 block ${hasError('clerk') ? 'text-red-400' : 'text-muted-foreground'}`}>Clerk (Analista) *</Label>
               <Popover open={clerkOpen} onOpenChange={setClerkOpen}>
                 <PopoverTrigger asChild>
                   <div className="relative">
