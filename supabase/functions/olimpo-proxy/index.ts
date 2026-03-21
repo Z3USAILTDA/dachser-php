@@ -2225,7 +2225,9 @@ serve(async (req) => {
                 WHEN MAX(hf_proc.mbl_id) IS NOT NULL THEN 1
                 WHEN MAX(hf_cont.cliente_nome) IS NOT NULL THEN 1
                 ELSE 0
-              END as has_free_time
+              END as has_free_time,
+              MAX(pw_o.un_locode) as origem_code,
+              MAX(pw_d.un_locode) as destino_code
             FROM dados_dachser.t_tracking_sea ts
             LEFT JOIN master_data md ON md.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN master_dados_new mdn ON mdn.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
