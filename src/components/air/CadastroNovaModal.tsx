@@ -834,7 +834,7 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
               {form.mode === 'expo' && (
                 <>
                   <div className="col-span-1 md:col-span-2 lg:col-span-3">
-                    <Label className="text-xs text-[#aaa] mb-2 block">D-Term</Label>
+                    <Label className={`text-xs mb-2 block ${hasError('d_term') ? 'text-red-400' : 'text-[#aaa]'}`}>D-Term *</Label>
                     <RadioGroup value={form.d_term} onValueChange={v => updateField('d_term', v)} className="flex flex-wrap gap-4">
                       {['DAP', 'DPU', 'DDP'].map(opt => (
                         <div key={opt} className="flex items-center gap-1.5">
@@ -843,6 +843,7 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
                         </div>
                       ))}
                     </RadioGroup>
+                    {hasError('d_term') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                   </div>
                   <div className="flex items-center gap-2">
                     <Checkbox checked={form.pre_alert_sent} onCheckedChange={v => updateField('pre_alert_sent', !!v)} id="modal_pre_alert" />
