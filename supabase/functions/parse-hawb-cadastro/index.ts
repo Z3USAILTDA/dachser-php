@@ -148,7 +148,7 @@ Return ONLY valid JSON, no markdown, no explanation.`;
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[parse-hawb-cadastro] OpenAI error:", response.status, errorText);
+      console.error("[parse-hawb-cadastro] Anthropic error:", response.status, errorText);
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns minutos." }),
@@ -158,14 +158,14 @@ Return ONLY valid JSON, no markdown, no explanation.`;
           },
         );
       }
-      throw new Error(`OpenAI API error: ${response.status}`);
+      throw new Error(`Anthropic API error: ${response.status}`);
     }
 
     const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content || "";
+    const content = aiResponse.content?.[0]?.text || "";
 
     if (!content) {
-      throw new Error("Empty response from OpenAI");
+      throw new Error("Empty response from Anthropic");
     }
 
     let extracted: any;
