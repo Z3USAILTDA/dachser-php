@@ -852,6 +852,37 @@ const ContainerTracking = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Port code cache for transshipment resolution
+  const [portCodeMap, setPortCodeMap] = useState<Record<string, string>>({});
+
+  // Resolve transshipment port names to UN/LOCODE codes
+  const resolvePortCodes = React.useCallback(async (mbls: any[]) => {
+    const allTransshipmentPorts = new Set<string>();
+    for (const mbl of mbls) {
+      if (mbl.transshipment_port) {
+        mbl.transshipment_port.split(';').map((s: string) => s.trim()).filter(Boolean).forEach((p: string) => allTransshipmentPorts.add(p));
+      }
+    }
+    if (allTransshipmentPorts.size === 0) return;
+
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ action: 'resolve_port_codes', port_names: Array.from(allTransshipmentPorts) })
+      });
+      const result = await res.json();
+      if (result.success && result.data) {
+        setPortCodeMap(prev => ({ ...prev, ...result.data }));
+      }
+    } catch (e) {
+      console.warn('[resolvePortCodes] Error:', e);
+    }
+  }, []);
+
   // Fetch MBL data from t_tracking_sea
   const fetchMblData = React.useCallback(async () => {
     setIsLoadingData(true);
@@ -866,6 +897,7 @@ const ContainerTracking = () => {
       const result = await res.json();
       if (result.success && result.data) {
         setMblList(result.data);
+        resolvePortCodes(result.data);
       } else if (result.error) {
         console.error("Error fetching MBL data:", result.error);
       }
@@ -874,7 +906,7 @@ const ContainerTracking = () => {
     } finally {
       setIsLoadingData(false);
     }
-  }, []);
+  }, [resolvePortCodes]);
 
   // Cleanup orphan PENDENTE containers on initial load, then fetch data
   useEffect(() => {
