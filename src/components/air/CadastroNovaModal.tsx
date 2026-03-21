@@ -565,15 +565,18 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
     setSwapResult(null);
   };
 
+  const hasError = (field: string) => validationErrors.has(field);
+
   const Field = ({ label, field, type = "text", span2 = false }: { label: string; field: keyof FormData; type?: string; span2?: boolean }) => (
     <div className={span2 ? "col-span-1 md:col-span-2" : ""}>
-      <Label className="text-xs text-muted-foreground mb-1 block">{label}</Label>
+      <Label className={`text-xs mb-1 block ${hasError(field) ? 'text-red-400' : 'text-muted-foreground'}`}>{label}</Label>
       <Input
         type={type}
         value={form[field] as string}
         onChange={e => updateField(field, e.target.value)}
-        className="h-8 text-sm rounded-lg"
+        className={`h-8 text-sm rounded-lg ${hasError(field) ? 'border-red-500' : ''}`}
       />
+      {hasError(field) && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
     </div>
   );
 
