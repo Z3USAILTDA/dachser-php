@@ -374,9 +374,34 @@ export const CadastroNovaModal = ({ open, onOpenChange, onSuccess }: CadastroNov
   };
 
   const handleSave = async () => {
-    if (!form.awb_number) { toast.error("MAWB Number é obrigatório"); return; }
-    if (!form.consignee_nome) { toast.error("Consignee é obrigatório"); return; }
-    if (!form.clerk) { toast.error("Clerk é obrigatório"); return; }
+    const requiredBase: { field: keyof FormData; label: string }[] = [
+      { field: 'clerk', label: 'Clerk' },
+      { field: 'consignee_nome', label: 'Consignee' },
+      { field: 'awb_number', label: 'Master No. (MAWB)' },
+      { field: 'etd', label: 'E.T.D.' },
+      { field: 'eta', label: 'E.T.A.' },
+    ];
+    const requiredImpo: { field: keyof FormData; label: string }[] = [
+      { field: 'shipper_name', label: 'Shipper' },
+      { field: 'green_light_date', label: 'Green Light Date' },
+      { field: 'pickup_date', label: 'Pickup Date' },
+      { field: 'service_level', label: 'Service Level' },
+      { field: 'airport_destination', label: 'Airport at Destination' },
+      { field: 'wh_treatment', label: 'WH Treatment' },
+      { field: 'pre_alert_date', label: 'Pre-Alert Date' },
+    ];
+    const requiredExpo: { field: keyof FormData; label: string }[] = [
+      { field: 'd_term', label: 'D-Term' },
+    ];
+
+    const allRequired = [...requiredBase, ...(form.mode === 'impo' ? requiredImpo : requiredExpo)];
+    const missing = allRequired.filter(r => !form[r.field]);
+    if (missing.length > 0) {
+      setValidationErrors(new Set(missing.map(m => m.field)));
+      toast.error("Preencha todos os campos obrigatórios", { description: missing.map(m => m.label).join(', ') });
+      return;
+    }
+    setValidationErrors(new Set());
 
     setIsSaving(true);
     try {
