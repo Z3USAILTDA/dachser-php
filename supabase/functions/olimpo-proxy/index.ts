@@ -2349,10 +2349,12 @@ serve(async (req) => {
               });
 
               const namesArr = Array.from(portNames);
-              const placeholders = namesArr.map(() => '?').join(',');
+              const placeholders = namesArr
+                .map(() => 'UPPER(TRIM(CONVERT(? USING utf8mb4))) COLLATE utf8mb4_unicode_ci')
+                .join(',');
               const portRows = await portClient.query(
                 `SELECT port_name, un_locode, country_code FROM dados_dachser.t_ports_world 
-                 WHERE UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci IN (${placeholders})`,
+                 WHERE UPPER(TRIM(CONVERT(port_name USING utf8mb4))) COLLATE utf8mb4_unicode_ci IN (${placeholders})`,
                 namesArr
               );
 
@@ -2365,10 +2367,12 @@ serve(async (req) => {
               const unmatched = namesArr.filter(n => !portMapping[n]);
               if (unmatched.length > 0) {
                 const cleanNames = unmatched.map(n => n.replace(/,\s*[A-Z]{2}$/, '').trim());
-                const ph2 = cleanNames.map(() => '?').join(',');
+                const ph2 = cleanNames
+                  .map(() => 'UPPER(TRIM(CONVERT(? USING utf8mb4))) COLLATE utf8mb4_unicode_ci')
+                  .join(',');
                 const portRows2 = await portClient.query(
                   `SELECT port_name, un_locode, country_code FROM dados_dachser.t_ports_world 
-                   WHERE UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci IN (${ph2})`,
+                   WHERE UPPER(TRIM(CONVERT(port_name USING utf8mb4))) COLLATE utf8mb4_unicode_ci IN (${ph2})`,
                   cleanNames
                 );
                 for (let i = 0; i < unmatched.length; i++) {
@@ -2481,10 +2485,10 @@ serve(async (req) => {
 
           const rows = await client.query(
             `SELECT port_name, un_locode, country_code FROM dados_dachser.t_ports_world 
-             WHERE UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
-                OR UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
-                OR UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', ? COLLATE utf8mb4_unicode_ci, '%')
-                OR ? COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci, '%')
+             WHERE UPPER(TRIM(CONVERT(port_name USING utf8mb4))) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(CONVERT(? USING utf8mb4))) COLLATE utf8mb4_unicode_ci
+                OR UPPER(TRIM(CONVERT(port_name USING utf8mb4))) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(CONVERT(? USING utf8mb4))) COLLATE utf8mb4_unicode_ci
+                OR UPPER(TRIM(CONVERT(port_name USING utf8mb4))) COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', UPPER(TRIM(CONVERT(? USING utf8mb4))) COLLATE utf8mb4_unicode_ci, '%')
+                OR UPPER(TRIM(CONVERT(? USING utf8mb4))) COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', UPPER(TRIM(CONVERT(port_name USING utf8mb4))) COLLATE utf8mb4_unicode_ci, '%')
              LIMIT 1`,
             [cleanName, nameWithoutCountry, nameWithoutCountry, nameWithoutCountry]
           );
