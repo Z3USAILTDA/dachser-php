@@ -3292,6 +3292,36 @@ serve(async (req) => {
               }
             }
             
+            // ===== FALLBACK 2: Detectar transbordo via last_event location vs destino =====
+            // Se last_event contém "Evento - LOCALIZAÇÃO" e a localização difere do destino e da origem,
+            // então é um porto de transbordo (ex: "Vessel departed - YANTIAN" com destino HAMBURG)
+            if (!transshipmentPort) {
+              const lastEvtText = lastEventDescription || '';
+              const dashIdx = lastEvtText.lastIndexOf(' - ');
+              if (dashIdx > 0) {
+                const evtPrefix = lastEvtText.substring(0, dashIdx).toUpperCase().trim();
+                const evtLocation = lastEvtText.substring(dashIdx + 3).toUpperCase().trim();
+                
+                // Apenas eventos de navegação/movimento indicam transbordo
+                const TRANSIT_EVENTS = ['VESSEL DEPARTED', 'DEPARTURE', 'ARRIVAL IN', 'ARRIVED', 'DISCHARGED'];
+                const IGNORE_EVENTS = ['GATE OUT', 'GATE IN', 'LOADED', 'EMPTY'];
+                
+                const isTransitEvent = TRANSIT_EVENTS.some(te => evtPrefix.includes(te));
+                const isIgnoredEvent = IGNORE_EVENTS.some(ie => evtPrefix.includes(ie));
+                
+                if (evtLocation && isTransitEvent && !isIgnoredEvent) {
+                  const locToken = evtLocation.split(/[\s,]+/)[0];
+                  const origemToken = (row.origem || '').toUpperCase().trim().split(/[\s,]+/)[0];
+                  const destinoToken = (row.destino || '').toUpperCase().trim().split(/[\s,]+/)[0];
+                  
+                  if (locToken && locToken !== origemToken && locToken !== destinoToken) {
+                    transshipmentPort = evtLocation;
+                    console.log(`[refresh_sea_tracking] Transshipment detected via last_event location for ${containerId}: "${evtLocation}" (destino="${row.destino}", origem="${row.origem}")`);
+                  }
+                }
+              }
+            }
+            
             if (transshipmentPort) {
               console.log(`[refresh_sea_tracking] Found transshipment port(s) for ${containerId}: ${transshipmentPort}`);
             }
