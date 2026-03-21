@@ -2112,6 +2112,35 @@ serve(async (req) => {
                     )
                   GROUP BY tsh2.mbl_id
                 ),
+              -- CTE: Detect transshipment from last_event location vs destino/origem
+              transship_last_event AS (
+                SELECT 
+                  ts_le.mbl_id,
+                  MAX(UPPER(TRIM(SUBSTRING_INDEX(ts_le.last_event, ' - ', -1)))) as transshipment_port
+                FROM dados_dachser.t_tracking_sea ts_le
+                WHERE ts_le.active = 1
+                  AND ts_le.last_event LIKE '% - %'
+                  AND (ts_le.transshipment_port IS NULL OR ts_le.transshipment_port = '')
+                  AND (
+                    UPPER(ts_le.last_event) LIKE 'VESSEL DEPARTED%'
+                    OR UPPER(ts_le.last_event) LIKE 'DEPARTURE%'
+                    OR UPPER(ts_le.last_event) LIKE 'ARRIVAL%'
+                    OR UPPER(ts_le.last_event) LIKE 'ARRIVED%'
+                    OR UPPER(ts_le.last_event) LIKE 'DISCHARGED%'
+                  )
+                  AND UPPER(ts_le.last_event) NOT LIKE 'GATE OUT%'
+                  AND UPPER(ts_le.last_event) NOT LIKE 'GATE IN%'
+                  AND UPPER(ts_le.last_event) NOT LIKE 'LOADED%'
+                  AND UPPER(ts_le.last_event) NOT LIKE 'EMPTY%'
+                  AND ts_le.destino IS NOT NULL
+                  AND UPPER(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(ts_le.last_event, ' - ', -1), ',', 1))) != UPPER(TRIM(SUBSTRING_INDEX(ts_le.destino, ',', 1)))
+                  AND UPPER(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(ts_le.last_event, ' - ', -1), ' ', 1))) != UPPER(TRIM(SUBSTRING_INDEX(ts_le.destino, ' ', 1)))
+                  AND (ts_le.origem IS NULL OR (
+                    UPPER(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(ts_le.last_event, ' - ', -1), ',', 1))) != UPPER(TRIM(SUBSTRING_INDEX(ts_le.origem, ',', 1)))
+                    AND UPPER(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(ts_le.last_event, ' - ', -1), ' ', 1))) != UPPER(TRIM(SUBSTRING_INDEX(ts_le.origem, ' ', 1)))
+                  ))
+                GROUP BY ts_le.mbl_id
+              ),
               -- CTE 5: Free time cadastrado (simplificado)
               has_freetime AS (
                 SELECT DISTINCT
@@ -2188,7 +2217,7 @@ serve(async (req) => {
                 THEN DATEDIFF(MAX(ts.eta), COALESCE(MAX(md.eta), MAX(mdn.eta)))
                 ELSE 0 
               END as dias_atraso,
-              COALESCE(MAX(tvc.transshipment_port), MAX(td.transshipment_port), MAX(th.transshipment_port)) as transshipment_port,
+              COALESCE(MAX(tvc.transshipment_port), MAX(td.transshipment_port), MAX(th.transshipment_port), MAX(tle.transshipment_port)) as transshipment_port,
               MAX(tvc.transshipment_vessel_from) as transshipment_vessel_from,
               MAX(tvc.transshipment_vessel_to) as transshipment_vessel_to,
               MAX(tvc.transshipment_date) as transshipment_date,
@@ -2205,6 +2234,7 @@ serve(async (req) => {
             LEFT JOIN transship_direct td ON td.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN transship_history th ON th.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN has_freetime hf_proc ON hf_proc.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci AND hf_proc.tipo_ft = 'PROCESSO'
+            LEFT JOIN transship_last_event tle ON tle.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN has_freetime hf_cont ON hf_cont.cliente_nome COLLATE utf8mb4_unicode_ci = ts.consignee COLLATE utf8mb4_unicode_ci AND hf_cont.tipo_ft = 'CONTRATO'
             WHERE ts.active = 1
             GROUP BY ts.mbl_id
