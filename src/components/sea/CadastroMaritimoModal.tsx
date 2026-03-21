@@ -509,13 +509,14 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
 
   const Field = ({ label, field, type = "text", span2 = false }: { label: string; field: keyof SeaFormData; type?: string; span2?: boolean }) => (
     <div className={span2 ? "col-span-1 md:col-span-2" : ""}>
-      <Label className={labelCls}>{label}</Label>
+      <Label className={`text-xs mb-1 block ${hasError(field) ? 'text-red-400' : 'text-[#aaa]'}`}>{label}</Label>
       <Input
         type={type}
         value={form[field] as string}
         onChange={e => updateField(field, e.target.value)}
-        className={inputCls}
+        className={`${inputCls} ${hasError(field) ? 'border-red-500' : ''}`}
       />
+      {hasError(field) && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
     </div>
   );
 
