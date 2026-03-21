@@ -238,9 +238,20 @@ const CadastroBl = () => {
   };
 
   const handleSave = async () => {
-    if (!form.bl_number) { toast.error("BL Number é obrigatório"); return; }
-    if (!form.consignee_nome) { toast.error("Consignee é obrigatório"); return; }
-    if (!form.clerk) { toast.error("Clerk é obrigatório"); return; }
+    const required: { field: keyof FormData; label: string }[] = [
+      { field: 'bl_number', label: 'BL Number' },
+      { field: 'consignee_nome', label: 'Consignee' },
+      { field: 'clerk', label: 'Clerk' },
+      { field: 'etd', label: 'ETD' },
+      { field: 'eta', label: 'ETA' },
+    ];
+    const missing = required.filter(r => !form[r.field]);
+    if (missing.length > 0) {
+      setValidationErrors(new Set(missing.map(m => m.field)));
+      toast.error("Preencha todos os campos obrigatórios", { description: missing.map(m => m.label).join(', ') });
+      return;
+    }
+    setValidationErrors(new Set());
 
     setIsSaving(true);
     try {
