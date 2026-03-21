@@ -797,28 +797,33 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
-                  <Label className={labelCls}>Consignee</Label>
-                  <Input value={form.consignee_expo} onChange={e => updateField('consignee_expo', e.target.value)} className={inputCls} />
+                  <Label className={`text-xs mb-1 block ${hasError('consignee_expo') ? 'text-red-400' : 'text-[#aaa]'}`}>Consignee *</Label>
+                  <Input value={form.consignee_expo} onChange={e => updateField('consignee_expo', e.target.value)} className={`${inputCls} ${hasError('consignee_expo') ? 'border-red-500' : ''}`} />
+                  {hasError('consignee_expo') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                 </div>
                 <div>
-                  <Label className={labelCls}>P.O. *</Label>
-                  <Input value={form.po_number} onChange={e => updateField('po_number', e.target.value)} className={inputCls} />
+                  <Label className={`text-xs mb-1 block ${hasError('po_number') ? 'text-red-400' : 'text-[#aaa]'}`}>P.O. *</Label>
+                  <Input value={form.po_number} onChange={e => updateField('po_number', e.target.value)} className={`${inputCls} ${hasError('po_number') ? 'border-red-500' : ''}`} />
+                  {hasError('po_number') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                 </div>
                 <div>
-                  <Label className={labelCls}>Customer Order *</Label>
+                  <Label className={labelCls}>Customer Order</Label>
                   <Input value={form.customer_order} onChange={e => updateField('customer_order', e.target.value)} className={inputCls} />
                 </div>
                 <div>
-                  <Label className={labelCls}>HBL No.</Label>
-                  <Input value={form.hbl_number} onChange={e => updateField('hbl_number', e.target.value)} className={inputCls} />
+                  <Label className={`text-xs mb-1 block ${hasError('hbl_number') ? 'text-red-400' : 'text-[#aaa]'}`}>HBL No. *</Label>
+                  <Input value={form.hbl_number} onChange={e => updateField('hbl_number', e.target.value)} className={`${inputCls} ${hasError('hbl_number') ? 'border-red-500' : ''}`} />
+                  {hasError('hbl_number') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                 </div>
                 <div>
-                  <Label className={labelCls}>Master No.</Label>
-                  <Input value={form.master_number} onChange={e => updateField('master_number', e.target.value)} className={inputCls} />
+                  <Label className={`text-xs mb-1 block ${hasError('master_number') ? 'text-red-400' : 'text-[#aaa]'}`}>Master No. *</Label>
+                  <Input value={form.master_number} onChange={e => updateField('master_number', e.target.value)} className={`${inputCls} ${hasError('master_number') ? 'border-red-500' : ''}`} />
+                  {hasError('master_number') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                 </div>
                 <div>
-                  <Label className={labelCls}>Port of Origin</Label>
-                  <Input value={form.port_origin} onChange={e => updateField('port_origin', e.target.value)} className={inputCls} />
+                  <Label className={`text-xs mb-1 block ${hasError('port_origin') ? 'text-red-400' : 'text-[#aaa]'}`}>Port of Origin *</Label>
+                  <Input value={form.port_origin} onChange={e => updateField('port_origin', e.target.value)} className={`${inputCls} ${hasError('port_origin') ? 'border-red-500' : ''}`} />
+                  {hasError('port_origin') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                 </div>
                 <div className="flex items-center gap-2 self-end pb-1">
                   <Checkbox checked={form.drafts_available} onCheckedChange={v => updateField('drafts_available', !!v)} id="sea_drafts_avail" />
@@ -829,24 +834,29 @@ export const CadastroMaritimoModal = ({ open, onOpenChange, onSuccess }: Cadastr
                   <Label htmlFor="sea_drafts_sent" className={checkCls}>Drafts Sent</Label>
                 </div>
                 <div>
-                  <Label className={`${labelCls} flex items-center gap-1`}><Calendar className="h-3 w-3" /> Deadline REAL Draft + VGM</Label>
-                  <Input type="datetime-local" value={form.deadline_draft_vgm} onChange={e => updateField('deadline_draft_vgm', e.target.value)} className={inputCls} />
+                  <Label className={`text-xs mb-1 block flex items-center gap-1 ${hasError('deadline_draft_vgm') ? 'text-red-400' : 'text-[#aaa]'}`}><Calendar className="h-3 w-3" /> Deadline REAL Draft + VGM *</Label>
+                  <Input type="datetime-local" value={form.deadline_draft_vgm} onChange={e => updateField('deadline_draft_vgm', e.target.value)} className={`${inputCls} ${hasError('deadline_draft_vgm') ? 'border-red-500' : ''}`} />
+                  {hasError('deadline_draft_vgm') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                 </div>
                 <div>
-                  <Label className={labelCls}>Deadline Load</Label>
-                  <Input type="date" value={form.deadline_load} onChange={e => updateField('deadline_load', e.target.value)} className={inputCls} />
+                  <Label className={`text-xs mb-1 block ${hasError('deadline_load') ? 'text-red-400' : 'text-[#aaa]'}`}>Deadline Load *</Label>
+                  <Input type="date" value={form.deadline_load} onChange={e => updateField('deadline_load', e.target.value)} className={`${inputCls} ${hasError('deadline_load') ? 'border-red-500' : ''}`} />
+                  {hasError('deadline_load') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                 </div>
                 <div>
-                  <Label className={`${labelCls} flex items-center gap-1`}><Calendar className="h-3 w-3" /> E.T.D.</Label>
-                  <Input type="datetime-local" value={form.etd} onChange={e => updateField('etd', e.target.value)} className={inputCls} />
+                  <Label className={`text-xs mb-1 block flex items-center gap-1 ${hasError('etd') ? 'text-red-400' : 'text-[#aaa]'}`}><Calendar className="h-3 w-3" /> E.T.D. *</Label>
+                  <Input type="datetime-local" value={form.etd} onChange={e => updateField('etd', e.target.value)} className={`${inputCls} ${hasError('etd') ? 'border-red-500' : ''}`} />
+                  {hasError('etd') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                 </div>
                 <div>
-                  <Label className={`${labelCls} flex items-center gap-1`}><Calendar className="h-3 w-3" /> E.T.A. / A.T.A.</Label>
-                  <Input type="datetime-local" value={form.eta} onChange={e => updateField('eta', e.target.value)} className={inputCls} />
+                  <Label className={`text-xs mb-1 block flex items-center gap-1 ${hasError('eta') ? 'text-red-400' : 'text-[#aaa]'}`}><Calendar className="h-3 w-3" /> E.T.A. / A.T.A. *</Label>
+                  <Input type="datetime-local" value={form.eta} onChange={e => updateField('eta', e.target.value)} className={`${inputCls} ${hasError('eta') ? 'border-red-500' : ''}`} />
+                  {hasError('eta') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                 </div>
                 <div>
-                  <Label className={labelCls}>Free Time</Label>
-                  <Input value={form.free_time} onChange={e => updateField('free_time', e.target.value)} className={inputCls} />
+                  <Label className={`text-xs mb-1 block ${hasError('free_time') ? 'text-red-400' : 'text-[#aaa]'}`}>Free Time *</Label>
+                  <Input value={form.free_time} onChange={e => updateField('free_time', e.target.value)} className={`${inputCls} ${hasError('free_time') ? 'border-red-500' : ''}`} />
+                  {hasError('free_time') && <span className="text-[10px] text-red-400 mt-0.5 block">Campo obrigatório</span>}
                 </div>
                 <div className="flex items-center gap-2 self-end pb-1">
                   <Checkbox checked={form.cargo_departed} onCheckedChange={v => updateField('cargo_departed', !!v)} id="sea_cargo" />
