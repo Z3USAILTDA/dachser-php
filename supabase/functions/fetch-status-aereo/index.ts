@@ -1141,7 +1141,24 @@ serve(async (req) => {
         destino: ws.destination || null,
         último_status: finalStatus || null,
         tracking_failed: !finalStatus,
-        status_info: extractLastEventDescription(timelineStr, etdForTimeline) || ws.last_status_description || null,
+        status_info: (() => {
+          // Read description directly from most recent event (no ETD filter)
+          if (timelineStr) {
+            try {
+              const events = JSON.parse(timelineStr);
+              if (Array.isArray(events) && events.length > 0) {
+                const sorted = [...events].sort((a, b) => {
+                  const tsA = parseEventTimestamp(getEventDateStr(a));
+                  const tsB = parseEventTimestamp(getEventDateStr(b));
+                  return tsB - tsA;
+                });
+                const desc = (sorted[0].Description || sorted[0].description || sorted[0].descricao_evento || sorted[0].title || sorted[0].details || '').trim();
+                if (desc) return desc;
+              }
+            } catch (_e) { /* ignore */ }
+          }
+          return ws.last_status_description || null;
+        })(),
         'última atualização': scrapedAt,
         last_flight: ws.last_flight || null,
         is_ground_transport: (() => {
