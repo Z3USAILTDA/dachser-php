@@ -103,7 +103,7 @@ import FirecrawlMonitor from "./pages/admin/FirecrawlMonitor";
 
 // AWB Pages
 import AWBList from "./pages/AWBList";
-import StatusAereoList from "./pages/StatusAereoList";
+
 
 import NotFound from "./pages/NotFound";
 
@@ -211,7 +211,7 @@ const App = () => (
           
           {/* AWB Tracking Pages */}
           <Route path="/air/awb-list" element={<AWBList />} />
-          <Route path="/air/status-aereo" element={<StatusAereoList />} />
+          
           <Route path="/air/cadastro-nova" element={<CadastroNova />} />
           
           {/* CHB Module Manual */}
