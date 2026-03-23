@@ -1085,84 +1085,48 @@ serve(async (req) => {
       const etdForDiscrepancy = masters && masters.length > 0 ? (masters[0].etd || null) : null;
       const { pieces_discrepancy, baseline_pieces, has_dis_event } = detectPiecesDiscrepancy(timelineStr, etdForDiscrepancy);
 
-      // Derive status: PREFER t_aereo_api.ultimo_status (authoritative), then timeline, then ws.last_status_code
+      // Derive status: read directly from timeline (most recent event by date), no IATA tiebreaker, no ETD filter, no statusMap
       const rawStatus = ws.last_status_code ? String(ws.last_status_code).trim() : null;
-      const rawStatusUpper = (rawStatus || '').toUpperCase();
-      const awbPrefix = awb.substring(0, 3);
       const destForClassify = ws.destination ? String(ws.destination).trim() : null;
       const origForClassify = ws.origin ? String(ws.origin).trim() : null;
-      const etdForTimeline = etdForDiscrepancy; // same ETD used for pieces discrepancy
 
-      // Check if t_aereo_api has an authoritative status for this AWB
-      const apiRow = apiFallbackMap.get(awb);
-      const apiStatus = apiRow ? String(apiRow.ultimo_status || '').trim().toUpperCase() : null;
-      const apiStatusValid = apiStatus && !invalidStatuses.has(apiStatus) && apiStatus !== 'UNK';
+      let finalStatus: string | null = null;
 
-      // Timeline status (for cases where API status is not available)
-      const timelineStatus = resolveUnkFromTimeline(timelineStr, awb, etdForTimeline);
-
-      let finalStatus: string | null;
-
-      if (timelineStatus) {
-        // Timeline é sempre a fonte mais precisa — priorizar
-        finalStatus = classifyArrival(timelineStatus, timelineStr, destForClassify, origForClassify, awb);
-        console.log(`[timelinePrimary] ${awb}: timeline="${timelineStatus}" → "${finalStatus}"`);
-      } else if (apiStatusValid) {
-        // Sem status na timeline — usar t_aereo_api como fallback
-        finalStatus = classifyArrival(apiStatus!, timelineStr, destForClassify, origForClassify, awb);
-        console.log(`[apiFallback] ${awb}: t_aereo_api.ultimo_status="${apiStatus}" → "${finalStatus}"`);
-      } else if (rawStatus && !invalidStatuses.has(rawStatusUpper) && rawStatusUpper !== 'UNK') {
-        // Sem timeline nem API — fallback para ws.last_status_code
-        finalStatus = classifyArrival(rawStatus, timelineStr, destForClassify, origForClassify, awb);
-        console.log(`[wsFallback] ${awb}: ws.last_status_code="${rawStatus}" → "${finalStatus}"`);
-      } else {
-        // Last resort: try resolving from last_status_description via timeline resolver
-        const descText = ws.last_status_description ? String(ws.last_status_description).trim() : '';
-        if (descText) {
-          // Wrap description as a fake timeline event so resolveUnkFromTimeline can parse it
-          const fakeTimeline = JSON.stringify([{ Description: descText, status: '', Timestamp: new Date().toISOString() }]);
-          const descResolved = resolveUnkFromTimeline(fakeTimeline, awb);
-          if (descResolved) {
-            finalStatus = classifyArrival(descResolved, timelineStr, destForClassify, origForClassify, awb);
-            console.log(`[descFallback] ${awb}: extracted "${descResolved}" from description → "${finalStatus}"`);
-          } else {
-            finalStatus = null;
-            console.log(`[noSource] ${awb}: no valid status from api/timeline/ws/desc, marking as tracking failed`);
+      // Parse timeline, sort ONLY by date DESC (no IATA tiebreaker)
+      if (timelineStr) {
+        try {
+          const events = JSON.parse(timelineStr);
+          if (Array.isArray(events) && events.length > 0) {
+            // Sort purely by date descending
+            const sorted = [...events].sort((a, b) => {
+              const tsA = parseEventTimestamp(getEventDateStr(a));
+              const tsB = parseEventTimestamp(getEventDateStr(b));
+              return tsB - tsA;
+            });
+            // Use the most recent event's status code directly
+            for (const ev of sorted) {
+              const code = getEventStatusCode(ev);
+              if (code && code !== 'UNK' && code !== 'UNKNOWN') {
+                finalStatus = code;
+                console.log(`[directTimeline] ${awb}: most recent event code="${code}"`);
+                break;
+              }
+            }
           }
-        } else {
-          finalStatus = null;
-          console.log(`[noSource] ${awb}: no valid status from api/timeline/ws, marking as tracking failed`);
+        } catch (_e) {
+          console.log(`[directTimeline] ${awb}: parse error: ${_e}`);
         }
       }
 
-      // Safety net: if no status but timeline has valid events, use raw last event status
-      if (!finalStatus) {
-        const rawTimelineStatus = extractLastStatusFromTimeline(timelineStr);
-        if (rawTimelineStatus) {
-          finalStatus = classifyArrival(rawTimelineStatus, timelineStr, destForClassify, origForClassify, awb);
-          console.log(`[timelineSafety] ${awb}: using raw timeline last event status "${rawTimelineStatus}" → "${finalStatus}"`);
-        }
+      // Fallback: use ws.last_status_code as-is from the database
+      if (!finalStatus && rawStatus) {
+        finalStatus = rawStatus.toUpperCase();
+        console.log(`[wsFallback] ${awb}: ws.last_status_code="${rawStatus}"`);
       }
 
-      // Final guard: if status is still UNK after all resolution
-      if (finalStatus && finalStatus.toUpperCase() === 'UNK') {
-        const rawTimelineStatus = extractLastStatusFromTimeline(timelineStr);
-        if (rawTimelineStatus && rawTimelineStatus !== 'UNK') {
-          finalStatus = rawTimelineStatus;
-          console.log(`[unkGuard] ${awb}: UNK with valid timeline, using raw "${rawTimelineStatus}"`);
-        } else {
-          finalStatus = null;
-          console.log(`[unkGuard] ${awb}: resolved to UNK with no timeline, marking as tracking failed`);
-        }
-      }
-
-      // Re-classificar ARR genérico para determinar CONEXAO/DESTINO
-      if (finalStatus && finalStatus.toUpperCase() === 'ARR') {
-        const reclassified = classifyArrival(finalStatus, timelineStr, destForClassify, origForClassify, awb);
-        if (reclassified && reclassified !== finalStatus) {
-          console.log(`[reClassify] ${awb}: ARR → ${reclassified} (post-resolve)`);
-          finalStatus = reclassified;
-        }
+      // Classify ARR as DESTINO/CONEXAO (visual enrichment, not data alteration)
+      if (finalStatus) {
+        finalStatus = classifyArrival(finalStatus, timelineStr, destForClassify, origForClassify, awb) || finalStatus;
       }
 
       // Se o AWB tem swap, substituir pelo novo master
