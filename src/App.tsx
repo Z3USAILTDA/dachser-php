@@ -211,7 +211,7 @@ const App = () => (
           
           {/* AWB Tracking Pages */}
           <Route path="/air/awb-list" element={<AWBList />} />
-          <Route path="/air/status-aereo" element={<StatusAereoList />} />
+          
           <Route path="/air/cadastro-nova" element={<CadastroNova />} />
           
           {/* CHB Module Manual */}
