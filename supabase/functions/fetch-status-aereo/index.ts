@@ -2475,29 +2475,10 @@ serve(async (req) => {
       const override = MANUAL_OVERRIDES[awb];
       if (!override) continue;
 
-      // Compare automatic status vs manual override using IATA hierarchy
+      // Manual overrides always apply when defined (no IATA weight or date skip)
       const autoStatus = (row['último_status'] || '').trim().toUpperCase();
       const manualStatus = (override.status || '').trim().toUpperCase();
-      const autoWeight = IATA_HIERARCHY[autoStatus] || 0;
-      const manualWeight = IATA_HIERARCHY[manualStatus] || 0;
-
-      // If automatic status is more advanced than a manual status override, skip only the status override
-      if (manualStatus && autoStatus && !row.tracking_failed && autoWeight > manualWeight) {
-        console.log(`[OVERRIDE SKIP] ${awb}: auto="${autoStatus}"(${autoWeight}) > manual="${manualStatus}"(${manualWeight})`);
-        continue;
-      }
-
-      // If automatic data has a more recent event date than the manual override, skip the override
-      if (override.last_event_date && row.last_event_date) {
-        const autoDate = new Date(row.last_event_date).getTime();
-        const manualDate = new Date(override.last_event_date).getTime();
-        if (!isNaN(autoDate) && !isNaN(manualDate) && autoDate > manualDate) {
-          console.log(`[OVERRIDE SKIP DATE] ${awb}: autoDate="${row.last_event_date}" > manualDate="${override.last_event_date}"`);
-          continue;
-        }
-      }
-
-      console.log(`[OVERRIDE APPLY] AWB="${awb}" auto="${autoStatus}"(${autoWeight}) <= manual="${manualStatus}"(${manualWeight})`);
+      console.log(`[OVERRIDE APPLY] AWB="${awb}" auto="${autoStatus}" => manual="${manualStatus}"`);
 
       if (override.skip_first_event) {
         // Re-resolve status skipping the first timeline event
