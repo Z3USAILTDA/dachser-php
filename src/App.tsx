@@ -103,7 +103,7 @@ import FirecrawlMonitor from "./pages/admin/FirecrawlMonitor";
 
 // AWB Pages
 import AWBList from "./pages/AWBList";
-import StatusAereoList from "./pages/StatusAereoList";
+
 
 import NotFound from "./pages/NotFound";
 
