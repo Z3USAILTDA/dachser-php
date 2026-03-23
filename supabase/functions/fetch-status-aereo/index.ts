@@ -495,6 +495,7 @@ function extractLastEventDescription(timelineJson: string | null, etdStr?: strin
     return null;
   }
 }
+      const etdForTimeline = masters && masters.length > 0 ? (masters[0].etd || null) : null;
 
 
 // Extract the date of the most recent valid event from the timeline
