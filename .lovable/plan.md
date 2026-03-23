@@ -1,46 +1,70 @@
 
 
-## Plano: Melhorar matching de portos para resolver mais UN/LOCODEs
+## Plano: Corrigir status para espelhar o banco de dados
 
 ### Problema
-O JOIN atual e o `resolve_port_codes` usam matching **exato** entre `port_name` e os campos `origem`/`destino`/`transshipment_port`. Porém os dados podem conter sufixos de país (ex: `"ITAPOA, BR"`, `"SANTOS, BR"`), variações de nome, ou formatações diferentes do que está na `t_ports_world`.
+
+O `fetch-status-aereo` aplica uma cadeia complexa de transformações entre o valor real do banco e o que aparece na coluna "Último Evento" do grid:
+
+1. **`resolveUnkFromTimeline`** — reordena eventos por hierarquia IATA, filtra eventos `[planned]`/futuros/pré-ETD, aplica `statusMap` (ex: "CONFIRMED" → "NFD", "RECEIVED" → "RCF")
+2. **Fallback chain** — timeline → t_aereo_api → ws.last_status_code → description (4 camadas com transformações em cada uma)
+3. **`classifyArrival`** — transforma "ARR" em "ARR - DESTINO" / "ARR - CONEXAO"
+4. **`extractLastEventDescription`** — filtra eventos por ETD cutoff para gerar `status_info`
+5. **MANUAL_OVERRIDES** — substitui status com regras de skip por peso IATA e data
+
+Resultado: se o banco tem NFD no último evento, a tela pode mostrar RCF (por causa do ETD filter ou IATA tiebreaker).
+
+### Solução
+
+Simplificar o bloco de resolução de status no `fetch-status-aereo` (linhas ~1088-1166) para ler direto do banco.
 
 ### Alterações
 
-| Arquivo | O que muda |
-|---------|-----------|
-| `supabase/functions/olimpo-proxy/index.ts` | **(1)** Na query `get_sea_tracking`: melhorar os LEFT JOINs com `t_ports_world` — usar `LIKE` bidirecional além do match exato, para capturar variações. **(2)** Na action `resolve_port_codes`: substituir match exato por matching fuzzy (LIKE bidirecional), e também tentar match sem sufixo de país (removendo `, XX` do final). |
+**Arquivo: `supabase/functions/fetch-status-aereo/index.ts`**
 
-### Detalhes técnicos
+**1. Novo resolvedor de `finalStatus` (substituir linhas ~1088-1166)**
 
-**1. JOINs melhorados na query `get_sea_tracking`**
+- Parsear `timeline_json`, ordenar **apenas por data DESC** (sem tiebreaker IATA, sem filtro ETD, sem filtro `[planned]`, sem `statusMap`)
+- Usar o código do evento mais recente diretamente via `getEventStatusCode`
+- Se timeline vazia: usar `ws.last_status_code` como está no banco
+- Manter `classifyArrival` para ARR (diferencia conexão de destino — é informação visual, não altera o dado base)
+- **Remover**: `resolveUnkFromTimeline` da resolução principal, `statusMap` translations, UNK guard, description fallback, safety net
 
-Trocar os LEFT JOINs atuais por matching mais flexível:
-```sql
-LEFT JOIN dados_dachser.t_ports_world pw_o 
-  ON (
-    UPPER(TRIM(pw_o.port_name)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(SUBSTRING_INDEX(ts.origem, ',', 1))) COLLATE utf8mb4_unicode_ci
-    OR UPPER(TRIM(pw_o.port_name)) COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', UPPER(TRIM(SUBSTRING_INDEX(ts.origem, ',', 1))), '%') COLLATE utf8mb4_unicode_ci
-    OR UPPER(TRIM(SUBSTRING_INDEX(ts.origem, ',', 1))) COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', UPPER(TRIM(pw_o.port_name)), '%') COLLATE utf8mb4_unicode_ci
-  )
+```text
+Lógica simplificada:
+
+timeline_json → parse → sort by date DESC → último evento → getEventStatusCode()
+                                                          ↓
+                                                   classifyArrival (se ARR)
+                                                          ↓
+                                                     finalStatus
 ```
 
-Idem para `pw_d` (destino). O `MAX(pw_o.un_locode)` no SELECT já garante que mesmo com múltiplos matches, retorna um resultado.
+**2. Novo resolvedor de `status_info` (linha ~1180)**
 
-**2. `resolve_port_codes` com matching fuzzy**
+- Substituir `extractLastEventDescription(timelineStr, etdForTimeline)` por leitura direta do último evento (sem filtro ETD)
+- Pegar `Description`/`description`/`descricao_evento` do mesmo evento usado para o status
 
-Na query de resolução de escalas, para cada nome de porto:
-- Tentar match exato primeiro
-- Se não encontrar, tentar LIKE bidirecional
-- Remover sufixo `, XX` (código de país) antes do match
-- Usar `COLLATE utf8mb4_unicode_ci` em todas as comparações
+**3. Override loop (linhas ~2504-2517 aprox.)**
 
-```sql
-SELECT port_name, un_locode, country_code 
-FROM dados_dachser.t_ports_world 
-WHERE UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci IN (...)
-   OR UPPER(TRIM(port_name)) COLLATE utf8mb4_unicode_ci IN (...cleaned names without country suffix...)
-```
+- Remover os blocos de `continue` que fazem skip quando o peso IATA automático é maior ou a data automática é mais recente
+- Resultado: overrides manuais sempre aplicam quando definidos (conforme memória `ajustes-manuais-e-exclusoes-v2`, flags como `force_discrepancy` e `force_critical` já persistem — agora o status também)
 
-Alternativamente, fazer uma query por porto com LIKE para melhor cobertura.
+### O que NÃO muda
+
+- Colunas do grid (AWB, HAWB, Cliente, Rota, etc.)
+- `classifyArrival` (ARR → DESTINO/CONEXAO)
+- Enriquecimento com `t_master_dados` (HAWB, cliente, analista)
+- Detecção de ground transport, days_in_transit, pieces_discrepancy
+- MANUAL_OVERRIDES existência — só remove a trava que os ignora
+
+### Resultado esperado
+
+| Banco (último evento timeline) | Tela atual (pode divergir) | Tela após mudança |
+|---|---|---|
+| NFD | RCF (ETD filter ignorou NFD) | NFD |
+| AWD | NFD (IATA tiebreaker) | AWD |
+| FOH | RCS (IATA tiebreaker) | FOH |
+| DIS | DIS | DIS |
+| ARR | ARR - DESTINO/CONEXAO | ARR - DESTINO/CONEXAO |
 
