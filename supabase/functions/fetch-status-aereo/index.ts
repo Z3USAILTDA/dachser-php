@@ -497,6 +497,7 @@ function extractLastEventDescription(timelineJson: string | null, etdStr?: strin
 }
 
 
+
 // Extract the date of the most recent valid event from the timeline
 function extractLastEventDate(timelineJson: string | null, etdStr?: string | null): string | null {
   if (!timelineJson) return null;
@@ -1084,8 +1085,9 @@ serve(async (req) => {
       const timelineStr = ws.timeline_json ? String(ws.timeline_json) : null;
       const etdForDiscrepancy = masters && masters.length > 0 ? (masters[0].etd || null) : null;
       const { pieces_discrepancy, baseline_pieces, has_dis_event } = detectPiecesDiscrepancy(timelineStr, etdForDiscrepancy);
+      const etdForTimeline = masters && masters.length > 0 ? (masters[0].etd || null) : null;
 
-      // Derive status: read directly from timeline (most recent event by date), no IATA tiebreaker, no ETD filter, no statusMap
+
       const rawStatus = ws.last_status_code ? String(ws.last_status_code).trim() : null;
       const destForClassify = ws.destination ? String(ws.destination).trim() : null;
       const origForClassify = ws.origin ? String(ws.origin).trim() : null;
