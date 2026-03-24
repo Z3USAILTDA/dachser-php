@@ -2,6 +2,23 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
+async function invokeWithRetry(body: Record<string, unknown>, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const { data, error } = await supabase.functions.invoke('client-freetime-crud', { body });
+    if (error) {
+      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 1000 * attempt)); continue; }
+      throw error;
+    }
+    if (!data.success && data.retryable && attempt < maxRetries) {
+      await new Promise(r => setTimeout(r, 1000 * attempt));
+      continue;
+    }
+    if (!data.success) throw new Error(data.error);
+    return data;
+  }
+  throw new Error('Falha após múltiplas tentativas');
+}
+
 export interface ClientFreeTime {
   id: string;
   cliente_cnpj: string | null;
@@ -36,13 +53,7 @@ export function useClientFreeTimeList() {
   return useQuery({
     queryKey: ['client-free-time'],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('client-freetime-crud', {
-        body: { action: 'list' }
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error);
-      
+      const data = await invokeWithRetry({ action: 'list' });
       return (data.data || []) as ClientFreeTime[];
     },
   });
@@ -55,14 +66,7 @@ export function useCreateClientFreeTime() {
 
   return useMutation({
     mutationFn: async (formData: CreateClientFreeTimeData) => {
-      const { data, error } = await supabase.functions.invoke('client-freetime-crud', {
-        body: { action: 'create', data: formData }
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error);
-      
-      return data;
+      return await invokeWithRetry({ action: 'create', data: formData });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['client-free-time'] });
@@ -88,14 +92,7 @@ export function useUpdateClientFreeTime() {
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<CreateClientFreeTimeData> }) => {
-      const { data: result, error } = await supabase.functions.invoke('client-freetime-crud', {
-        body: { action: 'update', id, data }
-      });
-
-      if (error) throw error;
-      if (!result.success) throw new Error(result.error);
-      
-      return result;
+      return await invokeWithRetry({ action: 'update', id, data });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['client-free-time'] });
@@ -121,14 +118,7 @@ export function useDeleteClientFreeTime() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase.functions.invoke('client-freetime-crud', {
-        body: { action: 'delete', id }
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error);
-      
-      return data;
+      return await invokeWithRetry({ action: 'delete', id });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['client-free-time'] });
@@ -153,18 +143,10 @@ export function useFreeTimeForClient(clienteNome?: string, mbl?: string) {
     queryKey: ['client-free-time', 'applicable', clienteNome, mbl],
     queryFn: async () => {
       if (!clienteNome) return null;
-
-      const { data, error } = await supabase.functions.invoke('client-freetime-crud', {
-        body: { action: 'findForClient', clienteNome, mbl }
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error);
-      
+      const data = await invokeWithRetry({ action: 'findForClient', clienteNome, mbl });
       if (data.data) {
         return { ...data.data, origem: data.data.tipo_ft } as ClientFreeTime & { origem: string };
       }
-      
       return null;
     },
     enabled: !!clienteNome,
