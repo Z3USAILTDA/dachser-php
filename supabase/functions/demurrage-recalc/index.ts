@@ -355,11 +355,14 @@ serve(async (req) => {
     if (client) {
       try { await client.close(); } catch {}
     }
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const isRetryable = errMsg.includes('max_user_connections') || errMsg.includes('ETIMEDOUT') || errMsg.includes('Connection reset');
     return new Response(JSON.stringify({
       success: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: errMsg,
+      retryable: isRetryable,
     }), {
-      status: 500,
+      status: isRetryable ? 503 : 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
