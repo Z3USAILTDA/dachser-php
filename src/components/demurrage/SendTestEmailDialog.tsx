@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Mail } from "lucide-react";
-import { useSendTestAlert, useDemurragePreInvoiceItems, type PreInvoice } from "@/hooks/useDemurrageData";
+import { useSendTestAlert, useDemurragePreInvoiceItems, type PreInvoice, type DemurrageContainer } from "@/hooks/useDemurrageData";
 import { toast } from "sonner";
 
 interface SendTestEmailDialogProps {
