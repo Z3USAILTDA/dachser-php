@@ -734,24 +734,43 @@ export function useSendTestAlert() {
       const partnerId = firstContainer?.partner_id || '';
       const houseBl = (demurrageContainers || []).find(c => c.hbl)?.hbl || preInvoice?.bl_number || '';
 
-      const containers = (items || []).map(item => {
-        // Match with DemurrageContainer for enriched data
-        const match = (demurrageContainers || []).find(dc => dc.numero === item.container_number);
-        return {
-          number: item.container_number,
-          type: item.container_type || '',
-          size: match?.tipo_conteiner || '',
-          discharge_date: item.period_start_date || '',
-          free_time_days: item.free_time_days || 0,
-          return_deadline: match?.free_time_end_date || '',
-          return_date: item.period_end_date || '',
-          days_possession: item.days_count || 0,
-          days_incident: item.days_count || 0,
-          rate_period1_usd: item.daily_rate_usd || 0,
+      let containers: Array<Record<string, unknown>>;
+      
+      if (items && items.length > 0) {
+        containers = items.map(item => {
+          const match = (demurrageContainers || []).find(dc => dc.numero === item.container_number);
+          return {
+            number: item.container_number,
+            type: item.container_type || '',
+            size: match?.tipo_conteiner || '',
+            discharge_date: item.period_start_date || match?.ft_started_at || '',
+            free_time_days: item.free_time_days || match?.free_time_days || 0,
+            return_deadline: match?.free_time_end_date || '',
+            return_date: item.period_end_date || match?.data_devolucao || '',
+            days_possession: item.days_count || 0,
+            days_incident: item.days_count || 0,
+            rate_period1_usd: item.daily_rate_usd || 0,
+            rate_period2_usd: 0,
+            total_usd: item.total_usd || 0,
+          };
+        });
+      } else {
+        // Fallback: build from demurrageContainers when pre_invoice_items is empty
+        containers = (demurrageContainers || []).map(dc => ({
+          number: dc.numero,
+          type: '',
+          size: dc.tipo_conteiner || '',
+          discharge_date: dc.ft_started_at || dc.data_atracacao || '',
+          free_time_days: dc.free_time_days || 0,
+          return_deadline: dc.free_time_end_date || '',
+          return_date: dc.data_devolucao || '',
+          days_possession: dc.excedente_dias || 0,
+          days_incident: dc.excedente_dias || 0,
+          rate_period1_usd: dc.rate_usd_per_day ? Number(dc.rate_usd_per_day) : 0,
           rate_period2_usd: 0,
-          total_usd: item.total_usd || 0,
-        };
-      });
+          total_usd: dc.expected_cost_usd ? Number(dc.expected_cost_usd) : 0,
+        }));
+      }
 
       const { data, error } = await supabase.functions.invoke('demurrage-send-alert', {
         body: {
