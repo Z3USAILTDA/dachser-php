@@ -143,18 +143,10 @@ export function useFreeTimeForClient(clienteNome?: string, mbl?: string) {
     queryKey: ['client-free-time', 'applicable', clienteNome, mbl],
     queryFn: async () => {
       if (!clienteNome) return null;
-
-      const { data, error } = await supabase.functions.invoke('client-freetime-crud', {
-        body: { action: 'findForClient', clienteNome, mbl }
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error);
-      
+      const data = await invokeWithRetry({ action: 'findForClient', clienteNome, mbl });
       if (data.data) {
         return { ...data.data, origem: data.data.tipo_ft } as ClientFreeTime & { origem: string };
       }
-      
       return null;
     },
     enabled: !!clienteNome,
