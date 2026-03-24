@@ -63,7 +63,7 @@ function generateNotificationHtml(testMode?: boolean): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:20px;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#fff;color:#333;font-size:14px;line-height:1.6;">
 ${testBanner}
-<p><strong>NOTIFICAÇÃO ( ALERTA DE FREE TIME)</strong></p>
+<p><strong><p><strong>NOTIFICAÇÃO DE COBRANÇA</strong></p></strong></p>
 
 <p>Prezados(as),</p>
 
