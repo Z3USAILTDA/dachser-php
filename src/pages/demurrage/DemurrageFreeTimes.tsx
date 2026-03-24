@@ -403,8 +403,9 @@ export default function DemurrageFreeTimes() {
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         onSuccess={() => {
-          refetch();
-          recalcMutation.mutate();
+          // Don't call refetch() — invalidateQueries in the hook handles it
+          // Serialize recalc to avoid connection storms
+          setTimeout(() => recalcMutation.mutate(), 2000);
         }}
       />
     </DemurrageLayout>
