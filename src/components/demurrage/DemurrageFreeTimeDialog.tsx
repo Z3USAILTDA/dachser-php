@@ -81,7 +81,7 @@ export function DemurrageFreeTimeDialog({ open, onOpenChange, onSuccess }: Demur
     setVigenciaFim('');
     setMbl('');
     setFreeTimeDays(14);
-    setTipoConteiner('');
+    setTipoConteiner([]);
     setNotas('');
     setSuggestions([]);
   };
