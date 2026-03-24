@@ -92,14 +92,7 @@ export function useUpdateClientFreeTime() {
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<CreateClientFreeTimeData> }) => {
-      const { data: result, error } = await supabase.functions.invoke('client-freetime-crud', {
-        body: { action: 'update', id, data }
-      });
-
-      if (error) throw error;
-      if (!result.success) throw new Error(result.error);
-      
-      return result;
+      return await invokeWithRetry({ action: 'update', id, data });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['client-free-time'] });
