@@ -14,7 +14,7 @@ interface SendTestEmailDialogProps {
   containers?: DemurrageContainer[];
 }
 
-export function SendTestEmailDialog({ open, onOpenChange, preInvoice }: SendTestEmailDialogProps) {
+export function SendTestEmailDialog({ open, onOpenChange, preInvoice, containers = [] }: SendTestEmailDialogProps) {
   const [email, setEmail] = useState("");
   const sendMutation = useSendTestAlert();
   const { data: items } = useDemurragePreInvoiceItems(preInvoice?.id ?? null);
