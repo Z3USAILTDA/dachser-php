@@ -1,26 +1,25 @@
 
 
-## Plano: Corrigir erro "etdForTimeline is not defined"
+## Plano: Permitir seleção múltipla de Tipo de Container no cadastro de Free Time
 
-### Problema
+### Problema atual
 
-A edição anterior removeu a declaração da variável `etdForTimeline` mas deixou 6 referências a ela no código:
-- Linha 1244, 1250: `detectInTransit(timelineStr, etdForTimeline)`
-- Linha 1256, 1262: `extractLastEventDate(timelineStr, etdForTimeline)`
-- Linha 1339, 1345: `extractLastEventDate(timelineStr, etdForTimeline)` (para `hours_in_status`)
+O campo "Tipo Container" usa um `Select` single-value, permitindo apenas um tipo por cadastro.
 
 ### Solução
 
-Adicionar a declaração de `etdForTimeline` de volta, logo após a linha 1087 (onde `etdForDiscrepancy` já é declarado). Como o objetivo do plano anterior era **não filtrar por ETD na resolução de status**, mas essas funções (`detectInTransit`, `extractLastEventDate`) ainda precisam do ETD para outros cálculos (transit detection, event date extraction), a variável deve ser restaurada:
+Trocar o `Select` por checkboxes com toggle visual (badges clicáveis), armazenando os tipos selecionados como array e enviando como string separada por vírgula (ex: `"20DV,40HC"`).
 
-```typescript
-const etdForTimeline = masters && masters.length > 0 ? (masters[0].etd || null) : null;
-```
+### Alterações
 
-Isso corrige o erro 500 sem reverter a simplificação de status já implementada.
+**Arquivo: `src/components/demurrage/DemurrageFreeTimeDialog.tsx`**
 
-### Alteração
+1. **State**: Trocar `tipoConteiner` de `string` para `string[]` (array)
+2. **UI**: Substituir o `Select` (linhas 248-258) por um grid de badges/botões clicáveis para cada tipo de container, com visual de toggle (selecionado = fundo amarelo, não selecionado = fundo escuro)
+3. **Submit**: Na linha 111, converter o array para string separada por vírgula: `tipoConteiner.join(',')` antes de enviar
+4. **Reset**: Ajustar `resetForm` para `setTipoConteiner([])`
 
-**Arquivo: `supabase/functions/fetch-status-aereo/index.ts`**
-- Adicionar `const etdForTimeline = ...` na linha ~1088, antes do bloco de resolução de status
+### Resultado
+
+O usuário poderá clicar em múltiplos tipos de container (ex: 20DV + 40HC) e o valor será salvo como `"20DV,40HC"` no banco.
 
