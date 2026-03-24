@@ -362,8 +362,7 @@ export default function DemurrageFreeTimes() {
         onOpenChange={(open) => !open && setEditingFreeTime(null)}
         onSuccess={() => {
           setEditingFreeTime(null);
-          refetch();
-          recalcMutation.mutate();
+          setTimeout(() => recalcMutation.mutate(), 2000);
         }}
       />
 
