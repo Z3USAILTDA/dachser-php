@@ -23,7 +23,7 @@ interface FreeTimeRecord {
   created_by?: string | null;
 }
 
-async function connectWithRetry(maxRetries = 3): Promise<Client> {
+async function connectWithRetry(maxRetries = 5): Promise<Client> {
   const host = Deno.env.get('MARIADB_HOST');
   const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
   const database = Deno.env.get('MARIADB_DATABASE');
@@ -33,6 +33,9 @@ async function connectWithRetry(maxRetries = 3): Promise<Client> {
   if (!host || !database || !username || !password) {
     throw new Error('Missing MariaDB credentials');
   }
+
+  // Random initial delay to avoid thundering herd
+  await new Promise(r => setTimeout(r, Math.random() * 500));
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -46,9 +49,9 @@ async function connectWithRetry(maxRetries = 3): Promise<Client> {
       return client;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (attempt < maxRetries && (msg.includes('max_user_connections') || msg.includes('ETIMEDOUT') || msg.includes('Connection reset'))) {
-        const delay = 1000 * attempt;
-        console.log(`[client-freetime-crud] Connection attempt ${attempt} failed, retrying in ${delay}ms...`);
+      if (attempt < maxRetries && (msg.includes('max_user_connections') || msg.includes('ETIMEDOUT') || msg.includes('Connection reset') || msg.includes('Too many connections'))) {
+        const delay = 1000 * attempt + Math.random() * 1000;
+        console.log(`[client-freetime-crud] Attempt ${attempt} failed, retrying in ${Math.round(delay)}ms...`);
         await new Promise(r => setTimeout(r, delay));
       } else {
         throw err;
