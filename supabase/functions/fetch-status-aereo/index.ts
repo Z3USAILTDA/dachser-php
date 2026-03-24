@@ -1073,6 +1073,7 @@ serve(async (req) => {
     const processedRows: any[] = [];
     for (const ws of wsList) {
       const awb = String(ws.awb || '').trim();
+      const apiRow = apiFallbackMap.get(awb) || null;
       const masters = masterMultiMap.get(awb);
 
       // Convert scraped_at - remove Z suffix to treat as local time
