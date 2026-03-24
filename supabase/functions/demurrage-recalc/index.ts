@@ -66,9 +66,27 @@ serve(async (req) => {
       throw new Error("MariaDB credentials not configured");
     }
 
-    console.log(`Connecting to MariaDB at ${mariaConfig.hostname}:${mariaConfig.port}`);
-    client = await new Client().connect(mariaConfig);
-    console.log("✓ Connected to MariaDB");
+    // connectWithRetry - handles max_user_connections
+    const MAX_RETRIES = 3;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        console.log(`Connecting to MariaDB (attempt ${attempt}/${MAX_RETRIES})...`);
+        client = await new Client().connect(mariaConfig);
+        console.log("✓ Connected to MariaDB");
+        break;
+      } catch (connErr: any) {
+        const msg = connErr?.message || '';
+        if (attempt < MAX_RETRIES && (msg.includes('max_user_connections') || msg.includes('ETIMEDOUT') || msg.includes('Connection reset'))) {
+          const delay = 1000 * Math.pow(2, attempt - 1);
+          console.warn(`Connection attempt ${attempt} failed: ${msg}. Retrying in ${delay}ms...`);
+          await new Promise(r => setTimeout(r, delay));
+        } else {
+          throw connErr;
+        }
+      }
+    }
+
+    if (!client) throw new Error("Failed to connect after retries");
 
     // Fetch settings
     const settingsRows = await client.query(`
