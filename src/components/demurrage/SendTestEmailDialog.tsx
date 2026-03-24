@@ -11,6 +11,7 @@ interface SendTestEmailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   preInvoice: PreInvoice | null;
+  containers?: DemurrageContainer[];
 }
 
 export function SendTestEmailDialog({ open, onOpenChange, preInvoice }: SendTestEmailDialogProps) {
