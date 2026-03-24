@@ -53,13 +53,7 @@ export function useClientFreeTimeList() {
   return useQuery({
     queryKey: ['client-free-time'],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('client-freetime-crud', {
-        body: { action: 'list' }
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error);
-      
+      const data = await invokeWithRetry({ action: 'list' });
       return (data.data || []) as ClientFreeTime[];
     },
   });
