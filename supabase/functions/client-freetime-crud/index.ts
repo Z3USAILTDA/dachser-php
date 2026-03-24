@@ -21,8 +21,41 @@ interface FreeTimeRecord {
   created_at?: string;
   updated_at?: string;
   created_by?: string | null;
-  customer_number?: string | null;
-  tipo_conteiner?: string | null;
+}
+
+async function connectWithRetry(maxRetries = 3): Promise<Client> {
+  const host = Deno.env.get('MARIADB_HOST');
+  const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
+  const database = Deno.env.get('MARIADB_DATABASE');
+  const username = Deno.env.get('MARIADB_USER');
+  const password = Deno.env.get('MARIADB_PASSWORD');
+
+  if (!host || !database || !username || !password) {
+    throw new Error('Missing MariaDB credentials');
+  }
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const client = await new Client().connect({
+        hostname: host,
+        port,
+        db: database,
+        username,
+        password,
+      });
+      return client;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (attempt < maxRetries && (msg.includes('max_user_connections') || msg.includes('ETIMEDOUT') || msg.includes('Connection reset'))) {
+        const delay = 1000 * attempt;
+        console.log(`[client-freetime-crud] Connection attempt ${attempt} failed, retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw new Error('Failed to connect after retries');
 }
 
 serve(async (req) => {
@@ -33,23 +66,7 @@ serve(async (req) => {
   let client: Client | null = null;
 
   try {
-    const host = Deno.env.get('MARIADB_HOST');
-    const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-    const database = Deno.env.get('MARIADB_DATABASE');
-    const username = Deno.env.get('MARIADB_USER');
-    const password = Deno.env.get('MARIADB_PASSWORD');
-
-    if (!host || !database || !username || !password) {
-      throw new Error('Missing MariaDB credentials');
-    }
-
-    client = await new Client().connect({
-      hostname: host,
-      port: port,
-      db: database,
-      username: username,
-      password: password,
-    });
+    client = await connectWithRetry();
 
     const { action, data, id, clienteNome, mbl } = await req.json();
 
@@ -57,7 +74,6 @@ serve(async (req) => {
 
     switch (action) {
       case 'list': {
-        // List all active free time records
         const rows = await client.query(
           `SELECT * FROM t_client_free_time WHERE ativo = TRUE ORDER BY created_at DESC`
         );
@@ -66,15 +82,14 @@ serve(async (req) => {
       }
 
       case 'create': {
-        // Create new free time record
         const record = data as FreeTimeRecord;
         const newId = crypto.randomUUID();
         
         await client.execute(
           `INSERT INTO t_client_free_time 
            (id, cliente_nome, cliente_cnpj, tipo_ft, mbl, armador, free_time_days, 
-            vigencia_inicio, vigencia_fim, notas, ativo, created_by, customer_number, tipo_conteiner)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?, ?)`,
+            vigencia_inicio, vigencia_fim, notas, ativo, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?)`,
           [
             newId,
             record.cliente_nome,
@@ -86,9 +101,7 @@ serve(async (req) => {
             record.vigencia_inicio || null,
             record.vigencia_fim || null,
             record.notas || null,
-            record.created_by || null,
-            record.customer_number || null,
-            record.tipo_conteiner || null
+            record.created_by || null
           ]
         );
         
@@ -97,60 +110,21 @@ serve(async (req) => {
       }
 
       case 'update': {
-        // Update existing free time record
         const record = data as Partial<FreeTimeRecord>;
         
         const updates: string[] = [];
         const values: unknown[] = [];
         
-        if (record.cliente_nome !== undefined) {
-          updates.push('cliente_nome = ?');
-          values.push(record.cliente_nome);
-        }
-        if (record.cliente_cnpj !== undefined) {
-          updates.push('cliente_cnpj = ?');
-          values.push(record.cliente_cnpj);
-        }
-        if (record.tipo_ft !== undefined) {
-          updates.push('tipo_ft = ?');
-          values.push(record.tipo_ft);
-        }
-        if (record.mbl !== undefined) {
-          updates.push('mbl = ?');
-          values.push(record.mbl);
-        }
-        if (record.armador !== undefined) {
-          updates.push('armador = ?');
-          values.push(record.armador);
-        }
-        if (record.free_time_days !== undefined) {
-          updates.push('free_time_days = ?');
-          values.push(record.free_time_days);
-        }
-        if (record.vigencia_inicio !== undefined) {
-          updates.push('vigencia_inicio = ?');
-          values.push(record.vigencia_inicio);
-        }
-        if (record.vigencia_fim !== undefined) {
-          updates.push('vigencia_fim = ?');
-          values.push(record.vigencia_fim);
-        }
-        if (record.notas !== undefined) {
-          updates.push('notas = ?');
-          values.push(record.notas);
-        }
-        if (record.ativo !== undefined) {
-          updates.push('ativo = ?');
-          values.push(record.ativo);
-        }
-        if ((record as any).customer_number !== undefined) {
-          updates.push('customer_number = ?');
-          values.push((record as any).customer_number);
-        }
-        if ((record as any).tipo_conteiner !== undefined) {
-          updates.push('tipo_conteiner = ?');
-          values.push((record as any).tipo_conteiner);
-        }
+        if (record.cliente_nome !== undefined) { updates.push('cliente_nome = ?'); values.push(record.cliente_nome); }
+        if (record.cliente_cnpj !== undefined) { updates.push('cliente_cnpj = ?'); values.push(record.cliente_cnpj); }
+        if (record.tipo_ft !== undefined) { updates.push('tipo_ft = ?'); values.push(record.tipo_ft); }
+        if (record.mbl !== undefined) { updates.push('mbl = ?'); values.push(record.mbl); }
+        if (record.armador !== undefined) { updates.push('armador = ?'); values.push(record.armador); }
+        if (record.free_time_days !== undefined) { updates.push('free_time_days = ?'); values.push(record.free_time_days); }
+        if (record.vigencia_inicio !== undefined) { updates.push('vigencia_inicio = ?'); values.push(record.vigencia_inicio); }
+        if (record.vigencia_fim !== undefined) { updates.push('vigencia_fim = ?'); values.push(record.vigencia_fim); }
+        if (record.notas !== undefined) { updates.push('notas = ?'); values.push(record.notas); }
+        if (record.ativo !== undefined) { updates.push('ativo = ?'); values.push(record.ativo); }
         
         values.push(id);
         
@@ -164,7 +138,6 @@ serve(async (req) => {
       }
 
       case 'delete': {
-        // Soft delete - set ativo = FALSE
         await client.execute(
           `UPDATE t_client_free_time SET ativo = FALSE WHERE id = ?`,
           [id]
@@ -174,8 +147,6 @@ serve(async (req) => {
       }
 
       case 'findForClient': {
-        // Find applicable free time for a client
-        // First try to find PROCESSO type matching MBL
         if (mbl) {
           const processoRows = await client.query(
             `SELECT * FROM t_client_free_time 
@@ -190,7 +161,6 @@ serve(async (req) => {
           }
         }
         
-        // Fallback to CONTRATO type for the client
         if (clienteNome) {
           const contratoRows = await client.query(
             `SELECT * FROM t_client_free_time 
@@ -231,11 +201,15 @@ serve(async (req) => {
       try { await client.close(); } catch (_) { /* ignore */ }
     }
 
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const isRetryable = msg.includes('max_user_connections') || msg.includes('ETIMEDOUT');
+
     return new Response(JSON.stringify({ 
       success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+      error: msg,
+      retryable: isRetryable
     }), {
-      status: 500,
+      status: isRetryable ? 503 : 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
