@@ -123,8 +123,8 @@ export default function DemurrageFreeTimes() {
     if (!deletingFreeTime) return;
     await deleteMutation.mutateAsync(deletingFreeTime.id);
     setDeletingFreeTime(null);
-    // Trigger recalc after deletion
-    recalcMutation.mutate();
+    // Serialize recalc with delay to avoid connection storms
+    setTimeout(() => recalcMutation.mutate(), 2000);
   };
 
 

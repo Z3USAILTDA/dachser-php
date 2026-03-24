@@ -24,6 +24,13 @@ interface FreeTimeRecord {
   created_by?: string | null;
 }
 
+const RETRYABLE_ERRORS = ['max_user_connections', 'ETIMEDOUT', 'Connection reset', 'Too many connections'];
+
+function isRetryableError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return RETRYABLE_ERRORS.some(e => msg.includes(e));
+}
+
 async function connectWithRetry(maxRetries = 5): Promise<Client> {
   const host = Deno.env.get('MARIADB_HOST');
   const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
@@ -35,24 +42,16 @@ async function connectWithRetry(maxRetries = 5): Promise<Client> {
     throw new Error('Missing MariaDB credentials');
   }
 
-  // Random initial delay to avoid thundering herd
   await new Promise(r => setTimeout(r, Math.random() * 500));
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const client = await new Client().connect({
-        hostname: host,
-        port,
-        db: database,
-        username,
-        password,
-      });
+      const client = await new Client().connect({ hostname: host, port, db: database, username, password });
       return client;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (attempt < maxRetries && (msg.includes('max_user_connections') || msg.includes('ETIMEDOUT') || msg.includes('Connection reset') || msg.includes('Too many connections'))) {
+      if (attempt < maxRetries && isRetryableError(err)) {
         const delay = 1000 * attempt + Math.random() * 1000;
-        console.log(`[client-freetime-crud] Attempt ${attempt} failed, retrying in ${Math.round(delay)}ms...`);
+        console.log(`[client-freetime-crud] Connect attempt ${attempt} failed, retrying in ${Math.round(delay)}ms...`);
         await new Promise(r => setTimeout(r, delay));
       } else {
         throw err;
@@ -60,6 +59,38 @@ async function connectWithRetry(maxRetries = 5): Promise<Client> {
     }
   }
   throw new Error('Failed to connect after retries');
+}
+
+async function queryWithRetry(client: Client, sql: string, params?: unknown[], maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await client.query(sql, params);
+    } catch (err) {
+      if (attempt < maxRetries && isRetryableError(err)) {
+        const delay = 1000 * attempt + Math.random() * 500;
+        console.log(`[client-freetime-crud] Query attempt ${attempt} failed, retrying in ${Math.round(delay)}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
+async function executeWithRetry(client: Client, sql: string, params?: unknown[], maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await client.execute(sql, params);
+    } catch (err) {
+      if (attempt < maxRetries && isRetryableError(err)) {
+        const delay = 1000 * attempt + Math.random() * 500;
+        console.log(`[client-freetime-crud] Execute attempt ${attempt} failed, retrying in ${Math.round(delay)}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
 }
 
 serve(async (req) => {
@@ -78,7 +109,7 @@ serve(async (req) => {
 
     switch (action) {
       case 'list': {
-        const rows = await client.query(
+        const rows = await queryWithRetry(client,
           `SELECT * FROM t_client_free_time WHERE ativo = TRUE ORDER BY created_at DESC`
         );
         result = { success: true, data: rows };
@@ -89,7 +120,7 @@ serve(async (req) => {
         const record = data as FreeTimeRecord;
         const newId = crypto.randomUUID();
         
-        await client.execute(
+        await executeWithRetry(client,
           `INSERT INTO t_client_free_time 
            (id, cliente_nome, cliente_cnpj, tipo_ft, mbl, armador, free_time_days, 
             vigencia_inicio, vigencia_fim, tipo_conteiner, notas, ativo, created_by)
@@ -134,7 +165,7 @@ serve(async (req) => {
         
         values.push(id);
         
-        await client.execute(
+        await executeWithRetry(client,
           `UPDATE t_client_free_time SET ${updates.join(', ')} WHERE id = ?`,
           values
         );
@@ -144,7 +175,7 @@ serve(async (req) => {
       }
 
       case 'delete': {
-        await client.execute(
+        await executeWithRetry(client,
           `UPDATE t_client_free_time SET ativo = FALSE WHERE id = ?`,
           [id]
         );
@@ -154,7 +185,7 @@ serve(async (req) => {
 
       case 'findForClient': {
         if (mbl) {
-          const processoRows = await client.query(
+          const processoRows = await queryWithRetry(client,
             `SELECT * FROM t_client_free_time 
              WHERE tipo_ft = 'PROCESSO' AND mbl = ? AND ativo = TRUE 
              LIMIT 1`,
@@ -168,7 +199,7 @@ serve(async (req) => {
         }
         
         if (clienteNome) {
-          const contratoRows = await client.query(
+          const contratoRows = await queryWithRetry(client,
             `SELECT * FROM t_client_free_time 
              WHERE tipo_ft = 'CONTRATO' 
                AND cliente_nome = ? 
@@ -208,14 +239,14 @@ serve(async (req) => {
     }
 
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    const isRetryable = msg.includes('max_user_connections') || msg.includes('ETIMEDOUT');
+    const retryable = isRetryableError(error);
 
     return new Response(JSON.stringify({ 
       success: false, 
       error: msg,
-      retryable: isRetryable
+      retryable
     }), {
-      status: isRetryable ? 503 : 500,
+      status: retryable ? 503 : 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
