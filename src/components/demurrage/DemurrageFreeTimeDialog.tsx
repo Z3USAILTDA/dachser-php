@@ -33,7 +33,7 @@ export function DemurrageFreeTimeDialog({ open, onOpenChange, onSuccess }: Demur
   const [vigenciaFim, setVigenciaFim] = useState('');
   const [mbl, setMbl] = useState('');
   const [freeTimeDays, setFreeTimeDays] = useState(14);
-  const [tipoConteiner, setTipoConteiner] = useState('');
+  const [tipoConteiner, setTipoConteiner] = useState<string[]>([]);
   const [notas, setNotas] = useState('');
 
   // Autocomplete
