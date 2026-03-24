@@ -396,7 +396,7 @@ serve(async (req) => {
 
     const html = generateNotificationHtml(test_mode);
     const testPrefix = test_mode ? '[TESTE] ' : '';
-    const subject = `${testPrefix}Notificação - Alerta de Free Time - ${shipment_master || container_number || 'N/A'}`;
+    const subject = `${testPrefix}Notificação de Cobrança - ${shipment_master || container_number || 'N/A'}`;
 
     // Generate XLSX attachment
     let attachments: Array<{ filename: string; content: string }> = [];

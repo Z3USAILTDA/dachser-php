@@ -725,23 +725,33 @@ export function useSendTestAlert() {
       emails: string[];
       preInvoice?: PreInvoice;
       items?: PreInvoiceItem[];
+      demurrageContainers?: DemurrageContainer[];
     }) => {
-      const { clientName, emails, preInvoice, items } = params;
+      const { clientName, emails, preInvoice, items, demurrageContainers } = params;
 
-      const containers = (items || []).map(item => ({
-        number: item.container_number,
-        type: item.container_type || '',
-        size: '',
-        discharge_date: item.period_start_date || '',
-        free_time_days: item.free_time_days || 0,
-        return_deadline: '',
-        return_date: item.period_end_date || '',
-        days_possession: item.days_count || 0,
-        days_incident: item.days_count || 0,
-        rate_period1_usd: item.daily_rate_usd || 0,
-        rate_period2_usd: 0,
-        total_usd: item.total_usd || 0,
-      }));
+      // Extract partner_id and hbl from demurrageContainers
+      const firstContainer = (demurrageContainers || []).find(c => c.partner_id);
+      const partnerId = firstContainer?.partner_id || '';
+      const houseBl = (demurrageContainers || []).find(c => c.hbl)?.hbl || preInvoice?.bl_number || '';
+
+      const containers = (items || []).map(item => {
+        // Match with DemurrageContainer for enriched data
+        const match = (demurrageContainers || []).find(dc => dc.numero === item.container_number);
+        return {
+          number: item.container_number,
+          type: item.container_type || '',
+          size: match?.tipo_conteiner || '',
+          discharge_date: item.period_start_date || '',
+          free_time_days: item.free_time_days || 0,
+          return_deadline: match?.free_time_end_date || '',
+          return_date: item.period_end_date || '',
+          days_possession: item.days_count || 0,
+          days_incident: item.days_count || 0,
+          rate_period1_usd: item.daily_rate_usd || 0,
+          rate_period2_usd: 0,
+          total_usd: item.total_usd || 0,
+        };
+      });
 
       const { data, error } = await supabase.functions.invoke('demurrage-send-alert', {
         body: {
@@ -749,7 +759,8 @@ export function useSendTestAlert() {
           client_name: clientName,
           recipient_emails: emails,
           shipment_master: preInvoice?.shipment_mbl || '',
-          house_bl: preInvoice?.bl_number || '',
+          house_bl: houseBl,
+          partner_id: partnerId,
           origin_port: preInvoice?.origin_port || '',
           destination_port: preInvoice?.destination_port || '',
           exchange_rate: preInvoice?.exchange_rate || 1,

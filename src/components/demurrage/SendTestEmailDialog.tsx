@@ -28,6 +28,7 @@ export function SendTestEmailDialog({ open, onOpenChange, preInvoice, containers
         emails: [email.trim()],
         preInvoice,
         items: items || [],
+        demurrageContainers: containers,
       });
       toast.success("E-mail de teste enviado com sucesso (com anexo XLSX)");
       onOpenChange(false);
