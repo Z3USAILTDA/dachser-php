@@ -16,6 +16,7 @@ interface FreeTimeRecord {
   free_time_days: number;
   vigencia_inicio?: string | null;
   vigencia_fim?: string | null;
+  tipo_conteiner?: string | null;
   notas?: string | null;
   ativo: boolean;
   created_at?: string;
