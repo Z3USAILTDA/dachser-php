@@ -246,16 +246,25 @@ export function DemurrageFreeTimeDialog({ open, onOpenChange, onSuccess }: Demur
             </div>
             <div className="space-y-2">
               <Label className="text-gray-300">Tipo Container</Label>
-              <Select value={tipoConteiner} onValueChange={setTipoConteiner}>
-                <SelectTrigger className="bg-[#111] border-[#333] text-white">
-                  <SelectValue placeholder="Selecione (opcional)" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#1a1a1a] border-[#333]">
-                  {CONTAINER_TYPES.map((t) => (
-                    <SelectItem key={t} value={t} className="text-white hover:bg-[#333]">{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex flex-wrap gap-2">
+                {CONTAINER_TYPES.map((t) => {
+                  const selected = tipoConteiner.includes(t);
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setTipoConteiner(prev => selected ? prev.filter(x => x !== t) : [...prev, t])}
+                      className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
+                        selected
+                          ? 'bg-[#ffc800] text-black border-[#ffc800]'
+                          : 'bg-[#111] text-gray-400 border-[#333] hover:border-[#555]'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
