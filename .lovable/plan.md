@@ -1,25 +1,30 @@
 
 
-## Plano: Permitir seleção múltipla de Tipo de Container no cadastro de Free Time
+## Plano: Incluir tipo_conteiner no INSERT da edge function client-freetime-crud
 
-### Problema atual
+### Problema
 
-O campo "Tipo Container" usa um `Select` single-value, permitindo apenas um tipo por cadastro.
+O frontend envia `tipo_conteiner` no body do request (linha 111 do DemurrageFreeTimeDialog), mas a edge function ignora esse campo:
+- `FreeTimeRecord` (linha 9-24) não tem `tipo_conteiner`
+- O `INSERT` (linhas 91-108) não inclui a coluna
+- O `UPDATE` (linhas 121-130) também não
 
-### Solução
+### Pré-requisito
 
-Trocar o `Select` por checkboxes com toggle visual (badges clicáveis), armazenando os tipos selecionados como array e enviando como string separada por vírgula (ex: `"20DV,40HC"`).
+A coluna `tipo_conteiner` precisa existir na tabela `t_client_free_time` do MariaDB. Se ainda não foi criada, executar:
+```sql
+ALTER TABLE t_client_free_time ADD COLUMN tipo_conteiner VARCHAR(100) DEFAULT NULL;
+```
 
 ### Alterações
 
-**Arquivo: `src/components/demurrage/DemurrageFreeTimeDialog.tsx`**
+**Arquivo: `supabase/functions/client-freetime-crud/index.ts`**
 
-1. **State**: Trocar `tipoConteiner` de `string` para `string[]` (array)
-2. **UI**: Substituir o `Select` (linhas 248-258) por um grid de badges/botões clicáveis para cada tipo de container, com visual de toggle (selecionado = fundo amarelo, não selecionado = fundo escuro)
-3. **Submit**: Na linha 111, converter o array para string separada por vírgula: `tipoConteiner.join(',')` antes de enviar
-4. **Reset**: Ajustar `resetForm` para `setTipoConteiner([])`
+1. Adicionar `tipo_conteiner?: string | null` na interface `FreeTimeRecord` (após linha 15)
+2. Adicionar `tipo_conteiner` no SQL do INSERT (linhas 92-108) - coluna e valor
+3. Adicionar handler de `tipo_conteiner` no bloco UPDATE (após linha 130)
 
 ### Resultado
 
-O usuário poderá clicar em múltiplos tipos de container (ex: 20DV + 40HC) e o valor será salvo como `"20DV,40HC"` no banco.
+O valor selecionado no multi-select (ex: `"20DV,40HC"`) será persistido na coluna `tipo_conteiner` do banco.
 
