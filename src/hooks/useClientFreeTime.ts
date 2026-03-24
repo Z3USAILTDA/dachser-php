@@ -118,14 +118,7 @@ export function useDeleteClientFreeTime() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase.functions.invoke('client-freetime-crud', {
-        body: { action: 'delete', id }
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error);
-      
-      return data;
+      return await invokeWithRetry({ action: 'delete', id });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['client-free-time'] });
