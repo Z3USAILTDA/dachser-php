@@ -108,7 +108,7 @@ export function DemurrageFreeTimeDialog({ open, onOpenChange, onSuccess }: Demur
     };
 
     if (tipoFt === 'CONTRATO' && customerNumber) (data as any).customer_number = customerNumber;
-    if (tipoConteiner) (data as any).tipo_conteiner = tipoConteiner;
+    if (tipoConteiner.length > 0) (data as any).tipo_conteiner = tipoConteiner.join(',');
 
     if (tipoFt === 'CONTRATO') {
       data.vigencia_inicio = vigenciaInicio;
