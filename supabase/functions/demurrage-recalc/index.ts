@@ -6,6 +6,45 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const RETRYABLE_ERRORS = ['max_user_connections', 'ETIMEDOUT', 'Connection reset', 'Too many connections'];
+
+function isRetryableError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return RETRYABLE_ERRORS.some(e => msg.includes(e));
+}
+
+async function queryWithRetry(client: Client, sql: string, params?: unknown[], maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await client.query(sql, params);
+    } catch (err) {
+      if (attempt < maxRetries && isRetryableError(err)) {
+        const delay = 1000 * attempt + Math.random() * 500;
+        console.log(`[demurrage-recalc] Query attempt ${attempt} failed, retrying in ${Math.round(delay)}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
+async function executeWithRetry(client: Client, sql: string, params?: unknown[], maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await client.execute(sql, params);
+    } catch (err) {
+      if (attempt < maxRetries && isRetryableError(err)) {
+        const delay = 1000 * attempt + Math.random() * 500;
+        console.log(`[demurrage-recalc] Execute attempt ${attempt} failed, retrying in ${Math.round(delay)}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
 interface DemurrageContainer {
   id: number;
   numero: string;
@@ -66,19 +105,18 @@ serve(async (req) => {
       throw new Error("MariaDB credentials not configured");
     }
 
-    // connectWithRetry - handles max_user_connections
-    const MAX_RETRIES = 3;
+    // connectWithRetry
+    const MAX_RETRIES = 5;
+    await new Promise(r => setTimeout(r, Math.random() * 500));
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        console.log(`Connecting to MariaDB (attempt ${attempt}/${MAX_RETRIES})...`);
         client = await new Client().connect(mariaConfig);
         console.log("✓ Connected to MariaDB");
         break;
-      } catch (connErr: any) {
-        const msg = connErr?.message || '';
-        if (attempt < MAX_RETRIES && (msg.includes('max_user_connections') || msg.includes('ETIMEDOUT') || msg.includes('Connection reset'))) {
-          const delay = 1000 * Math.pow(2, attempt - 1);
-          console.warn(`Connection attempt ${attempt} failed: ${msg}. Retrying in ${delay}ms...`);
+      } catch (connErr) {
+        if (attempt < MAX_RETRIES && isRetryableError(connErr)) {
+          const delay = 1000 * attempt + Math.random() * 1000;
+          console.warn(`Connection attempt ${attempt} failed. Retrying in ${Math.round(delay)}ms...`);
           await new Promise(r => setTimeout(r, delay));
         } else {
           throw connErr;
@@ -88,23 +126,19 @@ serve(async (req) => {
 
     if (!client) throw new Error("Failed to connect after retries");
 
-    // Fetch settings
-    const settingsRows = await client.query(`
+    const settingsRows = await queryWithRetry(client, `
       SELECT setting_key, setting_value 
       FROM dados_dachser.t_dachser_demurrage_settings
     `) as DemurrageSetting[];
     
     const settings: Record<string, string> = {};
-    (settingsRows || []).forEach((s) => {
-      settings[s.setting_key] = s.setting_value;
-    });
+    (settingsRows || []).forEach((s) => { settings[s.setting_key] = s.setting_value; });
     
     const defaultFreeTime = parseInt(settings.default_free_time) || 14;
     const defaultRate = parseFloat(settings.default_rate) || 150;
     console.log(`Settings: FT=${defaultFreeTime} days, Rate=$${defaultRate}/day`);
 
-    // Fetch rates
-    const rates = await client.query(`
+    const rates = await queryWithRetry(client, `
       SELECT armador, container_type, free_time_days, rate_usd, 
              period_type, period_start_day, period_end_day
       FROM dados_dachser.t_dachser_demurrage_rates
@@ -113,18 +147,14 @@ serve(async (req) => {
     
     console.log(`Loaded ${rates.length} demurrage rates`);
 
-    // Build rate lookup by armador + container type
     const ratesMap: Record<string, DemurrageRate[]> = {};
     for (const rate of rates) {
       const key = `${rate.armador}:${rate.container_type}`;
-      if (!ratesMap[key]) {
-        ratesMap[key] = [];
-      }
+      if (!ratesMap[key]) ratesMap[key] = [];
       ratesMap[key].push(rate);
     }
 
-    // Fetch client free times (custom free times registered by users)
-    const clientFreeTimeRows = await client.query(`
+    const clientFreeTimeRows = await queryWithRetry(client, `
       SELECT id, cliente_nome, tipo_ft, mbl, free_time_days, 
              vigencia_inicio, vigencia_fim, armador
       FROM dados_dachser.t_client_free_time 
@@ -139,7 +169,6 @@ serve(async (req) => {
     
     console.log(`Loaded ${clientFreeTimeRows.length} client free time configurations`);
 
-    // Build lookup maps for quick access
     const ftByMbl = new Map<string, ClientFreeTime>();
     const ftByCliente = new Map<string, ClientFreeTime>();
 
@@ -151,8 +180,7 @@ serve(async (req) => {
       }
     }
 
-    // Fetch containers with ft_started_at set
-    const containers = await client.query(`
+    const containers = await queryWithRetry(client, `
       SELECT id, numero, mbl, cliente, armador, tipo_conteiner, ft_started_at, data_devolucao, free_time_days
       FROM dados_dachser.t_dachser_demurrage_containers
       WHERE active = 1 AND ft_started_at IS NOT NULL
@@ -178,128 +206,88 @@ serve(async (req) => {
         if (!container.ft_started_at) continue;
 
         const ftStart = new Date(container.ft_started_at);
-        const endDate = container.data_devolucao 
-          ? new Date(container.data_devolucao) 
-          : now;
+        const endDate = container.data_devolucao ? new Date(container.data_devolucao) : now;
 
-        // Get rates for this container (by armador + tipo_conteiner)
         const containerType = container.tipo_conteiner || '40DV';
         const armador = container.armador || 'DEFAULT';
         const key = `${armador}:${containerType}`;
         const applicableRates = ratesMap[key] || ratesMap[`DEFAULT:${containerType}`] || [];
         
-        // Determine free time days with priority:
-        // 1. PROCESSO (MBL específico) - Highest priority
-        // 2. CONTRATO (Cliente) - Second priority
-        // 3. Tarifas por Armador/Container - Third priority
-        // 4. Default Settings - Fallback
         let freeTimeDays = defaultFreeTime;
         let ftSource = 'DEFAULT';
 
-        // Check for MBL-specific free time (PROCESSO)
         if (container.mbl && ftByMbl.has(container.mbl.toUpperCase())) {
           const ft = ftByMbl.get(container.mbl.toUpperCase())!;
           freeTimeDays = ft.free_time_days;
           ftSource = 'PROCESSO';
-          console.log(`${container.numero}: Using PROCESSO free time (MBL: ${container.mbl}) = ${freeTimeDays}d`);
-        }
-        // Check for client contract free time (CONTRATO)
-        else if (container.cliente && ftByCliente.has(container.cliente.toUpperCase())) {
+        } else if (container.cliente && ftByCliente.has(container.cliente.toUpperCase())) {
           const ft = ftByCliente.get(container.cliente.toUpperCase())!;
           freeTimeDays = ft.free_time_days;
           ftSource = 'CONTRATO';
-          console.log(`${container.numero}: Using CONTRATO free time (Cliente: ${container.cliente}) = ${freeTimeDays}d`);
-        }
-        // Use carrier/container rates
-        else if (applicableRates.length > 0 && applicableRates[0].free_time_days) {
+        } else if (applicableRates.length > 0 && applicableRates[0].free_time_days) {
           freeTimeDays = applicableRates[0].free_time_days;
           ftSource = 'TARIFA';
-        }
-        // Fallback to container's own free_time_days
-        else if (container.free_time_days) {
+        } else if (container.free_time_days) {
           freeTimeDays = container.free_time_days;
           ftSource = 'CONTAINER';
         }
         
-        // Calculate free time end date
         const freeTimeEnd = new Date(ftStart);
         freeTimeEnd.setDate(freeTimeEnd.getDate() + freeTimeDays);
 
-        // Calculate days
         const totalDays = Math.floor((endDate.getTime() - ftStart.getTime()) / (1000 * 60 * 60 * 24));
         const daysRemaining = Math.floor((freeTimeEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
         const daysExceeded = Math.max(0, totalDays - freeTimeDays);
 
-        // Calculate demurrage cost
         let demurrageCost = 0;
         let ratePerDay = defaultRate;
         
         if (daysExceeded > 0) {
-          // Use tiered rates if available
           const sortedRates = applicableRates
             .filter(r => r.period_type !== 'free_period')
             .sort((a, b) => (a.period_start_day || 0) - (b.period_start_day || 0));
 
           if (sortedRates.length > 0) {
             let remainingDays = daysExceeded;
-            
             for (const rate of sortedRates) {
               if (remainingDays <= 0) break;
-              
               const periodStart = (rate.period_start_day || 1);
               const periodEnd = rate.period_end_day || Infinity;
               const periodLength = periodEnd - periodStart + 1;
-              
               const daysInPeriod = Math.min(remainingDays, periodLength);
-              
               if (daysInPeriod > 0) {
                 demurrageCost += daysInPeriod * rate.rate_usd;
                 ratePerDay = rate.rate_usd;
                 remainingDays -= daysInPeriod;
               }
             }
-
-            // Any remaining days use last rate
             if (remainingDays > 0) {
-              const lastRate = sortedRates[sortedRates.length - 1];
-              demurrageCost += remainingDays * lastRate.rate_usd;
+              demurrageCost += remainingDays * sortedRates[sortedRates.length - 1].rate_usd;
             }
           } else {
-            // No specific rates, use default
             demurrageCost = daysExceeded * defaultRate;
           }
         }
 
-        // Determine risk status
         let riskStatus: string;
         let riskScore: number;
         
         if (container.data_devolucao) {
-          // Container returned
           riskStatus = daysExceeded > 0 ? 'exceeded' : 'safe';
           riskScore = daysExceeded > 0 ? 100 : 0;
         } else if (daysRemaining > 5) {
-          riskStatus = 'safe';
-          riskScore = 20;
-          results.safe++;
+          riskStatus = 'safe'; riskScore = 20; results.safe++;
         } else if (daysRemaining > 2) {
-          riskStatus = 'at_risk';
-          riskScore = 50;
-          results.at_risk++;
+          riskStatus = 'at_risk'; riskScore = 50; results.at_risk++;
         } else if (daysRemaining > 0) {
-          riskStatus = 'critical';
-          riskScore = 80;
-          results.critical++;
+          riskStatus = 'critical'; riskScore = 80; results.critical++;
         } else {
-          riskStatus = 'exceeded';
-          riskScore = 100;
-          results.exceeded++;
+          riskStatus = 'exceeded'; riskScore = 100; results.exceeded++;
         }
 
         const freeTimeEndStr = freeTimeEnd.toISOString().split('T')[0];
 
-        // Update container in MariaDB
-        await client.execute(`
+        await executeWithRetry(client, `
           UPDATE dados_dachser.t_dachser_demurrage_containers SET
             free_time_days = ?,
             free_time_end_date = ?,
@@ -313,22 +301,13 @@ serve(async (req) => {
             updated_at = NOW()
           WHERE id = ?
         `, [
-          freeTimeDays,
-          freeTimeEndStr,
-          Math.max(0, daysRemaining),
-          daysExceeded,
-          demurrageCost,
-          ratePerDay,
-          riskStatus,
-          riskScore,
-          ftSource,
-          container.id
+          freeTimeDays, freeTimeEndStr, Math.max(0, daysRemaining),
+          daysExceeded, demurrageCost, ratePerDay,
+          riskStatus, riskScore, ftSource, container.id
         ]);
 
         results.updated++;
         results.total_demurrage_usd += demurrageCost;
-
-        console.log(`${container.numero}: ${daysExceeded}d exceeded, $${demurrageCost.toFixed(2)}, ${riskStatus}`);
 
       } catch (err) {
         console.error(`Error processing ${container.numero}:`, err);
@@ -337,10 +316,7 @@ serve(async (req) => {
     }
 
     await client.close();
-    console.log("✓ MariaDB connection closed");
-
     console.log('=== Recalculation Complete ===');
-    console.log(`Results: ${JSON.stringify(results)}`);
 
     return new Response(JSON.stringify({
       success: true,
@@ -352,17 +328,13 @@ serve(async (req) => {
 
   } catch (err) {
     console.error('Recalc error:', err);
-    if (client) {
-      try { await client.close(); } catch {}
-    }
+    if (client) { try { await client.close(); } catch {} }
     const errMsg = err instanceof Error ? err.message : String(err);
-    const isRetryable = errMsg.includes('max_user_connections') || errMsg.includes('ETIMEDOUT') || errMsg.includes('Connection reset');
+    const retryable = isRetryableError(err);
     return new Response(JSON.stringify({
-      success: false,
-      error: errMsg,
-      retryable: isRetryable,
+      success: false, error: errMsg, retryable,
     }), {
-      status: isRetryable ? 503 : 500,
+      status: retryable ? 503 : 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

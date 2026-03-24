@@ -56,6 +56,9 @@ export function useClientFreeTimeList() {
       const data = await invokeWithRetry({ action: 'list' });
       return (data.data || []) as ClientFreeTime[];
     },
+    retry: 1,
+    retryDelay: 3000,
+    staleTime: 10000,
   });
 }
 

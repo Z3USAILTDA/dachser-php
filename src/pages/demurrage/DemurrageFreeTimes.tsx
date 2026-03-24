@@ -123,8 +123,8 @@ export default function DemurrageFreeTimes() {
     if (!deletingFreeTime) return;
     await deleteMutation.mutateAsync(deletingFreeTime.id);
     setDeletingFreeTime(null);
-    // Trigger recalc after deletion
-    recalcMutation.mutate();
+    // Serialize recalc with delay to avoid connection storms
+    setTimeout(() => recalcMutation.mutate(), 2000);
   };
 
 
@@ -362,8 +362,7 @@ export default function DemurrageFreeTimes() {
         onOpenChange={(open) => !open && setEditingFreeTime(null)}
         onSuccess={() => {
           setEditingFreeTime(null);
-          refetch();
-          recalcMutation.mutate();
+          setTimeout(() => recalcMutation.mutate(), 2000);
         }}
       />
 
@@ -403,8 +402,9 @@ export default function DemurrageFreeTimes() {
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         onSuccess={() => {
-          refetch();
-          recalcMutation.mutate();
+          // Don't call refetch() — invalidateQueries in the hook handles it
+          // Serialize recalc to avoid connection storms
+          setTimeout(() => recalcMutation.mutate(), 2000);
         }}
       />
     </DemurrageLayout>
