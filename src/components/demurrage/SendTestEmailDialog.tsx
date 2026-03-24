@@ -4,16 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Mail } from "lucide-react";
-import { useSendTestAlert, useDemurragePreInvoiceItems, type PreInvoice } from "@/hooks/useDemurrageData";
+import { useSendTestAlert, useDemurragePreInvoiceItems, type PreInvoice, type DemurrageContainer } from "@/hooks/useDemurrageData";
 import { toast } from "sonner";
 
 interface SendTestEmailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   preInvoice: PreInvoice | null;
+  containers?: DemurrageContainer[];
 }
 
-export function SendTestEmailDialog({ open, onOpenChange, preInvoice }: SendTestEmailDialogProps) {
+export function SendTestEmailDialog({ open, onOpenChange, preInvoice, containers = [] }: SendTestEmailDialogProps) {
   const [email, setEmail] = useState("");
   const sendMutation = useSendTestAlert();
   const { data: items } = useDemurragePreInvoiceItems(preInvoice?.id ?? null);
@@ -27,6 +28,7 @@ export function SendTestEmailDialog({ open, onOpenChange, preInvoice }: SendTest
         emails: [email.trim()],
         preInvoice,
         items: items || [],
+        demurrageContainers: containers,
       });
       toast.success("E-mail de teste enviado com sucesso (com anexo XLSX)");
       onOpenChange(false);
