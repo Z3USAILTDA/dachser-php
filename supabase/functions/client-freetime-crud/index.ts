@@ -16,6 +16,7 @@ interface FreeTimeRecord {
   free_time_days: number;
   vigencia_inicio?: string | null;
   vigencia_fim?: string | null;
+  tipo_conteiner?: string | null;
   notas?: string | null;
   ativo: boolean;
   created_at?: string;
@@ -91,8 +92,8 @@ serve(async (req) => {
         await client.execute(
           `INSERT INTO t_client_free_time 
            (id, cliente_nome, cliente_cnpj, tipo_ft, mbl, armador, free_time_days, 
-            vigencia_inicio, vigencia_fim, notas, ativo, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?)`,
+            vigencia_inicio, vigencia_fim, tipo_conteiner, notas, ativo, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?)`,
           [
             newId,
             record.cliente_nome,
@@ -103,6 +104,7 @@ serve(async (req) => {
             record.free_time_days,
             record.vigencia_inicio || null,
             record.vigencia_fim || null,
+            record.tipo_conteiner || null,
             record.notas || null,
             record.created_by || null
           ]
@@ -126,6 +128,7 @@ serve(async (req) => {
         if (record.free_time_days !== undefined) { updates.push('free_time_days = ?'); values.push(record.free_time_days); }
         if (record.vigencia_inicio !== undefined) { updates.push('vigencia_inicio = ?'); values.push(record.vigencia_inicio); }
         if (record.vigencia_fim !== undefined) { updates.push('vigencia_fim = ?'); values.push(record.vigencia_fim); }
+        if (record.tipo_conteiner !== undefined) { updates.push('tipo_conteiner = ?'); values.push(record.tipo_conteiner); }
         if (record.notas !== undefined) { updates.push('notas = ?'); values.push(record.notas); }
         if (record.ativo !== undefined) { updates.push('ativo = ?'); values.push(record.ativo); }
         
