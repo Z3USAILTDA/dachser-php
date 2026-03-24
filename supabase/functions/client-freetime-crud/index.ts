@@ -128,6 +128,7 @@ serve(async (req) => {
         if (record.free_time_days !== undefined) { updates.push('free_time_days = ?'); values.push(record.free_time_days); }
         if (record.vigencia_inicio !== undefined) { updates.push('vigencia_inicio = ?'); values.push(record.vigencia_inicio); }
         if (record.vigencia_fim !== undefined) { updates.push('vigencia_fim = ?'); values.push(record.vigencia_fim); }
+        if (record.tipo_conteiner !== undefined) { updates.push('tipo_conteiner = ?'); values.push(record.tipo_conteiner); }
         if (record.notas !== undefined) { updates.push('notas = ?'); values.push(record.notas); }
         if (record.ativo !== undefined) { updates.push('ativo = ?'); values.push(record.ativo); }
         
