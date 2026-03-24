@@ -92,8 +92,8 @@ serve(async (req) => {
         await client.execute(
           `INSERT INTO t_client_free_time 
            (id, cliente_nome, cliente_cnpj, tipo_ft, mbl, armador, free_time_days, 
-            vigencia_inicio, vigencia_fim, notas, ativo, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?)`,
+            vigencia_inicio, vigencia_fim, tipo_conteiner, notas, ativo, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?)`,
           [
             newId,
             record.cliente_nome,
@@ -104,6 +104,7 @@ serve(async (req) => {
             record.free_time_days,
             record.vigencia_inicio || null,
             record.vigencia_fim || null,
+            record.tipo_conteiner || null,
             record.notas || null,
             record.created_by || null
           ]
