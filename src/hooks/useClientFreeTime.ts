@@ -66,14 +66,7 @@ export function useCreateClientFreeTime() {
 
   return useMutation({
     mutationFn: async (formData: CreateClientFreeTimeData) => {
-      const { data, error } = await supabase.functions.invoke('client-freetime-crud', {
-        body: { action: 'create', data: formData }
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error);
-      
-      return data;
+      return await invokeWithRetry({ action: 'create', data: formData });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['client-free-time'] });
