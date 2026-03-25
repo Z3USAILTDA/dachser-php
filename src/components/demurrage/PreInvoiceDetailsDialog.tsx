@@ -132,8 +132,8 @@ export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreI
               <p className="font-mono">{preInvoice.shipment_mbl || '-'}</p>
             </div>
             <div>
-              <span className="text-muted-foreground">BL:</span>
-              <p className="font-mono">{preInvoice.bl_number || '-'}</p>
+              <span className="text-muted-foreground">HBL:</span>
+              <p className="font-mono">{(preInvoice as any).hbl || preInvoice.bl_number || '-'}</p>
             </div>
             <div>
               <span className="text-muted-foreground">Navio:</span>
