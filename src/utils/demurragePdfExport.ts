@@ -362,7 +362,8 @@ export const exportDemurrageReportPDF = (data: DemurrageContainer[]) => {
 
 export const exportPreInvoicePDF = (
   preInvoice: PreInvoice, 
-  items: PreInvoiceItem[]
+  items: PreInvoiceItem[],
+  containers?: DemurrageContainer[]
 ) => {
   const doc = new jsPDF({
     orientation: "portrait",
