@@ -984,15 +984,20 @@ export const PagamentosTab = () => {
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
                               {anexo.file_url && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => window.open(anexo.file_url, "_blank")}
-                                  title="Abrir em nova aba"
-                                >
-                                  <ExternalLink className="h-3.5 w-3.5" />
-                                </Button>
+                                <FilePreview
+                                  fileName={anexo.file_name || "arquivo"}
+                                  fileUrl={anexo.file_url}
+                                  fileType={anexo.tipo || "OUTROS"}
+                                  onDownload={() => {
+                                    const link = document.createElement("a");
+                                    link.href = anexo.file_url;
+                                    link.download = anexo.file_name || "arquivo";
+                                    link.target = "_blank";
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                  }}
+                                />
                               )}
                             </div>
                           </div>
