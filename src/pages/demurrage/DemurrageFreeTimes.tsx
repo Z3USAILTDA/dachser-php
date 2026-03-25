@@ -252,6 +252,7 @@ export default function DemurrageFreeTimes() {
                       <TableHead>Cliente</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>MBL</TableHead>
+                      <TableHead>HBL</TableHead>
                       <TableHead>Armador</TableHead>
                       <TableHead className="text-center">Dias FT</TableHead>
                       <TableHead>Vigência</TableHead>
