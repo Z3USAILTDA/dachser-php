@@ -81,12 +81,12 @@ export const DadosPagamentoPanel = ({
   const { toast } = useToast();
 
   const handleCopy = async (text: string, field: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyToClipboard(text);
+    if (ok) {
       setCopiedField(field);
       toast({ title: "Copiado!", description: "Texto copiado para a área de transferência" });
       setTimeout(() => setCopiedField(null), 2000);
-    } catch {
+    } else {
       toast({ title: "Erro ao copiar", variant: "destructive" });
     }
   };

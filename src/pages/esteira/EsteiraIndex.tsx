@@ -1243,10 +1243,12 @@ const EsteiraIndex = () => {
         }
       }
 
-      // Filtro de busca por SPO
+      // Filtro de busca por SPO (startsWith para evitar matches parciais)
       if (filters.search) {
-        const searchLower = filters.search.toLowerCase();
-        if (!voucher.numeroSPO.toLowerCase().includes(searchLower)) return false;
+        const searchLower = filters.search.toLowerCase().trim();
+        const spoMatch = voucher.numeroSPO.toLowerCase().startsWith(searchLower);
+        const masterNameMatch = voucher.nomeMaster?.toLowerCase().includes(searchLower);
+        if (!spoMatch && !masterNameMatch) return false;
       }
 
       // Filtro de processo
