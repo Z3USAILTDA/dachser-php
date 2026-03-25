@@ -1,46 +1,28 @@
 
 
-## Plano: Usar tarifas configuradas no "VALOR DIÁRIA USD" do anexo XLSX
+## Plano: Trocar filtros Origem/Destino por Tipo Processo
 
-### Problema atual
-A seção "VALOR DIÁRIA USD" no anexo XLSX do e-mail mostra dados genéricos: `rate_period1_usd` e `rate_period2_usd` passados pelo cliente, mas esses valores não correspondem às tarifas configuradas na tabela `t_dachser_demurrage_rates` (que tem múltiplos períodos por armador/container_type com `period_start_day` e `period_end_day`).
+### Alterações em `src/pages/demurrage/DemurrageMonitor.tsx`
 
-### Solução
-Passar o `armador` de cada container para a edge function, que então consulta as tarifas configuradas no MariaDB e calcula os dias e valores corretos por período.
+**1. State** — Remover `filterPortoOrigem` e `filterPortoDestino`, adicionar `filterTipoProcesso`
 
-### Alterações
-
-**1. `src/hooks/useDemurrageData.ts` — Passar armador nos containers**
-- No `useSendTestAlert`, adicionar `armador` ao mapeamento de containers (tanto no branch de items quanto no fallback):
-  ```typescript
-  armador: match?.armador || dc.armador || '',
-  ```
-
-**2. `supabase/functions/demurrage-send-alert/index.ts` — Buscar tarifas e calcular períodos**
-
-- Adicionar `armador` ao `ContainerDetail` interface
-- Na edge function, após receber os containers, conectar ao MariaDB e buscar as tarifas ativas:
-  ```sql
-  SELECT * FROM dados_dachser.t_dachser_demurrage_rates 
-  WHERE active = 1 ORDER BY armador, container_type, period_start_day
-  ```
-- Para cada container, localizar as tarifas correspondentes por `armador` + `container_type` (usando `size` como container_type)
-- Calcular quantos dias incidentes caem em cada período usando `period_start_day` e `period_end_day`
-- Preencher as colunas do XLSX com os valores corretos:
-  - **1° PERÍODO**: quantidade de dias no período 1 + valor diário (rate_usd)
-  - **2° PERÍODO**: quantidade de dias no período 2 + valor diário (rate_usd)
-
-- Se houver 3+ períodos nas tarifas, expandir os headers do XLSX dinamicamente para incluir todos os períodos configurados
-
-**3. Lógica de cálculo de dias por período**
-```
-dias_incidentes = total de dias além do free time
-Para cada período da tarifa (ordenado por period_start_day):
-  - dias_no_periodo = min(dias_restantes, period_end_day - period_start_day + 1)
-  - valor_periodo = dias_no_periodo * rate_usd
+**2. Filtro client-side** — Substituir os blocos de filtro de porto_origem/porto_destino pelo filtro de tipo_processo:
+```typescript
+if (filterTipoProcesso !== "all") {
+  result = result.filter(c => c.tipo_processo === filterTipoProcesso);
+}
 ```
 
-### Arquivos editados
-- `src/hooks/useDemurrageData.ts`
-- `supabase/functions/demurrage-send-alert/index.ts`
+**3. Unique values** — Remover `uniquePortosOrigem`/`uniquePortosDestino`, adicionar:
+```typescript
+const uniqueTipoProcesso = useMemo(() => 
+  [...new Set(containers.map(c => c.tipo_processo).filter(Boolean))].sort() as string[], [containers]);
+```
+
+**4. UI** — Substituir os dois `<Select>` de Porto Origem e Porto Destino por um único Select de Tipo Processo com opções dinâmicas (valores do banco, ex: "SEA IMPORT", "SEA EXPORT")
+
+**5. Limpeza** — Atualizar `hasActiveFilters`, `clearAllFilters` e o `useEffect` de reset de página para usar `filterTipoProcesso` em vez dos dois filtros removidos
+
+### Arquivo editado
+- `src/pages/demurrage/DemurrageMonitor.tsx`
 
