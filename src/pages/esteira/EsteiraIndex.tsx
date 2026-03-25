@@ -1263,9 +1263,11 @@ const EsteiraIndex = () => {
         if (!voucher.fornecedor?.toLowerCase().includes(searchLower)) return false;
       }
 
-      // Filtro de etapa
-      if (filters.etapa !== "all" && (voucher.etapaAtual || "").trim() !== filters.etapa) {
-        return false;
+      // Filtro de etapa (normalizado)
+      if (filters.etapa !== "all") {
+        const vEtapa = (voucher.etapaAtual || "").trim().toUpperCase();
+        const fEtapa = filters.etapa.trim().toUpperCase();
+        if (vEtapa !== fEtapa) return false;
       }
 
       // Filtro de cobrança
