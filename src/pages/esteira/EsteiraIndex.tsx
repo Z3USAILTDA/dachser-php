@@ -762,6 +762,7 @@ const EsteiraIndex = () => {
     aprovadoPorUserId: v.aprovado_por_user_id,
     clienteEmail: v.cliente_email,
     isMaster: v.is_master === 1 || v.is_master === true,
+    nomeMaster: v.nome_master || null,
     origemCriacao: v.is_master ? "MASTER" : v.id_rm ? "RM" : "MANUAL",
     processoId: v.processo_id || null,
     origemProcesso: v.origem_processo || null,
