@@ -184,7 +184,12 @@ export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreI
               Containers ({containers.length})
             </h4>
 
-            {containers.length === 0 ? (
+            {isLoadingContainers ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Loader2 className="h-10 w-10 mx-auto mb-2 animate-spin opacity-50" />
+                <p>Carregando containers...</p>
+              </div>
+            ) : containers.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Package className="h-10 w-10 mx-auto mb-2 opacity-50" />
                 <p>Nenhum container encontrado para este MBL</p>
