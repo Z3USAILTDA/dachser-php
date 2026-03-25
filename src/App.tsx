@@ -100,6 +100,7 @@ import ManualAdmin from "./pages/admin/ManualAdmin";
 import UploadMaster from "./pages/admin/UploadMaster";
 import ApiKeyTest from "./pages/admin/ApiKeyTest";
 import FirecrawlMonitor from "./pages/admin/FirecrawlMonitor";
+import CronManager from "./pages/admin/CronManager";
 
 // AWB Pages
 import AWBList from "./pages/AWBList";
@@ -224,6 +225,7 @@ const App = () => (
           <Route path="/admin/manual" element={<ManualAdmin />} />
           <Route path="/admin/api-test" element={<ApiKeyTest />} />
           <Route path="/admin/firecrawl-monitor" element={<FirecrawlMonitor />} />
+          <Route path="/admin/cron-manager" element={<CronManager />} />
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
