@@ -10,6 +10,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   Play, Pencil, Power, RefreshCw, Clock, Loader2,
   ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, XCircle,
@@ -267,6 +272,37 @@ function HistoryTable({ jobid }: { jobid: number }) {
 }
 
 // ─── Main Component ──────────────────────────────────────────
+const WEEK_DAYS = [
+  { value: 1, label: "Seg" },
+  { value: 2, label: "Ter" },
+  { value: 3, label: "Qua" },
+  { value: 4, label: "Qui" },
+  { value: 5, label: "Sex" },
+  { value: 6, label: "Sáb" },
+  { value: 0, label: "Dom" },
+];
+
+const detectScheduleMode = (cron: string): "presets" | "weekly" | "manual" => {
+  if (CRON_PRESETS.some(p => p.value === cron)) return "presets";
+  const parts = cron.split(/\s+/);
+  if (parts.length === 5 && parts[4] !== "*" && parts[2] === "*" && parts[3] === "*") return "weekly";
+  return "manual";
+};
+
+const parseWeeklyCron = (cron: string) => {
+  const parts = cron.split(/\s+/);
+  if (parts.length !== 5) return { days: [], hour: 12, minute: 0 };
+  const days = parts[4] !== "*" ? parts[4].split(",").map(Number).filter(n => !isNaN(n)) : [];
+  const hour = parts[1] !== "*" ? parseInt(parts[1]) || 0 : 12;
+  const minute = parseInt(parts[0]) || 0;
+  return { days, hour, minute };
+};
+
+const buildWeeklyCron = (days: number[], hour: number, minute: number): string => {
+  if (days.length === 0) return "";
+  return `${minute} ${hour} * * ${days.sort((a, b) => a - b).join(",")}`;
+};
+
 const CronManager = () => {
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<CronJob[]>([]);
@@ -278,6 +314,10 @@ const CronManager = () => {
   const [runningJob, setRunningJob] = useState<number | null>(null);
   const [togglingJob, setTogglingJob] = useState<number | null>(null);
   const [expandedJob, setExpandedJob] = useState<number | null>(null);
+  const [scheduleMode, setScheduleMode] = useState<"presets" | "weekly" | "manual">("presets");
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
+  const [selectedHour, setSelectedHour] = useState(12);
+  const [selectedMinute, setSelectedMinute] = useState(0);
 
   useEffect(() => {
     if (!isZ3usAdmin()) {
@@ -472,7 +512,22 @@ const CronManager = () => {
                           <Button
                             variant="ghost" size="icon"
                             title="Editar schedule"
-                            onClick={() => { setEditJob(job); setNewSchedule(job.schedule); }}
+                            onClick={() => {
+                              setEditJob(job);
+                              setNewSchedule(job.schedule);
+                              const mode = detectScheduleMode(job.schedule);
+                              setScheduleMode(mode);
+                              if (mode === "weekly") {
+                                const parsed = parseWeeklyCron(job.schedule);
+                                setSelectedDays(parsed.days);
+                                setSelectedHour(parsed.hour);
+                                setSelectedMinute(parsed.minute);
+                              } else {
+                                setSelectedDays([]);
+                                setSelectedHour(12);
+                                setSelectedMinute(0);
+                              }
+                            }}
                             className="hover:bg-[rgba(255,255,255,0.06)]"
                           >
                             <Pencil className="h-4 w-4 text-[#aaaaaa]" />
@@ -571,7 +626,7 @@ const CronManager = () => {
 
       {/* ── Edit Schedule Dialog ── */}
       <Dialog open={!!editJob} onOpenChange={(open) => !open && setEditJob(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Editar Schedule</DialogTitle>
             <DialogDescription>
@@ -579,10 +634,22 @@ const CronManager = () => {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium text-muted-foreground mb-1 block">Presets</label>
-              <div className="flex flex-wrap gap-2">
+          <Tabs value={scheduleMode} onValueChange={(v) => {
+            const mode = v as "presets" | "weekly" | "manual";
+            setScheduleMode(mode);
+            if (mode === "weekly") {
+              const cron = buildWeeklyCron(selectedDays, selectedHour, selectedMinute);
+              if (cron) setNewSchedule(cron);
+            }
+          }}>
+            <TabsList className="w-full">
+              <TabsTrigger value="presets" className="flex-1 text-xs">Presets</TabsTrigger>
+              <TabsTrigger value="weekly" className="flex-1 text-xs">Semanal</TabsTrigger>
+              <TabsTrigger value="manual" className="flex-1 text-xs">Cron Manual</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="presets" className="space-y-3">
+              <div className="flex flex-wrap gap-2 pt-2">
                 {CRON_PRESETS.map((preset) => (
                   <Button
                     key={preset.value}
@@ -594,22 +661,112 @@ const CronManager = () => {
                   </Button>
                 ))}
               </div>
-            </div>
+            </TabsContent>
 
-            <div>
-              <label className="text-sm font-medium text-muted-foreground mb-1 block">Expressão Cron</label>
-              <Input
-                value={newSchedule}
-                onChange={(e) => setNewSchedule(e.target.value)}
-                placeholder="*/5 * * * *"
-                className="font-mono"
-              />
-              <p className="text-xs text-muted-foreground mt-1">Formato: minuto hora dia_mês mês dia_semana</p>
-              {newSchedule && (
-                <p className="text-xs mt-1 text-primary font-medium">→ {cronToHuman(newSchedule)}</p>
+            <TabsContent value="weekly" className="space-y-4">
+              <div className="pt-2">
+                <label className="text-sm font-medium text-muted-foreground mb-2 block">Dias da Semana</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {WEEK_DAYS.map((day) => (
+                    <label
+                      key={day.value}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
+                        selectedDays.includes(day.value)
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border bg-input/50 text-muted-foreground hover:border-primary/50"
+                      }`}
+                    >
+                      <Checkbox
+                        checked={selectedDays.includes(day.value)}
+                        onCheckedChange={(checked) => {
+                          const next = checked
+                            ? [...selectedDays, day.value]
+                            : selectedDays.filter(d => d !== day.value);
+                          setSelectedDays(next);
+                          const cron = buildWeeklyCron(next, selectedHour, selectedMinute);
+                          if (cron) setNewSchedule(cron);
+                        }}
+                      />
+                      <span className="text-sm font-medium">{day.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-muted-foreground mb-2 block">Horário (UTC)</label>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={String(selectedHour)}
+                    onValueChange={(v) => {
+                      const h = parseInt(v);
+                      setSelectedHour(h);
+                      const cron = buildWeeklyCron(selectedDays, h, selectedMinute);
+                      if (cron) setNewSchedule(cron);
+                    }}
+                  >
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <SelectItem key={i} value={String(i)}>
+                          {String(i).padStart(2, "0")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-muted-foreground font-bold">:</span>
+                  <Select
+                    value={String(selectedMinute)}
+                    onValueChange={(v) => {
+                      const m = parseInt(v);
+                      setSelectedMinute(m);
+                      const cron = buildWeeklyCron(selectedDays, selectedHour, m);
+                      if (cron) setNewSchedule(cron);
+                    }}
+                  >
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[0, 15, 30, 45].map((m) => (
+                        <SelectItem key={m} value={String(m)}>
+                          {String(m).padStart(2, "0")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-xs text-muted-foreground ml-1">UTC</span>
+                </div>
+              </div>
+
+              {selectedDays.length === 0 && (
+                <p className="text-xs text-destructive">Selecione ao menos um dia da semana.</p>
               )}
+            </TabsContent>
+
+            <TabsContent value="manual" className="space-y-3">
+              <div className="pt-2">
+                <label className="text-sm font-medium text-muted-foreground mb-1 block">Expressão Cron</label>
+                <Input
+                  value={newSchedule}
+                  onChange={(e) => setNewSchedule(e.target.value)}
+                  placeholder="*/5 * * * *"
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Formato: minuto hora dia_mês mês dia_semana</p>
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          {/* Preview */}
+          {newSchedule && (
+            <div className="rounded-lg border border-border bg-input/30 px-4 py-3 space-y-1">
+              <p className="text-xs font-mono text-muted-foreground">→ {newSchedule}</p>
+              <p className="text-sm font-medium text-primary">→ {cronToHuman(newSchedule)}</p>
             </div>
-          </div>
+          )}
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditJob(null)}>Cancelar</Button>
