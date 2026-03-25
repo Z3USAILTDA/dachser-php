@@ -259,6 +259,7 @@ const Dashboard = () => {
                 { label: "Gerenciamento de APIs", href: "/admin/apis" },
                 { label: "Monitoramento de Dados", href: "/admin/database" },
                 { label: "Monitoramento de Dados ZEUS", href: "/admin/firecrawl-monitor" },
+                { label: "Gerenciamento de Crons", href: "/admin/cron-manager" },
               ],
             },
             {

@@ -225,6 +225,7 @@ const App = () => (
           <Route path="/admin/manual" element={<ManualAdmin />} />
           <Route path="/admin/api-test" element={<ApiKeyTest />} />
           <Route path="/admin/firecrawl-monitor" element={<FirecrawlMonitor />} />
+          <Route path="/admin/cron-manager" element={<CronManager />} />
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
