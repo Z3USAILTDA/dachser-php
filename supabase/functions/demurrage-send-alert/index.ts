@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.78.0";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import XLSX from "https://esm.sh/xlsx-js-style@1.2.0";
+import mysql from "npm:mysql2/promise";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,6 +13,7 @@ interface ContainerDetail {
   number: string;
   size?: string;
   type?: string;
+  armador?: string;
   discharge_date?: string;
   free_time_days?: number;
   return_deadline?: string;
@@ -45,6 +47,20 @@ interface AlertRequest {
   total_brl?: number;
   containers?: ContainerDetail[];
   issue_date?: string;
+}
+
+interface RateRow {
+  armador: string;
+  container_type: string;
+  rate_usd: number;
+  period_start_day: number;
+  period_end_day: number;
+}
+
+interface PeriodData {
+  days: number;
+  rate: number;
+  value: number;
 }
 
 function formatDateBR(dateStr: string | undefined | null): string {
@@ -86,7 +102,6 @@ Santos, SP - 11013-151.</p>
 // Style constants
 const DARK_BLUE = "003369";
 const WHITE_FONT = { color: { rgb: "FFFFFF" } };
-const BOLD = { bold: true };
 const THIN_BORDER = { style: "thin", color: { rgb: "000000" } };
 const ALL_BORDERS = { top: THIN_BORDER, bottom: THIN_BORDER, left: THIN_BORDER, right: THIN_BORDER };
 
@@ -115,18 +130,57 @@ function dataCell(v: string | number, fmt?: string): object {
   };
 }
 
-function labelCell(v: string, bold = false): object {
-  return {
-    v, t: "s",
-    s: { font: { sz: 9, bold }, alignment: { horizontal: "left", vertical: "center" } }
-  };
+async function fetchRatesFromMariaDB(): Promise<RateRow[]> {
+  let conn;
+  try {
+    conn = await mysql.createConnection({
+      host: Deno.env.get("MARIADB_HOST"),
+      port: Number(Deno.env.get("MARIADB_PORT") || "3306"),
+      user: Deno.env.get("MARIADB_USER"),
+      password: Deno.env.get("MARIADB_PASSWORD"),
+      database: Deno.env.get("MARIADB_DATABASE"),
+      connectTimeout: 10000,
+    });
+    const [rows] = await conn.execute(
+      `SELECT armador, container_type, rate_usd, period_start_day, period_end_day 
+       FROM t_dachser_demurrage_rates 
+       WHERE active = 1 
+       ORDER BY armador, container_type, period_start_day`
+    );
+    return (rows as RateRow[]) || [];
+  } catch (err) {
+    console.error('[Demurrage Alert] MariaDB rates fetch failed:', err);
+    return [];
+  } finally {
+    if (conn) await conn.end().catch(() => {});
+  }
 }
 
-function valCell(v: string, bold = false): object {
-  return {
-    v, t: "s",
-    s: { font: { sz: 9, bold }, alignment: { horizontal: "left", vertical: "center" } }
-  };
+function calculatePeriods(daysIncident: number, armador: string, containerType: string, allRates: RateRow[]): PeriodData[] {
+  // Find matching rates for this armador + container_type
+  const matchingRates = allRates.filter(r =>
+    r.armador?.toLowerCase() === armador?.toLowerCase() &&
+    r.container_type?.toLowerCase() === containerType?.toLowerCase()
+  );
+
+  if (matchingRates.length === 0 || daysIncident <= 0) return [];
+
+  const periods: PeriodData[] = [];
+  let remaining = daysIncident;
+
+  for (const rate of matchingRates) {
+    if (remaining <= 0) break;
+    const periodLength = (rate.period_end_day || 9999) - (rate.period_start_day || 1) + 1;
+    const daysInPeriod = Math.min(remaining, periodLength);
+    periods.push({
+      days: daysInPeriod,
+      rate: rate.rate_usd,
+      value: daysInPeriod * rate.rate_usd,
+    });
+    remaining -= daysInPeriod;
+  }
+
+  return periods;
 }
 
 function generateDemonstrativoXlsx(params: {
@@ -141,112 +195,103 @@ function generateDemonstrativoXlsx(params: {
   total_usd?: number;
   total_brl?: number;
   containers?: ContainerDetail[];
+  containerPeriods?: Map<string, PeriodData[]>;
+  maxPeriods?: number;
 }): string {
   const { client_name, house_bl, partner_id, shipment_master,
     origin_port, destination_port, issue_date,
-    exchange_rate, total_usd, total_brl, containers } = params;
+    exchange_rate, total_usd, total_brl, containers,
+    containerPeriods, maxPeriods: rawMaxPeriods } = params;
+
+  const numPeriods = Math.max(rawMaxPeriods || 2, 2);
+  // Each period uses 2 columns (qty + value)
+  const periodColStart = 9;
+  const totalCols = periodColStart + numPeriods * 2; // last col index = totalCols - 1
+  const lastCol = totalCols - 1;
 
   const wb = XLSX.utils.book_new();
   const ws: Record<string, unknown> = {};
   const merges: Array<{ s: { r: number; c: number }; e: { r: number; c: number } }> = [];
 
-  // Column widths (A-M = 13 columns)
-  ws["!cols"] = [
-    { wch: 16 }, // A - Container
-    { wch: 10 }, // B - Medida
-    { wch: 8 },  // C - Tipo
-    { wch: 12 }, // D - Descarga
-    { wch: 10 }, // E - Free Time
-    { wch: 16 }, // F - Limite Devolução
-    { wch: 14 }, // G - Devolução
-    { wch: 12 }, // H - Dias em Posse
-    { wch: 14 }, // I - Dias Incidêntes
-    { wch: 6 },  // J - 1° per qty
-    { wch: 12 }, // K - 1° per value
-    { wch: 6 },  // L - 2° per qty
-    { wch: 12 }, // M - 2° per value
+  // Column widths
+  const cols = [
+    { wch: 16 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 10 },
+    { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 14 },
   ];
+  for (let p = 0; p < numPeriods; p++) {
+    cols.push({ wch: 6 }, { wch: 12 });
+  }
+  ws["!cols"] = cols;
 
   let r = 0;
 
-  // Row 0: DACHSER header (left) + Company info (right)
+  // Row 0: DACHSER header
   ws[XLSX.utils.encode_cell({ r, c: 0 })] = {
     v: "DACHSER", t: "s",
     s: { font: { bold: true, sz: 18, color: { rgb: DARK_BLUE } } }
   };
   merges.push({ s: { r, c: 0 }, e: { r: r + 1, c: 3 } });
-  
   ws[XLSX.utils.encode_cell({ r, c: 7 })] = {
     v: "DACHSER BRASIL LOGISTICA LTDA", t: "s",
     s: { font: { bold: true, sz: 9 }, alignment: { horizontal: "right" } }
   };
-  merges.push({ s: { r, c: 7 }, e: { r, c: 12 } });
+  merges.push({ s: { r, c: 7 }, e: { r, c: lastCol } });
   r++;
 
-  // Row 1: subtitle + address
   ws[XLSX.utils.encode_cell({ r, c: 7 })] = {
     v: "Rua Amador Bueno, 333 – Sl. 1201/1202, Centro", t: "s",
     s: { font: { sz: 8, italic: true }, alignment: { horizontal: "right" } }
   };
-  merges.push({ s: { r, c: 7 }, e: { r, c: 12 } });
+  merges.push({ s: { r, c: 7 }, e: { r, c: lastCol } });
   r++;
 
-  // Row 2: Intelligent Logistics + city
   ws[XLSX.utils.encode_cell({ r, c: 0 })] = {
     v: "Intelligent Logistics", t: "s",
     s: { font: { sz: 9, italic: true, color: { rgb: "666666" } } }
   };
   merges.push({ s: { r, c: 0 }, e: { r, c: 3 } });
-  
   ws[XLSX.utils.encode_cell({ r, c: 7 })] = {
     v: "Santos, SP - 11013-151", t: "s",
     s: { font: { sz: 8, italic: true }, alignment: { horizontal: "right" } }
   };
-  merges.push({ s: { r, c: 7 }, e: { r, c: 12 } });
+  merges.push({ s: { r, c: 7 }, e: { r, c: lastCol } });
   r++;
 
-  // Row 3: CNPJ
   ws[XLSX.utils.encode_cell({ r, c: 7 })] = {
     v: "CNPJ NR. 08.996.109/0001-32", t: "s",
     s: { font: { sz: 8, italic: true }, alignment: { horizontal: "right" } }
   };
-  merges.push({ s: { r, c: 7 }, e: { r, c: 12 } });
+  merges.push({ s: { r, c: 7 }, e: { r, c: lastCol } });
   r++;
 
-  // Row 4: blank
-  r++;
+  r++; // blank
 
-  // Row 5: Title - centered
+  // Title
   ws[XLSX.utils.encode_cell({ r, c: 0 })] = {
     v: "DEMONSTRATIVO DE COBRANÇA - DEMURRAGE", t: "s",
     s: { font: { bold: true, sz: 14 }, alignment: { horizontal: "center", vertical: "center" } }
   };
-  merges.push({ s: { r, c: 0 }, e: { r, c: 12 } });
+  merges.push({ s: { r, c: 0 }, e: { r, c: lastCol } });
   r++;
+  r++; // blank
 
-  // Row 6: blank
-  r++;
-
-  // Row 7: Consignee / House BL (with borders)
-  const infoBoxStart = r;
+  // Info box
   ws[XLSX.utils.encode_cell({ r, c: 0 })] = { v: "Consignee:", t: "s", s: { font: { bold: true, sz: 9 }, border: { top: THIN_BORDER, left: THIN_BORDER } } };
   ws[XLSX.utils.encode_cell({ r, c: 1 })] = { v: client_name || "", t: "s", s: { font: { sz: 9 }, border: { top: THIN_BORDER } } };
   merges.push({ s: { r, c: 1 }, e: { r, c: 5 } });
   ws[XLSX.utils.encode_cell({ r, c: 7 })] = { v: "House BL:", t: "s", s: { font: { bold: true, sz: 9 }, border: { top: THIN_BORDER } } };
   ws[XLSX.utils.encode_cell({ r, c: 8 })] = { v: house_bl || "", t: "s", s: { font: { sz: 9 }, border: { top: THIN_BORDER, right: THIN_BORDER } } };
-  merges.push({ s: { r, c: 8 }, e: { r, c: 12 } });
+  merges.push({ s: { r, c: 8 }, e: { r, c: lastCol } });
   r++;
 
-  // Row 8: Partner ID / Shipment
   ws[XLSX.utils.encode_cell({ r, c: 0 })] = { v: "Partner ID:", t: "s", s: { font: { bold: true, sz: 9 }, border: { left: THIN_BORDER } } };
   ws[XLSX.utils.encode_cell({ r, c: 1 })] = { v: partner_id || "", t: "s", s: { font: { sz: 9 } } };
   merges.push({ s: { r, c: 1 }, e: { r, c: 5 } });
   ws[XLSX.utils.encode_cell({ r, c: 7 })] = { v: "Shipment:", t: "s", s: { font: { bold: true, sz: 9 } } };
   ws[XLSX.utils.encode_cell({ r, c: 8 })] = { v: shipment_master || "", t: "s", s: { font: { sz: 9 }, border: { right: THIN_BORDER } } };
-  merges.push({ s: { r, c: 8 }, e: { r, c: 12 } });
+  merges.push({ s: { r, c: 8 }, e: { r, c: lastCol } });
   r++;
 
-  // Row 9: Origem / Destino / Data
   ws[XLSX.utils.encode_cell({ r, c: 0 })] = { v: "Origem:", t: "s", s: { font: { bold: true, sz: 9 }, border: { left: THIN_BORDER, bottom: THIN_BORDER } } };
   ws[XLSX.utils.encode_cell({ r, c: 1 })] = { v: origin_port || "", t: "s", s: { font: { sz: 9 }, border: { bottom: THIN_BORDER } } };
   merges.push({ s: { r, c: 1 }, e: { r, c: 3 } });
@@ -255,15 +300,13 @@ function generateDemonstrativoXlsx(params: {
   merges.push({ s: { r, c: 5 }, e: { r, c: 6 } });
   ws[XLSX.utils.encode_cell({ r, c: 7 })] = { v: "Data:", t: "s", s: { font: { bold: true, sz: 9 }, border: { bottom: THIN_BORDER } } };
   ws[XLSX.utils.encode_cell({ r, c: 8 })] = { v: formatDateBR(issue_date || new Date().toISOString()), t: "s", s: { font: { sz: 9 }, border: { bottom: THIN_BORDER, right: THIN_BORDER } } };
-  merges.push({ s: { r, c: 8 }, e: { r, c: 12 } });
+  merges.push({ s: { r, c: 8 }, e: { r, c: lastCol } });
   r++;
 
-  // Row 10: blank
-  r++;
+  r++; // blank
 
-  // Row 11-12: Table header (two rows with merged "VALOR DIÁRIA USD")
+  // Table header row 1
   const hdrRow1 = r;
-  // First header row
   ws[XLSX.utils.encode_cell({ r, c: 0 })] = headerCell("CONTAINER");
   ws[XLSX.utils.encode_cell({ r, c: 1 })] = headerCell("MEDIDA");
   ws[XLSX.utils.encode_cell({ r, c: 2 })] = headerCell("TIPO");
@@ -273,25 +316,29 @@ function generateDemonstrativoXlsx(params: {
   ws[XLSX.utils.encode_cell({ r, c: 6 })] = headerCell("DEVOLUÇÃO");
   ws[XLSX.utils.encode_cell({ r, c: 7 })] = headerCell("DIAS EM POSSE");
   ws[XLSX.utils.encode_cell({ r, c: 8 })] = headerCell("DIAS INCIDÊNTES");
-  // "VALOR DIÁRIA USD" spans J-M (cols 9-12)
-  ws[XLSX.utils.encode_cell({ r, c: 9 })] = headerCell("VALOR DIÁRIA USD");
-  merges.push({ s: { r, c: 9 }, e: { r, c: 12 } });
 
-  // Merge header cells that span 2 rows (A-I)
+  // "VALOR DIÁRIA USD" spans all period columns
+  ws[XLSX.utils.encode_cell({ r, c: periodColStart })] = headerCell("VALOR DIÁRIA USD");
+  merges.push({ s: { r, c: periodColStart }, e: { r, c: lastCol } });
+
+  // Merge header cells A-I spanning 2 rows
   for (let c = 0; c <= 8; c++) {
     merges.push({ s: { r: hdrRow1, c }, e: { r: hdrRow1 + 1, c } });
   }
   r++;
 
-  // Second header row: sub-headers for VALOR DIÁRIA USD
-  ws[XLSX.utils.encode_cell({ r, c: 9 })] = headerCell("1° PERÍODO");
-  merges.push({ s: { r, c: 9 }, e: { r, c: 10 } });
-  ws[XLSX.utils.encode_cell({ r, c: 11 })] = headerCell("2° PERÍODO");
-  merges.push({ s: { r, c: 11 }, e: { r, c: 12 } });
+  // Table header row 2: period sub-headers
+  for (let p = 0; p < numPeriods; p++) {
+    const colStart = periodColStart + p * 2;
+    ws[XLSX.utils.encode_cell({ r, c: colStart })] = headerCell(`${p + 1}° PERÍODO`);
+    merges.push({ s: { r, c: colStart }, e: { r, c: colStart + 1 } });
+  }
   r++;
 
   // Data rows
   const ctrs = containers || [];
+  let computedTotalUsd = 0;
+
   for (const c of ctrs) {
     ws[XLSX.utils.encode_cell({ r, c: 0 })] = dataCell(c.number || "N/A");
     ws[XLSX.utils.encode_cell({ r, c: 1 })] = dataCell(c.size || "");
@@ -302,57 +349,65 @@ function generateDemonstrativoXlsx(params: {
     ws[XLSX.utils.encode_cell({ r, c: 6 })] = dataCell(formatDateBR(c.return_date));
     ws[XLSX.utils.encode_cell({ r, c: 7 })] = dataCell(c.days_possession ?? 0);
     ws[XLSX.utils.encode_cell({ r, c: 8 })] = dataCell(c.days_incident ?? 0);
-    // 1° Período: qty + value
-    ws[XLSX.utils.encode_cell({ r, c: 9 })] = dataCell(c.days_incident ?? 0);
-    ws[XLSX.utils.encode_cell({ r, c: 10 })] = dataCell(c.rate_period1_usd ?? 0, "#,##0.00");
-    // 2° Período: qty + value
-    ws[XLSX.utils.encode_cell({ r, c: 11 })] = dataCell(0);
-    ws[XLSX.utils.encode_cell({ r, c: 12 })] = dataCell(c.rate_period2_usd ?? 0, "#,##0.00");
+
+    // Fill period columns from calculated data
+    const periods = containerPeriods?.get(c.number) || [];
+    let containerTotal = 0;
+
+    for (let p = 0; p < numPeriods; p++) {
+      const colStart = periodColStart + p * 2;
+      if (p < periods.length) {
+        ws[XLSX.utils.encode_cell({ r, c: colStart })] = dataCell(periods[p].days);
+        ws[XLSX.utils.encode_cell({ r, c: colStart + 1 })] = dataCell(periods[p].rate, "#,##0.00");
+        containerTotal += periods[p].value;
+      } else {
+        ws[XLSX.utils.encode_cell({ r, c: colStart })] = dataCell(0);
+        ws[XLSX.utils.encode_cell({ r, c: colStart + 1 })] = dataCell(0, "#,##0.00");
+      }
+    }
+    computedTotalUsd += containerTotal > 0 ? containerTotal : (c.total_usd || 0);
     r++;
   }
 
-  // Blank row
-  r++;
+  r++; // blank
 
   // Totals
-  const computedTotalUsd = total_usd ?? ctrs.reduce((s, c) => s + (c.total_usd || 0), 0);
+  const finalTotalUsd = total_usd ?? computedTotalUsd;
   const rate = exchange_rate || 1;
-  const computedTotalBrl = total_brl ?? (computedTotalUsd * rate);
+  const computedTotalBrl = total_brl ?? (finalTotalUsd * rate);
 
   const totalLabelStyle = { font: { bold: true, sz: 10 }, alignment: { horizontal: "right" as const } };
   const totalValueStyle = { font: { bold: true, sz: 10 }, alignment: { horizontal: "right" as const }, numFmt: "#,##0.00" };
 
-  ws[XLSX.utils.encode_cell({ r, c: 10 })] = { v: "TOTAL USD =", t: "s", s: totalLabelStyle };
-  merges.push({ s: { r, c: 10 }, e: { r, c: 11 } });
-  ws[XLSX.utils.encode_cell({ r, c: 12 })] = { v: computedTotalUsd, t: "n", s: totalValueStyle };
+  const labelCol = lastCol - 2;
+  ws[XLSX.utils.encode_cell({ r, c: labelCol })] = { v: "TOTAL USD =", t: "s", s: totalLabelStyle };
+  merges.push({ s: { r, c: labelCol }, e: { r, c: lastCol - 1 } });
+  ws[XLSX.utils.encode_cell({ r, c: lastCol })] = { v: finalTotalUsd, t: "n", s: totalValueStyle };
   r++;
 
-  ws[XLSX.utils.encode_cell({ r, c: 10 })] = { v: "TAXA USD =", t: "s", s: totalLabelStyle };
-  merges.push({ s: { r, c: 10 }, e: { r, c: 11 } });
-  ws[XLSX.utils.encode_cell({ r, c: 12 })] = { v: rate, t: "n", s: totalValueStyle };
+  ws[XLSX.utils.encode_cell({ r, c: labelCol })] = { v: "TAXA USD =", t: "s", s: totalLabelStyle };
+  merges.push({ s: { r, c: labelCol }, e: { r, c: lastCol - 1 } });
+  ws[XLSX.utils.encode_cell({ r, c: lastCol })] = { v: rate, t: "n", s: totalValueStyle };
   r++;
 
-  ws[XLSX.utils.encode_cell({ r, c: 10 })] = { v: "TOTAL BRL =", t: "s", s: totalLabelStyle };
-  merges.push({ s: { r, c: 10 }, e: { r, c: 11 } });
-  ws[XLSX.utils.encode_cell({ r, c: 12 })] = { v: computedTotalBrl, t: "n", s: totalValueStyle };
+  ws[XLSX.utils.encode_cell({ r, c: labelCol })] = { v: "TOTAL BRL =", t: "s", s: totalLabelStyle };
+  merges.push({ s: { r, c: labelCol }, e: { r, c: lastCol - 1 } });
+  ws[XLSX.utils.encode_cell({ r, c: lastCol })] = { v: computedTotalBrl, t: "n", s: totalValueStyle };
   r++;
 
-  // Blank row
-  r++;
+  r++; // blank
 
-  // Footer - contestation text (with border box)
+  // Footer
   const footerText = "Após o recebimento deste demonstrativo de cobrança, concedemos um prazo de 48 horas úteis para eventuais contestações, mediante apresentação de evidências. Caso não haja manifestação dentro deste período, procederemos com o faturamento e a emissão da Nota de Débito correspondente ao valor informado.";
   ws[XLSX.utils.encode_cell({ r, c: 0 })] = {
     v: footerText, t: "s",
     s: { font: { sz: 9 }, alignment: { wrapText: true, vertical: "top" }, border: ALL_BORDERS }
   };
-  merges.push({ s: { r, c: 0 }, e: { r: r + 2, c: 12 } });
-  // Set row heights for footer
+  merges.push({ s: { r, c: 0 }, e: { r: r + 2, c: lastCol } });
   if (!ws["!rows"]) ws["!rows"] = [];
   (ws["!rows"] as Array<{ hpt?: number }>)[r] = { hpt: 50 };
 
-  // Set range
-  ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: r + 2, c: 12 } });
+  ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: r + 2, c: lastCol } });
   ws["!merges"] = merges;
 
   XLSX.utils.book_append_sheet(wb, ws, "Demonstrativo");
@@ -394,6 +449,37 @@ serve(async (req) => {
 
     console.log(`[Demurrage Alert] Sending alert, containers: ${(containers || []).length}`);
 
+    // Fetch configured rates from MariaDB
+    const allRates = await fetchRatesFromMariaDB();
+    console.log(`[Demurrage Alert] Fetched ${allRates.length} rate rows from MariaDB`);
+
+    // Calculate periods per container using configured rates
+    const containerPeriods = new Map<string, PeriodData[]>();
+    let maxPeriods = 2;
+
+    for (const c of (containers || [])) {
+      const daysIncident = c.days_incident || 0;
+      const armador = c.armador || '';
+      const containerType = c.size || '';
+
+      const periods = calculatePeriods(daysIncident, armador, containerType, allRates);
+
+      if (periods.length === 0 && daysIncident > 0) {
+        // Fallback: use the rate_period1_usd passed from client
+        containerPeriods.set(c.number, [{
+          days: daysIncident,
+          rate: c.rate_period1_usd || 0,
+          value: daysIncident * (c.rate_period1_usd || 0),
+        }]);
+      } else {
+        containerPeriods.set(c.number, periods);
+      }
+
+      maxPeriods = Math.max(maxPeriods, containerPeriods.get(c.number)!.length);
+    }
+
+    console.log(`[Demurrage Alert] Max periods detected: ${maxPeriods}`);
+
     const html = generateNotificationHtml(test_mode);
     const testPrefix = test_mode ? '[TESTE] ' : '';
     const subject = `${testPrefix}Notificação de Cobrança - ${shipment_master || container_number || 'N/A'}`;
@@ -405,6 +491,7 @@ serve(async (req) => {
         client_name, house_bl, partner_id, shipment_master,
         origin_port, destination_port, issue_date,
         exchange_rate, total_usd, total_brl, containers,
+        containerPeriods, maxPeriods,
       });
       const filename = `Demonstrativo_Demurrage_${(shipment_master || container_number || 'N_A').replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
       attachments = [{ filename, content: xlsxBase64 }];
