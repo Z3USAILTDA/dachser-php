@@ -129,6 +129,21 @@ export function useDemurrageData(filters?: DemurrageFilters) {
   });
 }
 
+export function useDemurrageContainersByMbl(mbl: string | null) {
+  return useQuery({
+    queryKey: ['demurrage_containers_by_mbl', mbl],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'demurrage_get_containers_by_mbl', mbl }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to fetch containers by MBL');
+      return (data.data || []) as DemurrageContainer[];
+    },
+    enabled: !!mbl,
+  });
+}
+
 export function useDemurrageStats() {
   return useQuery({
     queryKey: ['demurrage_stats'],

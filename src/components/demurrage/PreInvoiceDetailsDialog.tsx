@@ -16,11 +16,11 @@ interface PreInvoiceDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   preInvoice: PreInvoice | null;
-  containers?: DemurrageContainer[];
 }
 
-export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice, containers = [] }: PreInvoiceDetailsDialogProps) {
+export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreInvoiceDetailsDialogProps) {
   const { data: items = [], isLoading } = useDemurragePreInvoiceItems(preInvoice?.id ?? null);
+  const { data: containers = [], isLoading: isLoadingContainers } = useDemurrageContainersByMbl(open ? preInvoice?.shipment_mbl ?? null : null);
 
   const formatCurrency = (value: number) => 
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value || 0);
