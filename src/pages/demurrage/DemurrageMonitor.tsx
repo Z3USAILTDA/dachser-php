@@ -98,7 +98,7 @@ export default function DemurrageMonitor() {
       result = result.filter(c => c.ft_source === filterFtSource);
     }
     return result;
-  }, [containers, quickFilter, filterArmador, filterCliente, filterTipoContainer, filterPortoOrigem, filterPortoDestino, filterCronosStatus, filterFtSource]);
+  }, [containers, quickFilter, filterArmador, filterCliente, filterTipoContainer, filterTipoProcesso, filterCronosStatus, filterFtSource]);
 
   // Extract unique values for filter dropdowns
   const uniqueArmadores = useMemo(() => [...new Set(containers.map(c => c.armador).filter(Boolean))].sort() as string[], [containers]);
