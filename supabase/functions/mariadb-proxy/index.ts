@@ -12093,6 +12093,36 @@ Deno.serve(async (req) => {
           LIMIT ?
         `, [...piParams, piLimit]);
 
+        // Enrich pre-invoices with HBL from t_sea_master / t_master_dados
+        if (preInvoices && preInvoices.length > 0) {
+          const piMbls = [...new Set(preInvoices.map((pi: any) => pi.shipment_mbl).filter(Boolean))] as string[];
+          if (piMbls.length > 0) {
+            const hblMap: Record<string, string> = {};
+            try {
+              const seaMasterRows = await client.query(
+                `SELECT master, hawb FROM dados_dachser.t_sea_master WHERE master IN (${piMbls.map(() => '?').join(',')})`,
+                piMbls
+              );
+              for (const r of (seaMasterRows || [])) {
+                if (r.hawb && !hblMap[r.master]) hblMap[r.master] = r.hawb;
+              }
+              const missingMbls = piMbls.filter(m => !hblMap[m]);
+              if (missingMbls.length > 0) {
+                const mdRows = await client.query(
+                  `SELECT mawb, hawb FROM dados_dachser.t_master_dados WHERE mawb IN (${missingMbls.map(() => '?').join(',')})`,
+                  missingMbls
+                );
+                for (const r of (mdRows || [])) {
+                  if (r.hawb && !hblMap[r.mawb]) hblMap[r.mawb] = r.hawb;
+                }
+              }
+            } catch (e) { console.error('PI HBL enrichment error:', e); }
+            for (const pi of preInvoices) {
+              (pi as any).hbl = hblMap[pi.shipment_mbl] || null;
+            }
+          }
+        }
+
         result = { success: true, data: preInvoices || [] };
         break;
       }
