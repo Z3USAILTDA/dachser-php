@@ -10916,7 +10916,7 @@ Deno.serve(async (req) => {
           if (s.includes('T')) return `${s.split('T')[0]} 00:00:00.000`;
           const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
           if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]} 00:00:00.000`;
-          const fixedTz = s.replace(/\bGM$/, 'GMT');
+          const fixedTz = s.replace(/\bGM\b/g, 'GMT');
           const parsed = new Date(fixedTz);
           if (!isNaN(parsed.getTime())) {
             const y = parsed.getFullYear();
