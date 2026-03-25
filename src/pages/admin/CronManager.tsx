@@ -512,7 +512,22 @@ const CronManager = () => {
                           <Button
                             variant="ghost" size="icon"
                             title="Editar schedule"
-                            onClick={() => { setEditJob(job); setNewSchedule(job.schedule); }}
+                            onClick={() => {
+                              setEditJob(job);
+                              setNewSchedule(job.schedule);
+                              const mode = detectScheduleMode(job.schedule);
+                              setScheduleMode(mode);
+                              if (mode === "weekly") {
+                                const parsed = parseWeeklyCron(job.schedule);
+                                setSelectedDays(parsed.days);
+                                setSelectedHour(parsed.hour);
+                                setSelectedMinute(parsed.minute);
+                              } else {
+                                setSelectedDays([]);
+                                setSelectedHour(12);
+                                setSelectedMinute(0);
+                              }
+                            }}
                             className="hover:bg-[rgba(255,255,255,0.06)]"
                           >
                             <Pencil className="h-4 w-4 text-[#aaaaaa]" />
