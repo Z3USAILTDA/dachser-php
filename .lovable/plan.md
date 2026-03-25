@@ -1,43 +1,35 @@
 
 
-## Plano: Corrigir dados da Notificação de Cobrança (Demurrage)
+## Plano: Mostrar containers do MBL nos Detalhes da Pré-Fatura
 
-### Problemas
-
-1. **Título do email** diz "NOTIFICAÇÃO ( ALERTA DE FREE TIME)" — deveria ser "NOTIFICAÇÃO DE COBRANÇA"
-2. **Partner ID** não é enviado — o hook `useSendTestAlert` não recebe dados do `DemurrageContainer` que tem o `partner_id` enriquecido
-3. **House BL** usa `preInvoice.bl_number` — deveria usar o `hbl` enriquecido dos containers (vem de `t_sea_master`)
-4. **Dados dos containers no XLSX** — `size` (MEDIDA) está vazio (hardcoded `''`), deveria usar `tipo_conteiner`; `return_deadline` (LIMITE DE DEVOLUÇÃO) está vazio, deveria ser `free_time_end_date`
+### Problema
+O dialog `PreInvoiceDetailsDialog` busca containers via `useDemurragePreInvoiceItems` (tabela `pre_invoice_items`), que retorna vazio. Os dados reais dos containers estão na lista operacional (`allContainers` via `useDemurrageData`), filtrados pelo MBL da pré-fatura.
 
 ### Alterações
 
-**1. Edge Function `supabase/functions/demurrage-send-alert/index.ts`**
-- Linha 66: trocar `NOTIFICAÇÃO ( ALERTA DE FREE TIME)` por `NOTIFICAÇÃO DE COBRANÇA`
-- Linha 399: trocar subject de `Notificação - Alerta de Free Time` por `Notificação de Cobrança`
+**1. `src/pages/demurrage/DemurragePreInvoicing.tsx`**
+- Passar nova prop `containers` ao `PreInvoiceDetailsDialog`, filtrando `allContainers` pelo MBL da pré-fatura selecionada (mesmo padrão já usado no `SendTestEmailDialog`)
 
-**2. Hook `src/hooks/useDemurrageData.ts` — função `useSendTestAlert` (linhas 719-769)**
-- Adicionar parâmetro opcional `containers: DemurrageContainer[]` na interface do mutation
-- Extrair `partner_id` do primeiro container que tenha valor
-- Extrair `hbl` do primeiro container para usar como `house_bl`
-- No mapeamento dos items para `containers[]`:
-  - `size` → usar `tipo_conteiner` do DemurrageContainer correspondente (match por `container_number` = `numero`)
-  - `return_deadline` → usar `free_time_end_date` do DemurrageContainer correspondente
-
-**3. Componente `src/components/demurrage/SendTestEmailDialog.tsx`**
+**2. `src/components/demurrage/PreInvoiceDetailsDialog.tsx`**
 - Adicionar prop `containers: DemurrageContainer[]`
-- Passar ao `sendMutation.mutateAsync`
+- Substituir a tabela atual (que usa `items` do `useDemurragePreInvoiceItems`) por uma tabela que exibe os `containers` recebidos via prop
+- Manter `useDemurragePreInvoiceItems` apenas para o PDF e email
+- Colunas da nova tabela de containers:
 
-**4. Página `src/pages/demurrage/DemurragePreInvoicing.tsx`**
-- Buscar os containers do grid filtrando pelo MBL da pré-fatura selecionada
-- Passar ao `SendTestEmailDialog` via nova prop `containers`
+| Coluna | Campo do `DemurrageContainer` |
+|---|---|
+| Container | `numero` |
+| ATA | `data_atracacao` |
+| Último Evento | `last_event` |
+| Medida | `tipo_conteiner` |
+| Tipo | `tipo_processo` |
+| Descarga | `ft_started_at` |
+| Free Time | `free_time_days` + `free_time_end_date` |
+| Limite Devolução | `free_time_end_date` |
+| Devolução Vazio | `data_devolucao` |
+| Dias em Posse | calculado: diferença entre `ft_started_at` e `data_devolucao` (ou hoje) |
+| Dias Incidentes | `excedente_dias` |
 
 ### Resultado
-
-| Campo XLSX | Antes | Depois |
-|---|---|---|
-| Título email | Alerta de Free Time | Notificação de Cobrança |
-| Partner ID | vazio | `dchr_customer_number` do cliente |
-| House BL | `bl_number` da pré-fatura (vazio) | `hbl` enriquecido do container |
-| MEDIDA | vazio | `tipo_conteiner` (ex: 20DV, 40HC) |
-| LIMITE DE DEVOLUÇÃO | vazio | `free_time_end_date` |
+O dialog mostrará todos os containers vinculados ao MBL da pré-fatura com as informações operacionais completas solicitadas.
 
