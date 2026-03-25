@@ -325,7 +325,7 @@ const CronManager = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageLayout>
   );
 };
 
