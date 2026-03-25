@@ -459,6 +459,7 @@ export default function DemurrageMonitor() {
                       >
                         <TableCell className="font-mono font-medium">{container.numero}</TableCell>
                         <TableCell className="font-mono text-sm">{container.mbl}</TableCell>
+                        <TableCell className="font-mono text-sm">{container.hbl || '-'}</TableCell>
                         <TableCell>{container.cliente || '-'}</TableCell>
                         <TableCell>{container.armador || '-'}</TableCell>
                         <TableCell>

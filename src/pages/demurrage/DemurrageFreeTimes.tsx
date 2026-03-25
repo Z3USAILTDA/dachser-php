@@ -282,6 +282,9 @@ export default function DemurrageFreeTimes() {
                         <TableCell className="font-mono text-sm">
                           {ft.mbl || "-"}
                         </TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {(ft as any).hbl || "-"}
+                        </TableCell>
                         <TableCell>
                           {ft.armador ? (
                             <div className="flex items-center gap-1">
