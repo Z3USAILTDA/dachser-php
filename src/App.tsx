@@ -100,6 +100,7 @@ import ManualAdmin from "./pages/admin/ManualAdmin";
 import UploadMaster from "./pages/admin/UploadMaster";
 import ApiKeyTest from "./pages/admin/ApiKeyTest";
 import FirecrawlMonitor from "./pages/admin/FirecrawlMonitor";
+import CronManager from "./pages/admin/CronManager";
 
 // AWB Pages
 import AWBList from "./pages/AWBList";
