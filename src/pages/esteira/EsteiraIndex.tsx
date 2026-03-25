@@ -1264,7 +1264,7 @@ const EsteiraIndex = () => {
       }
 
       // Filtro de etapa
-      if (filters.etapa !== "all" && voucher.etapaAtual !== filters.etapa) {
+      if (filters.etapa !== "all" && (voucher.etapaAtual || "").trim() !== filters.etapa) {
         return false;
       }
 
