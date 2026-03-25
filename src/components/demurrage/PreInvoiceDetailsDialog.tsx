@@ -197,8 +197,7 @@ export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreI
                 <Package className="h-10 w-10 mx-auto mb-2 opacity-50" />
                 <p>Nenhum container encontrado para este MBL</p>
               </div>
-            ) : (
-              {containers.length === 1 && (containers[0] as any)._source === 'pre_invoice_only' ? (
+            ) : containers.length === 1 && (containers[0] as any)._source === 'pre_invoice_only' ? (
                 <div className="text-center py-6 text-muted-foreground border border-[rgba(255,255,255,0.1)] rounded-lg">
                   <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <p className="text-sm font-medium mb-1">Dados parciais disponíveis</p>
@@ -209,7 +208,7 @@ export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreI
                     {(containers[0] as any).porto_destino && <p>Destino: <span className="text-foreground">{(containers[0] as any).porto_destino}</span></p>}
                   </div>
                 </div>
-              ) : (
+            ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -252,10 +251,7 @@ export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreI
                   </TableBody>
                 </Table>
               </div>
-              )}
             )}
-          </div>
-
           {/* Actions Footer */}
           <div className="flex justify-between items-center pt-4 border-t border-[rgba(255,255,255,0.1)]">
             <Button
