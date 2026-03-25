@@ -560,7 +560,19 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
             <Label className="text-sm font-medium">
               Fatura e Demonstrativo <span className="text-destructive">*</span>
             </Label>
-            <div className="mt-2 border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors bg-background/30">
+            <div 
+              className="mt-2 border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors bg-background/30"
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('border-primary', 'bg-primary/5'); }}
+              onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('border-primary', 'bg-primary/5'); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.currentTarget.classList.remove('border-primary', 'bg-primary/5');
+                if (e.dataTransfer.files?.length) {
+                  setFaturaFiles(prev => [...prev, ...Array.from(e.dataTransfer.files)]);
+                }
+              }}
+            >
               <input
                 type="file"
                 multiple
@@ -572,7 +584,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
               <label htmlFor="master-fatura-upload" className="cursor-pointer flex flex-col items-center gap-2">
                 <Upload className="h-8 w-8 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">
-                  Clique para selecionar arquivos
+                  Arraste arquivos aqui ou clique para selecionar
                 </span>
               </label>
             </div>
