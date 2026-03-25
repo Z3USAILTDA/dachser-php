@@ -466,6 +466,7 @@ export default function DemurrageClients() {
                           <TableHead>Cliente</TableHead>
                           <TableHead>Container</TableHead>
                           <TableHead>MBL</TableHead>
+                          <TableHead>HBL</TableHead>
                           <TableHead className="text-center">Status</TableHead>
                           <TableHead className="text-center">Retorno</TableHead>
                           <TableHead className="text-center">Ações</TableHead>
