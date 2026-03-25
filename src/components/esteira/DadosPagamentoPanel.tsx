@@ -12,6 +12,7 @@ import {
   Barcode,
   Key
 } from "lucide-react";
+import { copyToClipboard } from "@/utils/clipboard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
