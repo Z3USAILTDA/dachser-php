@@ -346,7 +346,7 @@ export default function DemurrageMonitor() {
                 )}
               </div>
               {/* Row 2: Additional filters */}
-              <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
                 <Select value={filterArmador} onValueChange={setFilterArmador}>
                   <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] text-sm">
                     <SelectValue placeholder="Armador" />
