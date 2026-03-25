@@ -1294,10 +1294,11 @@ const EsteiraIndex = () => {
       // Filtro de SLA
       if (filters.slaStatus && filters.slaStatus !== "all") {
         const tempoHoras = calcularTempoNaEtapa(voucher);
-        const sla = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA] || 24;
+        const slaVal = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA];
+        const sla = slaVal !== undefined && slaVal !== null ? slaVal : 24;
         let status: "ok" | "warning" | "critical" = "ok";
         if (sla > 0) {
-          if (tempoHoras >= sla) status = "critical";else if (tempoHoras >= sla * 0.75) status = "warning";
+          if (tempoHoras >= sla) status = "critical"; else if (tempoHoras >= sla * 0.75) status = "warning";
         }
         if (filters.slaStatus !== status) return false;
       }
