@@ -5829,6 +5829,9 @@ Deno.serve(async (req) => {
             if (s.includes('T')) return `${s.split('T')[0]} 00:00:00.000`;
             const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
             if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]} 00:00:00.000`;
+            const _mm: Record<string,string> = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+            const _jm = s.match(/\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{4})/);
+            if (_jm && _mm[_jm[1]]) return `${_jm[3]}-${_mm[_jm[1]]}-${_jm[2].padStart(2,'0')} 00:00:00.000`;
             const fixedTz = s.replace(/\bGM\b/g, 'GMT');
             const parsed = new Date(fixedTz);
             if (!isNaN(parsed.getTime())) {
@@ -6076,6 +6079,9 @@ Deno.serve(async (req) => {
           if (s.includes('T')) return `${s.split('T')[0]} 00:00:00.000`;
           const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
           if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]} 00:00:00.000`;
+          const _mm2: Record<string,string> = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+          const _jm2 = s.match(/\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{4})/);
+          if (_jm2 && _mm2[_jm2[1]]) return `${_jm2[3]}-${_mm2[_jm2[1]]}-${_jm2[2].padStart(2,'0')} 00:00:00.000`;
           const parsed = new Date(s.replace(/\bGM\b/g, 'GMT'));
           if (!isNaN(parsed.getTime())) {
             const y = parsed.getFullYear();
@@ -10416,6 +10422,9 @@ Deno.serve(async (req) => {
           if (s.includes('T')) return `${s.split('T')[0]} 00:00:00.000`;
           const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
           if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]} 00:00:00.000`;
+          const _mm3: Record<string,string> = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+          const _jm3 = s.match(/\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{4})/);
+          if (_jm3 && _mm3[_jm3[1]]) return `${_jm3[3]}-${_mm3[_jm3[1]]}-${_jm3[2].padStart(2,'0')} 00:00:00.000`;
           const parsed = new Date(s.replace(/\bGM\b/g, 'GMT'));
           if (!isNaN(parsed.getTime())) {
             const y = parsed.getFullYear();
@@ -10830,6 +10839,9 @@ Deno.serve(async (req) => {
               if (s.includes('T')) return `${s.split('T')[0]} 00:00:00.000`;
               const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
               if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]} 00:00:00.000`;
+              const _mm4: Record<string,string> = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+              const _jm4 = s.match(/\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{4})/);
+              if (_jm4 && _mm4[_jm4[1]]) return `${_jm4[3]}-${_mm4[_jm4[1]]}-${_jm4[2].padStart(2,'0')} 00:00:00.000`;
               const parsed = new Date(s.replace(/\bGM\b/g, 'GMT'));
               if (!isNaN(parsed.getTime())) {
                 const y = parsed.getFullYear();
@@ -10916,6 +10928,9 @@ Deno.serve(async (req) => {
           if (s.includes('T')) return `${s.split('T')[0]} 00:00:00.000`;
           const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
           if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]} 00:00:00.000`;
+          const _mm5: Record<string,string> = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+          const _jm5 = s.match(/\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{4})/);
+          if (_jm5 && _mm5[_jm5[1]]) return `${_jm5[3]}-${_mm5[_jm5[1]]}-${_jm5[2].padStart(2,'0')} 00:00:00.000`;
           const fixedTz = s.replace(/\bGM\b/g, 'GMT');
           const parsed = new Date(fixedTz);
           if (!isNaN(parsed.getTime())) {
