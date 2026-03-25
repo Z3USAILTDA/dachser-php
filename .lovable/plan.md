@@ -1,36 +1,56 @@
 
+Objetivo: fazer com que todas as pré-faturas mostrem containers no modal, inclusive as mais antigas.
 
-## Plano: Garantir que containers apareçam para todas as pré-faturas
+Diagnóstico confirmado
+- O front já está chamando `demurrage_get_containers_by_mbl` corretamente.
+- O problema agora está no backend/dados: a action retorna `[]` para vários MBLs testados (`MEDUEC647355`, `MEDUKQ387608`, `MEDUVK324543`, `MEDUK8744501`, `MEDUYP869983`) e retorna dado para pelo menos um (`MEDUWA505645`).
+- `pre_invoice_items` também está vazio em várias pré-faturas, então ele não serve hoje como fallback confiável.
+- Conclusão: o modal está correto, mas a busca atual depende demais da tabela operacional de demurrage. Para várias faturas históricas, esses registros já não estão mais disponíveis por MBL.
 
-### Problema raiz
-A query `demurrage_get_containers` retorna no maximo 500 containers ordenados por `updated_at DESC`. Quando o usuario abre uma pre-fatura mais antiga, os containers daquele MBL podem nao estar entre os 500 carregados, resultando em lista vazia.
+Plano
+1. Reforçar a action `demurrage_get_containers_by_mbl` em `supabase/functions/mariadb-proxy/index.ts`
+- Manter a busca atual na tabela `t_dachser_demurrage_containers`.
+- Normalizar o MBL na consulta (`TRIM`/`UPPER`) para evitar falhas por formatação.
+- Se vier vazio, aplicar fallbacks:
+  - buscar por `pre_invoice_number` quando o front informar `invoice_number`;
+  - se ainda vier vazio, reconstruir os containers a partir das tabelas de tracking (`t_tracking_sea`, `t_consulta_armador`, `t_tracking_sea_history`), sem depender do recorte atual “ativo”.
 
-O filtro atual: `allContainers.filter(c => c.mbl === selectedInvoice.shipment_mbl)` so funciona se os containers ja estiverem na memoria.
+2. Reaproveitar a lógica já existente de sincronização
+- Usar a mesma lógica do sync para montar os campos derivados:
+  - `data_atracacao`
+  - `ft_started_at`
+  - `free_time_end_date`
+  - `data_devolucao`
+  - `last_event`
+  - `excedente_dias`
+- Assim o modal continua recebendo o mesmo formato `DemurrageContainer[]`, sem retrabalho no front.
 
-### Solucao
-Criar uma nova action `demurrage_get_containers_by_mbl` no mariadb-proxy que busca containers especificamente por MBL, sem limite de 500 e sem filtro `active = 1` (containers devolvidos podem ter `active = 0`). Usar essa action no dialog de detalhes.
+3. Ajustar o hook em `src/hooks/useDemurrageData.ts`
+- Fazer `useDemurrageContainersByMbl` enviar também `invoice_number`, não só `mbl`.
+- Manter a mesma tipagem de retorno para não quebrar o dialog.
 
-### Alteracoes
+4. Manter o `PreInvoiceDetailsDialog` praticamente como está
+- A tabela atual já exibe as colunas corretas.
+- Só ajustar a chamada do hook e, se necessário, a mensagem de vazio para aparecer apenas depois de esgotar todos os fallbacks.
 
-**1. `supabase/functions/mariadb-proxy/index.ts`**
-- Adicionar novo case `demurrage_get_containers_by_mbl` que recebe `mbl: string` e faz query:
-  ```sql
-  SELECT dc.* FROM t_dachser_demurrage_containers dc WHERE dc.mbl = ?
-  ```
-- Enriquecer com `partner_id` e `hbl` (mesma logica do `demurrage_get_containers`)
+5. Endurecer a geração futura das pré-faturas
+- Revisar `supabase/functions/demurrage-auto-invoice/index.ts` para garantir que novas pré-faturas sempre tenham snapshot suficiente dos itens/containers.
+- Isso evita que casos futuros dependam exclusivamente da tabela operacional viva.
 
-**2. `src/hooks/useDemurrageData.ts`**
-- Criar hook `useDemurrageContainersByMbl(mbl: string | null)` que chama a nova action
-- Retorna `DemurrageContainer[]` com react-query, habilitado apenas quando `mbl` nao e null
+Detalhes técnicos
+```text
+Novo fluxo
+Pré-fatura
+  -> mariadb-proxy(demurrage_get_containers_by_mbl, mbl, invoice_number)
+     -> 1) busca em demurrage por MBL normalizado
+     -> 2) fallback por pre_invoice_number
+     -> 3) fallback histórico via tracking + history
+     -> retorna DemurrageContainer[]
+  -> modal renderiza normalmente
+```
 
-**3. `src/components/demurrage/PreInvoiceDetailsDialog.tsx`**
-- Remover prop `containers` recebida externamente
-- Usar o novo hook `useDemurrageContainersByMbl(preInvoice?.shipment_mbl)` para buscar containers diretamente quando o dialog abre
-- Mostrar loading state enquanto busca
-
-**4. `src/pages/demurrage/DemurragePreInvoicing.tsx`**
-- Remover a prop `containers` do `PreInvoiceDetailsDialog` (nao e mais necessaria)
-
-### Resultado
-Cada pre-fatura buscara seus containers diretamente pelo MBL ao abrir o dialog, independente dos 500 containers carregados na pagina principal.
-
+Resultado esperado
+- Pré-faturas recentes continuam funcionando.
+- Pré-faturas antigas também passam a exibir:
+  ATA, Último Evento, Medida, Tipo, Descarga, Free Time, Limite de Devolução, Devolução do Vazio, Dias em Posse e Dias Incidentes.
+- O modal deixa de depender apenas do estado atual da tabela operacional.
