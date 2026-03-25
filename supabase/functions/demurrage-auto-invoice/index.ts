@@ -112,14 +112,29 @@ serve(async (req) => {
 
     console.log(`Loaded ${rates.length} demurrage rates`);
 
+    // Count containers skipped due to no gate-out (for logging)
+    const allContainersIncludingNoGateOut = await client.query(`
+      SELECT COUNT(*) as cnt
+      FROM dados_dachser.t_dachser_demurrage_containers
+      WHERE active = 1 
+        AND risk_status IN ('exceeded', 'critical')
+        AND excedente_dias > 0
+        AND (pre_invoice_number IS NULL OR pre_invoice_number = '')
+        AND data_gate_out IS NULL
+    `) as Array<{ cnt: number }>;
+    const skippedNoGateOut = allContainersIncludingNoGateOut?.[0]?.cnt || 0;
+
     const results = {
       total_containers: containers.length,
+      skipped_no_gate_out: skippedNoGateOut,
       client_not_invoicable: 0,
       invoices_created: 0,
       items_created: 0,
       containers_updated: 0,
       errors: 0,
     };
+
+    console.log(`Skipped ${skippedNoGateOut} containers without gate-out event`);
 
     // Group containers by MBL for invoice creation
     const containersByMbl: Record<string, Container[]> = {};
