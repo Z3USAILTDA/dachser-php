@@ -129,12 +129,12 @@ export function useDemurrageData(filters?: DemurrageFilters) {
   });
 }
 
-export function useDemurrageContainersByMbl(mbl: string | null) {
+export function useDemurrageContainersByMbl(mbl: string | null, invoiceNumber?: string | null) {
   return useQuery({
-    queryKey: ['demurrage_containers_by_mbl', mbl],
+    queryKey: ['demurrage_containers_by_mbl', mbl, invoiceNumber],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'demurrage_get_containers_by_mbl', mbl }
+        body: { action: 'demurrage_get_containers_by_mbl', mbl, invoice_number: invoiceNumber || undefined }
       });
       if (error) throw error;
       if (!data.success) throw new Error(data.error || 'Failed to fetch containers by MBL');

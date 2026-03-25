@@ -11306,23 +11306,153 @@ serve(async (req) => {
       }
 
       case 'demurrage_get_containers_by_mbl': {
-        const { mbl } = body as any;
+        const { mbl, invoice_number } = body as any;
         if (!mbl) {
           result = { success: false, error: 'MBL is required' };
           break;
         }
-        console.log(`[demurrage_get_containers_by_mbl] Fetching containers for MBL: ${mbl}`);
+        console.log(`[demurrage_get_containers_by_mbl] Fetching containers for MBL: ${mbl}, invoice: ${invoice_number || 'none'}`);
         const batchSizeMbl = 100;
 
-        const mblContainers = await queryWithRetry(() => client.query(
-          `SELECT dc.* FROM dados_dachser.t_dachser_demurrage_containers dc WHERE dc.mbl = ?`,
+        // Step 1: Search by normalized MBL in demurrage table
+        let mblContainers = await queryWithRetry(() => client.query(
+          `SELECT dc.* FROM dados_dachser.t_dachser_demurrage_containers dc WHERE TRIM(UPPER(dc.mbl)) = TRIM(UPPER(?))`,
           [mbl]
         ), { label: 'demurrage_get_containers_by_mbl', attempts: 3 });
 
+        // Step 2: Fallback - search by pre_invoice_number if provided
+        if ((!mblContainers || mblContainers.length === 0) && invoice_number) {
+          console.log(`[demurrage_get_containers_by_mbl] No results for MBL, trying invoice_number: ${invoice_number}`);
+          mblContainers = await queryWithRetry(() => client.query(
+            `SELECT dc.* FROM dados_dachser.t_dachser_demurrage_containers dc WHERE dc.pre_invoice_number = ?`,
+            [invoice_number]
+          ), { label: 'demurrage_by_invoice_number', attempts: 3 });
+        }
+
+        // Step 3: Fallback - reconstruct from tracking tables
+        if (!mblContainers || mblContainers.length === 0) {
+          console.log(`[demurrage_get_containers_by_mbl] No demurrage records found, reconstructing from tracking tables for MBL: ${mbl}`);
+          try {
+            const trackingRows = await queryWithRetry(() => client.query(
+              `SELECT 
+                t.id,
+                t.mbl_id as mbl,
+                t.container as numero,
+                t.shipping_line as armador,
+                t.consignee as cliente,
+                t.tipo_processo,
+                t.origem as porto_origem,
+                t.destino as porto_destino,
+                t.navio,
+                t.vessel_imo,
+                t.eta,
+                t.last_event,
+                t.container_status,
+                t.email_analista,
+                t.email_cliente,
+                c.booking,
+                c.etd,
+                c.eta as eta_confirmado,
+                c.voyage,
+                c.status_armador
+              FROM dados_dachser.t_tracking_sea t
+              LEFT JOIN dados_dachser.t_consulta_armador c 
+                ON t.mbl_id COLLATE utf8mb4_general_ci = c.mbl_id COLLATE utf8mb4_general_ci
+              WHERE TRIM(UPPER(t.mbl_id)) = TRIM(UPPER(?))
+                AND t.container IS NOT NULL
+                AND t.container != ''
+                AND UPPER(t.container) != 'PENDENTE'
+                AND UPPER(t.container) != 'NAO_ENCONTRADO'
+              ORDER BY t.id DESC`,
+              [mbl]
+            ), { label: 'demurrage_tracking_fallback', attempts: 3 });
+
+            if (trackingRows && trackingRows.length > 0) {
+              console.log(`[demurrage_get_containers_by_mbl] Found ${trackingRows.length} tracking records, reconstructing containers`);
+              mblContainers = [];
+
+              for (const row of trackingRows) {
+                const numero = (row.numero || '').trim();
+                if (!numero) continue;
+
+                // Fetch historical dates for this container
+                let dischargeDate: string | null = null;
+                let gateOutDate: string | null = null;
+                let returnDate: string | null = null;
+                try {
+                  const histRows = await queryWithRetry(() => client.query(
+                    `SELECT event_type, MIN(event_datetime) as event_datetime FROM (
+                      SELECT 'discharge' as event_type, event_datetime FROM dados_dachser.t_tracking_sea_history 
+                      WHERE container = ? AND (event_description LIKE '%Discharged%' OR event_description = 'Discharge' OR event_description LIKE '%Unloaded from Vessel%' OR event_description LIKE '%Import Discharged%' OR event_description LIKE '%Descarga%')
+                      UNION ALL
+                      SELECT 'gate_out' as event_type, event_datetime FROM dados_dachser.t_tracking_sea_history 
+                      WHERE container = ? AND (event_description LIKE '%Gate out%' OR event_description LIKE '%Gate-out%' OR event_description = 'Import to consignee' OR event_description LIKE '%Saída%' OR event_description LIKE '%Saida%')
+                      UNION ALL
+                      SELECT 'return' as event_type, event_datetime FROM dados_dachser.t_tracking_sea_history 
+                      WHERE container = ? AND (event_description LIKE '%Empty%returned%' OR event_description LIKE '%Gate in%' OR event_description LIKE '%Devolução%' OR event_description LIKE '%Devolvido%' OR event_description LIKE '%Empty to shipper%')
+                    ) AS events GROUP BY event_type`,
+                    [numero, numero, numero]
+                  ), { label: 'demurrage_hist_dates', attempts: 2 });
+
+                  for (const h of (histRows || [])) {
+                    if (!h.event_datetime) continue;
+                    const ds = typeof h.event_datetime === 'string' ? h.event_datetime.split('T')[0] : h.event_datetime.toISOString().split('T')[0];
+                    if (h.event_type === 'discharge') dischargeDate = ds;
+                    else if (h.event_type === 'gate_out') gateOutDate = ds;
+                    else if (h.event_type === 'return') returnDate = ds;
+                  }
+                } catch (e) { console.error(`History error for ${numero}:`, e); }
+
+                const etaDate = row.eta_confirmado || row.eta;
+                const etaStr = etaDate ? (typeof etaDate === 'string' ? etaDate.split('T')[0] : etaDate.toISOString().split('T')[0]) : null;
+                const etdStr = row.etd ? (typeof row.etd === 'string' ? row.etd.split('T')[0] : row.etd.toISOString().split('T')[0]) : null;
+
+                const ftStartedAt = dischargeDate ? `${dischargeDate} 00:00:00` : (etaStr ? `${etaStr} 00:00:00` : null);
+
+                mblContainers.push({
+                  id: row.id,
+                  numero,
+                  mbl: (row.mbl || '').trim(),
+                  booking: row.booking || null,
+                  cliente: row.cliente || null,
+                  armador: row.armador || null,
+                  tipo_processo: row.tipo_processo || null,
+                  porto_origem: row.porto_origem || null,
+                  porto_destino: row.porto_destino || null,
+                  navio: row.navio || null,
+                  vessel_imo: row.vessel_imo || null,
+                  voyage: row.voyage || null,
+                  etd: etdStr,
+                  eta: etaStr,
+                  last_event: row.last_event || null,
+                  container_status: row.container_status || null,
+                  status_armador: row.status_armador || null,
+                  cronos_status: null,
+                  email_analista: row.email_analista || null,
+                  email_cliente: row.email_cliente || null,
+                  tipo_conteiner: null,
+                  ft_started_at: ftStartedAt,
+                  ft_source: dischargeDate ? 'HISTORICAL' : (etaStr ? 'ETA' : null),
+                  data_atracacao: dischargeDate,
+                  data_gate_out: gateOutDate,
+                  data_devolucao: returnDate,
+                  mariadb_id: row.id,
+                  active: 1,
+                  partner_id: null,
+                  hbl: null,
+                  _source: 'tracking_fallback',
+                });
+              }
+            }
+          } catch (e) {
+            console.error('[demurrage_get_containers_by_mbl] Tracking fallback error:', e);
+          }
+        }
+
+        // Enrich with partner_id and HBL
         if (mblContainers && mblContainers.length > 0) {
           const clientes = [...new Set(mblContainers.map((c: any) => c.cliente).filter(Boolean))];
 
-          // Batch fetch partner_ids
           let partnerMap: Record<string, string> = {};
           if (clientes.length > 0) {
             try {
@@ -11338,7 +11468,6 @@ serve(async (req) => {
             } catch (e) { console.error('Partner batch error:', e); }
           }
 
-          // Fetch HBL
           let hbl: string | null = null;
           try {
             const seaMasterRows = await queryWithRetry(() => client.query(
@@ -11357,8 +11486,8 @@ serve(async (req) => {
           } catch (e) { console.error('HBL error:', e); }
 
           for (const c of mblContainers) {
-            c.partner_id = partnerMap[c.cliente] || null;
-            c.hbl = hbl || null;
+            if (!c.partner_id) c.partner_id = partnerMap[c.cliente] || null;
+            if (!c.hbl) c.hbl = hbl || null;
           }
         }
 
