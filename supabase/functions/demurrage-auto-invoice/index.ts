@@ -90,12 +90,13 @@ serve(async (req) => {
         id, numero, mbl, tipo_conteiner, excedente_dias, expected_cost_usd,
         free_time_end_date, free_time_days, ft_started_at, cliente, armador,
         navio, voyage, porto_origem, porto_destino, data_atracacao,
-        rate_usd_per_day, pre_invoice_number
+        rate_usd_per_day, pre_invoice_number, data_gate_out
       FROM dados_dachser.t_dachser_demurrage_containers
       WHERE active = 1 
         AND risk_status IN ('exceeded', 'critical')
         AND excedente_dias > 0
         AND (pre_invoice_number IS NULL OR pre_invoice_number = '')
+        AND data_gate_out IS NOT NULL
       ORDER BY cliente, mbl
     `) as Container[];
 
