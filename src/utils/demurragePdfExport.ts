@@ -572,7 +572,7 @@ export const exportPreInvoicePDF = (
     doc.setTextColor(120, 120, 120);
     doc.setFontSize(7);
     doc.setFont("helvetica", "normal");
-    doc.text(`Taxa: ${preInvoice.exchange_rate.toFixed(4)}`, pageWidth - 20, afterTableY + 30, { align: "right" });
+    doc.text(`Taxa: ${Number(preInvoice.exchange_rate).toFixed(4)}`, pageWidth - 20, afterTableY + 30, { align: "right" });
   }
 
   // Footer
