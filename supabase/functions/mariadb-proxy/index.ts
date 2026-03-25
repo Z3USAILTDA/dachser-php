@@ -11305,6 +11305,68 @@ serve(async (req) => {
         break;
       }
 
+      case 'demurrage_get_containers_by_mbl': {
+        const { mbl } = body as any;
+        if (!mbl) {
+          result = { success: false, error: 'MBL is required' };
+          break;
+        }
+        console.log(`[demurrage_get_containers_by_mbl] Fetching containers for MBL: ${mbl}`);
+        const batchSizeMbl = 100;
+
+        const mblContainers = await queryWithRetry(() => client.query(
+          `SELECT dc.* FROM dados_dachser.t_dachser_demurrage_containers dc WHERE dc.mbl = ?`,
+          [mbl]
+        ), { label: 'demurrage_get_containers_by_mbl', attempts: 3 });
+
+        if (mblContainers && mblContainers.length > 0) {
+          const clientes = [...new Set(mblContainers.map((c: any) => c.cliente).filter(Boolean))];
+
+          // Batch fetch partner_ids
+          let partnerMap: Record<string, string> = {};
+          if (clientes.length > 0) {
+            try {
+              for (const clientChunk of chunkArray(clientes, batchSizeMbl)) {
+                const partnerRows = await queryWithRetry(() => client.query(
+                  `SELECT nome_cliente, dchr_customer_number FROM dados_dachser.t_clientes_base WHERE nome_cliente IN (${clientChunk.map(() => '?').join(',')})`,
+                  clientChunk
+                ), { label: 'demurrage_by_mbl_partner', attempts: 3 });
+                for (const r of (partnerRows || [])) {
+                  partnerMap[r.nome_cliente] = r.dchr_customer_number;
+                }
+              }
+            } catch (e) { console.error('Partner batch error:', e); }
+          }
+
+          // Fetch HBL
+          let hbl: string | null = null;
+          try {
+            const seaMasterRows = await queryWithRetry(() => client.query(
+              `SELECT hawb FROM dados_dachser.t_sea_master WHERE master = ? LIMIT 1`,
+              [mbl]
+            ), { label: 'demurrage_by_mbl_hbl', attempts: 3 });
+            if (seaMasterRows?.[0]?.hawb) {
+              hbl = seaMasterRows[0].hawb;
+            } else {
+              const mdRows = await queryWithRetry(() => client.query(
+                `SELECT hawb FROM dados_dachser.t_master_dados WHERE mawb = ? LIMIT 1`,
+                [mbl]
+              ), { label: 'demurrage_by_mbl_hbl_fallback', attempts: 3 });
+              if (mdRows?.[0]?.hawb) hbl = mdRows[0].hawb;
+            }
+          } catch (e) { console.error('HBL error:', e); }
+
+          for (const c of mblContainers) {
+            c.partner_id = partnerMap[c.cliente] || null;
+            c.hbl = hbl || null;
+          }
+        }
+
+        console.log(`[demurrage_get_containers_by_mbl] Returning ${mblContainers?.length || 0} containers for MBL: ${mbl}`);
+        result = { success: true, data: mblContainers || [] };
+        break;
+      }
+
       case 'demurrage_get_stats': {
         console.log('Fetching demurrage stats');
 
