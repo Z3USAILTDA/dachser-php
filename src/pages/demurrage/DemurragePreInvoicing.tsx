@@ -424,6 +424,7 @@ export default function DemurragePreInvoicing() {
                       </TableHead>
                       <TableHead>Nº Pré-Fatura</TableHead>
                       <TableHead>MBL</TableHead>
+                      <TableHead>HBL</TableHead>
                       <TableHead>Cliente</TableHead>
                       <TableHead>Navio</TableHead>
                       <TableHead>Data Emissão</TableHead>
@@ -456,6 +457,7 @@ export default function DemurragePreInvoicing() {
                           {invoice.invoice_number}
                         </TableCell>
                         <TableCell className="font-mono text-sm">{invoice.shipment_mbl || '-'}</TableCell>
+                        <TableCell className="font-mono text-sm">{invoice.bl_number || '-'}</TableCell>
                         <TableCell>{invoice.client_name || '-'}</TableCell>
                         <TableCell>{invoice.vessel_name || '-'}</TableCell>
                         <TableCell>{formatDate(invoice.issue_date)}</TableCell>

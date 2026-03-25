@@ -466,6 +466,7 @@ export default function DemurrageClients() {
                           <TableHead>Cliente</TableHead>
                           <TableHead>Container</TableHead>
                           <TableHead>MBL</TableHead>
+                          <TableHead>HBL</TableHead>
                           <TableHead className="text-center">Status</TableHead>
                           <TableHead className="text-center">Retorno</TableHead>
                           <TableHead className="text-center">Ações</TableHead>
@@ -487,6 +488,7 @@ export default function DemurrageClients() {
                                 <TableCell className="font-medium">{alert.client_name || '-'}</TableCell>
                                 <TableCell className="font-mono text-sm">{alert.container_number || '-'}</TableCell>
                                 <TableCell className="font-mono text-sm">{alert.shipment_master || '-'}</TableCell>
+                                <TableCell className="font-mono text-sm">{(alert as any).house_bl || '-'}</TableCell>
                                 <TableCell className="text-center">
                                   <Badge variant="outline"
                                     className={alert.status === 'sent' ? 'text-green-400 border-green-400/30' : alert.status === 'failed' ? 'text-red-400 border-red-400/30' : 'text-yellow-400 border-yellow-400/30'}>
