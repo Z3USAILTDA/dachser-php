@@ -252,6 +252,7 @@ export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreI
                 </Table>
               </div>
             )}
+          </div>
           {/* Actions Footer */}
           <div className="flex justify-between items-center pt-4 border-t border-[rgba(255,255,255,0.1)]">
             <Button
