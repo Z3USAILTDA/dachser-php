@@ -198,6 +198,18 @@ export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreI
                 <p>Nenhum container encontrado para este MBL</p>
               </div>
             ) : (
+              {containers.length === 1 && (containers[0] as any)._source === 'pre_invoice_only' ? (
+                <div className="text-center py-6 text-muted-foreground border border-[rgba(255,255,255,0.1)] rounded-lg">
+                  <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm font-medium mb-1">Dados parciais disponíveis</p>
+                  <p className="text-xs">Os containers desta pré-fatura não estão mais disponíveis nas tabelas operacionais.</p>
+                  <div className="mt-3 text-xs space-y-1">
+                    {(containers[0] as any).navio && <p>Navio: <span className="text-foreground">{(containers[0] as any).navio}</span></p>}
+                    {(containers[0] as any).porto_origem && <p>Origem: <span className="text-foreground">{(containers[0] as any).porto_origem}</span></p>}
+                    {(containers[0] as any).porto_destino && <p>Destino: <span className="text-foreground">{(containers[0] as any).porto_destino}</span></p>}
+                  </div>
+                </div>
+              ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -240,6 +252,7 @@ export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreI
                   </TableBody>
                 </Table>
               </div>
+              )}
             )}
           </div>
 
