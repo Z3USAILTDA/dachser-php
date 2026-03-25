@@ -315,6 +315,11 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
 
       onSuccess();
       onClose();
+      
+      // Navigate to the newly created master voucher details
+      if (masterId) {
+        navigate(`/fin/esteira/voucher/${masterId}`);
+      }
     } catch (error: any) {
       console.error("Error creating voucher master:", error);
       toast({
