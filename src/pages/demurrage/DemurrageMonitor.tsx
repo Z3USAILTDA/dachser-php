@@ -439,6 +439,7 @@ export default function DemurrageMonitor() {
                     <TableRow className="border-[rgba(255,255,255,0.1)]">
                       <TableHead>Container</TableHead>
                       <TableHead>MBL</TableHead>
+                      <TableHead>HBL</TableHead>
                       <TableHead>Cliente</TableHead>
                       <TableHead>Armador</TableHead>
                       <TableHead>Tipo</TableHead>
