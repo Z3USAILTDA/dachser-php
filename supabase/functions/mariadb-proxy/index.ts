@@ -13592,7 +13592,7 @@ Deno.serve(async (req) => {
               if (s.includes('T')) return s.split('T')[0];
               const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
               if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-              const parsed = new Date(s.replace(/\bGM$/, 'GMT'));
+              const parsed = new Date(s.replace(/\bGM\b/g, 'GMT'));
               if (!isNaN(parsed.getTime())) {
                 const y = parsed.getFullYear();
                 const m = String(parsed.getMonth() + 1).padStart(2, '0');
