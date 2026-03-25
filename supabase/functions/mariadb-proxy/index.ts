@@ -13671,7 +13671,11 @@ Deno.serve(async (req) => {
                            'RASCUNHO_ENVIADO', 'MASTER_APROVADO_OPERACAO')
              ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
           FROM dados_dachser.t_vouchers v
-          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
+          LEFT JOIN (
+            SELECT nd, MIN(id_rm) as id_rm, MIN(created_by) as created_by
+            FROM dados_dachser.t_dados_financeiro_voucher
+            GROUP BY nd
+          ) dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
           ${whereClause} ORDER BY v.created_at DESC
         `, params);
         

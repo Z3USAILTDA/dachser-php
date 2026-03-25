@@ -762,6 +762,7 @@ const EsteiraIndex = () => {
     aprovadoPorUserId: v.aprovado_por_user_id,
     clienteEmail: v.cliente_email,
     isMaster: v.is_master === 1 || v.is_master === true,
+    nomeMaster: v.nome_master || null,
     origemCriacao: v.is_master ? "MASTER" : v.id_rm ? "RM" : "MANUAL",
     processoId: v.processo_id || null,
     origemProcesso: v.origem_processo || null,
@@ -887,8 +888,12 @@ const EsteiraIndex = () => {
         // Map pending RM vouchers
         const rmPendingVouchers: Voucher[] = (rmPendingResult.data?.data || []).map((rm: any) => mapRMPendingVoucher(rm));
         
+        // Deduplicate: remove RM pending vouchers that already exist in mappedVouchers
+        const mappedSPOs = new Set(mappedVouchers.map(v => v.numeroSPO));
+        const deduplicatedRMPending = rmPendingVouchers.filter(rm => !mappedSPOs.has(rm.numeroSPO));
+        
         // Merge both arrays
-        const allVouchers = [...rmPendingVouchers, ...mappedVouchers].filter(v => {
+        const allVouchers = [...deduplicatedRMPending, ...mappedVouchers].filter(v => {
           if ((v.isMaster || v.origemCriacao === "MASTER") && v.etapaAtual === "A_PROCESSAR") {
             return false;
           }
@@ -1238,10 +1243,12 @@ const EsteiraIndex = () => {
         }
       }
 
-      // Filtro de busca por SPO
+      // Filtro de busca por SPO (startsWith para evitar matches parciais)
       if (filters.search) {
-        const searchLower = filters.search.toLowerCase();
-        if (!voucher.numeroSPO.toLowerCase().includes(searchLower)) return false;
+        const searchLower = filters.search.toLowerCase().trim();
+        const spoMatch = voucher.numeroSPO.toLowerCase().startsWith(searchLower);
+        const masterNameMatch = voucher.nomeMaster?.toLowerCase().includes(searchLower);
+        if (!spoMatch && !masterNameMatch) return false;
       }
 
       // Filtro de processo
