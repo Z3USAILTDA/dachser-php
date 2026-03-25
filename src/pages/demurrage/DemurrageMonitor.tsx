@@ -37,8 +37,7 @@ export default function DemurrageMonitor() {
   const [filterArmador, setFilterArmador] = useState<string>("all");
   const [filterCliente, setFilterCliente] = useState<string>("all");
   const [filterTipoContainer, setFilterTipoContainer] = useState<string>("all");
-  const [filterPortoOrigem, setFilterPortoOrigem] = useState<string>("all");
-  const [filterPortoDestino, setFilterPortoDestino] = useState<string>("all");
+  const [filterTipoProcesso, setFilterTipoProcesso] = useState<string>("all");
   const [filterCronosStatus, setFilterCronosStatus] = useState<string>("all");
   const [filterFtSource, setFilterFtSource] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
