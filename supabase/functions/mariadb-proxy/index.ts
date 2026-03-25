@@ -10363,6 +10363,19 @@ Deno.serve(async (req) => {
           );
         }
 
+        // Check for existing voucher with same numero_spo
+        const existingVoucher = await client.query(`
+          SELECT id FROM dados_dachser.t_vouchers 
+          WHERE numero_spo = ? AND sync_status = 'ATIVO' 
+          LIMIT 1
+        `, [nd]);
+
+        if (existingVoucher && existingVoucher.length > 0) {
+          console.log(`Voucher ${nd} already exists as ${existingVoucher[0].id}, skipping duplicate insert`);
+          result = { success: true, voucherId: existingVoucher[0].id, numeroSPO: nd, alreadyExists: true };
+          break;
+        }
+
         // Buscar dados do RM
         const rmData = await client.query(`
           SELECT 
