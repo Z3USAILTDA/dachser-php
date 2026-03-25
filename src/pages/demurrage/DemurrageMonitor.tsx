@@ -112,8 +112,7 @@ export default function DemurrageMonitor() {
     setFilterArmador("all");
     setFilterCliente("all");
     setFilterTipoContainer("all");
-    setFilterPortoOrigem("all");
-    setFilterPortoDestino("all");
+    setFilterTipoProcesso("all");
     setFilterCronosStatus("all");
     setFilterFtSource("all");
     setSearchTerm("");
