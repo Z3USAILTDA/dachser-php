@@ -261,9 +261,8 @@ const CronManager = () => {
                 )}
               </TableBody>
             </Table>
-          </div>
-        )}
-      </div>
+        </PageCard>
+      )}
 
       {/* Edit Schedule Dialog */}
       <Dialog open={!!editJob} onOpenChange={(open) => !open && setEditJob(null)}>
