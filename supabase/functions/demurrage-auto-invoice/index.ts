@@ -25,6 +25,7 @@ interface Container {
   data_atracacao: string | null;
   rate_usd_per_day: number | null;
   pre_invoice_number: string | null;
+  data_gate_out: string | null;
 }
 
 interface ClientProfile {
