@@ -1280,9 +1280,11 @@ const EsteiraIndex = () => {
         return false;
       }
 
-      // Filtro de urgência
-      if (filters.urgente !== "all" && (voucher.urgenciaTipo || "NORMAL").trim() !== filters.urgente) {
-        return false;
+      // Filtro de urgência (normalizado)
+      if (filters.urgente !== "all") {
+        const vUrg = (voucher.urgenciaTipo || "NORMAL").trim().toUpperCase();
+        const fUrg = filters.urgente.trim().toUpperCase();
+        if (vUrg !== fUrg) return false;
       }
 
       // Filtro de faixa de valor
