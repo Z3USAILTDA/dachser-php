@@ -888,8 +888,12 @@ const EsteiraIndex = () => {
         // Map pending RM vouchers
         const rmPendingVouchers: Voucher[] = (rmPendingResult.data?.data || []).map((rm: any) => mapRMPendingVoucher(rm));
         
+        // Deduplicate: remove RM pending vouchers that already exist in mappedVouchers
+        const mappedSPOs = new Set(mappedVouchers.map(v => v.numeroSPO));
+        const deduplicatedRMPending = rmPendingVouchers.filter(rm => !mappedSPOs.has(rm.numeroSPO));
+        
         // Merge both arrays
-        const allVouchers = [...rmPendingVouchers, ...mappedVouchers].filter(v => {
+        const allVouchers = [...deduplicatedRMPending, ...mappedVouchers].filter(v => {
           if ((v.isMaster || v.origemCriacao === "MASTER") && v.etapaAtual === "A_PROCESSAR") {
             return false;
           }
