@@ -1,34 +1,37 @@
 
 
-## Plano: Usar FilePreview na aba de Pagamentos
+## Fix: Add JS Date.toString() Pattern Detection to All Date Formatters
 
-### Problema
-Na aba de Pagamentos, o botão de visualizar arquivo usa `window.open(url, "_blank")`, que abre uma nova aba bloqueada pelo navegador. Nos detalhes do voucher e comprovantes, o componente `FilePreview` já faz a visualização inline (PDF, imagem, XML) via dialog modal.
+### Root Cause
+The value reaching MariaDB is `'Mon Apr 20 2026 00:00:00 GM 00:00:00.000'`. This is a JS `Date.toString()` output (with truncated timezone `GM` instead of `GMT`). None of the existing regex checks match this pattern — they only handle `YYYY-MM-DD`, ISO with `T`, and `DD/MM/YYYY`. The `new Date()` fallback also fails because the string is malformed.
 
-### Correção
+### Fix
+Add a **month-name extraction regex** as the first check after the simple format detections, in all 4 date formatting helpers. This directly extracts `Apr` → `04`, `20`, `2026` without relying on `new Date()`.
 
-**Arquivo: `src/components/esteira/PagamentosTab.tsx`**
+### File: `supabase/functions/mariadb-proxy/index.ts`
 
-1. Importar `FilePreview` de `./FilePreview`
-2. Na seção de anexos do dialog expandido (~linha 986-996), substituir o botão `ExternalLink` + `window.open` pelo componente `<FilePreview>`, passando `fileName`, `fileUrl`, `fileType` e `onDownload` — mesmo padrão usado em `VoucherDetailsView.tsx` e `ComprovantesTab.tsx`.
+Add this block **before** the `new Date(s.replace(...))` fallback in each of the 4 helpers:
 
-Trecho atual:
-```tsx
-<Button variant="ghost" size="icon" className="h-7 w-7"
-  onClick={() => window.open(anexo.file_url, "_blank")}>
-  <ExternalLink className="h-3.5 w-3.5" />
-</Button>
+```typescript
+// Detect JS Date.toString() format: "Mon Apr 20 2026 ..."
+const monthMap: Record<string,string> = {
+  Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',
+  Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'
+};
+const jsMatch = s.match(/\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{4})/);
+if (jsMatch && monthMap[jsMatch[1]]) {
+  return `${jsMatch[3]}-${monthMap[jsMatch[1]]}-${jsMatch[2].padStart(2,'0')} 00:00:00.000`;
+}
 ```
 
-Substituir por:
-```tsx
-<FilePreview
-  fileName={anexo.file_name || "arquivo"}
-  fileUrl={anexo.file_url}
-  fileType={anexo.tipo || "OUTROS"}
-  onDownload={() => { /* download handler */ }}
-/>
-```
+### Locations (4 total)
+1. **`toMySQLDate`** (~line 5832) — used by `create_voucher`
+2. **`formatDateVal`** (~line 6079) — used by `update_voucher_esteira`
+3. **`toMySQLDateSafe`** (~line 10419) — used by `import_voucher_from_rm`
+4. **`formatDateForMariaDB`** (~line 10919) — used by `create_voucher_master`
+5. **`mirrorVenc` inline** (~line 10833) — used by master mirror creation
 
-Nenhuma alteração em outros arquivos.
+Each location: insert the `jsMatch` block right **after** the BR date match and **before** the `new Date(s.replace(...))` line.
+
+No other files need changes.
 
