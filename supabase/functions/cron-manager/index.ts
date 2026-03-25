@@ -142,21 +142,16 @@ Deno.serve(async (req) => {
       const headersMatch = command.match(/headers:='([^']+)'/);
       const headersObj = headersMatch ? JSON.parse(headersMatch[1]) : {};
       
-      const bodyMatch = command.match(/body:=concat\('([^']*)',\s*now\(\),\s*'([^']*)'\)/);
-      const body = bodyMatch
-        ? JSON.stringify({ time: new Date().toISOString() })
-        : "{}";
-
-      const response = await fetch(functionUrl, {
+      // Fire-and-forget: dispatch the request without awaiting the response
+      fetch(functionUrl, {
         method: "POST",
         headers: { ...headersObj, "Content-Type": "application/json" },
-        body,
-      });
-      const responseText = await response.text();
+        body: JSON.stringify({ time: new Date().toISOString() }),
+      }).catch((e) => console.error("Fire-and-forget error:", e.message));
+
       result = {
         success: true,
-        status: response.status,
-        response: responseText.substring(0, 500),
+        message: "Função disparada com sucesso (fire-and-forget)",
       };
 
     } else {

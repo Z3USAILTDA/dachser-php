@@ -372,9 +372,9 @@ const CronManager = () => {
     setRunningJob(job.jobid);
     try {
       const res = await callCronManager("run_now", { command: job.command });
-      toast.success(`"${job.jobname}" executado (status: ${res.status})`);
+      toast.success(`"${job.jobname}" disparado com sucesso! A execução continua em segundo plano.`);
     } catch (err: any) {
-      toast.error("Erro: " + err.message);
+      toast.error("Erro ao disparar: " + err.message);
     } finally {
       setRunningJob(null);
     }
