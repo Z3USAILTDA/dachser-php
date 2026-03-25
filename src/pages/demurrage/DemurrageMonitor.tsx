@@ -379,22 +379,13 @@ export default function DemurrageMonitor() {
                     <SelectItem value="45HC">45HC</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={filterPortoOrigem} onValueChange={setFilterPortoOrigem}>
+                <Select value={filterTipoProcesso} onValueChange={setFilterTipoProcesso}>
                   <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] text-sm">
-                    <SelectValue placeholder="Porto Origem" />
+                    <SelectValue placeholder="Tipo Processo" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos Origens</SelectItem>
-                    {uniquePortosOrigem.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select value={filterPortoDestino} onValueChange={setFilterPortoDestino}>
-                  <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] text-sm">
-                    <SelectValue placeholder="Porto Destino" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos Destinos</SelectItem>
-                    {uniquePortosDestino.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                    <SelectItem value="all">Todos Tipos Processo</SelectItem>
+                    {uniqueTipoProcesso.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <Select value={filterCronosStatus} onValueChange={setFilterCronosStatus}>
