@@ -258,14 +258,14 @@ export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreI
             <Button
               variant="outline"
               onClick={() => {
-                try {
-                  exportPreInvoicePDF(preInvoice, items);
+              try {
+                  exportPreInvoicePDF(preInvoice, items, containers);
                   toast.success("PDF exportado com sucesso");
                 } catch (error) {
                   toast.error("Erro ao exportar PDF");
                 }
               }}
-              disabled={isLoading || items.length === 0}
+              disabled={isLoading || isLoadingContainers}
               className="bg-transparent border-[rgba(255,255,255,0.2)]"
             >
               <Download className="h-4 w-4 mr-2" />

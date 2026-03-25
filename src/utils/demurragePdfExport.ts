@@ -362,7 +362,8 @@ export const exportDemurrageReportPDF = (data: DemurrageContainer[]) => {
 
 export const exportPreInvoicePDF = (
   preInvoice: PreInvoice, 
-  items: PreInvoiceItem[]
+  items: PreInvoiceItem[],
+  containers?: DemurrageContainer[]
 ) => {
   const doc = new jsPDF({
     orientation: "portrait",
@@ -464,52 +465,81 @@ export const exportPreInvoicePDF = (
 
   y += 5;
 
-  // Items Table
-  const tableData = items.map((item) => [
-    item.container_number || "-",
-    item.container_type || "-",
-    item.free_time_days?.toString() || "-",
-    item.days_count?.toString() || "0",
-    formatCurrency(item.daily_rate_usd || 0),
-    formatCurrency(item.total_usd || 0),
-  ]);
+  // Determine data source: items > containers > empty
+  const hasItems = items.length > 0;
+  const hasContainers = containers && containers.length > 0 && !((containers[0] as any)._source === 'pre_invoice_only');
 
-  autoTable(doc, {
-    startY: y,
-    head: [[
-      "Container",
-      "Tipo",
-      "Free Time",
-      "Dias",
-      "Taxa/Dia",
-      "Total USD",
-    ]],
-    body: tableData,
-    theme: "grid",
-    headStyles: {
-      fillColor: [255, 200, 0],
-      textColor: [0, 0, 0],
-      fontStyle: "bold",
-      fontSize: 9,
-      halign: "center",
-    },
-    bodyStyles: {
-      fontSize: 8,
-      cellPadding: 3,
-    },
-    alternateRowStyles: {
-      fillColor: [250, 250, 250],
-    },
-    columnStyles: {
-      0: { cellWidth: 35, halign: "center", fontStyle: "bold" },
-      1: { cellWidth: 25, halign: "center" },
-      2: { cellWidth: 25, halign: "center" },
-      3: { cellWidth: 20, halign: "center" },
-      4: { cellWidth: 30, halign: "right" },
-      5: { cellWidth: 35, halign: "right", fontStyle: "bold" },
-    },
-    margin: { left: 15, right: 15 },
-  });
+  if (hasItems) {
+    const tableData = items.map((item) => [
+      item.container_number || "-",
+      item.container_type || "-",
+      item.free_time_days?.toString() || "-",
+      item.days_count?.toString() || "0",
+      formatCurrency(item.daily_rate_usd || 0),
+      formatCurrency(item.total_usd || 0),
+    ]);
+
+    autoTable(doc, {
+      startY: y,
+      head: [["Container", "Tipo", "Free Time", "Dias", "Taxa/Dia", "Total USD"]],
+      body: tableData,
+      theme: "grid",
+      headStyles: { fillColor: [255, 200, 0], textColor: [0, 0, 0], fontStyle: "bold", fontSize: 9, halign: "center" },
+      bodyStyles: { fontSize: 8, cellPadding: 3 },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+      columnStyles: {
+        0: { cellWidth: 35, halign: "center", fontStyle: "bold" },
+        1: { cellWidth: 25, halign: "center" },
+        2: { cellWidth: 25, halign: "center" },
+        3: { cellWidth: 20, halign: "center" },
+        4: { cellWidth: 30, halign: "right" },
+        5: { cellWidth: 35, halign: "right", fontStyle: "bold" },
+      },
+      margin: { left: 15, right: 15 },
+    });
+  } else if (hasContainers) {
+    const calcDiasPosse = (c: DemurrageContainer) => {
+      if (!c.ft_started_at) return "-";
+      const start = new Date(c.ft_started_at);
+      const end = c.data_devolucao ? new Date(c.data_devolucao) : new Date();
+      return Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)).toString();
+    };
+
+    const tableData = containers!.map((c) => [
+      c.numero || "-",
+      c.tipo_conteiner || "-",
+      c.free_time_days ? `${c.free_time_days}d` : "-",
+      formatDate(c.free_time_end_date),
+      calcDiasPosse(c),
+      c.excedente_dias > 0 ? c.excedente_dias.toString() : "-",
+    ]);
+
+    autoTable(doc, {
+      startY: y,
+      head: [["Container", "Tipo", "Free Time", "Limite Devol.", "Dias Posse", "Dias Excedidos"]],
+      body: tableData,
+      theme: "grid",
+      headStyles: { fillColor: [255, 200, 0], textColor: [0, 0, 0], fontStyle: "bold", fontSize: 9, halign: "center" },
+      bodyStyles: { fontSize: 8, cellPadding: 3 },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+      columnStyles: {
+        0: { cellWidth: 35, halign: "center", fontStyle: "bold" },
+        1: { cellWidth: 25, halign: "center" },
+        2: { cellWidth: 25, halign: "center" },
+        3: { cellWidth: 30, halign: "center" },
+        4: { cellWidth: 25, halign: "center" },
+        5: { cellWidth: 30, halign: "center", fontStyle: "bold" },
+      },
+      margin: { left: 15, right: 15 },
+    });
+  } else {
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(120, 120, 120);
+    doc.text("Dados detalhados dos containers não disponíveis.", 15, y + 10);
+    // Create a minimal fake table position for the totals box
+    (doc as any).lastAutoTable = { finalY: y + 20 };
+  }
 
   const afterTableY = (doc as any).lastAutoTable.finalY + 10;
 
