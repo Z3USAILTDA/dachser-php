@@ -157,34 +157,26 @@ const CronManager = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="flex items-center gap-4 mb-6">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Clock className="h-6 w-6 text-primary" />
-              Gerenciamento de Crons
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Gerencie os jobs agendados do sistema (pg_cron)
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={loadJobs} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />
-            Atualizar
-          </Button>
+    <PageLayout
+      title="DACHSER"
+      subtitle="Gerenciamento de Crons"
+      pageIcon={Clock}
+      backTo="/dashboard"
+      rightContent={
+        <Button variant="outline" size="sm" onClick={loadJobs} disabled={loading}
+          className="bg-[rgba(0,0,0,.70)] border-[rgba(255,255,255,.18)] text-[#aaaaaa] hover:text-white">
+          <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />
+          Atualizar
+        </Button>
+      }
+    >
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-[#ffc800]" />
         </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <div className="border border-border rounded-lg overflow-hidden">
-            <Table>
+      ) : (
+        <PageCard className="overflow-hidden">
+          <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
