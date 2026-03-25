@@ -1264,7 +1264,7 @@ const EsteiraIndex = () => {
       }
 
       // Filtro de etapa
-      if (filters.etapa !== "all" && voucher.etapaAtual !== filters.etapa) {
+      if (filters.etapa !== "all" && (voucher.etapaAtual || "").trim() !== filters.etapa) {
         return false;
       }
 
@@ -1279,7 +1279,7 @@ const EsteiraIndex = () => {
       }
 
       // Filtro de urgência
-      if (filters.urgente !== "all" && voucher.urgenciaTipo !== filters.urgente) {
+      if (filters.urgente !== "all" && (voucher.urgenciaTipo || "NORMAL").trim() !== filters.urgente) {
         return false;
       }
 
@@ -1294,25 +1294,26 @@ const EsteiraIndex = () => {
       // Filtro de SLA
       if (filters.slaStatus && filters.slaStatus !== "all") {
         const tempoHoras = calcularTempoNaEtapa(voucher);
-        const sla = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA] || 24;
+        const slaVal = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA];
+        const sla = slaVal !== undefined && slaVal !== null ? slaVal : 24;
         let status: "ok" | "warning" | "critical" = "ok";
         if (sla > 0) {
-          if (tempoHoras >= sla) status = "critical";else if (tempoHoras >= sla * 0.75) status = "warning";
+          if (tempoHoras >= sla) status = "critical"; else if (tempoHoras >= sla * 0.75) status = "warning";
         }
         if (filters.slaStatus !== status) return false;
       }
 
-      // Filtro de vencimento - data inicial e final
+      // Filtro de vencimento - data inicial e final (normalizado para date-only)
+      const vencDate = new Date(voucher.vencimento.getFullYear(), voucher.vencimento.getMonth(), voucher.vencimento.getDate());
       if (filters.vencimentoInicio) {
         const parts = filters.vencimentoInicio.split('-');
         if (parts.length === 3) {
           const year = parseInt(parts[0], 10);
           if (year >= 1900) {
-            const inicio = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0, 0);
-            if (voucher.vencimento < inicio) return false;
+            const inicio = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            if (vencDate < inicio) return false;
             if (!filters.vencimentoFim) {
-              const fimDoDia = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
-              if (voucher.vencimento > fimDoDia) return false;
+              if (vencDate > inicio) return false;
             }
           }
         }
@@ -1323,8 +1324,8 @@ const EsteiraIndex = () => {
         if (parts.length === 3) {
           const year = parseInt(parts[0], 10);
           if (year >= 1900) {
-            const fim = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
-            if (voucher.vencimento > fim) return false;
+            const fim = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            if (vencDate > fim) return false;
           }
         }
       }
@@ -1336,7 +1337,7 @@ const EsteiraIndex = () => {
 
       // Filtro de status comprovante
       if (filters.statusComprovante && filters.statusComprovante !== "all") {
-        const status = voucher.statusComprovante || "PENDENTE";
+        const status = (voucher.statusComprovante || "PENDENTE").trim();
         if (status !== filters.statusComprovante) return false;
       }
 
@@ -2037,7 +2038,7 @@ const EsteiraIndex = () => {
           {/* Tab Content */}
           {activeTab === "processos" && <div className="mt-3">
               {loading ? <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" /> : <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)] overflow-hidden">
-                    <VoucherTable vouchers={filteredVouchers} onViewDetails={handleViewDetails} onEdit={handleEdit} onDelete={handleDelete} onGoBack={handleGoBack} onCancel={handleCancel} onDisassemble={handleDisassemble} onValidateComprovante={handleValidateComprovante} filters={filters} onFilterChange={setFilters} canEdit={canEditVoucher} canDelete={canDeleteVoucher} canGoBackStage={canGoBackStage} canCancelVoucher={canCancelVoucher} canDisassembleMaster={canDisassembleMaster} canValidateComprovante={isFinanceiro || isAdmin || isSystemAdmin} lastUpdateTime={lastUpdateTime} />
+                    <VoucherTable vouchers={filteredVouchers} onViewDetails={handleViewDetails} onEdit={handleEdit} onDelete={handleDelete} onGoBack={handleGoBack} onCancel={handleCancel} onDisassemble={handleDisassemble} onValidateComprovante={handleValidateComprovante} filters={filters} onFilterChange={(newFilters) => { setFilters(newFilters); setDrillDownFilter("all"); }} canEdit={canEditVoucher} canDelete={canDeleteVoucher} canGoBackStage={canGoBackStage} canCancelVoucher={canCancelVoucher} canDisassembleMaster={canDisassembleMaster} canValidateComprovante={isFinanceiro || isAdmin || isSystemAdmin} lastUpdateTime={lastUpdateTime} />
                 </div>}
             </div>}
 

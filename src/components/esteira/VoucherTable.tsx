@@ -113,7 +113,8 @@ const getRowClassName = (vencimento: Date | string) => {
 };
 
 const getSlaStatus = (tempoHoras: number, etapa: string): "ok" | "warning" | "critical" => {
-  const sla = SLA_POR_ETAPA[etapa as keyof typeof SLA_POR_ETAPA] || 24;
+  const slaVal = SLA_POR_ETAPA[etapa as keyof typeof SLA_POR_ETAPA];
+  const sla = slaVal !== undefined && slaVal !== null ? slaVal : 24;
   if (sla === 0) return "ok";
   if (tempoHoras >= sla) return "critical";
   if (tempoHoras >= sla * 0.75) return "warning";
