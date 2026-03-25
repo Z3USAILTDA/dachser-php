@@ -121,7 +121,7 @@ export default function DemurrageMonitor() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterStatus, quickFilter, filterArmador, filterCliente, filterTipoContainer, filterPortoOrigem, filterPortoDestino, filterCronosStatus, filterFtSource]);
+  }, [searchTerm, filterStatus, quickFilter, filterArmador, filterCliente, filterTipoContainer, filterTipoProcesso, filterCronosStatus, filterFtSource]);
 
   const totalPages = Math.ceil(filteredContainers.length / PAGE_SIZE);
   const paginatedContainers = useMemo(() => {
