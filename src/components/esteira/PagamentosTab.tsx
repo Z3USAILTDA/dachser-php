@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { FilePreview } from "./FilePreview";
 import {
-  ExternalLink,
   FileDown,
   Paperclip,
   Calendar, 
