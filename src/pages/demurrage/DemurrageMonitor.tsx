@@ -37,8 +37,7 @@ export default function DemurrageMonitor() {
   const [filterArmador, setFilterArmador] = useState<string>("all");
   const [filterCliente, setFilterCliente] = useState<string>("all");
   const [filterTipoContainer, setFilterTipoContainer] = useState<string>("all");
-  const [filterPortoOrigem, setFilterPortoOrigem] = useState<string>("all");
-  const [filterPortoDestino, setFilterPortoDestino] = useState<string>("all");
+  const [filterTipoProcesso, setFilterTipoProcesso] = useState<string>("all");
   const [filterCronosStatus, setFilterCronosStatus] = useState<string>("all");
   const [filterFtSource, setFilterFtSource] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
@@ -89,11 +88,8 @@ export default function DemurrageMonitor() {
     if (filterTipoContainer !== "all") {
       result = result.filter(c => c.tipo_conteiner === filterTipoContainer);
     }
-    if (filterPortoOrigem !== "all") {
-      result = result.filter(c => c.porto_origem === filterPortoOrigem);
-    }
-    if (filterPortoDestino !== "all") {
-      result = result.filter(c => c.porto_destino === filterPortoDestino);
+    if (filterTipoProcesso !== "all") {
+      result = result.filter(c => c.tipo_processo === filterTipoProcesso);
     }
     if (filterCronosStatus !== "all") {
       result = result.filter(c => c.cronos_status === filterCronosStatus);
@@ -102,23 +98,21 @@ export default function DemurrageMonitor() {
       result = result.filter(c => c.ft_source === filterFtSource);
     }
     return result;
-  }, [containers, quickFilter, filterArmador, filterCliente, filterTipoContainer, filterPortoOrigem, filterPortoDestino, filterCronosStatus, filterFtSource]);
+  }, [containers, quickFilter, filterArmador, filterCliente, filterTipoContainer, filterTipoProcesso, filterCronosStatus, filterFtSource]);
 
   // Extract unique values for filter dropdowns
   const uniqueArmadores = useMemo(() => [...new Set(containers.map(c => c.armador).filter(Boolean))].sort() as string[], [containers]);
   const uniqueClientes = useMemo(() => [...new Set(containers.map(c => c.cliente).filter(Boolean))].sort() as string[], [containers]);
-  const uniquePortosOrigem = useMemo(() => [...new Set(containers.map(c => c.porto_origem).filter(Boolean))].sort() as string[], [containers]);
-  const uniquePortosDestino = useMemo(() => [...new Set(containers.map(c => c.porto_destino).filter(Boolean))].sort() as string[], [containers]);
+  const uniqueTipoProcesso = useMemo(() => [...new Set(containers.map(c => c.tipo_processo).filter(Boolean))].sort() as string[], [containers]);
 
-  const hasActiveFilters = filterArmador !== "all" || filterCliente !== "all" || filterTipoContainer !== "all" || filterPortoOrigem !== "all" || filterPortoDestino !== "all" || filterCronosStatus !== "all" || filterFtSource !== "all" || filterStatus !== "all";
+  const hasActiveFilters = filterArmador !== "all" || filterCliente !== "all" || filterTipoContainer !== "all" || filterTipoProcesso !== "all" || filterCronosStatus !== "all" || filterFtSource !== "all" || filterStatus !== "all";
 
   const clearAllFilters = () => {
     setFilterStatus("all");
     setFilterArmador("all");
     setFilterCliente("all");
     setFilterTipoContainer("all");
-    setFilterPortoOrigem("all");
-    setFilterPortoDestino("all");
+    setFilterTipoProcesso("all");
     setFilterCronosStatus("all");
     setFilterFtSource("all");
     setSearchTerm("");
@@ -127,7 +121,7 @@ export default function DemurrageMonitor() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterStatus, quickFilter, filterArmador, filterCliente, filterTipoContainer, filterPortoOrigem, filterPortoDestino, filterCronosStatus, filterFtSource]);
+  }, [searchTerm, filterStatus, quickFilter, filterArmador, filterCliente, filterTipoContainer, filterTipoProcesso, filterCronosStatus, filterFtSource]);
 
   const totalPages = Math.ceil(filteredContainers.length / PAGE_SIZE);
   const paginatedContainers = useMemo(() => {
@@ -352,7 +346,7 @@ export default function DemurrageMonitor() {
                 )}
               </div>
               {/* Row 2: Additional filters */}
-              <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
                 <Select value={filterArmador} onValueChange={setFilterArmador}>
                   <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] text-sm">
                     <SelectValue placeholder="Armador" />
@@ -385,22 +379,13 @@ export default function DemurrageMonitor() {
                     <SelectItem value="45HC">45HC</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={filterPortoOrigem} onValueChange={setFilterPortoOrigem}>
+                <Select value={filterTipoProcesso} onValueChange={setFilterTipoProcesso}>
                   <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] text-sm">
-                    <SelectValue placeholder="Porto Origem" />
+                    <SelectValue placeholder="Tipo Processo" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos Origens</SelectItem>
-                    {uniquePortosOrigem.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select value={filterPortoDestino} onValueChange={setFilterPortoDestino}>
-                  <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] text-sm">
-                    <SelectValue placeholder="Porto Destino" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos Destinos</SelectItem>
-                    {uniquePortosDestino.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                    <SelectItem value="all">Todos Tipos Processo</SelectItem>
+                    {uniqueTipoProcesso.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <Select value={filterCronosStatus} onValueChange={setFilterCronosStatus}>
