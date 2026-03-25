@@ -1337,7 +1337,7 @@ const EsteiraIndex = () => {
 
       // Filtro de status comprovante
       if (filters.statusComprovante && filters.statusComprovante !== "all") {
-        const status = voucher.statusComprovante || "PENDENTE";
+        const status = (voucher.statusComprovante || "PENDENTE").trim();
         if (status !== filters.statusComprovante) return false;
       }
 
