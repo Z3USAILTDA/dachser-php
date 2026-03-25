@@ -1,14 +1,14 @@
-import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { FileText, Package, Calendar, DollarSign, Ship, Loader2, Download } from "lucide-react";
-import { useDemurragePreInvoiceItems, type PreInvoice, type PreInvoiceItem } from "@/hooks/useDemurrageData";
+import { FileText, Package, Calendar, DollarSign, Loader2, Download } from "lucide-react";
+import { useDemurragePreInvoiceItems, type PreInvoice, type PreInvoiceItem, type DemurrageContainer } from "@/hooks/useDemurrageData";
 import { exportPreInvoicePDF } from "@/utils/demurragePdfExport";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 
@@ -16,9 +16,10 @@ interface PreInvoiceDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   preInvoice: PreInvoice | null;
+  containers?: DemurrageContainer[];
 }
 
-export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreInvoiceDetailsDialogProps) {
+export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice, containers = [] }: PreInvoiceDetailsDialogProps) {
   const { data: items = [], isLoading } = useDemurragePreInvoiceItems(preInvoice?.id ?? null);
 
   const formatCurrency = (value: number) => 
@@ -55,11 +56,18 @@ export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreI
     );
   };
 
+  const calcDiasEmPosse = (c: DemurrageContainer) => {
+    if (!c.ft_started_at) return '-';
+    const start = parseISO(c.ft_started_at);
+    const end = c.data_devolucao ? parseISO(c.data_devolucao) : new Date();
+    return differenceInDays(end, start);
+  };
+
   if (!preInvoice) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[rgba(5,6,18,0.95)] border-[rgba(255,255,255,0.1)] max-w-4xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="bg-[rgba(5,6,18,0.95)] border-[rgba(255,255,255,0.1)] max-w-6xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground">
             <FileText className="h-5 w-5 text-[#ffc800]" />
@@ -169,47 +177,61 @@ export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreI
 
           <Separator className="bg-[rgba(255,255,255,0.1)]" />
 
-          {/* Items Table */}
+          {/* Containers Table */}
           <div>
             <h4 className="text-sm font-medium flex items-center gap-2 mb-3">
               <Package className="h-4 w-4 text-[#ffc800]" />
-              Containers ({items.length})
+              Containers ({containers.length})
             </h4>
 
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-[#ffc800]" />
-              </div>
-            ) : items.length === 0 ? (
+            {containers.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Package className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                <p>Nenhum container encontrado</p>
+                <p>Nenhum container encontrado para este MBL</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-[rgba(255,255,255,0.1)]">
-                    <TableHead>Container</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead className="text-center">Free Time</TableHead>
-                    <TableHead className="text-center">Dias</TableHead>
-                    <TableHead className="text-right">Taxa/Dia</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((item) => (
-                    <TableRow key={item.id} className="border-[rgba(255,255,255,0.1)]">
-                      <TableCell className="font-mono">{item.container_number || '-'}</TableCell>
-                      <TableCell>{item.container_type || '-'}</TableCell>
-                      <TableCell className="text-center">{item.free_time_days || '-'}</TableCell>
-                      <TableCell className="text-center font-medium">{item.days_count}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(item.daily_rate_usd || 0)}</TableCell>
-                      <TableCell className="text-right font-semibold text-[#ffc800]">{formatCurrency(item.total_usd)}</TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-[rgba(255,255,255,0.1)]">
+                      <TableHead>Container</TableHead>
+                      <TableHead>ATA</TableHead>
+                      <TableHead>Último Evento</TableHead>
+                      <TableHead>Medida</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Descarga</TableHead>
+                      <TableHead className="text-center">Free Time</TableHead>
+                      <TableHead>Limite Devol.</TableHead>
+                      <TableHead>Devol. Vazio</TableHead>
+                      <TableHead className="text-center">Dias Posse</TableHead>
+                      <TableHead className="text-center">Dias Incid.</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {containers.map((c) => (
+                      <TableRow key={c.id} className="border-[rgba(255,255,255,0.1)]">
+                        <TableCell className="font-mono text-xs">{c.numero || '-'}</TableCell>
+                        <TableCell className="text-xs">{formatDate(c.data_atracacao)}</TableCell>
+                        <TableCell className="text-xs max-w-[150px] truncate" title={c.last_event || ''}>
+                          {c.last_event || '-'}
+                        </TableCell>
+                        <TableCell className="text-xs">{c.tipo_conteiner || '-'}</TableCell>
+                        <TableCell className="text-xs">{c.tipo_processo || '-'}</TableCell>
+                        <TableCell className="text-xs">{formatDate(c.ft_started_at)}</TableCell>
+                        <TableCell className="text-center text-xs">
+                          {c.free_time_days ? `${c.free_time_days}d` : '-'}
+                        </TableCell>
+                        <TableCell className="text-xs">{formatDate(c.free_time_end_date)}</TableCell>
+                        <TableCell className="text-xs">{formatDate(c.data_devolucao)}</TableCell>
+                        <TableCell className="text-center text-xs font-medium">{calcDiasEmPosse(c)}</TableCell>
+                        <TableCell className="text-center text-xs font-semibold text-[#ffc800]">
+                          {c.excedente_dias > 0 ? c.excedente_dias : '-'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </div>
 

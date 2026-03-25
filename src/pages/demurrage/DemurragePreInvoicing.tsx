@@ -597,6 +597,7 @@ export default function DemurragePreInvoicing() {
         open={detailsDialogOpen}
         onOpenChange={setDetailsDialogOpen}
         preInvoice={selectedInvoice}
+        containers={allContainers.filter(c => selectedInvoice?.shipment_mbl && c.mbl === selectedInvoice.shipment_mbl)}
       />
 
       {/* Pre-Invoice Info Dialog */}
