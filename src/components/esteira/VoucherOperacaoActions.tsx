@@ -469,7 +469,6 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
           <AlertTitle className="text-purple-500">Voucher Master</AlertTitle>
           <AlertDescription className="mt-2 text-foreground">
             Este é um voucher agrupador (master). Ao aprovar, ele será enviado para a etapa Fiscal.
-            Os anexos são opcionais para vouchers master.
           </AlertDescription>
         </Alert>
       )}
