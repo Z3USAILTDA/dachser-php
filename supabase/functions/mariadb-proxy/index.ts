@@ -1,5 +1,4 @@
-// mariadb-proxy edge function v2.1
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// mariadb-proxy edge function v2.2 - native Deno.serve
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 
@@ -390,7 +389,7 @@ function chunkArray<T>(items: T[], chunkSize: number): T[][] {
   return chunks;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
