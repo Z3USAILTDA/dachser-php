@@ -1,89 +1,75 @@
 
+Objetivo: corrigir de fato os filtros de Classificação, Etapa atual, Tempo na Etapa e Comprovante sem mexer em outras áreas.
 
-## Correção dos 5 Filtros Quebrados na Esteira
+O que a análise mostrou
+- Os filtros visuais existem, mas ainda há inconsistências na base comparada.
+- “Tempo na Etapa” hoje usa `updatedAt` via `calcularTempoNaEtapa(voucher)`. Isso mede “última alteração no voucher”, não “entrada na etapa”. Qualquer update (anexo, validação, comentário, automação) distorce Atenção/Crítico.
+- Classificação, Etapa e Comprovante ainda comparam strings quase “cruas” do banco (`urgenciaTipo`, `etapaAtual`, `statusComprovante`). Se vier espaço, case diferente ou valor alternativo, o filtro falha silenciosamente.
+- O filtro por papel também interfere: `roleFilteredVouchers` limita a lista antes do filtro da tabela. Então o usuário pode selecionar uma etapa e ainda assim não ver todos os itens esperados em alguns perfis.
 
-Analisei todo o fluxo de dados: `get_vouchers_ativos` (backend) → `mapVoucherFromDB` → `roleFilteredVouchers` → `sortedVouchers` → `filterVouchers` → `VoucherTable`.
+Plano de correção
+1. Normalizar os valores antes de filtrar em `src/pages/esteira/EsteiraIndex.tsx`
+- Criar normalização defensiva para:
+  - `etapaAtual`
+  - `urgenciaTipo`
+  - `statusComprovante`
+- Comparar sempre valores já normalizados, com `trim()` e `toUpperCase()`.
+- Aplicar isso especificamente nos filtros:
+  - Classificação
+  - Etapa atual
+  - Comprovante
 
----
+2. Corrigir a origem lógica do filtro “Tempo na Etapa”
+- Ajustar a lógica atual para não tratar `updatedAt` como entrada real de etapa.
+- Como o código atual não possui um campo dedicado de “entrada na etapa”, a correção deve usar uma abordagem segura:
+  - parar de classificar errado etapas sem SLA;
+  - evitar que concluído/cancelado/sem SLA caiam em atenção/crítico;
+  - alinhar a função usada no filtro com a função usada na tabela.
+- Se existir histórico/log suficiente no voucher, usar a última mudança de etapa como base; se não existir, manter fallback explícito e consistente.
 
-### Bug Confirmado: Filtro SLA (Tempo na Etapa)
+3. Alinhar cálculo de SLA entre tabela e filtro
+- Hoje a tabela usa `getSlaStatus(...)` e o filtro replica lógica parecida.
+- Centralizar a regra para ambos usarem exatamente a mesma classificação:
+  - `ok`
+  - `warning`
+  - `critical`
+- Isso evita casos em que o badge mostra uma coisa e o filtro retorna outra.
 
-**Causa raiz encontrada no código:**
+4. Revisar a interferência de `roleFilteredVouchers`
+- Manter a segurança/visibilidade por papel.
+- Mas ajustar a regra para que, quando o usuário escolhe explicitamente uma etapa no filtro, a lista-base não esconda indevidamente resultados daquela etapa.
+- Revisar especialmente os perfis:
+  - OPERACAO
+  - FISCAL
+  - SUPERVISOR
 
-Em `filterVouchers` (linha ~1297) e `getSlaStatus` (VoucherTable linha ~116):
-```typescript
-const sla = SLA_POR_ETAPA[voucher.etapaAtual] || 24;
-```
+Arquivos a ajustar
+- `src/pages/esteira/EsteiraIndex.tsx`
+  - normalização dos campos filtrados
+  - correção da lógica de SLA/tempo na etapa
+  - ajuste do filtro por etapa dentro do recorte por papel
+- `src/components/esteira/VoucherTable.tsx`
+  - reutilizar a mesma regra central de SLA/status exibido
+- `src/types/voucher.ts`
+  - se necessário, extrair/helper compartilhado para cálculo de status SLA consistente
 
-O operador `|| 24` transforma SLA=0 em SLA=24. Etapas como CONCLUIDO, A_PROCESSAR, RASCUNHO e CANCELADO têm SLA definido como `0` (sem controle de SLA), mas o `|| 24` as trata como se tivessem SLA de 24h. Resultado: vouchers CONCLUIDO/CANCELADO aparecem como "atenção" ou "crítico" quando na verdade deveriam ser "ok".
+Resultado esperado
+- Classificação:
+  - “Urgente Real”, “Urgente Auto” e “Normal” mostram apenas os vouchers corretos.
+- Etapa atual:
+  - Operacional, Fiscal, Supervisor, Financeiro, Robô, Concluído, Ajuste Op., Ajuste Fiscal e Cancelado filtram corretamente.
+- Tempo na Etapa:
+  - Atenção e Crítico param de usar falsos positivos causados por `updatedAt`.
+- Comprovante:
+  - Anexado e Validado passam a refletir exatamente o status real exibido na linha.
 
-**Correção:** Substituir `|| 24` por verificação adequada de `undefined`:
-```typescript
-const slaVal = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA];
-const sla = slaVal !== undefined && slaVal !== null ? slaVal : 24;
-if (sla === 0) { /* always "ok", skip comparison */ }
-```
+Detalhe técnico importante
+- A causa mais séria remanescente é estrutural: “Tempo na Etapa” está baseado em `updatedAt`, que não representa entrada na etapa. Se quisermos precisão total, o ideal depois é persistir `data_entrada_etapa` ou derivar isso do histórico de mudança de etapa. Nesta correção, eu priorizaria primeiro eliminar os erros atuais sem expandir escopo.
 
-Aplicar em **ambos** os locais: `filterVouchers` no EsteiraIndex e `getSlaStatus` no VoucherTable.
-
----
-
-### Bug Provável: drillDownFilter Interferindo nos Filtros
-
-O `drillDownFilter` (cards métricos "Em Andamento", "SLA", etc.) filtra vouchers ANTES dos filtros da tabela. Se o usuário clicou em um card e depois tenta usar os filtros inline, os resultados ficam silenciosamente reduzidos. Embora exista um indicador visual, pode não ser percebido.
-
-**Correção:** Ao alterar qualquer filtro na tabela, resetar `drillDownFilter` para `"all"`:
-```typescript
-// Em EsteiraIndex, ao receber onFilterChange da VoucherTable:
-const handleFilterChange = (newFilters: FilterValues) => {
-  setFilters(newFilters);
-  setDrillDownFilter("all"); // Reset drill-down when table filters change
-};
-```
-
----
-
-### Filtro de Data (Vencimento)
-
-O filtro cria `Date` objects com `new Date(year, month, day, 0, 0, 0)` (meia-noite local). O `voucher.vencimento` vem de `parseDBDate` que pode retornar horários não-meia-noite dependendo do formato do banco. Comparações `<` e `>` podem falhar por diferença de horas.
-
-**Correção:** Normalizar ambos os lados para comparação date-only:
-```typescript
-const vencDate = new Date(voucher.vencimento.getFullYear(), voucher.vencimento.getMonth(), voucher.vencimento.getDate());
-// Comparar vencDate com inicio/fimDoDia
-```
-
----
-
-### Filtros de Urgência, Etapa, Comprovante
-
-A lógica do código está correta sintaticamente. A causa mais provável dos erros é a interferência do `drillDownFilter` descrita acima, combinada com possíveis diferenças de case/trim nos valores do banco.
-
-**Correção defensiva:** Adicionar normalização em todas as comparações de string:
-```typescript
-// Urgência
-if (filters.urgente !== "all" && (voucher.urgenciaTipo || "NORMAL").trim() !== filters.urgente) return false;
-
-// Etapa  
-if (filters.etapa !== "all" && (voucher.etapaAtual || "").trim() !== filters.etapa) return false;
-
-// Comprovante
-if (filters.statusComprovante !== "all") {
-  const status = (voucher.statusComprovante || "PENDENTE").trim();
-  if (status !== filters.statusComprovante) return false;
-}
-```
-
----
-
-### Arquivos a editar
-
-1. **`src/pages/esteira/EsteiraIndex.tsx`**:
-   - `filterVouchers`: corrigir SLA `|| 24`, normalizar datas, adicionar `.trim()` nas comparações
-   - Handler de `setFilters`: resetar `drillDownFilter` ao mudar filtros da tabela
-
-2. **`src/components/esteira/VoucherTable.tsx`**:
-   - `getSlaStatus`: corrigir `|| 24` com verificação de `sla === 0`
-
-Nenhuma alteração de backend, banco ou RLS.
-
+Validação
+- Testar cada filtro isoladamente:
+  - Classificação: Normal / Urgente Real / Urgente Auto
+  - Etapa: todas as etapas listadas
+  - Tempo na Etapa: OK / Atenção / Crítico
+  - Comprovante: Pendente / Anexado / Validado
+- Testar também combinando dois filtros ao mesmo tempo para confirmar que não há interferência cruzada.
