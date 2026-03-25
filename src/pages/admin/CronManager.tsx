@@ -272,6 +272,37 @@ function HistoryTable({ jobid }: { jobid: number }) {
 }
 
 // ─── Main Component ──────────────────────────────────────────
+const WEEK_DAYS = [
+  { value: 1, label: "Seg" },
+  { value: 2, label: "Ter" },
+  { value: 3, label: "Qua" },
+  { value: 4, label: "Qui" },
+  { value: 5, label: "Sex" },
+  { value: 6, label: "Sáb" },
+  { value: 0, label: "Dom" },
+];
+
+const detectScheduleMode = (cron: string): "presets" | "weekly" | "manual" => {
+  if (CRON_PRESETS.some(p => p.value === cron)) return "presets";
+  const parts = cron.split(/\s+/);
+  if (parts.length === 5 && parts[4] !== "*" && parts[2] === "*" && parts[3] === "*") return "weekly";
+  return "manual";
+};
+
+const parseWeeklyCron = (cron: string) => {
+  const parts = cron.split(/\s+/);
+  if (parts.length !== 5) return { days: [], hour: 12, minute: 0 };
+  const days = parts[4] !== "*" ? parts[4].split(",").map(Number).filter(n => !isNaN(n)) : [];
+  const hour = parts[1] !== "*" ? parseInt(parts[1]) || 0 : 12;
+  const minute = parseInt(parts[0]) || 0;
+  return { days, hour, minute };
+};
+
+const buildWeeklyCron = (days: number[], hour: number, minute: number): string => {
+  if (days.length === 0) return "";
+  return `${minute} ${hour} * * ${days.sort((a, b) => a - b).join(",")}`;
+};
+
 const CronManager = () => {
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<CronJob[]>([]);
@@ -283,6 +314,10 @@ const CronManager = () => {
   const [runningJob, setRunningJob] = useState<number | null>(null);
   const [togglingJob, setTogglingJob] = useState<number | null>(null);
   const [expandedJob, setExpandedJob] = useState<number | null>(null);
+  const [scheduleMode, setScheduleMode] = useState<"presets" | "weekly" | "manual">("presets");
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
+  const [selectedHour, setSelectedHour] = useState(12);
+  const [selectedMinute, setSelectedMinute] = useState(0);
 
   useEffect(() => {
     if (!isZ3usAdmin()) {
