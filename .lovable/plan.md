@@ -1,28 +1,31 @@
 
 
-## Plano: Trocar filtros Origem/Destino por Tipo Processo
+## Plano: Adicionar coluna HBL em todas as visualizações de Demurrage
 
-### Alterações em `src/pages/demurrage/DemurrageMonitor.tsx`
+### Contexto
+O campo `hbl` já existe na interface `DemurrageContainer` (linha 63) e `bl_number` existe na `PreInvoice` (linha 447). Precisamos apenas adicionar a coluna na UI das tabelas.
 
-**1. State** — Remover `filterPortoOrigem` e `filterPortoDestino`, adicionar `filterTipoProcesso`
+### Alterações
 
-**2. Filtro client-side** — Substituir os blocos de filtro de porto_origem/porto_destino pelo filtro de tipo_processo:
-```typescript
-if (filterTipoProcesso !== "all") {
-  result = result.filter(c => c.tipo_processo === filterTipoProcesso);
-}
-```
+**1. `src/pages/demurrage/DemurrageMonitor.tsx` — Tabela principal**
+- Adicionar `<TableHead>HBL</TableHead>` após a coluna MBL (linha 441)
+- Adicionar `<TableCell className="font-mono text-sm">{container.hbl || '-'}</TableCell>` após a célula MBL (linha 460)
 
-**3. Unique values** — Remover `uniquePortosOrigem`/`uniquePortosDestino`, adicionar:
-```typescript
-const uniqueTipoProcesso = useMemo(() => 
-  [...new Set(containers.map(c => c.tipo_processo).filter(Boolean))].sort() as string[], [containers]);
-```
+**2. `src/pages/demurrage/DemurragePreInvoicing.tsx` — Tabela de pré-faturas**
+- Adicionar `<TableHead>HBL</TableHead>` após a coluna MBL (linha 426)
+- Adicionar `<TableCell className="font-mono text-sm">{invoice.bl_number || '-'}</TableCell>` após a célula MBL (linha 458)
 
-**4. UI** — Substituir os dois `<Select>` de Porto Origem e Porto Destino por um único Select de Tipo Processo com opções dinâmicas (valores do banco, ex: "SEA IMPORT", "SEA EXPORT")
+**3. `src/pages/demurrage/DemurrageClients.tsx` — Tabela de alertas**
+- Adicionar `<TableHead>HBL</TableHead>` após a coluna MBL (linha 468)
+- Adicionar `<TableCell className="font-mono text-sm">{(alert as any).house_bl || '-'}</TableCell>` após a célula MBL (linha 489)
 
-**5. Limpeza** — Atualizar `hasActiveFilters`, `clearAllFilters` e o `useEffect` de reset de página para usar `filterTipoProcesso` em vez dos dois filtros removidos
+**4. `src/pages/demurrage/DemurrageFreeTimes.tsx` — Tabela de free times**
+- Adicionar `<TableHead>HBL</TableHead>` após a coluna MBL (linha 254)
+- Adicionar célula com dado HBL correspondente após a célula MBL
 
-### Arquivo editado
+### Arquivos editados
 - `src/pages/demurrage/DemurrageMonitor.tsx`
+- `src/pages/demurrage/DemurragePreInvoicing.tsx`
+- `src/pages/demurrage/DemurrageClients.tsx`
+- `src/pages/demurrage/DemurrageFreeTimes.tsx`
 
