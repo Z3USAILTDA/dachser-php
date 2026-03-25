@@ -1,37 +1,59 @@
 
+Objetivo: corrigir de vez o `500` no `import_voucher_from_rm` que ainda envia um valor inválido para `t_vouchers.vencimento`.
 
-## Fix: Add JS Date.toString() Pattern Detection to All Date Formatters
+Diagnóstico
+- O banco aceita `DATETIME` no padrão `YYYY-MM-DD HH:MM:SS.000`.
+- O valor que chega hoje é: `Mon Apr 20 2026 00:00:00 GM 00:00:00.000`.
+- Eu revisei o `mariadb-proxy` e encontrei o motivo exato: os helpers usam `if (s.includes('T'))`.
+- Em uma string JavaScript como `Mon Apr 20 2026 00:00:00 GMT+0000 (Coordinated Universal Time)`, existe a letra `T` dentro de `GMT` e também em `Time`.
+- Então o código entra no ramo errado e faz:
+  - `s.split('T')[0]` → `Mon Apr 20 2026 00:00:00 GM`
+  - depois concatena ` 00:00:00.000`
+  - resultado final: exatamente o valor quebrado que o MariaDB rejeita.
 
-### Root Cause
-The value reaching MariaDB is `'Mon Apr 20 2026 00:00:00 GM 00:00:00.000'`. This is a JS `Date.toString()` output (with truncated timezone `GM` instead of `GMT`). None of the existing regex checks match this pattern — they only handle `YYYY-MM-DD`, ISO with `T`, and `DD/MM/YYYY`. The `new Date()` fallback also fails because the string is malformed.
+Do I know what the issue is?
+- Sim. O problema não é mais “falta de suporte ao formato JS Date”.
+- O problema real é a detecção ISO excessivamente ampla com `s.includes('T')`, que captura strings não-ISO antes do regex de mês (`Apr`, `May`, etc.) rodar.
 
-### Fix
-Add a **month-name extraction regex** as the first check after the simple format detections, in all 4 date formatting helpers. This directly extracts `Apr` → `04`, `20`, `2026` without relying on `new Date()`.
+Arquivos afetados
+- `supabase/functions/mariadb-proxy/index.ts`
 
-### File: `supabase/functions/mariadb-proxy/index.ts`
+Correção proposta
+1. Substituir todas as checagens genéricas `s.includes('T')` por uma validação estrita de ISO, por exemplo:
+   - `if (/^\d{4}-\d{2}-\d{2}T/.test(s)) ...`
+   - ou mais estrito: `if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) ...`
+2. Manter o parser de `JS Date.toString()` ativo para formatos como:
+   - `Mon Apr 20 2026 ...`
+3. Garantir a ordem correta dentro de cada helper:
+   ```text
+   vazio/null
+   YYYY-MM-DD
+   YYYY-MM-DD HH:MM:SS
+   DD/MM/YYYY
+   JS Date.toString() com mês textual
+   ISO real com T
+   fallback new Date(...)
+   fallback final
+   ```
+4. Aplicar a mesma correção em todos os formatadores de data do arquivo, porque todos repetem o mesmo padrão:
+   - `toMySQLDate`
+   - `formatDateVal`
+   - `toMySQLDateSafe`
+   - `mirrorVenc`
+   - `formatDateForMariaDB`
 
-Add this block **before** the `new Date(s.replace(...))` fallback in each of the 4 helpers:
+Validação
+- Reexecutar `import_voucher_from_rm` com o mesmo ND `20261881537`.
+- Confirmar que `vencimento` vai como algo no formato:
+  - `2026-04-20 00:00:00.000`
+- Confirmar que o retorno deixa de ser `500`.
 
-```typescript
-// Detect JS Date.toString() format: "Mon Apr 20 2026 ..."
-const monthMap: Record<string,string> = {
-  Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',
-  Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'
-};
-const jsMatch = s.match(/\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{4})/);
-if (jsMatch && monthMap[jsMatch[1]]) {
-  return `${jsMatch[3]}-${monthMap[jsMatch[1]]}-${jsMatch[2].padStart(2,'0')} 00:00:00.000`;
-}
-```
+Apoio de debug
+- Como o erro está persistente há várias tentativas, eu também incluiria logs temporários no fluxo `import_voucher_from_rm` antes do `INSERT`:
+  - valor bruto de `rm.data_vencimento`
+  - valor retornado por `toMySQLDateSafe(rm.data_vencimento)`
+- Isso serve para provar no log se o problema foi resolvido ou se ainda existe algum segundo ponto bypassando o helper.
 
-### Locations (4 total)
-1. **`toMySQLDate`** (~line 5832) — used by `create_voucher`
-2. **`formatDateVal`** (~line 6079) — used by `update_voucher_esteira`
-3. **`toMySQLDateSafe`** (~line 10419) — used by `import_voucher_from_rm`
-4. **`formatDateForMariaDB`** (~line 10919) — used by `create_voucher_master`
-5. **`mirrorVenc` inline** (~line 10833) — used by master mirror creation
-
-Each location: insert the `jsMatch` block right **after** the BR date match and **before** the `new Date(s.replace(...))` line.
-
-No other files need changes.
-
+Escopo
+- Sem mudanças de banco, RLS ou UI.
+- Correção concentrada apenas no `mariadb-proxy`.
