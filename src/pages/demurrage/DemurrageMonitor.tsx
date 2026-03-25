@@ -103,8 +103,7 @@ export default function DemurrageMonitor() {
   // Extract unique values for filter dropdowns
   const uniqueArmadores = useMemo(() => [...new Set(containers.map(c => c.armador).filter(Boolean))].sort() as string[], [containers]);
   const uniqueClientes = useMemo(() => [...new Set(containers.map(c => c.cliente).filter(Boolean))].sort() as string[], [containers]);
-  const uniquePortosOrigem = useMemo(() => [...new Set(containers.map(c => c.porto_origem).filter(Boolean))].sort() as string[], [containers]);
-  const uniquePortosDestino = useMemo(() => [...new Set(containers.map(c => c.porto_destino).filter(Boolean))].sort() as string[], [containers]);
+  const uniqueTipoProcesso = useMemo(() => [...new Set(containers.map(c => c.tipo_processo).filter(Boolean))].sort() as string[], [containers]);
 
   const hasActiveFilters = filterArmador !== "all" || filterCliente !== "all" || filterTipoContainer !== "all" || filterPortoOrigem !== "all" || filterPortoDestino !== "all" || filterCronosStatus !== "all" || filterFtSource !== "all" || filterStatus !== "all";
 
