@@ -10928,12 +10928,13 @@ Deno.serve(async (req) => {
           const s = String(dateValue).trim();
           if (!s || s === 'null' || s === 'undefined' || s === 'Invalid Date') return fallback;
           if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s} 00:00:00.000`;
-          if (s.includes('T')) return `${s.split('T')[0]} 00:00:00.000`;
+          if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(s)) return s.includes('.') ? s : `${s}.000`;
           const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
           if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]} 00:00:00.000`;
           const _mm5: Record<string,string> = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
           const _jm5 = s.match(/\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{4})/);
           if (_jm5 && _mm5[_jm5[1]]) return `${_jm5[3]}-${_mm5[_jm5[1]]}-${_jm5[2].padStart(2,'0')} 00:00:00.000`;
+          if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return `${s.split('T')[0]} 00:00:00.000`;
           const fixedTz = s.replace(/\bGM\b/g, 'GMT');
           const parsed = new Date(fixedTz);
           if (!isNaN(parsed.getTime())) {
