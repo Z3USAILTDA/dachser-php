@@ -10,7 +10,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Play, Pencil, Power, RefreshCw, Clock, Loader2 } from "lucide-react";
+import { Play, Pencil, Power, RefreshCw, Clock, Loader2 } from "lucide-react";
+import { PageLayout } from "@/components/layout/PageLayout";
+import { PageCard } from "@/components/layout/PageCard";
 import { toast } from "sonner";
 
 interface CronJob {
