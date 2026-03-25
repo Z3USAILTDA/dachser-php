@@ -88,11 +88,8 @@ export default function DemurrageMonitor() {
     if (filterTipoContainer !== "all") {
       result = result.filter(c => c.tipo_conteiner === filterTipoContainer);
     }
-    if (filterPortoOrigem !== "all") {
-      result = result.filter(c => c.porto_origem === filterPortoOrigem);
-    }
-    if (filterPortoDestino !== "all") {
-      result = result.filter(c => c.porto_destino === filterPortoDestino);
+    if (filterTipoProcesso !== "all") {
+      result = result.filter(c => c.tipo_processo === filterTipoProcesso);
     }
     if (filterCronosStatus !== "all") {
       result = result.filter(c => c.cronos_status === filterCronosStatus);
