@@ -1263,9 +1263,11 @@ const EsteiraIndex = () => {
         if (!voucher.fornecedor?.toLowerCase().includes(searchLower)) return false;
       }
 
-      // Filtro de etapa
-      if (filters.etapa !== "all" && (voucher.etapaAtual || "").trim() !== filters.etapa) {
-        return false;
+      // Filtro de etapa (normalizado)
+      if (filters.etapa !== "all") {
+        const vEtapa = (voucher.etapaAtual || "").trim().toUpperCase();
+        const fEtapa = filters.etapa.trim().toUpperCase();
+        if (vEtapa !== fEtapa) return false;
       }
 
       // Filtro de cobrança
@@ -1278,9 +1280,11 @@ const EsteiraIndex = () => {
         return false;
       }
 
-      // Filtro de urgência
-      if (filters.urgente !== "all" && (voucher.urgenciaTipo || "NORMAL").trim() !== filters.urgente) {
-        return false;
+      // Filtro de urgência (normalizado)
+      if (filters.urgente !== "all") {
+        const vUrg = (voucher.urgenciaTipo || "NORMAL").trim().toUpperCase();
+        const fUrg = filters.urgente.trim().toUpperCase();
+        if (vUrg !== fUrg) return false;
       }
 
       // Filtro de faixa de valor
@@ -1335,10 +1339,11 @@ const EsteiraIndex = () => {
         return false;
       }
 
-      // Filtro de status comprovante
+      // Filtro de status comprovante (normalizado)
       if (filters.statusComprovante && filters.statusComprovante !== "all") {
-        const status = (voucher.statusComprovante || "PENDENTE").trim();
-        if (status !== filters.statusComprovante) return false;
+        const vStatus = (voucher.statusComprovante || "PENDENTE").trim().toUpperCase();
+        const fStatus = filters.statusComprovante.trim().toUpperCase();
+        if (vStatus !== fStatus) return false;
       }
 
       // Filtro de tipo de documento

@@ -443,7 +443,8 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                 paginatedVouchers.map((voucher) => {
                   const tempoNaEtapa = calcularTempoNaEtapa(voucher);
                   const slaStatus = getSlaStatus(tempoNaEtapa, voucher.etapaAtual);
-                  const slaLimit = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA] || 24;
+                  const slaLimitVal = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA];
+                  const slaLimit = slaLimitVal !== undefined && slaLimitVal !== null ? slaLimitVal : 24;
                   
                   return (
                     <TableRow 
