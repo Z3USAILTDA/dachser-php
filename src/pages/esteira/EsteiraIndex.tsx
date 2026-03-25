@@ -1339,10 +1339,11 @@ const EsteiraIndex = () => {
         return false;
       }
 
-      // Filtro de status comprovante
+      // Filtro de status comprovante (normalizado)
       if (filters.statusComprovante && filters.statusComprovante !== "all") {
-        const status = (voucher.statusComprovante || "PENDENTE").trim();
-        if (status !== filters.statusComprovante) return false;
+        const vStatus = (voucher.statusComprovante || "PENDENTE").trim().toUpperCase();
+        const fStatus = filters.statusComprovante.trim().toUpperCase();
+        if (vStatus !== fStatus) return false;
       }
 
       // Filtro de tipo de documento
