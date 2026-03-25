@@ -1,59 +1,41 @@
 
-Objetivo: corrigir de vez o `500` no `import_voucher_from_rm` que ainda envia um valor inválido para `t_vouchers.vencimento`.
 
-Diagnóstico
-- O banco aceita `DATETIME` no padrão `YYYY-MM-DD HH:MM:SS.000`.
-- O valor que chega hoje é: `Mon Apr 20 2026 00:00:00 GM 00:00:00.000`.
-- Eu revisei o `mariadb-proxy` e encontrei o motivo exato: os helpers usam `if (s.includes('T'))`.
-- Em uma string JavaScript como `Mon Apr 20 2026 00:00:00 GMT+0000 (Coordinated Universal Time)`, existe a letra `T` dentro de `GMT` e também em `Time`.
-- Então o código entra no ramo errado e faz:
-  - `s.split('T')[0]` → `Mon Apr 20 2026 00:00:00 GM`
-  - depois concatena ` 00:00:00.000`
-  - resultado final: exatamente o valor quebrado que o MariaDB rejeita.
+## Diagnóstico: Voucher 20261881179 Duplicado
 
-Do I know what the issue is?
-- Sim. O problema não é mais “falta de suporte ao formato JS Date”.
-- O problema real é a detecção ISO excessivamente ampla com `s.includes('T')`, que captura strings não-ISO antes do regex de mês (`Apr`, `May`, etc.) rodar.
+### O que aconteceu
+Nos logs de rede, o botão de importação disparou **duas chamadas consecutivas** para `import_voucher_from_rm` com o mesmo ND `20261881179`, em um intervalo de ~4 segundos:
+- **19:44:43** → criou `e39ce75b-...` (OPERACAO)
+- **19:44:47** → criou `96060be6-...` (OPERACAO)
 
-Arquivos afetados
-- `supabase/functions/mariadb-proxy/index.ts`
+Depois, apenas o segundo (`96060be6`) foi editado (tipo_documento alterado para SPO, enviado para FISCAL). Por isso aparecem dois registros com etapas diferentes.
 
-Correção proposta
-1. Substituir todas as checagens genéricas `s.includes('T')` por uma validação estrita de ISO, por exemplo:
-   - `if (/^\d{4}-\d{2}-\d{2}T/.test(s)) ...`
-   - ou mais estrito: `if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) ...`
-2. Manter o parser de `JS Date.toString()` ativo para formatos como:
-   - `Mon Apr 20 2026 ...`
-3. Garantir a ordem correta dentro de cada helper:
-   ```text
-   vazio/null
-   YYYY-MM-DD
-   YYYY-MM-DD HH:MM:SS
-   DD/MM/YYYY
-   JS Date.toString() com mês textual
-   ISO real com T
-   fallback new Date(...)
-   fallback final
-   ```
-4. Aplicar a mesma correção em todos os formatadores de data do arquivo, porque todos repetem o mesmo padrão:
-   - `toMySQLDate`
-   - `formatDateVal`
-   - `toMySQLDateSafe`
-   - `mirrorVenc`
-   - `formatDateForMariaDB`
+### Causa raiz
+O handler `import_voucher_from_rm` no `mariadb-proxy` **não verifica se já existe um voucher com o mesmo `numero_spo`** na tabela `t_vouchers` antes de inserir. Cada chamada gera um novo UUID e insere incondicionalmente.
 
-Validação
-- Reexecutar `import_voucher_from_rm` com o mesmo ND `20261881537`.
-- Confirmar que `vencimento` vai como algo no formato:
-  - `2026-04-20 00:00:00.000`
-- Confirmar que o retorno deixa de ser `500`.
+### Correção proposta
 
-Apoio de debug
-- Como o erro está persistente há várias tentativas, eu também incluiria logs temporários no fluxo `import_voucher_from_rm` antes do `INSERT`:
-  - valor bruto de `rm.data_vencimento`
-  - valor retornado por `toMySQLDateSafe(rm.data_vencimento)`
-- Isso serve para provar no log se o problema foi resolvido ou se ainda existe algum segundo ponto bypassando o helper.
+**1. Backend — Adicionar verificação de duplicata no `import_voucher_from_rm`**
 
-Escopo
-- Sem mudanças de banco, RLS ou UI.
-- Correção concentrada apenas no `mariadb-proxy`.
+Antes do INSERT, consultar `t_vouchers` por `numero_spo = nd` com `sync_status = 'ATIVO'`. Se já existir, retornar o voucher existente em vez de criar um novo:
+
+```sql
+SELECT id FROM t_vouchers 
+WHERE numero_spo = ? AND sync_status = 'ATIVO' 
+LIMIT 1
+```
+
+Se encontrar, retornar `{ success: true, voucherId: existente, numeroSPO: nd, alreadyExists: true }`.
+
+**2. Frontend — Desabilitar botão durante importação (debounce)**
+
+Nos componentes `EsteiraIndex.tsx` e `BacklogTab.tsx`, adicionar um estado `importing` que desabilita o botão enquanto a chamada está em andamento, prevenindo duplo-clique.
+
+**3. Limpeza — Remover o voucher duplicado**
+
+Executar a exclusão do voucher órfão `e39ce75b-0763-46a9-bce3-b0d034eb95cc` (o que ficou em OPERACAO sem edições) e seus logs associados.
+
+### Arquivos afetados
+- `supabase/functions/mariadb-proxy/index.ts` — check de duplicata no handler `import_voucher_from_rm`
+- `src/pages/esteira/EsteiraIndex.tsx` — debounce no botão de importar
+- `src/components/esteira/BacklogTab.tsx` — debounce no botão de importar
+
