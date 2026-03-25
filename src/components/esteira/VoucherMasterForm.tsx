@@ -58,7 +58,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
   const [faturaFiles, setFaturaFiles] = useState<File[]>([]);
   const [boletoFiles, setBoletoFiles] = useState<File[]>([]);
   const { toast } = useToast();
-
+  const navigate = useNavigate();
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
