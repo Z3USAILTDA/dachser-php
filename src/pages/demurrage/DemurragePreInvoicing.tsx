@@ -424,6 +424,7 @@ export default function DemurragePreInvoicing() {
                       </TableHead>
                       <TableHead>Nº Pré-Fatura</TableHead>
                       <TableHead>MBL</TableHead>
+                      <TableHead>HBL</TableHead>
                       <TableHead>Cliente</TableHead>
                       <TableHead>Navio</TableHead>
                       <TableHead>Data Emissão</TableHead>
