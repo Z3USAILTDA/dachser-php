@@ -1,31 +1,17 @@
 
 
-## Plano: Adicionar coluna HBL em todas as visualizações de Demurrage
+## Plano: Corrigir campo HBL no detalhe da pré-fatura
 
-### Contexto
-O campo `hbl` já existe na interface `DemurrageContainer` (linha 63) e `bl_number` existe na `PreInvoice` (linha 447). Precisamos apenas adicionar a coluna na UI das tabelas.
+### Problema
+Na dialog de detalhes da pré-fatura (`PreInvoiceDetailsDialog.tsx`), linha 135-136:
+- O label diz "BL:" quando deveria ser "HBL:"
+- O valor usa `preInvoice.bl_number` que contém o MBL duplicado, em vez do HBL real enriquecido pelo backend
 
-### Alterações
+### Alteração em `src/components/demurrage/PreInvoiceDetailsDialog.tsx`
 
-**1. `src/pages/demurrage/DemurrageMonitor.tsx` — Tabela principal**
-- Adicionar `<TableHead>HBL</TableHead>` após a coluna MBL (linha 441)
-- Adicionar `<TableCell className="font-mono text-sm">{container.hbl || '-'}</TableCell>` após a célula MBL (linha 460)
+1. Renomear o label de "BL:" para "HBL:"
+2. Usar `(preInvoice as any).hbl || preInvoice.bl_number || '-'` para exibir o HBL enriquecido pelo backend (mesmo padrão já usado na tabela de pré-faturamento)
 
-**2. `src/pages/demurrage/DemurragePreInvoicing.tsx` — Tabela de pré-faturas**
-- Adicionar `<TableHead>HBL</TableHead>` após a coluna MBL (linha 426)
-- Adicionar `<TableCell className="font-mono text-sm">{invoice.bl_number || '-'}</TableCell>` após a célula MBL (linha 458)
-
-**3. `src/pages/demurrage/DemurrageClients.tsx` — Tabela de alertas**
-- Adicionar `<TableHead>HBL</TableHead>` após a coluna MBL (linha 468)
-- Adicionar `<TableCell className="font-mono text-sm">{(alert as any).house_bl || '-'}</TableCell>` após a célula MBL (linha 489)
-
-**4. `src/pages/demurrage/DemurrageFreeTimes.tsx` — Tabela de free times**
-- Adicionar `<TableHead>HBL</TableHead>` após a coluna MBL (linha 254)
-- Adicionar célula com dado HBL correspondente após a célula MBL
-
-### Arquivos editados
-- `src/pages/demurrage/DemurrageMonitor.tsx`
-- `src/pages/demurrage/DemurragePreInvoicing.tsx`
-- `src/pages/demurrage/DemurrageClients.tsx`
-- `src/pages/demurrage/DemurrageFreeTimes.tsx`
+### Arquivo editado
+- `src/components/demurrage/PreInvoiceDetailsDialog.tsx`
 
