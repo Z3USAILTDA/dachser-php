@@ -1279,7 +1279,7 @@ const EsteiraIndex = () => {
       }
 
       // Filtro de urgência
-      if (filters.urgente !== "all" && voucher.urgenciaTipo !== filters.urgente) {
+      if (filters.urgente !== "all" && (voucher.urgenciaTipo || "NORMAL").trim() !== filters.urgente) {
         return false;
       }
 
