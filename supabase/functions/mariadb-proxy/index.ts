@@ -12099,21 +12099,27 @@ Deno.serve(async (req) => {
           if (piMbls.length > 0) {
             const hblMap: Record<string, string> = {};
             try {
-              const seaMasterRows = await client.query(
-                `SELECT master, hawb FROM dados_dachser.t_sea_master WHERE master IN (${piMbls.map(() => '?').join(',')})`,
-                piMbls
-              );
-              for (const r of (seaMasterRows || [])) {
-                if (r.hawb && !hblMap[r.master]) hblMap[r.master] = r.hawb;
+              const mblChunks = chunkArray(piMbls, 50);
+              for (const chunk of mblChunks) {
+                const seaMasterRows = await queryWithRetry(() => client.query(
+                  `SELECT master, hawb FROM dados_dachser.t_sea_master WHERE master IN (${chunk.map(() => '?').join(',')})`,
+                  chunk
+                ), { label: 'pi_hbl_sea_master', maxRetries: 2 });
+                for (const r of (seaMasterRows || [])) {
+                  if (r.hawb && !hblMap[r.master]) hblMap[r.master] = r.hawb;
+                }
               }
               const missingMbls = piMbls.filter(m => !hblMap[m]);
               if (missingMbls.length > 0) {
-                const mdRows = await client.query(
-                  `SELECT mawb, hawb FROM dados_dachser.t_master_dados WHERE mawb IN (${missingMbls.map(() => '?').join(',')})`,
-                  missingMbls
-                );
-                for (const r of (mdRows || [])) {
-                  if (r.hawb && !hblMap[r.mawb]) hblMap[r.mawb] = r.hawb;
+                const missingChunks = chunkArray(missingMbls, 50);
+                for (const chunk of missingChunks) {
+                  const mdRows = await queryWithRetry(() => client.query(
+                    `SELECT mawb, hawb FROM dados_dachser.t_master_dados WHERE mawb IN (${chunk.map(() => '?').join(',')})`,
+                    chunk
+                  ), { label: 'pi_hbl_master_dados', maxRetries: 2 });
+                  for (const r of (mdRows || [])) {
+                    if (r.hawb && !hblMap[r.mawb]) hblMap[r.mawb] = r.hawb;
+                  }
                 }
               }
             } catch (e) { console.error('PI HBL enrichment error:', e); }
