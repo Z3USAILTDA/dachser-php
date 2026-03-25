@@ -51,53 +51,71 @@ interface CronMeta {
 }
 
 const CRON_METADATA: Record<string, CronMeta> = {
-  "sync-leadcomex": {
-    description: "Sincroniza dados de embarques da Leadcomex, atualizando informações de AWBs, status e eventos em tempo real.",
-    category: "Integrações",
-    categoryColor: "#3b82f6",
-    impact: "alto",
-    relatedPage: "/air-tracking",
-  },
-  "sync-cct-status": {
-    description: "Atualiza o status CCT oficial dos embarques a partir dos eventos normalizados e handlers.",
+  "leadcomex-sync-every-minute": {
+    description: "Sincroniza dados de embarques aéreos via API Leadcomex (enrich-reverse-ladder). Prioriza embarques pendentes, processando 5 por ciclo.",
     category: "Aéreo",
     categoryColor: "#ffc800",
     impact: "alto",
     relatedPage: "/air-tracking",
   },
-  "check-sla-alerts": {
-    description: "Verifica os limites de SLA dos embarques e gera alertas para possíveis atrasos.",
+  "air-dep-transition-alert": {
+    description: "Monitora transições de status DEP (departed) nos embarques aéreos e envia alertas por e-mail aos analistas responsáveis.",
     category: "Alertas",
     categoryColor: "#ef4444",
     impact: "alto",
+    relatedPage: "/air-tracking",
   },
-  "sync-maritime": {
-    description: "Sincroniza dados de embarques marítimos das APIs de companhias navais (Hapag-Lloyd, etc).",
-    category: "Marítimo",
-    categoryColor: "#06b6d4",
-    impact: "médio",
-    relatedPage: "/sea-shipments",
+  "air-tracking-failed-alert": {
+    description: "Verifica embarques aéreos com falha de rastreamento e notifica a equipe operacional para ação corretiva.",
+    category: "Alertas",
+    categoryColor: "#ef4444",
+    impact: "alto",
+    relatedPage: "/air-tracking",
   },
-  "cleanup-old-runs": {
-    description: "Remove registros antigos de execução de crons para manter performance do banco.",
-    category: "Sistema",
-    categoryColor: "#8b5cf6",
-    impact: "baixo",
-  },
-  "api-usage-cycle": {
-    description: "Consolida métricas de uso das APIs e calcula consumo do ciclo de faturamento.",
+  "anthropic-balance-check-daily": {
+    description: "Verifica diariamente o saldo disponível na API Anthropic (Claude) e envia alerta caso esteja abaixo do limiar configurado.",
     category: "Financeiro",
     categoryColor: "#22c55e",
     impact: "médio",
     relatedPage: "/admin/api-management",
   },
+  "db-critical-alert-hourly": {
+    description: "Monitora métricas críticas do banco de dados (conexões, tamanho, queries lentas) e dispara alertas em caso de anomalias.",
+    category: "Sistema",
+    categoryColor: "#8b5cf6",
+    impact: "alto",
+  },
+  "db-status-report-hourly": {
+    description: "Gera relatório horário do status geral do banco de dados incluindo uso de disco, tabelas maiores e estatísticas de performance.",
+    category: "Sistema",
+    categoryColor: "#8b5cf6",
+    impact: "médio",
+  },
+  "firecrawl-monitor-alert-every-30min": {
+    description: "Monitora o uso da API Firecrawl (web scraping) e envia alertas sobre consumo, limites e possíveis falhas de integração.",
+    category: "Integrações",
+    categoryColor: "#3b82f6",
+    impact: "médio",
+    relatedPage: "/admin/api-management",
+  },
+  "sea-analysis-watchdog-check": {
+    description: "Verifica embarques marítimos pendentes de análise e identifica possíveis travamentos no pipeline de processamento.",
+    category: "Marítimo",
+    categoryColor: "#06b6d4",
+    impact: "alto",
+    relatedPage: "/sea-shipments",
+  },
+  "sea-tracking-weekly": {
+    description: "Atualiza rastreamento de embarques marítimos via APIs das companhias navais (Hapag-Lloyd). Executa duas vezes por semana.",
+    category: "Marítimo",
+    categoryColor: "#06b6d4",
+    impact: "médio",
+    relatedPage: "/sea-shipments",
+  },
 };
 
 const getMetadata = (jobname: string): CronMeta => {
-  // Try exact match first, then partial match
   if (CRON_METADATA[jobname]) return CRON_METADATA[jobname];
-  const key = Object.keys(CRON_METADATA).find(k => jobname.toLowerCase().includes(k.toLowerCase()));
-  if (key) return CRON_METADATA[key];
   return {
     description: "Job agendado do sistema.",
     category: "Geral",
