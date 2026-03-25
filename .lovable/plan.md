@@ -1,35 +1,36 @@
 
 
-## Plano: Mostrar containers do MBL nos Detalhes da Pré-Fatura
+## Plano: Garantir que containers apareçam para todas as pré-faturas
 
-### Problema
-O dialog `PreInvoiceDetailsDialog` busca containers via `useDemurragePreInvoiceItems` (tabela `pre_invoice_items`), que retorna vazio. Os dados reais dos containers estão na lista operacional (`allContainers` via `useDemurrageData`), filtrados pelo MBL da pré-fatura.
+### Problema raiz
+A query `demurrage_get_containers` retorna no maximo 500 containers ordenados por `updated_at DESC`. Quando o usuario abre uma pre-fatura mais antiga, os containers daquele MBL podem nao estar entre os 500 carregados, resultando em lista vazia.
 
-### Alterações
+O filtro atual: `allContainers.filter(c => c.mbl === selectedInvoice.shipment_mbl)` so funciona se os containers ja estiverem na memoria.
 
-**1. `src/pages/demurrage/DemurragePreInvoicing.tsx`**
-- Passar nova prop `containers` ao `PreInvoiceDetailsDialog`, filtrando `allContainers` pelo MBL da pré-fatura selecionada (mesmo padrão já usado no `SendTestEmailDialog`)
+### Solucao
+Criar uma nova action `demurrage_get_containers_by_mbl` no mariadb-proxy que busca containers especificamente por MBL, sem limite de 500 e sem filtro `active = 1` (containers devolvidos podem ter `active = 0`). Usar essa action no dialog de detalhes.
 
-**2. `src/components/demurrage/PreInvoiceDetailsDialog.tsx`**
-- Adicionar prop `containers: DemurrageContainer[]`
-- Substituir a tabela atual (que usa `items` do `useDemurragePreInvoiceItems`) por uma tabela que exibe os `containers` recebidos via prop
-- Manter `useDemurragePreInvoiceItems` apenas para o PDF e email
-- Colunas da nova tabela de containers:
+### Alteracoes
 
-| Coluna | Campo do `DemurrageContainer` |
-|---|---|
-| Container | `numero` |
-| ATA | `data_atracacao` |
-| Último Evento | `last_event` |
-| Medida | `tipo_conteiner` |
-| Tipo | `tipo_processo` |
-| Descarga | `ft_started_at` |
-| Free Time | `free_time_days` + `free_time_end_date` |
-| Limite Devolução | `free_time_end_date` |
-| Devolução Vazio | `data_devolucao` |
-| Dias em Posse | calculado: diferença entre `ft_started_at` e `data_devolucao` (ou hoje) |
-| Dias Incidentes | `excedente_dias` |
+**1. `supabase/functions/mariadb-proxy/index.ts`**
+- Adicionar novo case `demurrage_get_containers_by_mbl` que recebe `mbl: string` e faz query:
+  ```sql
+  SELECT dc.* FROM t_dachser_demurrage_containers dc WHERE dc.mbl = ?
+  ```
+- Enriquecer com `partner_id` e `hbl` (mesma logica do `demurrage_get_containers`)
+
+**2. `src/hooks/useDemurrageData.ts`**
+- Criar hook `useDemurrageContainersByMbl(mbl: string | null)` que chama a nova action
+- Retorna `DemurrageContainer[]` com react-query, habilitado apenas quando `mbl` nao e null
+
+**3. `src/components/demurrage/PreInvoiceDetailsDialog.tsx`**
+- Remover prop `containers` recebida externamente
+- Usar o novo hook `useDemurrageContainersByMbl(preInvoice?.shipment_mbl)` para buscar containers diretamente quando o dialog abre
+- Mostrar loading state enquanto busca
+
+**4. `src/pages/demurrage/DemurragePreInvoicing.tsx`**
+- Remover a prop `containers` do `PreInvoiceDetailsDialog` (nao e mais necessaria)
 
 ### Resultado
-O dialog mostrará todos os containers vinculados ao MBL da pré-fatura com as informações operacionais completas solicitadas.
+Cada pre-fatura buscara seus containers diretamente pelo MBL ao abrir o dialog, independente dos 500 containers carregados na pagina principal.
 
