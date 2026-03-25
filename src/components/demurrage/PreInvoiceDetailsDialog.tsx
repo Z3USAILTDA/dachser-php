@@ -20,7 +20,10 @@ interface PreInvoiceDetailsDialogProps {
 
 export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreInvoiceDetailsDialogProps) {
   const { data: items = [], isLoading } = useDemurragePreInvoiceItems(preInvoice?.id ?? null);
-  const { data: containers = [], isLoading: isLoadingContainers } = useDemurrageContainersByMbl(open ? preInvoice?.shipment_mbl ?? null : null);
+  const { data: containers = [], isLoading: isLoadingContainers } = useDemurrageContainersByMbl(
+    open ? preInvoice?.shipment_mbl ?? null : null,
+    open ? preInvoice?.invoice_number ?? null : null
+  );
 
   const formatCurrency = (value: number) => 
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value || 0);
