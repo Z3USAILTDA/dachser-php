@@ -105,7 +105,7 @@ export default function DemurrageMonitor() {
   const uniqueClientes = useMemo(() => [...new Set(containers.map(c => c.cliente).filter(Boolean))].sort() as string[], [containers]);
   const uniqueTipoProcesso = useMemo(() => [...new Set(containers.map(c => c.tipo_processo).filter(Boolean))].sort() as string[], [containers]);
 
-  const hasActiveFilters = filterArmador !== "all" || filterCliente !== "all" || filterTipoContainer !== "all" || filterPortoOrigem !== "all" || filterPortoDestino !== "all" || filterCronosStatus !== "all" || filterFtSource !== "all" || filterStatus !== "all";
+  const hasActiveFilters = filterArmador !== "all" || filterCliente !== "all" || filterTipoContainer !== "all" || filterTipoProcesso !== "all" || filterCronosStatus !== "all" || filterFtSource !== "all" || filterStatus !== "all";
 
   const clearAllFilters = () => {
     setFilterStatus("all");
