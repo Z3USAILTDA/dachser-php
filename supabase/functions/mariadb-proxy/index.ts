@@ -13608,9 +13608,13 @@ Deno.serve(async (req) => {
               if (!d) return null;
               const s = String(d).trim();
               if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-              if (s.includes('T')) return s.split('T')[0];
+              if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(s)) return s.split(' ')[0];
               const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
               if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+              const _mm6: Record<string,string> = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+              const _jm6 = s.match(/\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{4})/);
+              if (_jm6 && _mm6[_jm6[1]]) return `${_jm6[3]}-${_mm6[_jm6[1]]}-${_jm6[2].padStart(2,'0')}`;
+              if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.split('T')[0];
               const parsed = new Date(s.replace(/\bGM\b/g, 'GMT'));
               if (!isNaN(parsed.getTime())) {
                 const y = parsed.getFullYear();
