@@ -6062,10 +6062,34 @@ Deno.serve(async (req) => {
           status_comprovante: 'status_comprovante',
         };
         
+        // Date fields that need formatting for MariaDB DATETIME
+        const dateFields = new Set(['vencimento', 'data_emissao_documento']);
+        
+        const formatDateVal = (d: any): string => {
+          const now = new Date();
+          const fb = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} 00:00:00.000`;
+          if (!d) return fb;
+          const s = String(d).trim();
+          if (!s || s === 'null' || s === 'undefined' || s === 'Invalid Date') return fb;
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s} 00:00:00.000`;
+          if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(s)) return s;
+          if (s.includes('T')) return `${s.split('T')[0]} 00:00:00.000`;
+          const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+          if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]} 00:00:00.000`;
+          const parsed = new Date(s.replace(/\bGM\b/g, 'GMT'));
+          if (!isNaN(parsed.getTime())) {
+            const y = parsed.getFullYear();
+            const m = String(parsed.getMonth() + 1).padStart(2, '0');
+            const dd = String(parsed.getDate()).padStart(2, '0');
+            return `${y}-${m}-${dd} 00:00:00.000`;
+          }
+          return fb;
+        };
+        
         for (const [key, dbField] of Object.entries(fieldMapping)) {
           if (updateData[key] !== undefined) {
             updateClauses.push(`${dbField} = ?`);
-            params.push(updateData[key]);
+            params.push(dateFields.has(key) ? formatDateVal(updateData[key]) : updateData[key]);
           }
         }
         
