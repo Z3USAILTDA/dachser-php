@@ -3,7 +3,7 @@ import postgres from "https://deno.land/x/postgresjs@v3.4.5/mod.js";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 Deno.serve(async (req) => {
@@ -28,12 +28,66 @@ Deno.serve(async (req) => {
     let result: unknown;
 
     if (req.method === "GET" && action === "list") {
+      // Get jobs with last run info
       const jobs = await sql`
-        SELECT jobid, jobname, schedule, active, command
-        FROM cron.job
-        ORDER BY jobname
+        SELECT 
+          j.jobid, j.jobname, j.schedule, j.active, j.command,
+          lr.last_run_at,
+          lr.last_status,
+          lr.last_return_message,
+          lr.last_duration_seconds
+        FROM cron.job j
+        LEFT JOIN LATERAL (
+          SELECT 
+            d.start_time as last_run_at,
+            d.status as last_status,
+            d.return_message as last_return_message,
+            EXTRACT(EPOCH FROM (d.end_time - d.start_time))::numeric(10,2) as last_duration_seconds
+          FROM cron.job_run_details d
+          WHERE d.jobid = j.jobid
+          ORDER BY d.start_time DESC
+          LIMIT 1
+        ) lr ON true
+        ORDER BY j.jobname
       `;
-      result = { jobs };
+
+      // Get failure count in last 24h
+      const failures = await sql`
+        SELECT COUNT(*) as count
+        FROM cron.job_run_details
+        WHERE status = 'failed'
+          AND start_time > now() - interval '24 hours'
+      `;
+
+      result = { 
+        jobs,
+        recent_failures: Number(failures[0]?.count || 0)
+      };
+
+    } else if (req.method === "GET" && action === "history") {
+      const jobid = url.searchParams.get("jobid");
+      if (!jobid) {
+        await sql.end();
+        return new Response(
+          JSON.stringify({ error: "jobid is required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const history = await sql`
+        SELECT 
+          runid,
+          status,
+          return_message,
+          start_time,
+          end_time,
+          EXTRACT(EPOCH FROM (end_time - start_time))::numeric(10,2) as duration_seconds
+        FROM cron.job_run_details
+        WHERE jobid = ${Number(jobid)}
+        ORDER BY start_time DESC
+        LIMIT 15
+      `;
+      result = { history };
 
     } else if (req.method === "POST" && action === "update_schedule") {
       const { jobid, schedule } = await req.json();
@@ -44,7 +98,6 @@ Deno.serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      // Validate cron expression (basic: 5 fields)
       const cronParts = schedule.trim().split(/\s+/);
       if (cronParts.length !== 5) {
         await sql.end();
@@ -77,7 +130,6 @@ Deno.serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      // Extract the URL from the command and call it
       const urlMatch = command.match(/url:='([^']+)'/);
       if (!urlMatch) {
         await sql.end();
@@ -110,7 +162,7 @@ Deno.serve(async (req) => {
     } else {
       await sql.end();
       return new Response(
-        JSON.stringify({ error: "Invalid action. Use: list, update_schedule, toggle_active, run_now" }),
+        JSON.stringify({ error: "Invalid action. Use: list, update_schedule, toggle_active, run_now, history" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
