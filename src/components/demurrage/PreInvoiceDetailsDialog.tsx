@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { FileText, Package, Calendar, DollarSign, Loader2, Download } from "lucide-react";
-import { useDemurragePreInvoiceItems, type PreInvoice, type PreInvoiceItem, type DemurrageContainer } from "@/hooks/useDemurrageData";
+import { useDemurragePreInvoiceItems, useDemurrageContainersByMbl, type PreInvoice, type PreInvoiceItem, type DemurrageContainer } from "@/hooks/useDemurrageData";
 import { exportPreInvoicePDF } from "@/utils/demurragePdfExport";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
