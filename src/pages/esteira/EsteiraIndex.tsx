@@ -1303,17 +1303,17 @@ const EsteiraIndex = () => {
         if (filters.slaStatus !== status) return false;
       }
 
-      // Filtro de vencimento - data inicial e final
+      // Filtro de vencimento - data inicial e final (normalizado para date-only)
+      const vencDate = new Date(voucher.vencimento.getFullYear(), voucher.vencimento.getMonth(), voucher.vencimento.getDate());
       if (filters.vencimentoInicio) {
         const parts = filters.vencimentoInicio.split('-');
         if (parts.length === 3) {
           const year = parseInt(parts[0], 10);
           if (year >= 1900) {
-            const inicio = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0, 0);
-            if (voucher.vencimento < inicio) return false;
+            const inicio = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            if (vencDate < inicio) return false;
             if (!filters.vencimentoFim) {
-              const fimDoDia = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
-              if (voucher.vencimento > fimDoDia) return false;
+              if (vencDate > inicio) return false;
             }
           }
         }
@@ -1324,8 +1324,8 @@ const EsteiraIndex = () => {
         if (parts.length === 3) {
           const year = parseInt(parts[0], 10);
           if (year >= 1900) {
-            const fim = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
-            if (voucher.vencimento > fim) return false;
+            const fim = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            if (vencDate > fim) return false;
           }
         }
       }
