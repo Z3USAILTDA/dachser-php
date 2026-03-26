@@ -408,7 +408,7 @@ const TrackingAereo = () => {
       total++;
       const code = getStatusCode(awb.last_event).toUpperCase();
       if (inTransitCodes.has(code)) transit++;
-      if (awb.etd && new Date(awb.etd).getTime() < Date.now() && !["ARR", "DLV", "POD"].includes(code)) alert++;
+      if (code === "DIS") alert++;
       if (criticalCodes.has(code) || awb.pieces_discrepancy) critical++;
     });
     return { total, transit, alert, critical };
