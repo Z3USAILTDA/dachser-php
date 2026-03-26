@@ -348,9 +348,22 @@ const TrackingAereo = () => {
             }
           }
 
-          // Determine if critical: discrepancy in timeline or NIL/NIF/OFLD
-          const upperEvent = lastEvent.toUpperCase();
-          const isCritical = ["NIL", "NIF", "OFLD"].includes(upperEvent) || checkTimelineDiscrepancy(item.timeline_json);
+          // Determine invalid AWB and tracking failures
+          let isInvalid = false;
+          let trackingFailed = false;
+          let resolvedLastEvent = lastEvent;
+
+          if (awbNumber === "NI") {
+            isInvalid = true;
+            resolvedLastEvent = "AWB Invalido";
+          } else if (!lastEvent || hasScraperFailure(timeline)) {
+            trackingFailed = true;
+            resolvedLastEvent = "Falha do Rastreio";
+          }
+
+          // Determine if critical: discrepancy in timeline or NIL/NIF/OFLD or tracking_failed
+          const upperEvent = resolvedLastEvent.toUpperCase();
+          const isCritical = trackingFailed || ["NIL", "NIF", "OFLD"].includes(upperEvent) || checkTimelineDiscrepancy(item.timeline_json);
 
           return {
             id: `scraper-${index}`,
@@ -358,8 +371,8 @@ const TrackingAereo = () => {
             hawb: item.hawb_number || "-",
             airline_code: airlineCode,
             consignee_name: item.consignee_nome || "-",
-            last_event: lastEvent,
-            status: lastEvent || "-",
+            last_event: resolvedLastEvent,
+            status: resolvedLastEvent || "-",
             nome_analista: item.clerk || "-",
             email_analista: item.clerk_email || null,
             origem: origin || "N/A",
@@ -373,6 +386,8 @@ const TrackingAereo = () => {
             penultimate_location: penultLoc,
             is_critical: isCritical,
             pieces_discrepancy: checkTimelineDiscrepancy(item.timeline_json),
+            is_invalid: isInvalid,
+            tracking_failed: trackingFailed,
           };
         });
 
