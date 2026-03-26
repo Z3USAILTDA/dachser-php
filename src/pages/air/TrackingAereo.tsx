@@ -172,6 +172,20 @@ function parseTimelineDateTime(dateStr: string, timeStr: string): string | null 
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+// ─── Scraper failure descriptions ───
+
+const SCRAPER_FAILURE_DESCRIPTIONS = [
+  "O site da operadora está fora do ar, tente novamente mais tarde",
+  "Não foi possível detectar a operadora para o seu número de rastreamento",
+];
+
+function hasScraperFailure(timeline: any[]): boolean {
+  if (!timeline || timeline.length === 0) return false;
+  return timeline.some((evt: any) =>
+    SCRAPER_FAILURE_DESCRIPTIONS.some(msg => evt.description?.includes(msg))
+  );
+}
+
 // ─── AWB Data interface for this page ───
 
 interface AWBData {
@@ -197,6 +211,8 @@ interface AWBData {
   tipo_processo?: string;
   pieces_discrepancy?: boolean;
   is_critical?: boolean;
+  is_invalid?: boolean;
+  tracking_failed?: boolean;
 }
 
 // ─── Airlines list (same as Index.tsx) ───
@@ -332,9 +348,22 @@ const TrackingAereo = () => {
             }
           }
 
-          // Determine if critical: discrepancy in timeline or NIL/NIF/OFLD
-          const upperEvent = lastEvent.toUpperCase();
-          const isCritical = ["NIL", "NIF", "OFLD"].includes(upperEvent) || checkTimelineDiscrepancy(item.timeline_json);
+          // Determine invalid AWB and tracking failures
+          let isInvalid = false;
+          let trackingFailed = false;
+          let resolvedLastEvent = lastEvent;
+
+          if (awbNumber === "NI") {
+            isInvalid = true;
+            resolvedLastEvent = "AWB Invalido";
+          } else if (!lastEvent || hasScraperFailure(timeline)) {
+            trackingFailed = true;
+            resolvedLastEvent = "Falha do Rastreio";
+          }
+
+          // Determine if critical: discrepancy in timeline or NIL/NIF/OFLD or tracking_failed
+          const upperEvent = resolvedLastEvent.toUpperCase();
+          const isCritical = trackingFailed || ["NIL", "NIF", "OFLD"].includes(upperEvent) || checkTimelineDiscrepancy(item.timeline_json);
 
           return {
             id: `scraper-${index}`,
@@ -342,8 +371,8 @@ const TrackingAereo = () => {
             hawb: item.hawb_number || "-",
             airline_code: airlineCode,
             consignee_name: item.consignee_nome || "-",
-            last_event: lastEvent,
-            status: lastEvent || "-",
+            last_event: resolvedLastEvent,
+            status: resolvedLastEvent || "-",
             nome_analista: item.clerk || "-",
             email_analista: item.clerk_email || null,
             origem: origin || "N/A",
@@ -357,6 +386,8 @@ const TrackingAereo = () => {
             penultimate_location: penultLoc,
             is_critical: isCritical,
             pieces_discrepancy: checkTimelineDiscrepancy(item.timeline_json),
+            is_invalid: isInvalid,
+            tracking_failed: trackingFailed,
           };
         });
 
@@ -406,6 +437,13 @@ const TrackingAereo = () => {
     return () => { clearInterval(interval); clearInterval(statsInterval); };
   }, [fetchData, fetchDbStats]);
 
+  // ─── Alert for tracking failures ───
+  useEffect(() => {
+    const failedAwbs = awbsData.filter(a => a.tracking_failed);
+    if (failedAwbs.length === 0) return;
+    supabase.functions.invoke("air-tracking-failed-alert").catch(console.error);
+  }, [awbsData]);
+
   // ─── Unique analysts ───
   const uniqueAnalysts = useMemo(() => {
     const s = new Set<string>();
@@ -426,12 +464,13 @@ const TrackingAereo = () => {
 
     let total = 0, transit = 0, alert = 0, critical = 0;
     awbsData.forEach(awb => {
+      if (awb.is_invalid) return; // Skip invalid
       const code = getStatusCode(awb.last_event).toUpperCase();
       if (code === "DLV" || code === "POD") return; // Skip delivered
       total++;
       if (inTransitCodes.has(code)) transit++;
       if (code === "DIS") alert++;
-      if (criticalCodes.has(code) || awb.pieces_discrepancy) critical++;
+      if (awb.tracking_failed || criticalCodes.has(code) || awb.pieces_discrepancy) critical++;
     });
     return { total, transit, alert, critical };
   }, [awbsData]);
@@ -443,6 +482,8 @@ const TrackingAereo = () => {
       const isDLV = code === "DLV" || code === "POD";
       // Hide DLV unless actively searching
       if (isDLV && !searchTerm) return false;
+      // Hide invalid unless actively searching
+      if (awb.is_invalid && !searchTerm) return false;
 
       const sl = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm ||
@@ -462,7 +503,7 @@ const TrackingAereo = () => {
         switch (cardFilter) {
           case "transito": return ["DEP", "MAN", "RCF", "ARR"].includes(code);
           case "alerta": return code === "DIS";
-          case "criticos": return ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy;
+          case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy;
           default: return true;
         }
       });
@@ -480,6 +521,13 @@ const TrackingAereo = () => {
         const dA = a.last_event_date ? new Date(a.last_event_date).getTime() : 0;
         const dB = b.last_event_date ? new Date(b.last_event_date).getTime() : 0;
         return sortLastCheck === "asc" ? dA - dB : dB - dA;
+      });
+    } else {
+      // Default sort: most recent first
+      awbs = [...awbs].sort((a, b) => {
+        const dA = a.last_event_date ? new Date(a.last_event_date).getTime() : 0;
+        const dB = b.last_event_date ? new Date(b.last_event_date).getTime() : 0;
+        return dB - dA;
       });
     }
 
@@ -755,6 +803,8 @@ const TrackingAereo = () => {
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-1.5">
                               {(() => {
+                                if (awb.is_invalid) return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-red-600/20 text-red-400 border border-red-500/40"><AlertCircle className="h-3 w-3" />AWB Inválido</span>;
+                                if (awb.tracking_failed) return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-600/20 text-orange-400 border border-orange-500/40"><AlertTriangle className="h-3 w-3" />Falha do Rastreio</span>;
                                 const sc = statusCode;
                                 if (sc === "ARR - DESTINO") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-green-500/20 text-green-400 border border-green-500/40"><MapPin className="h-3 w-3" />Destino</span>;
                                 if (sc === "ARR - CONEXÃO" || sc === "ARR - CONEXAO") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-500/20 text-orange-400 border border-orange-500/40"><ArrowLeftRight className="h-3 w-3" />Conexão</span>;
@@ -768,7 +818,17 @@ const TrackingAereo = () => {
                           </td>
                           {/* Situação */}
                           <td className="px-3 py-3 text-center">
-                            {isCritical ? (
+                            {awb.is_invalid ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                                Inválido
+                              </span>
+                            ) : awb.tracking_failed ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                                Falha
+                              </span>
+                            ) : isCritical ? (
                               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
                                 <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
                                 {awb.pieces_discrepancy ? "Discrepância Peças" : "Crítico"}
