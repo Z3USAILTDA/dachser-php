@@ -92,6 +92,7 @@ import ManualCheckAwb from "./pages/air/ManualCheckAwb";
 import ManualAwbList from "./pages/air/ManualAwbList";
 import ManualStatusAereo from "./pages/air/ManualStatusAereo";
 import CadastroNova from "./pages/air/CadastroNova";
+import TrackingAereo from "./pages/air/TrackingAereo";
 // FIN Module
 import ManualFinanceiro from "./pages/fin/ManualFinanceiro";
 
