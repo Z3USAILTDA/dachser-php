@@ -102,6 +102,53 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
   return builder ? builder(airlineCode, awbNumber) : null;
 };
 
+// ─── Airport code extraction helper ───
+
+const CITY_TO_IATA: Record<string, string> = {
+  "FRANKFURT": "FRA", "GUARULHOS": "GRU", "SAO PAULO": "GRU",
+  "PARIS": "CDG", "AMSTERDAM": "AMS", "LONDON": "LHR",
+  "MIAMI": "MIA", "NEW YORK": "JFK", "VIRACOPOS": "VCP",
+  "CAMPINAS": "VCP", "CURITIBA": "CWB", "PORTO ALEGRE": "POA",
+  "RIO DE JANEIRO": "GIG", "BELO HORIZONTE": "CNF",
+  "SALVADOR": "SSA", "RECIFE": "REC", "FORTALEZA": "FOR",
+  "BRASILIA": "BSB", "MUNICH": "MUC", "LEIPZIG": "LEJ",
+  "LISBON": "LIS", "MADRID": "MAD", "MILAN": "MXP",
+  "ROME": "FCO", "BOGOTA": "BOG", "SANTIAGO": "SCL",
+  "BUENOS AIRES": "EZE", "DUBAI": "DXB", "HONG KONG": "HKG",
+  "SHANGHAI": "PVG", "TOKYO": "NRT", "SINGAPORE": "SIN",
+  "CHICAGO": "ORD", "LOS ANGELES": "LAX", "ATLANTA": "ATL",
+  "MANAUS": "MAO", "BELEM": "BEL", "GOIANIA": "GYN",
+  "VITORIA": "VIX", "FLORIANOPOLIS": "FLN", "NATAL": "NAT",
+};
+
+const extractAirportCode = (location: string): string => {
+  if (!location) return "";
+  const trimmed = location.trim();
+  if (!trimmed) return "";
+
+  // Rule 1: sigla between parentheses e.g. "Frankfurt Main (FRA)"
+  const parenMatch = trimmed.match(/\(([A-Z]{3})\)/);
+  if (parenMatch) return parenMatch[1];
+
+  // Rule 2: ends with 3 uppercase letters after space or hyphen
+  const endMatch = trimmed.match(/[-\s]([A-Z]{3})$/);
+  if (endMatch) return endMatch[1];
+
+  // Rule 2b: if it's already a 3-letter IATA code
+  if (/^[A-Z]{3}$/.test(trimmed)) return trimmed;
+
+  // Rule 3: city name lookup
+  const upper = trimmed.toUpperCase().replace(/[^A-Z\s]/g, "").trim();
+  if (CITY_TO_IATA[upper]) return CITY_TO_IATA[upper];
+  // Try partial match (first word)
+  for (const [city, code] of Object.entries(CITY_TO_IATA)) {
+    if (upper.startsWith(city) || city.startsWith(upper)) return code;
+  }
+
+  // Rule 4: return original trimmed
+  return trimmed;
+};
+
 // ─── AWB Data interface for this page ───
 
 interface AWBData {
@@ -229,23 +276,36 @@ const TrackingAereo = () => {
           const lastEvent = item.last_event || "";
           const etd = item.etd || null;
 
+          // Normalize locations to IATA codes
+          const origin = extractAirportCode(item.origin || "");
+          const destination = extractAirportCode(item.destination || "");
+          const lastLoc = extractAirportCode(item.last_event_location || "");
+          const penultLoc = extractAirportCode(item.penultimate_location || "");
+
           // Derive connection from locations
           let conexao: string | undefined;
-          const origin = item.origin || "";
-          const destination = item.destination || "";
-          const lastLoc = item.last_event_location || "";
-          const penultLoc = item.penultimate_location || "";
-
           if (lastLoc && lastLoc !== origin && lastLoc !== destination) {
             conexao = lastLoc;
           } else if (penultLoc && penultLoc !== origin && penultLoc !== destination) {
             conexao = penultLoc;
           }
 
+          // Build last_event_date from timeline_json
+          const timeline = item.timeline_json || [];
+          let lastEventDate: string | null = null;
+          if (timeline.length > 0) {
+            const evt = timeline.find((e: any) => e.date);
+            if (evt) {
+              const d = evt.date || "";
+              const t = evt.time || "00:00";
+              lastEventDate = `${d}T${t}:00`;
+            }
+          }
+
           // Calculate hours_in_status from last event date
           let hoursInStatus: number | undefined;
-          if (item.last_event_date) {
-            const eventTime = new Date(item.last_event_date).getTime();
+          if (lastEventDate) {
+            const eventTime = new Date(lastEventDate).getTime();
             if (!isNaN(eventTime)) {
               hoursInStatus = (Date.now() - eventTime) / (1000 * 60 * 60);
             }
@@ -254,9 +314,6 @@ const TrackingAereo = () => {
           // Determine if critical: discrepancy in timeline or NIL/NIF/OFLD
           const upperEvent = lastEvent.toUpperCase();
           const isCritical = ["NIL", "NIF", "OFLD"].includes(upperEvent) || checkTimelineDiscrepancy(item.timeline_json);
-
-          // Determine if delayed based on ETD
-          const isDelayed = etd ? new Date(etd).getTime() < Date.now() && !["ARR", "DLV", "POD"].includes(upperEvent) : false;
 
           return {
             id: `scraper-${index}`,
@@ -273,10 +330,10 @@ const TrackingAereo = () => {
             conexao,
             hours_in_status: hoursInStatus,
             etd,
-            last_event_date: item.last_event_date || null,
-            timeline_json: item.timeline_json || [],
-            last_event_location: item.last_event_location || "",
-            penultimate_location: item.penultimate_location || "",
+            last_event_date: lastEventDate,
+            timeline_json: timeline,
+            last_event_location: lastLoc,
+            penultimate_location: penultLoc,
             is_critical: isCritical,
             pieces_discrepancy: checkTimelineDiscrepancy(item.timeline_json),
           };
@@ -351,7 +408,7 @@ const TrackingAereo = () => {
       total++;
       const code = getStatusCode(awb.last_event).toUpperCase();
       if (inTransitCodes.has(code)) transit++;
-      if (awb.etd && new Date(awb.etd).getTime() < Date.now() && !["ARR", "DLV", "POD"].includes(code)) alert++;
+      if (code === "DIS") alert++;
       if (criticalCodes.has(code) || awb.pieces_discrepancy) critical++;
     });
     return { total, transit, alert, critical };
@@ -377,7 +434,7 @@ const TrackingAereo = () => {
         const code = getStatusCode(awb.last_event).toUpperCase();
         switch (cardFilter) {
           case "transito": return ["DEP", "MAN", "RCF", "ARR"].includes(code);
-          case "alerta": return awb.etd && new Date(awb.etd).getTime() < Date.now() && !["ARR", "DLV", "POD"].includes(code);
+          case "alerta": return code === "DIS";
           case "criticos": return ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy;
           default: return true;
         }
@@ -580,7 +637,7 @@ const TrackingAereo = () => {
                     {currentAwbs.map((awb, index) => {
                       const statusCode = getStatusCode(awb.last_event).toUpperCase();
                       const isCritical = awb.is_critical;
-                      const isDelayed = awb.etd ? new Date(awb.etd).getTime() < Date.now() && !["ARR", "DLV", "POD"].includes(statusCode) : false;
+                      const isDelayed = statusCode === "DIS";
 
                       // Route highlighting logic
                       const conexoes = awb.conexao ? awb.conexao.split(',').map(c => c.trim()).filter(Boolean) : [];
