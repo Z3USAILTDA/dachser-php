@@ -434,7 +434,7 @@ const TrackingAereo = () => {
         const code = getStatusCode(awb.last_event).toUpperCase();
         switch (cardFilter) {
           case "transito": return ["DEP", "MAN", "RCF", "ARR"].includes(code);
-          case "alerta": return awb.etd && new Date(awb.etd).getTime() < Date.now() && !["ARR", "DLV", "POD"].includes(code);
+          case "alerta": return code === "DIS";
           case "criticos": return ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy;
           default: return true;
         }
