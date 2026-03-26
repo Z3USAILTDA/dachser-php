@@ -276,23 +276,36 @@ const TrackingAereo = () => {
           const lastEvent = item.last_event || "";
           const etd = item.etd || null;
 
+          // Normalize locations to IATA codes
+          const origin = extractAirportCode(item.origin || "");
+          const destination = extractAirportCode(item.destination || "");
+          const lastLoc = extractAirportCode(item.last_event_location || "");
+          const penultLoc = extractAirportCode(item.penultimate_location || "");
+
           // Derive connection from locations
           let conexao: string | undefined;
-          const origin = item.origin || "";
-          const destination = item.destination || "";
-          const lastLoc = item.last_event_location || "";
-          const penultLoc = item.penultimate_location || "";
-
           if (lastLoc && lastLoc !== origin && lastLoc !== destination) {
             conexao = lastLoc;
           } else if (penultLoc && penultLoc !== origin && penultLoc !== destination) {
             conexao = penultLoc;
           }
 
+          // Build last_event_date from timeline_json
+          const timeline = item.timeline_json || [];
+          let lastEventDate: string | null = null;
+          if (timeline.length > 0) {
+            const evt = timeline.find((e: any) => e.date);
+            if (evt) {
+              const d = evt.date || "";
+              const t = evt.time || "00:00";
+              lastEventDate = `${d}T${t}:00`;
+            }
+          }
+
           // Calculate hours_in_status from last event date
           let hoursInStatus: number | undefined;
-          if (item.last_event_date) {
-            const eventTime = new Date(item.last_event_date).getTime();
+          if (lastEventDate) {
+            const eventTime = new Date(lastEventDate).getTime();
             if (!isNaN(eventTime)) {
               hoursInStatus = (Date.now() - eventTime) / (1000 * 60 * 60);
             }
@@ -301,9 +314,6 @@ const TrackingAereo = () => {
           // Determine if critical: discrepancy in timeline or NIL/NIF/OFLD
           const upperEvent = lastEvent.toUpperCase();
           const isCritical = ["NIL", "NIF", "OFLD"].includes(upperEvent) || checkTimelineDiscrepancy(item.timeline_json);
-
-          // Determine if delayed based on ETD
-          const isDelayed = etd ? new Date(etd).getTime() < Date.now() && !["ARR", "DLV", "POD"].includes(upperEvent) : false;
 
           return {
             id: `scraper-${index}`,
@@ -320,10 +330,10 @@ const TrackingAereo = () => {
             conexao,
             hours_in_status: hoursInStatus,
             etd,
-            last_event_date: item.last_event_date || null,
-            timeline_json: item.timeline_json || [],
-            last_event_location: item.last_event_location || "",
-            penultimate_location: item.penultimate_location || "",
+            last_event_date: lastEventDate,
+            timeline_json: timeline,
+            last_event_location: lastLoc,
+            penultimate_location: penultLoc,
             is_critical: isCritical,
             pieces_discrepancy: checkTimelineDiscrepancy(item.timeline_json),
           };
