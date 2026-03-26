@@ -37,7 +37,7 @@ async function fetchTrackingData(): Promise<any[]> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
 
-  const resp = await fetch(`${supabaseUrl}/functions/v1/fetch-status-aereo`, {
+  const resp = await fetch(`${supabaseUrl}/functions/v1/fetch-tracking-aereo`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
