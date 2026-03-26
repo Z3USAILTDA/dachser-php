@@ -803,6 +803,8 @@ const TrackingAereo = () => {
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-1.5">
                               {(() => {
+                                if (awb.is_invalid) return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-red-600/20 text-red-400 border border-red-500/40"><AlertCircle className="h-3 w-3" />AWB Inválido</span>;
+                                if (awb.tracking_failed) return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-600/20 text-orange-400 border border-orange-500/40"><AlertTriangle className="h-3 w-3" />Falha do Rastreio</span>;
                                 const sc = statusCode;
                                 if (sc === "ARR - DESTINO") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-green-500/20 text-green-400 border border-green-500/40"><MapPin className="h-3 w-3" />Destino</span>;
                                 if (sc === "ARR - CONEXÃO" || sc === "ARR - CONEXAO") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-500/20 text-orange-400 border border-orange-500/40"><ArrowLeftRight className="h-3 w-3" />Conexão</span>;
@@ -816,7 +818,17 @@ const TrackingAereo = () => {
                           </td>
                           {/* Situação */}
                           <td className="px-3 py-3 text-center">
-                            {isCritical ? (
+                            {awb.is_invalid ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                                Inválido
+                              </span>
+                            ) : awb.tracking_failed ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                                Falha
+                              </span>
+                            ) : isCritical ? (
                               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
                                 <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
                                 {awb.pieces_discrepancy ? "Discrepância Peças" : "Crítico"}
