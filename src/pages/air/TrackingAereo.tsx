@@ -1,0 +1,836 @@
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useUsageLog } from "@/hooks/useUsageLog";
+import { DatabaseStatsPanel, DbStats } from "@/components/DatabaseStatsPanel";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Search,
+  Plane,
+  RefreshCw,
+  ArrowLeft,
+  HelpCircle,
+  Settings,
+  Clock,
+  MapPin,
+  ArrowLeftRight,
+  ArrowDownUp,
+  AlertCircle,
+  AlertTriangle,
+  Loader2,
+  ExternalLink,
+  FilePlus,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
+import type { User, Session } from "@supabase/supabase-js";
+import DashboardCards, { CardFilterType } from "@/components/DashboardCards";
+import dachserBg from "@/assets/dachser-background.jpg";
+import { TablePagination } from "@/components/layout/TablePagination";
+import { EmailClienteRegrasDialog } from "@/components/air/EmailClienteRegrasDialog";
+import { CadastroNovaModal } from "@/components/air/CadastroNovaModal";
+import { AwbTimelineModalScraper } from "@/components/air/AwbTimelineModalScraper";
+import { formatDateTimeBR } from "@/utils/timezone";
+
+// ─── Status code helpers (reused from Index.tsx) ───
+
+const getStatusCode = (lastEvent: string | null): string => {
+  if (!lastEvent) return "AGUARDANDO CONSULTA";
+  const knownStatusCodes = [
+    "OFLD","NIL","NIF","DIS","DLV","DEP","ARR","RCF","RCS","MAN","NFD","AWD",
+    "BKD","BKF","AWB","FWB","FOH","UNK","TFD","RCT","RCP","PRE","LOF","TDE",
+    "CCD","ASN","MIS","TFS","POD","TRM","ARRT","CAN","DISCREPANCY","BCBP",
+    "ARR - DESTINO","ARR - CONEXÃO",
+  ];
+  const upperEvent = lastEvent.toUpperCase().trim();
+  if (upperEvent.startsWith("ARR - ")) return upperEvent;
+  if (knownStatusCodes.includes(upperEvent)) return upperEvent;
+  if (lastEvent.includes(" - ")) return lastEvent.split(" - ")[0];
+  return lastEvent.substring(0, 3).toUpperCase();
+};
+
+const getTimelineProgress = (lastEvent: string | null): number => {
+  if (!lastEvent) return 0;
+  const statusCode = getStatusCode(lastEvent).toUpperCase();
+  const progressMap: Record<string, number> = {
+    UNK:0,BKD:0,BKF:5,AWB:8,FWB:8,RCS:15,FOH:20,RCF:25,MAN:50,
+    PRE:58,RCT:60,LOF:62,TFD:65,RCP:55,DEP:75,TRM:55,
+    "ARR - CONEXÃO":85,"ARR - CONEXAO":85,"ARR - DESTINO":100,
+    ARR:100,ARRT:95,TDE:90,NFD:100,AWD:100,CCD:100,ASN:100,
+    DLV:100,POD:100,DIS:80,OFLD:80,NIL:60,NIF:60,BCBP:0,
+  };
+  if (progressMap[statusCode] !== undefined) return progressMap[statusCode];
+  if (statusCode === "AGUARDANDO CONSULTA") return 0;
+  return 10;
+};
+
+const getStatusFromEvent = (lastEvent: string): string => {
+  if (!lastEvent) return "-";
+  const upperEvent = lastEvent.toUpperCase().trim();
+  if (upperEvent === "ARR - DESTINO") return "Chegou em seu destino final";
+  if (upperEvent === "ARR - CONEXÃO") return "Chegou na conexão";
+  const codeMatch = lastEvent.match(/^\(?([A-Z]{3,4})\)?/);
+  if (codeMatch) {
+    const map: Record<string,string> = {
+      BKD:"Reserva confirmada",FOH:"Carga recebida pela cia aérea",MAN:"Carga manifestada",
+      DEP:"Partida confirmada",ARR:"Chegou na conexão",RCF:"Carga recebida pela cia aérea",
+      DLV:"Chegou em seu destino final",NFD:"Agente notificado",
+    };
+    return map[codeMatch[1]] || "-";
+  }
+  return "-";
+};
+
+// ─── Tracking URL builder ───
+
+const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => {
+  const awbNumber = fullAwb.replace(airlineCode, "").replace(/^[-\s]+/, "").trim();
+  const urlBuilders: Record<string, (iata: string, awb: string) => string> = {
+    "020": (i,a) => `https://www.lufthansa-cargo.com/en/eservices/etracking/tracking/-/awb/${i}/${a}`,
+    "045": (i,a) => `https://www.latamcargo.com/en/trackshipment?docNumber=${a}&docPrefix=${i}&soType=MAWB`,
+    "577": (i,a) => `https://azulcargoexpress.smartkargo.com/FrmAWBTracking.aspx?AWBPrefix=${i}&AWBno=${a}`,
+    "057": (i,a) => `https://www.afklcargo.com/mycargo/shipment/detail/${i}-${a}`,
+    "074": (i,a) => `https://www.afklcargo.com/mycargo/shipment/detail/${i}-${a}`,
+    "369": (_,a) => `https://jumpseat.atlasair.com/aa/tracktracehtml/TrackTrace.html?pe=369&se=${a}`,
+    "615": (i,a) => `https://aviationcargo.dhl.com/track/${i}-${a}`,
+    "996": (i,a) => `https://uxtracking.com/tracking.asp?prefix=${i}&Serial=${a}`,
+  };
+  const builder = urlBuilders[airlineCode];
+  return builder ? builder(airlineCode, awbNumber) : null;
+};
+
+// ─── AWB Data interface for this page ───
+
+interface AWBData {
+  id: string;
+  awb: string;
+  hawb?: string;
+  airline_code: string;
+  consignee_name: string;
+  last_event: string;
+  status: string;
+  nome_analista?: string;
+  email_analista?: string;
+  origem?: string;
+  destino?: string;
+  conexao?: string;
+  hours_in_status?: number;
+  etd?: string | null;
+  last_event_date?: string | null;
+  timeline_json?: any[];
+  last_event_location?: string;
+  penultimate_location?: string;
+  tipo_servico?: string;
+  tipo_processo?: string;
+  pieces_discrepancy?: boolean;
+  is_critical?: boolean;
+}
+
+// ─── Airlines list (same as Index.tsx) ───
+
+const airlines = [
+  { code: "006", name: "Delta Cargo" },
+  { code: "020", name: "Lufthansa Cargo" },
+  { code: "045", name: "LATAM Cargo" },
+  { code: "057", name: "Air France Cargo" },
+  { code: "074", name: "KLM Cargo" },
+  { code: "369", name: "Atlas Air Cargo" },
+  { code: "577", name: "Azul Cargo" },
+  { code: "615", name: "European Air Transport" },
+  { code: "996", name: "Air Europa Cargo" },
+];
+
+// ─── Monitored Airlines Data ───
+
+const monitoredAirlinesData = {
+  airlines: [
+    { code: "020", name: "Lufthansa Cargo" },
+    { code: "045", name: "LATAM Cargo" },
+    { code: "047", name: "TAP Air Portugal Cargo" },
+    { code: "055", name: "ITA Airways Cargo" },
+    { code: "057", name: "Air France Cargo" },
+    { code: "074", name: "AF/KL Cargo" },
+    { code: "075", name: "IAG Cargo" },
+    { code: "369", name: "Atlas Air" },
+    { code: "549", name: "LATAM Cargo (Alt)" },
+    { code: "577", name: "Azul Cargo" },
+    { code: "615", name: "European Air Transport (DHL)" },
+    { code: "724", name: "Swiss WorldCargo" },
+    { code: "996", name: "Air Europa Cargo" },
+  ],
+  totalAirlines: 13,
+};
+
+// ─── Component ───
+
+const TrackingAereo = () => {
+  useUsageLog({ endpoint: "/air/tracking-aereo" });
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [awbsData, setAwbsData] = useState<AWBData[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterAirline, setFilterAirline] = useState("all");
+  const [filterAnalyst, setFilterAnalyst] = useState("all");
+  const [filterService, setFilterService] = useState("all");
+  const [filterProcessType, setFilterProcessType] = useState("all");
+  const [sortAwb, setSortAwb] = useState<"asc" | "desc" | null>(null);
+  const [sortClient, setSortClient] = useState<"asc" | "desc" | null>(null);
+  const [sortAnalyst, setSortAnalyst] = useState<"asc" | "desc" | null>(null);
+  const [sortLastCheck, setSortLastCheck] = useState<"asc" | "desc" | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [cardFilter, setCardFilter] = useState<CardFilterType>("all");
+  const [showMonitoredModal, setShowMonitoredModal] = useState(false);
+  const [cadastroNovaOpen, setCadastroNovaOpen] = useState(false);
+  const [regrasDialogOpen, setRegrasDialogOpen] = useState(false);
+  const [dbStats, setDbStats] = useState<DbStats | null>(null);
+  const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
+  const [timelineModal, setTimelineModal] = useState<{
+    open: boolean;
+    awb: string;
+    consigneeName: string;
+    timelineJson: any[];
+    lastEvent: string;
+  }>({ open: false, awb: "", consigneeName: "", timelineJson: [], lastEvent: "" });
+
+  const itemsPerPage = 10;
+
+  // Auth
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    });
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Fetch data from edge function
+  const fetchData = useCallback(async () => {
+    setIsLoadingData(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-tracking-aereo");
+      if (error) {
+        console.error("Error fetching tracking aereo:", error);
+        return;
+      }
+      if (data?.success && data?.data) {
+        const converted: AWBData[] = data.data.map((item: any, index: number) => {
+          const awbNumber = item.awb_number || "";
+          const airlineCode = awbNumber.substring(0, 3);
+          const lastEvent = item.last_event || "";
+          const etd = item.etd || null;
+
+          // Derive connection from locations
+          let conexao: string | undefined;
+          const origin = item.origin || "";
+          const destination = item.destination || "";
+          const lastLoc = item.last_event_location || "";
+          const penultLoc = item.penultimate_location || "";
+
+          if (lastLoc && lastLoc !== origin && lastLoc !== destination) {
+            conexao = lastLoc;
+          } else if (penultLoc && penultLoc !== origin && penultLoc !== destination) {
+            conexao = penultLoc;
+          }
+
+          // Calculate hours_in_status from last event date
+          let hoursInStatus: number | undefined;
+          if (item.last_event_date) {
+            const eventTime = new Date(item.last_event_date).getTime();
+            if (!isNaN(eventTime)) {
+              hoursInStatus = (Date.now() - eventTime) / (1000 * 60 * 60);
+            }
+          }
+
+          // Determine if critical: discrepancy in timeline or NIL/NIF/OFLD
+          const upperEvent = lastEvent.toUpperCase();
+          const isCritical = ["NIL", "NIF", "OFLD"].includes(upperEvent) || checkTimelineDiscrepancy(item.timeline_json);
+
+          // Determine if delayed based on ETD
+          const isDelayed = etd ? new Date(etd).getTime() < Date.now() && !["ARR", "DLV", "POD"].includes(upperEvent) : false;
+
+          return {
+            id: `scraper-${index}`,
+            awb: awbNumber,
+            hawb: item.hawb_number || "-",
+            airline_code: airlineCode,
+            consignee_name: item.consignee_nome || "-",
+            last_event: lastEvent,
+            status: lastEvent || "-",
+            nome_analista: item.clerk || "-",
+            email_analista: item.clerk_email || null,
+            origem: origin || "N/A",
+            destino: destination || "N/A",
+            conexao,
+            hours_in_status: hoursInStatus,
+            etd,
+            last_event_date: item.last_event_date || null,
+            timeline_json: item.timeline_json || [],
+            last_event_location: item.last_event_location || "",
+            penultimate_location: item.penultimate_location || "",
+            is_critical: isCritical,
+            pieces_discrepancy: checkTimelineDiscrepancy(item.timeline_json),
+          };
+        });
+
+        // Deduplicate by awb+hawb
+        const deduped = converted.reduce((acc: AWBData[], cur) => {
+          const key = `${cur.awb}|${cur.hawb || "-"}`;
+          const existing = acc.findIndex(i => `${i.awb}|${i.hawb || "-"}` === key);
+          if (existing === -1) acc.push(cur);
+          return acc;
+        }, []);
+
+        setAwbsData(deduped);
+      }
+    } catch (error) {
+      console.error("Error in fetchData:", error);
+    } finally {
+      setIsLoadingData(false);
+    }
+  }, []);
+
+  // Check timeline for piece/weight discrepancy
+  function checkTimelineDiscrepancy(timeline: any[]): boolean {
+    if (!timeline || timeline.length < 2) return false;
+    const pieces = timeline.map((e: any) => e.pieces).filter((p: any) => p != null && p > 0);
+    if (pieces.length < 2) return false;
+    const unique = [...new Set(pieces)];
+    return unique.length >= 2;
+  }
+
+  // Fetch DB stats
+  const fetchDbStats = useCallback(async () => {
+    setIsLoadingDbStats(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-master-dados-stats");
+      if (error) return;
+      if (data?.success && data?.stats) setDbStats(data.stats);
+    } catch (_) {} finally {
+      setIsLoadingDbStats(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+    fetchDbStats();
+    const interval = setInterval(fetchData, 30000);
+    const statsInterval = setInterval(fetchDbStats, 60000);
+    return () => { clearInterval(interval); clearInterval(statsInterval); };
+  }, [fetchData, fetchDbStats]);
+
+  // ─── Unique analysts ───
+  const uniqueAnalysts = useMemo(() => {
+    const s = new Set<string>();
+    awbsData.forEach(a => { if (a.nome_analista && a.nome_analista !== "-") s.add(a.nome_analista); });
+    return Array.from(s).sort();
+  }, [awbsData]);
+
+  // ─── Sort handlers ───
+  const handleAwbSort = () => { setSortAnalyst(null); setSortClient(null); setSortLastCheck(null); setSortAwb(prev => prev === null ? "asc" : prev === "asc" ? "desc" : null); };
+  const handleClientSort = () => { setSortAnalyst(null); setSortAwb(null); setSortLastCheck(null); setSortClient(prev => prev === null ? "asc" : prev === "asc" ? "desc" : null); };
+  const handleAnalystSort = () => { setSortAwb(null); setSortClient(null); setSortLastCheck(null); setSortAnalyst(prev => prev === null ? "asc" : prev === "asc" ? "desc" : null); };
+  const handleLastCheckSort = () => { setSortAwb(null); setSortClient(null); setSortAnalyst(null); setSortLastCheck(prev => prev === null ? "asc" : prev === "asc" ? "desc" : null); };
+
+  // ─── Card counts ───
+  const cardCounts = useMemo(() => {
+    const inTransitCodes = new Set(["DEP", "MAN", "RCF", "ARR"]);
+    const criticalCodes = new Set(["NIL", "NIF", "OFLD"]);
+
+    let total = 0, transit = 0, alert = 0, critical = 0;
+    awbsData.forEach(awb => {
+      total++;
+      const code = getStatusCode(awb.last_event).toUpperCase();
+      if (inTransitCodes.has(code)) transit++;
+      if (awb.etd && new Date(awb.etd).getTime() < Date.now() && !["ARR", "DLV", "POD"].includes(code)) alert++;
+      if (criticalCodes.has(code) || awb.pieces_discrepancy) critical++;
+    });
+    return { total, transit, alert, critical };
+  }, [awbsData]);
+
+  // ─── Filtered & sorted data ───
+  const filteredAwbs = useMemo(() => {
+    let awbs = awbsData.filter(awb => {
+      const sl = searchTerm.toLowerCase();
+      const matchesSearch = !searchTerm ||
+        awb.awb.toLowerCase().includes(sl) ||
+        (awb.hawb && awb.hawb.toLowerCase().includes(sl)) ||
+        awb.consignee_name.toLowerCase().includes(sl) ||
+        (awb.nome_analista && awb.nome_analista.toLowerCase().includes(sl));
+      const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
+      const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
+      return matchesSearch && matchesAirline && matchesAnalyst;
+    });
+
+    // Card filter
+    if (cardFilter !== "all") {
+      awbs = awbs.filter(awb => {
+        const code = getStatusCode(awb.last_event).toUpperCase();
+        switch (cardFilter) {
+          case "transito": return ["DEP", "MAN", "RCF", "ARR"].includes(code);
+          case "alerta": return awb.etd && new Date(awb.etd).getTime() < Date.now() && !["ARR", "DLV", "POD"].includes(code);
+          case "criticos": return ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy;
+          default: return true;
+        }
+      });
+    }
+
+    // Sorting
+    if (sortAwb !== null) {
+      awbs = [...awbs].sort((a, b) => { const c = a.awb.localeCompare(b.awb); return sortAwb === "asc" ? c : -c; });
+    } else if (sortClient !== null) {
+      awbs = [...awbs].sort((a, b) => { const c = a.consignee_name.localeCompare(b.consignee_name); return sortClient === "asc" ? c : -c; });
+    } else if (sortAnalyst !== null) {
+      awbs = [...awbs].sort((a, b) => { const c = (a.nome_analista || "").localeCompare(b.nome_analista || ""); return sortAnalyst === "asc" ? c : -c; });
+    } else if (sortLastCheck !== null) {
+      awbs = [...awbs].sort((a, b) => {
+        const dA = a.last_event_date ? new Date(a.last_event_date).getTime() : 0;
+        const dB = b.last_event_date ? new Date(b.last_event_date).getTime() : 0;
+        return sortLastCheck === "asc" ? dA - dB : dB - dA;
+      });
+    }
+
+    return awbs;
+  }, [awbsData, searchTerm, filterAirline, filterAnalyst, cardFilter, sortAwb, sortClient, sortAnalyst, sortLastCheck]);
+
+  const totalPages = Math.ceil(filteredAwbs.length / itemsPerPage);
+  const currentAwbs = filteredAwbs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const abbreviateName = (name: string): string => {
+    if (!name || name === "-") return "-";
+    return name.length > 20 ? name.substring(0, 20) + "..." : name;
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <p className="text-white">Carregando...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen relative overflow-x-hidden">
+      {/* Background */}
+      <div className="fixed inset-0 z-0">
+        <div className="absolute inset-0" style={{ backgroundImage: `url(${dachserBg})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+        <div className="absolute inset-0" style={{ background: "linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))" }} />
+        <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 20% 20%, rgba(245, 184, 67, 0.12) 0%, transparent 50%), radial-gradient(ellipse at 80% 80%, rgba(245, 184, 67, 0.08) 0%, transparent 50%)" }} />
+        <div className="absolute inset-0 opacity-20">
+          {[...Array(6)].map((_, i) => (
+            <div key={`line-${i}`} className="absolute h-full w-px bg-gradient-to-b from-primary/70 to-primary/10" style={{ left: `${15 + i * 14}%`, transform: `skewX(${-20 + i * 8}deg)` }} />
+          ))}
+        </div>
+        {[...Array(20)].map((_, i) => (
+          <div key={`p-${i}`} className="absolute w-1 h-1 rounded-full bg-primary/40 animate-float" style={{ left: `${Math.random() * 100}%`, top: `${Math.random() * 100}%`, animationDelay: `${Math.random() * 5}s`, animationDuration: `${4 + Math.random() * 4}s` }} />
+        ))}
+      </div>
+
+      {/* Header */}
+      <div className="relative z-10 max-w-[95%] mx-auto px-2 pt-5 pb-4 flex items-center justify-between">
+        <div className="flex items-center gap-[18px]">
+          <button onClick={() => navigate("/dashboard")} className="w-8 h-8 rounded-full border border-white/12 bg-[rgba(5,6,18,0.9)] text-white/80 flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all">
+            <ArrowLeft size={16} />
+          </button>
+          <header>
+            <h1 className="text-[1.6rem] tracking-[0.24em] uppercase text-[#f5f5f5]">DACHSER</h1>
+            <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">Intelligent Logistics – Tracking Aéreo (Scraper)</p>
+            <div className="flex gap-1.5 mt-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+            </div>
+          </header>
+        </div>
+        <div className="flex items-center gap-2.5 text-[0.85rem]">
+          <DatabaseStatsPanel stats={dbStats} isLoading={isLoadingDbStats} onRefresh={fetchDbStats} />
+          <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[220px] truncate">
+            @{user?.email?.split("@")[0] || "admin"}
+          </div>
+          <button onClick={() => setRegrasDialogOpen(true)} className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors" title="Regras de notificação">
+            <Settings className="h-4 w-4" />
+          </button>
+          <button onClick={() => navigate("/air/tracking/manual")} className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors" title="Manual do usuário">
+            <HelpCircle className="h-4 w-4" />
+          </button>
+          <div className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800]" title="Tracking Aéreo (Scraper)">
+            <Plane className="w-4 h-4" />
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <main className="relative z-10 max-w-[95%] mx-auto mb-12 px-2 space-y-[18px]">
+        {/* Dashboard Cards */}
+        <DashboardCards
+          totalMonitorados={cardCounts.total}
+          emTransito={cardCounts.transit}
+          emAlerta={cardCounts.alert}
+          criticos={cardCounts.critical}
+          activeFilter={cardFilter}
+          onFilterChange={(f) => { setCardFilter(f); setCurrentPage(1); }}
+        />
+
+        {/* Search and Filters */}
+        <section className="rounded-2xl p-4" style={{ background: "rgba(5,6,18,.9)", border: "1px solid rgba(255,255,255,.12)", boxShadow: "0 18px 40px rgba(0,0,0,.85)" }}>
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#aaaaaa]" />
+              <input
+                type="text"
+                placeholder="Buscar por AWB, HAWB, cliente ou analista..."
+                value={searchTerm}
+                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                className="w-full h-10 pl-10 pr-4 rounded-xl bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.12)] text-[#f5f5f5] placeholder-[#666] text-[0.85rem] focus:outline-none focus:border-[#ffc800]/50 transition"
+              />
+            </div>
+
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Airline filter */}
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+                    <Plane className="h-3 w-3 text-[#ffc800]" />
+                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Companhia</span>
+                  </div>
+                  <Select value={filterAirline} onValueChange={(v) => { setFilterAirline(v); setCurrentPage(1); }}>
+                    <SelectTrigger className="h-8 w-[180px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
+                      <SelectValue placeholder="Todas" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border border-border z-50">
+                      <SelectItem value="all">Todas</SelectItem>
+                      {airlines.map((a) => <SelectItem key={a.code} value={a.code}>{a.code} - {a.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Analyst filter */}
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+                    <Plane className="h-3 w-3 text-[#ffc800]" />
+                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Analista</span>
+                  </div>
+                  <Select value={filterAnalyst} onValueChange={(v) => { setFilterAnalyst(v); setCurrentPage(1); }}>
+                    <SelectTrigger className="h-8 w-[180px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border border-border z-50">
+                      <SelectItem value="all">Todos</SelectItem>
+                      {uniqueAnalysts.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowMonitoredModal(true)} className="h-8 px-4 rounded-full bg-emerald-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-emerald-500/80 transition border border-emerald-500/50">
+                  <Plane className="w-3.5 h-3.5" />
+                  CIAs Monitoradas ({monitoredAirlinesData.totalAirlines})
+                </button>
+                <button onClick={() => setCadastroNovaOpen(true)} className="h-8 px-4 rounded-full bg-emerald-500/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-emerald-400/80 transition border border-emerald-400/50 shadow-[0_0_15px_rgba(16,185,129,.2)]">
+                  <FilePlus className="w-3.5 h-3.5" />
+                  Novo Processo
+                </button>
+                <button onClick={fetchData} className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)]">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Atualizar
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Table */}
+        <section className="rounded-2xl overflow-hidden" style={{ background: "rgba(5,6,18,.9)", border: "1px solid rgba(255,255,255,.12)", boxShadow: "0 18px 40px rgba(0,0,0,.85)" }}>
+          {filteredAwbs.length > 0 ? (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-[rgba(0,0,0,.4)] border-b border-[rgba(255,255,255,.08)]">
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition" onClick={handleAwbSort}>
+                        <span className="flex items-center gap-1">AWB {sortAwb === "asc" && <span className="text-[#ffc800]">↑</span>}{sortAwb === "desc" && <span className="text-[#ffc800]">↓</span>}</span>
+                      </th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">HAWB</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition" onClick={handleClientSort}>
+                        <span className="flex items-center gap-1">Cliente {sortClient === "asc" && <span className="text-[#ffc800]">↑</span>}{sortClient === "desc" && <span className="text-[#ffc800]">↓</span>}</span>
+                      </th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Rota</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Rastreio</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Último Evento</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Data/Hora</th>
+                      <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Situação</th>
+                      <th className="px-3 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">SLA</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition" onClick={handleAnalystSort}>
+                        <span className="flex items-center gap-1">Analista {sortAnalyst === "asc" && <span className="text-[#ffc800]">↑</span>}{sortAnalyst === "desc" && <span className="text-[#ffc800]">↓</span>}</span>
+                      </th>
+                      <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentAwbs.map((awb, index) => {
+                      const statusCode = getStatusCode(awb.last_event).toUpperCase();
+                      const isCritical = awb.is_critical;
+                      const isDelayed = awb.etd ? new Date(awb.etd).getTime() < Date.now() && !["ARR", "DLV", "POD"].includes(statusCode) : false;
+
+                      // Route highlighting logic
+                      const conexoes = awb.conexao ? awb.conexao.split(',').map(c => c.trim()).filter(Boolean) : [];
+                      const PRE_DEPARTURE = ['BKD','PRE','MAN','DOC','RCS','RDP','RCT','LAT','TKG','SCR','ECC'];
+                      const FINAL_DESTINO_ONLY = ['DLV','POD','ARR - DESTINO'];
+                      const POST_DESTINO = ['ARR','RCF','NFD','AWD','DLV','POD','CCD','AWR','FOH'];
+                      let highlightOrigin = false, highlightDestino = false, highlightConexaoIndex = -1;
+
+                      if (conexoes.length > 0) {
+                        if (FINAL_DESTINO_ONLY.includes(statusCode)) highlightDestino = true;
+                        else if (PRE_DEPARTURE.includes(statusCode) || statusCode === 'RCF') highlightOrigin = true;
+                        else if (['ARR - CONEXÃO','ARR - CONEXAO','DEP'].includes(statusCode)) highlightConexaoIndex = conexoes.length - 1;
+                        else if (POST_DESTINO.includes(statusCode)) highlightDestino = true;
+                        else highlightOrigin = true;
+                      } else {
+                        if (POST_DESTINO.includes(statusCode)) highlightDestino = true;
+                        else highlightOrigin = true;
+                      }
+
+                      const activeClass = "text-[#ffc800] font-semibold";
+                      const inactiveClass = "text-muted-foreground";
+
+                      // Timeline progress bar colors
+                      const isArrConexao = statusCode === "ARR - CONEXÃO" || statusCode === "ARR - CONEXAO";
+                      const isArrDestino = statusCode === "ARR - DESTINO";
+                      const isAlertStatus = isDelayed || statusCode === "DIS" || statusCode === "OFLD";
+                      const progressGradient = isAlertStatus ? "linear-gradient(90deg, hsl(0 84% 60%), hsl(0 84% 70%))" : isArrConexao ? "linear-gradient(90deg, hsl(30 100% 50%), hsl(30 100% 60%))" : isArrDestino ? "linear-gradient(90deg, hsl(142 76% 36%), hsl(142 76% 46%))" : "linear-gradient(90deg, hsl(39 100% 50%), hsl(39 100% 60%))";
+                      const planeColor = isAlertStatus ? "rgb(239, 68, 68)" : isArrConexao ? "rgb(249, 115, 22)" : isArrDestino ? "rgb(34, 197, 94)" : "rgb(255, 165, 0)";
+                      const shadowColor = isAlertStatus ? "rgba(239, 68, 68, 1)" : isArrConexao ? "rgba(249, 115, 22, 1)" : isArrDestino ? "rgba(34, 197, 94, 1)" : "rgba(255, 165, 0, 1)";
+                      const bgBarColor = isAlertStatus ? "bg-red-900/30" : "bg-gray-800/50";
+                      const dotColor = isAlertStatus ? "bg-red-400" : "bg-white/90";
+                      const dotColorMuted = isAlertStatus ? "bg-red-400/70" : "bg-white/70";
+
+                      return (
+                        <tr key={`${awb.id}-${index}`} className={`border-b border-[rgba(255,255,255,.06)] transition-all duration-300 ${isCritical ? "bg-red-500/15 border-red-400/50 border-2 shadow-[0_0_15px_rgba(255,0,0,0.2)]" : "hover:bg-[rgba(255,255,255,.03)]"}`}>
+                          {/* AWB */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="font-semibold text-[#f5f5f5] text-[0.82rem]">{awb.awb}</span>
+                          </td>
+                          {/* HAWB */}
+                          <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem] whitespace-nowrap">{awb.hawb || "-"}</td>
+                          {/* Cliente */}
+                          <td className="px-4 py-3">
+                            <div className="text-[#f5f5f5] text-[0.8rem] uppercase">{abbreviateName(awb.consignee_name)}</div>
+                          </td>
+                          {/* Rota */}
+                          <td className="px-4 py-3 text-[0.8rem]">
+                            <div className="flex items-center gap-1 whitespace-nowrap">
+                              <span className={highlightOrigin ? activeClass : inactiveClass}>{awb.origem || "N/A"}</span>
+                              {conexoes.map((con, idx) => (
+                                <span key={idx} className="flex items-center gap-1">
+                                  <span className="text-muted-foreground">→</span>
+                                  <span className={highlightConexaoIndex === idx ? activeClass : inactiveClass}>{con}</span>
+                                </span>
+                              ))}
+                              <span className="text-muted-foreground">→</span>
+                              <span className={highlightDestino ? activeClass : inactiveClass}>{awb.destino || "N/A"}</span>
+                            </div>
+                          </td>
+                          {/* Rastreio (progress bar) */}
+                          <td className="px-4 py-3 min-w-[300px]">
+                            <div className="relative h-1.5 w-full flex items-center">
+                              <div className={`absolute inset-0 ${bgBarColor} rounded-full`} />
+                              <div className="absolute left-0 h-full rounded-l-full transition-all duration-700 ease-out" style={{ width: `${getTimelineProgress(awb.last_event)}%`, background: progressGradient, borderTopRightRadius: getTimelineProgress(awb.last_event) === 100 ? "9999px" : "0", borderBottomRightRadius: getTimelineProgress(awb.last_event) === 100 ? "9999px" : "0" }} />
+                              <TooltipProvider>
+                                <Tooltip><TooltipTrigger asChild><div className={`absolute left-0 w-1.5 h-1.5 rounded-full ${dotColor} shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform`} /></TooltipTrigger><TooltipContent><p className="text-xs">BKD - Reserva Confirmada</p></TooltipContent></Tooltip>
+                                <Tooltip><TooltipTrigger asChild><div className={`absolute left-1/4 -translate-x-1/2 w-1.5 h-1.5 rounded-full ${dotColorMuted} shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform`} /></TooltipTrigger><TooltipContent><p className="text-xs">RCF - Recebida pela Cia Aérea</p></TooltipContent></Tooltip>
+                                <Tooltip><TooltipTrigger asChild><div className={`absolute left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full ${dotColorMuted} shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform`} /></TooltipTrigger><TooltipContent><p className="text-xs">MAN - Manifestada</p></TooltipContent></Tooltip>
+                                <Tooltip><TooltipTrigger asChild><div className={`absolute left-3/4 -translate-x-1/2 w-1.5 h-1.5 rounded-full ${dotColorMuted} shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform`} /></TooltipTrigger><TooltipContent><p className="text-xs">DEP - Partida Confirmada</p></TooltipContent></Tooltip>
+                                <Tooltip><TooltipTrigger asChild><div className={`absolute right-0 w-1.5 h-1.5 rounded-full ${dotColor} shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform`} /></TooltipTrigger><TooltipContent><p className="text-xs">ARR - Chegada no Destino</p></TooltipContent></Tooltip>
+                              </TooltipProvider>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-all duration-700 ease-out z-20 cursor-pointer" style={{ left: `${getTimelineProgress(awb.last_event)}%` }}>
+                                      <Plane className="w-4 h-4" style={{ transform: "rotate(90deg)", color: planeColor, fill: planeColor, filter: `drop-shadow(0 0 4px ${shadowColor}) drop-shadow(0 2px 6px rgba(0,0,0,0.6))` }} />
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-xs font-medium">{getStatusCode(awb.last_event)}</p>
+                                    <p className="text-xs text-muted-foreground">{getStatusFromEvent(awb.last_event)}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                          </td>
+                          {/* Último Evento */}
+                          <td className="px-3 py-3">
+                            <div className="flex items-center gap-1.5">
+                              {(() => {
+                                const sc = statusCode;
+                                if (sc === "ARR - DESTINO") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-green-500/20 text-green-400 border border-green-500/40"><MapPin className="h-3 w-3" />Destino</span>;
+                                if (sc === "ARR - CONEXÃO" || sc === "ARR - CONEXAO") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-500/20 text-orange-400 border border-orange-500/40"><ArrowLeftRight className="h-3 w-3" />Conexão</span>;
+                                return <span className="text-sm font-bold" style={{ color: "hsl(120 100% 35%)" }}>{getStatusCode(awb.last_event)}</span>;
+                              })()}
+                            </div>
+                          </td>
+                          {/* Data/Hora */}
+                          <td className="px-3 py-3 text-[#aaaaaa] text-sm whitespace-nowrap">
+                            {formatDateTimeBR(awb.last_event_date)}
+                          </td>
+                          {/* Situação */}
+                          <td className="px-3 py-3 text-center">
+                            {isCritical ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                                {awb.pieces_discrepancy ? "Discrepância Peças" : "Crítico"}
+                              </span>
+                            ) : isDelayed ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                                Em Atraso
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-green-500/20 text-green-400 border border-green-500/30">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                                No Prazo
+                              </span>
+                            )}
+                          </td>
+                          {/* SLA */}
+                          <td className="px-3 py-3 text-center">
+                            {(() => {
+                              const POST_ARRIVAL = new Set(['ARR','ARR - DESTINO','ARR - CONEXAO','ARR - CONEXÃO','RCF','NFD','AWD','AWR','CCD','DLV','POD']);
+                              if (POST_ARRIVAL.has(statusCode)) return <span className="text-green-400 text-sm">✓</span>;
+                              const hours = awb.hours_in_status;
+                              if (hours == null) return <span className="text-muted-foreground text-xs">—</span>;
+                              const thresholds: Record<string,number> = { BKD:12,RCS:12,MAN:3,PRE:6,RCF:6,DEP:48,FOH:12,FWB:24,RDP:3,RFC:6 };
+                              const threshold = thresholds[statusCode] || 24;
+                              const ratio = hours / threshold;
+                              const h = Math.floor(hours);
+                              const m = Math.floor((hours - h) * 60);
+                              const display = h >= 24 ? `${Math.floor(h/24)}d${h%24}h` : m > 0 ? `${h}h${m.toString().padStart(2,'0')}` : `${h}h`;
+                              const color = ratio >= 1 ? "text-red-400 bg-red-500/15 border-red-500/30" : ratio >= 0.7 ? "text-amber-400 bg-amber-500/15 border-amber-500/30" : "text-green-400 bg-green-500/15 border-green-500/30";
+                              return (
+                                <TooltipProvider><Tooltip><TooltipTrigger asChild>
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.7rem] font-semibold border ${color}`}>
+                                    <Clock className="w-3 h-3" />{display}
+                                  </span>
+                                </TooltipTrigger><TooltipContent>
+                                  <p className="text-xs">SLA: {statusCode} — limite {threshold}h</p>
+                                  <p className="text-xs text-muted-foreground">{Math.round(ratio * 100)}% do tempo limite</p>
+                                </TooltipContent></Tooltip></TooltipProvider>
+                              );
+                            })()}
+                          </td>
+                          {/* Analista */}
+                          <td className="px-3 py-3 text-[#aaaaaa] text-sm uppercase">{awb.nome_analista || "-"}</td>
+                          {/* Ações */}
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="sm" onClick={() => setTimelineModal({ open: true, awb: awb.awb, consigneeName: awb.consignee_name, timelineJson: awb.timeline_json || [], lastEvent: awb.last_event })} className="text-[#ffc800] hover:text-[#ffc800] hover:bg-[#ffc800]/10 h-8 w-8 p-0">
+                                      <Clock className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent><p className="text-xs">Ver Timeline</p></TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              {(() => {
+                                const trackingUrl = getTrackingUrl(awb.airline_code, awb.awb);
+                                return trackingUrl ? (
+                                  <TooltipProvider><Tooltip><TooltipTrigger asChild>
+                                    <Button variant="ghost" size="sm" onClick={() => window.open(trackingUrl, "_blank")} className="text-foreground hover:text-primary h-8 w-8 p-0">
+                                      <ExternalLink className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger><TooltipContent><p className="text-xs">Abrir Rastreio Externo</p></TooltipContent></Tooltip></TooltipProvider>
+                                ) : null;
+                              })()}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {/* Pagination */}
+              <div className="p-4 border-t border-[rgba(255,255,255,.08)] flex items-center justify-between bg-[rgba(0,0,0,.3)]">
+                <div className="text-[0.78rem] text-[#aaaaaa]">
+                  Página {currentPage} de {totalPages} | Total: {filteredAwbs.length} registros
+                </div>
+                <TablePagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} showFirstLast={false} />
+              </div>
+            </>
+          ) : (
+            <div className="p-12 text-center">
+              <p className="text-[#f5f5f5] uppercase tracking-[0.15em] font-medium">
+                {isLoadingData ? "CARREGANDO DADOS..." : "NENHUM AWB ENCONTRADO"}
+              </p>
+              <p className="text-[0.85rem] text-[#aaaaaa] mt-2">
+                {isLoadingData ? "Buscando dados do scraper..." : "Os dados serão carregados automaticamente do banco de dados"}
+              </p>
+            </div>
+          )}
+        </section>
+      </main>
+
+      {/* Monitored Airlines Modal */}
+      <Dialog open={showMonitoredModal} onOpenChange={setShowMonitoredModal}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
+          <DialogHeader>
+            <DialogTitle className="text-[#f5f5f5] flex items-center gap-2">
+              <Plane className="w-5 h-5 text-emerald-400" />
+              Companhias Aéreas Monitoradas
+            </DialogTitle>
+            <DialogDescription className="text-[#aaaaaa]">
+              {monitoredAirlinesData.totalAirlines} companhias aéreas com integração ativa
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-y-auto max-h-[50vh] mt-4">
+            <table className="w-full border-collapse">
+              <thead className="sticky top-0 bg-[rgba(0,0,0,.8)]">
+                <tr className="border-b border-[rgba(255,255,255,.08)]">
+                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Código</th>
+                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Companhia Aérea</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monitoredAirlinesData.airlines.map((airline) => (
+                  <tr key={airline.code} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                    <td className="px-3 py-2.5"><span className="font-mono text-emerald-400 text-sm">{airline.code}</span></td>
+                    <td className="px-3 py-2.5 text-[#f5f5f5] text-sm">{airline.name}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Regras de Notificação */}
+      <EmailClienteRegrasDialog open={regrasDialogOpen} onOpenChange={setRegrasDialogOpen} />
+
+      {/* Timeline Modal (Scraper version) */}
+      <AwbTimelineModalScraper
+        open={timelineModal.open}
+        onOpenChange={(open) => setTimelineModal(prev => ({ ...prev, open }))}
+        awb={timelineModal.awb}
+        consigneeName={timelineModal.consigneeName}
+        timelineJson={timelineModal.timelineJson}
+        lastEvent={timelineModal.lastEvent}
+      />
+
+      {/* Cadastro NOVA Modal */}
+      <CadastroNovaModal open={cadastroNovaOpen} onOpenChange={setCadastroNovaOpen} onSuccess={fetchData} />
+    </div>
+  );
+};
+
+export default TrackingAereo;
