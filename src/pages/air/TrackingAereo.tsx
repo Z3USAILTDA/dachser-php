@@ -439,6 +439,11 @@ const TrackingAereo = () => {
   // ─── Filtered & sorted data ───
   const filteredAwbs = useMemo(() => {
     let awbs = awbsData.filter(awb => {
+      const code = getStatusCode(awb.last_event).toUpperCase();
+      const isDLV = code === "DLV" || code === "POD";
+      // Hide DLV unless actively searching
+      if (isDLV && !searchTerm) return false;
+
       const sl = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm ||
         awb.awb.toLowerCase().includes(sl) ||
