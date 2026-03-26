@@ -149,6 +149,29 @@ const extractAirportCode = (location: string): string => {
   return trimmed;
 };
 
+// ─── Textual date parser for timeline_json ───
+
+const MONTH_MAP: Record<string, string> = {
+  Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06",
+  Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12",
+};
+
+function parseTimelineDateTime(dateStr: string, timeStr: string): string | null {
+  const parts = dateStr.trim().split(/\s+/);
+  if (parts.length === 3) {
+    const [day, mon, year] = parts;
+    const mm = MONTH_MAP[mon];
+    if (mm) {
+      const dd = day.padStart(2, "0");
+      const t = timeStr || "00:00";
+      return `${year}-${mm}-${dd}T${t}:00`;
+    }
+  }
+  // Fallback
+  const d = new Date(`${dateStr} ${timeStr}`);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 // ─── AWB Data interface for this page ───
 
 interface AWBData {
@@ -296,9 +319,7 @@ const TrackingAereo = () => {
           if (timeline.length > 0) {
             const evt = timeline.find((e: any) => e.date);
             if (evt) {
-              const d = evt.date || "";
-              const t = evt.time || "00:00";
-              lastEventDate = `${d}T${t}:00`;
+              lastEventDate = parseTimelineDateTime(evt.date || "", evt.time || "00:00");
             }
           }
 
