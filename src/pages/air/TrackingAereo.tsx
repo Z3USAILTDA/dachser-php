@@ -637,7 +637,7 @@ const TrackingAereo = () => {
                     {currentAwbs.map((awb, index) => {
                       const statusCode = getStatusCode(awb.last_event).toUpperCase();
                       const isCritical = awb.is_critical;
-                      const isDelayed = awb.etd ? new Date(awb.etd).getTime() < Date.now() && !["ARR", "DLV", "POD"].includes(statusCode) : false;
+                      const isDelayed = statusCode === "DIS";
 
                       // Route highlighting logic
                       const conexoes = awb.conexao ? awb.conexao.split(',').map(c => c.trim()).filter(Boolean) : [];
