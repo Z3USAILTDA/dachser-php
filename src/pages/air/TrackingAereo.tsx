@@ -296,9 +296,7 @@ const TrackingAereo = () => {
           if (timeline.length > 0) {
             const evt = timeline.find((e: any) => e.date);
             if (evt) {
-              const d = evt.date || "";
-              const t = evt.time || "00:00";
-              lastEventDate = `${d}T${t}:00`;
+              lastEventDate = parseTimelineDateTime(evt.date || "", evt.time || "00:00");
             }
           }
 
