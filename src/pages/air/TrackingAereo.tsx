@@ -464,12 +464,13 @@ const TrackingAereo = () => {
 
     let total = 0, transit = 0, alert = 0, critical = 0;
     awbsData.forEach(awb => {
+      if (awb.is_invalid) return; // Skip invalid
       const code = getStatusCode(awb.last_event).toUpperCase();
       if (code === "DLV" || code === "POD") return; // Skip delivered
       total++;
       if (inTransitCodes.has(code)) transit++;
       if (code === "DIS") alert++;
-      if (criticalCodes.has(code) || awb.pieces_discrepancy) critical++;
+      if (awb.tracking_failed || criticalCodes.has(code) || awb.pieces_discrepancy) critical++;
     });
     return { total, transit, alert, critical };
   }, [awbsData]);
@@ -481,6 +482,8 @@ const TrackingAereo = () => {
       const isDLV = code === "DLV" || code === "POD";
       // Hide DLV unless actively searching
       if (isDLV && !searchTerm) return false;
+      // Hide invalid unless actively searching
+      if (awb.is_invalid && !searchTerm) return false;
 
       const sl = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm ||
@@ -500,7 +503,7 @@ const TrackingAereo = () => {
         switch (cardFilter) {
           case "transito": return ["DEP", "MAN", "RCF", "ARR"].includes(code);
           case "alerta": return code === "DIS";
-          case "criticos": return ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy;
+          case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy;
           default: return true;
         }
       });
@@ -518,6 +521,13 @@ const TrackingAereo = () => {
         const dA = a.last_event_date ? new Date(a.last_event_date).getTime() : 0;
         const dB = b.last_event_date ? new Date(b.last_event_date).getTime() : 0;
         return sortLastCheck === "asc" ? dA - dB : dB - dA;
+      });
+    } else {
+      // Default sort: most recent first
+      awbs = [...awbs].sort((a, b) => {
+        const dA = a.last_event_date ? new Date(a.last_event_date).getTime() : 0;
+        const dB = b.last_event_date ? new Date(b.last_event_date).getTime() : 0;
+        return dB - dA;
       });
     }
 
