@@ -426,8 +426,9 @@ const TrackingAereo = () => {
 
     let total = 0, transit = 0, alert = 0, critical = 0;
     awbsData.forEach(awb => {
-      total++;
       const code = getStatusCode(awb.last_event).toUpperCase();
+      if (code === "DLV" || code === "POD") return; // Skip delivered
+      total++;
       if (inTransitCodes.has(code)) transit++;
       if (code === "DIS") alert++;
       if (criticalCodes.has(code) || awb.pieces_discrepancy) critical++;
