@@ -22,7 +22,10 @@ import {
   AlertTriangle,
   ChevronDown,
   MoreHorizontal,
-  Eye
+  Eye,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -125,6 +128,45 @@ export const PagamentosTab = () => {
   
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Sorting
+  type PagSortField = "numero_spo" | "fornecedor" | "valor" | "vencimento" | "forma_pagamento" | "tipo_execucao_pagamento";
+  const [sortField, setSortField] = useState<PagSortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (field: PagSortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  const getSortIcon = (field: PagSortField) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-50" />;
+    return sortDirection === "asc" 
+      ? <ArrowUp className="h-3 w-3 ml-1" /> 
+      : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
+
+  const sortedPagamentos = useMemo(() => {
+    if (!sortField) return pagamentos;
+    return [...pagamentos].sort((a, b) => {
+      let valA: any, valB: any;
+      switch (sortField) {
+        case "numero_spo": valA = a.numero_spo || ""; valB = b.numero_spo || ""; break;
+        case "fornecedor": valA = a.fornecedor || ""; valB = b.fornecedor || ""; break;
+        case "valor": valA = a.valor || 0; valB = b.valor || 0; break;
+        case "vencimento": valA = a.vencimento || ""; valB = b.vencimento || ""; break;
+        case "forma_pagamento": valA = a.forma_pagamento || ""; valB = b.forma_pagamento || ""; break;
+        case "tipo_execucao_pagamento": valA = a.tipo_execucao_pagamento || ""; valB = b.tipo_execucao_pagamento || ""; break;
+        default: return 0;
+      }
+      const cmp = typeof valA === "number" ? valA - valB : String(valA).localeCompare(String(valB), "pt-BR");
+      return sortDirection === "asc" ? cmp : -cmp;
+    });
+  }, [pagamentos, sortField, sortDirection]);
   
   // Actions state
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -797,17 +839,29 @@ export const PagamentosTab = () => {
                     onCheckedChange={handleSelectAll}
                   />
                 </th>
-                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">SPO</th>
-                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Fornecedor</th>
-                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Valor</th>
-                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Vencimento</th>
-                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Forma Pag.</th>
-                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Tipo Exec.</th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("numero_spo")}>
+                  <span className="flex items-center">SPO{getSortIcon("numero_spo")}</span>
+                </th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("fornecedor")}>
+                  <span className="flex items-center">Fornecedor{getSortIcon("fornecedor")}</span>
+                </th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("valor")}>
+                  <span className="flex items-center">Valor{getSortIcon("valor")}</span>
+                </th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("vencimento")}>
+                  <span className="flex items-center">Vencimento{getSortIcon("vencimento")}</span>
+                </th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("forma_pagamento")}>
+                  <span className="flex items-center">Forma Pag.{getSortIcon("forma_pagamento")}</span>
+                </th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("tipo_execucao_pagamento")}>
+                  <span className="flex items-center">Tipo Exec.{getSortIcon("tipo_execucao_pagamento")}</span>
+                </th>
                 <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {pagamentos.map((pag) => {
+              {sortedPagamentos.map((pag) => {
                 const vencido = isVencido(pag.vencimento);
                 const hoje = isHoje(pag.vencimento);
                 
