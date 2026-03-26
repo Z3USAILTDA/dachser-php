@@ -839,17 +839,29 @@ export const PagamentosTab = () => {
                     onCheckedChange={handleSelectAll}
                   />
                 </th>
-                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">SPO</th>
-                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Fornecedor</th>
-                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Valor</th>
-                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Vencimento</th>
-                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Forma Pag.</th>
-                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Tipo Exec.</th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("numero_spo")}>
+                  <span className="flex items-center">SPO{getSortIcon("numero_spo")}</span>
+                </th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("fornecedor")}>
+                  <span className="flex items-center">Fornecedor{getSortIcon("fornecedor")}</span>
+                </th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("valor")}>
+                  <span className="flex items-center">Valor{getSortIcon("valor")}</span>
+                </th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("vencimento")}>
+                  <span className="flex items-center">Vencimento{getSortIcon("vencimento")}</span>
+                </th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("forma_pagamento")}>
+                  <span className="flex items-center">Forma Pag.{getSortIcon("forma_pagamento")}</span>
+                </th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("tipo_execucao_pagamento")}>
+                  <span className="flex items-center">Tipo Exec.{getSortIcon("tipo_execucao_pagamento")}</span>
+                </th>
                 <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {pagamentos.map((pag) => {
+              {sortedPagamentos.map((pag) => {
                 const vencido = isVencido(pag.vencimento);
                 const hoje = isHoje(pag.vencimento);
                 
