@@ -437,6 +437,13 @@ const TrackingAereo = () => {
     return () => { clearInterval(interval); clearInterval(statsInterval); };
   }, [fetchData, fetchDbStats]);
 
+  // ─── Alert for tracking failures ───
+  useEffect(() => {
+    const failedAwbs = awbsData.filter(a => a.tracking_failed);
+    if (failedAwbs.length === 0) return;
+    supabase.functions.invoke("air-tracking-failed-alert").catch(console.error);
+  }, [awbsData]);
+
   // ─── Unique analysts ───
   const uniqueAnalysts = useMemo(() => {
     const s = new Set<string>();
