@@ -128,6 +128,45 @@ export const PagamentosTab = () => {
   
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Sorting
+  type PagSortField = "numero_spo" | "fornecedor" | "valor" | "vencimento" | "forma_pagamento" | "tipo_execucao_pagamento";
+  const [sortField, setSortField] = useState<PagSortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (field: PagSortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  const getSortIcon = (field: PagSortField) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-50" />;
+    return sortDirection === "asc" 
+      ? <ArrowUp className="h-3 w-3 ml-1" /> 
+      : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
+
+  const sortedPagamentos = useMemo(() => {
+    if (!sortField) return pagamentos;
+    return [...pagamentos].sort((a, b) => {
+      let valA: any, valB: any;
+      switch (sortField) {
+        case "numero_spo": valA = a.numero_spo || ""; valB = b.numero_spo || ""; break;
+        case "fornecedor": valA = a.fornecedor || ""; valB = b.fornecedor || ""; break;
+        case "valor": valA = a.valor || 0; valB = b.valor || 0; break;
+        case "vencimento": valA = a.vencimento || ""; valB = b.vencimento || ""; break;
+        case "forma_pagamento": valA = a.forma_pagamento || ""; valB = b.forma_pagamento || ""; break;
+        case "tipo_execucao_pagamento": valA = a.tipo_execucao_pagamento || ""; valB = b.tipo_execucao_pagamento || ""; break;
+        default: return 0;
+      }
+      const cmp = typeof valA === "number" ? valA - valB : String(valA).localeCompare(String(valB), "pt-BR");
+      return sortDirection === "asc" ? cmp : -cmp;
+    });
+  }, [pagamentos, sortField, sortDirection]);
   
   // Actions state
   const [copiedId, setCopiedId] = useState<string | null>(null);
