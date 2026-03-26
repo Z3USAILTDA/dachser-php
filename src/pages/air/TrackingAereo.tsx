@@ -172,6 +172,20 @@ function parseTimelineDateTime(dateStr: string, timeStr: string): string | null 
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+// ─── Scraper failure descriptions ───
+
+const SCRAPER_FAILURE_DESCRIPTIONS = [
+  "O site da operadora está fora do ar, tente novamente mais tarde",
+  "Não foi possível detectar a operadora para o seu número de rastreamento",
+];
+
+function hasScraperFailure(timeline: any[]): boolean {
+  if (!timeline || timeline.length === 0) return false;
+  return timeline.some((evt: any) =>
+    SCRAPER_FAILURE_DESCRIPTIONS.some(msg => evt.description?.includes(msg))
+  );
+}
+
 // ─── AWB Data interface for this page ───
 
 interface AWBData {
@@ -197,6 +211,8 @@ interface AWBData {
   tipo_processo?: string;
   pieces_discrepancy?: boolean;
   is_critical?: boolean;
+  is_invalid?: boolean;
+  tracking_failed?: boolean;
 }
 
 // ─── Airlines list (same as Index.tsx) ───
