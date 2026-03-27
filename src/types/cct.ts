@@ -30,7 +30,7 @@ export type TipoExcecao =
 
 export type CanalNotificacao = "EMAIL_CLIENTE" | "EMAIL_INTERNO" | "WEBHOOK";
 
-export type FonteEvento = "LEADCOMEX" | "HANDLER" | "RFB" | "MANUAL" | "TRACKING";
+export type FonteEvento = "HANDLER" | "RFB" | "MANUAL" | "TRACKING";
 
 export type NivelConfianca = "PRIMARIA" | "COMPLEMENTAR";
 
