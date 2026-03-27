@@ -3621,7 +3621,6 @@ Deno.serve(async (req) => {
         const houseList = (shipments || []).map((s: any) => s.house).filter((h: string) => h && h.trim() !== '');
         
         let cctDataMap = new Map<string, any>();
-        let leadcomexStatusMap = new Map<string, { success: boolean; attempts: number; situacao_portal: string | null; status_cct: string | null }>();
         
         if (houseList.length > 0) {
           const houseFilter = houseList.map((h: string) => `'${h.replace(/'/g, "''")}'`).join(',');
