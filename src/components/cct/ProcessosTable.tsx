@@ -205,22 +205,7 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                     })()}
                   </TableCell>
                   <TableCell>
-                    {(() => {
-                      const statusOficial = String(processo.status_atual?.status_cct_oficial || '');
-                      const isAguardando = !statusOficial || 
-                        statusOficial === 'AGUARDANDO_CONSULTA' || 
-                        statusOficial === 'AGUARDANDO_MANIFESTACAO';
-
-                      if (isAguardando) {
-                        return (
-                          <LeadComexStatusBadge 
-                            status={processo.shipment.leadcomex_status || 'pending'} 
-                            attempts={processo.shipment.leadcomex_attempts}
-                          />
-                        );
-                      }
-                      return <StatusBadge status={statusOficial} />;
-                    })()}
+                    <StatusBadge status={String(processo.status_atual?.status_cct_oficial || 'AGUARDANDO_CONSULTA')} />
                   </TableCell>
                   <TableCell>
                     <SLAInfoBadge 

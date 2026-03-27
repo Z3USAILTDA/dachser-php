@@ -153,7 +153,7 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
       codigo_evento: row.ultimo_evento_codigo,
       data_hora_evento: row.ultimo_evento_data,
       descricao: row.ultimo_evento_descricao || row.ultimo_evento_codigo,
-      fonte: 'LEADCOMEX' as FonteEvento,
+      fonte: 'RFB' as FonteEvento,
       nivel_confianca: 'PRIMARIA' as NivelConfianca,
       aeroporto: row.aeroporto_destino || null,
       created_at: row.ultimo_evento_data,

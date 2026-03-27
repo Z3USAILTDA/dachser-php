@@ -3723,26 +3723,12 @@ Deno.serve(async (req) => {
           }
         }
 
-        // ==================== MERGE: Enrich shipments with CCT data, LeadComex, RFB ====================
+        // ==================== MERGE: Enrich shipments with CCT data and RFB ====================
         const enrichedShipments = (shipments || []).map((row: any) => {
           const houseKey = (row.house || '').trim().toUpperCase();
           const cctInfo = cctDataMap.get(houseKey) || {};
-          const leadcomexInfo = leadcomexStatusMap.get(houseKey);
           
-          let leadcomex_status: 'success' | 'failed' | 'pending' = 'pending';
-          if (leadcomexInfo) {
-            leadcomex_status = leadcomexInfo.success ? 'success' : 'failed';
-          }
-          
-          // Preserve tracking status; only upgrade if LeadComex provides a more advanced status
           let statusCctOficial = row.status_cct_oficial || 'AGUARDANDO_CONSULTA';
-          if (leadcomexInfo?.success && leadcomexInfo.status_cct) {
-            const trackingOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
-            const leadcomexOrder = CCT_STATUS_ORDER[leadcomexInfo.status_cct] || 0;
-            if (leadcomexOrder > trackingOrder) {
-              statusCctOficial = leadcomexInfo.status_cct;
-            }
-          }
           
           // Override with latest timeline event from t_cct_eventos_historico
           const evtHistorico = eventosHistoricoMap.get(houseKey);
@@ -3753,7 +3739,6 @@ Deno.serve(async (req) => {
           return {
             ...row,
             status_cct_oficial: statusCctOficial,
-            situacao_portal: leadcomexInfo?.situacao_portal || null,
             peso_declarado: row.peso_declarado || cctInfo.peso_declarado || null,
             peso_constatado: cctInfo.peso_constatado || null,
             volume_declarado: row.volume_declarado || cctInfo.volume_declarado || null,
@@ -3763,8 +3748,6 @@ Deno.serve(async (req) => {
             data_decolagem_ultimo_trecho: cctInfo.data_decolagem_ultimo_trecho || null,
             cnpj_consignatario: row.cnpj_consignatario || cctInfo.cnpj_consignatario || null,
             data_manifestacao_cct: cctInfo.data_manifestacao_cct || null,
-            leadcomex_status,
-            leadcomex_attempts: leadcomexInfo?.attempts || null,
           };
         });
 
