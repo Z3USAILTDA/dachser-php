@@ -3548,60 +3548,68 @@ Deno.serve(async (req) => {
           });
         }
 
-        // ==================== STEP 2: Get client/analyst info from t_master_dados by HAWB ====================
+        // ==================== STEP 2: Get complementary data from t_dados_aereo ====================
         const hawbList = [...hawbApiMap.keys()];
         const hawbFilterStr = hawbList.map((h: string) => `'${h.replace(/'/g, "''")}'`).join(',');
         
-        console.log('CCT Step 2: Fetching client/analyst info from t_master_dados...');
-        const rawShipments = await client.query(`
-          SELECT 
-            sub.id, sub.master, sub.house, sub.cliente, sub.nome_analista, sub.email_analista, sub.emails_cliente, sub.tipo_servico
-          FROM (
-            SELECT 
-              m.id,
-              TRIM(m.mawb) as master,
-              TRIM(m.hawb) as house,
-              TRIM(m.cliente) as cliente,
-              m.nome_analista,
-              m.email_analista,
-              m.emails_cliente,
-              COALESCE(m.tipo_servico, 'N/A') as tipo_servico,
-              ROW_NUMBER() OVER (PARTITION BY TRIM(m.hawb) ORDER BY m.data_insert DESC) as rn
-            FROM ${database}.t_master_dados m
-            WHERE TRIM(m.hawb) IN (${hawbFilterStr})
-            AND m.tipo_processo = 'AIR IMPORT'
-            AND m.hawb IS NOT NULL
-            AND TRIM(m.hawb) != ''
-            AND m.hawb != 'N/A'
-          ) sub
-          WHERE sub.rn = 1
-        `);
-
-        console.log(`CCT Step 2: Found ${(rawShipments || []).length} shipments from t_master_dados`);
-
-        // Build a map from HAWB -> t_master_dados info
-        const masterDadosMap = new Map<string, any>();
-        for (const row of (rawShipments || [])) {
-          const houseKey = (row.house || '').trim();
-          if (houseKey) masterDadosMap.set(houseKey, row);
+        console.log('CCT Step 2: Fetching complementary data from t_dados_aereo...');
+        let dadosAereoMap = new Map<string, any>();
+        
+        if (hawbList.length > 0) {
+          try {
+            const dadosAereo = await client.query(`
+              SELECT *
+              FROM (
+                SELECT
+                  TRIM(a.hawb_number) AS hawb,
+                  a.awb_number,
+                  a.consignee_nome,
+                  a.gross_weight_kg,
+                  a.volume_cbm,
+                  a.pieces,
+                  a.clerk,
+                  a.clerk_email,
+                  a.etd,
+                  a.eta,
+                  a.created_at,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY TRIM(a.hawb_number)
+                    ORDER BY a.created_at DESC
+                  ) AS rn
+                FROM ${database}.t_dados_aereo a
+                WHERE a.hawb_number IS NOT NULL
+                  AND TRIM(a.hawb_number) != ''
+                  AND TRIM(a.hawb_number) IN (${hawbFilterStr})
+              ) x
+              WHERE x.rn = 1
+            `);
+            
+            for (const row of (dadosAereo || [])) {
+              const hawbKey = (row.hawb || '').trim();
+              if (hawbKey) dadosAereoMap.set(hawbKey, row);
+            }
+            console.log(`CCT Step 2: Found ${dadosAereoMap.size} complementary records from t_dados_aereo`);
+          } catch (aereoErr) {
+            console.warn('CCT Step 2: Error fetching t_dados_aereo (non-fatal):', aereoErr);
+          }
         }
 
-        // Merge: iterate over hawbApiMap (primary) and enrich with t_master_dados (optional)
-        const shipments = [];
+        // ==================== MERGE: Combine hawbApiMap + dadosAereoMap ====================
+        const enrichedShipments = [];
         for (const [hawbKey, apiInfo] of hawbApiMap) {
-          const masterInfo = masterDadosMap.get(hawbKey) || {};
+          const aereoInfo = dadosAereoMap.get(hawbKey) || {};
           
-          const statusCctOficial = apiInfo?.rfb_status_cct || 'INFORMADA';
+          const statusCctOficial = apiInfo?.rfb_status_cct || 'AGUARDANDO_CONSULTA';
           
-          shipments.push({
-            id: masterInfo.id?.toString() || hawbKey,
+          enrichedShipments.push({
+            id: hawbKey,
             house: apiInfo.hawb || hawbKey,
-            master: apiInfo.mawb || masterInfo.master || '',
-            cliente: masterInfo.cliente || '',
-            nome_analista: masterInfo.nome_analista || null,
-            email_analista: masterInfo.email_analista || null,
-            emails_cliente: masterInfo.emails_cliente || null,
-            tipo_servico: masterInfo.tipo_servico || null,
+            master: apiInfo.mawb || aereoInfo.awb_number || '',
+            cliente: aereoInfo.consignee_nome || '',
+            nome_analista: aereoInfo.clerk || null,
+            email_analista: aereoInfo.clerk_email || null,
+            emails_cliente: null,
+            tipo_servico: null,
             aeroporto_origem: (apiInfo?.aeroporto_origem || '').trim() || null,
             aeroporto_destino: (apiInfo?.aeroporto_destino || '').trim() || null,
             dep_datetime: apiInfo?.dep_datetime || null,
@@ -3620,146 +3628,21 @@ Deno.serve(async (req) => {
             info_frete: apiInfo?.info_frete || null,
             manuseios_especiais_rfb: apiInfo?.manuseios_especiais || [],
             rfb_situacao: apiInfo?.rfb_situacao || null,
-            peso_declarado: apiInfo?.peso_declarado_rfb || null,
-            volume_declarado: apiInfo?.volume_declarado_rfb || null,
+            // Peso/volume: API first, then t_dados_aereo fallback
+            peso_declarado: apiInfo?.peso_declarado_rfb || (aereoInfo.gross_weight_kg ? Number(aereoInfo.gross_weight_kg) : null),
+            volume_declarado: apiInfo?.volume_declarado_rfb || (aereoInfo.volume_cbm ? Number(aereoInfo.volume_cbm) : null),
+            peso_constatado: null,
+            volume_constatado: null,
             cnpj_consignatario: apiInfo?.consignatario_cnpj || null,
             has_bloqueio: apiInfo?.has_bloqueio || false,
+            // t_dados_aereo enrichment
+            eta: aereoInfo.eta || null,
+            etd: aereoInfo.etd || null,
+            tratamento: apiInfo?.manuseios_especiais?.join(',') || null,
+            data_decolagem_ultimo_trecho: apiInfo?.dep_datetime || null,
+            data_manifestacao_cct: null,
           });
         }
-
-        // ==================== STEP 2.5: Enrich with t_cct_shipments (pesos, volumes, ETD/ETA) ====================
-        const houseList = (shipments || []).map((s: any) => s.house).filter((h: string) => h && h.trim() !== '');
-        
-        let cctDataMap = new Map<string, any>();
-        
-        if (houseList.length > 0) {
-          const houseFilter = houseList.map((h: string) => `'${h.replace(/'/g, "''")}'`).join(',');
-          
-          // Get unique masters for tratamento lookup
-          const masterList = [...new Set((shipments || []).map((s: any) => s.master).filter((m: any) => m && String(m).trim() !== ''))] as string[];
-          const masterFilter = masterList.map((m) => `'${m.replace(/'/g, "''")}'`).join(',');
-          
-          // Query tratamento from t_master_dados
-          let tratamentoMap = new Map<string, string>();
-          if (masterList.length > 0) {
-            const tratamentoData = await client.query(`
-              SELECT TRIM(mawb) as mawb, TRIM(tratamento) as tratamento
-              FROM ${database}.t_master_dados
-              WHERE mawb IN (${masterFilter})
-              AND data_insert >= NOW() - INTERVAL 30 DAY
-              AND tipo_processo = 'AIR IMPORT'
-            `);
-            for (const row of (tratamentoData || [])) {
-              tratamentoMap.set((row.mawb || '').trim(), row.tratamento || '');
-            }
-          }
-          
-          // Query CCT enrichment data
-          const cctData = await client.query(`
-            SELECT 
-              TRIM(house) as house,
-              peso_declarado,
-              peso_constatado,
-              volume_declarado,
-              volume_constatado,
-              eta,
-              etd,
-              data_decolagem_ultimo_trecho,
-              cnpj_consignatario,
-              data_manifestacao_cct
-            FROM ${database}.t_cct_shipments
-            WHERE TRIM(house) IN (${houseFilter})
-          `);
-          
-          for (const cct of (cctData || [])) {
-            const houseKey = (cct.house || '').trim().toUpperCase();
-            cctDataMap.set(houseKey, cct);
-          }
-          
-          // Add tratamento to shipments
-          for (const ship of (shipments || [])) {
-            ship.tratamento = tratamentoMap.get((ship.master || '').trim()) || null;
-          }
-        }
-
-        // ==================== STEP 3: Get LATEST mapped event per HAWB from t_cct_eventos_historico ====================
-        let eventosHistoricoMap = new Map<string, { codigo_evento: string; data_hora_evento: string; mapped_status: string }>();
-        if (houseList.length > 0) {
-          try {
-            const houseFilterEvt = houseList.map((h: string) => `'${h.replace(/'/g, "''")}'`).join(',');
-            const allEvents = await client.query(`
-              SELECT id, TRIM(awb) as awb, codigo_evento, data_hora_evento, created_at
-              FROM ${database}.t_cct_eventos_historico
-              WHERE TRIM(awb) IN (${houseFilterEvt})
-              ORDER BY TRIM(awb) ASC, data_hora_evento DESC, created_at DESC, id DESC
-            `);
-            
-            const eventToCctStatus: Record<string, string> = {
-              'AREA_TRANSFERENCIA': 'EM_AREA_TRANSFERENCIA',
-              'MANIFESTADO': 'MANIFESTADA',
-              'RECEPCIONADO': 'RECEPCIONADA',
-              'CHEGADA_INFORMADA': 'INFORMADA',
-              'CHEGADA_AERONAVE': 'INFORMADA',
-              'EM_TRANSITO': 'EM_TRANSITO_TERRESTRE',
-              'ENTREGUE': 'ENTREGUE',
-              'BLOQUEIO': 'BLOQUEIO',
-              'DESEMBARACO': 'ENTREGUE',
-              'LIBERADO': 'ENTREGUE',
-              'DESBLOQUEIO': 'RECEPCIONADA',
-              'ARR': 'INFORMADA', 'ATA': 'INFORMADA',
-              'DEP': 'MANIFESTADA', 'MAN': 'MANIFESTADA', 'BKD': 'MANIFESTADA',
-              'RCF': 'EM_AREA_TRANSFERENCIA', 'RCS': 'EM_AREA_TRANSFERENCIA',
-              'NFD': 'RECEPCIONADA', 'AWD': 'RECEPCIONADA',
-              'DLV': 'ENTREGUE', 'POD': 'ENTREGUE',
-              'FRO': 'BLOQUEIO', 'DIS': 'BLOQUEIO', 'OFLD': 'BLOQUEIO',
-            };
-
-            for (const evt of (allEvents || [])) {
-              const awbKey = (evt.awb || '').trim().toUpperCase();
-              if (!awbKey || eventosHistoricoMap.has(awbKey)) continue;
-              const code = (evt.codigo_evento || '').toUpperCase();
-              const mapped = eventToCctStatus[code];
-              if (!mapped) continue;
-              eventosHistoricoMap.set(awbKey, {
-                codigo_evento: code,
-                data_hora_evento: evt.data_hora_evento,
-                mapped_status: mapped,
-              });
-            }
-
-            console.log(`CCT Step 3: Found latest mapped events for ${eventosHistoricoMap.size} HAWBs from t_cct_eventos_historico`);
-          } catch (evtErr) {
-            console.warn('CCT Step 3: Error fetching t_cct_eventos_historico (non-fatal):', evtErr);
-          }
-        }
-
-        // ==================== MERGE: Enrich shipments with CCT data and RFB ====================
-        const enrichedShipments = (shipments || []).map((row: any) => {
-          const houseKey = (row.house || '').trim().toUpperCase();
-          const cctInfo = cctDataMap.get(houseKey) || {};
-          
-          let statusCctOficial = row.status_cct_oficial || 'AGUARDANDO_CONSULTA';
-          
-          // Override with latest timeline event from t_cct_eventos_historico
-          const evtHistorico = eventosHistoricoMap.get(houseKey);
-          if (evtHistorico?.mapped_status) {
-            statusCctOficial = evtHistorico.mapped_status;
-          }
-          
-          return {
-            ...row,
-            status_cct_oficial: statusCctOficial,
-            peso_declarado: row.peso_declarado || cctInfo.peso_declarado || null,
-            peso_constatado: cctInfo.peso_constatado || null,
-            volume_declarado: row.volume_declarado || cctInfo.volume_declarado || null,
-            volume_constatado: cctInfo.volume_constatado || null,
-            eta: cctInfo.eta || null,
-            etd: cctInfo.etd || null,
-            data_decolagem_ultimo_trecho: cctInfo.data_decolagem_ultimo_trecho || null,
-            cnpj_consignatario: row.cnpj_consignatario || cctInfo.cnpj_consignatario || null,
-            data_manifestacao_cct: cctInfo.data_manifestacao_cct || null,
-          };
-        });
 
         // ==================== SLA Calculation ====================
         const now = new Date();
