@@ -3575,20 +3575,33 @@ Deno.serve(async (req) => {
             AND m.hawb != 'N/A'
           ) sub
           WHERE sub.rn = 1
-          LIMIT 500
         `);
 
         console.log(`CCT Step 2: Found ${(rawShipments || []).length} shipments from t_master_dados`);
 
-        // Merge API data into shipments
-        const shipments = (rawShipments || []).map((row: any) => {
+        // Build a map from HAWB -> t_master_dados info
+        const masterDadosMap = new Map<string, any>();
+        for (const row of (rawShipments || [])) {
           const houseKey = (row.house || '').trim();
-          const apiInfo = hawbApiMap.get(houseKey);
+          if (houseKey) masterDadosMap.set(houseKey, row);
+        }
+
+        // Merge: iterate over hawbApiMap (primary) and enrich with t_master_dados (optional)
+        const shipments = [];
+        for (const [hawbKey, apiInfo] of hawbApiMap) {
+          const masterInfo = masterDadosMap.get(hawbKey) || {};
+          
           const statusCctOficial = apiInfo?.rfb_status_cct || 'INFORMADA';
           
-          return {
-            ...row,
-            master: apiInfo?.mawb || row.master,
+          shipments.push({
+            id: masterInfo.id?.toString() || hawbKey,
+            house: apiInfo.hawb || hawbKey,
+            master: apiInfo.mawb || masterInfo.master || '',
+            cliente: masterInfo.cliente || '',
+            nome_analista: masterInfo.nome_analista || null,
+            email_analista: masterInfo.email_analista || null,
+            emails_cliente: masterInfo.emails_cliente || null,
+            tipo_servico: masterInfo.tipo_servico || null,
             aeroporto_origem: (apiInfo?.aeroporto_origem || '').trim() || null,
             aeroporto_destino: (apiInfo?.aeroporto_destino || '').trim() || null,
             dep_datetime: apiInfo?.dep_datetime || null,
@@ -3611,8 +3624,8 @@ Deno.serve(async (req) => {
             volume_declarado: apiInfo?.volume_declarado_rfb || null,
             cnpj_consignatario: apiInfo?.consignatario_cnpj || null,
             has_bloqueio: apiInfo?.has_bloqueio || false,
-          };
-        });
+          });
+        }
 
         // ==================== STEP 2.5: Enrich with t_cct_shipments (pesos, volumes, ETD/ETA) ====================
         const houseList = (shipments || []).map((s: any) => s.house).filter((h: string) => h && h.trim() !== '');
