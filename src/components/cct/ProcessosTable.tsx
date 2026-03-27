@@ -10,7 +10,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StatusBadge, SLAInfoBadge } from "./StatusBadge";
-import { LeadComexStatusBadge } from "./LeadComexStatusBadge";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { Search, Eye, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
