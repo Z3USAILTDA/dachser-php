@@ -30,7 +30,7 @@ export type TipoExcecao =
 
 export type CanalNotificacao = "EMAIL_CLIENTE" | "EMAIL_INTERNO" | "WEBHOOK";
 
-export type FonteEvento = "LEADCOMEX" | "HANDLER" | "RFB" | "MANUAL" | "TRACKING";
+export type FonteEvento = "HANDLER" | "RFB" | "MANUAL" | "TRACKING";
 
 export type NivelConfianca = "PRIMARIA" | "COMPLEMENTAR";
 
@@ -232,8 +232,6 @@ export interface CCTShipment {
   data_decolagem_ultimo_trecho?: string | null;
   dep_datetime?: string | null;
   data_manifestacao_cct?: string | null;
-  leadcomex_status?: 'success' | 'failed' | 'pending';
-  leadcomex_attempts?: number | null;
     created_at: string;
     updated_at: string;
     // t_aereo_cct (RFB) enrichment fields

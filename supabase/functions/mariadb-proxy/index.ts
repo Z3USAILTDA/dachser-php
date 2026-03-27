@@ -3621,7 +3621,6 @@ Deno.serve(async (req) => {
         const houseList = (shipments || []).map((s: any) => s.house).filter((h: string) => h && h.trim() !== '');
         
         let cctDataMap = new Map<string, any>();
-        let leadcomexStatusMap = new Map<string, { success: boolean; attempts: number; situacao_portal: string | null; status_cct: string | null }>();
         
         if (houseList.length > 0) {
           const houseFilter = houseList.map((h: string) => `'${h.replace(/'/g, "''")}'`).join(',');
@@ -3662,51 +3661,9 @@ Deno.serve(async (req) => {
             WHERE TRIM(house) IN (${houseFilter})
           `);
           
-          // Query LeadComex enrichment logs
-          const leadcomexLogs = await client.query(`
-            SELECT 
-              l.hawb,
-              l.success,
-              l.total_attempts,
-              l.lc_situacao_portal
-            FROM ${database}.t_leadcomex_enrichment_logs l
-            INNER JOIN (
-              SELECT hawb, MAX(created_at) as max_created
-              FROM ${database}.t_leadcomex_enrichment_logs
-              WHERE hawb IN (${houseFilter})
-              GROUP BY hawb
-            ) latest ON l.hawb = latest.hawb AND l.created_at = latest.max_created
-          `);
-          
           for (const cct of (cctData || [])) {
             const houseKey = (cct.house || '').trim().toUpperCase();
             cctDataMap.set(houseKey, cct);
-          }
-          
-          // Map LeadComex situacao_portal to CCT official status
-          const mapLeadcomexStatusToCCT = (situacao: string | null): string | null => {
-            if (!situacao) return null;
-            const statusMap: Record<string, string> = {
-              'Informado': 'MANIFESTADA',
-              'Informada': 'MANIFESTADA',
-              'Em área de transferência': 'EM_AREA_TRANSFERENCIA',
-              'Chegada informada': 'INFORMADA',
-              'Recepcionado': 'RECEPCIONADA',
-              'Em trânsito terrestre': 'EM_TRANSITO_TERRESTRE',
-              'Entregue': 'ENTREGUE',
-              'Processado': 'ENTREGUE',
-            };
-            return statusMap[situacao] || null;
-          };
-          
-          for (const log of (leadcomexLogs || [])) {
-            const hawbKey = (log.hawb || '').trim().toUpperCase();
-            leadcomexStatusMap.set(hawbKey, {
-              success: log.success === 1 || log.success === true,
-              attempts: log.total_attempts || 1,
-              situacao_portal: log.lc_situacao_portal || null,
-              status_cct: mapLeadcomexStatusToCCT(log.lc_situacao_portal)
-            });
           }
           
           // Add tratamento to shipments
@@ -3766,26 +3723,12 @@ Deno.serve(async (req) => {
           }
         }
 
-        // ==================== MERGE: Enrich shipments with CCT data, LeadComex, RFB ====================
+        // ==================== MERGE: Enrich shipments with CCT data and RFB ====================
         const enrichedShipments = (shipments || []).map((row: any) => {
           const houseKey = (row.house || '').trim().toUpperCase();
           const cctInfo = cctDataMap.get(houseKey) || {};
-          const leadcomexInfo = leadcomexStatusMap.get(houseKey);
           
-          let leadcomex_status: 'success' | 'failed' | 'pending' = 'pending';
-          if (leadcomexInfo) {
-            leadcomex_status = leadcomexInfo.success ? 'success' : 'failed';
-          }
-          
-          // Preserve tracking status; only upgrade if LeadComex provides a more advanced status
           let statusCctOficial = row.status_cct_oficial || 'AGUARDANDO_CONSULTA';
-          if (leadcomexInfo?.success && leadcomexInfo.status_cct) {
-            const trackingOrder = CCT_STATUS_ORDER[statusCctOficial] || 0;
-            const leadcomexOrder = CCT_STATUS_ORDER[leadcomexInfo.status_cct] || 0;
-            if (leadcomexOrder > trackingOrder) {
-              statusCctOficial = leadcomexInfo.status_cct;
-            }
-          }
           
           // Override with latest timeline event from t_cct_eventos_historico
           const evtHistorico = eventosHistoricoMap.get(houseKey);
@@ -3796,7 +3739,6 @@ Deno.serve(async (req) => {
           return {
             ...row,
             status_cct_oficial: statusCctOficial,
-            situacao_portal: leadcomexInfo?.situacao_portal || null,
             peso_declarado: row.peso_declarado || cctInfo.peso_declarado || null,
             peso_constatado: cctInfo.peso_constatado || null,
             volume_declarado: row.volume_declarado || cctInfo.volume_declarado || null,
@@ -3806,8 +3748,6 @@ Deno.serve(async (req) => {
             data_decolagem_ultimo_trecho: cctInfo.data_decolagem_ultimo_trecho || null,
             cnpj_consignatario: row.cnpj_consignatario || cctInfo.cnpj_consignatario || null,
             data_manifestacao_cct: cctInfo.data_manifestacao_cct || null,
-            leadcomex_status,
-            leadcomex_attempts: leadcomexInfo?.attempts || null,
           };
         });
 

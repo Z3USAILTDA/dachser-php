@@ -100,9 +100,6 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
     data_decolagem_ultimo_trecho: row.dep_datetime || row.data_decolagem_ultimo_trecho || null,
     dep_datetime: row.dep_datetime || null,
     data_manifestacao_cct: row.data_manifestacao_cct,
-    // LeadComex enrichment status
-    leadcomex_status: row.leadcomex_status || 'pending',
-    leadcomex_attempts: row.leadcomex_attempts || null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     // t_aereo_cct (RFB) enrichment
@@ -156,7 +153,7 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
       codigo_evento: row.ultimo_evento_codigo,
       data_hora_evento: row.ultimo_evento_data,
       descricao: row.ultimo_evento_descricao || row.ultimo_evento_codigo,
-      fonte: 'LEADCOMEX' as FonteEvento,
+      fonte: 'RFB' as FonteEvento,
       nivel_confianca: 'PRIMARIA' as NivelConfianca,
       aeroporto: row.aeroporto_destino || null,
       created_at: row.ultimo_evento_data,
