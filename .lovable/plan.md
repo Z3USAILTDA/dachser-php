@@ -1,59 +1,69 @@
 
 
-## Remoção do LeadComex do fluxo CCT
+## Espelhamento total: CCT como reflexo da `t_cct_hawb_api_atual`
 
-### Contexto
+### Problema atual
 
-O CCT atualmente consulta `t_leadcomex_enrichment_logs` para enriquecer status e exibe badges de "LeadComex status" no frontend. Como os dados agora vêm inteiramente de `t_cct_hawb_api_atual` / `t_cct_hawb_api_historico`, as referências ao LeadComex no fluxo do CCT devem ser removidas.
+O `get_cct_shipments` aplica 3 filtros que ocultam dados:
 
-**Nota**: As actions `get_leadcomex_logs`, `get_leadcomex_log_detail`, `get_leadcomex_logs_stats`, `reset_leadcomex_status`, `update_leadcomex_data` e a página `/air/leadcomex-logs` continuam existindo para consulta independente — não serão removidas.
+1. `WHERE h.data_consulta_sucesso IS NOT NULL AND h.response_http_status = 200` — exclui HAWBs com erro ou ainda não consultados
+2. `LIMIT 1000` — corta registros além de 1000
+3. O loop de merge itera sobre `rawShipments` (vindo do `t_master_dados`), não sobre `hawbApiMap` — HAWBs sem match no `t_master_dados` são descartados silenciosamente
 
----
+### Correções no arquivo `supabase/functions/mariadb-proxy/index.ts`
 
-### Arquivo 1: `supabase/functions/mariadb-proxy/index.ts`
+**1. Remover filtros na query principal (linha ~3418-3421)**
 
-**No `get_cct_shipments` (linhas ~3624-3710)**:
-- Remover a variável `leadcomexStatusMap` e toda a query a `t_leadcomex_enrichment_logs`
-- Remover a função `mapLeadcomexStatusToCCT` e o loop que popula o map
+```sql
+-- DE:
+WHERE h.data_consulta_sucesso IS NOT NULL
+  AND h.response_http_status = 200
+LIMIT 1000
 
-**No merge (linhas ~3769-3811)**:
-- Remover referências a `leadcomexInfo`, `leadcomex_status`, `leadcomex_attempts`, `situacao_portal`
-- O `status_cct_oficial` já vem do `json_partes_estoque` da `t_cct_hawb_api_atual` — não precisa mais do upgrade via LeadComex
-- Manter apenas: RFB (da API atual) + `t_cct_eventos_historico` (override) + `t_cct_shipments` (pesos/volumes)
+-- PARA:
+-- (sem WHERE, sem LIMIT — traz tudo)
+```
 
----
+**2. Inverter a lógica de merge (linhas ~3587-3618)**
 
-### Arquivo 2: `src/components/cct/ProcessosTable.tsx`
+Atualmente o loop principal itera sobre `rawShipments` (t_master_dados) e busca dados da API. Inverter: iterar sobre `hawbApiMap` (t_cct_hawb_api_atual) e enriquecer opcionalmente com t_master_dados.
 
-- Remover import e uso do `LeadComexStatusBadge` na coluna de status
-- Quando status for "AGUARDANDO", mostrar badge padrão em vez do LeadComex badge
+```typescript
+// Criar map de t_master_dados por HAWB
+const masterDadosMap = new Map();
+for (const row of (rawShipments || [])) {
+  masterDadosMap.set((row.house || '').trim(), row);
+}
 
----
+// Loop principal: cada HAWB da t_cct_hawb_api_atual
+const shipments = [];
+for (const [hawbKey, apiInfo] of hawbApiMap) {
+  const masterInfo = masterDadosMap.get(hawbKey) || {};
+  shipments.push({
+    id: masterInfo.id || hawbKey,
+    house: apiInfo.hawb || hawbKey,
+    master: apiInfo.mawb || masterInfo.master || '',
+    cliente: masterInfo.cliente || '',
+    nome_analista: masterInfo.nome_analista || null,
+    email_analista: masterInfo.email_analista || null,
+    emails_cliente: masterInfo.emails_cliente || null,
+    tipo_servico: masterInfo.tipo_servico || null,
+    // ... todos os campos da apiInfo como antes
+  });
+}
+```
 
-### Arquivo 3: `src/hooks/useCCTData.ts`
-
-- Remover campos `leadcomex_status` e `leadcomex_attempts` do `mapRowToProcessoCCT`
-- Remover `fonte: 'LEADCOMEX'` dos eventos fallback (usar `'RFB'` ou `'TRACKING'`)
-
----
-
-### Arquivo 4: `src/types/cct.ts`
-
-- Remover `leadcomex_status` e `leadcomex_attempts` do tipo `CCTShipment`
-- Remover `'LEADCOMEX'` do tipo `FonteEvento` (manter `'RFB' | 'TRACKING' | 'HANDLER' | 'MANUAL'`)
-
----
+**3. Manter o enriquecimento com `t_cct_shipments` e `t_cct_eventos_historico`** — sem alteração na lógica, apenas agora opera sobre o conjunto completo.
 
 ### Resumo
 
-| O que muda | Ação |
+| Filtro removido | Efeito |
 |---|---|
-| Query a `t_leadcomex_enrichment_logs` no `get_cct_shipments` | Removida |
-| `leadcomexStatusMap` e `mapLeadcomexStatusToCCT` | Removidos |
-| Campos `leadcomex_status`/`leadcomex_attempts` no merge | Removidos |
-| `LeadComexStatusBadge` no ProcessosTable | Removido |
-| Tipo `CCTShipment` (leadcomex fields) | Removidos |
-| Página LeadcomexLogsPage e actions de logs | Mantidos (uso independente) |
+| `data_consulta_sucesso IS NOT NULL` | Mostra HAWBs ainda não consultados ou com falha |
+| `response_http_status = 200` | Mostra HAWBs com erro de API |
+| `LIMIT 1000` | Mostra todos os registros |
+| Merge baseado em t_master_dados | HAWBs sem match no t_master_dados aparecem (sem cliente/analista) |
 
-**4 arquivos alterados.**
+**1 arquivo alterado:** `supabase/functions/mariadb-proxy/index.ts`
+**Nenhuma alteração no frontend.**
 
