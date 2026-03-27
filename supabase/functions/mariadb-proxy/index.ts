@@ -3661,51 +3661,9 @@ Deno.serve(async (req) => {
             WHERE TRIM(house) IN (${houseFilter})
           `);
           
-          // Query LeadComex enrichment logs
-          const leadcomexLogs = await client.query(`
-            SELECT 
-              l.hawb,
-              l.success,
-              l.total_attempts,
-              l.lc_situacao_portal
-            FROM ${database}.t_leadcomex_enrichment_logs l
-            INNER JOIN (
-              SELECT hawb, MAX(created_at) as max_created
-              FROM ${database}.t_leadcomex_enrichment_logs
-              WHERE hawb IN (${houseFilter})
-              GROUP BY hawb
-            ) latest ON l.hawb = latest.hawb AND l.created_at = latest.max_created
-          `);
-          
           for (const cct of (cctData || [])) {
             const houseKey = (cct.house || '').trim().toUpperCase();
             cctDataMap.set(houseKey, cct);
-          }
-          
-          // Map LeadComex situacao_portal to CCT official status
-          const mapLeadcomexStatusToCCT = (situacao: string | null): string | null => {
-            if (!situacao) return null;
-            const statusMap: Record<string, string> = {
-              'Informado': 'MANIFESTADA',
-              'Informada': 'MANIFESTADA',
-              'Em área de transferência': 'EM_AREA_TRANSFERENCIA',
-              'Chegada informada': 'INFORMADA',
-              'Recepcionado': 'RECEPCIONADA',
-              'Em trânsito terrestre': 'EM_TRANSITO_TERRESTRE',
-              'Entregue': 'ENTREGUE',
-              'Processado': 'ENTREGUE',
-            };
-            return statusMap[situacao] || null;
-          };
-          
-          for (const log of (leadcomexLogs || [])) {
-            const hawbKey = (log.hawb || '').trim().toUpperCase();
-            leadcomexStatusMap.set(hawbKey, {
-              success: log.success === 1 || log.success === true,
-              attempts: log.total_attempts || 1,
-              situacao_portal: log.lc_situacao_portal || null,
-              status_cct: mapLeadcomexStatusToCCT(log.lc_situacao_portal)
-            });
           }
           
           // Add tratamento to shipments
