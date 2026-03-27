@@ -6609,51 +6609,43 @@ Deno.serve(async (req) => {
 
           console.log(`CCT: Found ${events?.length || 0} events in t_cct_eventos_historico for AWB ${queryAwb}`);
           
-      // Also try to get events from t_aereo_cct partesEstoque using MAWB
-          // t_aereo_cct.identificacao stores MAWB (e.g. 020-17606035), not HAWB
+          // Also try to get RFB events from t_cct_hawb_api_historico snapshots
           let rfbEvents: any[] = [];
           try {
-            // Use master (MAWB) if provided, otherwise lookup from t_master_dados
-            let mawbForRfb = (body as any).master || '';
-            if (!mawbForRfb) {
-              try {
-                const mawbLookup = await client.query(`
-                  SELECT TRIM(master) as master FROM ${database}.t_master_dados
-                  WHERE TRIM(house) = TRIM(?) LIMIT 1
-                `, [queryAwb]);
-                if (mawbLookup && mawbLookup.length > 0) {
-                  mawbForRfb = mawbLookup[0].master;
-                }
-              } catch (lookupErr) {
-                console.warn('CCT: Could not lookup MAWB from HAWB:', lookupErr);
-              }
-            }
+            // Normalize HAWB for lookup
+            const hawbNorm = queryAwb.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
             
-            console.log(`CCT: Looking up RFB events with MAWB: ${mawbForRfb} (HAWB: ${queryAwb})`);
+            console.log(`CCT: Looking up RFB events from t_cct_hawb_api_historico for HAWB: ${queryAwb} (normalized: ${hawbNorm})`);
             
-            const rfbRows = mawbForRfb ? await client.query(`
-              SELECT identificacao, partesEstoque, dataEmissao
-              FROM ${database}.t_aereo_cct
-              WHERE identificacao = ?
-              LIMIT 1
-            `, [mawbForRfb]) : [];
+            const histSnapshots = await client.query(`
+              SELECT id, hawb, consulted_at, json_partes_estoque, json_bloqueios_ativos, json_bloqueios_baixados
+              FROM ${database}.t_cct_hawb_api_historico
+              WHERE hawb_normalizado = ?
+              ORDER BY consulted_at DESC
+              LIMIT 50
+            `, [hawbNorm]);
             
-            if (rfbRows && rfbRows.length > 0 && rfbRows[0].partesEstoque) {
-              let partes: any[] = [];
-              try {
-                partes = typeof rfbRows[0].partesEstoque === 'string' 
-                  ? JSON.parse(rfbRows[0].partesEstoque) 
-                  : rfbRows[0].partesEstoque;
-              } catch {}
+            if (histSnapshots && histSnapshots.length > 0) {
+              const existingCodes = new Set((events || []).map((e: any) => e.codigo_evento));
               
-              if (Array.isArray(partes)) {
-                // Map each partesEstoque entry as an RFB event
-                const existingCodes = new Set((events || []).map((e: any) => e.codigo_evento));
+              // Compare consecutive snapshots to detect status transitions
+              const seenStatuses = new Set<string>();
+              
+              for (let i = 0; i < histSnapshots.length; i++) {
+                const snap = histSnapshots[i];
+                let partes: any[] = [];
+                try {
+                  partes = typeof snap.json_partes_estoque === 'string' 
+                    ? JSON.parse(snap.json_partes_estoque) 
+                    : (snap.json_partes_estoque || []);
+                } catch {}
+                
+                if (!Array.isArray(partes)) continue;
+                
                 for (const pe of partes) {
                   const situacao = pe?.situacaoAtual || pe?.situacao || pe?.status;
                   if (!situacao) continue;
                   
-                  // Map situacao to codigo_evento
                   const lower = situacao.toLowerCase().trim();
                   let codigoEvento = situacao.toUpperCase().replace(/\s+/g, '_');
                   if (lower.includes('manifestada')) codigoEvento = 'MANIFESTADO';
@@ -6662,28 +6654,31 @@ Deno.serve(async (req) => {
                   else if (lower.includes('entregue')) codigoEvento = 'ENTREGUE';
                   else if (lower.includes('transferência') || lower.includes('transferencia')) codigoEvento = 'AREA_TRANSFERENCIA';
                   
-                  // Skip if already exists from t_cct_eventos_historico
-                  if (existingCodes.has(codigoEvento)) continue;
+                  // Skip duplicates
+                  if (existingCodes.has(codigoEvento) || seenStatuses.has(codigoEvento)) continue;
+                  seenStatuses.add(codigoEvento);
                   
-                  const fallbackEventDate = pe?.dataHora || pe?.data || rfbRows?.[0]?.dataEmissao || events?.[events.length - 1]?.data_hora_evento || '1970-01-01T00:00:00.000Z';
-
+                  const eventDate = snap.consulted_at || pe?.dataHora || pe?.data || '1970-01-01T00:00:00.000Z';
+                  
                   rfbEvents.push({
-                    id: `rfb-${queryAwb}-${codigoEvento}`,
+                    id: `rfb-${queryAwb}-${codigoEvento}-${snap.id}`,
                     awb: queryAwb,
                     codigo_evento: codigoEvento,
                     descricao_evento: `${situacao} (RFB)`,
-                    data_hora_evento: fallbackEventDate,
+                    data_hora_evento: eventDate,
                     fonte: 'RFB',
                     aeroporto: pe?.aeroporto || null,
                     nivel_confianca: 'COMPLEMENTAR',
-                    created_at: fallbackEventDate,
+                    created_at: eventDate,
                   });
                   existingCodes.add(codigoEvento);
                 }
               }
+              
+              console.log(`CCT: Generated ${rfbEvents.length} RFB events from ${histSnapshots.length} historical snapshots`);
             }
           } catch (rfbEvtErr) {
-            console.warn('CCT: Error fetching t_aereo_cct events (non-fatal):', rfbEvtErr);
+            console.warn('CCT: Error fetching t_cct_hawb_api_historico events (non-fatal):', rfbEvtErr);
           }
           
           const allEvents = [...(events || []), ...rfbEvents];
