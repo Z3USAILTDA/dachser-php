@@ -13414,32 +13414,15 @@ Deno.serve(async (req) => {
       }
 
       // ==================== CCT: Get Pending HAWBs for LeadComex Enrichment ====================
-      // ALIGNED WITH get_cct_shipments: Use t_aereo_ws_firecrawl as primary source (same as tracking)
+      // ALIGNED WITH get_cct_shipments: Use t_cct_hawb_api_atual as primary source
       case 'get_cct_pending_hawbs': {
         const limit = body.limit || 500;
         const hawbFilter = body.hawb_filter || null;
         const processAll = body.process_all === true;
         const prioritizePending = body.prioritize_pending === true;
         
-        // Same airline codes as get_cct_shipments
-        const registeredAirlineCodes = [
-          '001', '005', '006', '014', '016', '020', '023', '045', '047', '055',
-          '057', '072', '074', '075', '081', '082', '086', '112', '118', '125',
-          '139', '157', '160', '172', '176', '180', '205', '217', '235', '254',
-          '263', '369', '399', '406', '416', '489', '549', '577', '615', '695',
-          '724', '729', '881', '996', '999'
-        ];
-        
-        const cctStatuses = "'DEP','ARR','ATA','RCF','NFD','AWD','DLV','POD','FRO','DIS'";
-        const errorStatuses = [
-          'COMPANY_NOT_REGISTERED', 'NOT_FOUND', 'ERRO', 'ERROR', 'INVALID_AWB',
-          'API_ERROR', 'TIMEOUT', 'PARSE_ERROR', 'SIS', 'PENDING', 'PROCESSING',
-          'UNKNOWN', 'N/A', 'NULL'
-        ];
-        const errorStatusFilter = errorStatuses.map(s => `'${s}'`).join(',');
-        
         let rows;
-        let awbDateMap: Record<string, string> = {};
+        let hawbDateMap: Record<string, string> = {};
         
         if (hawbFilter) {
           // Specific HAWB reprocessing
@@ -13458,56 +13441,46 @@ Deno.serve(async (req) => {
             LIMIT ${limit}
           `);
         } else {
-          // Step 1: Get AWBs from t_aereo_ws_firecrawl with CCT-relevant statuses (sliding 30-day window)
-          const awbAirlineLike = registeredAirlineCodes.map(c => `awb LIKE '${c}-%'`).join(' OR ');
-          const awbsResult = await client.query(`
-            SELECT ws.awb, ws.scraped_at
-            FROM ${database}.t_aereo_ws_firecrawl ws
-            INNER JOIN (
-              SELECT awb, MAX(id) as max_id
-              FROM ${database}.t_aereo_ws_firecrawl
-              WHERE scraped_at >= NOW() - INTERVAL 30 DAY
-              AND last_status_code IN (${cctStatuses})
-              AND last_status_code NOT IN (${errorStatusFilter})
-              AND (${awbAirlineLike})
-              GROUP BY awb
-            ) latest ON ws.awb = latest.awb AND ws.id = latest.max_id
+          // Step 1: Get HAWBs from t_cct_hawb_api_atual
+          console.log(`[get_cct_pending_hawbs] Fetching HAWBs from t_cct_hawb_api_atual...`);
+          const hawbApiResult = await client.query(`
+            SELECT h.hawb, h.hawb_normalizado, h.consulted_at
+            FROM ${database}.t_cct_hawb_api_atual h
+            WHERE h.data_consulta_sucesso IS NOT NULL
+              AND h.response_http_status = 200
           `);
           
-          const awbList = (awbsResult || []).map((r: any) => r.awb).filter((a: string) => a && a.trim() !== '');
+          const hawbNormList = (hawbApiResult || []).map((r: any) => (r.hawb_normalizado || r.hawb || '').trim()).filter((h: string) => h !== '');
           
-          // Populate AWB -> scraped_at map to use as dep_datetime
-          for (const r of (awbsResult || []) as any[]) {
-            if (r.awb && r.scraped_at) {
-              awbDateMap[r.awb] = r.scraped_at;
+          // Populate HAWB -> consulted_at map
+          for (const r of (hawbApiResult || []) as any[]) {
+            const key = (r.hawb_normalizado || r.hawb || '').trim();
+            if (key && r.consulted_at) {
+              hawbDateMap[key] = r.consulted_at;
             }
           }
           
-          if (awbList.length === 0) {
+          if (hawbNormList.length === 0) {
             result = { success: true, shipments: [], total: 0 };
             break;
           }
           
-          const awbFilterStr = awbList.map((a: string) => `'${a.replace(/'/g, "''")}'`).join(',');
+          const hawbFilterStr = hawbNormList.map((h: string) => `'${h.replace(/'/g, "''")}'`).join(',');
           
           // Build extra WHERE conditions
           let extraWhere = '';
           let orderBy = 'ORDER BY m.data_insert DESC';
           
           if (prioritizePending) {
-            // Continuous polling: query ALL processes including delivered, no cooldowns
             extraWhere = '';
-            // Rotate: oldest insert first for fair distribution
             orderBy = `ORDER BY m.data_insert ASC`;
           } else if (!processAll) {
             extraWhere = 'AND (cct.peso_declarado IS NULL OR cct.cnpj_consignatario IS NULL)';
           }
           
-          const failCountJoin = '';
-          
           console.log(`[get_cct_pending_hawbs] Fetching HAWBs from t_master_dados (${processAll ? 'ALL' : 'pending'}${prioritizePending ? ', continuous polling, no cooldown' : ''})...`);
           
-          // Step 2: Get HAWBs from t_master_dados for these AWBs
+          // Step 2: Get HAWBs from t_master_dados matched by HAWB
           rows = await client.query(`
             SELECT DISTINCT
               TRIM(m.hawb) as house,
@@ -13517,8 +13490,7 @@ Deno.serve(async (req) => {
             FROM ${database}.t_master_dados m
             LEFT JOIN ${database}.t_cct_shipments cct 
               ON TRIM(m.hawb) COLLATE utf8mb4_unicode_ci = TRIM(cct.house) COLLATE utf8mb4_unicode_ci
-            ${failCountJoin}
-            WHERE m.mawb IN (${awbFilterStr})
+            WHERE TRIM(m.hawb) IN (${hawbFilterStr})
             AND m.tipo_processo = 'AIR IMPORT'
             AND m.data_insert >= NOW() - INTERVAL 30 DAY
             AND m.hawb IS NOT NULL
@@ -13537,7 +13509,7 @@ Deno.serve(async (req) => {
           shipments: (rows || []).map((row: any) => ({
             house: row.house,
             master: row.master,
-            dep_datetime: awbDateMap?.[row.master] || row.dep_datetime || null,
+            dep_datetime: hawbDateMap?.[(row.house || '').trim()] || row.dep_datetime || null,
             arr_datetime: null,
             status: row.status || null,
             peso_declarado: row.peso_declarado,
