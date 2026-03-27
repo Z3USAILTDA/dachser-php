@@ -3416,9 +3416,6 @@ Deno.serve(async (req) => {
             h.json_mawb_awb_associados, h.json_itens_carga,
             h.json_contatos_consignatario, h.json_documentos_saida
           FROM ${database}.t_cct_hawb_api_atual h
-          WHERE h.data_consulta_sucesso IS NOT NULL
-            AND h.response_http_status = 200
-          LIMIT 1000
         `);
         
         console.log(`CCT Step 1: Found ${(hawbApiData || []).length} HAWBs from t_cct_hawb_api_atual`);
