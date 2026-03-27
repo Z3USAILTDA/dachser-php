@@ -3864,8 +3864,6 @@ Deno.serve(async (req) => {
             data_manifestacao_cct: row.data_manifestacao_cct,
             created_at: row.ultimo_evento_data || new Date().toISOString(),
             updated_at: row.ultimo_evento_data || new Date().toISOString(),
-            leadcomex_status: row.leadcomex_status || 'pending',
-            leadcomex_attempts: row.leadcomex_attempts || null,
             ruc: row.ruc || null,
             recinto_aduaneiro: row.recinto_aduaneiro || null,
             numero_voo: row.numero_voo || null,
