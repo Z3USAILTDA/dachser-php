@@ -3597,7 +3597,8 @@ Deno.serve(async (req) => {
         // ==================== MERGE: Combine hawbApiMap + dadosAereoMap ====================
         const enrichedShipments = [];
         for (const [hawbKey, apiInfo] of hawbApiMap) {
-          const aereoInfo = dadosAereoMap.get(hawbKey) || {};
+          const aereoInfo = dadosAereoMap.get(hawbKey);
+          if (!aereoInfo) continue; // Skip HAWBs not found in t_dados_aereo
           
           const statusCctOficial = apiInfo?.rfb_status_cct || 'AGUARDANDO_CONSULTA';
           
