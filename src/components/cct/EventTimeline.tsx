@@ -227,9 +227,6 @@ export function EventTimeline({ eventos }: EventTimelineProps) {
                       <span className={cn("font-mono font-medium", colors.icon)}>
                         {formatEventCode(evento.codigo_evento)}
                       </span>
-                      <Badge variant="outline" className={cn("text-xs", fonte.color)}>
-                        {fonte.label}
-                      </Badge>
                     </div>
                     
                     {/* Right side - Date and Time */}
