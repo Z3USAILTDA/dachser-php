@@ -6544,105 +6544,116 @@ Deno.serve(async (req) => {
           );
         }
 
-        console.log('Fetching CCT events for AWB from t_cct_eventos_historico:', queryAwb);
+        console.log('Fetching CCT events for AWB from t_cct_hawb_api_historico only:', queryAwb);
 
-        // Query from t_cct_eventos_historico (CCT-specific tracking history table)
         try {
-          const events = await client.query(`
-            SELECT 
-              id,
-              TRIM(awb) as awb,
-              codigo_evento,
-              descricao_evento,
-              data_hora_evento,
-              fonte,
-              aeroporto,
-              nivel_confianca,
-              created_at
-            FROM ${database}.t_cct_eventos_historico
-            WHERE TRIM(awb) = TRIM(?)
-            ORDER BY data_hora_evento DESC, created_at DESC, id DESC
-            LIMIT 100
-          `, [queryAwb]);
-
-          console.log(`CCT: Found ${events?.length || 0} events in t_cct_eventos_historico for AWB ${queryAwb}`);
+          // Normalize HAWB for lookup
+          const hawbNorm = queryAwb.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
           
-          // Also try to get RFB events from t_cct_hawb_api_historico snapshots
-          let rfbEvents: any[] = [];
-          try {
-            // Normalize HAWB for lookup
-            const hawbNorm = queryAwb.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+          // 1. Fetch historical snapshots ordered chronologically ASC
+          const histSnapshots = await client.query(`
+            SELECT id, hawb, consulted_at, json_partes_estoque
+            FROM ${database}.t_cct_hawb_api_historico
+            WHERE hawb_normalizado = ?
+            ORDER BY consulted_at ASC
+            LIMIT 200
+          `, [hawbNorm]);
+          
+          console.log(`CCT: Found ${histSnapshots?.length || 0} historical snapshots for HAWB ${queryAwb}`);
+          
+          // Helper: map situacao text to codigo_evento
+          const mapSituacao = (situacao: string): string => {
+            const lower = situacao.toLowerCase().trim();
+            if (lower.includes('manifestada')) return 'MANIFESTADO';
+            if (lower.includes('informada')) return 'CHEGADA_INFORMADA';
+            if (lower.includes('recepcionada')) return 'RECEPCIONADO';
+            if (lower.includes('entregue')) return 'ENTREGUE';
+            if (lower.includes('transferência') || lower.includes('transferencia')) return 'AREA_TRANSFERENCIA';
+            if (lower.includes('trânsito terrestre') || lower.includes('transito terrestre')) return 'EM_TRANSITO_TERRESTRE';
+            return situacao.toUpperCase().replace(/\s+/g, '_');
+          };
+          
+          // Helper: extract situacaoAtual from json_partes_estoque
+          const extractSituacao = (jsonField: any): { situacao: string; aeroporto: string | null } | null => {
+            let partes: any[] = [];
+            try {
+              partes = typeof jsonField === 'string' ? JSON.parse(jsonField) : (jsonField || []);
+            } catch { return null; }
+            if (!Array.isArray(partes) || partes.length === 0) return null;
+            const pe = partes[0];
+            const situacao = pe?.situacaoAtual || pe?.situacao || pe?.status;
+            if (!situacao) return null;
+            return { situacao, aeroporto: pe?.aeroporto || null };
+          };
+          
+          // 2. Compare consecutive snapshots to detect transitions
+          const allEvents: any[] = [];
+          let previousStatus: string | null = null;
+          
+          for (const snap of (histSnapshots || [])) {
+            const extracted = extractSituacao(snap.json_partes_estoque);
+            if (!extracted) continue;
             
-            console.log(`CCT: Looking up RFB events from t_cct_hawb_api_historico for HAWB: ${queryAwb} (normalized: ${hawbNorm})`);
+            const codigoEvento = mapSituacao(extracted.situacao);
             
-            const histSnapshots = await client.query(`
-              SELECT id, hawb, consulted_at, json_partes_estoque, json_bloqueios_ativos, json_bloqueios_baixados
-              FROM ${database}.t_cct_hawb_api_historico
-              WHERE hawb_normalizado = ?
-              ORDER BY consulted_at DESC
-              LIMIT 50
-            `, [hawbNorm]);
-            
-            if (histSnapshots && histSnapshots.length > 0) {
-              const existingCodes = new Set((events || []).map((e: any) => e.codigo_evento));
-              
-              // Compare consecutive snapshots to detect status transitions
-              const seenStatuses = new Set<string>();
-              
-              for (let i = 0; i < histSnapshots.length; i++) {
-                const snap = histSnapshots[i];
-                let partes: any[] = [];
-                try {
-                  partes = typeof snap.json_partes_estoque === 'string' 
-                    ? JSON.parse(snap.json_partes_estoque) 
-                    : (snap.json_partes_estoque || []);
-                } catch {}
-                
-                if (!Array.isArray(partes)) continue;
-                
-                for (const pe of partes) {
-                  const situacao = pe?.situacaoAtual || pe?.situacao || pe?.status;
-                  if (!situacao) continue;
-                  
-                  const lower = situacao.toLowerCase().trim();
-                  let codigoEvento = situacao.toUpperCase().replace(/\s+/g, '_');
-                  if (lower.includes('manifestada')) codigoEvento = 'MANIFESTADO';
-                  else if (lower.includes('informada')) codigoEvento = 'CHEGADA_INFORMADA';
-                  else if (lower.includes('recepcionada')) codigoEvento = 'RECEPCIONADO';
-                  else if (lower.includes('entregue')) codigoEvento = 'ENTREGUE';
-                  else if (lower.includes('transferência') || lower.includes('transferencia')) codigoEvento = 'AREA_TRANSFERENCIA';
-                  
-                  // Skip duplicates
-                  if (existingCodes.has(codigoEvento) || seenStatuses.has(codigoEvento)) continue;
-                  seenStatuses.add(codigoEvento);
-                  
-                  const eventDate = snap.consulted_at || pe?.dataHora || pe?.data || '1970-01-01T00:00:00.000Z';
-                  
-                  rfbEvents.push({
-                    id: `rfb-${queryAwb}-${codigoEvento}-${snap.id}`,
-                    awb: queryAwb,
-                    codigo_evento: codigoEvento,
-                    descricao_evento: `${situacao} (RFB)`,
-                    data_hora_evento: eventDate,
-                    fonte: 'RFB',
-                    aeroporto: pe?.aeroporto || null,
-                    nivel_confianca: 'COMPLEMENTAR',
-                    created_at: eventDate,
-                  });
-                  existingCodes.add(codigoEvento);
-                }
-              }
-              
-              console.log(`CCT: Generated ${rfbEvents.length} RFB events from ${histSnapshots.length} historical snapshots`);
+            if (codigoEvento !== previousStatus) {
+              const eventDate = snap.consulted_at || '1970-01-01T00:00:00.000Z';
+              allEvents.push({
+                id: `rfb-${queryAwb}-${codigoEvento}-${snap.id}`,
+                awb: queryAwb,
+                codigo_evento: codigoEvento,
+                descricao_evento: extracted.situacao,
+                data_hora_evento: eventDate,
+                fonte: 'RFB',
+                aeroporto: extracted.aeroporto,
+                nivel_confianca: 'PRIMARIA',
+                created_at: eventDate,
+              });
+              previousStatus = codigoEvento;
             }
-          } catch (rfbEvtErr) {
-            console.warn('CCT: Error fetching t_cct_hawb_api_historico events (non-fatal):', rfbEvtErr);
           }
           
-          const allEvents = [...(events || []), ...rfbEvents];
+          // 3. Check t_cct_hawb_api_atual for the latest status not yet in history
+          try {
+            const atualRows = await client.query(`
+              SELECT id, hawb, consulted_at, json_partes_estoque
+              FROM ${database}.t_cct_hawb_api_atual
+              WHERE hawb_normalizado = ?
+              LIMIT 1
+            `, [hawbNorm]);
+            
+            if (atualRows && atualRows.length > 0) {
+              const atual = atualRows[0];
+              const extracted = extractSituacao(atual.json_partes_estoque);
+              if (extracted) {
+                const codigoEvento = mapSituacao(extracted.situacao);
+                if (codigoEvento !== previousStatus) {
+                  const eventDate = atual.consulted_at || new Date().toISOString();
+                  allEvents.push({
+                    id: `rfb-${queryAwb}-${codigoEvento}-atual`,
+                    awb: queryAwb,
+                    codigo_evento: codigoEvento,
+                    descricao_evento: extracted.situacao,
+                    data_hora_evento: eventDate,
+                    fonte: 'RFB',
+                    aeroporto: extracted.aeroporto,
+                    nivel_confianca: 'PRIMARIA',
+                    created_at: eventDate,
+                  });
+                }
+              }
+            }
+          } catch (atualErr) {
+            console.warn('CCT: Error fetching t_cct_hawb_api_atual for timeline (non-fatal):', atualErr);
+          }
+          
+          // 4. Sort by date DESC for frontend
+          allEvents.sort((a: any, b: any) => new Date(b.data_hora_evento).getTime() - new Date(a.data_hora_evento).getTime());
+          
+          console.log(`CCT: Generated ${allEvents.length} events from snapshots for AWB ${queryAwb}`);
           result = { success: true, data: allEvents };
         } catch (tableErr) {
-          console.log('Error fetching from t_cct_eventos_historico:', tableErr);
+          console.log('Error fetching CCT events from snapshots:', tableErr);
           result = { success: true, data: [] };
         }
         break;
