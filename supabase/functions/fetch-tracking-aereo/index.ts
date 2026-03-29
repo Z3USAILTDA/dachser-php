@@ -46,32 +46,11 @@ serve(async (req) => {
 
     // Main query: fetch all tracking data from t_dados_aereo + t_aereo_scraper + t_eventos_awb + t_description_eventos
     const sql = `
-      SELECT
-        x.awb_number,
-        x.hawb_number,
-        x.consignee_nome,
-        x.clerk,
-        x.clerk_email,
-        x.etd,
-        x.last_flight,
-        x.origin,
-        x.destination,
-        x.timeline_json,
-        x.last_status_code,
-        x.description_last,
-        x.location_last,
-        x.description_penultimate,
-        x.location_penultimate,
-        x.penultimo_code,
-        x.ultimo_code,
-        x.penultimo_evento,
-        x.ultimo_evento,
-        CASE
-          WHEN x.ultimo_evento >= x.penultimo_evento THEN x.ultimo_code
-          ELSE x.penultimo_code
-        END AS last_event
-      FROM (
-        SELECT
+      select
+        *
+      from
+        (
+        select
           tda.awb_number,
           tda.hawb_number,
           tda.consignee_nome,
@@ -83,31 +62,54 @@ serve(async (req) => {
           tdaf.destination,
           tdaf.timeline_json,
           tdaf.last_status_code,
-          tea.descricao_en AS ultimo_desc,
-          tea.code AS ultimo_code,
-          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[0].description')) AS description_last,
-          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[0].location')) AS location_last,
-          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[1].description')) AS description_penultimate,
-          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[1].location')) AS location_penultimate,
-          a.descricao_en AS penultimo_des,
-          a.code AS penultimo_code,
-          CASE
-            WHEN SUBSTRING(JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[1].description')), 1, 5) = SUBSTRING(a.descricao_en, 1, 5) THEN a.id
-          END AS penultimo_evento,
-          CASE
-            WHEN SUBSTRING(tde.descricao, 1, 5) = SUBSTRING(tea.descricao_en, 1, 5) THEN tea.id
-          END AS ultimo_evento,
+          tea.descricao_en,
+          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[0].description')) as description_last,
+          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[0].location')) as location_last,
+          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[1].description')) as description_penultimate,
+          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[1].location')) as location_penultimate,
+          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[2].description')) as description_antepenultimate,
+          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[2].location')) as location_antepenultimate,
+          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[3].description')) as description_before_antepenultimate,
+          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[3].location')) as location_before_antepenultimate,
+          a.descricao_en penultimo_des,
+          a.code penultimo_code,
+          b.descricao_en antepenultimo_des,
+          b.code antepenultimo_code,
+          c.descricao_en antes_antepenultimo_des,
+          c.code antes_antepenultimo_code,
+          tea.descricao_en ultimo_desc,
+          tea.code ultimo_code,
+          tde.descricao,
+          case
+            when substring(JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[1].description')), 1, 5) = substring(a.descricao_en, 1, 5) then a.id
+          end as penultimo_evento,
+          case
+            when substring(JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[2].description')), 1, 5) = substring(b.descricao_en, 1, 5) then b.id
+          end as antepenultimo_evento,
+          case
+            when substring(JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[3].description')), 1, 5) = substring(c.descricao_en, 1, 5) then c.id
+          end as antes_antepenultimo_evento,
+          case
+            when substring(tde.descricao, 1, 5) = substring(teau.descricao_en, 1, 5) then tea.id
+          end as ultimo_evento,
           tde.description
-        FROM dados_dachser.t_dados_aereo tda
-        LEFT JOIN dados_dachser.t_aereo_scraper tdaf
-          ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
-        LEFT JOIN dados_dachser.t_eventos_awb tea
-          ON tea.code COLLATE utf8mb4_unicode_ci = tdaf.last_status_code COLLATE utf8mb4_unicode_ci
-        LEFT JOIN dados_dachser.t_eventos_awb a
-          ON SUBSTRING(a.descricao_en, 1, 5) = SUBSTRING(JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[1].description')), 1, 5)
-        LEFT JOIN dados_dachser.t_description_eventos tde
-          ON tde.description COLLATE utf8mb4_unicode_ci = JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[0].description'))
-      ) x
+        from
+          dados_dachser.t_dados_aereo tda
+        left join dados_dachser.t_aereo_scraper tdaf
+          on tdaf.awb collate utf8mb4_unicode_ci = tda.awb_number collate utf8mb4_unicode_ci
+        left join dados_dachser.t_eventos_awb tea
+          on tea.code collate utf8mb4_unicode_ci = tdaf.last_status_code collate utf8mb4_unicode_ci
+        left join dados_dachser.t_eventos_awb a
+          on substring(a.descricao_en, 1, 5) = substring(JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[1].description')), 1, 5)
+        left join dados_dachser.t_eventos_awb b
+          on substring(b.descricao_en, 1, 5) = substring(JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[2].description')), 1, 5)
+        left join dados_dachser.t_eventos_awb c
+          on substring(c.descricao_en, 1, 5) = substring(JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[3].description')), 1, 5)
+        left join dados_dachser.t_description_eventos tde
+          on tde.description collate utf8mb4_unicode_ci = JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[0].description'))
+        left join dados_dachser.t_eventos_awb teau
+          on teau.code collate utf8mb4_unicode_ci = tde.code
+        ) x
     `;
 
     console.log('Executing tracking aereo query...');
@@ -136,6 +138,27 @@ serve(async (req) => {
         lastEventDate = lastEvt?.date || lastEvt?.timestamp || null;
       }
 
+      // Determine last_event using hierarchy rules
+      let lastEvent = '';
+      if (row.ultimo_code === 'DLV' || row.penultimo_code === 'DLV' || 
+          row.antepenultimo_code === 'DLV' || row.antes_antepenultimo_code === 'DLV') {
+        lastEvent = 'DLV';
+      } else {
+        const candidates = [
+          { id: row.ultimo_evento, code: row.ultimo_code },
+          { id: row.penultimo_evento, code: row.penultimo_code },
+          { id: row.antepenultimo_evento, code: row.antepenultimo_code },
+          { id: row.antes_antepenultimo_evento, code: row.antes_antepenultimo_code },
+        ].filter(c => c.id != null);
+
+        if (candidates.length > 0) {
+          const winner = candidates.reduce((a, b) => (Number(a.id) >= Number(b.id) ? a : b));
+          lastEvent = winner.code || '';
+        } else {
+          lastEvent = row.ultimo_code || row.last_status_code || '';
+        }
+      }
+
       return {
         awb_number: row.awb_number || '',
         hawb_number: row.hawb_number || '',
@@ -148,7 +171,7 @@ serve(async (req) => {
         destination: row.destination || '',
         timeline_json: timeline,
         last_status_code: row.last_status_code || '',
-        last_event: row.last_event || row.ultimo_code || row.last_status_code || '',
+        last_event: lastEvent,
         last_event_description: row.description_last || '',
         last_event_date: lastEventDate,
         last_event_location: row.location_last || '',
