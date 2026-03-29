@@ -138,6 +138,27 @@ serve(async (req) => {
         lastEventDate = lastEvt?.date || lastEvt?.timestamp || null;
       }
 
+      // Determine last_event using hierarchy rules
+      let lastEvent = '';
+      if (row.ultimo_code === 'DLV' || row.penultimo_code === 'DLV' || 
+          row.antepenultimo_code === 'DLV' || row.antes_antepenultimo_code === 'DLV') {
+        lastEvent = 'DLV';
+      } else {
+        const candidates = [
+          { id: row.ultimo_evento, code: row.ultimo_code },
+          { id: row.penultimo_evento, code: row.penultimo_code },
+          { id: row.antepenultimo_evento, code: row.antepenultimo_code },
+          { id: row.antes_antepenultimo_evento, code: row.antes_antepenultimo_code },
+        ].filter(c => c.id != null);
+
+        if (candidates.length > 0) {
+          const winner = candidates.reduce((a, b) => (Number(a.id) >= Number(b.id) ? a : b));
+          lastEvent = winner.code || '';
+        } else {
+          lastEvent = row.ultimo_code || row.last_status_code || '';
+        }
+      }
+
       return {
         awb_number: row.awb_number || '',
         hawb_number: row.hawb_number || '',
@@ -150,7 +171,7 @@ serve(async (req) => {
         destination: row.destination || '',
         timeline_json: timeline,
         last_status_code: row.last_status_code || '',
-        last_event: row.last_event || row.ultimo_code || row.last_status_code || '',
+        last_event: lastEvent,
         last_event_description: row.description_last || '',
         last_event_date: lastEventDate,
         last_event_location: row.location_last || '',
