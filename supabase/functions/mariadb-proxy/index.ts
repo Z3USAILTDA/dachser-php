@@ -3564,7 +3564,7 @@ Deno.serve(async (req) => {
             c.json_bloqueios_ativos
           FROM base_cct c
           LEFT JOIN aereo_latest a
-            ON TRIM(a.hawb) = TRIM(c.hawb)
+            ON TRIM(a.hawb) COLLATE utf8mb4_unicode_ci = TRIM(c.hawb) COLLATE utf8mb4_unicode_ci
           WHERE a.hawb IS NOT NULL
           ORDER BY c.consulted_at DESC, c.id DESC
         `);
@@ -3863,7 +3863,7 @@ Deno.serve(async (req) => {
             c.qtd_bloqueios_ativos,
             c.json_frete, c.json_manuseios_especiais, c.json_bloqueios_ativos
           FROM base_cct c
-          LEFT JOIN aereo_latest a ON TRIM(a.hawb) = TRIM(c.hawb)
+          LEFT JOIN aereo_latest a ON TRIM(a.hawb) COLLATE utf8mb4_unicode_ci = TRIM(c.hawb) COLLATE utf8mb4_unicode_ci
           WHERE ${hawbFilter}
           LIMIT 1
         `);
