@@ -1,25 +1,62 @@
 
 
-## Corrigir erro de collation no JOIN do CCT
+## Corrigir divergência de status e remover badges de fonte
 
-### Causa raiz
+### Arquivos alterados
 
-Linha 3567 do `mariadb-proxy/index.ts`:
-```sql
-ON TRIM(a.hawb) = TRIM(c.hawb)
+**2 arquivos:**
+1. `src/pages/cct/ProcessoTimeline.tsx`
+2. `src/components/cct/EventTimeline.tsx`
+
+---
+
+### Alteração 1 — `ProcessoTimeline.tsx` (linhas 69-74)
+
+**O que muda:** O `effectiveStatus` deixa de usar `getLatestTimelineStatus` e passa a usar diretamente o status oficial do processo.
+
+**Código atual:**
+```typescript
+// Derive effective status: always follow the most recent mapped event from timeline
+const effectiveStatus = useMemo(() => {
+  if (isLoadingEvents) return null;
+  const baseStatus = processo?.status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
+  return getLatestTimelineStatus(allEventos, baseStatus);
+}, [allEventos, processo, isLoadingEvents]);
 ```
 
-As tabelas `t_cct_hawb_api_atual` e `t_dados_aereo` usam collations diferentes (`utf8mb4_general_ci` vs `utf8mb4_unicode_ci`), causando o erro "Illegal mix of collations" na comparação.
-
-### Correção
-
-**1 arquivo:** `supabase/functions/mariadb-proxy/index.ts`
-
-Alterar a linha 3567 para forçar collation explícita:
-
-```sql
-ON TRIM(a.hawb) COLLATE utf8mb4_unicode_ci = TRIM(c.hawb) COLLATE utf8mb4_unicode_ci
+**Código novo:**
+```typescript
+// Use o status oficial do processo diretamente, igual ao dashboard
+const effectiveStatus = useMemo(() => {
+  return processo?.status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
+}, [processo]);
 ```
 
-Nada mais muda.
+Também remover o import de `getLatestTimelineStatus` (linha 33).
+
+---
+
+### Alteração 2 — `EventTimeline.tsx` (linhas 230-232)
+
+**O que muda:** Remover o badge de fonte (`LeadComex`, `RFB`, etc.) de cada evento na timeline.
+
+**Código atual:**
+```tsx
+<Badge variant="outline" className={cn("text-xs", fonte.color)}>
+  {fonte.label}
+</Badge>
+```
+
+**Código novo:** Remover essas 3 linhas. Nada mais muda no card do evento.
+
+---
+
+### O que NÃO muda
+
+- Nenhum arquivo backend / edge function / SQL
+- Nenhum dashboard, filtro, card, analytics
+- Nenhum layout, cor, ordenação ou paginação
+- Nenhuma variável, tipo ou interface renomeada
+- O objeto `fonteConfig` permanece no arquivo (pode ser usado internamente)
+- Texto, descrição, data/hora, aeroporto dos eventos permanecem intactos
 
