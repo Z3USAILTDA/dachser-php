@@ -3792,48 +3792,156 @@ Deno.serve(async (req) => {
           );
         }
 
-        const whereClause = shipmentId 
-          ? `s.id = ${parseInt(shipmentId)}` 
-          : `TRIM(s.awb) = '${(awbNumber || '').trim()}'`;
+        const safeParseJsonDetail = (val: any): any => {
+          if (!val) return null;
+          try { return typeof val === 'string' ? JSON.parse(val) : val; } catch { return null; }
+        };
 
-        const shipment = await client.query(`
-          SELECT 
-            s.id,
-            TRIM(s.awb) as master,
-            TRIM(s.hawb) as house,
-            TRIM(s.\`destinatário\`) as cliente,
-            TRIM(s.origem) as aeroporto_origem,
-            TRIM(s.destino) as aeroporto_destino,
-            s.\`último_status\` as status_cct_oficial,
-            s.\`última atualização\` as ultimo_evento_data,
-            s.nome_analista,
-            s.email_analista,
-            s.email_cliente as emails_cliente,
-            s.data_atraso,
-            cct.eta,
-            cct.etd,
-            cct.peso_declarado,
-            cct.peso_constatado,
-            cct.volume_declarado,
-            cct.volume_constatado,
-            cct.data_decolagem_ultimo_trecho,
-            cct.tratamentos_especiais,
-            cct.cnpj_consignatario
-          FROM ${database}.t_status_aereo s
-          LEFT JOIN ${database}.t_master_dados m ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(m.mawb) COLLATE utf8mb4_unicode_ci
-          LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci
-          WHERE ${whereClause}
+        const hawbFilter = shipmentId 
+          ? `(TRIM(c.hawb) = '${(shipmentId || '').replace(/'/g, "''")}' OR TRIM(c.hawb_normalizado) = '${(shipmentId || '').replace(/'/g, "''")}')`
+          : `TRIM(c.hawb) = '${(awbNumber || '').trim().replace(/'/g, "''")}'`;
+
+        const shipmentRows = await client.query(`
+          WITH base_cct AS (
+            SELECT
+              h.id, h.hawb, h.hawb_normalizado, h.data_emissao,
+              h.data_consulta_sucesso, h.consulted_at, h.response_http_status,
+              h.json_identificacao, h.json_conhecimento_carga_detalhada,
+              h.json_partes_estoque, h.json_bloqueios_ativos, h.json_bloqueios_baixados,
+              h.json_frete, h.json_manuseios_especiais, h.json_viagens_associadas,
+              h.json_divergencias, h.json_mawb_awb_associados, h.json_itens_carga,
+              h.json_contatos_consignatario, h.json_documentos_saida,
+              JSON_UNQUOTE(JSON_EXTRACT(h.json_identificacao, '$.situacaoPortal')) AS situacao_portal,
+              JSON_UNQUOTE(JSON_EXTRACT(h.json_conhecimento_carga_detalhada, '$.ruc')) AS ruc,
+              JSON_UNQUOTE(JSON_EXTRACT(h.json_conhecimento_carga_detalhada, '$.codigoAeroportoOrigemConhecimento')) AS aeroporto_origem,
+              JSON_UNQUOTE(JSON_EXTRACT(h.json_conhecimento_carga_detalhada, '$.codigoAeroportoDestinoConhecimento')) AS aeroporto_destino,
+              JSON_UNQUOTE(JSON_EXTRACT(h.json_conhecimento_carga_detalhada, '$.identificacaoDocumentoConsignatario')) AS cnpj_consignatario,
+              JSON_UNQUOTE(JSON_EXTRACT(h.json_conhecimento_carga_detalhada, '$.nomeConsignatarioConhecimento')) AS nome_consignatario_leadcomex,
+              JSON_UNQUOTE(JSON_EXTRACT(h.json_conhecimento_carga_detalhada, '$.recintoAduaneiroDestino')) AS recinto_aduaneiro_destino,
+              JSON_UNQUOTE(JSON_EXTRACT(h.json_conhecimento_carga_detalhada, '$.nroMawbAssociado')) AS mawb_associado_fallback,
+              JSON_UNQUOTE(JSON_EXTRACT(h.json_conhecimento_carga_detalhada, '$.indicadorPartesMadeira')) AS indicador_madeira,
+              CAST(JSON_UNQUOTE(JSON_EXTRACT(h.json_conhecimento_carga_detalhada, '$.pesoBrutoConhecimento')) AS DECIMAL(18,3)) AS peso_bruto_conhecimento,
+              CAST(JSON_UNQUOTE(JSON_EXTRACT(h.json_conhecimento_carga_detalhada, '$.quantidadeVolumesConhecimento')) AS UNSIGNED) AS volumes_conhecimento,
+              JSON_UNQUOTE(JSON_EXTRACT(h.json_mawb_awb_associados, '$[0].identificacao')) AS mawb_associado,
+              JSON_UNQUOTE(JSON_EXTRACT(h.json_viagens_associadas, '$[0].identificacaoViagem')) AS voo_1,
+              JSON_UNQUOTE(JSON_EXTRACT(h.json_viagens_associadas, '$[0].dataPartidaPrevista')) AS voo_1_data_partida,
+              JSON_UNQUOTE(JSON_EXTRACT(h.json_partes_estoque, '$[0].situacaoAtual')) AS situacao_estoque_atual,
+              CAST(JSON_UNQUOTE(JSON_EXTRACT(h.json_partes_estoque, '$[0].pesoBrutoEstoque')) AS DECIMAL(18,3)) AS peso_bruto_estoque,
+              CAST(JSON_UNQUOTE(JSON_EXTRACT(h.json_partes_estoque, '$[0].quantidadeVolumesEstoque')) AS UNSIGNED) AS volumes_estoque,
+              JSON_LENGTH(h.json_bloqueios_ativos) AS qtd_bloqueios_ativos
+            FROM ${database}.t_cct_hawb_api_atual h
+          ),
+          aereo_latest AS (
+            SELECT * FROM (
+              SELECT
+                TRIM(a.hawb_number) AS hawb,
+                TRIM(a.awb_number) AS awb_number,
+                TRIM(a.consignee_nome) AS consignee_nome,
+                TRIM(a.clerk) AS clerk,
+                TRIM(a.clerk_email) AS clerk_email,
+                a.etd, a.eta, a.gross_weight_kg, a.volume_cbm, a.pieces,
+                ROW_NUMBER() OVER (PARTITION BY TRIM(a.hawb_number) ORDER BY a.created_at DESC, a.data_emissao DESC) AS rn
+              FROM ${database}.t_dados_aereo a
+              WHERE a.hawb_number IS NOT NULL AND TRIM(a.hawb_number) <> ''
+            ) x WHERE x.rn = 1
+          )
+          SELECT
+            c.id, c.hawb, c.hawb_normalizado, c.data_emissao, c.consulted_at, c.response_http_status,
+            COALESCE(a.consignee_nome, c.nome_consignatario_leadcomex) AS cliente,
+            a.clerk AS analista, a.clerk_email AS analista_email,
+            COALESCE(c.mawb_associado, c.mawb_associado_fallback, a.awb_number) AS master_final,
+            c.aeroporto_origem, c.aeroporto_destino,
+            c.situacao_estoque_atual, c.situacao_portal,
+            c.ruc, c.recinto_aduaneiro_destino, c.cnpj_consignatario, c.indicador_madeira,
+            COALESCE(c.peso_bruto_conhecimento, a.gross_weight_kg) AS peso_declarado,
+            c.peso_bruto_estoque AS peso_constatado,
+            COALESCE(c.volumes_conhecimento, a.pieces) AS volume_declarado,
+            c.volumes_estoque AS volume_constatado,
+            a.etd, a.eta,
+            c.voo_1 AS voo_principal,
+            c.voo_1_data_partida AS data_decolagem,
+            c.qtd_bloqueios_ativos,
+            c.json_frete, c.json_manuseios_especiais, c.json_bloqueios_ativos
+          FROM base_cct c
+          LEFT JOIN aereo_latest a ON TRIM(a.hawb) = TRIM(c.hawb)
+          WHERE ${hawbFilter}
           LIMIT 1
         `);
 
-        if (!shipment || shipment.length === 0) {
+        if (!shipmentRows || shipmentRows.length === 0) {
           return new Response(
             JSON.stringify({ error: 'Shipment não encontrado', success: false }),
             { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
-        result = { success: true, data: shipment[0] };
+        const sRow = shipmentRows[0];
+
+        // Map to same format as dashboard
+        const mapStatusTelaDetail = (row: any): string => {
+          const se = (row.situacao_estoque_atual || '').toUpperCase().trim();
+          const sp = (row.situacao_portal || '').toUpperCase().trim();
+          if (se === 'ENTREGUE' || sp === 'ENTREGUE') return 'ENTREGUE';
+          if (se === 'RECEPCIONADA' || sp === 'RECEPCIONADA') return 'RECEPCIONADA';
+          if (se === 'MANIFESTADA' || sp === 'MANIFESTADA') return 'MANIFESTADA';
+          if (row.response_http_status === 200) return 'EM_TRANSITO_TERRESTRE';
+          return 'AGUARDANDO_CONSULTA';
+        };
+
+        const manuseiosDetail = safeParseJsonDetail(sRow.json_manuseios_especiais) || [];
+        const tratamentoDetail = Array.isArray(manuseiosDetail)
+          ? manuseiosDetail.map((m: any) => typeof m === 'string' ? m : m?.codigo || m?.code || '').filter(Boolean).join(',')
+          : null;
+
+        const freteDetail = safeParseJsonDetail(sRow.json_frete);
+        let infoFreteDetail: any = null;
+        if (freteDetail) {
+          const moeda = freteDetail.moedaOrigem || freteDetail.moeda || '';
+          const formaPgto = freteDetail.formaPgto || freteDetail.forma_pagamento || '';
+          let total = 0;
+          if (Array.isArray(freteDetail.totaisMoedaOrigem)) {
+            const te = freteDetail.totaisMoedaOrigem.find((t: any) => (t?.descricao || '').toLowerCase().includes('total'));
+            total = te?.valor || 0;
+          } else if (freteDetail.total) { total = freteDetail.total; }
+          if (moeda || total > 0) infoFreteDetail = { moeda, formaPgto, total };
+        }
+
+        result = {
+          success: true,
+          data: {
+            id: (sRow.hawb_normalizado || sRow.hawb || '').trim(),
+            house: sRow.hawb || '',
+            master: sRow.master_final || '',
+            cliente: sRow.cliente || '',
+            nome_analista: sRow.analista || null,
+            email_analista: sRow.analista_email || null,
+            aeroporto_origem: (sRow.aeroporto_origem || '').trim() || null,
+            aeroporto_destino: (sRow.aeroporto_destino || '').trim() || null,
+            status_cct_oficial: mapStatusTelaDetail(sRow),
+            dep_datetime: sRow.data_decolagem || null,
+            data_decolagem_ultimo_trecho: sRow.data_decolagem || null,
+            ultimo_evento_data: sRow.consulted_at || null,
+            ruc: sRow.ruc || null,
+            recinto_aduaneiro: sRow.recinto_aduaneiro_destino || null,
+            numero_voo: sRow.voo_principal || null,
+            data_emissao: sRow.data_emissao || null,
+            indicador_madeira: sRow.indicador_madeira === 'S',
+            info_frete: infoFreteDetail,
+            rfb_situacao: sRow.situacao_estoque_atual || sRow.situacao_portal || null,
+            peso_declarado: sRow.peso_declarado ? Number(sRow.peso_declarado) : null,
+            peso_constatado: sRow.peso_constatado ? Number(sRow.peso_constatado) : null,
+            volume_declarado: sRow.volume_declarado ? Number(sRow.volume_declarado) : null,
+            volume_constatado: sRow.volume_constatado ? Number(sRow.volume_constatado) : null,
+            cnpj_consignatario: sRow.cnpj_consignatario || null,
+            has_bloqueio: (sRow.qtd_bloqueios_ativos || 0) > 0,
+            eta: sRow.eta || null,
+            etd: sRow.etd || null,
+            tratamento: tratamentoDetail || null,
+            manuseios_especiais_rfb: Array.isArray(manuseiosDetail)
+              ? manuseiosDetail.map((m: any) => typeof m === 'string' ? m : m?.codigo || m?.code || '').filter(Boolean)
+              : [],
+          },
+        };
         break;
       }
 
