@@ -1,62 +1,15 @@
+## Usar apenas `t_cct_hawb_api_historico` como fonte da timeline
 
+### Arquivo alterado
 
-## Corrigir divergência de status e remover badges de fonte
+**1 arquivo:** `supabase/functions/mariadb-proxy/index.ts` — apenas o `case 'get_cct_events'`
 
-### Arquivos alterados
+### O que foi feito
 
-**2 arquivos:**
-1. `src/pages/cct/ProcessoTimeline.tsx`
-2. `src/components/cct/EventTimeline.tsx`
-
----
-
-### Alteração 1 — `ProcessoTimeline.tsx` (linhas 69-74)
-
-**O que muda:** O `effectiveStatus` deixa de usar `getLatestTimelineStatus` e passa a usar diretamente o status oficial do processo.
-
-**Código atual:**
-```typescript
-// Derive effective status: always follow the most recent mapped event from timeline
-const effectiveStatus = useMemo(() => {
-  if (isLoadingEvents) return null;
-  const baseStatus = processo?.status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
-  return getLatestTimelineStatus(allEventos, baseStatus);
-}, [allEventos, processo, isLoadingEvents]);
-```
-
-**Código novo:**
-```typescript
-// Use o status oficial do processo diretamente, igual ao dashboard
-const effectiveStatus = useMemo(() => {
-  return processo?.status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
-}, [processo]);
-```
-
-Também remover o import de `getLatestTimelineStatus` (linha 33).
-
----
-
-### Alteração 2 — `EventTimeline.tsx` (linhas 230-232)
-
-**O que muda:** Remover o badge de fonte (`LeadComex`, `RFB`, etc.) de cada evento na timeline.
-
-**Código atual:**
-```tsx
-<Badge variant="outline" className={cn("text-xs", fonte.color)}>
-  {fonte.label}
-</Badge>
-```
-
-**Código novo:** Remover essas 3 linhas. Nada mais muda no card do evento.
-
----
-
-### O que NÃO muda
-
-- Nenhum arquivo backend / edge function / SQL
-- Nenhum dashboard, filtro, card, analytics
-- Nenhum layout, cor, ordenação ou paginação
-- Nenhuma variável, tipo ou interface renomeada
-- O objeto `fonteConfig` permanece no arquivo (pode ser usado internamente)
-- Texto, descrição, data/hora, aeroporto dos eventos permanecem intactos
-
+1. **Removida** a query a `t_cct_eventos_historico` — essa tabela não é mais consultada
+2. **Fonte única**: `t_cct_hawb_api_historico` (ORDER BY consulted_at ASC) para detectar transições reais
+3. **Comparação consecutiva**: snapshots são percorridos em ordem cronológica; evento é gerado apenas quando `situacaoAtual` muda em relação ao snapshot anterior
+4. **Evento sintético do atual**: query a `t_cct_hawb_api_atual` gera evento adicional se o status mais recente ainda não está no histórico
+5. **Novo mapeamento**: adicionado `em trânsito terrestre` → `EM_TRANSITO_TERRESTRE`
+6. **nivel_confianca**: todos os eventos agora são `PRIMARIA` (fonte única)
+7. **Contrato de saída**: inalterado — mesmos campos retornados ao frontend
