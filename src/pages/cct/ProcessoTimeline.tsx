@@ -32,7 +32,7 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ProcessoCCT, CCTEvento } from "@/types/cct";
-import { getLatestTimelineStatus } from "@/utils/cctStatusResolver";
+
 
 
 export default function ProcessoTimeline() {
@@ -66,12 +66,10 @@ export default function ProcessoTimeline() {
     return eventosHistorico.length > 0 ? eventosHistorico : fallback;
   }, [processo, eventosHistorico]);
 
-  // Derive effective status: always follow the most recent mapped event from timeline
+  // Use o status oficial do processo diretamente, igual ao dashboard
   const effectiveStatus = useMemo(() => {
-    if (isLoadingEvents) return null;
-    const baseStatus = processo?.status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
-    return getLatestTimelineStatus(allEventos, baseStatus);
-  }, [allEventos, processo, isLoadingEvents]);
+    return processo?.status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
+  }, [processo]);
 
   // Initialize form values when processo loads - use useEffect to properly update state
   useEffect(() => {
