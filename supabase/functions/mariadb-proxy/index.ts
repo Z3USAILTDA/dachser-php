@@ -3679,7 +3679,7 @@ Deno.serve(async (req) => {
           const STATUS_MANIFESTADO_OU_ALEM = ['MANIFESTADA', 'EM_AREA_TRANSFERENCIA', 'RECEPCIONADA', 'EM_TROCA_RECINTOS', 'EM_TRANSITO_TERRESTRE', 'ENTREGUE'];
           const cctStatusParaSla = row.status_cct_oficial || 'INFORMADA';
           const jaManifestado = !!dataManifestacao || STATUS_MANIFESTADO_OU_ALEM.includes(cctStatusParaSla);
-          let slaStatus: string = jaManifestado ? 'CUMPRIDO' : calcularSlaStatus(slaLimite);
+          let slaStatus: string = row.sla_status_sql === 'Cumprido' ? 'CUMPRIDO' : jaManifestado ? 'CUMPRIDO' : calcularSlaStatus(slaLimite);
           
           const horasRestantes = slaLimite 
             ? (slaLimite.getTime() - now.getTime()) / (1000 * 60 * 60) 
