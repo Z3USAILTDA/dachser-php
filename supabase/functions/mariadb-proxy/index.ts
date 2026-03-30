@@ -1974,34 +1974,44 @@ Deno.serve(async (req) => {
                 });
               }
               
-              // Find previous fee for each current row
+              // Group current rows by key - keep the one with latest date
+              const currByKey: Record<string, any> = {};
               for (const c of currRows) {
-                const k = keyOf(c);
-                const cDt = c._dt_key;
+                const k = keyOf(c, fallbackEmpresa);
+                if (!currByKey[k] || c._dt_key > currByKey[k]._dt_key) {
+                  currByKey[k] = c;
+                }
+              }
+
+              // For each current key, find the most recent history record with a different fee
+              let changesForPair = 0;
+              for (const k in currByKey) {
+                const c = currByKey[k];
                 const list = histByKey[k] || [];
-                
                 if (!list.length) continue;
                 
+                const cFee = parseFloat(c.fee);
+                
+                // Find the most recent history record with a different fee (any date direction)
                 let prev = null;
                 for (const h of list) {
-                  if (h._dt_key < cDt || (h._dt_key === cDt && (h.id || 0) < (c.id || 0))) {
-                    if (parseFloat(h.fee) !== parseFloat(c.fee)) {
-                      prev = h;
-                      break;
-                    }
+                  const hFee = parseFloat(h.fee);
+                  if (!isNaN(hFee) && !isNaN(cFee) && hFee !== cFee) {
+                    prev = h;
+                    break; // list is sorted by date desc, so first different-fee match is most recent
                   }
                 }
                 
                 if (!prev) continue;
                 
                 const feeAnterior = parseFloat(prev.fee) || 0;
-                const feeAtual = parseFloat(c.fee) || 0;
+                const feeAtual = cFee || 0;
                 const diffAbs = feeAtual - feeAnterior;
                 const diffPct = feeAnterior !== 0 ? ((feeAtual - feeAnterior) / feeAnterior) * 100 : null;
                 
                 changes.push({
                   chave: c.chave || null,
-                  empresa: c.empresa || null,
+                  empresa: c.empresa || fallbackEmpresa || null,
                   charge_description: c.charge_description || null,
                   charge_code: c.charge_code || null,
                   container_type: c.container_type || null,
@@ -2020,9 +2030,10 @@ Deno.serve(async (req) => {
                   src_anterior: pair.hist,
                   src_atual: pair.main,
                 });
+                changesForPair++;
               }
               
-              console.log(`[fee_changes] ${pair.main}: found ${changes.length} total changes so far`);
+              console.log(`[fee_changes] ${pair.main}: found ${changesForPair} changes for this pair (${changes.length} total)`);
               
             } catch (err) {
               console.error(`Error processing pair ${pair.main}/${pair.hist}:`, err);
