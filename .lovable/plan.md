@@ -1,50 +1,43 @@
 
 
-## Corrigir mapeamento de campos ao salvar tracking no MariaDB
+## Corrigir roteamento de tracking para MSC e ONE no grid
 
 ### Causa raiz
 
-No `DraftDataGrid.tsx` (linhas 209-225), ao salvar dados no `draft-save-tracking`, os nomes dos campos estão errados:
+No `DraftDataGrid.tsx` (linha 179), a função `trackSingleMBL` sempre chama `draft-track-hapag-multi`, independente do armador. MBLs da MSC (prefixo MEDU/MSC) e ONE (prefixo ONEY) precisam ser roteados para `draft-track-msc` e `draft-track-one` respectivamente.
 
-| Campo usado (errado) | Campo real da API (`BookingInfo`) |
-|---|---|
-| `data.bookingInfo.polName` | `data.bookingInfo.originLocation` |
-| `data.bookingInfo.podName` | `data.bookingInfo.destinationLocation` |
-| `data.bookingInfo.bookingReference` | `data.bookingInfo.bookingNumber` |
-| `data.bookingInfo.voyage` | `data.bookingInfo.voyageNumber` |
-
-Como `polName`, `podName`, `bookingReference` e `voyage` não existem no objeto `bookingInfo`, seus valores são `undefined`, e o `draft-save-tracking` salva string vazia (`''`) no MariaDB. Por isso a tabela `t_consulta_armador` tem esses campos nulos/vazios, enquanto o painel de detalhes (que lê direto da API) mostra os dados corretos.
+O `HapagTrackerPanel.tsx` já faz esse roteamento corretamente via `detectCarrier` + `getEdgeFunctionName`, mas o grid ignora isso.
 
 ### Arquivo alterado
 
-**1 arquivo:** `src/components/draft/DraftDataGrid.tsx` — apenas o bloco de save (linhas 212-223)
+**1 arquivo:** `src/components/draft/DraftDataGrid.tsx`
 
 ### Alteração
 
-Corrigir os 4 campos para usar os nomes corretos:
+Na função `trackSingleMBL` (linha 176), adicionar detecção do armador e roteamento para a edge function correta:
 
 ```typescript
-trackingData: {
-  mbl_id: mblId,
-  booking: data.bookingInfo.bookingNumber,           // era bookingReference
-  origem: data.bookingInfo.originLocation,            // era polName
-  destino: data.bookingInfo.destinationLocation,      // era podName
-  navio: data.bookingInfo.vesselName,                 // OK
-  voyage: data.bookingInfo.voyageNumber,              // era voyage
-  etd: data.bookingInfo.etd,                          // OK
-  eta: data.bookingInfo.eta,                          // OK
-  status_armador: data.bookingInfo.documentStatus,    // OK
-  transaction_id: data.apiMetadata?.transactionId     // OK
-}
+const trackSingleMBL = async (mblId: string) => {
+  setProcessingMBL(mblId);
+  try {
+    // Detectar armador e rotear para a edge function correta
+    const carrier = detectCarrier(mblId);
+    let fnName = 'draft-track-hapag-multi';
+    if (carrier.name === 'MSC') fnName = 'draft-track-msc';
+    else if (carrier.name === 'ONE') fnName = 'draft-track-one';
+
+    const { data, error } = await supabase.functions.invoke(fnName, {
+      body: { searchType: 'BL', searchValue: mblId }
+    });
+    // ... resto da lógica permanece igual
 ```
+
+A função `detectCarrier` já existe no mesmo arquivo (linha 68) e identifica corretamente MSC (MEDU/MSC/EBKG) e ONE (ONEY).
 
 ### O que NÃO muda
 
 - Nenhuma edge function
-- Nenhum tipo, layout ou outro componente
-- A lógica de save no `draft-save-tracking` já está correta — o problema é só nos nomes dos campos enviados
-
-### Após o deploy
-
-Os MBLs precisarão ser re-consultados (botão ↻) para que os dados corretos sejam salvos no MariaDB.
+- Nenhum outro componente ou hook
+- A lógica de save (`draft-save-tracking`) permanece igual
+- O `HapagTrackerPanel` (consulta manual) já funciona corretamente
 
