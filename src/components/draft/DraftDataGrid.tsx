@@ -176,14 +176,17 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
   const trackSingleMBL = async (mblId: string) => {
     setProcessingMBL(mblId);
     try {
+      // Limpar o MBL: pegar apenas a primeira parte antes de " - " e limitar a 20 chars
+      const cleanMbl = mblId.split(' - ')[0].trim().substring(0, 20);
+
       // Detectar armador e rotear para a edge function correta
-      const carrier = detectCarrier(mblId);
+      const carrier = detectCarrier(cleanMbl);
       let fnName = 'draft-track-hapag-multi';
       if (carrier.name === 'MSC') fnName = 'draft-track-msc';
       else if (carrier.name === 'ONE') fnName = 'draft-track-one';
 
       const { data, error } = await supabase.functions.invoke(fnName, {
-        body: { searchType: 'BL', searchValue: mblId }
+        body: { searchType: 'BL', searchValue: cleanMbl }
       });
 
       // Handle API errors - check if it's a "not found" type error (204)
