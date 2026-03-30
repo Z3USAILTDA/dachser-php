@@ -159,8 +159,11 @@ export default function LocalCharges() {
     })), ...oneData.rows.map(r => ({
       ...r,
       empresa: 'ONE'
+    })), ...zimData.rows.map(r => ({
+      ...r,
+      empresa: 'ZIM'
     }))];
-  }, [hapagData, mscData, cmaData, hmmData, oneData]);
+  }, [hapagData, mscData, cmaData, hmmData, oneData, zimData]);
 
   // Stats by armador
   const statsByArmador = useMemo(() => {
