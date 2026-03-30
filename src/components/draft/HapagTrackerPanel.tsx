@@ -33,7 +33,7 @@ const CARRIER_LABELS: Record<Carrier, string> = {
 function detectCarrier(value: string): 'hapag' | 'msc' | 'one' {
   const upper = value.trim().toUpperCase();
   if (upper.startsWith('MEDU') || upper.startsWith('EBKG') || upper.startsWith('MSC')) return 'msc';
-  if (upper.startsWith('ONEY')) return 'one';
+  if (/^(ONEY|ONEU|NYKU|MOLU|KKFU|MOAU|KKLU)/.test(upper)) return 'one';
   return 'hapag';
 }
 

@@ -68,7 +68,7 @@ const normalizeMblId = (mblId: string): string =>
 const detectCarrier = (mblId: string): { name: CarrierName; color: string } => {
   const id = normalizeMblId(mblId);
   if (/^(MEDU|MSC|EBKG)/.test(id)) return { name: 'MSC', color: '#00B4D8' };
-  if (/^ONEY/.test(id)) return { name: 'ONE', color: '#FF6B9D' };
+  if (/^(ONEY|ONEU|NYKU|MOLU|KKFU|MOAU|KKLU)/.test(id)) return { name: 'ONE', color: '#FF6B9D' };
   if (/^HLC/.test(id)) return { name: 'HAPAG', color: '#ffc800' };
   return { name: 'OUTRO', color: '#888' };
 };
