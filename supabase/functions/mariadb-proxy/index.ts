@@ -2022,6 +2022,8 @@ Deno.serve(async (req) => {
                 });
               }
               
+              console.log(`[fee_changes] ${pair.main}: found ${changes.length} total changes so far`);
+              
             } catch (err) {
               console.error(`Error processing pair ${pair.main}/${pair.hist}:`, err);
             }
