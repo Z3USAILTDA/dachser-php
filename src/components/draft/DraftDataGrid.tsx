@@ -211,11 +211,11 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
           body: { 
             trackingData: {
               mbl_id: mblId,
-              booking: data.bookingInfo.bookingReference,
-              origem: data.bookingInfo.polName,
-              destino: data.bookingInfo.podName,
+              booking: data.bookingInfo.bookingNumber,
+              origem: data.bookingInfo.originLocation,
+              destino: data.bookingInfo.destinationLocation,
               navio: data.bookingInfo.vesselName,
-              voyage: data.bookingInfo.voyage,
+              voyage: data.bookingInfo.voyageNumber,
               etd: data.bookingInfo.etd,
               eta: data.bookingInfo.eta,
               status_armador: data.bookingInfo.documentStatus,
