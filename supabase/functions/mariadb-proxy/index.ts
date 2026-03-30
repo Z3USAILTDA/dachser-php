@@ -1865,6 +1865,7 @@ Deno.serve(async (req) => {
             { main: 't_local_charge_cma', hist: 't_local_charge_cma_history' },
             { main: 't_local_charge_hmm', hist: 't_local_charge_hmm_history' },
             { main: 't_local_charge_one', hist: 't_local_charge_one_history' },
+            { main: 't_local_charge_zim', hist: 't_local_charge_zim_history' },
           ];
           
           const changes: any[] = [];

@@ -295,6 +295,7 @@ export default function LocalCharges() {
                   <SelectItem value="CMA">CMA</SelectItem>
                   <SelectItem value="HMM">HMM</SelectItem>
                   <SelectItem value="ONE">ONE</SelectItem>
+                  <SelectItem value="ZIM">ZIM</SelectItem>
                 </SelectContent>
               </Select>
             </div>
