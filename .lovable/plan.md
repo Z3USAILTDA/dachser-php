@@ -1,12 +1,10 @@
 
 
-## Corrigir roteamento de tracking para MSC e ONE no grid
+## Corrigir erro 400: documentNumber maior que 20 caracteres
 
 ### Causa raiz
 
-No `DraftDataGrid.tsx` (linha 179), a função `trackSingleMBL` sempre chama `draft-track-hapag-multi`, independente do armador. MBLs da MSC (prefixo MEDU/MSC) e ONE (prefixo ONEY) precisam ser roteados para `draft-track-msc` e `draft-track-one` respectivamente.
-
-O `HapagTrackerPanel.tsx` já faz esse roteamento corretamente via `detectCarrier` + `getEdgeFunctionName`, mas o grid ignora isso.
+O campo `mbl_id` na tabela `t_consulta_armador` contém valores compostos como `"HLCUSS5251240550 - 20122846"` (BL + booking separados por ` - `). Quando o grid envia esse valor para a API Hapag, ela rejeita porque o campo `documentNumber` aceita no maximo 20 caracteres.
 
 ### Arquivo alterado
 
@@ -14,30 +12,29 @@ O `HapagTrackerPanel.tsx` já faz esse roteamento corretamente via `detectCarrie
 
 ### Alteração
 
-Na função `trackSingleMBL` (linha 176), adicionar detecção do armador e roteamento para a edge function correta:
+Na função `trackSingleMBL` (linha 186), limpar o `mblId` antes de enviar para a API. Extrair apenas a primeira parte (antes do ` - `) e truncar a 20 caracteres:
 
 ```typescript
 const trackSingleMBL = async (mblId: string) => {
-  setProcessingMBL(mblId);
-  try {
-    // Detectar armador e rotear para a edge function correta
-    const carrier = detectCarrier(mblId);
-    let fnName = 'draft-track-hapag-multi';
-    if (carrier.name === 'MSC') fnName = 'draft-track-msc';
-    else if (carrier.name === 'ONE') fnName = 'draft-track-one';
+    setProcessingMBL(mblId);
+    try {
+      // Limpar o MBL: pegar apenas a primeira parte antes de " - " e limitar a 20 chars
+      const cleanMbl = mblId.split(' - ')[0].trim().substring(0, 20);
+      
+      const carrier = detectCarrier(cleanMbl);
+      let fnName = 'draft-track-hapag-multi';
+      if (carrier.name === 'MSC') fnName = 'draft-track-msc';
+      else if (carrier.name === 'ONE') fnName = 'draft-track-one';
 
-    const { data, error } = await supabase.functions.invoke(fnName, {
-      body: { searchType: 'BL', searchValue: mblId }
-    });
-    // ... resto da lógica permanece igual
+      const { data, error } = await supabase.functions.invoke(fnName, {
+        body: { searchType: 'BL', searchValue: cleanMbl }
+      });
+      // ... resto permanece igual
 ```
-
-A função `detectCarrier` já existe no mesmo arquivo (linha 68) e identifica corretamente MSC (MEDU/MSC/EBKG) e ONE (ONEY).
 
 ### O que NÃO muda
 
 - Nenhuma edge function
-- Nenhum outro componente ou hook
-- A lógica de save (`draft-save-tracking`) permanece igual
-- O `HapagTrackerPanel` (consulta manual) já funciona corretamente
+- O `mblId` original continua sendo usado para `setProcessingMBL` e para salvar no banco
+- Apenas o valor enviado para a API do armador e limpo
 
