@@ -111,8 +111,8 @@ Deno.serve(async (req) => {
           destino = ?,
           navio = ?,
           voyage = ?,
-          etd = ?,
-          eta = ?,
+          etd = NULLIF(?, ''),
+          eta = NULLIF(?, ''),
           tipo_processo = ?,
           status_armador = ?,
           transaction_id = ?,
@@ -129,8 +129,8 @@ Deno.serve(async (req) => {
         trackingData.destino || '',
         trackingData.navio || '',
         trackingData.voyage || '',
-        trackingData.etd || null,
-        trackingData.eta || null,
+        trackingData.etd || '',
+        trackingData.eta || '',
         trackingData.tipo_processo || DEFAULT_TIPO_PROCESSO,
         trackingData.status_armador || '',
         trackingData.transaction_id || '',
@@ -164,7 +164,7 @@ Deno.serve(async (req) => {
           data_hora_servidor,
           data_hora_consulta,
           created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ) VALUES (?, ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, NOW())
       `;
 
       await mariaClient.execute(insertQuery, [
@@ -174,8 +174,8 @@ Deno.serve(async (req) => {
         trackingData.destino || '',
         trackingData.navio || '',
         trackingData.voyage || '',
-        trackingData.etd || null,
-        trackingData.eta || null,
+        trackingData.etd || '',
+        trackingData.eta || '',
         trackingData.tipo_processo || DEFAULT_TIPO_PROCESSO,
         trackingData.status_armador || '',
         trackingData.transaction_id || '',
