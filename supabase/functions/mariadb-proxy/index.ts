@@ -1929,9 +1929,25 @@ Deno.serve(async (req) => {
                 ORDER BY data_atualizacao DESC LIMIT 10000
               `);
               
+              console.log(`[fee_changes] ${pair.main}: ${currRows.length} current rows, ${pair.hist}: ${histRows.length} history rows`);
+              if (currRows.length > 0) {
+                console.log(`[fee_changes] ${pair.main} sample empresa: "${currRows[0].empresa}"`);
+              }
+              if (histRows.length > 0) {
+                console.log(`[fee_changes] ${pair.hist} sample empresa: "${histRows[0].empresa}"`);
+              }
+              
               if (!currRows.length || !histRows.length) {
                 console.log(`No data in ${pair.main} or ${pair.hist}, skipping...`);
                 continue;
+              }
+              
+              // Apply fallback empresa if empty
+              for (const r of currRows) {
+                if (!r.empresa) r.empresa = fallbackEmpresa;
+              }
+              for (const h of histRows) {
+                if (!h.empresa) h.empresa = fallbackEmpresa;
               }
               
               // Add normalized date to each row
