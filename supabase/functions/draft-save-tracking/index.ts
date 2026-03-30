@@ -164,7 +164,7 @@ Deno.serve(async (req) => {
           data_hora_servidor,
           data_hora_consulta,
           created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ) VALUES (?, ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, NOW())
       `;
 
       await mariaClient.execute(insertQuery, [
