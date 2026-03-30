@@ -1,111 +1,50 @@
 
 
-## Corrigir detecção de fee changes para HMM, ONE, ZIM (e MSC)
+## Corrigir mapeamento de campos ao salvar tracking no MariaDB
 
 ### Causa raiz
 
-A lógica atual (linha 1987) busca registros de history com data **anterior** ao registro current:
-```
-if (h._dt_key < cDt || (h._dt_key === cDt && (h.id || 0) < (c.id || 0)))
-```
+No `DraftDataGrid.tsx` (linhas 209-225), ao salvar dados no `draft-save-tracking`, os nomes dos campos estão errados:
 
-Para HMM, ONE e ZIM, as tabelas de history foram populadas com `data_atualizacao` igual ou posterior à tabela current, fazendo com que a condição nunca seja satisfeita e nenhuma alteração seja detectada.
+| Campo usado (errado) | Campo real da API (`BookingInfo`) |
+|---|---|
+| `data.bookingInfo.polName` | `data.bookingInfo.originLocation` |
+| `data.bookingInfo.podName` | `data.bookingInfo.destinationLocation` |
+| `data.bookingInfo.bookingReference` | `data.bookingInfo.bookingNumber` |
+| `data.bookingInfo.voyage` | `data.bookingInfo.voyageNumber` |
+
+Como `polName`, `podName`, `bookingReference` e `voyage` não existem no objeto `bookingInfo`, seus valores são `undefined`, e o `draft-save-tracking` salva string vazia (`''`) no MariaDB. Por isso a tabela `t_consulta_armador` tem esses campos nulos/vazios, enquanto o painel de detalhes (que lê direto da API) mostra os dados corretos.
 
 ### Arquivo alterado
 
-**1 arquivo:** `supabase/functions/mariadb-proxy/index.ts` — apenas dentro do `case 'get_fee_changes'`
+**1 arquivo:** `src/components/draft/DraftDataGrid.tsx` — apenas o bloco de save (linhas 212-223)
 
-### Alteração proposta
+### Alteração
 
-Substituir a lógica de matching (linhas 1977-2023) por uma abordagem bidirecional:
-
-1. **Agrupar current por key** (mesmo `keyOf`) em um mapa
-2. **Agrupar history por key** em um mapa
-3. Para cada key que existe em AMBOS os mapas:
-   - Pegar o registro current mais recente (por `_dt_key`)
-   - Pegar o registro history com fee diferente (qualquer direção temporal)
-   - Se encontrar fee diferente, emitir a alteração
-4. Também processar keys que existem APENAS no history (com mais de 1 registro de fee diferente) para capturar alterações históricas entre snapshots
-
-### Detalhes técnicos
-
-Substituir o bloco `// Find previous fee for each current row` (linhas 1977-2023) por:
+Corrigir os 4 campos para usar os nomes corretos:
 
 ```typescript
-// Group current rows by key - keep the one with latest date
-const currByKey: Record<string, any> = {};
-for (const c of currRows) {
-  const k = keyOf(c, fallbackEmpresa);
-  if (!currByKey[k] || c._dt_key > currByKey[k]._dt_key) {
-    currByKey[k] = c;
-  }
+trackingData: {
+  mbl_id: mblId,
+  booking: data.bookingInfo.bookingNumber,           // era bookingReference
+  origem: data.bookingInfo.originLocation,            // era polName
+  destino: data.bookingInfo.destinationLocation,      // era podName
+  navio: data.bookingInfo.vesselName,                 // OK
+  voyage: data.bookingInfo.voyageNumber,              // era voyage
+  etd: data.bookingInfo.etd,                          // OK
+  eta: data.bookingInfo.eta,                          // OK
+  status_armador: data.bookingInfo.documentStatus,    // OK
+  transaction_id: data.apiMetadata?.transactionId     // OK
 }
-
-// For each current key, find the most recent history record with a different fee
-let changesForPair = 0;
-for (const k in currByKey) {
-  const c = currByKey[k];
-  const list = histByKey[k] || [];
-  if (!list.length) continue;
-  
-  const cFee = parseFloat(c.fee);
-  
-  // Find the most recent history record with a different fee (any date)
-  let prev = null;
-  for (const h of list) {
-    const hFee = parseFloat(h.fee);
-    if (!isNaN(hFee) && !isNaN(cFee) && hFee !== cFee) {
-      prev = h;
-      break; // list is sorted by date desc, so first different-fee match is most recent
-    }
-  }
-  
-  if (!prev) continue;
-  
-  const feeAnterior = parseFloat(prev.fee) || 0;
-  const feeAtual = cFee || 0;
-  const diffAbs = feeAtual - feeAnterior;
-  const diffPct = feeAnterior !== 0 ? ((feeAtual - feeAnterior) / feeAnterior) * 100 : null;
-  
-  changes.push({
-    chave: c.chave || null,
-    empresa: c.empresa || fallbackEmpresa || null,
-    charge_description: c.charge_description || null,
-    charge_code: c.charge_code || null,
-    container_type: c.container_type || null,
-    currency: c.currency || null,
-    unit_of_measure: c.unit_of_measure || null,
-    fee_anterior: feeAnterior,
-    fee_atual: feeAtual,
-    diff_abs: diffAbs,
-    diff_pct: diffPct,
-    effective_anterior: prev.effective || null,
-    effective_atual: c.effective || null,
-    dt_chave_anterior: prev.data_atualizacao_chave || null,
-    dt_chave_atual: c.data_atualizacao_chave || null,
-    dt_ordenacao_anterior: prev._dt_key,
-    dt_ordenacao_atual: c._dt_key,
-    src_anterior: pair.hist,
-    src_atual: pair.main,
-  });
-  changesForPair++;
-}
-
-console.log(`[fee_changes] ${pair.main}: found ${changesForPair} changes for this pair`);
 ```
-
-### O que muda
-
-- Remove a exigência de `h._dt_key < cDt` que impedia o matching
-- Agrupa por key para evitar duplicatas (1 alteração por charge/container/currency)
-- Mantém os logs diagnósticos existentes
 
 ### O que NÃO muda
 
-- Nenhum arquivo frontend
-- Nenhum outro case do mariadb-proxy
-- Queries SQL (mesmas colunas, mesmo LIMIT)
-- Lógica de `keyOf`, `normalizeDt`, fallbackEmpresa
-- Lógica de sorting, latest marking e latestMarked (linhas 2032-2088)
-- Layout, filtros, paginação da tela
+- Nenhuma edge function
+- Nenhum tipo, layout ou outro componente
+- A lógica de save no `draft-save-tracking` já está correta — o problema é só nos nomes dos campos enviados
+
+### Após o deploy
+
+Os MBLs precisarão ser re-consultados (botão ↻) para que os dados corretos sejam salvos no MariaDB.
 
