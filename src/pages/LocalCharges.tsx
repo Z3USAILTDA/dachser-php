@@ -172,10 +172,11 @@ export default function LocalCharges() {
       'MSC': mscData.rows.length,
       'CMA': cmaData.rows.length,
       'HMM': hmmData.rows.length,
-      'ONE': oneData.rows.length
+      'ONE': oneData.rows.length,
+      'ZIM': zimData.rows.length
     };
     return stats;
-  }, [hapagData, mscData, cmaData, hmmData, oneData]);
+  }, [hapagData, mscData, cmaData, hmmData, oneData, zimData]);
 
   // Filter data
   const filteredRows = useMemo(() => {
