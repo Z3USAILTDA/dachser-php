@@ -244,6 +244,7 @@ export default function LocalCharges() {
       if (data.cma) setCmaData(data.cma);
       if (data.hmm) setHmmData(data.hmm);
       if (data.one) setOneData(data.one);
+      if (data.zim) setZimData(data.zim);
       toast.success('Dados carregados com sucesso');
     } catch (error: any) {
       console.error('Error fetching local charges:', error);
