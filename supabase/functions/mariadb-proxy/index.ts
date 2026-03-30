@@ -1910,18 +1910,23 @@ Deno.serve(async (req) => {
                 continue;
               }
               
-              // Load current data
+              // Derive fallback empresa name from table name
+              const fallbackEmpresa = pair.main.replace('t_local_charge_', '').replace('t_local_charge', 'HAPAG').toUpperCase();
+              
+              // Load current data (limited to avoid timeout)
               const currRows = await chargesClient.query(`
                 SELECT id, chave, empresa, charge_description, charge_code, container_type,
                        currency, unit_of_measure, fee, effective, data_atualizacao_chave, data_atualizacao
                 FROM ${pair.main}
+                ORDER BY data_atualizacao DESC LIMIT 10000
               `);
               
-              // Load history data
+              // Load history data (limited to avoid timeout)
               const histRows = await chargesClient.query(`
                 SELECT id, chave, empresa, charge_description, charge_code, container_type,
                        currency, unit_of_measure, fee, effective, data_atualizacao_chave, data_atualizacao
                 FROM ${pair.hist}
+                ORDER BY data_atualizacao DESC LIMIT 10000
               `);
               
               if (!currRows.length || !histRows.length) {
