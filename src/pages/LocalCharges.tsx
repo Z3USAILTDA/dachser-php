@@ -133,6 +133,14 @@ export default function LocalCharges() {
     },
     source: ''
   });
+  const [zimData, setZimData] = useState<CompanyData>({
+    rows: [],
+    meta: {
+      updated_at: null,
+      effective: null
+    },
+    source: ''
+  });
 
   // Combine all data into a single array with armador field
   const allData = useMemo(() => {
