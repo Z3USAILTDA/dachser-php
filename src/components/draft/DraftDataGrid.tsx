@@ -176,7 +176,13 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
   const trackSingleMBL = async (mblId: string) => {
     setProcessingMBL(mblId);
     try {
-      const { data, error } = await supabase.functions.invoke('draft-track-hapag-multi', {
+      // Detectar armador e rotear para a edge function correta
+      const carrier = detectCarrier(mblId);
+      let fnName = 'draft-track-hapag-multi';
+      if (carrier.name === 'MSC') fnName = 'draft-track-msc';
+      else if (carrier.name === 'ONE') fnName = 'draft-track-one';
+
+      const { data, error } = await supabase.functions.invoke(fnName, {
         body: { searchType: 'BL', searchValue: mblId }
       });
 
