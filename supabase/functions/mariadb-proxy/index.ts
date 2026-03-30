@@ -1887,9 +1887,10 @@ Deno.serve(async (req) => {
           };
           
           // Helper to create unique key for matching
-          const keyOf = (row: any): string => {
+          const keyOf = (row: any, fallbackEmpresa?: string): string => {
+            const emp = (row.empresa || fallbackEmpresa || '').toUpperCase().trim();
             return [
-              (row.empresa || '').toUpperCase().trim(),
+              emp,
               (row.charge_description || '').trim(),
               (row.charge_code || '').trim(),
               (row.container_type || '').trim(),
@@ -1909,23 +1910,44 @@ Deno.serve(async (req) => {
                 continue;
               }
               
-              // Load current data
+              // Derive fallback empresa name from table name
+              const fallbackEmpresa = pair.main.replace('t_local_charge_', '').replace('t_local_charge', 'HAPAG').toUpperCase();
+              
+              // Load current data (limited to avoid timeout)
               const currRows = await chargesClient.query(`
                 SELECT id, chave, empresa, charge_description, charge_code, container_type,
                        currency, unit_of_measure, fee, effective, data_atualizacao_chave, data_atualizacao
                 FROM ${pair.main}
+                ORDER BY data_atualizacao DESC LIMIT 10000
               `);
               
-              // Load history data
+              // Load history data (limited to avoid timeout)
               const histRows = await chargesClient.query(`
                 SELECT id, chave, empresa, charge_description, charge_code, container_type,
                        currency, unit_of_measure, fee, effective, data_atualizacao_chave, data_atualizacao
                 FROM ${pair.hist}
+                ORDER BY data_atualizacao DESC LIMIT 10000
               `);
+              
+              console.log(`[fee_changes] ${pair.main}: ${currRows.length} current rows, ${pair.hist}: ${histRows.length} history rows`);
+              if (currRows.length > 0) {
+                console.log(`[fee_changes] ${pair.main} sample empresa: "${currRows[0].empresa}"`);
+              }
+              if (histRows.length > 0) {
+                console.log(`[fee_changes] ${pair.hist} sample empresa: "${histRows[0].empresa}"`);
+              }
               
               if (!currRows.length || !histRows.length) {
                 console.log(`No data in ${pair.main} or ${pair.hist}, skipping...`);
                 continue;
+              }
+              
+              // Apply fallback empresa if empty
+              for (const r of currRows) {
+                if (!r.empresa) r.empresa = fallbackEmpresa;
+              }
+              for (const h of histRows) {
+                if (!h.empresa) h.empresa = fallbackEmpresa;
               }
               
               // Add normalized date to each row
@@ -1999,6 +2021,8 @@ Deno.serve(async (req) => {
                   src_atual: pair.main,
                 });
               }
+              
+              console.log(`[fee_changes] ${pair.main}: found ${changes.length} total changes so far`);
               
             } catch (err) {
               console.error(`Error processing pair ${pair.main}/${pair.hist}:`, err);
