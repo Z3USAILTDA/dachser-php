@@ -216,7 +216,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
       }
 
       if (data?.success && data?.bookingInfo) {
-        await supabase.functions.invoke('draft-save-tracking', {
+        const { data: saveData, error: saveError } = await supabase.functions.invoke('draft-save-tracking', {
           body: { 
             trackingData: {
               mbl_id: mblId,
@@ -232,7 +232,12 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
             }
           }
         });
-        toast.success(`${mblId} atualizado com sucesso!`);
+        if (saveError) {
+          console.error(`Save failed for ${mblId}:`, saveError);
+          toast.warning(`${mblId}: consultado com sucesso, mas falhou ao salvar no banco`);
+        } else {
+          toast.success(`${mblId} atualizado com sucesso!`);
+        }
       }
 
       return { success: true, mblId };
