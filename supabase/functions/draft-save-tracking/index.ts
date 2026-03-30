@@ -5,6 +5,28 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Normalize date string to MySQL-compatible format, handling dd/MM/yyyy from MSC API
+function normalizeDateForMySQL(dateStr: string | null | undefined): string | null {
+  if (!dateStr || dateStr.trim() === '') return null;
+  const trimmed = dateStr.trim();
+  
+  // dd/MM/yyyy or dd/MM/yyyy HH:mm:ss
+  const slashMatch = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})(.*)$/);
+  if (slashMatch) {
+    const [, day, month, year, rest] = slashMatch;
+    return `${year}-${month}-${day}${rest || ''}`.trim();
+  }
+  
+  // Already ISO-like (yyyy-MM-dd...) — keep as-is
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed;
+  
+  // Try Date parse as fallback
+  const d = new Date(trimmed);
+  if (isNaN(d.getTime())) return null;
+  
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 // Convert various date formats to MySQL datetime format (YYYY-MM-DD HH:MM:SS)
 function formatDateTimeForMySQL(dateStr: string | null): string {
   const date = dateStr ? new Date(dateStr) : new Date();
@@ -129,8 +151,8 @@ Deno.serve(async (req) => {
         trackingData.destino || '',
         trackingData.navio || '',
         trackingData.voyage || '',
-        trackingData.etd || '',
-        trackingData.eta || '',
+        normalizeDateForMySQL(trackingData.etd) || '',
+        normalizeDateForMySQL(trackingData.eta) || '',
         trackingData.tipo_processo || DEFAULT_TIPO_PROCESSO,
         trackingData.status_armador || '',
         trackingData.transaction_id || '',
@@ -174,8 +196,8 @@ Deno.serve(async (req) => {
         trackingData.destino || '',
         trackingData.navio || '',
         trackingData.voyage || '',
-        trackingData.etd || '',
-        trackingData.eta || '',
+        normalizeDateForMySQL(trackingData.etd) || '',
+        normalizeDateForMySQL(trackingData.eta) || '',
         trackingData.tipo_processo || DEFAULT_TIPO_PROCESSO,
         trackingData.status_armador || '',
         trackingData.transaction_id || '',

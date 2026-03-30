@@ -68,7 +68,7 @@ const normalizeMblId = (mblId: string): string =>
 const detectCarrier = (mblId: string): { name: CarrierName; color: string } => {
   const id = normalizeMblId(mblId);
   if (/^(MEDU|MSC|EBKG)/.test(id)) return { name: 'MSC', color: '#00B4D8' };
-  if (/^ONEY/.test(id)) return { name: 'ONE', color: '#FF6B9D' };
+  if (/^(ONEY|ONEU|NYKU|MOLU|KKFU|MOAU|KKLU)/.test(id)) return { name: 'ONE', color: '#FF6B9D' };
   if (/^HLC/.test(id)) return { name: 'HAPAG', color: '#ffc800' };
   return { name: 'OUTRO', color: '#888' };
 };
@@ -216,7 +216,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
       }
 
       if (data?.success && data?.bookingInfo) {
-        await supabase.functions.invoke('draft-save-tracking', {
+        const { data: saveData, error: saveError } = await supabase.functions.invoke('draft-save-tracking', {
           body: { 
             trackingData: {
               mbl_id: mblId,
@@ -232,7 +232,12 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
             }
           }
         });
-        toast.success(`${mblId} atualizado com sucesso!`);
+        if (saveError) {
+          console.error(`Save failed for ${mblId}:`, saveError);
+          toast.warning(`${mblId}: consultado com sucesso, mas falhou ao salvar no banco`);
+        } else {
+          toast.success(`${mblId} atualizado com sucesso!`);
+        }
       }
 
       return { success: true, mblId };
@@ -292,8 +297,14 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
     setDetailsData(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke('draft-track-hapag-multi', {
-        body: { searchType: 'BL', searchValue: item.mbl_id }
+      const cleanMbl = item.mbl_id.split(' - ')[0].trim().substring(0, 20);
+      const carrier = detectCarrier(cleanMbl);
+      let fnName = 'draft-track-hapag-multi';
+      if (carrier.name === 'MSC') fnName = 'draft-track-msc';
+      else if (carrier.name === 'ONE') fnName = 'draft-track-one';
+
+      const { data, error } = await supabase.functions.invoke(fnName, {
+        body: { searchType: 'BL', searchValue: cleanMbl }
       });
 
       // Handle case where BL is not found (API returns 204/404)
