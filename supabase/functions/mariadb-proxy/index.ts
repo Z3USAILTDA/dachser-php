@@ -1887,9 +1887,10 @@ Deno.serve(async (req) => {
           };
           
           // Helper to create unique key for matching
-          const keyOf = (row: any): string => {
+          const keyOf = (row: any, fallbackEmpresa?: string): string => {
+            const emp = (row.empresa || fallbackEmpresa || '').toUpperCase().trim();
             return [
-              (row.empresa || '').toUpperCase().trim(),
+              emp,
               (row.charge_description || '').trim(),
               (row.charge_code || '').trim(),
               (row.container_type || '').trim(),
