@@ -76,7 +76,8 @@ const armadorColors: Record<string, string> = {
   'MSC': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   'CMA': 'bg-red-500/20 text-red-400 border-red-500/30',
   'HMM': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  'ONE': 'bg-pink-500/20 text-pink-400 border-pink-500/30'
+  'ONE': 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+  'ZIM': 'bg-teal-500/20 text-teal-400 border-teal-500/30'
 };
 
 // Main Component
@@ -132,6 +133,14 @@ export default function LocalCharges() {
     },
     source: ''
   });
+  const [zimData, setZimData] = useState<CompanyData>({
+    rows: [],
+    meta: {
+      updated_at: null,
+      effective: null
+    },
+    source: ''
+  });
 
   // Combine all data into a single array with armador field
   const allData = useMemo(() => {
@@ -150,8 +159,11 @@ export default function LocalCharges() {
     })), ...oneData.rows.map(r => ({
       ...r,
       empresa: 'ONE'
+    })), ...zimData.rows.map(r => ({
+      ...r,
+      empresa: 'ZIM'
     }))];
-  }, [hapagData, mscData, cmaData, hmmData, oneData]);
+  }, [hapagData, mscData, cmaData, hmmData, oneData, zimData]);
 
   // Stats by armador
   const statsByArmador = useMemo(() => {
@@ -160,10 +172,11 @@ export default function LocalCharges() {
       'MSC': mscData.rows.length,
       'CMA': cmaData.rows.length,
       'HMM': hmmData.rows.length,
-      'ONE': oneData.rows.length
+      'ONE': oneData.rows.length,
+      'ZIM': zimData.rows.length
     };
     return stats;
-  }, [hapagData, mscData, cmaData, hmmData, oneData]);
+  }, [hapagData, mscData, cmaData, hmmData, oneData, zimData]);
 
   // Filter data
   const filteredRows = useMemo(() => {
@@ -231,6 +244,7 @@ export default function LocalCharges() {
       if (data.cma) setCmaData(data.cma);
       if (data.hmm) setHmmData(data.hmm);
       if (data.one) setOneData(data.one);
+      if (data.zim) setZimData(data.zim);
       toast.success('Dados carregados com sucesso');
     } catch (error: any) {
       console.error('Error fetching local charges:', error);
@@ -281,6 +295,7 @@ export default function LocalCharges() {
                   <SelectItem value="CMA">CMA</SelectItem>
                   <SelectItem value="HMM">HMM</SelectItem>
                   <SelectItem value="ONE">ONE</SelectItem>
+                  <SelectItem value="ZIM">ZIM</SelectItem>
                 </SelectContent>
               </Select>
             </div>

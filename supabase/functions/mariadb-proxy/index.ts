@@ -1810,10 +1810,11 @@ Deno.serve(async (req) => {
           const cma = await loadChargesForCompany(chargesClient, 't_local_charge_cma', 'CMA');
           const hmm = await loadChargesForCompany(chargesClient, 't_local_charge_hmm', 'HMM');
           const one = await loadChargesForCompany(chargesClient, 't_local_charge_one', 'ONE');
+          const zim = await loadChargesForCompany(chargesClient, 't_local_charge_zim', 'ZIM');
           
-          console.log(`Local charges loaded: Hapag=${hapag.rows.length}, MSC=${msc.rows.length}, CMA=${cma.rows.length}, HMM=${hmm.rows.length}, ONE=${one.rows.length}`);
+          console.log(`Local charges loaded: Hapag=${hapag.rows.length}, MSC=${msc.rows.length}, CMA=${cma.rows.length}, HMM=${hmm.rows.length}, ONE=${one.rows.length}, ZIM=${zim.rows.length}`);
           
-          result = { success: true, hapag, msc, cma, hmm, one };
+          result = { success: true, hapag, msc, cma, hmm, one, zim };
           
         } finally {
           // Close charges client if it's different from main client
@@ -1864,6 +1865,7 @@ Deno.serve(async (req) => {
             { main: 't_local_charge_cma', hist: 't_local_charge_cma_history' },
             { main: 't_local_charge_hmm', hist: 't_local_charge_hmm_history' },
             { main: 't_local_charge_one', hist: 't_local_charge_one_history' },
+            { main: 't_local_charge_zim', hist: 't_local_charge_zim_history' },
           ];
           
           const changes: any[] = [];
