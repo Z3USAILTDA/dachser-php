@@ -292,8 +292,14 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
     setDetailsData(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke('draft-track-hapag-multi', {
-        body: { searchType: 'BL', searchValue: item.mbl_id }
+      const cleanMbl = item.mbl_id.split(' - ')[0].trim().substring(0, 20);
+      const carrier = detectCarrier(cleanMbl);
+      let fnName = 'draft-track-hapag-multi';
+      if (carrier.name === 'MSC') fnName = 'draft-track-msc';
+      else if (carrier.name === 'ONE') fnName = 'draft-track-one';
+
+      const { data, error } = await supabase.functions.invoke(fnName, {
+        body: { searchType: 'BL', searchValue: cleanMbl }
       });
 
       // Handle case where BL is not found (API returns 204/404)
