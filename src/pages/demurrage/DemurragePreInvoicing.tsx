@@ -34,7 +34,6 @@ import {
   useDemurragePreInvoices,
   useUpdatePreInvoice,
   useGeneratePreInvoices,
-  useDemurrageData,
   type PreInvoice 
 } from "@/hooks/useDemurrageData";
 import { PreInvoiceDetailsDialog } from "@/components/demurrage/PreInvoiceDetailsDialog";
@@ -64,7 +63,6 @@ export default function DemurragePreInvoicing() {
   const [exchangeRates, setExchangeRates] = useState<Record<number, string>>({});
 
   const { data: preInvoices = [], isLoading, refetch } = useDemurragePreInvoices();
-  const { data: allContainers = [] } = useDemurrageData();
   const updateMutation = useUpdatePreInvoice();
   const generateMutation = useGeneratePreInvoices();
 
@@ -613,7 +611,6 @@ export default function DemurragePreInvoicing() {
         open={emailDialogOpen}
         onOpenChange={setEmailDialogOpen}
         preInvoice={emailInvoice}
-        containers={allContainers.filter(c => emailInvoice?.shipment_mbl && c.mbl === emailInvoice.shipment_mbl)}
       />
     </DemurrageLayout>
   );
