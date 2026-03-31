@@ -429,7 +429,7 @@ Deno.serve(async (req) => {
           username: dbUser,
           password: dbPassword,
           charset: "utf8mb4",
-          timeout: 30000,
+          timeout: 10000,
         });
         console.log(`Connected to MariaDB on attempt ${attempt}`);
         break;
