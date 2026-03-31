@@ -44,72 +44,229 @@ serve(async (req) => {
       password,
     });
 
-    // Main query: fetch all tracking data from t_dados_aereo + t_aereo_scraper + t_eventos_awb + t_description_eventos
+    // Main query: fetch all tracking data from t_dados_aereo + t_fato_aereo + t_eventos_awb + t_description_eventos
     const sql = `
       select
         *
       from
-        (
-        select
-          tda.awb_number,
-          tda.hawb_number,
-          tda.consignee_nome,
-          tda.clerk,
-          tda.clerk_email,
-          tda.etd,
-          tdaf.last_flight,
-          tdaf.origin,
-          tdaf.destination,
-          tdaf.timeline_json,
-          tdaf.last_status_code,
-          tea.descricao_en,
-          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[0].Description')) as description_last,
-          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[0].Location')) as location_last,
-          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[1].Description')) as description_penultimate,
-          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[1].Location')) as location_penultimate,
-          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[2].Description')) as description_antepenultimate,
-          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[2].Location')) as location_antepenultimate,
-          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[3].Description')) as description_before_antepenultimate,
-          JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[3].Location')) as location_before_antepenultimate,
-          a.descricao_en penultimo_des,
-          a.code penultimo_code,
-          b.descricao_en antepenultimo_des,
-          b.code antepenultimo_code,
-          c.descricao_en antes_antepenultimo_des,
-          c.code antes_antepenultimo_code,
-          tea.descricao_en ultimo_desc,
-          tea.code ultimo_code,
-          tde.descricao,
-          case
-            when substring(JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[1].Description')), 1, 5) = substring(a.descricao_en, 1, 5) then a.id
-          end as penultimo_evento,
-          case
-            when substring(JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[2].Description')), 1, 5) = substring(b.descricao_en, 1, 5) then b.id
-          end as antepenultimo_evento,
-          case
-            when substring(JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[3].Description')), 1, 5) = substring(c.descricao_en, 1, 5) then c.id
-          end as antes_antepenultimo_evento,
-          case
-            when substring(tde.descricao, 1, 5) = substring(teau.descricao_en, 1, 5) then tea.id
-          end as ultimo_evento,
-          tde.description
-        from
-          dados_dachser.t_dados_aereo tda
-        left join dados_dachser.t_aereo_scraper tdaf
-          on tdaf.awb collate utf8mb4_unicode_ci = tda.awb_number collate utf8mb4_unicode_ci
-        left join dados_dachser.t_eventos_awb tea
-          on tea.code collate utf8mb4_unicode_ci = tdaf.last_status_code collate utf8mb4_unicode_ci
-        left join dados_dachser.t_eventos_awb a
-          on substring(a.descricao_en, 1, 5) = substring(JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[1].Description')), 1, 5)
-        left join dados_dachser.t_eventos_awb b
-          on substring(b.descricao_en, 1, 5) = substring(JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[2].Description')), 1, 5)
-        left join dados_dachser.t_eventos_awb c
-          on substring(c.descricao_en, 1, 5) = substring(JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[3].Description')), 1, 5)
-        left join dados_dachser.t_description_eventos tde
-          on tde.description collate utf8mb4_unicode_ci = JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[0].Description'))
-        left join dados_dachser.t_eventos_awb teau
-          on teau.code collate utf8mb4_unicode_ci = tde.code
-        ) x
+      (
+          select
+              b.awb_number,
+              b.hawb_number,
+              b.consignee_nome,
+              b.clerk,
+              b.clerk_email,
+              b.etd,
+              b.last_flight,
+              b.origin,
+              b.destination,
+              b.timeline_json,
+              b.last_status_code,
+              b.location_last,
+              b.location_penultimate,
+              tea.descricao_en,
+              b.desc0 as description_last,
+              b.desc1 as description_penultimate,
+              b.desc2 as description_antepenultimate,
+              b.desc3 as description_before_antepenultimate,
+              (
+                  select e.descricao_en
+                  from dados_dachser.t_eventos_awb e
+                  where e.code = coalesce(
+                      case
+                          when b.desc1 like '(%' then substring_index(substring_index(b.desc1, ')', 1), '(', -1)
+                      end,
+                      (
+                          select d.code
+                          from dados_dachser.t_description_eventos d
+                          where b.desc1 like concat(d.description, '%')
+                          order by char_length(d.description) desc
+                          limit 1
+                      )
+                  )
+                  limit 1
+              ) as penultimo_des,
+              coalesce(
+                  case
+                      when b.desc1 like '(%' then substring_index(substring_index(b.desc1, ')', 1), '(', -1)
+                  end,
+                  (
+                      select d.code
+                      from dados_dachser.t_description_eventos d
+                      where b.desc1 like concat(d.description, '%')
+                      order by char_length(d.description) desc
+                      limit 1
+                  )
+              ) as penultimo_code,
+              (
+                  select e.id
+                  from dados_dachser.t_eventos_awb e
+                  where e.code = coalesce(
+                      case
+                          when b.desc1 like '(%' then substring_index(substring_index(b.desc1, ')', 1), '(', -1)
+                      end,
+                      (
+                          select d.code
+                          from dados_dachser.t_description_eventos d
+                          where b.desc1 like concat(d.description, '%')
+                          order by char_length(d.description) desc
+                          limit 1
+                      )
+                  )
+                  limit 1
+              ) as penultimo_evento,
+              (
+                  select e.descricao_en
+                  from dados_dachser.t_eventos_awb e
+                  where e.code = coalesce(
+                      case
+                          when b.desc2 like '(%' then substring_index(substring_index(b.desc2, ')', 1), '(', -1)
+                      end,
+                      (
+                          select d.code
+                          from dados_dachser.t_description_eventos d
+                          where b.desc2 like concat(d.description, '%')
+                          order by char_length(d.description) desc
+                          limit 1
+                      )
+                  )
+                  limit 1
+              ) as antepenultimo_des,
+              coalesce(
+                  case
+                      when b.desc2 like '(%' then substring_index(substring_index(b.desc2, ')', 1), '(', -1)
+                  end,
+                  (
+                      select d.code
+                      from dados_dachser.t_description_eventos d
+                      where b.desc2 like concat(d.description, '%')
+                      order by char_length(d.description) desc
+                      limit 1
+                  )
+              ) as antepenultimo_code,
+              (
+                  select e.id
+                  from dados_dachser.t_eventos_awb e
+                  where e.code = coalesce(
+                      case
+                          when b.desc2 like '(%' then substring_index(substring_index(b.desc2, ')', 1), '(', -1)
+                      end,
+                      (
+                          select d.code
+                          from dados_dachser.t_description_eventos d
+                          where b.desc2 like concat(d.description, '%')
+                          order by char_length(d.description) desc
+                          limit 1
+                      )
+                  )
+                  limit 1
+              ) as antepenultimo_evento,
+              (
+                  select e.descricao_en
+                  from dados_dachser.t_eventos_awb e
+                  where e.code = coalesce(
+                      case
+                          when b.desc3 like '(%' then substring_index(substring_index(b.desc3, ')', 1), '(', -1)
+                      end,
+                      (
+                          select d.code
+                          from dados_dachser.t_description_eventos d
+                          where b.desc3 like concat(d.description, '%')
+                          order by char_length(d.description) desc
+                          limit 1
+                      )
+                  )
+                  limit 1
+              ) as antes_antepenultimo_des,
+              coalesce(
+                  case
+                      when b.desc3 like '(%' then substring_index(substring_index(b.desc3, ')', 1), '(', -1)
+                  end,
+                  (
+                      select d.code
+                      from dados_dachser.t_description_eventos d
+                      where b.desc3 like concat(d.description, '%')
+                      order by char_length(d.description) desc
+                      limit 1
+                  )
+              ) as antes_antepenultimo_code,
+              (
+                  select e.id
+                  from dados_dachser.t_eventos_awb e
+                  where e.code = coalesce(
+                      case
+                          when b.desc3 like '(%' then substring_index(substring_index(b.desc3, ')', 1), '(', -1)
+                      end,
+                      (
+                          select d.code
+                          from dados_dachser.t_description_eventos d
+                          where b.desc3 like concat(d.description, '%')
+                          order by char_length(d.description) desc
+                          limit 1
+                      )
+                  )
+                  limit 1
+              ) as antes_antepenultimo_evento,
+              tea.descricao_en as ultimo_desc,
+              tea.code as ultimo_code,
+              tde.descricao,
+              coalesce(
+                  (
+                      select e.id
+                      from dados_dachser.t_eventos_awb e
+                      where e.code = coalesce(
+                          case
+                              when b.desc0 like '(%' then substring_index(substring_index(b.desc0, ')', 1), '(', -1)
+                          end,
+                          (
+                              select d.code
+                              from dados_dachser.t_description_eventos d
+                              where b.desc0 like concat(d.description, '%')
+                              order by char_length(d.description) desc
+                              limit 1
+                          ),
+                          b.last_status_code
+                      )
+                      limit 1
+                  ),
+                  tea.id
+              ) as ultimo_evento,
+              tde.descricao as des,
+              teau.descricao_en as des_en,
+              tde.description
+          from
+          (
+              select
+                  tda.awb_number,
+                  tda.hawb_number,
+                  tda.consignee_nome,
+                  tda.clerk,
+                  tda.clerk_email,
+                  tda.etd,
+                  '' as last_flight,
+                  '' as origin,
+                  '' as destination,
+                  tdaf.timeline_json,
+                  tdaf.last_status_code,
+                  convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc0,
+                  convert(json_unquote(json_extract(tdaf.timeline_json, '$[1].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc1,
+                  convert(json_unquote(json_extract(tdaf.timeline_json, '$[2].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc2,
+                  convert(json_unquote(json_extract(tdaf.timeline_json, '$[3].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc3,
+                  convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].location')) using utf8mb4) collate utf8mb4_unicode_ci as location_last,
+                  convert(json_unquote(json_extract(tdaf.timeline_json, '$[1].location')) using utf8mb4) collate utf8mb4_unicode_ci as location_penultimate
+              from dados_dachser.t_dados_aereo tda
+              left join dados_dachser.t_fato_aereo tdaf
+                  on tdaf.awb collate utf8mb4_unicode_ci = tda.awb_number collate utf8mb4_unicode_ci
+                 and json_valid(tdaf.hawbs_json)
+                 and json_contains(tdaf.hawbs_json, json_array(tda.hawb_number))
+          ) b
+          left join dados_dachser.t_eventos_awb tea
+              on tea.code collate utf8mb4_unicode_ci = b.last_status_code collate utf8mb4_unicode_ci
+          left join dados_dachser.t_description_eventos tde
+              on tde.description collate utf8mb4_unicode_ci = b.desc0
+          left join dados_dachser.t_eventos_awb teau
+              on teau.code collate utf8mb4_unicode_ci = tde.code collate utf8mb4_unicode_ci
+      ) x
     `;
 
     console.log("Executing tracking aereo query...");
