@@ -34,7 +34,6 @@ import {
   useDemurragePreInvoices,
   useUpdatePreInvoice,
   useGeneratePreInvoices,
-  useDemurrageData,
   type PreInvoice 
 } from "@/hooks/useDemurrageData";
 import { PreInvoiceDetailsDialog } from "@/components/demurrage/PreInvoiceDetailsDialog";
