@@ -354,18 +354,32 @@ function isTransientMariaDbErrorMessage(message: string) {
 
 async function queryWithRetry<T>(
   operation: () => Promise<T>,
-  options: { label: string; attempts?: number; baseDelayMs?: number }
+  options: { label: string; attempts?: number; baseDelayMs?: number; timeoutMs?: number }
 ): Promise<T> {
   const attempts = options.attempts ?? 3;
   const baseDelayMs = options.baseDelayMs ?? 500;
+  const timeoutMs = options.timeoutMs ?? 8000;
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      return await operation();
+      const result = await Promise.race([
+        operation(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('DB_TIMEOUT')), timeoutMs)
+        ),
+      ]);
+      return result;
     } catch (error) {
       lastError = error;
       const errorMessage = error instanceof Error ? error.message : String(error);
+
+      if (errorMessage === 'DB_TIMEOUT') {
+        console.warn(`[${options.label}] query timed out after ${timeoutMs}ms on attempt ${attempt}/${attempts}`);
+        if (attempt === attempts) throw new Error(`Query timed out after ${timeoutMs}ms`);
+        await sleep(baseDelayMs * attempt);
+        continue;
+      }
 
       if (!isTransientMariaDbErrorMessage(errorMessage) || attempt === attempts) {
         throw error;
@@ -429,7 +443,7 @@ Deno.serve(async (req) => {
           username: dbUser,
           password: dbPassword,
           charset: "utf8mb4",
-          timeout: 30000,
+          timeout: 10000,
         });
         console.log(`Connected to MariaDB on attempt ${attempt}`);
         break;
