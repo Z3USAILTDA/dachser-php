@@ -231,6 +231,7 @@ serve(async (req) => {
                               select d.code
                               from dados_dachser.t_description_eventos d
                               where b.desc0 like concat(d.description, '%')
+                                 or substring_index(b.desc0, ',', 1) like concat(d.description, '%')
                               order by char_length(d.description) desc
                               limit 1
                           ),
