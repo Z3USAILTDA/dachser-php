@@ -168,7 +168,7 @@ async function fetchRatesFromMariaDB(): Promise<RateRow[]> {
 function calculatePeriods(daysIncident: number, armador: string, containerType: string, allRates: RateRow[]): PeriodData[] {
   // Find matching rates for this armador + container_type
   const matchingRates = allRates.filter(r =>
-    r.armador?.toLowerCase() === armador?.toLowerCase() &&
+    r.armador?.toLowerCase() === 'dachser' &&
     r.container_type?.toLowerCase() === containerType?.toLowerCase()
   );
 
