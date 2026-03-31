@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Mail } from "lucide-react";
-import { useSendTestAlert, useDemurragePreInvoiceItems, type PreInvoice, type DemurrageContainer } from "@/hooks/useDemurrageData";
+import { useSendTestAlert, useDemurragePreInvoiceItems, useDemurrageContainersByMbl, type PreInvoice, type DemurrageContainer } from "@/hooks/useDemurrageData";
 import { toast } from "sonner";
 
 interface SendTestEmailDialogProps {
@@ -18,6 +18,10 @@ export function SendTestEmailDialog({ open, onOpenChange, preInvoice, containers
   const [email, setEmail] = useState("");
   const sendMutation = useSendTestAlert();
   const { data: items } = useDemurragePreInvoiceItems(preInvoice?.id ?? null);
+  const { data: containersByMbl } = useDemurrageContainersByMbl(
+    open ? preInvoice?.shipment_mbl ?? null : null,
+    open ? preInvoice?.invoice_number ?? null : null
+  );
 
   const handleSend = async () => {
     if (!preInvoice || !email.trim()) return;
