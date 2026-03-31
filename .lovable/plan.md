@@ -1,65 +1,78 @@
 
-Objetivo: fazer MSC e ONE passarem a aparecer como “consultados” no grid.
 
-Diagnóstico
-- MSC não está “sem consulta”: a chamada para `draft-track-msc` acontece e retorna sucesso.
-- O problema do MSC ocorre depois, ao salvar em `draft-save-tracking`: a API MSC devolve `eta` como `10/04/2026` e a tabela MariaDB espera data em formato MySQL/ISO. Por isso o save falha e o processo continua sem registro em `t_consulta_armador`, ficando como “Nunca Consultado”.
-- ONE segue falhando na origem do roteamento/detecção: no grid e no painel manual a lógica reconhece apenas prefixo `ONEY`, mas o projeto já considera vários prefixos válidos da ONE (`ONEU`, `NYKU`, `MOLU`, `KKFU`, `MOAU`, `KKLU`). Esses casos caem em Hapag indevidamente e nunca consultam a função `draft-track-one`.
-- Há ainda um ajuste secundário importante: `viewDetails` sempre chama Hapag, então os detalhes de MSC/ONE podem ficar inconsistentes mesmo após o save.
+## Alterações na Notificação de Cobrança de Demurrage
 
-Arquivos a ajustar
-1. `supabase/functions/draft-save-tracking/index.ts`
-2. `src/components/draft/DraftDataGrid.tsx`
-3. `src/components/draft/HapagTrackerPanel.tsx`
+### Diagnóstico
 
-Implementação proposta
+Arquivo principal: `supabase/functions/demurrage-send-alert/index.ts`
+Hook que monta os dados: `src/hooks/useDemurrageData.ts` (função `useSendTestAlert`)
 
-1. Normalizar datas antes de salvar no MariaDB
-- Em `draft-save-tracking`, adicionar uma função utilitária para converter:
-  - `dd/MM/yyyy` -> `yyyy-MM-dd`
-  - manter `yyyy-MM-dd` como está
-  - retornar `null` para vazio ou inválido
-- Aplicar essa normalização especificamente em `etd` e `eta` antes do `execute`.
-- Manter `NULLIF(?, '')`, mas passar o valor já normalizado para evitar novo erro de data inválida.
+### Alteração 1: Tarifa Dachser para todos os containers
 
-Resultado esperado:
-- MSC deixa de falhar no save.
-- Assim que salvar, o registro passa a existir em `t_consulta_armador` e o grid deixa de mostrar “Nunca Consultado”.
+**Problema**: Linha 161-163 — `calculatePeriods` filtra tarifas por `armador` do container. Deveria sempre usar a tarifa com armador = `'DACHSER'`.
 
-2. Corrigir a detecção de armador para ONE
-- Em `DraftDataGrid.tsx`, ampliar `detectCarrier` para reconhecer todos os prefixos da ONE já usados no mapeamento central do projeto:
-  - `ONEY`, `ONEU`, `NYKU`, `MOLU`, `KKFU`, `MOAU`, `KKLU`
-- Fazer o mesmo em `HapagTrackerPanel.tsx`, para manter consistência entre grid e busca manual.
+**Correção**: Em `calculatePeriods` (linha 159), ignorar o parâmetro `armador` recebido e sempre filtrar por `'dachser'` na comparação com `r.armador`.
 
-Resultado esperado:
-- Processos ONE deixam de ser enviados para Hapag por engano.
-- A função `draft-track-one` passa a ser usada para todos os prefixos válidos da ONE.
+```typescript
+// Antes:
+r.armador?.toLowerCase() === armador?.toLowerCase()
 
-3. Ajustar consulta de detalhes para multi-armador
-- Em `DraftDataGrid.tsx`, mudar `viewDetails` para usar a mesma lógica de roteamento por armador em vez de chamar sempre `draft-track-hapag-multi`.
+// Depois:
+r.armador?.toLowerCase() === 'dachser'
+```
 
-Resultado esperado:
-- O detalhe do processo mostra dados do armador correto para MSC e ONE.
+### Alteração 2: Assunto do e-mail
 
-4. Tratar feedback de erro de save no grid
-- Em `trackSingleMBL`, validar também o retorno de `draft-save-tracking`.
-- Se o tracking veio com sucesso mas o save falhou, mostrar toast específico de “consulta realizada, mas falhou ao salvar”.
-- Não mascarar isso como simples erro genérico.
+**Problema**: Linha 485 — o subject usa `shipment_master` (MBL). Deveria usar `house_bl` (HBL).
 
-Resultado esperado:
-- Fica claro quando o problema é API do armador versus persistência no banco.
+**Correção**:
+```typescript
+// Antes:
+const subject = `${testPrefix}Notificação de Cobrança - ${shipment_master || container_number || 'N/A'}`;
 
-O que não muda
-- Nenhuma mudança de layout.
-- Nenhuma alteração estrutural nas tabelas.
-- Nenhuma mudança no fluxo de filtros e paginação.
-- Não é necessário criar novas funções backend.
+// Depois:
+const subject = `${testPrefix}Notificação de sobreestadia BL ${house_bl || shipment_master || container_number || 'N/A'}`;
+```
 
-Resumo da causa raiz
-- MSC: consulta funciona, mas não persiste por causa do formato de data.
-- ONE: parte dos processos nem chega à função correta porque a detecção atual cobre só `ONEY`.
+### Alteração 3: Corpo do e-mail
 
-Validação após implementar
-- Reconsultar um MBL MSC que hoje retorna `eta` em formato `dd/MM/yyyy` e confirmar que salva.
-- Reconsultar um processo ONE com prefixo diferente de `ONEY` (por exemplo `NYKU` ou `MOLU`) e confirmar que agora roteia para `draft-track-one`.
-- Abrir o detalhe de um MSC e de um ONE para confirmar que o armador correto está sendo usado na consulta.
+**Problema**: Linhas 74-100 — o texto atual fala de "free time vencido" e "minuta de devolução". Deve ser substituído pelo modelo fornecido, que foca em "custos de D&D – Sobreestadia de Contêineres".
+
+**Correção**: Reescrever `generateNotificationHtml` com o texto exato fornecido. O detalhamento (tabela de containers) continuará no XLSX em anexo, mas o corpo do e-mail mencionará as informações do embarque (MBL, HBL, cliente). A função passará a receber parâmetros para inserir o detalhamento inline.
+
+Novo corpo:
+```
+Prezados(as),
+
+Identificamos custos de D&D – Sobreestadia de Contêineres referentes ao(s) embarque(s) mencionado(s) abaixo:
+
+[Detalhamento: Cliente, HBL, MBL]
+
+Caso haja alguma divergência, solicitamos que seja sinalizada com a devida evidência no prazo de 48 horas a contar desta data.
+Após este período, os custos serão considerados válidos e será emitida Nota de Débito para pagamento.
+
+Atenciosamente,
+
+Time Demurrage & Detention
+Air & Sea Logistics Brazil
+
+DACHSER Brasil Logística Ltda.
+Santos Office
+Rua Amador Bueno, 333 – Sl. 1201/1202, Centro
+Santos, SP - 11013-151.
+```
+
+### Arquivos alterados
+
+1. **`supabase/functions/demurrage-send-alert/index.ts`**
+   - `calculatePeriods`: forçar armador = `'dachser'`
+   - `subject`: trocar para `Notificação de sobreestadia BL {house_bl}`
+   - `generateNotificationHtml`: reescrever com o texto do modelo, recebendo `client_name`, `house_bl`, `shipment_master` para o detalhamento inline
+
+### O que NÃO muda
+
+- Geração do XLSX (demonstrativo)
+- Lógica de envio via Resend
+- Hook `useSendTestAlert` no frontend
+- Nenhum arquivo frontend
+
