@@ -611,7 +611,6 @@ export default function DemurragePreInvoicing() {
         open={emailDialogOpen}
         onOpenChange={setEmailDialogOpen}
         preInvoice={emailInvoice}
-        containers={allContainers.filter(c => emailInvoice?.shipment_mbl && c.mbl === emailInvoice.shipment_mbl)}
       />
     </DemurrageLayout>
   );
