@@ -27,12 +27,13 @@ export function SendTestEmailDialog({ open, onOpenChange, preInvoice, containers
     if (!preInvoice || !email.trim()) return;
 
     try {
+      const resolvedContainers = (containersByMbl && containersByMbl.length > 0) ? containersByMbl : containers;
       await sendMutation.mutateAsync({
         clientName: preInvoice.client_name || "Teste",
         emails: [email.trim()],
         preInvoice,
         items: items || [],
-        demurrageContainers: containers,
+        demurrageContainers: resolvedContainers,
       });
       toast.success("E-mail de teste enviado com sucesso (com anexo XLSX)");
       onOpenChange(false);
