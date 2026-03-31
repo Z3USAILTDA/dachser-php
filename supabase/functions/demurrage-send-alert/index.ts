@@ -510,7 +510,7 @@ serve(async (req) => {
     }
 
     const emailPayload: Record<string, unknown> = {
-      from: "Dachser <alerts@hermes.z3us.ai>",,
+      from: "Dachser <alerts@hermes.z3us.ai>",
       to: recipient_emails,
       subject,
       html,
