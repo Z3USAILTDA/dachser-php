@@ -489,9 +489,9 @@ serve(async (req) => {
 
     console.log(`[Demurrage Alert] Max periods detected: ${maxPeriods}`);
 
-    const html = generateNotificationHtml(test_mode);
+    const html = generateNotificationHtml({ testMode: test_mode, client_name, house_bl, shipment_master });
     const testPrefix = test_mode ? '[TESTE] ' : '';
-    const subject = `${testPrefix}Notificação de Cobrança - ${shipment_master || container_number || 'N/A'}`;
+    const subject = `${testPrefix}Notificação de sobreestadia BL ${house_bl || shipment_master || container_number || 'N/A'}`;
 
     // Generate XLSX attachment
     let attachments: Array<{ filename: string; content: string }> = [];
