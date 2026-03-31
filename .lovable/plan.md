@@ -1,36 +1,45 @@
 
 
-## Alteração pontual: SQL do `fetch-tracking-aereo`
+## Corrigir resolução de eventos null no SQL do `fetch-tracking-aereo`
 
-### Arquivo único alterado
+### Diagnóstico
 
-**`supabase/functions/fetch-tracking-aereo/index.ts`** — somente o bloco SQL (linhas 47-113).
+O retorno do select mostra que para o AWB `016-06977736`, os campos `penultimo_des/code/evento`, `antepenultimo_des/code/evento` e `antes_antepenultimo_des/code/evento` vêm **todos null**, mesmo tendo descrições válidas na timeline.
 
-### Resultado do teste da query atual
+**Causa raiz**: As descrições da `t_fato_aereo` vêm no formato `"Documents Delivered, qty: 11, weight: 166.1"` — sem prefixo `(CODE)` e com sufixo `, qty: ...`. A lógica atual tenta:
 
-A função retorna dados corretamente hoje. Confirmado:
-- Timeline do `t_aereo_scraper` usa chaves maiúsculas: `Description`, `Location`, `Timestamp`, `Carrier`
-- Timeline do `t_fato_aereo` usa chaves minúsculas: `description`, `location`, `date`, `carrier`
-- O JS de normalização (linhas 120-182) acessa `lastEvt?.date` (linha 136) — compatível com `t_fato_aereo`
-- O JS usa `row.consignee_nome`, `row.clerk`, `row.clerk_email`, `row.etd`, `row.last_flight`, `row.origin`, `row.destination`, `row.location_last`, `row.location_penultimate`
+1. Extrair código do prefixo `(...)` → falha (não existe prefixo)
+2. Fallback via `t_description_eventos` com `b.desc1 LIKE concat(d.description, '%')` → falha porque `"Documents Delivered, qty: 11, weight: 166.1"` começa com `"Documents Delivered"`, mas `t_description_eventos` provavelmente só tem `"Delivered"` (que não bate no início da string)
 
-### O que muda
+O `desc0` ("Delivered, qty: 11, weight: 166.1") funciona porque `tde.description = b.desc0` faz match direto no join externo com `t_description_eventos`, e "Delivered" bate com `LIKE 'Delivered%'`. Mas "Documents Delivered" não começa com nenhuma entrada da tabela.
 
-Substituir a query SQL (linhas 48-113) pela query fornecida, com os seguintes campos adicionais na subquery interna para manter compatibilidade com o JS de normalização que **não será alterado**:
+### Solução
 
-1. **Campos de `t_dados_aereo`**: `tda.consignee_nome`, `tda.clerk`, `tda.clerk_email`, `tda.etd`
-2. **Locations da timeline**: extrair `$[0].location` como `location_last` e `$[1].location` como `location_penultimate`
-3. **Campos inexistentes em `t_fato_aereo`**: `'' as last_flight`, `'' as origin`, `'' as destination`
-4. Propagar todos esses campos no select externo
+Adicionar um terceiro nível de fallback nos subselects: além de tentar o prefixo `(CODE)` e o LIKE direto, também tentar o LIKE contra o texto **antes da primeira vírgula** (`substring_index(b.descN, ',', 1)`). Isso transforma `"Documents Delivered, qty: 11, weight: 166.1"` em `"Documents Delivered"` para matching.
 
-### Comentário do bloco
+A alteração é mínima — em cada subselect de fallback via `t_description_eventos`, trocar:
 
-Atualizar de `t_aereo_scraper` para `t_fato_aereo`.
+```sql
+where b.desc1 like concat(d.description, '%')
+```
+
+Por:
+
+```sql
+where b.desc1 like concat(d.description, '%')
+   or substring_index(b.desc1, ',', 1) like concat(d.description, '%')
+```
+
+Isso se aplica aos 12 subselects (3 campos × 4 posições: penultimo, antepenultimo, antes_antepenultimo, e o ultimo_evento).
+
+### Arquivo alterado
+
+**`supabase/functions/fetch-tracking-aereo/index.ts`** — somente os subselects de fallback dentro do bloco SQL (linhas 48-269). Nenhum outro arquivo tocado.
 
 ### O que NÃO muda
 
-- Nenhum outro arquivo
-- Código JS de normalização (linhas 119-182) permanece idêntico
-- Nenhum componente, hook, tela ou serviço tocado
-- Nenhuma variável, tipo ou interface renomeada
+- Estrutura do select (mesmas colunas, mesmos aliases)
+- Código JS de normalização (linhas 277-339)
+- Nenhum outro arquivo, hook, componente ou tela
+- Prioridade de resolução: prefixo `(CODE)` primeiro, depois `t_description_eventos`
 
