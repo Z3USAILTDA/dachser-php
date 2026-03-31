@@ -166,10 +166,15 @@ async function fetchRatesFromMariaDB(): Promise<RateRow[]> {
 }
 
 function calculatePeriods(daysIncident: number, armador: string, containerType: string, allRates: RateRow[]): PeriodData[] {
-  // Find matching rates for this armador + container_type
+  // Extract size (20 or 40) from container tipo_conteiner (e.g. "20DV" -> "20", "40HC" -> "40")
+  const sizeMatch = containerType.match(/(\d{2})/);
+  const containerSize = sizeMatch ? sizeMatch[1] : '';
+
+  // Match DACHSER rates where container_type contains the same size (e.g. "DRY 20" contains "20")
   const matchingRates = allRates.filter(r =>
     r.armador?.toLowerCase() === 'dachser' &&
-    r.container_type?.toLowerCase() === containerType?.toLowerCase()
+    containerSize !== '' &&
+    r.container_type?.includes(containerSize)
   );
 
   if (matchingRates.length === 0 || daysIncident <= 0) return [];
