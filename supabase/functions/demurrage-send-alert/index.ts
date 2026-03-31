@@ -71,26 +71,35 @@ function formatDateBR(dateStr: string | undefined | null): string {
   } catch { return String(dateStr); }
 }
 
-function generateNotificationHtml(testMode?: boolean): string {
+function generateNotificationHtml(params: { testMode?: boolean; client_name?: string; house_bl?: string; shipment_master?: string }): string {
+  const { testMode, client_name, house_bl, shipment_master } = params;
   const testBanner = testMode
     ? `<div style="background:#ffc800;color:#000;text-align:center;padding:8px;font-size:13px;font-weight:bold;margin-bottom:16px;">⚠️ E-MAIL DE TESTE — NÃO ENCAMINHAR</div>`
     : '';
 
+  const detalhamento = `<table style="border-collapse:collapse;margin:12px 0;font-size:13px;">
+<tr><td style="padding:4px 12px 4px 0;font-weight:bold;">Cliente:</td><td>${client_name || 'N/A'}</td></tr>
+<tr><td style="padding:4px 12px 4px 0;font-weight:bold;">House BL:</td><td>${house_bl || 'N/A'}</td></tr>
+<tr><td style="padding:4px 12px 4px 0;font-weight:bold;">MBL:</td><td>${shipment_master || 'N/A'}</td></tr>
+</table>`;
+
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:20px;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#fff;color:#333;font-size:14px;line-height:1.6;">
 ${testBanner}
-<p><strong><p><strong>NOTIFICAÇÃO DE COBRANÇA</strong></p></strong></p>
-
 <p>Prezados(as),</p>
 
-<p>Identificamos que a(s) unidade(s) mencionada(s) encontra(m)-se com o free time vencido, o que poderá gerar custos adicionais de Demurrage.</p>
+<p>Identificamos custos de D&amp;D – Sobreestadia de Contêineres referentes ao(s) embarque(s) mencionado(s) abaixo:</p>
 
-<p>Caso a(s) unidade(s) já tenha(m) sido devolvida(s), solicitamos o envio da minuta de devolução para atualização dos registros.</p>
+${detalhamento}
+
+<p>Caso haja alguma divergência, solicitamos que seja sinalizada com a devida evidência no prazo de 48 horas a contar desta data.<br/>
+Após este período, os custos serão considerados válidos e será emitida Nota de Débito para pagamento.</p>
 
 <br/>
-<p>Atenciosamente,<br/>
-Time Demurrage & Detention<br/>
-Air & Sea Logistics Brazil</p>
+<p>Atenciosamente,</p>
+
+<p>Time Demurrage &amp; Detention<br/>
+Air &amp; Sea Logistics Brazil</p>
 
 <p><strong>DACHSER Brasil Logística Ltda.</strong><br/>
 Santos Office<br/>
