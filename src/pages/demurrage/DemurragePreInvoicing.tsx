@@ -63,7 +63,6 @@ export default function DemurragePreInvoicing() {
   const [exchangeRates, setExchangeRates] = useState<Record<number, string>>({});
 
   const { data: preInvoices = [], isLoading, refetch } = useDemurragePreInvoices();
-  const { data: allContainers = [] } = useDemurrageData();
   const updateMutation = useUpdatePreInvoice();
   const generateMutation = useGeneratePreInvoices();
 
