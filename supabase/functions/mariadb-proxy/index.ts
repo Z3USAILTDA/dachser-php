@@ -3542,6 +3542,7 @@ Deno.serve(async (req) => {
               FROM ${database}.t_dados_aereo a
               WHERE a.hawb_number IS NOT NULL
                 AND TRIM(a.hawb_number) <> ''
+                AND (a.master_insert >= '2026-03-20' OR a.created_at >= '2026-03-20')
             ) x
             WHERE x.rn = 1
           )
@@ -3616,7 +3617,7 @@ Deno.serve(async (req) => {
           FROM base_cct c
           LEFT JOIN aereo_latest a
             ON TRIM(a.hawb) COLLATE utf8mb4_unicode_ci = TRIM(c.hawb) COLLATE utf8mb4_unicode_ci
-          WHERE a.hawb IS NOT NULL
+          WHERE 1=1
           ORDER BY c.consulted_at DESC, c.id DESC
         `);
 
