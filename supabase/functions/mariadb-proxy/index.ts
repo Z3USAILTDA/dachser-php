@@ -3642,7 +3642,7 @@ Deno.serve(async (req) => {
             const chunk = uniqueHawbs.slice(i, i + 100);
             const placeholders = chunk.map(() => '?').join(',');
             const masterRows = await client.query(
-              `SELECT hawb, clerk, clerk_email FROM ${database}.t_dados_aereo WHERE hawb_number IN (${placeholders}) AND clerk IS NOT NULL AND TRIM(clerk) != '' ORDER BY created_at DESC`,
+              `SELECT hawb_number, clerk, clerk_email FROM ${database}.t_dados_aereo WHERE hawb_number IN (${placeholders}) AND clerk IS NOT NULL AND TRIM(clerk) != '' ORDER BY created_at DESC`,
               chunk
             );
             for (const mr of masterRows || []) {
