@@ -3630,32 +3630,45 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Fallback: fetch analista from t_master_dados for rows missing it
-        const missingAnalistaHawbs = (cctRows || [])
+        // Fallback: fetch analista for rows missing it — using normalized HAWB keys
+        const normalizeKey = (h: string) => h.replace(/[\s\-\.\/]/g, '').toUpperCase();
+        const missingAnalistaRows = (cctRows || [])
           .filter((r: any) => !r.analista || r.analista.toString().trim() === '')
-          .map((r: any) => (r.hawb || '').trim())
-          .filter((h: string) => h !== '');
+          .map((r: any) => ({
+            hawb: (r.hawb || '').trim(),
+            hawb_normalizado: (r.hawb_normalizado || '').trim(),
+          }))
+          .filter((r: any) => r.hawb !== '' || r.hawb_normalizado !== '');
         const analistaMap: Record<string, { clerk: string; clerk_email: string }> = {};
-        if (missingAnalistaHawbs.length > 0) {
-          const uniqueHawbs = [...new Set(missingAnalistaHawbs)] as string[];
-          for (let i = 0; i < uniqueHawbs.length; i += 100) {
-            const chunk = uniqueHawbs.slice(i, i + 100);
+        if (missingAnalistaRows.length > 0) {
+          const allHawbs = new Set<string>();
+          const allNormalized = new Set<string>();
+          for (const r of missingAnalistaRows) {
+            if (r.hawb) allHawbs.add(r.hawb);
+            if (r.hawb_normalizado) allNormalized.add(r.hawb_normalizado);
+          }
+          const allLookupKeys = [...new Set([...allHawbs, ...allNormalized])];
+
+          for (let i = 0; i < allLookupKeys.length; i += 100) {
+            const chunk = allLookupKeys.slice(i, i + 100);
             const placeholders = chunk.map(() => '?').join(',');
             const masterRows = await client.query(
               `SELECT hawb_number, clerk, clerk_email FROM ${database}.t_dados_aereo WHERE hawb_number IN (${placeholders}) AND clerk IS NOT NULL AND TRIM(clerk) != '' ORDER BY created_at DESC`,
               chunk
             );
             for (const mr of masterRows || []) {
-              const h = (mr.hawb_number || mr.hawb || '').trim();
-              if (h && mr.clerk && !analistaMap[h]) {
-                analistaMap[h] = { clerk: mr.clerk, clerk_email: mr.clerk_email || '' };
+              const h = (mr.hawb_number || '').trim();
+              const nk = normalizeKey(h);
+              if (h && mr.clerk) {
+                if (!analistaMap[h]) analistaMap[h] = { clerk: mr.clerk, clerk_email: mr.clerk_email || '' };
+                if (!analistaMap[nk]) analistaMap[nk] = { clerk: mr.clerk, clerk_email: mr.clerk_email || '' };
               }
             }
           }
-          console.log(`CCT: Fetched ${Object.keys(analistaMap).length} analyst names from t_dados_aereo for ${uniqueHawbs.length} missing`);
+          console.log(`CCT: Fetched ${Object.keys(analistaMap).length} analyst entries from t_dados_aereo for ${allLookupKeys.length} missing`);
 
           // Second fallback: t_master_dados for HAWBs still missing
-          const stillMissing = uniqueHawbs.filter(h => !analistaMap[h]);
+          const stillMissing = allLookupKeys.filter(h => !analistaMap[h] && !analistaMap[normalizeKey(h)]);
           if (stillMissing.length > 0) {
             for (let i = 0; i < stillMissing.length; i += 100) {
               const chunk = stillMissing.slice(i, i + 100);
@@ -3666,14 +3679,23 @@ Deno.serve(async (req) => {
               );
               for (const mr of mdRows || []) {
                 const h = (mr.hawb || '').trim();
-                if (h && mr.nome_analista && !analistaMap[h]) {
-                  analistaMap[h] = { clerk: mr.nome_analista, clerk_email: mr.email_analista || '' };
+                const nk = normalizeKey(h);
+                if (h && mr.nome_analista) {
+                  if (!analistaMap[h]) analistaMap[h] = { clerk: mr.nome_analista, clerk_email: mr.email_analista || '' };
+                  if (!analistaMap[nk]) analistaMap[nk] = { clerk: mr.nome_analista, clerk_email: mr.email_analista || '' };
                 }
               }
             }
             console.log(`CCT: After t_master_dados fallback, total analyst mappings: ${Object.keys(analistaMap).length}`);
           }
         }
+        // Helper to find analyst in map using multiple key formats
+        const findAnalista = (row: any) => {
+          const rawHawb = (row.hawb || '').trim();
+          const normHawb = (row.hawb_normalizado || '').trim();
+          const nk = normalizeKey(rawHawb || normHawb);
+          return analistaMap[rawHawb] || analistaMap[normHawb] || analistaMap[nk] || null;
+        };
 
         // Helper: map status_tela to canonical CCT status
         const mapStatusTelaToCanonical = (st: string | null): string => {
