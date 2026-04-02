@@ -20,6 +20,7 @@ import {
   Loader2,
   ExternalLink,
   FilePlus,
+  Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -518,7 +519,15 @@ const TrackingAereo = () => {
         (awb.nome_analista && awb.nome_analista.toLowerCase().includes(sl));
       const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
       const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
-      return matchesSearch && matchesAirline && matchesAnalyst;
+
+      const BR_AIRPORTS = ['GRU','VCP','CGH','GIG','SDU','BSB','CNF','POA','CWB','REC','SSA','FOR','BEL','MAO','NAT','MCZ','FLN','VIX','CGB','GYN','SLZ','THE','AJU','JPA','PMW','PVH','RBR','BVB','MCP','CGR','LDB','MGF','IGU','NVT','JOI','XAP','UDI','RAO','SJP','PPB','BAU','CPQ','QPS','SOD','MAB','STM','SJK','PNZ'];
+      const destCode = (awb.destino || '').toUpperCase().trim();
+      const isImport = BR_AIRPORTS.includes(destCode);
+      const matchesType = filterProcessType === "all" ||
+        (filterProcessType === "import" && isImport) ||
+        (filterProcessType === "export" && !isImport);
+
+      return matchesSearch && matchesAirline && matchesAnalyst && matchesType;
     });
 
     // Card filter
@@ -557,7 +566,7 @@ const TrackingAereo = () => {
     }
 
     return awbs;
-  }, [awbsData, searchTerm, filterAirline, filterAnalyst, cardFilter, sortAwb, sortClient, sortAnalyst, sortLastCheck]);
+  }, [awbsData, searchTerm, filterAirline, filterAnalyst, filterProcessType, cardFilter, sortAwb, sortClient, sortAnalyst, sortLastCheck]);
 
   const totalPages = Math.ceil(filteredAwbs.length / itemsPerPage);
   const currentAwbs = filteredAwbs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -683,6 +692,24 @@ const TrackingAereo = () => {
                     <SelectContent className="bg-card border border-border z-50">
                       <SelectItem value="all">Todos</SelectItem>
                       {uniqueAnalysts.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Impo/Expo filter */}
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-background/80 border border-border/50">
+                    <Package className="h-3 w-3 text-primary" />
+                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-muted-foreground">Tipo</span>
+                  </div>
+                  <Select value={filterProcessType} onValueChange={(v) => { setFilterProcessType(v); setCurrentPage(1); }}>
+                    <SelectTrigger className="h-8 w-[150px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border border-border z-50">
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="import">Importação</SelectItem>
+                      <SelectItem value="export">Exportação</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
