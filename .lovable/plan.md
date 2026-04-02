@@ -1,45 +1,68 @@
 
 
-## Corrigir resolução de eventos null no SQL do `fetch-tracking-aereo`
+## Plano: Fallback multi-armador para MBLs PENDENTE/NAO_ENCONTRADO
 
-### Diagnóstico
+### Contexto
 
-O retorno do select mostra que para o AWB `016-06977736`, os campos `penultimo_des/code/evento`, `antepenultimo_des/code/evento` e `antes_antepenultimo_des/code/evento` vêm **todos null**, mesmo tendo descrições válidas na timeline.
+Existem 37 MBLs travados com `container = 'PENDENTE'` ou `'NAO_ENCONTRADO'` na `t_tracking_sea`. O sistema atual (`sea_seed_smart`) só processa containers já conhecidos. O `hapag-batch-discover` existe mas conecta diretamente na API Hapag e faz toda a lógica internamente.
 
-**Causa raiz**: As descrições da `t_fato_aereo` vêm no formato `"Documents Delivered, qty: 11, weight: 166.1"` — sem prefixo `(CODE)` e com sufixo `, qty: ...`. A lógica atual tenta:
+A tela **Status Doc Exportação** já possui Edge Functions prontas que consultam APIs de 3 armadores:
+- **Hapag-Lloyd**: `draft-track-hapag-multi` (API `hlag.com`, usa `transportDocumentReference`)
+- **MSC**: `draft-track-msc` (API `msc.com/api/feature/tools/TrackingInfo`)
+- **ONE**: `draft-track-one` (API `ecomm.one-line.com`)
 
-1. Extrair código do prefixo `(...)` → falha (não existe prefixo)
-2. Fallback via `t_description_eventos` com `b.desc1 LIKE concat(d.description, '%')` → falha porque `"Documents Delivered, qty: 11, weight: 166.1"` começa com `"Documents Delivered"`, mas `t_description_eventos` provavelmente só tem `"Delivered"` (que não bate no início da string)
+Todas retornam o mesmo formato normalizado: `{ success, bookingInfo, containers[], events[] }`.
 
-O `desc0` ("Delivered, qty: 11, weight: 166.1") funciona porque `tde.description = b.desc0` faz match direto no join externo com `t_description_eventos`, e "Delivered" bate com `LIKE 'Delivered%'`. Mas "Documents Delivered" não começa com nenhuma entrada da tabela.
+### O que será feito
 
-### Solução
+**1 nova Edge Function**: `sea-carrier-fallback/index.ts`
 
-Adicionar um terceiro nível de fallback nos subselects: além de tentar o prefixo `(CODE)` e o LIKE direto, também tentar o LIKE contra o texto **antes da primeira vírgula** (`substring_index(b.descN, ',', 1)`). Isso transforma `"Documents Delivered, qty: 11, weight: 166.1"` em `"Documents Delivered"` para matching.
+Responsabilidade:
+1. Conecta ao MariaDB e busca MBLs ativos com `container IN ('PENDENTE', 'NAO_ENCONTRADO', '')` da `t_tracking_sea`
+2. Identifica o armador pelo prefixo do MBL (usando mapeamento já existente em `_shared/shippingLineMapping.ts`)
+3. Para cada MBL, chama a Edge Function correspondente:
+   - Hapag → `draft-track-hapag-multi` com `{ searchType: 'bl', searchValue: mblId }`
+   - MSC → `draft-track-msc` com `{ searchType: 'bl', searchValue: mblId }`
+   - ONE → `draft-track-one` com `{ searchType: 'bl', searchValue: mblId }`
+4. Com o retorno (`containers[]`, `bookingInfo`), insere/atualiza os containers na `t_tracking_sea` e remove o placeholder PENDENTE
+5. Atualiza o `t_sea_master` com informações consolidadas (container_count, status, vessel, eta, origem, destino)
+6. Limite: processa até 15 MBLs por execução, com delay de 1s entre chamadas
 
-A alteração é mínima — em cada subselect de fallback via `t_description_eventos`, trocar:
+**1 alteração no `sea-tracking-cron/index.ts`**: adicionar Passo 4 que chama `sea-carrier-fallback` após o enrich_coords.
 
-```sql
-where b.desc1 like concat(d.description, '%')
+### Detalhes técnicos
+
+```text
+sea-tracking-cron (orquestrador)
+├── Passo 1: olimpo-sync
+├── Passo 2: sea_seed_smart (batches)
+├── Passo 3: enrich_missing_coords
+└── Passo 4 (NOVO): sea-carrier-fallback
+    ├── Busca MBLs PENDENTE/NAO_ENCONTRADO no MariaDB
+    ├── Detecta armador por prefixo
+    ├── Chama draft-track-hapag-multi / draft-track-msc / draft-track-one
+    ├── Insere containers descobertos na t_tracking_sea
+    ├── Remove placeholders PENDENTE
+    └── Atualiza t_sea_master
 ```
 
-Por:
+Armadores suportados no fallback:
+- `HLCU, HLXU, HLBU, SAHL, GLNL` → Hapag (`draft-track-hapag-multi`)
+- `MSCU, MEDU, MSCM` → MSC (`draft-track-msc`)
+- `ONEY, ONEU, NYKU, MOLU, KKFU` → ONE (`draft-track-one`)
+- Outros prefixos → ignorados (log + skip)
 
-```sql
-where b.desc1 like concat(d.description, '%')
-   or substring_index(b.desc1, ',', 1) like concat(d.description, '%')
-```
+### Arquivos alterados
 
-Isso se aplica aos 12 subselects (3 campos × 4 posições: penultimo, antepenultimo, antes_antepenultimo, e o ultimo_evento).
-
-### Arquivo alterado
-
-**`supabase/functions/fetch-tracking-aereo/index.ts`** — somente os subselects de fallback dentro do bloco SQL (linhas 48-269). Nenhum outro arquivo tocado.
+| Arquivo | Ação |
+|---------|------|
+| `supabase/functions/sea-carrier-fallback/index.ts` | **Criar** |
+| `supabase/functions/sea-tracking-cron/index.ts` | **Adicionar** Passo 4 |
 
 ### O que NÃO muda
 
-- Estrutura do select (mesmas colunas, mesmos aliases)
-- Código JS de normalização (linhas 277-339)
-- Nenhum outro arquivo, hook, componente ou tela
-- Prioridade de resolução: prefixo `(CODE)` primeiro, depois `t_description_eventos`
+- Nenhuma Edge Function existente (draft-track-*, olimpo-proxy, hapag-batch-discover)
+- Nenhum componente, hook ou tela
+- Nenhuma tabela ou migração
+- Lógica dos Passos 1-3 do cron permanece idêntica
 
