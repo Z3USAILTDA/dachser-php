@@ -2697,15 +2697,12 @@ serve(async (req) => {
         const candidatesSeaMaster = await client.query(`
           SELECT
             TRIM(sm.master) AS mbl_id,
-            COALESCE(NULLIF(MAX(md.tipo_processo), ''), 'SEA IMPORT') AS tipo_processo,
+            'SEA EXPORT' AS tipo_processo,
             'PENDENTE' AS container,
             sm.customer_no AS consignee,
             sm.nome_analista AS email_analista,
             NULL AS email_cliente
           FROM dados_dachser.t_sea_master sm
-          LEFT JOIN dados_dachser.t_master_dados md 
-            ON TRIM(md.mawb) = TRIM(sm.master) 
-            AND md.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
           WHERE sm.master IS NOT NULL
             AND TRIM(sm.master) != ''
             AND (
@@ -2719,36 +2716,35 @@ serve(async (req) => {
         `);
         console.log(`[sync_sea_tracking] Found ${(candidatesSeaMaster as any[]).length} candidates from t_sea_master`);
 
-        // Step 2B: Get candidates from t_master_dados (FONTE SECUNDÁRIA - SEA IMPORT/EXPORT recentes)
-        const candidatesMasterDados = await client.query(`
+        // Step 2B: Get candidates from t_dados_maritimo (FONTE SECUNDÁRIA)
+        const candidatesDadosMaritimo = await client.query(`
           SELECT
-            TRIM(md.mawb) AS mbl_id,
-            md.tipo_processo AS tipo_processo,
+            TRIM(dm.bl_number) AS mbl_id,
+            'SEA EXPORT' AS tipo_processo,
             'PENDENTE' AS container,
-            md.cliente AS consignee,
-            md.nome_analista AS email_analista,
+            dm.consignee_nome AS consignee,
+            dm.clerk_email AS email_analista,
             NULL AS email_cliente
-          FROM dados_dachser.t_master_dados md
-          WHERE md.mawb IS NOT NULL
-            AND TRIM(md.mawb) != ''
-            AND md.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
-            AND md.data_insert >= '2026-02-04 09:55:11'
+          FROM dados_dachser.t_dados_maritimo dm
+          WHERE dm.bl_number IS NOT NULL
+            AND TRIM(dm.bl_number) != ''
+            AND dm.created_at >= '2026-02-01'
             AND (
-              TRIM(md.mawb) REGEXP '^[A-Za-z]{4}[0-9]+$'
-              OR TRIM(md.mawb) REGEXP '^(${VALID_MBL_PREFIXES})[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$'
+              TRIM(dm.bl_number) REGEXP '^[A-Za-z]{4}[0-9]+$'
+              OR TRIM(dm.bl_number) REGEXP '^(${VALID_MBL_PREFIXES})[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$'
             )
-            AND LEFT(TRIM(md.mawb), 4) NOT IN ('EBKG', 'BKNG', 'GLNL', 'GLSL', 'GLDL', 'BRSA')
-            AND TRIM(md.mawb) NOT REGEXP '^BR[A-Za-z]{3}'
-          GROUP BY TRIM(md.mawb)
+            AND LEFT(TRIM(dm.bl_number), 4) NOT IN ('EBKG', 'BKNG', 'GLNL', 'GLSL', 'GLDL', 'BRSA')
+            AND TRIM(dm.bl_number) NOT REGEXP '^BR[A-Za-z]{3}'
+          GROUP BY TRIM(dm.bl_number), dm.consignee_nome, dm.clerk_email
           LIMIT 300
         `);
-        console.log(`[sync_sea_tracking] Found ${(candidatesMasterDados as any[]).length} candidates from t_master_dados`);
+        console.log(`[sync_sea_tracking] Found ${(candidatesDadosMaritimo as any[]).length} candidates from t_dados_maritimo`);
 
         // Step 3: Merge candidates (t_sea_master has priority for duplicates)
         const seaMasterSet = new Set((candidatesSeaMaster as any[]).map(c => c.mbl_id?.trim()));
-        const uniqueMasterDados = (candidatesMasterDados as any[]).filter(c => !seaMasterSet.has(c.mbl_id?.trim()));
-        const allCandidates = [...(candidatesSeaMaster as any[]), ...uniqueMasterDados];
-        console.log(`[sync_sea_tracking] Total unique candidates: ${allCandidates.length} (${(candidatesSeaMaster as any[]).length} from t_sea_master + ${uniqueMasterDados.length} unique from t_master_dados)`);
+        const uniqueDadosMaritimo = (candidatesDadosMaritimo as any[]).filter(c => !seaMasterSet.has(c.mbl_id?.trim()));
+        const allCandidates = [...(candidatesSeaMaster as any[]), ...uniqueDadosMaritimo];
+        console.log(`[sync_sea_tracking] Total unique candidates: ${allCandidates.length} (${(candidatesSeaMaster as any[]).length} from t_sea_master + ${uniqueDadosMaritimo.length} unique from t_dados_maritimo)`);
 
         // Step 4: Filter out existing MBLs in JavaScript (much faster than SQL NOT EXISTS)
         const toInsert = allCandidates.filter(c => !existingSet.has(c.mbl_id?.trim()));
