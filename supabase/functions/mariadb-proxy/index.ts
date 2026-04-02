@@ -3653,6 +3653,26 @@ Deno.serve(async (req) => {
             }
           }
           console.log(`CCT: Fetched ${Object.keys(analistaMap).length} analyst names from t_dados_aereo for ${uniqueHawbs.length} missing`);
+
+          // Second fallback: t_master_dados for HAWBs still missing
+          const stillMissing = uniqueHawbs.filter(h => !analistaMap[h]);
+          if (stillMissing.length > 0) {
+            for (let i = 0; i < stillMissing.length; i += 100) {
+              const chunk = stillMissing.slice(i, i + 100);
+              const placeholders = chunk.map(() => '?').join(',');
+              const mdRows = await client.query(
+                `SELECT hawb, nome_analista, email_analista FROM ${database}.t_master_dados WHERE hawb IN (${placeholders}) AND nome_analista IS NOT NULL AND TRIM(nome_analista) != '' ORDER BY created_at DESC`,
+                chunk
+              );
+              for (const mr of mdRows || []) {
+                const h = (mr.hawb || '').trim();
+                if (h && mr.nome_analista && !analistaMap[h]) {
+                  analistaMap[h] = { clerk: mr.nome_analista, clerk_email: mr.email_analista || '' };
+                }
+              }
+            }
+            console.log(`CCT: After t_master_dados fallback, total analyst mappings: ${Object.keys(analistaMap).length}`);
+          }
         }
 
         // Helper: map status_tela to canonical CCT status
