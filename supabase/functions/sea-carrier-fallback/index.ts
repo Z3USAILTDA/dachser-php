@@ -90,9 +90,9 @@ serve(async (req) => {
     for (let i = 0; i < pendingRows.length; i++) {
       const mblId = pendingRows[i].mbl_id as string;
       const carrierInfo = detectCarrierFromMbl(mblId);
-      const functionName = CARRIER_FUNCTION_MAP[carrierInfo.code];
+      const carrierConfig = CARRIER_CONFIG[carrierInfo.code];
 
-      if (!functionName) {
+      if (!carrierConfig) {
         console.log(`[sea-carrier-fallback] Skip ${mblId}: armador ${carrierInfo.code} sem fallback`);
         stats.skipped_no_carrier++;
 
