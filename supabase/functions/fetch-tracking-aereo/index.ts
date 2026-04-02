@@ -18,6 +18,61 @@ async function queryWithRetry(client: Client, sql: string, params: any[] = [], m
   }
 }
 
+async function sendFailureEmail(failedRows: any[]) {
+  if (failedRows.length === 0) return;
+
+  const smtpHost = Deno.env.get("SMTP_HOST");
+  const smtpPort = Deno.env.get("SMTP_PORT");
+  const smtpUser = Deno.env.get("SMTP_USER");
+  const smtpPass = Deno.env.get("SMTP_PASS");
+  const smtpFrom = Deno.env.get("SMTP_FROM_EMAIL") || smtpUser;
+
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    console.warn("SMTP not configured, skipping failure email");
+    return;
+  }
+
+  const tableRows = failedRows
+    .map((r) => `<tr><td style="border:1px solid #ddd;padding:6px">${r.awb}</td><td style="border:1px solid #ddd;padding:6px">${r.hawb}</td><td style="border:1px solid #ddd;padding:6px">${r.cliente}</td></tr>`)
+    .join("");
+
+  const html = `
+    <h2>Tracking Aéreo — Processos com falha no rastreio</h2>
+    <p>Total: ${failedRows.length} processos sem status resolvido.</p>
+    <table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px">
+      <thead><tr style="background:#f0f0f0">
+        <th style="border:1px solid #ddd;padding:6px">AWB</th>
+        <th style="border:1px solid #ddd;padding:6px">HAWB</th>
+        <th style="border:1px solid #ddd;padding:6px">Cliente</th>
+      </tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+  `;
+
+  try {
+    const { SMTPClient } = await import("https://deno.land/x/denomailer@1.6.0/mod.ts");
+    const client = new SMTPClient({
+      connection: {
+        hostname: smtpHost,
+        port: parseInt(smtpPort || "587"),
+        tls: true,
+        auth: { username: smtpUser, password: smtpPass },
+      },
+    });
+    await client.send({
+      from: smtpFrom!,
+      to: "larissa@z3us.ai",
+      subject: "Tracking Aéreo — Processos com falha no rastreio",
+      content: "Veja a versão HTML deste e-mail.",
+      html,
+    });
+    await client.close();
+    console.log(`Failure email sent with ${failedRows.length} rows`);
+  } catch (err) {
+    console.error("Failed to send failure email:", err);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -44,322 +99,274 @@ serve(async (req) => {
       password,
     });
 
-    // Main query: fetch all tracking data from t_dados_aereo + t_fato_aereo + t_eventos_awb + t_description_eventos
     const sql = `
-      select
-        *
-      from
-      (
+      with base as (
           select
-              b.awb_number,
-              b.hawb_number,
-              b.consignee_nome,
-              b.clerk,
-              b.clerk_email,
-              b.etd,
-              b.last_flight,
-              b.origin,
-              b.destination,
-              b.timeline_json,
-              b.last_status_code,
-              b.location_last,
-              b.location_penultimate,
-              tea.descricao_en,
-              b.desc0 as description_last,
-              b.desc1 as description_penultimate,
-              b.desc2 as description_antepenultimate,
-              b.desc3 as description_before_antepenultimate,
+              tda.awb_number as awb,
+              tda.hawb_number as hawb,
+              tda.consignee_nome as cliente,
+              tdaf.origin as origem,
+              tdaf.destination as destino,
+              tda.clerk as analista,
+              tdaf.last_status_code,
+              tdaf.timeline_json,
+              convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc0,
+              convert(json_unquote(json_extract(tdaf.timeline_json, '$[1].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc1,
+              convert(json_unquote(json_extract(tdaf.timeline_json, '$[2].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc2,
+              convert(json_unquote(json_extract(tdaf.timeline_json, '$[3].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc3,
+              convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].location')) using utf8mb4) collate utf8mb4_unicode_ci as loc0,
+              convert(json_unquote(json_extract(tdaf.timeline_json, '$[1].location')) using utf8mb4) collate utf8mb4_unicode_ci as loc1,
+              convert(json_unquote(json_extract(tdaf.timeline_json, '$[2].location')) using utf8mb4) collate utf8mb4_unicode_ci as loc2,
+              convert(json_unquote(json_extract(tdaf.timeline_json, '$[3].location')) using utf8mb4) collate utf8mb4_unicode_ci as loc3,
+              convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].date')) using utf8mb4) collate utf8mb4_unicode_ci as date0,
+              convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].time')) using utf8mb4) collate utf8mb4_unicode_ci as time0
+          from dados_dachser.t_dados_aereo tda
+          left join dados_dachser.t_fato_aereo tdaf
+              on tdaf.awb collate utf8mb4_unicode_ci = tda.awb_number collate utf8mb4_unicode_ci
+             and json_valid(tdaf.hawbs_json)
+             and json_contains(tdaf.hawbs_json, json_array(tda.hawb_number))
+          where
               (
-                  select e.descricao_en
-                  from dados_dachser.t_eventos_awb e
-                  where e.code = coalesce(
-                      case
-                          when b.desc1 like '(%' then substring_index(substring_index(b.desc1, ')', 1), '(', -1)
-                      end,
-                      (
-                          select d.code
-                          from dados_dachser.t_description_eventos d
-                          where b.desc1 like concat(d.description, '%')
-                             or substring_index(b.desc1, ',', 1) like concat(d.description, '%')
-                          order by char_length(d.description) desc
-                          limit 1
-                      )
-                  )
-                  limit 1
-              ) as penultimo_des,
-              coalesce(
-                  case
-                      when b.desc1 like '(%' then substring_index(substring_index(b.desc1, ')', 1), '(', -1)
-                  end,
-                  (
+                  tda.master_insert >= '2026-03-20'
+                  or tda.created_at >= '2026-03-20'
+              )
+      ),
+      codes as (
+          select
+              b.*,
+              case
+                  when nullif(b.last_status_code, '') is not null then b.last_status_code
+                  when b.desc0 like '(%' then substring_index(substring_index(b.desc0, ')', 1), '(', -1)
+                  when upper(b.desc0) like '%OFFLOADED%' then 'OFLD'
+                  when upper(b.desc0) like '%READY FOR PICK-UP%' then 'NFD'
+                  when upper(b.desc0) like '%AGENT NOTIFIED%' then 'NFD'
+                  when upper(b.desc0) like '%NOTIFIED FOR DELIVERY%' then 'NFD'
+                  when upper(b.desc0) like '%DOCUMENTS DELIVERED%' then 'AWD'
+                  when upper(b.desc0) like '%RECEIVED FROM FLIGHT%' then 'RCF'
+                  when upper(b.desc0) like '%RECEIVED FROM SHIPPER%' then 'RCS'
+                  when upper(b.desc0) like '%READY FOR CARRIAGE%' then 'RCS'
+                  when upper(b.desc0) like '%FREIGHT ON HAND%' then 'FOH'
+                  when upper(b.desc0) like '%MANIFESTED%' then 'MAN'
+                  when upper(b.desc0) like '%DEPARTED%' then 'DEP'
+                  when upper(b.desc0) like '%ARRIVED%' then 'ARR'
+                  when upper(b.desc0) like '%DELIVERED%' then 'DLV'
+                  else (
                       select d.code
                       from dados_dachser.t_description_eventos d
-                      where b.desc1 like concat(d.description, '%')
-                         or substring_index(b.desc1, ',', 1) like concat(d.description, '%')
+                      where upper(b.desc0) like concat(upper(d.description), '%')
                       order by char_length(d.description) desc
                       limit 1
                   )
-              ) as penultimo_code,
-              (
-                  select e.id
-                  from dados_dachser.t_eventos_awb e
-                  where e.code = coalesce(
-                      case
-                          when b.desc1 like '(%' then substring_index(substring_index(b.desc1, ')', 1), '(', -1)
-                      end,
-                      (
-                          select d.code
-                          from dados_dachser.t_description_eventos d
-                          where b.desc1 like concat(d.description, '%')
-                             or substring_index(b.desc1, ',', 1) like concat(d.description, '%')
-                          order by char_length(d.description) desc
-                          limit 1
-                      )
-                  )
-                  limit 1
-              ) as penultimo_evento,
-              (
-                  select e.descricao_en
-                  from dados_dachser.t_eventos_awb e
-                  where e.code = coalesce(
-                      case
-                          when b.desc2 like '(%' then substring_index(substring_index(b.desc2, ')', 1), '(', -1)
-                      end,
-                      (
-                          select d.code
-                          from dados_dachser.t_description_eventos d
-                          where b.desc2 like concat(d.description, '%')
-                             or substring_index(b.desc2, ',', 1) like concat(d.description, '%')
-                          order by char_length(d.description) desc
-                          limit 1
-                      )
-                  )
-                  limit 1
-              ) as antepenultimo_des,
-              coalesce(
-                  case
-                      when b.desc2 like '(%' then substring_index(substring_index(b.desc2, ')', 1), '(', -1)
-                  end,
-                  (
+              end as code0,
+              case
+                  when b.desc1 like '(%' then substring_index(substring_index(b.desc1, ')', 1), '(', -1)
+                  when upper(b.desc1) like '%OFFLOADED%' then 'OFLD'
+                  when upper(b.desc1) like '%READY FOR PICK-UP%' then 'NFD'
+                  when upper(b.desc1) like '%AGENT NOTIFIED%' then 'NFD'
+                  when upper(b.desc1) like '%NOTIFIED FOR DELIVERY%' then 'NFD'
+                  when upper(b.desc1) like '%DOCUMENTS DELIVERED%' then 'AWD'
+                  when upper(b.desc1) like '%RECEIVED FROM FLIGHT%' then 'RCF'
+                  when upper(b.desc1) like '%RECEIVED FROM SHIPPER%' then 'RCS'
+                  when upper(b.desc1) like '%READY FOR CARRIAGE%' then 'RCS'
+                  when upper(b.desc1) like '%FREIGHT ON HAND%' then 'FOH'
+                  when upper(b.desc1) like '%MANIFESTED%' then 'MAN'
+                  when upper(b.desc1) like '%DEPARTED%' then 'DEP'
+                  when upper(b.desc1) like '%ARRIVED%' then 'ARR'
+                  when upper(b.desc1) like '%DELIVERED%' then 'DLV'
+                  else (
                       select d.code
                       from dados_dachser.t_description_eventos d
-                      where b.desc2 like concat(d.description, '%')
-                         or substring_index(b.desc2, ',', 1) like concat(d.description, '%')
+                      where upper(b.desc1) like concat(upper(d.description), '%')
                       order by char_length(d.description) desc
                       limit 1
                   )
-              ) as antepenultimo_code,
-              (
-                  select e.id
-                  from dados_dachser.t_eventos_awb e
-                  where e.code = coalesce(
-                      case
-                          when b.desc2 like '(%' then substring_index(substring_index(b.desc2, ')', 1), '(', -1)
-                      end,
-                      (
-                          select d.code
-                          from dados_dachser.t_description_eventos d
-                          where b.desc2 like concat(d.description, '%')
-                             or substring_index(b.desc2, ',', 1) like concat(d.description, '%')
-                          order by char_length(d.description) desc
-                          limit 1
-                      )
-                  )
-                  limit 1
-              ) as antepenultimo_evento,
-              (
-                  select e.descricao_en
-                  from dados_dachser.t_eventos_awb e
-                  where e.code = coalesce(
-                      case
-                          when b.desc3 like '(%' then substring_index(substring_index(b.desc3, ')', 1), '(', -1)
-                      end,
-                      (
-                          select d.code
-                          from dados_dachser.t_description_eventos d
-                          where b.desc3 like concat(d.description, '%')
-                             or substring_index(b.desc3, ',', 1) like concat(d.description, '%')
-                          order by char_length(d.description) desc
-                          limit 1
-                      )
-                  )
-                  limit 1
-              ) as antes_antepenultimo_des,
-              coalesce(
-                  case
-                      when b.desc3 like '(%' then substring_index(substring_index(b.desc3, ')', 1), '(', -1)
-                  end,
-                  (
+              end as code1,
+              case
+                  when b.desc2 like '(%' then substring_index(substring_index(b.desc2, ')', 1), '(', -1)
+                  when upper(b.desc2) like '%OFFLOADED%' then 'OFLD'
+                  when upper(b.desc2) like '%READY FOR PICK-UP%' then 'NFD'
+                  when upper(b.desc2) like '%AGENT NOTIFIED%' then 'NFD'
+                  when upper(b.desc2) like '%NOTIFIED FOR DELIVERY%' then 'NFD'
+                  when upper(b.desc2) like '%DOCUMENTS DELIVERED%' then 'AWD'
+                  when upper(b.desc2) like '%RECEIVED FROM FLIGHT%' then 'RCF'
+                  when upper(b.desc2) like '%RECEIVED FROM SHIPPER%' then 'RCS'
+                  when upper(b.desc2) like '%READY FOR CARRIAGE%' then 'RCS'
+                  when upper(b.desc2) like '%FREIGHT ON HAND%' then 'FOH'
+                  when upper(b.desc2) like '%MANIFESTED%' then 'MAN'
+                  when upper(b.desc2) like '%DEPARTED%' then 'DEP'
+                  when upper(b.desc2) like '%ARRIVED%' then 'ARR'
+                  when upper(b.desc2) like '%DELIVERED%' then 'DLV'
+                  else (
                       select d.code
                       from dados_dachser.t_description_eventos d
-                      where b.desc3 like concat(d.description, '%')
-                         or substring_index(b.desc3, ',', 1) like concat(d.description, '%')
+                      where upper(b.desc2) like concat(upper(d.description), '%')
                       order by char_length(d.description) desc
                       limit 1
                   )
-              ) as antes_antepenultimo_code,
-              (
-                  select e.id
-                  from dados_dachser.t_eventos_awb e
-                  where e.code = coalesce(
-                      case
-                          when b.desc3 like '(%' then substring_index(substring_index(b.desc3, ')', 1), '(', -1)
-                      end,
-                      (
-                          select d.code
-                          from dados_dachser.t_description_eventos d
-                          where b.desc3 like concat(d.description, '%')
-                             or substring_index(b.desc3, ',', 1) like concat(d.description, '%')
-                          order by char_length(d.description) desc
-                          limit 1
-                      )
-                  )
-                  limit 1
-              ) as antes_antepenultimo_evento,
-              tea.descricao_en as ultimo_desc,
-              tea.code as ultimo_code,
-              tde.descricao,
-              coalesce(
-                  (
-                      select e.id
-                      from dados_dachser.t_eventos_awb e
-                      where e.code = coalesce(
-                          case
-                              when b.desc0 like '(%' then substring_index(substring_index(b.desc0, ')', 1), '(', -1)
-                          end,
-                          (
-                              select d.code
-                              from dados_dachser.t_description_eventos d
-                              where b.desc0 like concat(d.description, '%')
-                                 or substring_index(b.desc0, ',', 1) like concat(d.description, '%')
-                              order by char_length(d.description) desc
-                              limit 1
-                          ),
-                          b.last_status_code
-                      )
+              end as code2,
+              case
+                  when b.desc3 like '(%' then substring_index(substring_index(b.desc3, ')', 1), '(', -1)
+                  when upper(b.desc3) like '%OFFLOADED%' then 'OFLD'
+                  when upper(b.desc3) like '%READY FOR PICK-UP%' then 'NFD'
+                  when upper(b.desc3) like '%AGENT NOTIFIED%' then 'NFD'
+                  when upper(b.desc3) like '%NOTIFIED FOR DELIVERY%' then 'NFD'
+                  when upper(b.desc3) like '%DOCUMENTS DELIVERED%' then 'AWD'
+                  when upper(b.desc3) like '%RECEIVED FROM FLIGHT%' then 'RCF'
+                  when upper(b.desc3) like '%RECEIVED FROM SHIPPER%' then 'RCS'
+                  when upper(b.desc3) like '%READY FOR CARRIAGE%' then 'RCS'
+                  when upper(b.desc3) like '%FREIGHT ON HAND%' then 'FOH'
+                  when upper(b.desc3) like '%MANIFESTED%' then 'MAN'
+                  when upper(b.desc3) like '%DEPARTED%' then 'DEP'
+                  when upper(b.desc3) like '%ARRIVED%' then 'ARR'
+                  when upper(b.desc3) like '%DELIVERED%' then 'DLV'
+                  else (
+                      select d.code
+                      from dados_dachser.t_description_eventos d
+                      where upper(b.desc3) like concat(upper(d.description), '%')
+                      order by char_length(d.description) desc
                       limit 1
-                  ),
-                  tea.id
-              ) as ultimo_evento,
-              tde.descricao as des,
-              teau.descricao_en as des_en,
-              tde.description
-          from
-          (
-              select
-                  tda.awb_number,
-                  tda.hawb_number,
-                  tda.consignee_nome,
-                  tda.clerk,
-                  tda.clerk_email,
-                  tda.etd,
-                  '' as last_flight,
-                  '' as origin,
-                  '' as destination,
-                  tdaf.timeline_json,
-                  tdaf.last_status_code,
-                  convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc0,
-                  convert(json_unquote(json_extract(tdaf.timeline_json, '$[1].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc1,
-                  convert(json_unquote(json_extract(tdaf.timeline_json, '$[2].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc2,
-                  convert(json_unquote(json_extract(tdaf.timeline_json, '$[3].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc3,
-                  convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].location')) using utf8mb4) collate utf8mb4_unicode_ci as location_last,
-                  convert(json_unquote(json_extract(tdaf.timeline_json, '$[1].location')) using utf8mb4) collate utf8mb4_unicode_ci as location_penultimate
-              from dados_dachser.t_dados_aereo tda
-              left join dados_dachser.t_fato_aereo tdaf
-                  on tdaf.awb collate utf8mb4_unicode_ci = tda.awb_number collate utf8mb4_unicode_ci
-                 and json_valid(tdaf.hawbs_json)
-                 and json_contains(tdaf.hawbs_json, json_array(tda.hawb_number))
-          ) b
-          left join dados_dachser.t_eventos_awb tea
-              on tea.code collate utf8mb4_unicode_ci = b.last_status_code collate utf8mb4_unicode_ci
-          left join dados_dachser.t_description_eventos tde
-              on tde.description collate utf8mb4_unicode_ci = b.desc0
-          left join dados_dachser.t_eventos_awb teau
-              on teau.code collate utf8mb4_unicode_ci = tde.code collate utf8mb4_unicode_ci
-      ) x
+                  )
+              end as code3
+          from base b
+      ),
+      ids as (
+          select
+              c.*,
+              e_last.id as id_last_status,
+              e0.id as id0,
+              e1.id as id1,
+              e2.id as id2,
+              e3.id as id3
+          from codes c
+          left join dados_dachser.t_eventos_awb e_last
+              on e_last.code collate utf8mb4_unicode_ci = c.last_status_code collate utf8mb4_unicode_ci
+          left join dados_dachser.t_eventos_awb e0
+              on e0.code collate utf8mb4_unicode_ci = c.code0 collate utf8mb4_unicode_ci
+          left join dados_dachser.t_eventos_awb e1
+              on e1.code collate utf8mb4_unicode_ci = c.code1 collate utf8mb4_unicode_ci
+          left join dados_dachser.t_eventos_awb e2
+              on e2.code collate utf8mb4_unicode_ci = c.code2 collate utf8mb4_unicode_ci
+          left join dados_dachser.t_eventos_awb e3
+              on e3.code collate utf8mb4_unicode_ci = c.code3 collate utf8mb4_unicode_ci
+      ),
+      final as (
+          select
+              i.*,
+              case
+                  when i.code0 = 'DLV' or i.code1 = 'DLV' or i.code2 = 'DLV' or i.code3 = 'DLV' or i.last_status_code = 'DLV'
+                      then 'DLV'
+                  when nullif(i.last_status_code, '') is not null
+                       and ifnull(i.id_last_status, 0) >= ifnull(i.id0, 0)
+                       and ifnull(i.id_last_status, 0) >= ifnull(i.id1, 0)
+                       and ifnull(i.id_last_status, 0) >= ifnull(i.id2, 0)
+                       and ifnull(i.id_last_status, 0) >= ifnull(i.id3, 0)
+                      then i.last_status_code
+                  when greatest(
+                      ifnull(i.id0, 0),
+                      ifnull(i.id1, 0),
+                      ifnull(i.id2, 0),
+                      ifnull(i.id3, 0)
+                  ) = ifnull(i.id0, 0) then i.code0
+                  when greatest(
+                      ifnull(i.id0, 0),
+                      ifnull(i.id1, 0),
+                      ifnull(i.id2, 0),
+                      ifnull(i.id3, 0)
+                  ) = ifnull(i.id1, 0) then i.code1
+                  when greatest(
+                      ifnull(i.id0, 0),
+                      ifnull(i.id1, 0),
+                      ifnull(i.id2, 0),
+                      ifnull(i.id3, 0)
+                  ) = ifnull(i.id2, 0) then i.code2
+                  when greatest(
+                      ifnull(i.id0, 0),
+                      ifnull(i.id1, 0),
+                      ifnull(i.id2, 0),
+                      ifnull(i.id3, 0)
+                  ) = ifnull(i.id3, 0) then i.code3
+                  else i.last_status_code
+              end as ultimo_status_correto_code
+          from ids i
+      )
+      select
+          f.awb as AWB,
+          f.hawb as HAWB,
+          f.cliente as CLIENTE,
+          f.origem as ORIGEM,
+          f.destino as DESTINO,
+          f.loc0 as LOCALIZACAO_ULTIMO_EVENTO,
+          f.loc1 as LOCALIZACAO_PENULTIMO_EVENTO,
+          f.loc2 as LOCALIZACAO_ANTEPENULTIMO_EVENTO,
+          f.loc3 as LOCALIZACAO_ANTES_ANTEPENULTIMO_EVENTO,
+          f.analista as ANALISTA,
+          f.timeline_json as TIMELINE,
+          trim(concat(ifnull(f.date0, ''), ' ', ifnull(f.time0, ''))) as DATA_HORA_ULTIMO_EVENTO,
+          f.ultimo_status_correto_code as ULTIMO_STATUS_CODE,
+          e_final.descricao_en as ULTIMO_STATUS_CORRETO
+      from final f
+      left join dados_dachser.t_eventos_awb e_final
+          on e_final.code collate utf8mb4_unicode_ci = f.ultimo_status_correto_code collate utf8mb4_unicode_ci
     `;
 
-    console.log("Executing tracking aereo query...");
+    console.log("Executing tracking aereo query (v2 CTEs)...");
     const rows = await queryWithRetry(client, sql);
     console.log(`Query returned ${rows?.length || 0} rows`);
 
-    // Normalize the data
-    const data = (rows || []).map((row: any) => {
-      // Parse timeline_json
+    const data: any[] = [];
+    const failed: any[] = [];
+
+    for (const row of rows || []) {
       let timeline: any[] = [];
       try {
-        if (row.timeline_json) {
-          timeline = typeof row.timeline_json === "string" ? JSON.parse(row.timeline_json) : row.timeline_json;
+        if (row.TIMELINE) {
+          timeline = typeof row.TIMELINE === "string" ? JSON.parse(row.TIMELINE) : row.TIMELINE;
         }
       } catch (e) {
-        console.warn(`Failed to parse timeline_json for AWB ${row.awb_number}:`, e);
+        console.warn(`Failed to parse timeline for AWB ${row.AWB}:`, e);
       }
 
-      // Get last event date from timeline
-      let lastEventDate: string | null = null;
-      if (timeline.length > 0) {
-        // Find the event matching last_event code in timeline
-        const lastEvt = timeline[0]; // First event in timeline (most recent by scraper order)
-        lastEventDate = lastEvt?.date || lastEvt?.timestamp || null;
-      }
-
-      // Determine last_event using hierarchy rules
-      let lastEvent = "";
-      if (
-        row.ultimo_code === "DLV" ||
-        row.penultimo_code === "DLV" ||
-        row.antepenultimo_code === "DLV" ||
-        row.antes_antepenultimo_code === "DLV"
-      ) {
-        lastEvent = "DLV";
-      } else {
-        const candidates = [
-          { id: row.ultimo_evento, code: row.ultimo_code },
-          { id: row.penultimo_evento, code: row.penultimo_code },
-          { id: row.antepenultimo_evento, code: row.antepenultimo_code },
-          { id: row.antes_antepenultimo_evento, code: row.antes_antepenultimo_code },
-        ].filter((c) => c.id != null);
-
-        if (candidates.length > 0) {
-          const winner = candidates.reduce((a, b) => (Number(a.id) >= Number(b.id) ? a : b));
-          lastEvent = winner.code || "";
-        } else {
-          lastEvent = row.ultimo_code || row.last_status_code || "";
-        }
-      }
-
-      return {
-        awb_number: row.awb_number || "",
-        hawb_number: row.hawb_number || "",
-        consignee_nome: row.consignee_nome || "",
-        clerk: row.clerk || "",
-        clerk_email: row.clerk_email || "",
-        etd: row.etd || null,
-        last_flight: row.last_flight || "",
-        origin: row.origin || "",
-        destination: row.destination || "",
+      const normalized = {
+        awb_number: row.AWB || "",
+        hawb_number: row.HAWB || "",
+        consignee_nome: row.CLIENTE || "",
+        clerk: row.ANALISTA || "",
+        origin: row.ORIGEM || "",
+        destination: row.DESTINO || "",
         timeline_json: timeline,
-        last_status_code: row.last_status_code || "",
-        last_event: lastEvent,
-        last_event_description: row.description_last || "",
-        last_event_date: lastEventDate,
-        last_event_location: row.location_last || "",
-        penultimate_location: row.location_penultimate || "",
+        last_event: row.ULTIMO_STATUS_CODE || "",
+        last_event_description: row.ULTIMO_STATUS_CORRETO || "",
+        last_status_code: row.ULTIMO_STATUS_CODE || "",
+        last_event_date: (row.DATA_HORA_ULTIMO_EVENTO || "").trim() || null,
+        last_event_location: row.LOCALIZACAO_ULTIMO_EVENTO || "",
+        penultimate_location: row.LOCALIZACAO_PENULTIMO_EVENTO || "",
       };
-    });
+
+      if (!row.ULTIMO_STATUS_CORRETO && !row.ULTIMO_STATUS_CODE) {
+        failed.push({ awb: row.AWB || "", hawb: row.HAWB || "", cliente: row.CLIENTE || "" });
+        normalized.last_event = "";
+        normalized.last_status_code = "";
+      }
+
+      data.push(normalized);
+    }
 
     await client.close();
+    client = null;
 
-    return new Response(JSON.stringify({ success: true, data }), {
+    // Send failure email asynchronously (don't block response)
+    if (failed.length > 0) {
+      sendFailureEmail(failed).catch((e) => console.error("sendFailureEmail error:", e));
+    }
+
+    return new Response(JSON.stringify({ success: true, data, failed_count: failed.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("fetch-tracking-aereo error:", error);
 
     if (client) {
-      try {
-        await client.close();
-      } catch (_) {}
+      try { await client.close(); } catch (_) {}
     }
 
     return new Response(
