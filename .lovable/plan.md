@@ -1,81 +1,77 @@
 
 
-## Plano: Reescrever query do fetch-tracking-aereo e alimentar grid existente com novo SELECT
+## Plano: Enriquecer timeline CCT com dados completos do histórico
 
-### Resumo
+### Problema
 
-Substituir a query SQL do `fetch-tracking-aereo` pelas 4 CTEs fornecidas (`base`, `codes`, `ids`, `final`). Manter **todas** as colunas do frontend iguais, apenas alimentando-as com os campos do novo SELECT. Processos com `ULTIMO_STATUS_CORRETO = NULL` ficam ocultos por padrão, mas aparecem como "Falha no Rastreio" quando pesquisados. E-mail enviado para larissa@z3us.ai com a lista de falhas.
+A `get_cct_events` busca 200 snapshots de `t_cct_hawb_api_historico`, mas só extrai `situacaoAtual` de `json_partes_estoque`. Como a maioria dos snapshots tem o mesmo status ("Recepcionada"), apenas 1 evento de transição é gerado. Outros campos ricos (viagens, bloqueios, divergências, documentos de saída) são ignorados.
 
-### Mapeamento SELECT → Frontend
+### Solução
 
-| Campo do SELECT | Coluna no Frontend |
-|---|---|
-| `AWB` | AWB |
-| `HAWB` | HAWB |
-| `CLIENTE` | Cliente |
-| `ORIGEM` / `DESTINO` | Rota (origem → destino) |
-| `ULTIMO_STATUS_CORRETO` | Último Evento + Rastreio (progress bar) + Situação + SLA |
-| `DATA_HORA_ULTIMO_EVENTO` | Data/Hora |
-| `LOCALIZACAO_ULTIMO_EVENTO` / `LOCALIZACAO_PENULTIMO_EVENTO` | Conexão (derivada) + highlight de rota |
-| `ANALISTA` | Analista |
-| `TIMELINE` | Modal de Timeline (já funciona assim) |
+Expandir a extração de eventos dos snapshots históricos para detectar mudanças em múltiplos campos JSON, não apenas `situacaoAtual`.
 
-### Alterações
+### Alteração
 
-#### 1. `supabase/functions/fetch-tracking-aereo/index.ts` — Reescrever query
+**Arquivo:** `supabase/functions/mariadb-proxy/index.ts` — action `get_cct_events`
 
-- Substituir toda a query SQL (linhas 48-279) pelas 4 CTEs (`base`, `codes`, `ids`, `final`) + SELECT final fornecido pelo usuário
-- A CTE `base` já contém o filtro `master_insert >= '2026-03-20' OR created_at >= '2026-03-20'`
-- Simplificar a normalização JS: o SQL já resolve `ultimo_status_correto` — não precisa mais da lógica de hierarquia de IDs no JS
-- Retornar campos mapeados: `awb_number`, `hawb_number`, `consignee_nome` (CLIENTE), `origin`, `destination`, `loc0-loc3`, `clerk` (ANALISTA), `timeline_json`, `last_event` (ultimo_status_correto), `last_event_date` (data_hora_ultimo_evento), `last_status_code` (ultimo_status_correto_code para progress bar)
-- Separar registros com `ultimo_status_correto = NULL` como `failed`
-- Enviar e-mail via SMTP para larissa@z3us.ai com lista de AWB/HAWB/Cliente dos `failed`
+**1. Expandir o SELECT do histórico** (linha ~6607):
+Buscar campos adicionais além de `json_partes_estoque`:
+```sql
+SELECT id, hawb, consulted_at,
+  json_partes_estoque,
+  json_viagens_associadas,
+  json_bloqueios_ativos,
+  json_bloqueios_baixados,
+  json_conhecimento_carga_detalhada,
+  json_documentos_saida,
+  json_divergencias
+FROM t_cct_hawb_api_historico
+WHERE hawb_normalizado = ?
+ORDER BY consulted_at ASC
+LIMIT 500
+```
 
-#### 2. `src/pages/air/TrackingAereo.tsx` — Ajustar fetchData
+**2. Extrair eventos de múltiplas fontes por snapshot**, comparando com o snapshot anterior:
 
-- Atualizar `fetchData` para mapear os novos campos retornados (nomes mudaram ligeiramente)
-- `last_event` agora vem do `ULTIMO_STATUS_CORRETO` (descricao_en, ex: "Received from Flight")
-- Precisamos derivar o **code** do status para a progress bar e SLA — o backend deve retornar `ultimo_status_correto_code` além do `descricao_en`
-- Processos com `ultimo_status_correto = null`: marcados como `tracking_failed = true`, ocultos por padrão, visíveis ao pesquisar com texto "Falha no Rastreio"
-- Usar `loc0` como `last_event_location` e `loc1` como `penultimate_location` (mesma lógica de conexão existente)
-- **Nenhuma coluna adicionada ou removida na grid**
+- **Situação (já existente)**: transições de `json_partes_estoque[0].situacaoAtual` → eventos como MANIFESTADO, RECEPCIONADO, etc.
+- **Viagens**: mudanças em `json_viagens_associadas` → eventos de voo (DEP com data de partida, chegada prevista). Detectar quando uma viagem nova aparece ou quando `dataPartidaEfetiva` muda.
+- **Bloqueios**: quando `json_bloqueios_ativos` muda (novo bloqueio aparece → evento BLOQUEIO; bloqueio some e aparece em `json_bloqueios_baixados` → evento DESBLOQUEIO).
+- **Divergências**: quando `json_divergencias` muda de vazio para preenchido → evento DIVERGENCIA_PESO ou DIVERGENCIA_VOLUME.
+- **Documentos de saída (DUIMP)**: quando `json_documentos_saida` muda de vazio para preenchido → evento DUIMP_VINCULADA com canal (verde/amarelo/vermelho).
+- **Peso/Volume constatado**: quando `json_partes_estoque[0].pesoBrutoConstatado` ou `quantidadeVolumeConstatado` aparece pela primeira vez → evento PESO_CONSTATADO.
 
-#### 3. Timeline Modal
+**3. Lógica de comparação**: para cada snapshot, extrair "fingerprint" de cada campo. Se diferir do anterior, gerar evento com `consulted_at` como data. Isso evita duplicatas quando múltiplos snapshots consecutivos têm os mesmos dados.
 
-- Já recebe `timeline_json` e já renderiza corretamente — nenhuma alteração necessária
-- O campo `TIMELINE` do SELECT é o mesmo `timeline_json` que já é passado ao modal
+**4. Mapeamento de novos eventos para a timeline do frontend**:
+- Adicionar labels no `EventTimeline` component para os novos códigos (DESBLOQUEIO, DIVERGENCIA_PESO, DUIMP_VINCULADA, etc.)
+- Cada evento terá: `codigo_evento`, `descricao_evento` (texto legível), `data_hora_evento`, `aeroporto`, `fonte: 'RFB'`
 
-### Detalhe técnico do retorno normalizado
+### Exemplo de resultado esperado
 
-```typescript
-return {
-  awb_number: row.AWB || "",
-  hawb_number: row.HAWB || "",
-  consignee_nome: row.CLIENTE || "",
-  clerk: row.ANALISTA || "",
-  origin: row.ORIGEM || "",
-  destination: row.DESTINO || "",
-  timeline_json: parseJSON(row.TIMELINE),
-  last_event: row.ULTIMO_STATUS_CORRETO || "",      // descricao_en
-  last_status_code: row.ultimo_status_correto_code,  // code (para progress bar)
-  last_event_date: row.DATA_HORA_ULTIMO_EVENTO,
-  last_event_location: row.LOCALIZACAO_ULTIMO_EVENTO || "",
-  penultimate_location: row.LOCALIZACAO_PENULTIMO_EVENTO || "",
-};
+Para um HAWB que passou por: Informada → Manifestada → Recepcionada, com 1 bloqueio ativo e 1 DUIMP vinculada:
+
+```text
+1. CHEGADA_INFORMADA    | 28/03 10:00 | "Informada"
+2. VOO_PARTIDA          | 29/03 14:30 | "LA9505 - MAD→GRU"  
+3. MANIFESTADO          | 30/03 08:00 | "Manifestada"
+4. BLOQUEIO             | 30/03 12:00 | "Bloqueio ativo"
+5. RECEPCIONADO         | 31/03 06:00 | "Recepcionada"
+6. DESBLOQUEIO          | 31/03 10:00 | "Bloqueio baixado"
+7. PESO_CONSTATADO      | 01/04 09:00 | "373.5 kg"
+8. DUIMP_VINCULADA      | 01/04 14:00 | "Canal Verde"
 ```
 
 ### Arquivos alterados
 
 | Arquivo | Ação |
 |---|---|
-| `supabase/functions/fetch-tracking-aereo/index.ts` | Reescrever query + normalização + e-mail |
-| `src/pages/air/TrackingAereo.tsx` | Ajustar fetchData mapping |
+| `supabase/functions/mariadb-proxy/index.ts` | Expandir `get_cct_events`: SELECT + extração multi-campo |
+| `src/components/cct/EventTimeline.tsx` | Adicionar labels/ícones para novos códigos de evento |
 
 ### O que NÃO muda
 
-- Colunas da grid (AWB, HAWB, Cliente, Rota, Rastreio, Último Evento, Data/Hora, Situação, SLA, Analista, Ações)
-- Progress bar, SLA, Situação (continuam derivados do status code)
-- Modal de Timeline (já usa timeline_json)
-- Dashboard cards, filtros, ordenação, paginação
-- Background, header, modais auxiliares
+- `get_cct_shipments` (dashboard principal)
+- Componente ProcessoTimeline (apenas consome os eventos, já funciona com qualquer código)
+- Tabelas do banco (nenhuma migração)
+- Lógica de status oficial e SLA
 
