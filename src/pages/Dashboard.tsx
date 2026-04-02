@@ -80,7 +80,7 @@ const menuItems: MenuItem[] = [
       },
       {
         label: "Monitoramento Pré-Embarque",
-        href: "/air/tracking",
+        href: "/air/tracking-aereo",
       },
       {
         label: "Monitoramento Pós-Embarque",
