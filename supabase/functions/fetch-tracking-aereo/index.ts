@@ -145,6 +145,31 @@ serve(async (req) => {
     const rows = await queryWithRetry(client, sql);
     console.log(`Query returned ${rows?.length || 0} rows`);
 
+    // Step 3b: For rows with empty CLIENTE, fetch from t_master_dados
+    const missingClienteHawbs = (rows || [])
+      .filter((r: any) => !r.CLIENTE || r.CLIENTE.toString().trim() === "")
+      .map((r: any) => r.HAWB)
+      .filter((h: string) => h && h !== "NI");
+
+    const clienteMap: Record<string, string> = {};
+    if (missingClienteHawbs.length > 0) {
+      const uniqueHawbs = [...new Set(missingClienteHawbs)] as string[];
+      // Batch lookup in chunks of 100
+      for (let i = 0; i < uniqueHawbs.length; i += 100) {
+        const chunk = uniqueHawbs.slice(i, i + 100);
+        const placeholders = chunk.map(() => "?").join(",");
+        const masterRows = await queryWithRetry(
+          client,
+          `SELECT hawb, cliente FROM dados_dachser.t_master_dados WHERE hawb IN (${placeholders}) AND cliente IS NOT NULL AND cliente != ''`,
+          chunk
+        );
+        for (const mr of masterRows || []) {
+          if (mr.hawb && mr.cliente) clienteMap[mr.hawb] = mr.cliente;
+        }
+      }
+      console.log(`Fetched ${Object.keys(clienteMap).length} client names from t_master_dados for ${uniqueHawbs.length} missing`);
+    }
+
     await client.close();
     client = null;
 
