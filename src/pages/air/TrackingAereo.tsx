@@ -20,6 +20,7 @@ import {
   Loader2,
   ExternalLink,
   FilePlus,
+  Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
