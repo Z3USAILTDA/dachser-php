@@ -487,12 +487,13 @@ const TrackingAereo = () => {
     let total = 0, transit = 0, alert = 0, critical = 0;
     awbsData.forEach(awb => {
       if (awb.is_invalid) return; // Skip invalid
+      if (awb.tracking_failed) return; // Skip tracking failed
       const code = getStatusCode(awb.last_event).toUpperCase();
       if (code === "DLV" || code === "POD") return; // Skip delivered
       total++;
       if (inTransitCodes.has(code)) transit++;
       if (code === "DIS") alert++;
-      if (awb.tracking_failed || criticalCodes.has(code) || awb.pieces_discrepancy) critical++;
+      if (criticalCodes.has(code) || awb.pieces_discrepancy) critical++;
     });
     return { total, transit, alert, critical };
   }, [awbsData]);
