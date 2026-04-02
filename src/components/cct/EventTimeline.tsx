@@ -91,6 +91,26 @@ const getEventIcon = (codigo: string) => {
     return Unlock;
   }
   
+  // Voo / Partida
+  if (upperCode === 'VOO_PARTIDA') {
+    return PlaneTakeoff;
+  }
+  
+  // Peso/Volume constatado
+  if (upperCode === 'PESO_CONSTATADO' || upperCode === 'VOLUME_CONSTATADO') {
+    return Scale;
+  }
+  
+  // Divergência
+  if (upperCode === 'DIVERGENCIA') {
+    return AlertCircle;
+  }
+  
+  // DUIMP
+  if (upperCode === 'DUIMP_VINCULADA') {
+    return FileText;
+  }
+  
   return Clock;
 };
 
