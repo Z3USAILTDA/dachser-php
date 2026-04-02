@@ -3630,6 +3630,31 @@ Deno.serve(async (req) => {
           });
         }
 
+        // Fallback: fetch analista from t_master_dados for rows missing it
+        const missingAnalistaHawbs = (cctRows || [])
+          .filter((r: any) => !r.analista || r.analista.toString().trim() === '')
+          .map((r: any) => (r.hawb || '').trim())
+          .filter((h: string) => h !== '');
+        const analistaMap: Record<string, { clerk: string; clerk_email: string }> = {};
+        if (missingAnalistaHawbs.length > 0) {
+          const uniqueHawbs = [...new Set(missingAnalistaHawbs)] as string[];
+          for (let i = 0; i < uniqueHawbs.length; i += 100) {
+            const chunk = uniqueHawbs.slice(i, i + 100);
+            const placeholders = chunk.map(() => '?').join(',');
+            const masterRows = await client.query(
+              `SELECT hawb_number, clerk, clerk_email FROM ${database}.t_dados_aereo WHERE hawb_number IN (${placeholders}) AND clerk IS NOT NULL AND TRIM(clerk) != '' ORDER BY created_at DESC`,
+              chunk
+            );
+            for (const mr of masterRows || []) {
+              const h = (mr.hawb_number || mr.hawb || '').trim();
+              if (h && mr.clerk && !analistaMap[h]) {
+                analistaMap[h] = { clerk: mr.clerk, clerk_email: mr.clerk_email || '' };
+              }
+            }
+          }
+          console.log(`CCT: Fetched ${Object.keys(analistaMap).length} analyst names from t_dados_aereo for ${uniqueHawbs.length} missing`);
+        }
+
         // Helper: map status_tela to canonical CCT status
         const mapStatusTelaToCanonical = (st: string | null): string => {
           if (!st) return 'AGUARDANDO_CONSULTA';
@@ -3679,8 +3704,8 @@ Deno.serve(async (req) => {
             house: row.hawb || '',
             master: row.master_final || row.master || '',
             cliente: row.cliente || '',
-            nome_analista: row.analista || null,
-            email_analista: row.analista_email || null,
+            nome_analista: row.analista || analistaMap[(row.hawb || '').trim()]?.clerk || null,
+            email_analista: row.analista_email || analistaMap[(row.hawb || '').trim()]?.clerk_email || null,
             emails_cliente: null,
             tipo_servico: null,
             aeroporto_origem: (row.aeroporto_origem || '').trim() || null,
