@@ -3542,6 +3542,7 @@ Deno.serve(async (req) => {
               FROM ${database}.t_dados_aereo a
               WHERE a.hawb_number IS NOT NULL
                 AND TRIM(a.hawb_number) <> ''
+                AND (a.master_insert >= '2026-03-20' OR a.created_at >= '2026-03-20')
             ) x
             WHERE x.rn = 1
           )
