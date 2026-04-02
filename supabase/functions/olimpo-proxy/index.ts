@@ -2550,14 +2550,13 @@ serve(async (req) => {
             ts.id, ts.mbl_id, ts.container, ts.shipping_line, 
             ts.container_status, ts.last_event, ts.last_check, 
             ts.loading_port, ts.transshipment_port,
-            -- ETA priorizado: usar t_master_dados.eta se disponível
+            -- ETA priorizado: usar t_dados_maritimo.eta se disponível
             COALESCE(
               (
-                SELECT md.eta 
-                FROM dados_dachser.t_master_dados md 
-                WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id
-                  AND md.eta IS NOT NULL 
-                  AND md.active = 1
+                SELECT dm.eta 
+                FROM dados_dachser.t_dados_maritimo dm 
+                WHERE BINARY TRIM(dm.bl_number) = BINARY ts.mbl_id
+                  AND dm.eta IS NOT NULL 
                 LIMIT 1
               ),
               ts.eta
