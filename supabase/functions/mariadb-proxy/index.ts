@@ -3630,32 +3630,45 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Fallback: fetch analista from t_master_dados for rows missing it
-        const missingAnalistaHawbs = (cctRows || [])
+        // Fallback: fetch analista for rows missing it — using normalized HAWB keys
+        const normalizeKey = (h: string) => h.replace(/[\s\-\.\/]/g, '').toUpperCase();
+        const missingAnalistaRows = (cctRows || [])
           .filter((r: any) => !r.analista || r.analista.toString().trim() === '')
-          .map((r: any) => (r.hawb || '').trim())
-          .filter((h: string) => h !== '');
+          .map((r: any) => ({
+            hawb: (r.hawb || '').trim(),
+            hawb_normalizado: (r.hawb_normalizado || '').trim(),
+          }))
+          .filter((r: any) => r.hawb !== '' || r.hawb_normalizado !== '');
         const analistaMap: Record<string, { clerk: string; clerk_email: string }> = {};
-        if (missingAnalistaHawbs.length > 0) {
-          const uniqueHawbs = [...new Set(missingAnalistaHawbs)] as string[];
-          for (let i = 0; i < uniqueHawbs.length; i += 100) {
-            const chunk = uniqueHawbs.slice(i, i + 100);
+        if (missingAnalistaRows.length > 0) {
+          const allHawbs = new Set<string>();
+          const allNormalized = new Set<string>();
+          for (const r of missingAnalistaRows) {
+            if (r.hawb) allHawbs.add(r.hawb);
+            if (r.hawb_normalizado) allNormalized.add(r.hawb_normalizado);
+          }
+          const allLookupKeys = [...new Set([...allHawbs, ...allNormalized])];
+
+          for (let i = 0; i < allLookupKeys.length; i += 100) {
+            const chunk = allLookupKeys.slice(i, i + 100);
             const placeholders = chunk.map(() => '?').join(',');
             const masterRows = await client.query(
               `SELECT hawb_number, clerk, clerk_email FROM ${database}.t_dados_aereo WHERE hawb_number IN (${placeholders}) AND clerk IS NOT NULL AND TRIM(clerk) != '' ORDER BY created_at DESC`,
               chunk
             );
             for (const mr of masterRows || []) {
-              const h = (mr.hawb_number || mr.hawb || '').trim();
-              if (h && mr.clerk && !analistaMap[h]) {
-                analistaMap[h] = { clerk: mr.clerk, clerk_email: mr.clerk_email || '' };
+              const h = (mr.hawb_number || '').trim();
+              const nk = normalizeKey(h);
+              if (h && mr.clerk) {
+                if (!analistaMap[h]) analistaMap[h] = { clerk: mr.clerk, clerk_email: mr.clerk_email || '' };
+                if (!analistaMap[nk]) analistaMap[nk] = { clerk: mr.clerk, clerk_email: mr.clerk_email || '' };
               }
             }
           }
-          console.log(`CCT: Fetched ${Object.keys(analistaMap).length} analyst names from t_dados_aereo for ${uniqueHawbs.length} missing`);
+          console.log(`CCT: Fetched ${Object.keys(analistaMap).length} analyst entries from t_dados_aereo for ${allLookupKeys.length} missing`);
 
           // Second fallback: t_master_dados for HAWBs still missing
-          const stillMissing = uniqueHawbs.filter(h => !analistaMap[h]);
+          const stillMissing = allLookupKeys.filter(h => !analistaMap[h] && !analistaMap[normalizeKey(h)]);
           if (stillMissing.length > 0) {
             for (let i = 0; i < stillMissing.length; i += 100) {
               const chunk = stillMissing.slice(i, i + 100);
@@ -3666,14 +3679,23 @@ Deno.serve(async (req) => {
               );
               for (const mr of mdRows || []) {
                 const h = (mr.hawb || '').trim();
-                if (h && mr.nome_analista && !analistaMap[h]) {
-                  analistaMap[h] = { clerk: mr.nome_analista, clerk_email: mr.email_analista || '' };
+                const nk = normalizeKey(h);
+                if (h && mr.nome_analista) {
+                  if (!analistaMap[h]) analistaMap[h] = { clerk: mr.nome_analista, clerk_email: mr.email_analista || '' };
+                  if (!analistaMap[nk]) analistaMap[nk] = { clerk: mr.nome_analista, clerk_email: mr.email_analista || '' };
                 }
               }
             }
             console.log(`CCT: After t_master_dados fallback, total analyst mappings: ${Object.keys(analistaMap).length}`);
           }
         }
+        // Helper to find analyst in map using multiple key formats
+        const findAnalista = (row: any) => {
+          const rawHawb = (row.hawb || '').trim();
+          const normHawb = (row.hawb_normalizado || '').trim();
+          const nk = normalizeKey(rawHawb || normHawb);
+          return analistaMap[rawHawb] || analistaMap[normHawb] || analistaMap[nk] || null;
+        };
 
         // Helper: map status_tela to canonical CCT status
         const mapStatusTelaToCanonical = (st: string | null): string => {
@@ -3724,8 +3746,8 @@ Deno.serve(async (req) => {
             house: row.hawb || '',
             master: row.master_final || row.master || '',
             cliente: row.cliente || '',
-            nome_analista: row.analista || analistaMap[(row.hawb || '').trim()]?.clerk || null,
-            email_analista: row.analista_email || analistaMap[(row.hawb || '').trim()]?.clerk_email || null,
+            nome_analista: row.analista || findAnalista(row)?.clerk || null,
+            email_analista: row.analista_email || findAnalista(row)?.clerk_email || null,
             emails_cliente: null,
             tipo_servico: null,
             aeroporto_origem: (row.aeroporto_origem || '').trim() || null,
@@ -4003,6 +4025,37 @@ Deno.serve(async (req) => {
           if (moeda || total > 0) infoFreteDetail = { moeda, formaPgto, total };
         }
 
+        // Fallback: fetch analyst from t_dados_aereo / t_master_dados if missing
+        let detailAnalista = (sRow.analista || '').trim() || null;
+        let detailAnalistaEmail = (sRow.analista_email || '').trim() || null;
+        if (!detailAnalista) {
+          const hawbRaw = (sRow.hawb || '').trim();
+          const hawbNorm = (sRow.hawb_normalizado || '').trim();
+          const lookupKeys = [...new Set([hawbRaw, hawbNorm].filter(Boolean))];
+          if (lookupKeys.length > 0) {
+            const ph = lookupKeys.map(() => '?').join(',');
+            // Try t_dados_aereo first
+            const aRows = await client.query(
+              `SELECT clerk, clerk_email FROM ${database}.t_dados_aereo WHERE hawb_number IN (${ph}) AND clerk IS NOT NULL AND TRIM(clerk) != '' ORDER BY created_at DESC LIMIT 1`,
+              lookupKeys
+            );
+            if (aRows?.[0]?.clerk) {
+              detailAnalista = aRows[0].clerk;
+              detailAnalistaEmail = aRows[0].clerk_email || null;
+            } else {
+              // Try t_master_dados
+              const mRows = await client.query(
+                `SELECT nome_analista, email_analista FROM ${database}.t_master_dados WHERE hawb IN (${ph}) AND nome_analista IS NOT NULL AND TRIM(nome_analista) != '' ORDER BY data_insert DESC LIMIT 1`,
+                lookupKeys
+              );
+              if (mRows?.[0]?.nome_analista) {
+                detailAnalista = mRows[0].nome_analista;
+                detailAnalistaEmail = mRows[0].email_analista || null;
+              }
+            }
+          }
+        }
+
         result = {
           success: true,
           data: {
@@ -4010,8 +4063,8 @@ Deno.serve(async (req) => {
             house: sRow.hawb || '',
             master: sRow.master_final || '',
             cliente: sRow.cliente || '',
-            nome_analista: sRow.analista || null,
-            email_analista: sRow.analista_email || null,
+            nome_analista: detailAnalista,
+            email_analista: detailAnalistaEmail,
             aeroporto_origem: (sRow.aeroporto_origem || '').trim() || null,
             aeroporto_destino: (sRow.aeroporto_destino || '').trim() || null,
             status_cct_oficial: mapStatusTelaDetail(sRow),
