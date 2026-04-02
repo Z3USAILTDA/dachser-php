@@ -2010,22 +2010,21 @@ serve(async (req) => {
                   AND TRIM(master) != ''
                 GROUP BY TRIM(master)
               ),
-              -- CTE 1B: Dados do t_master_dados para processos SEA recentes (FONTE SECUNDÁRIA)
+              -- CTE 1B: Dados do t_dados_maritimo (FONTE SECUNDÁRIA)
               master_dados_new AS (
                 SELECT 
-                  TRIM(mawb) as mbl_id,
-                  MAX(tipo_processo) as tipo_processo,
+                  TRIM(bl_number) as mbl_id,
+                  'SEA EXPORT' as tipo_processo,
                   MAX(eta) as eta,
-                  MAX(nome_analista) as nome_analista,
-                  MAX(hawb) as hawb,
-                  MAX(cliente) as cliente,
+                  MAX(clerk) as nome_analista,
+                  NULL as hawb,
+                  MAX(consignee_nome) as cliente,
                   MAX(etd) as etd
-                FROM dados_dachser.t_master_dados
-                WHERE mawb IS NOT NULL
-                  AND TRIM(mawb) != ''
-                  AND tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
-                  AND data_insert >= '2026-02-04 09:55:11'
-                GROUP BY TRIM(mawb)
+                FROM dados_dachser.t_dados_maritimo
+                WHERE bl_number IS NOT NULL
+                  AND TRIM(bl_number) != ''
+                  AND created_at >= '2026-02-01'
+                GROUP BY TRIM(bl_number)
               ),
               -- CTE 2: Navio/vessel_imo mais recente por mbl (ranking)
               latest_vessel AS (
