@@ -192,7 +192,7 @@ serve(async (req) => {
                bookingInfo.vesselName || null, bookingInfo.eta || null,
                bookingInfo.originLocation || bookingInfo.originCode || null,
                bookingInfo.destinationLocation || bookingInfo.destinationCode || null,
-               carrierInfo.name,
+               carrierConfig.shortName,
                mblId, containerNo]
             );
           } else {
