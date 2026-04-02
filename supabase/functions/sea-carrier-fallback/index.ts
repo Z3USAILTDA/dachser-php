@@ -111,12 +111,12 @@ serve(async (req) => {
       }
 
       try {
-        console.log(`[sea-carrier-fallback] Processando ${mblId} via ${functionName} (${carrierInfo.name})...`);
+        console.log(`[sea-carrier-fallback] Processando ${mblId} via ${carrierConfig.fn} (${carrierConfig.shortName})...`);
 
         const cleanMbl = sanitizeMbl(mblId);
 
         // 3. Call the carrier-specific edge function
-        const trackRes = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
+        const trackRes = await fetch(`${supabaseUrl}/functions/v1/${carrierConfig.fn}`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${supabaseKey}`,
