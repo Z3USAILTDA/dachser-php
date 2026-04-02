@@ -205,7 +205,7 @@ serve(async (req) => {
                 mblId,
                 templateRow.tipo_processo || 'SEA IMPORT',
                 containerNo,
-                carrierInfo.name,
+                carrierConfig.shortName,
                 templateRow.consignee || null,
                 bookingInfo.originLocation || bookingInfo.originCode || null,
                 bookingInfo.destinationLocation || bookingInfo.destinationCode || null,
