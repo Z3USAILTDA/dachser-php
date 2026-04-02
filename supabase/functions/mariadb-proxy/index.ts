@@ -4025,6 +4025,37 @@ Deno.serve(async (req) => {
           if (moeda || total > 0) infoFreteDetail = { moeda, formaPgto, total };
         }
 
+        // Fallback: fetch analyst from t_dados_aereo / t_master_dados if missing
+        let detailAnalista = (sRow.analista || '').trim() || null;
+        let detailAnalistaEmail = (sRow.analista_email || '').trim() || null;
+        if (!detailAnalista) {
+          const hawbRaw = (sRow.hawb || '').trim();
+          const hawbNorm = (sRow.hawb_normalizado || '').trim();
+          const lookupKeys = [...new Set([hawbRaw, hawbNorm].filter(Boolean))];
+          if (lookupKeys.length > 0) {
+            const ph = lookupKeys.map(() => '?').join(',');
+            // Try t_dados_aereo first
+            const aRows = await client.query(
+              `SELECT clerk, clerk_email FROM ${database}.t_dados_aereo WHERE hawb_number IN (${ph}) AND clerk IS NOT NULL AND TRIM(clerk) != '' ORDER BY created_at DESC LIMIT 1`,
+              lookupKeys
+            );
+            if (aRows?.[0]?.clerk) {
+              detailAnalista = aRows[0].clerk;
+              detailAnalistaEmail = aRows[0].clerk_email || null;
+            } else {
+              // Try t_master_dados
+              const mRows = await client.query(
+                `SELECT nome_analista, email_analista FROM ${database}.t_master_dados WHERE hawb IN (${ph}) AND nome_analista IS NOT NULL AND TRIM(nome_analista) != '' ORDER BY data_insert DESC LIMIT 1`,
+                lookupKeys
+              );
+              if (mRows?.[0]?.nome_analista) {
+                detailAnalista = mRows[0].nome_analista;
+                detailAnalistaEmail = mRows[0].email_analista || null;
+              }
+            }
+          }
+        }
+
         result = {
           success: true,
           data: {
@@ -4032,8 +4063,8 @@ Deno.serve(async (req) => {
             house: sRow.hawb || '',
             master: sRow.master_final || '',
             cliente: sRow.cliente || '',
-            nome_analista: sRow.analista || null,
-            email_analista: sRow.analista_email || null,
+            nome_analista: detailAnalista,
+            email_analista: detailAnalistaEmail,
             aeroporto_origem: (sRow.aeroporto_origem || '').trim() || null,
             aeroporto_destino: (sRow.aeroporto_destino || '').trim() || null,
             status_cct_oficial: mapStatusTelaDetail(sRow),
