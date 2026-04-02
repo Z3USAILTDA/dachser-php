@@ -10,12 +10,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Map ShippingLineCode → edge function name
-const CARRIER_FUNCTION_MAP: Partial<Record<ShippingLineCode, string>> = {
-  'HAPAG_LLOYD': 'draft-track-hapag-multi',
-  'HAMBURG_SUD': 'draft-track-hapag-multi',
-  'MSC': 'draft-track-msc',
-  'ONE': 'draft-track-one',
+// Map ShippingLineCode → { function, shortName (max 20 chars for DB column) }
+const CARRIER_CONFIG: Partial<Record<ShippingLineCode, { fn: string; shortName: string }>> = {
+  'HAPAG_LLOYD': { fn: 'draft-track-hapag-multi', shortName: 'HAPAG' },
+  'HAMBURG_SUD': { fn: 'draft-track-hapag-multi', shortName: 'HAMBURG SUD' },
+  'MSC': { fn: 'draft-track-msc', shortName: 'MSC' },
+  'ONE': { fn: 'draft-track-one', shortName: 'ONE' },
 };
 
 const MAX_MBLS = 15;
