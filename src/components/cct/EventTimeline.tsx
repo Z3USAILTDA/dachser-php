@@ -13,7 +13,11 @@ import {
   FileCheck,
   ClipboardCheck,
   MapPin,
-  Unlock
+  Unlock,
+  Scale,
+  FileText,
+  AlertCircle,
+  Boxes
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -87,6 +91,26 @@ const getEventIcon = (codigo: string) => {
     return Unlock;
   }
   
+  // Voo / Partida
+  if (upperCode === 'VOO_PARTIDA') {
+    return PlaneTakeoff;
+  }
+  
+  // Peso/Volume constatado
+  if (upperCode === 'PESO_CONSTATADO' || upperCode === 'VOLUME_CONSTATADO') {
+    return Scale;
+  }
+  
+  // Divergência
+  if (upperCode === 'DIVERGENCIA') {
+    return AlertCircle;
+  }
+  
+  // DUIMP
+  if (upperCode === 'DUIMP_VINCULADA') {
+    return FileText;
+  }
+  
   return Clock;
 };
 
@@ -145,6 +169,42 @@ const getEventColor = (codigo: string) => {
       dot: "border-gray-500 bg-gray-500",
       icon: "text-gray-400",
       card: "border-gray-500/30 bg-gray-500/5"
+    };
+  }
+  
+  // ✈️ Voo / Partida
+  if (upperCode === 'VOO_PARTIDA') {
+    return {
+      dot: "border-cyan-500 bg-cyan-500",
+      icon: "text-cyan-400",
+      card: "border-cyan-500/30 bg-cyan-500/5"
+    };
+  }
+  
+  // ⚖️ Peso/Volume constatado
+  if (upperCode === 'PESO_CONSTATADO' || upperCode === 'VOLUME_CONSTATADO') {
+    return {
+      dot: "border-indigo-500 bg-indigo-500",
+      icon: "text-indigo-400",
+      card: "border-indigo-500/30 bg-indigo-500/5"
+    };
+  }
+  
+  // ⚠️ Divergência
+  if (upperCode === 'DIVERGENCIA') {
+    return {
+      dot: "border-orange-500 bg-orange-500",
+      icon: "text-orange-400",
+      card: "border-orange-500/30 bg-orange-500/5"
+    };
+  }
+  
+  // 📄 DUIMP
+  if (upperCode === 'DUIMP_VINCULADA') {
+    return {
+      dot: "border-teal-500 bg-teal-500",
+      icon: "text-teal-400",
+      card: "border-teal-500/30 bg-teal-500/5"
     };
   }
   
