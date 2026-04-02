@@ -3617,7 +3617,7 @@ Deno.serve(async (req) => {
           FROM base_cct c
           LEFT JOIN aereo_latest a
             ON TRIM(a.hawb) COLLATE utf8mb4_unicode_ci = TRIM(c.hawb) COLLATE utf8mb4_unicode_ci
-          WHERE a.hawb IS NOT NULL
+          WHERE 1=1
           ORDER BY c.consulted_at DESC, c.id DESC
         `);
 
