@@ -264,7 +264,7 @@ serve(async (req) => {
       const normalized = {
         awb_number: row.AWB || "",
         hawb_number: row.HAWB || "",
-        consignee_nome: row.CLIENTE || "",
+        consignee_nome: row.CLIENTE || clienteMap[row.HAWB] || "",
         clerk: row.ANALISTA || "",
         origin: row.ORIGEM || "",
         destination: row.DESTINO || "",
