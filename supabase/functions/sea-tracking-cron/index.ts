@@ -192,6 +192,38 @@ serve(async (req) => {
 
   (stats as any).enrich_coords = enrichResults;
 
+  // ===== PASSO 4: Fallback multi-armador para MBLs PENDENTE/NAO_ENCONTRADO =====
+  let carrierFallbackResult: any = null;
+  try {
+    console.log('[sea-tracking-cron] Passo 4: Carrier fallback para MBLs pendentes...');
+    const fallbackRes = await fetch(`${supabaseUrl}/functions/v1/sea-carrier-fallback`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const fallbackText = await fallbackRes.text();
+    try {
+      carrierFallbackResult = JSON.parse(fallbackText);
+    } catch {
+      carrierFallbackResult = { raw: fallbackText, status: fallbackRes.status };
+    }
+
+    console.log('[sea-tracking-cron] Carrier fallback concluído:', {
+      processed: carrierFallbackResult.processed || 0,
+      discovered: carrierFallbackResult.discovered || 0,
+      errors: carrierFallbackResult.errors?.length || 0,
+    });
+  } catch (e: any) {
+    const errMsg = `carrier-fallback erro: ${e.message}`;
+    stats.errors.push(errMsg);
+    console.error('[sea-tracking-cron]', errMsg);
+  }
+
+  (stats as any).carrier_fallback = carrierFallbackResult;
+
   stats.duration_ms = Date.now() - startTime;
   
   console.log('[sea-tracking-cron] Concluído:', {
