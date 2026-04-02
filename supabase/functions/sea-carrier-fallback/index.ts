@@ -38,7 +38,7 @@ async function queryMariaDB(query: string, params: any[] = []): Promise<any[]> {
 }
 
 async function executeMariaDB(query: string, params: any[] = []): Promise<any> {
-  const client = await connect({
+  const client = await new Client().connect({
     hostname: Deno.env.get('MARIADB_HOST')!,
     port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
     db: Deno.env.get('MARIADB_DATABASE')!,
