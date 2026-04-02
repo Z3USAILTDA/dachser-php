@@ -2773,28 +2773,12 @@ serve(async (req) => {
           }
         }
 
-        // Step 6: Retroactive fix - update existing records with wrong tipo_processo
+        // Step 6: Retroactive fix - removed (t_dados_maritimo has no tipo_processo)
         let retroFixed = 0;
-        try {
-          const [retroResult] = await client.execute(`
-            UPDATE dados_dachser.t_tracking_sea ts
-            INNER JOIN dados_dachser.t_master_dados md 
-              ON TRIM(md.mawb) = TRIM(ts.mbl_id)
-              AND md.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
-            SET ts.tipo_processo = md.tipo_processo
-            WHERE ts.tipo_processo != md.tipo_processo
-          `);
-          retroFixed = (retroResult as any)?.affectedRows || 0;
-          if (retroFixed > 0) {
-            console.log(`[sync_sea_tracking] Retroactive fix: updated tipo_processo for ${retroFixed} records`);
-          }
-        } catch (retroErr: any) {
-          console.warn(`[sync_sea_tracking] Retroactive fix error: ${retroErr.message}`);
-        }
 
         await client.close();
         
-        console.log(`[sync_sea_tracking] Synced ${synced} rows (${syncedFromSeaMaster} from t_sea_master, ${syncedFromMasterDados} from t_master_dados), retroFixed ${retroFixed}`);
+        console.log(`[sync_sea_tracking] Synced ${synced} rows (${syncedFromSeaMaster} from t_sea_master, ${syncedFromDadosMaritimo} from t_dados_maritimo), retroFixed ${retroFixed}`);
         
         return new Response(JSON.stringify({ 
           success: true, 
@@ -2802,9 +2786,9 @@ serve(async (req) => {
           retroFixed,
           sources: {
             t_sea_master: syncedFromSeaMaster,
-            t_master_dados: syncedFromMasterDados
+            t_dados_maritimo: syncedFromDadosMaritimo
           },
-          message: `${synced} registros sincronizados (${syncedFromSeaMaster} t_sea_master + ${syncedFromMasterDados} t_master_dados)`,
+          message: `${synced} registros sincronizados (${syncedFromSeaMaster} t_sea_master + ${syncedFromDadosMaritimo} t_dados_maritimo)`,
           validation_rules: {
             mbl_scac_padrao: '^[A-Za-z]{4}[0-9]+$ (ex: COSU6437929310)',
             mbl_scac_estendido: `^(${VALID_MBL_PREFIXES.substring(0, 30)}...)[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$ (ex: HLCUHAM251021534)`,
@@ -2812,8 +2796,7 @@ serve(async (req) => {
             mbl_reject_internal: 'GLNL*, GLSL*, GLDL*, BRSA* (referências internas)',
             mbl_reject_hawb: '^BR[A-Za-z]{3} (HAWBs brasileiros)',
             container: 'Opcional (usa PENDENTE se vazio)',
-            etd_min: '2025-11-01',
-            t_master_dados_filter: 'tipo_processo IN (SEA IMPORT, SEA EXPORT), data_insert >= 2026-02-04 09:55:11'
+            t_dados_maritimo_filter: 'created_at >= 2026-02-01'
           }
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
