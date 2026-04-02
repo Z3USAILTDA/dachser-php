@@ -506,6 +506,8 @@ const TrackingAereo = () => {
       if (isDLV && !searchTerm) return false;
       // Hide invalid unless actively searching
       if (awb.is_invalid && !searchTerm) return false;
+      // Hide tracking failed unless actively searching by AWB
+      if (awb.tracking_failed && !searchTerm) return false;
 
       const sl = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm ||
