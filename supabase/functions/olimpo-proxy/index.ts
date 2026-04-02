@@ -2753,7 +2753,7 @@ serve(async (req) => {
         // Step 5: Batch insert new records
         let synced = 0;
         let syncedFromSeaMaster = 0;
-        let syncedFromMasterDados = 0;
+        let syncedFromDadosMaritimo = 0;
         for (const row of toInsert) {
           try {
             await client.execute(`
@@ -2766,7 +2766,7 @@ serve(async (req) => {
             if (seaMasterSet.has(row.mbl_id?.trim())) {
               syncedFromSeaMaster++;
             } else {
-              syncedFromMasterDados++;
+              syncedFromDadosMaritimo++;
             }
           } catch (insertErr) {
             console.warn(`[sync_sea_tracking] Failed to insert ${row.mbl_id}:`, insertErr);
