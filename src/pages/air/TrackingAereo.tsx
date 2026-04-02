@@ -518,7 +518,15 @@ const TrackingAereo = () => {
         (awb.nome_analista && awb.nome_analista.toLowerCase().includes(sl));
       const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
       const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
-      return matchesSearch && matchesAirline && matchesAnalyst;
+
+      const BR_AIRPORTS = ['GRU','VCP','CGH','GIG','SDU','BSB','CNF','POA','CWB','REC','SSA','FOR','BEL','MAO','NAT','MCZ','FLN','VIX','CGB','GYN','SLZ','THE','AJU','JPA','PMW','PVH','RBR','BVB','MCP','CGR','LDB','MGF','IGU','NVT','JOI','XAP','UDI','RAO','SJP','PPB','BAU','CPQ','QPS','SOD','MAB','STM','SJK','PNZ'];
+      const destCode = (awb.destino || '').toUpperCase().trim();
+      const isImport = BR_AIRPORTS.includes(destCode);
+      const matchesType = filterProcessType === "all" ||
+        (filterProcessType === "import" && isImport) ||
+        (filterProcessType === "export" && !isImport);
+
+      return matchesSearch && matchesAirline && matchesAnalyst && matchesType;
     });
 
     // Card filter
