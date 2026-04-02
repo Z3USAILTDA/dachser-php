@@ -1,77 +1,56 @@
 
+Diagnóstico
 
-## Plano: Enriquecer timeline CCT com dados completos do histórico
+- O frontend do CCT não parece ser o problema.
+  - A grid já tenta mostrar `processo.shipment.analista?.nome || processo.shipment.nome_analista_legado || "-"`.
+  - O hook `mapRowToProcessoCCT` também monta corretamente o objeto `analista` quando `row.nome_analista` vem preenchido.
+- Os logs do navegador mostram que a tela carrega normalmente 180 processos, então não é falha de renderização nem erro 500 agora. O mais provável é que o backend esteja devolvendo `nome_analista` vazio/null.
 
-### Problema
+Por que os analistas não estão aparecendo
 
-A `get_cct_events` busca 200 snapshots de `t_cct_hawb_api_historico`, mas só extrai `situacaoAtual` de `json_partes_estoque`. Como a maioria dos snapshots tem o mesmo status ("Recepcionada"), apenas 1 evento de transição é gerado. Outros campos ricos (viagens, bloqueios, divergências, documentos de saída) são ignorados.
+1. No `mariadb-proxy`, o analista principal vem de `t_dados_aereo.clerk`.
+2. Se vier vazio, existe fallback para:
+   - `t_dados_aereo` novamente
+   - `t_master_dados.nome_analista`
+3. O problema é que esses fallbacks usam comparação exata por `hawb`/`hawb_number`:
+   - `WHERE hawb_number IN (...)`
+   - `WHERE hawb IN (...)`
+4. Na mesma função existe `hawb_normalizado`, e em outras partes do arquivo já há lógica de normalização de HAWB removendo separadores e variações de formato.
+5. Então o cenário mais provável é:
+   - o processo existe na `t_cct_hawb_api_atual`
+   - o analista existe na `t_master_dados`
+   - mas o HAWB está em formato diferente entre as tabelas
+   - resultado: o lookup não encontra correspondência e o campo chega vazio no frontend
 
-### Solução
+Ponto adicional importante
 
-Expandir a extração de eventos dos snapshots históricos para detectar mudanças em múltiplos campos JSON, não apenas `situacaoAtual`.
+- O endpoint de detalhe (`get_cct_shipment`) ainda retorna só `sRow.analista || null`, sem reaplicar o fallback de `t_master_dados`.
+- Então, mesmo corrigindo a listagem principal, o detalhe pode continuar sem analista se essa parte não for alinhada também.
 
-### Alteração
+Plano de correção
 
-**Arquivo:** `supabase/functions/mariadb-proxy/index.ts` — action `get_cct_events`
+1. Ajustar o matching de analista no `get_cct_shipments`
+   - usar `hawb_normalizado` como chave preferencial
+   - ou normalizar HAWB dos dois lados na query/fallback
+2. Aplicar a mesma regra no fallback de:
+   - `t_dados_aereo`
+   - `t_master_dados`
+3. Manter o frontend exatamente como está
+   - porque ele já exibe corretamente quando `nome_analista` vem preenchido
+4. Alinhar também `get_cct_shipment`
+   - para o analista aparecer igual na tela de detalhe
 
-**1. Expandir o SELECT do histórico** (linha ~6607):
-Buscar campos adicionais além de `json_partes_estoque`:
-```sql
-SELECT id, hawb, consulted_at,
-  json_partes_estoque,
-  json_viagens_associadas,
-  json_bloqueios_ativos,
-  json_bloqueios_baixados,
-  json_conhecimento_carga_detalhada,
-  json_documentos_saida,
-  json_divergencias
-FROM t_cct_hawb_api_historico
-WHERE hawb_normalizado = ?
-ORDER BY consulted_at ASC
-LIMIT 500
-```
+Detalhes técnicos
 
-**2. Extrair eventos de múltiplas fontes por snapshot**, comparando com o snapshot anterior:
+- Arquivo principal do problema: `supabase/functions/mariadb-proxy/index.ts`
+- Trechos críticos:
+  - join principal `base_cct` x `aereo_latest`
+  - fallback por `missingAnalistaHawbs`
+  - endpoint único `get_cct_shipment`
+- Sinal de que a causa é lookup e não UI:
+  - `src/hooks/useCCTData.ts` e `src/components/cct/ProcessosTable.tsx` já estão preparados para mostrar o analista se ele vier no payload
 
-- **Situação (já existente)**: transições de `json_partes_estoque[0].situacaoAtual` → eventos como MANIFESTADO, RECEPCIONADO, etc.
-- **Viagens**: mudanças em `json_viagens_associadas` → eventos de voo (DEP com data de partida, chegada prevista). Detectar quando uma viagem nova aparece ou quando `dataPartidaEfetiva` muda.
-- **Bloqueios**: quando `json_bloqueios_ativos` muda (novo bloqueio aparece → evento BLOQUEIO; bloqueio some e aparece em `json_bloqueios_baixados` → evento DESBLOQUEIO).
-- **Divergências**: quando `json_divergencias` muda de vazio para preenchido → evento DIVERGENCIA_PESO ou DIVERGENCIA_VOLUME.
-- **Documentos de saída (DUIMP)**: quando `json_documentos_saida` muda de vazio para preenchido → evento DUIMP_VINCULADA com canal (verde/amarelo/vermelho).
-- **Peso/Volume constatado**: quando `json_partes_estoque[0].pesoBrutoConstatado` ou `quantidadeVolumeConstatado` aparece pela primeira vez → evento PESO_CONSTATADO.
+Resultado esperado após o ajuste
 
-**3. Lógica de comparação**: para cada snapshot, extrair "fingerprint" de cada campo. Se diferir do anterior, gerar evento com `consulted_at` como data. Isso evita duplicatas quando múltiplos snapshots consecutivos têm os mesmos dados.
-
-**4. Mapeamento de novos eventos para a timeline do frontend**:
-- Adicionar labels no `EventTimeline` component para os novos códigos (DESBLOQUEIO, DIVERGENCIA_PESO, DUIMP_VINCULADA, etc.)
-- Cada evento terá: `codigo_evento`, `descricao_evento` (texto legível), `data_hora_evento`, `aeroporto`, `fonte: 'RFB'`
-
-### Exemplo de resultado esperado
-
-Para um HAWB que passou por: Informada → Manifestada → Recepcionada, com 1 bloqueio ativo e 1 DUIMP vinculada:
-
-```text
-1. CHEGADA_INFORMADA    | 28/03 10:00 | "Informada"
-2. VOO_PARTIDA          | 29/03 14:30 | "LA9505 - MAD→GRU"  
-3. MANIFESTADO          | 30/03 08:00 | "Manifestada"
-4. BLOQUEIO             | 30/03 12:00 | "Bloqueio ativo"
-5. RECEPCIONADO         | 31/03 06:00 | "Recepcionada"
-6. DESBLOQUEIO          | 31/03 10:00 | "Bloqueio baixado"
-7. PESO_CONSTATADO      | 01/04 09:00 | "373.5 kg"
-8. DUIMP_VINCULADA      | 01/04 14:00 | "Canal Verde"
-```
-
-### Arquivos alterados
-
-| Arquivo | Ação |
-|---|---|
-| `supabase/functions/mariadb-proxy/index.ts` | Expandir `get_cct_events`: SELECT + extração multi-campo |
-| `src/components/cct/EventTimeline.tsx` | Adicionar labels/ícones para novos códigos de evento |
-
-### O que NÃO muda
-
-- `get_cct_shipments` (dashboard principal)
-- Componente ProcessoTimeline (apenas consome os eventos, já funciona com qualquer código)
-- Tabelas do banco (nenhuma migração)
-- Lógica de status oficial e SLA
-
+- A tela `/air/cct` passa a mostrar os analistas já existentes na `t_master_dados` mesmo quando o HAWB estiver em formato diferente entre as tabelas.
+- A grid e o detalhe ficam consistentes entre si.
