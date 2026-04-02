@@ -3661,7 +3661,7 @@ Deno.serve(async (req) => {
               const chunk = stillMissing.slice(i, i + 100);
               const placeholders = chunk.map(() => '?').join(',');
               const mdRows = await client.query(
-                `SELECT hawb, nome_analista, email_analista FROM ${database}.t_master_dados WHERE hawb IN (${placeholders}) AND nome_analista IS NOT NULL AND TRIM(nome_analista) != '' ORDER BY created_at DESC`,
+                `SELECT hawb, nome_analista, email_analista FROM ${database}.t_master_dados WHERE hawb IN (${placeholders}) AND nome_analista IS NOT NULL AND TRIM(nome_analista) != ''`,
                 chunk
               );
               for (const mr of mdRows || []) {
