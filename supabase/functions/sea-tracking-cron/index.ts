@@ -232,6 +232,7 @@ serve(async (req) => {
     total_cache_hits: stats.total_cache_hits,
     batches: stats.sea_seed_batches.length,
     enrich_batches: enrichResults.length,
+    carrier_fallback_discovered: carrierFallbackResult?.discovered || 0,
     errors: stats.errors.length
   });
 
