@@ -46,6 +46,40 @@ serve(async (req) => {
 
   console.log('[sea-tracking-cron] Iniciando orquestração...');
 
+  // ===== PASSO 0: Importar novos MBLs via sync_sea_tracking =====
+  try {
+    console.log('[sea-tracking-cron] Passo 0: Importando novos MBLs via sync_sea_tracking...');
+    const syncSeaRes = await fetch(
+      `${supabaseUrl}/functions/v1/olimpo-proxy?action=sync_sea_tracking`,
+      {
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    const syncSeaText = await syncSeaRes.text();
+    let syncSeaData: any = {};
+    try { syncSeaData = JSON.parse(syncSeaText); } catch { syncSeaData = { raw: syncSeaText, status: syncSeaRes.status }; }
+    
+    (stats as any).sync_sea_tracking = syncSeaData;
+    
+    if (!syncSeaRes.ok) {
+      stats.errors.push(`sync_sea_tracking falhou: ${syncSeaRes.status}`);
+      console.error('[sea-tracking-cron] sync_sea_tracking falhou:', syncSeaRes.status);
+    } else {
+      console.log('[sea-tracking-cron] sync_sea_tracking concluído:', {
+        synced: syncSeaData.synced || 0,
+        sources: syncSeaData.sources || {}
+      });
+    }
+  } catch (e: any) {
+    const errMsg = `sync_sea_tracking erro: ${e.message}`;
+    stats.errors.push(errMsg);
+    console.error('[sea-tracking-cron]', errMsg);
+  }
+
   // ===== PASSO 1: Sincronizar dados base via olimpo-sync =====
   try {
     console.log('[sea-tracking-cron] Passo 1: Chamando olimpo-sync...');

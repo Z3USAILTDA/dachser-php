@@ -39,22 +39,21 @@ serve(async (req) => {
 
     console.log('Connected to MariaDB successfully');
 
-    // Execute query to get MBLs - filtered by ETD from 2026-01-01 onwards
-    // This ensures both display AND processing only consider 2026+ data
-    // To revert: change back to DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+    // Execute query to get MBLs from t_dados_maritimo
     const query = `
       SELECT 
-        tmd.mawb as mbl_id,
-        tmd.tipo_processo,
-        tmd.etd,
-        tmd.shipper
+        dm.bl_number as mbl_id,
+        'SEA EXPORT' as tipo_processo,
+        dm.etd,
+        dm.shipper_name as shipper
       FROM 
-        dados_dachser.t_master_dados tmd
+        dados_dachser.t_dados_maritimo dm
       WHERE 
-        tmd.tipo_processo = 'SEA EXPORT'
-        AND (tmd.mawb LIKE 'HLC%' OR tmd.mawb LIKE 'MSC%' OR tmd.mawb LIKE 'MEDU%' OR tmd.mawb LIKE 'ONEY%')
-        AND tmd.data_insert >= '2026-02-01'
-      ORDER BY tmd.etd DESC, tmd.mawb
+        dm.bl_number IS NOT NULL
+        AND TRIM(dm.bl_number) != ''
+        AND (dm.bl_number LIKE 'HLC%' OR dm.bl_number LIKE 'MSC%' OR dm.bl_number LIKE 'MEDU%' OR dm.bl_number LIKE 'ONEY%')
+        AND dm.created_at >= '2026-02-01'
+      ORDER BY dm.etd DESC, dm.bl_number
     `;
 
     console.log('Executing query...');

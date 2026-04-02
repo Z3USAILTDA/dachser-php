@@ -2010,22 +2010,21 @@ serve(async (req) => {
                   AND TRIM(master) != ''
                 GROUP BY TRIM(master)
               ),
-              -- CTE 1B: Dados do t_master_dados para processos SEA recentes (FONTE SECUNDÁRIA)
+              -- CTE 1B: Dados do t_dados_maritimo (FONTE SECUNDÁRIA)
               master_dados_new AS (
                 SELECT 
-                  TRIM(mawb) as mbl_id,
-                  MAX(tipo_processo) as tipo_processo,
+                  TRIM(bl_number) as mbl_id,
+                  'SEA EXPORT' as tipo_processo,
                   MAX(eta) as eta,
-                  MAX(nome_analista) as nome_analista,
-                  MAX(hawb) as hawb,
-                  MAX(cliente) as cliente,
+                  MAX(clerk) as nome_analista,
+                  NULL as hawb,
+                  MAX(consignee_nome) as cliente,
                   MAX(etd) as etd
-                FROM dados_dachser.t_master_dados
-                WHERE mawb IS NOT NULL
-                  AND TRIM(mawb) != ''
-                  AND tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
-                  AND data_insert >= '2026-02-04 09:55:11'
-                GROUP BY TRIM(mawb)
+                FROM dados_dachser.t_dados_maritimo
+                WHERE bl_number IS NOT NULL
+                  AND TRIM(bl_number) != ''
+                  AND created_at >= '2026-02-01'
+                GROUP BY TRIM(bl_number)
               ),
               -- CTE 2: Navio/vessel_imo mais recente por mbl (ranking)
               latest_vessel AS (
@@ -2551,14 +2550,13 @@ serve(async (req) => {
             ts.id, ts.mbl_id, ts.container, ts.shipping_line, 
             ts.container_status, ts.last_event, ts.last_check, 
             ts.loading_port, ts.transshipment_port,
-            -- ETA priorizado: usar t_master_dados.eta se disponível
+            -- ETA priorizado: usar t_dados_maritimo.eta se disponível
             COALESCE(
               (
-                SELECT md.eta 
-                FROM dados_dachser.t_master_dados md 
-                WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id
-                  AND md.eta IS NOT NULL 
-                  AND md.active = 1
+                SELECT dm.eta 
+                FROM dados_dachser.t_dados_maritimo dm 
+                WHERE BINARY TRIM(dm.bl_number) = BINARY ts.mbl_id
+                  AND dm.eta IS NOT NULL 
                 LIMIT 1
               ),
               ts.eta
@@ -2699,15 +2697,12 @@ serve(async (req) => {
         const candidatesSeaMaster = await client.query(`
           SELECT
             TRIM(sm.master) AS mbl_id,
-            COALESCE(NULLIF(MAX(md.tipo_processo), ''), 'SEA IMPORT') AS tipo_processo,
+            'SEA EXPORT' AS tipo_processo,
             'PENDENTE' AS container,
             sm.customer_no AS consignee,
             sm.nome_analista AS email_analista,
             NULL AS email_cliente
           FROM dados_dachser.t_sea_master sm
-          LEFT JOIN dados_dachser.t_master_dados md 
-            ON TRIM(md.mawb) = TRIM(sm.master) 
-            AND md.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
           WHERE sm.master IS NOT NULL
             AND TRIM(sm.master) != ''
             AND (
@@ -2721,36 +2716,35 @@ serve(async (req) => {
         `);
         console.log(`[sync_sea_tracking] Found ${(candidatesSeaMaster as any[]).length} candidates from t_sea_master`);
 
-        // Step 2B: Get candidates from t_master_dados (FONTE SECUNDÁRIA - SEA IMPORT/EXPORT recentes)
-        const candidatesMasterDados = await client.query(`
+        // Step 2B: Get candidates from t_dados_maritimo (FONTE SECUNDÁRIA)
+        const candidatesDadosMaritimo = await client.query(`
           SELECT
-            TRIM(md.mawb) AS mbl_id,
-            md.tipo_processo AS tipo_processo,
+            TRIM(dm.bl_number) AS mbl_id,
+            'SEA EXPORT' AS tipo_processo,
             'PENDENTE' AS container,
-            md.cliente AS consignee,
-            md.nome_analista AS email_analista,
+            dm.consignee_nome AS consignee,
+            dm.clerk_email AS email_analista,
             NULL AS email_cliente
-          FROM dados_dachser.t_master_dados md
-          WHERE md.mawb IS NOT NULL
-            AND TRIM(md.mawb) != ''
-            AND md.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
-            AND md.data_insert >= '2026-02-04 09:55:11'
+          FROM dados_dachser.t_dados_maritimo dm
+          WHERE dm.bl_number IS NOT NULL
+            AND TRIM(dm.bl_number) != ''
+            AND dm.created_at >= '2026-02-01'
             AND (
-              TRIM(md.mawb) REGEXP '^[A-Za-z]{4}[0-9]+$'
-              OR TRIM(md.mawb) REGEXP '^(${VALID_MBL_PREFIXES})[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$'
+              TRIM(dm.bl_number) REGEXP '^[A-Za-z]{4}[0-9]+$'
+              OR TRIM(dm.bl_number) REGEXP '^(${VALID_MBL_PREFIXES})[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$'
             )
-            AND LEFT(TRIM(md.mawb), 4) NOT IN ('EBKG', 'BKNG', 'GLNL', 'GLSL', 'GLDL', 'BRSA')
-            AND TRIM(md.mawb) NOT REGEXP '^BR[A-Za-z]{3}'
-          GROUP BY TRIM(md.mawb)
+            AND LEFT(TRIM(dm.bl_number), 4) NOT IN ('EBKG', 'BKNG', 'GLNL', 'GLSL', 'GLDL', 'BRSA')
+            AND TRIM(dm.bl_number) NOT REGEXP '^BR[A-Za-z]{3}'
+          GROUP BY TRIM(dm.bl_number), dm.consignee_nome, dm.clerk_email
           LIMIT 300
         `);
-        console.log(`[sync_sea_tracking] Found ${(candidatesMasterDados as any[]).length} candidates from t_master_dados`);
+        console.log(`[sync_sea_tracking] Found ${(candidatesDadosMaritimo as any[]).length} candidates from t_dados_maritimo`);
 
         // Step 3: Merge candidates (t_sea_master has priority for duplicates)
         const seaMasterSet = new Set((candidatesSeaMaster as any[]).map(c => c.mbl_id?.trim()));
-        const uniqueMasterDados = (candidatesMasterDados as any[]).filter(c => !seaMasterSet.has(c.mbl_id?.trim()));
-        const allCandidates = [...(candidatesSeaMaster as any[]), ...uniqueMasterDados];
-        console.log(`[sync_sea_tracking] Total unique candidates: ${allCandidates.length} (${(candidatesSeaMaster as any[]).length} from t_sea_master + ${uniqueMasterDados.length} unique from t_master_dados)`);
+        const uniqueDadosMaritimo = (candidatesDadosMaritimo as any[]).filter(c => !seaMasterSet.has(c.mbl_id?.trim()));
+        const allCandidates = [...(candidatesSeaMaster as any[]), ...uniqueDadosMaritimo];
+        console.log(`[sync_sea_tracking] Total unique candidates: ${allCandidates.length} (${(candidatesSeaMaster as any[]).length} from t_sea_master + ${uniqueDadosMaritimo.length} unique from t_dados_maritimo)`);
 
         // Step 4: Filter out existing MBLs in JavaScript (much faster than SQL NOT EXISTS)
         const toInsert = allCandidates.filter(c => !existingSet.has(c.mbl_id?.trim()));
@@ -2759,7 +2753,7 @@ serve(async (req) => {
         // Step 5: Batch insert new records
         let synced = 0;
         let syncedFromSeaMaster = 0;
-        let syncedFromMasterDados = 0;
+        let syncedFromDadosMaritimo = 0;
         for (const row of toInsert) {
           try {
             await client.execute(`
@@ -2772,35 +2766,19 @@ serve(async (req) => {
             if (seaMasterSet.has(row.mbl_id?.trim())) {
               syncedFromSeaMaster++;
             } else {
-              syncedFromMasterDados++;
+              syncedFromDadosMaritimo++;
             }
           } catch (insertErr) {
             console.warn(`[sync_sea_tracking] Failed to insert ${row.mbl_id}:`, insertErr);
           }
         }
 
-        // Step 6: Retroactive fix - update existing records with wrong tipo_processo
+        // Step 6: Retroactive fix - removed (t_dados_maritimo has no tipo_processo)
         let retroFixed = 0;
-        try {
-          const [retroResult] = await client.execute(`
-            UPDATE dados_dachser.t_tracking_sea ts
-            INNER JOIN dados_dachser.t_master_dados md 
-              ON TRIM(md.mawb) = TRIM(ts.mbl_id)
-              AND md.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
-            SET ts.tipo_processo = md.tipo_processo
-            WHERE ts.tipo_processo != md.tipo_processo
-          `);
-          retroFixed = (retroResult as any)?.affectedRows || 0;
-          if (retroFixed > 0) {
-            console.log(`[sync_sea_tracking] Retroactive fix: updated tipo_processo for ${retroFixed} records`);
-          }
-        } catch (retroErr: any) {
-          console.warn(`[sync_sea_tracking] Retroactive fix error: ${retroErr.message}`);
-        }
 
         await client.close();
         
-        console.log(`[sync_sea_tracking] Synced ${synced} rows (${syncedFromSeaMaster} from t_sea_master, ${syncedFromMasterDados} from t_master_dados), retroFixed ${retroFixed}`);
+        console.log(`[sync_sea_tracking] Synced ${synced} rows (${syncedFromSeaMaster} from t_sea_master, ${syncedFromDadosMaritimo} from t_dados_maritimo), retroFixed ${retroFixed}`);
         
         return new Response(JSON.stringify({ 
           success: true, 
@@ -2808,9 +2786,9 @@ serve(async (req) => {
           retroFixed,
           sources: {
             t_sea_master: syncedFromSeaMaster,
-            t_master_dados: syncedFromMasterDados
+            t_dados_maritimo: syncedFromDadosMaritimo
           },
-          message: `${synced} registros sincronizados (${syncedFromSeaMaster} t_sea_master + ${syncedFromMasterDados} t_master_dados)`,
+          message: `${synced} registros sincronizados (${syncedFromSeaMaster} t_sea_master + ${syncedFromDadosMaritimo} t_dados_maritimo)`,
           validation_rules: {
             mbl_scac_padrao: '^[A-Za-z]{4}[0-9]+$ (ex: COSU6437929310)',
             mbl_scac_estendido: `^(${VALID_MBL_PREFIXES.substring(0, 30)}...)[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$ (ex: HLCUHAM251021534)`,
@@ -2818,8 +2796,7 @@ serve(async (req) => {
             mbl_reject_internal: 'GLNL*, GLSL*, GLDL*, BRSA* (referências internas)',
             mbl_reject_hawb: '^BR[A-Za-z]{3} (HAWBs brasileiros)',
             container: 'Opcional (usa PENDENTE se vazio)',
-            etd_min: '2025-11-01',
-            t_master_dados_filter: 'tipo_processo IN (SEA IMPORT, SEA EXPORT), data_insert >= 2026-02-04 09:55:11'
+            t_dados_maritimo_filter: 'created_at >= 2026-02-01'
           }
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
