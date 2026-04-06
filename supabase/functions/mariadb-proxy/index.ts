@@ -3235,14 +3235,14 @@ Deno.serve(async (req) => {
               // Update existing record
               await client.execute(`
                 UPDATE ai_agente.t_fin_disputas 
-                SET responsavel = ?, departamento = ?, observacoes = ?, escalation = ?, prazo = ?, updated_at = NOW()
+                SET responsavel = ?, departamento = ?, observacoes = ?, escalation = ?, vencimento = COALESCE(?, vencimento), updated_at = NOW()
                 WHERE nf = ?
               `, [
                 item.responsavel || docData.responsavel_disp || null,
                 item.departamento || null,
                 item.descricao || null,
                 item.escalation || null,
-                item.prazo || null,
+                item.prazo || docData.vencimento || null,
                 docKey
               ]);
               
