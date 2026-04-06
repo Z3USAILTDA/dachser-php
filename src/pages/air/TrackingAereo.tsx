@@ -181,12 +181,12 @@ const MONTH_MAP: Record<string, string> = {
 
 function parseTimelineDateTime(dateStr: string, timeStr: string): string | null {
   const parts = dateStr.trim().split(/\s+/);
-  if (parts.length === 3) {
+  if (parts.length >= 3) {
     const [day, mon, year] = parts;
     const mm = MONTH_MAP[mon];
     if (mm) {
       const dd = day.padStart(2, "0");
-      const t = timeStr || "00:00";
+      const t = parts.length >= 4 ? parts[3] : (timeStr || "00:00");
       return `${year}-${mm}-${dd}T${t}:00`;
     }
   }
