@@ -311,7 +311,8 @@ serve(async (req: Request): Promise<Response> => {
 
     connection = await connectWithRetry({
       host, port, database, user: dbUser, password: dbPassword,
-      connectTimeout: 15000, charset: "utf8mb4",
+      connectTimeout: 20000, charset: "utf8mb4",
+      idleTimeout: 60000,
     });
 
     // Determine target CNPJs
