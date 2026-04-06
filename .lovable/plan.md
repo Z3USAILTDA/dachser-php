@@ -1,34 +1,43 @@
 
 
-## Plano: Ocultar processos ENTREGUE após 5 dias no CCT
+## Plano: Normalizar HAWB no JOIN entre CCT e tracking_status
 
-### Contexto
+### Problema
 
-Processos com status CCT "ENTREGUE" devem continuar visíveis por 5 dias após a entrega, e depois ser ocultos da visualização padrão (grid e cards). Só devem aparecer se buscados pela barra de pesquisa.
+A tabela `t_cct_hawb_api_atual` armazena HAWBs sem hífen (ex: `ABC12345`), enquanto `t_fato_aereo.hawbs_json` armazena com hífen (ex: `ABC-12345`). O `json_contains` faz comparação exata, então o INNER JOIN falha e processos não aparecem no CCT.
 
-### Alterações
+### Alteração
 
-**1. Backend: `supabase/functions/mariadb-proxy/index.ts`** — seção `get_cct_shipments`
+**Arquivo: `supabase/functions/mariadb-proxy/index.ts`** — linha ~3631
 
-- Passar `data_hora_situacao_estoque` no objeto de resposta de cada shipment (atualmente extraído do SQL mas não incluído no retorno final, ~linha 3856-3908). Adicionar campo `data_entregue` com o valor de `row.data_hora_situacao_estoque` quando o status for ENTREGUE.
+Substituir:
+```sql
+INNER JOIN tracking_status ts
+  ON json_contains(ts.hawbs_json, JSON_ARRAY(c.hawb))
+```
 
-**2. Frontend: `src/components/cct/ProcessosTable.tsx`**
+Por uma abordagem que normalize ambos os lados removendo hífens, pontos, espaços e underscores. Como `json_contains` não suporta transformações inline facilmente, a solução é usar um JOIN lateral ou converter para `LIKE`/`LOCATE` com normalização:
 
-- No `filteredProcessos` (useMemo), antes dos filtros existentes, separar processos ENTREGUE com mais de 5 dias:
-  - Se `status_cct_oficial === 'ENTREGUE'` e a data de entrega (`data_entregue` ou `updated_at`) for > 5 dias atrás → ocultar do array **a menos que** `searchTerm` esteja preenchido
-- Quando o searchTerm estiver preenchido, mostrar todos os processos (inclusive ENTREGUE antigos)
+```sql
+INNER JOIN tracking_status ts
+  ON json_contains(ts.hawbs_json, JSON_ARRAY(c.hawb))
+  OR json_contains(ts.hawbs_json, JSON_ARRAY(
+    CONCAT(LEFT(c.hawb, 3), '-', SUBSTRING(c.hawb, 4))
+  ))
+```
 
-**3. Frontend: `src/pages/cct/CCTDashboard.tsx`**
+Essa segunda condição tenta o formato com hífen após os 3 primeiros caracteres (padrão HAWB: `XXX-YYYYYYYY` → `XXXYYYYYYYY`). Se o formato variar, podemos usar `REPLACE` no `hawbs_json` para remover hífens antes do `json_contains`:
 
-- No cálculo de `metrics` (useMemo, ~linha 76), filtrar os processos ENTREGUE > 5 dias antes de contar total, alerta, crítico, etc. Os cards de métricas não devem incluir processos entregues há mais de 5 dias.
+```sql
+INNER JOIN tracking_status ts
+  ON json_contains(ts.hawbs_json, JSON_ARRAY(c.hawb))
+  OR json_contains(
+    REPLACE(ts.hawbs_json, '-', ''),
+    JSON_ARRAY(REPLACE(c.hawb, '-', ''))
+  )
+```
 
-### Tipo CCT
+A segunda abordagem (com `REPLACE`) é mais robusta e cobre qualquer posição do hífen.
 
-- Adicionar campo opcional `data_entregue?: string | null` ao mapeamento no `useCCTData.ts` (hook `mapRowToProcessoCCT`).
-
-### Resultado
-
-- Processos entregues ficam visíveis por 5 dias após entrega
-- Após 5 dias, somem da grid e dos cards
-- Podem ser encontrados pela busca a qualquer momento
+### Nenhum outro arquivo alterado
 
