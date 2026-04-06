@@ -182,6 +182,7 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
     eventos,
     excecoes,
     origem_cct: row.origem_cct || 'OUTRO',
+    data_entregue: row.data_entregue || null,
   };
 }
 

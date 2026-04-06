@@ -3905,6 +3905,7 @@ Deno.serve(async (req) => {
             info_frete: row.info_frete || null,
             manuseios_especiais_rfb: row.manuseios_especiais_rfb || [],
             rfb_situacao: row.rfb_situacao || null,
+            data_entregue: row.data_hora_situacao_estoque || null,
           };
         });
 

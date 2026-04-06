@@ -319,6 +319,7 @@ export interface ProcessoCCT {
   eventos: CCTEvento[];
   excecoes: CCTExcecao[];
   origem_cct?: OrigemCCT;
+  data_entregue?: string | null;
 }
 
 export interface CodigoIATA {

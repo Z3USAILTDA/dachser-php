@@ -74,7 +74,16 @@ export default function CCTDashboard() {
   const [metricFilter, setMetricFilter] = useState<MetricFilterType>(null);
   
   const metrics = useMemo(() => {
-    const total = processos.length;
+    // Exclude ENTREGUE > 5 days from metrics
+    const fiveDaysMs = 5 * 24 * 60 * 60 * 1000;
+    const now = new Date().getTime();
+    const activeProcessos = processos.filter(p => {
+      if (p.status_atual?.status_cct_oficial !== 'ENTREGUE') return true;
+      const entregueDate = p.data_entregue || p.shipment.updated_at;
+      if (!entregueDate) return true;
+      return now - new Date(entregueDate).getTime() <= fiveDaysMs;
+    });
+    const total = activeProcessos.length;
     const emTransito = processos.filter(p => p.status_atual?.status_cct_oficial === "INFORMADA" || p.status_atual?.status_cct_oficial === "MANIFESTADA").length;
     const alerta = processos.filter(p => p.status_atual?.sla_status === "ALERTA").length;
     const critico = processos.filter(p => 
