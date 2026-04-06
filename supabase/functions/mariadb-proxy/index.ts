@@ -3265,7 +3265,7 @@ Deno.serve(async (req) => {
                 item.departamento || null,
                 item.descricao || null,
                 item.escalation || null,
-                item.prazo || docData.vencimento || null,
+                excelDateToSQL(item.prazo) || docData.vencimento || null,
                 docKey
               ]);
               
@@ -3331,7 +3331,7 @@ Deno.serve(async (req) => {
            await client.execute(insertSql, [
              docKey, 
              docData.cliente || 'N/A',
-             item.prazo || docData.vencimento || null,
+             excelDateToSQL(item.prazo) || docData.vencimento || null,
              docData.valor || 0,
              docData.tipo || 'À vista',
              item.responsavel || docData.responsavel_disp || null,
