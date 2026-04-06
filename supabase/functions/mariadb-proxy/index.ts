@@ -3226,13 +3226,14 @@ Deno.serve(async (req) => {
               // Update existing record
               await client.execute(`
                 UPDATE ai_agente.t_fin_disputas 
-                SET responsavel = ?, departamento = ?, observacoes = ?, escalation = ?, updated_at = NOW()
+                SET responsavel = ?, departamento = ?, observacoes = ?, escalation = ?, prazo = ?, updated_at = NOW()
                 WHERE nf = ?
               `, [
                 item.responsavel || docData.responsavel_disp || null,
                 item.departamento || null,
                 item.descricao || null,
                 item.escalation || null,
+                item.prazo || null,
                 docKey
               ]);
               
@@ -3277,8 +3278,8 @@ Deno.serve(async (req) => {
           
           // Insert new disputa (only if not exists)
           const insertSql = `
-            INSERT INTO ai_agente.t_fin_disputas (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+            INSERT INTO ai_agente.t_fin_disputas (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, prazo, is_disputa, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
           `;
           await client.execute(insertSql, [
             docKey, 
@@ -3289,7 +3290,8 @@ Deno.serve(async (req) => {
             item.responsavel || docData.responsavel_disp || null,
             item.departamento || null, 
             item.descricao || null,
-            item.escalation || null
+            item.escalation || null,
+            item.prazo || null
           ]);
           
           successCount++;
