@@ -3629,6 +3629,7 @@ Deno.serve(async (req) => {
             ON TRIM(a.hawb) COLLATE utf8mb4_unicode_ci = TRIM(c.hawb) COLLATE utf8mb4_unicode_ci
           INNER JOIN tracking_status ts
             ON json_contains(ts.hawbs_json, JSON_ARRAY(c.hawb))
+            OR json_contains(ts.hawbs_json, JSON_ARRAY(CONCAT(LEFT(c.hawb, 3), '-', SUBSTRING(c.hawb, 4))))
           WHERE 1=1
           ORDER BY c.consulted_at DESC, c.id DESC
         `);
