@@ -353,37 +353,34 @@ Financeiro Dachser`;
     const cnpjsList = Array.from(selectedClienteCnpjs);
     setAgrupamentoCnpjs(cnpjsList);
     
+    // Collect razao_base for all selected clients
+    const selectedRazaoBases = clienteRows
+      .filter(c => selectedClienteCnpjs.has(c.cnpj))
+      .map(c => c.razao_base)
+      .filter((v, i, a) => a.indexOf(v) === i); // unique
+
     // Build default text with all CNPJs
     const cnpjsFormatted = cnpjsList.map(c => formatCnpj(c)).join("\n");
-    const defaultText = `Boa tarde!
-Tudo bem?
-
-Segue anexo, aging list para os CNPJ's:
-
-${cnpjsFormatted}
-
-Por gentileza, poderia verificar e nos retornar com a programação de pagamento para essa semana?
-
-Em caso de dúvidas ou eventuais divergências, nossa equipe está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
-
-Agradecemos a sua atenção e colaboração.
-
-Atenciosamente,
-Financeiro Dachser`;
+    const defaultText = `Boa tarde!\nTudo bem?\n\nSegue anexo, aging list para os CNPJ's:\n${cnpjsFormatted}\n\nPor gentileza, poderia verificar e nos retornar com a programação de pagamento para essa semana?\n\nEm caso de dúvidas ou eventuais divergências, nossa equipe está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.\n\nAgradecemos a sua atenção e colaboração.\n\nAtenciosamente,\nFinanceiro Dachser`;
     
     setAgingEmailText(defaultText);
     setAgingRecipients("devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com");
+    // Store razao_bases in a ref or state for sending
+    (window as any).__agrupamentoRazaoBases = selectedRazaoBases;
     setAgrupamentoModalOpen(true);
   };
 
   const confirmSendAgingAgrupado = async () => {
     if (agrupamentoCnpjs.length === 0) return;
     
+    const razaoBases: string[] = (window as any).__agrupamentoRazaoBases || [];
+    
     setSendingAging(true);
     try {
       const { data, error } = await supabase.functions.invoke("regua-send-aging", {
         body: {
           cnpjs: agrupamentoCnpjs,
+          razao_bases: razaoBases,
           cliente: "Clientes Agrupados",
           email_to: agingRecipients,
           custom_text: agingEmailText,
@@ -470,6 +467,7 @@ Financeiro Dachser`;
       const { data, error } = await supabase.functions.invoke("regua-send-aging", {
         body: {
           cnpj: selectedRow.cnpj,
+          razao_base: selectedRow.razao_base || selectedRow.razao_social,
           cliente: selectedRow.razao_base || selectedRow.razao_social,
           email_to: agingRecipients,
           custom_text: agingEmailText,
