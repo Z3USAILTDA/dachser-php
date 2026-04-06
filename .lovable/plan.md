@@ -1,32 +1,37 @@
 
 
-## Plano: Replicar classificação e visualização de discrepância do /air/tracking para /air/tracking-aereo
+## Plano: Corrigir coluna Data/Hora no /air/tracking-aereo
 
 ### Problema
 
-O `/air/tracking-aereo` usa uma função simplificada `checkTimelineDiscrepancy` que retorna apenas `true/false`. O `/air/tracking` (Index.tsx) recebe do backend `baseline_pieces`, `has_dis_event` e mostra badges mais ricos:
-- Badge âmbar para DIS puro (sem discrepância de peças)
-- Badge vermelho com contagem: "Discrepância Peças (22)"
+A função `parseTimelineDateTime` (linha 182) espera datas com exatamente 3 partes (`"31 Mar 2026"`), mas os dados da API vêm com 4 partes (`"31 Mar 2026 23:00"` — dia, mês, ano, hora). O check `parts.length === 3` falha, o fallback `new Date("31 Mar 2026 23:00 00:00")` também falha, e retorna `null`.
 
-### Alterações
+### Alteração
 
-**Arquivo: `src/pages/air/TrackingAereo.tsx`**
+**Arquivo: `src/pages/air/TrackingAereo.tsx`** — função `parseTimelineDateTime` (linha 182-196)
 
-1. **Tipo AWBData** (~linha 235): adicionar `baseline_pieces?: number | null` e `has_dis_event?: boolean`
+Adicionar suporte para 4 partes (quando o horário vem embutido no `dateStr`):
 
-2. **Função `checkTimelineDiscrepancy`** (~linha 435): refatorar para retornar objeto `{ discrepancy: boolean, baseline: number | null, hasDis: boolean }` em vez de apenas boolean. Lógica:
-   - Extrair peças dos eventos do timeline
-   - Baseline = primeiro valor de peças encontrado
-   - hasDis = algum evento com código "DIS"
-   - Se último evento for delivery (DLV/POD) com peças === baseline → sem discrepância
+```typescript
+function parseTimelineDateTime(dateStr: string, timeStr: string): string | null {
+  const parts = dateStr.trim().split(/\s+/);
+  if (parts.length >= 3) {
+    const [day, mon, year] = parts;
+    const mm = MONTH_MAP[mon];
+    if (mm) {
+      const dd = day.padStart(2, "0");
+      // Se tem 4+ partes, o horário está no dateStr (ex: "31 Mar 2026 23:00")
+      const t = parts.length >= 4 ? parts[3] : (timeStr || "00:00");
+      return `${year}-${mm}-${dd}T${t}:00`;
+    }
+  }
+  // Fallback
+  const d = new Date(`${dateStr} ${timeStr}`);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+```
 
-3. **Mapeamento dos dados** (~linha 387-414): usar o retorno enriquecido para popular `pieces_discrepancy`, `baseline_pieces` e `has_dis_event`
-
-4. **Badge de Situação** (~linha 872-898): replicar a lógica de renderização do Index.tsx:
-   - DIS puro (sem `pieces_discrepancy`) → badge âmbar "DIS - Discrepância"
-   - Crítico com `pieces_discrepancy` → badge vermelho "Discrepância Peças (N)" mostrando `baseline_pieces`
-   - Crítico com `has_dis_event` → badge vermelho "DIS - Discrepância"
-   - Demais críticos → badge vermelho "Crítico"
+Mudança: `parts.length === 3` → `parts.length >= 3`, e priorizar `parts[3]` como horário quando presente.
 
 ### Nenhum outro arquivo alterado
 
