@@ -3287,20 +3287,19 @@ Deno.serve(async (req) => {
           
           // Insert new disputa (only if not exists)
           const insertSql = `
-            INSERT INTO ai_agente.t_fin_disputas (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, prazo, is_disputa, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
-          `;
-          await client.execute(insertSql, [
-            docKey, 
-            docData.cliente || 'N/A',
-            docData.vencimento || null,
-            docData.valor || 0,
-            docData.tipo || 'À vista',
-            item.responsavel || docData.responsavel_disp || null,
-            item.departamento || null, 
-            item.descricao || null,
-            item.escalation || null,
-            item.prazo || null
+             INSERT INTO ai_agente.t_fin_disputas (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+           `;
+           await client.execute(insertSql, [
+             docKey, 
+             docData.cliente || 'N/A',
+             item.prazo || docData.vencimento || null,
+             docData.valor || 0,
+             docData.tipo || 'À vista',
+             item.responsavel || docData.responsavel_disp || null,
+             item.departamento || null, 
+             item.descricao || null,
+             item.escalation || null
           ]);
           
           successCount++;
