@@ -36,23 +36,38 @@ async function getConnection() {
 async function fetchTrackingData(): Promise<any[]> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+  const maxRetries = 2;
 
-  const resp = await fetch(`${supabaseUrl}/functions/v1/fetch-tracking-aereo`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${anonKey}`,
-    },
-    body: JSON.stringify({}),
-  });
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
 
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`fetch-status-aereo returned ${resp.status}: ${text}`);
+      const resp = await fetch(`${supabaseUrl}/functions/v1/fetch-tracking-aereo`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${anonKey}`,
+        },
+        body: JSON.stringify({}),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`fetch-tracking-aereo returned ${resp.status}: ${text}`);
+      }
+
+      const data = await resp.json();
+      return data?.data || data || [];
+    } catch (err: any) {
+      console.warn(`[air-tracking-failed-alert] fetch attempt ${attempt}/${maxRetries} failed:`, err.message);
+      if (attempt === maxRetries) throw err;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
   }
-
-  const data = await resp.json();
-  return data?.data || data || [];
+  return [];
 }
 
 function classifyFailureReason(item: any): string {
