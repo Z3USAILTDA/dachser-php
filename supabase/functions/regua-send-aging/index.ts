@@ -12,6 +12,8 @@ const corsHeaders = {
 interface AgingRequest {
   cnpj?: string;
   cnpjs?: string[];
+  razao_base?: string;
+  razao_bases?: string[];
   cliente: string;
   email_to: string;
   custom_text?: string;
