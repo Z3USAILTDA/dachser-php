@@ -3179,6 +3179,29 @@ Deno.serve(async (req) => {
           escalation?: string;
           prazo?: string;
         }>; forceUpdate?: boolean };
+
+        // Helper: convert Excel serial date number to YYYY-MM-DD string
+        const excelDateToSQL = (val: any): string | null => {
+          if (val === null || val === undefined || val === '') return null;
+          const num = Number(val);
+          if (!isNaN(num) && num > 30000 && num < 100000) {
+            // Excel serial date: days since 1899-12-30
+            const excelEpochDiff = 25569;
+            const ms = (num - excelEpochDiff) * 86400000;
+            const d = new Date(ms);
+            if (!isNaN(d.getTime())) {
+              const yyyy = d.getUTCFullYear();
+              const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+              const dd = String(d.getUTCDate()).padStart(2, '0');
+              return `${yyyy}-${mm}-${dd}`;
+            }
+          }
+          // If it's already a date string, validate it
+          if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+            return val.substring(0, 10);
+          }
+          return null;
+        };
         
         if (!items || !Array.isArray(items) || items.length === 0) {
           return new Response(
