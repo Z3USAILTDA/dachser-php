@@ -305,7 +305,10 @@ serve(async (req) => {
       sendFailureEmail(failed).catch((e) => console.error("sendFailureEmail error:", e));
     }
 
-    return new Response(JSON.stringify({ success: true, data, failed_count: failed.length }), {
+    // Filter out hidden AWBs
+    const filteredData = hiddenAwbs.size > 0 ? data.filter((d: any) => !hiddenAwbs.has(d.awb_number)) : data;
+
+    return new Response(JSON.stringify({ success: true, data: filteredData, failed_count: failed.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
