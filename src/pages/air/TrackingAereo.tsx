@@ -326,114 +326,32 @@ const TrackingAereo = () => {
 
   // Fetch data from edge function
   const fetchData = useCallback(async () => {
-    setIsLoadingData(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("fetch-tracking-aereo");
-      if (error) {
-        console.error("Error fetching tracking aereo:", error);
-        return;
-      }
-      if (data?.success && data?.data) {
-        const converted: AWBData[] = data.data.map((item: any, index: number) => {
-          const awbNumber = item.awb_number || "";
-          const airlineCode = awbNumber.substring(0, 3);
-          const lastEvent = item.last_event || "";
-          const etd = item.etd || null;
-
-          // Normalize locations to IATA codes
-          const origin = extractAirportCode(item.origin || "");
-          const destination = extractAirportCode(item.destination || "");
-          const lastLoc = extractAirportCode(item.last_event_location || "");
-          const penultLoc = extractAirportCode(item.penultimate_location || "");
-
-          // Derive connection from locations
-          let conexao: string | undefined;
-          if (lastLoc && lastLoc !== origin && lastLoc !== destination) {
-            conexao = lastLoc;
-          } else if (penultLoc && penultLoc !== origin && penultLoc !== destination) {
-            conexao = penultLoc;
-          }
-
-          // Build last_event_date from timeline_json
-          const timeline = item.timeline_json || [];
-          let lastEventDate: string | null = null;
-          if (timeline.length > 0) {
-            const evt = timeline.find((e: any) => e.date);
-            if (evt) {
-              lastEventDate = parseTimelineDateTime(evt.date || "", evt.time || "00:00");
-            }
-          }
-
-          // Calculate hours_in_status from last event date
-          let hoursInStatus: number | undefined;
-          if (lastEventDate) {
-            const eventTime = new Date(lastEventDate).getTime();
-            if (!isNaN(eventTime)) {
-              hoursInStatus = (Date.now() - eventTime) / (1000 * 60 * 60);
-            }
-          }
-
-          // Determine invalid AWB and tracking failures
-          let isInvalid = false;
-          let trackingFailed = false;
-          let resolvedLastEvent = lastEvent;
-
-          if (awbNumber === "NI") {
-            isInvalid = true;
-            resolvedLastEvent = "AWB Invalido";
-          } else if (!lastEvent || hasScraperFailure(timeline)) {
-            trackingFailed = true;
-            resolvedLastEvent = "Falha do Rastreio";
-          }
-
-          // Determine if critical: discrepancy in timeline or NIL/NIF/OFLD or tracking_failed
-          const upperEvent = resolvedLastEvent.toUpperCase();
-          const discResult = checkTimelineDiscrepancy(item.timeline_json);
-          const isCritical = trackingFailed || ["NIL", "NIF", "OFLD"].includes(upperEvent) || discResult.discrepancy || discResult.hasDis;
-
-          return {
-            id: `scraper-${index}`,
-            awb: awbNumber,
-            hawb: item.hawb_number || "-",
-            airline_code: airlineCode,
-            consignee_name: item.consignee_nome || "-",
-            last_event: resolvedLastEvent,
-            status: resolvedLastEvent || "-",
-            nome_analista: item.clerk || "-",
-            email_analista: item.clerk_email || null,
-            origem: origin || "N/A",
-            destino: destination || "N/A",
-            conexao,
-            hours_in_status: hoursInStatus,
-            etd,
-            last_event_date: lastEventDate,
-            timeline_json: timeline,
-            last_event_location: lastLoc,
-            penultimate_location: penultLoc,
-            is_critical: isCritical,
-            pieces_discrepancy: discResult.discrepancy,
-            baseline_pieces: discResult.baseline,
-            has_dis_event: discResult.hasDis,
-            is_invalid: isInvalid,
-            tracking_failed: trackingFailed,
-          };
-        });
-
-        // Deduplicate by awb+hawb
-        const deduped = converted.reduce((acc: AWBData[], cur) => {
-          const key = `${cur.awb}|${cur.hawb || "-"}`;
-          const existing = acc.findIndex(i => `${i.awb}|${i.hawb || "-"}` === key);
-          if (existing === -1) acc.push(cur);
-          return acc;
-        }, []);
-
-        setAwbsData(deduped);
-      }
-    } catch (error) {
-      console.error("Error in fetchData:", error);
-    } finally {
-      setIsLoadingData(false);
-    }
+    // TEMPORARIAMENTE DESABILITADO - conexão com banco comentada
+    // setIsLoadingData(true);
+    // try {
+    //   const { data, error } = await supabase.functions.invoke("fetch-tracking-aereo");
+    //   if (error) {
+    //     console.error("Error fetching tracking aereo:", error);
+    //     return;
+    //   }
+    //   if (data?.success && data?.data) {
+    //     const converted: AWBData[] = data.data.map((item: any, index: number) => {
+    //       ... todo o mapeamento ...
+    //     });
+    //     const deduped = converted.reduce((acc: AWBData[], cur) => {
+    //       const key = `${cur.awb}|${cur.hawb || "-"}`;
+    //       const existing = acc.findIndex(i => `${i.awb}|${i.hawb || "-"}` === key);
+    //       if (existing === -1) acc.push(cur);
+    //       return acc;
+    //     }, []);
+    //     setAwbsData(deduped);
+    //   }
+    // } catch (error) {
+    //   console.error("Error in fetchData:", error);
+    // } finally {
+    //   setIsLoadingData(false);
+    // }
+    setAwbsData([]);
   }, []);
 
   // Check timeline for piece/weight discrepancy (enriched version matching /air/tracking)
