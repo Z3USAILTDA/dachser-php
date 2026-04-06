@@ -233,6 +233,8 @@ interface AWBData {
   tipo_servico?: string;
   tipo_processo?: string;
   pieces_discrepancy?: boolean;
+  baseline_pieces?: number | null;
+  has_dis_event?: boolean;
   is_critical?: boolean;
   is_invalid?: boolean;
   tracking_failed?: boolean;
@@ -431,13 +433,36 @@ const TrackingAereo = () => {
     }
   }, []);
 
-  // Check timeline for piece/weight discrepancy
-  function checkTimelineDiscrepancy(timeline: any[]): boolean {
-    if (!timeline || timeline.length < 2) return false;
-    const pieces = timeline.map((e: any) => e.pieces).filter((p: any) => p != null && p > 0);
-    if (pieces.length < 2) return false;
+  // Check timeline for piece/weight discrepancy (enriched version matching /air/tracking)
+  function checkTimelineDiscrepancy(timeline: any[]): { discrepancy: boolean; baseline: number | null; hasDis: boolean } {
+    const result = { discrepancy: false, baseline: null as number | null, hasDis: false };
+    if (!timeline || timeline.length < 2) return result;
+
+    // Check for DIS events
+    result.hasDis = timeline.some((e: any) => {
+      const code = (e.event_code || e.codigo_evento || '').toUpperCase();
+      return code === 'DIS' || (e.event_description || e.descricao_evento || '').toUpperCase().includes('DISCREPANCY');
+    });
+
+    const pieces = timeline.map((e: any) => e.pieces ?? e.pecas).filter((p: any) => p != null && p > 0);
+    if (pieces.length < 2) return result;
+
     const unique = [...new Set(pieces)];
-    return unique.length >= 2;
+    result.baseline = pieces[0]; // first recorded piece count
+
+    if (unique.length >= 2) {
+      // Check if resolved: last delivery event matches baseline
+      const lastEvent = timeline[timeline.length - 1];
+      const lastCode = (lastEvent?.event_code || lastEvent?.codigo_evento || '').toUpperCase();
+      const lastPieces = lastEvent?.pieces ?? lastEvent?.pecas;
+      if (['DLV', 'POD'].includes(lastCode) && lastPieces === result.baseline) {
+        result.discrepancy = false;
+      } else {
+        result.discrepancy = true;
+      }
+    }
+
+    return result;
   }
 
   // Fetch DB stats
@@ -881,10 +906,22 @@ const TrackingAereo = () => {
                                 Falha
                               </span>
                             ) : isCritical ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
-                                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                                {awb.pieces_discrepancy ? "Discrepância Peças" : "Crítico"}
-                              </span>
+                              awb.has_dis_event && !awb.pieces_discrepancy ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                  DIS - Discrepância
+                                </span>
+                              ) : awb.pieces_discrepancy ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                                  {awb.has_dis_event ? "DIS - Discrepância" : `Discrepância Peças${awb.baseline_pieces ? ` (${awb.baseline_pieces})` : ''}`}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                                  Crítico
+                                </span>
+                              )
                             ) : isDelayed ? (
                               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
                                 <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
