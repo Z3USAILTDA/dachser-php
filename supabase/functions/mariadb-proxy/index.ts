@@ -3145,7 +3145,13 @@ Deno.serve(async (req) => {
           
           // Check if already in t_fin_disputas
           const disputaRows = await client.query(
-            `SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
+            `SELECT fd.id FROM ai_agente.t_fin_disputas fd
+             WHERE fd.nf = ?
+             AND NOT EXISTS (
+               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd 
+               WHERE sd.documento = fd.nf AND sd.active = 0
+             )
+             LIMIT 1`,
             [docKey]
           );
           
@@ -14369,11 +14375,25 @@ Deno.serve(async (req) => {
         
         let deletedCount = 0;
         for (const docKey of doc_keys) {
+          // 1. Soft-delete marker
           const insertSql = `
             INSERT IGNORE INTO ai_agente.t_financeiro_soft_delete (documento, active)
             VALUES (?, 0)
           `;
           await client.execute(insertSql, [docKey]);
+          
+          // 2. Remove from t_fin_disputas (same as individual delete)
+          await client.execute(
+            `DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`,
+            [docKey]
+          );
+          
+          // 3. Reset disputa flag in source table
+          await client.execute(
+            `UPDATE dados_dachser.t_dados_financeiro_nfs SET disputa = 0 WHERE COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) = ?`,
+            [docKey]
+          );
+          
           deletedCount++;
         }
         
