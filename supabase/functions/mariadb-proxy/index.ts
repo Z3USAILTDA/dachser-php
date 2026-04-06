@@ -2780,17 +2780,15 @@ Deno.serve(async (req) => {
             t.responsavel_disp AS responsavel,
             t.valor_nf AS valor,
             CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo,
-            COALESCE(NULLIF(t.documento,''), NULLIF(t.nd,''), NULLIF(t.numero_nf,'')) AS doc_key,
+            CONCAT(COALESCE(t.documento,''), '|', COALESCE(t.numero_nf,'')) AS doc_key,
             fd.departamento,
             fd.observacoes,
             fd.escalation
           FROM dados_dachser.t_dados_financeiro_nfs t
           LEFT JOIN ai_agente.t_financeiro_soft_delete sd
-            ON sd.documento COLLATE utf8mb4_general_ci = t.documento COLLATE utf8mb4_general_ci
-            OR sd.documento COLLATE utf8mb4_general_ci = t.nd COLLATE utf8mb4_general_ci
-            OR sd.documento COLLATE utf8mb4_general_ci = t.numero_nf COLLATE utf8mb4_general_ci
+            ON sd.documento COLLATE utf8mb4_general_ci = CONCAT(COALESCE(t.documento,''), '|', COALESCE(t.numero_nf,'')) COLLATE utf8mb4_general_ci
           LEFT JOIN ai_agente.t_fin_disputas fd
-            ON fd.nf COLLATE utf8mb4_general_ci = COALESCE(NULLIF(t.documento,''), NULLIF(t.nd,''), NULLIF(t.numero_nf,'')) COLLATE utf8mb4_general_ci
+            ON fd.nf COLLATE utf8mb4_general_ci = CONCAT(COALESCE(t.documento,''), '|', COALESCE(t.numero_nf,'')) COLLATE utf8mb4_general_ci
           WHERE ${whereClause}
           ORDER BY t.inicio_disputa DESC, t.razao_social ASC
         `;
@@ -3125,37 +3123,41 @@ Deno.serve(async (req) => {
           const nd = item.nd?.toString().trim();
           if (!nd) continue;
           
-          // Check if document exists in financial data
+          // Check if document exists in financial data — fetch ALL NFs for this ND
           const docRows = await client.query(`
             SELECT 
-              COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key,
+              CONCAT(COALESCE(documento,''), '|', COALESCE(numero_nf,'')) AS doc_key,
               razao_social AS cliente,
               responsavel_disp AS responsavel
             FROM dados_dachser.t_dados_financeiro_nfs 
-            WHERE documento = ? OR numero_nf = ? OR nd = ?
-            LIMIT 1
-          `, [nd, nd, nd]);
+            WHERE nd = ?
+          `, [nd]);
           
           if (!docRows || docRows.length === 0) {
             notFoundCheckItems.push(nd);
             continue;
           }
           
-          const docKey = docRows[0].doc_key;
+          // Check if ANY NF of this ND already exists (non-soft-deleted) in t_fin_disputas
+          let allExist = true;
+          for (const doc of docRows) {
+            const disputaRows = await client.query(
+              `SELECT fd.id FROM ai_agente.t_fin_disputas fd
+               WHERE fd.nf = ?
+               AND NOT EXISTS (
+                 SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd 
+                 WHERE sd.documento = fd.nf AND sd.active = 0
+               )
+               LIMIT 1`,
+              [doc.doc_key]
+            );
+            if (!disputaRows || disputaRows.length === 0) {
+              allExist = false;
+              break;
+            }
+          }
           
-          // Check if already in t_fin_disputas
-          const disputaRows = await client.query(
-            `SELECT fd.id FROM ai_agente.t_fin_disputas fd
-             WHERE fd.nf = ?
-             AND NOT EXISTS (
-               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd 
-               WHERE sd.documento = fd.nf AND sd.active = 0
-             )
-             LIMIT 1`,
-            [docKey]
-          );
-          
-          if (disputaRows && disputaRows.length > 0) {
+          if (allExist) {
             existingItems.push({
               nd,
               cliente: docRows[0].cliente || 'N/A',
@@ -14385,24 +14387,41 @@ Deno.serve(async (req) => {
         
         let deletedCount = 0;
         for (const docKey of doc_keys) {
-          // 1. Soft-delete marker
-          const insertSql = `
-            INSERT IGNORE INTO ai_agente.t_financeiro_soft_delete (documento, active)
-            VALUES (?, 0)
-          `;
-          await client.execute(insertSql, [docKey]);
+          // 1. Soft-delete marker (use composite key)
+          await client.execute(
+            `INSERT IGNORE INTO ai_agente.t_financeiro_soft_delete (documento, active) VALUES (?, 0)`,
+            [docKey]
+          );
           
-          // 2. Remove from t_fin_disputas (same as individual delete)
+          // 2. Remove from t_fin_disputas — match both composite and legacy simple key
           await client.execute(
             `DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`,
             [docKey]
           );
           
-          // 3. Reset disputa flag in source table
-          await client.execute(
-            `UPDATE dados_dachser.t_dados_financeiro_nfs SET disputa = 0 WHERE COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) = ?`,
-            [docKey]
-          );
+          // 3. Reset disputa flag in source table using composite key parts
+          const parts = docKey.split('|');
+          if (parts.length === 2) {
+            const [documento, numero_nf] = parts;
+            await client.execute(
+              `UPDATE dados_dachser.t_dados_financeiro_nfs SET disputa = 0 WHERE documento = ? AND numero_nf = ?`,
+              [documento, numero_nf]
+            );
+          } else {
+            // Fallback for legacy simple keys
+            await client.execute(
+              `UPDATE dados_dachser.t_dados_financeiro_nfs SET disputa = 0 WHERE documento = ? OR numero_nf = ? OR nd = ?`,
+              [docKey, docKey, docKey]
+            );
+          }
+          
+          // 4. Also clean up any legacy simple-key records in soft_delete
+          if (parts.length === 2) {
+            const [documento, numero_nf] = parts;
+            // Clean legacy soft-delete markers that used simple keys
+            await client.execute(`DELETE FROM ai_agente.t_financeiro_soft_delete WHERE documento = ? AND documento NOT LIKE '%|%'`, [documento]);
+            await client.execute(`DELETE FROM ai_agente.t_financeiro_soft_delete WHERE documento = ? AND documento NOT LIKE '%|%'`, [numero_nf]);
+          }
           
           deletedCount++;
         }
