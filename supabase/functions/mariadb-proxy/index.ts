@@ -3329,6 +3329,13 @@ Deno.serve(async (req) => {
             // Clean up any soft-deleted residual records before inserting
             await client.execute(`DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`, [docKey]);
             await client.execute(`DELETE FROM ai_agente.t_financeiro_soft_delete WHERE documento = ?`, [docKey]);
+            // Also clean legacy simple-key soft-delete markers
+            if (docData.documento) {
+              await client.execute(`DELETE FROM ai_agente.t_financeiro_soft_delete WHERE documento = ? AND documento NOT LIKE '%|%'`, [docData.documento]);
+            }
+            if (docData.numero_nf) {
+              await client.execute(`DELETE FROM ai_agente.t_financeiro_soft_delete WHERE documento = ? AND documento NOT LIKE '%|%'`, [docData.numero_nf]);
+            }
             
             // Mark as disputa in source table
             await client.execute(`
