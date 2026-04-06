@@ -3217,146 +3217,124 @@ Deno.serve(async (req) => {
         const notFoundItems: string[] = [];
         const skippedItems: string[] = [];
         
+        // Deduplicate items by ND — keep first occurrence of each ND
+        const ndMap = new Map<string, any>();
         for (const item of items) {
           const nd = item.nd?.toString().trim();
           if (!nd) continue;
-          
-          // Check if document exists and get all required fields including id_rm
+          if (!ndMap.has(nd)) {
+            ndMap.set(nd, item);
+          }
+        }
+
+        for (const [nd, item] of ndMap) {
+          // Fetch ALL NFs for this ND (no LIMIT 1)
           const checkSql = `
             SELECT 
-              COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key,
+              CONCAT(COALESCE(documento,''), '|', COALESCE(numero_nf,'')) AS doc_key,
               id_rm,
               razao_social AS cliente,
               data_vencimento AS vencimento,
               valor_nf AS valor,
               CASE WHEN tipo_documento LIKE '%PRAZO%' THEN 'A prazo' ELSE 'À vista' END AS tipo,
-              responsavel_disp
+              responsavel_disp,
+              documento, numero_nf
             FROM dados_dachser.t_dados_financeiro_nfs 
-            WHERE documento = ? OR numero_nf = ? OR nd = ?
-            LIMIT 1
+            WHERE nd = ?
           `;
-          const existingRows = await client.query(checkSql, [nd, nd, nd]);
+          const allNfs = await client.query(checkSql, [nd]);
           
-          if (!existingRows || existingRows.length === 0) {
+          if (!allNfs || allNfs.length === 0) {
             notFoundCount++;
             notFoundItems.push(nd);
             continue;
           }
           
-          const docData = existingRows[0];
-          const docKey = docData.doc_key;
-          const idRm = docData.id_rm;
-          
-          // Check if already exists in t_fin_disputas
-          const checkDisputaSql = `
-            SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1
-          `;
-          const existingDisputa = await client.query(checkDisputaSql, [docKey]);
-          
-          if (existingDisputa && existingDisputa.length > 0) {
-            if (forceUpdate) {
-              // Update existing record
-              await client.execute(`
-                UPDATE ai_agente.t_fin_disputas 
-                SET responsavel = ?, departamento = ?, observacoes = ?, escalation = ?, vencimento = COALESCE(?, vencimento), updated_at = NOW()
-                WHERE nf = ?
-              `, [
-                item.responsavel || docData.responsavel_disp || null,
-                item.departamento || null,
-                item.descricao || null,
-                item.escalation || null,
-                excelDateToSQL(item.prazo) || docData.vencimento || null,
-                docKey
-              ]);
-              
-              // Also update responsavel in source tables
-               await client.execute(`
-                 UPDATE dados_dachser.t_dados_financeiro_nfs SET responsavel_disp = ?
-                 WHERE documento = ? OR numero_nf = ? OR nd = ?
-               `, [item.responsavel || null, nd, nd, nd]);
-               
-               // Propagate observation to all NFs of the same ND (only if they don't have one yet)
-               if (item.descricao && nd) {
-                 await client.execute(`
-                   UPDATE ai_agente.t_fin_disputas 
-                   SET observacoes = ?, updated_at = NOW()
-                   WHERE nf IN (
-                     SELECT DISTINCT CONCAT(COALESCE(documento,''), '|', COALESCE(numero_nf,''))
-                     FROM dados_dachser.t_dados_financeiro_nfs 
-                     WHERE nd = ? AND nd IS NOT NULL AND nd != ''
-                   )
-                   AND nf != ?
-                   AND (observacoes IS NULL OR observacoes = '')
-                 `, [item.descricao, nd, docKey]);
-               }
-               
-               updatedCount++;
-               continue;
-            } else {
-              // Skip
-              skippedCount++;
-              skippedItems.push(nd);
+          // Process each NF of this ND
+          for (const docData of allNfs) {
+            const docKey = docData.doc_key;
+            const idRm = docData.id_rm;
+            
+            // Check if already exists in t_fin_disputas
+            const existingDisputa = await client.query(
+              `SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
+              [docKey]
+            );
+            
+            if (existingDisputa && existingDisputa.length > 0) {
+              if (forceUpdate) {
+                await client.execute(`
+                  UPDATE ai_agente.t_fin_disputas 
+                  SET responsavel = ?, departamento = ?, observacoes = COALESCE(?, observacoes), escalation = ?, vencimento = COALESCE(?, vencimento), updated_at = NOW()
+                  WHERE nf = ?
+                `, [
+                  item.responsavel || docData.responsavel_disp || null,
+                  item.departamento || null,
+                  item.descricao || null,
+                  item.escalation || null,
+                  excelDateToSQL(item.prazo) || docData.vencimento || null,
+                  docKey
+                ]);
+                updatedCount++;
+              } else {
+                skippedCount++;
+                skippedItems.push(docKey);
+              }
               continue;
             }
+            
+            // Mark as disputa in source table
+            await client.execute(`
+              UPDATE dados_dachser.t_dados_financeiro_nfs 
+              SET disputa = 1, inicio_disputa = NOW(), responsavel_disp = ?
+              WHERE documento = ? AND numero_nf = ?
+            `, [item.responsavel || null, docData.documento || nd, docData.numero_nf || nd]);
+            
+            // Upsert in t_dados_rm
+            if (idRm) {
+              await client.execute(`
+                INSERT INTO dados_dachser.t_dados_rm (id_rm, nf_disputa, inicio_disputa, responsavel_disp)
+                VALUES (?, 1, NOW(), ?)
+                ON DUPLICATE KEY UPDATE 
+                  nf_disputa = 1,
+                  inicio_disputa = COALESCE(inicio_disputa, NOW()),
+                  responsavel_disp = VALUES(responsavel_disp)
+              `, [idRm, item.responsavel || null]);
+            }
+            
+            // Insert new disputa
+            await client.execute(`
+              INSERT INTO ai_agente.t_fin_disputas (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+            `, [
+              docKey, 
+              docData.cliente || 'N/A',
+              excelDateToSQL(item.prazo) || docData.vencimento || null,
+              docData.valor || 0,
+              docData.tipo || 'À vista',
+              item.responsavel || docData.responsavel_disp || null,
+              item.departamento || null, 
+              item.descricao || null,
+              item.escalation || null
+            ]);
+            
+            successCount++;
           }
           
-          // Update to mark as disputa in t_dados_financeiro_nfs
-          const updateSql = `
-            UPDATE dados_dachser.t_dados_financeiro_nfs 
-            SET disputa = 1, 
-                inicio_disputa = NOW(), 
-                responsavel_disp = ?
-            WHERE documento = ? OR numero_nf = ? OR nd = ?
-          `;
-          await client.execute(updateSql, [item.responsavel || null, nd, nd, nd]);
-          
-          // Also insert/update dispute info in t_dados_rm (using id_rm, not doc_key)
-          if (idRm) {
-            const rmUpsertSql = `
-              INSERT INTO dados_dachser.t_dados_rm (id_rm, nf_disputa, inicio_disputa, responsavel_disp)
-              VALUES (?, 1, NOW(), ?)
-              ON DUPLICATE KEY UPDATE 
-                nf_disputa = 1,
-                inicio_disputa = COALESCE(inicio_disputa, NOW()),
-                responsavel_disp = VALUES(responsavel_disp)
-            `;
-            await client.execute(rmUpsertSql, [idRm, item.responsavel || null]);
+          // After processing all NFs of this ND, propagate observation
+          if (item.descricao && nd) {
+            await client.execute(`
+              UPDATE ai_agente.t_fin_disputas 
+              SET observacoes = ?, updated_at = NOW()
+              WHERE nf IN (
+                SELECT DISTINCT CONCAT(COALESCE(documento,''), '|', COALESCE(numero_nf,''))
+                FROM dados_dachser.t_dados_financeiro_nfs 
+                WHERE nd = ? AND nd IS NOT NULL AND nd != ''
+              )
+              AND (observacoes IS NULL OR observacoes = '')
+            `, [item.descricao, nd]);
           }
-          
-          // Insert new disputa (only if not exists)
-          const insertSql = `
-             INSERT INTO ai_agente.t_fin_disputas (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
-           `;
-           await client.execute(insertSql, [
-             docKey, 
-             docData.cliente || 'N/A',
-             excelDateToSQL(item.prazo) || docData.vencimento || null,
-             docData.valor || 0,
-             docData.tipo || 'À vista',
-             item.responsavel || docData.responsavel_disp || null,
-             item.departamento || null, 
-             item.descricao || null,
-             item.escalation || null
-           ]);
-           
-           // Propagate observation to all NFs of the same ND (only if they don't have one yet)
-           if (item.descricao && nd) {
-             await client.execute(`
-               UPDATE ai_agente.t_fin_disputas 
-               SET observacoes = ?, updated_at = NOW()
-               WHERE nf IN (
-                 SELECT DISTINCT CONCAT(COALESCE(documento,''), '|', COALESCE(numero_nf,''))
-                 FROM dados_dachser.t_dados_financeiro_nfs 
-                 WHERE nd = ? AND nd IS NOT NULL AND nd != ''
-               )
-               AND nf != ?
-               AND (observacoes IS NULL OR observacoes = '')
-             `, [item.descricao, nd, docKey]);
-           }
-           
-           successCount++;
-         }
+        }
         
         console.log(`Disputas import: ${successCount} new, ${updatedCount} updated, ${skippedCount} skipped, ${notFoundCount} not found`);
         result = { 
