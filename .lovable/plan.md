@@ -1,28 +1,56 @@
 
+Objetivo
 
-## Plano: Corrigir parsing da coluna Data/Hora no Tracking Aéreo
+Corrigir de vez a coluna Data/Hora em `/air/tracking-aereo`.
 
-### Problema
+Diagnóstico
 
-O `last_event_date` retornado pelo edge function `fetch-tracking-aereo` vem no formato `"31 Mar 2026 23:00"` (texto humano). A função `parseDBDate` em `src/utils/timezone.ts` só reconhece formatos ISO (`YYYY-MM-DD`, `YYYY-MM-DDTHH:mm:ss`) e MariaDB (`YYYY-MM-DD HH:mm:ss`). O formato textual cai no fallback `new Date("31 Mar 2026 23:00")` que pode retornar `Invalid Date` dependendo do runtime, resultando em `'—'` na tela.
+O dado está vindo do backend:
+- `fetch-tracking-aereo` retorna `last_event_date: "31 Mar 2026 23:00"`.
 
-### Solução
-
-Adicionar um branch no `parseDBDate` (em `src/utils/timezone.ts`, antes do fallback na linha ~91) para reconhecer o formato `"DD Mon YYYY HH:MM"` usando regex e mapeamento de meses em inglês:
-
-```typescript
-// Human-readable format: "31 Mar 2026 23:00"
-const humanMatch = dateStr.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\s+(\d{2}):(\d{2})$/);
-if (humanMatch) {
-  const months: Record<string, number> = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
-  const [, day, mon, year, hour, min] = humanMatch;
-  const monthIdx = months[mon.charAt(0).toUpperCase() + mon.slice(1).toLowerCase()];
-  if (monthIdx !== undefined) {
-    return new Date(parseInt(year), monthIdx, parseInt(day), parseInt(hour), parseInt(min));
-  }
-}
+O problema está no parsing no front:
+- `TrackingAereo.tsx` renderiza com `formatDateTimeBR(awb.last_event_date)`.
+- `formatDateTimeBR` chama `parseDBDate`.
+- Em `parseDBDate`, a condição `if (dateStr.includes(' '))` roda antes do parser textual.
+- Então `"31 Mar 2026 23:00"` é tratado como se fosse formato MariaDB e vira algo inválido como:
+```text
+31TMar 2026 23:00-03:00
 ```
+- Resultado: `Invalid Date` e a tela mostra `—`.
 
-### Arquivo alterado
-- `src/utils/timezone.ts` — função `parseDBDate` (~linha 88, antes do fallback)
+Por que a correção anterior não resolveu
 
+O suporte ao formato textual foi adicionado, mas ficou abaixo de uma regra mais genérica que captura qualquer string com espaço. Então o branch correto nunca é alcançado para esse formato.
+
+Plano de correção
+
+1. Ajustar a ordem do parsing em `src/utils/timezone.ts`.
+   - Mover o branch do formato textual `"DD Mon YYYY HH:MM"` para antes da regra:
+   ```ts
+   if (dateStr.includes(' '))
+   ```
+   - Assim o formato do tracking será reconhecido corretamente.
+
+2. Tornar o `parseDBDate` mais seguro.
+   - Deixar a regra de “MariaDB datetime com espaço” restrita ao formato real `YYYY-MM-DD HH:mm:ss`, em vez de aceitar qualquer string com espaço.
+   - Isso evita novos falsos positivos.
+
+3. Padronizar `last_event_date` no `fetchData` de `src/pages/air/TrackingAereo.tsx`.
+   - Em vez de manter o valor cru vindo da função, converter com `parseTimelineDateTime(...)` quando necessário.
+   - Assim a tela, ordenação e qualquer cálculo passam a usar um formato consistente.
+
+4. Corrigir também a ordenação da coluna.
+   - Hoje o sort usa `new Date(a.last_event_date)`.
+   - Com dado textual cru, isso pode continuar inconsistente entre navegadores.
+   - Após normalizar o valor, a ordenação por data/hora volta a funcionar corretamente.
+
+Arquivos a ajustar
+
+- `src/utils/timezone.ts`
+- `src/pages/air/TrackingAereo.tsx`
+
+Resultado esperado
+
+- A coluna Data/Hora volta a exibir valores.
+- A ordenação por data deixa de falhar silenciosamente.
+- O tracking aéreo passa a usar um formato de data consistente em toda a tela.
