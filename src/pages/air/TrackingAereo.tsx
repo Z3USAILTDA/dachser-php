@@ -326,32 +326,67 @@ const TrackingAereo = () => {
 
   // Fetch data from edge function
   const fetchData = useCallback(async () => {
-    // TEMPORARIAMENTE DESABILITADO - conexão com banco comentada
-    // setIsLoadingData(true);
-    // try {
-    //   const { data, error } = await supabase.functions.invoke("fetch-tracking-aereo");
-    //   if (error) {
-    //     console.error("Error fetching tracking aereo:", error);
-    //     return;
-    //   }
-    //   if (data?.success && data?.data) {
-    //     const converted: AWBData[] = data.data.map((item: any, index: number) => {
-    //       ... todo o mapeamento ...
-    //     });
-    //     const deduped = converted.reduce((acc: AWBData[], cur) => {
-    //       const key = `${cur.awb}|${cur.hawb || "-"}`;
-    //       const existing = acc.findIndex(i => `${i.awb}|${i.hawb || "-"}` === key);
-    //       if (existing === -1) acc.push(cur);
-    //       return acc;
-    //     }, []);
-    //     setAwbsData(deduped);
-    //   }
-    // } catch (error) {
-    //   console.error("Error in fetchData:", error);
-    // } finally {
-    //   setIsLoadingData(false);
-    // }
-    setAwbsData([]);
+    setIsLoadingData(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-tracking-aereo");
+      if (error) {
+        console.error("Error fetching tracking aereo:", error);
+        return;
+      }
+      if (data?.success && data?.data) {
+        const converted: AWBData[] = data.data.map((item: any, index: number) => {
+          const timeline = Array.isArray(item.timeline_json) ? item.timeline_json : [];
+          const discrepancy = checkTimelineDiscrepancy(timeline);
+          const lastEvent = item.last_event || "";
+          const statusCode = getStatusCode(lastEvent);
+
+          return {
+            id: `tracking-${index}`,
+            awb: item.awb_number || "",
+            hawb: item.hawb_number || "",
+            airline_code: (item.awb_number || "").substring(0, 3),
+            consignee_name: item.consignee_nome || "",
+            last_event: lastEvent,
+            status: statusCode,
+            nome_analista: item.clerk || "",
+            origem: item.origin || "",
+            destino: item.destination || "",
+            last_event_date: item.last_event_date || null,
+            last_event_location: item.last_event_location || "",
+            penultimate_location: item.penultimate_location || "",
+            timeline_json: timeline,
+            pieces_discrepancy: discrepancy.discrepancy,
+            baseline_pieces: discrepancy.baseline,
+            has_dis_event: discrepancy.hasDis,
+            tracking_failed: !lastEvent || lastEvent === "",
+            is_critical: false,
+            is_invalid: false,
+          } as AWBData;
+        });
+
+        // Deduplicate by awb|hawb, keeping the record with the most recent last_event_date
+        const deduped = converted.reduce((acc: AWBData[], cur) => {
+          const key = `${cur.awb}|${cur.hawb || "-"}`;
+          const existingIdx = acc.findIndex(i => `${i.awb}|${i.hawb || "-"}` === key);
+          if (existingIdx === -1) {
+            acc.push(cur);
+          } else {
+            const existingDate = acc[existingIdx].last_event_date ? new Date(acc[existingIdx].last_event_date!).getTime() : 0;
+            const curDate = cur.last_event_date ? new Date(cur.last_event_date!).getTime() : 0;
+            if (curDate > existingDate) {
+              acc[existingIdx] = cur;
+            }
+          }
+          return acc;
+        }, []);
+
+        setAwbsData(deduped);
+      }
+    } catch (error) {
+      console.error("Error in fetchData:", error);
+    } finally {
+      setIsLoadingData(false);
+    }
   }, []);
 
   // Check timeline for piece/weight discrepancy (enriched version matching /air/tracking)
