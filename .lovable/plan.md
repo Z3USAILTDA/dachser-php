@@ -1,43 +1,32 @@
 
 
-## Plano: Normalizar HAWB no JOIN entre CCT e tracking_status
+## Plano: Replicar classificação e visualização de discrepância do /air/tracking para /air/tracking-aereo
 
 ### Problema
 
-A tabela `t_cct_hawb_api_atual` armazena HAWBs sem hífen (ex: `ABC12345`), enquanto `t_fato_aereo.hawbs_json` armazena com hífen (ex: `ABC-12345`). O `json_contains` faz comparação exata, então o INNER JOIN falha e processos não aparecem no CCT.
+O `/air/tracking-aereo` usa uma função simplificada `checkTimelineDiscrepancy` que retorna apenas `true/false`. O `/air/tracking` (Index.tsx) recebe do backend `baseline_pieces`, `has_dis_event` e mostra badges mais ricos:
+- Badge âmbar para DIS puro (sem discrepância de peças)
+- Badge vermelho com contagem: "Discrepância Peças (22)"
 
-### Alteração
+### Alterações
 
-**Arquivo: `supabase/functions/mariadb-proxy/index.ts`** — linha ~3631
+**Arquivo: `src/pages/air/TrackingAereo.tsx`**
 
-Substituir:
-```sql
-INNER JOIN tracking_status ts
-  ON json_contains(ts.hawbs_json, JSON_ARRAY(c.hawb))
-```
+1. **Tipo AWBData** (~linha 235): adicionar `baseline_pieces?: number | null` e `has_dis_event?: boolean`
 
-Por uma abordagem que normalize ambos os lados removendo hífens, pontos, espaços e underscores. Como `json_contains` não suporta transformações inline facilmente, a solução é usar um JOIN lateral ou converter para `LIKE`/`LOCATE` com normalização:
+2. **Função `checkTimelineDiscrepancy`** (~linha 435): refatorar para retornar objeto `{ discrepancy: boolean, baseline: number | null, hasDis: boolean }` em vez de apenas boolean. Lógica:
+   - Extrair peças dos eventos do timeline
+   - Baseline = primeiro valor de peças encontrado
+   - hasDis = algum evento com código "DIS"
+   - Se último evento for delivery (DLV/POD) com peças === baseline → sem discrepância
 
-```sql
-INNER JOIN tracking_status ts
-  ON json_contains(ts.hawbs_json, JSON_ARRAY(c.hawb))
-  OR json_contains(ts.hawbs_json, JSON_ARRAY(
-    CONCAT(LEFT(c.hawb, 3), '-', SUBSTRING(c.hawb, 4))
-  ))
-```
+3. **Mapeamento dos dados** (~linha 387-414): usar o retorno enriquecido para popular `pieces_discrepancy`, `baseline_pieces` e `has_dis_event`
 
-Essa segunda condição tenta o formato com hífen após os 3 primeiros caracteres (padrão HAWB: `XXX-YYYYYYYY` → `XXXYYYYYYYY`). Se o formato variar, podemos usar `REPLACE` no `hawbs_json` para remover hífens antes do `json_contains`:
-
-```sql
-INNER JOIN tracking_status ts
-  ON json_contains(ts.hawbs_json, JSON_ARRAY(c.hawb))
-  OR json_contains(
-    REPLACE(ts.hawbs_json, '-', ''),
-    JSON_ARRAY(REPLACE(c.hawb, '-', ''))
-  )
-```
-
-A segunda abordagem (com `REPLACE`) é mais robusta e cobre qualquer posição do hífen.
+4. **Badge de Situação** (~linha 872-898): replicar a lógica de renderização do Index.tsx:
+   - DIS puro (sem `pieces_discrepancy`) → badge âmbar "DIS - Discrepância"
+   - Crítico com `pieces_discrepancy` → badge vermelho "Discrepância Peças (N)" mostrando `baseline_pieces`
+   - Crítico com `has_dis_event` → badge vermelho "DIS - Discrepância"
+   - Demais críticos → badge vermelho "Crítico"
 
 ### Nenhum outro arquivo alterado
 
