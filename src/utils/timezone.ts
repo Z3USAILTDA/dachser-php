@@ -87,6 +87,17 @@ export const parseDBDate = (dateStr: string | null | undefined): Date | null => 
       return new Date(year, month, day); // Creates local date at 00:00
     }
     
+    // Human-readable format: "31 Mar 2026 23:00"
+    const humanMatch = dateStr.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\s+(\d{2}):(\d{2})$/);
+    if (humanMatch) {
+      const months: Record<string, number> = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
+      const [, day, mon, year, hour, min] = humanMatch;
+      const monthIdx = months[mon.charAt(0).toUpperCase() + mon.slice(1).toLowerCase()];
+      if (monthIdx !== undefined) {
+        return new Date(parseInt(year), monthIdx, parseInt(day), parseInt(hour), parseInt(min));
+      }
+    }
+
     // Fallback: try native parsing
     return new Date(dateStr);
   } catch {
