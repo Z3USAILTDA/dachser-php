@@ -1,47 +1,34 @@
 
 
-## Plano: Filtrar CCT para mostrar apenas AWBs com status específicos do tracking
+## Plano: Ocultar processos ENTREGUE após 5 dias no CCT
 
-### Problema
+### Contexto
 
-O CCT mostra todos os processos de `t_cct_hawb_api_atual`. O usuário quer que só apareçam processos cujo status no tracking aéreo (`t_fato_aereo.last_status_code`) seja um dos seguintes: DEP, TFD, TRF, TRM, OFS, RCT, RDP, ARR, RCF, NFD, AWD, PDD, CUS, CCD, DDL.
-
-### Abordagem
-
-Adicionar uma CTE `tracking_status` na query unificada do `get_cct_shipments` que busca `last_status_code` de `t_fato_aereo`, vinculando via HAWB (usando `json_contains` no `hawbs_json`, mesma lógica do `fetch-tracking-aereo`). Depois, fazer INNER JOIN (em vez de LEFT JOIN) para que apenas processos com status permitido sejam retornados.
+Processos com status CCT "ENTREGUE" devem continuar visíveis por 5 dias após a entrega, e depois ser ocultos da visualização padrão (grid e cards). Só devem aparecer se buscados pela barra de pesquisa.
 
 ### Alterações
 
-**Arquivo: `supabase/functions/mariadb-proxy/index.ts`** — seção `get_cct_shipments`
+**1. Backend: `supabase/functions/mariadb-proxy/index.ts`** — seção `get_cct_shipments`
 
-1. Adicionar CTE `tracking_status`:
-```sql
-tracking_status AS (
-  SELECT
-    tdaf.awb,
-    tdaf.last_status_code,
-    tdaf.hawbs_json
-  FROM dados_dachser.t_fato_aereo tdaf
-  WHERE tdaf.last_status_code IN ('DEP','TFD','TRF','TRM','OFS','RCT','RDP','ARR','RCF','NFD','AWD','PDD','CUS','CCD','DDL')
-    AND json_valid(tdaf.hawbs_json)
-)
-```
+- Passar `data_hora_situacao_estoque` no objeto de resposta de cada shipment (atualmente extraído do SQL mas não incluído no retorno final, ~linha 3856-3908). Adicionar campo `data_entregue` com o valor de `row.data_hora_situacao_estoque` quando o status for ENTREGUE.
 
-2. No SELECT final, adicionar JOIN com `tracking_status`:
-```sql
-INNER JOIN tracking_status ts
-  ON json_contains(ts.hawbs_json, JSON_ARRAY(c.hawb))
-```
+**2. Frontend: `src/components/cct/ProcessosTable.tsx`**
 
-3. Incluir `ts.last_status_code AS tracking_status` no SELECT para referência.
+- No `filteredProcessos` (useMemo), antes dos filtros existentes, separar processos ENTREGUE com mais de 5 dias:
+  - Se `status_cct_oficial === 'ENTREGUE'` e a data de entrega (`data_entregue` ou `updated_at`) for > 5 dias atrás → ocultar do array **a menos que** `searchTerm` esteja preenchido
+- Quando o searchTerm estiver preenchido, mostrar todos os processos (inclusive ENTREGUE antigos)
 
-4. O `get_cct_shipment` (detalhe individual) **não** será filtrado — se o usuário buscar por AWB específico, deve ver o processo independente do status.
+**3. Frontend: `src/pages/cct/CCTDashboard.tsx`**
+
+- No cálculo de `metrics` (useMemo, ~linha 76), filtrar os processos ENTREGUE > 5 dias antes de contar total, alerta, crítico, etc. Os cards de métricas não devem incluir processos entregues há mais de 5 dias.
+
+### Tipo CCT
+
+- Adicionar campo opcional `data_entregue?: string | null` ao mapeamento no `useCCTData.ts` (hook `mapRowToProcessoCCT`).
 
 ### Resultado
 
-- O dashboard CCT mostra apenas processos com status de tracking ativo (pré-entrega).
-- Processos DLV, sem status, ou com status fora da lista ficam ocultos.
-- A busca individual continua funcionando sem filtro.
-
-### Nenhum outro arquivo alterado
+- Processos entregues ficam visíveis por 5 dias após entrega
+- Após 5 dias, somem da grid e dos cards
+- Podem ser encontrados pela busca a qualquer momento
 
