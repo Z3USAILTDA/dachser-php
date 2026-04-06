@@ -2917,6 +2917,7 @@ Deno.serve(async (req) => {
       }
 
       case 'save_disputa': {
+        try {
         const { nf, responsavel, departamento, observacoes, escalation } = body as { 
           nf?: string; 
           responsavel?: string;
@@ -3015,6 +3016,14 @@ Deno.serve(async (req) => {
         
         console.log(`Disputa saved for: ${searchTerm} (doc_key: ${docKey})`);
         result = { success: true };
+        } catch (saveErr) {
+          console.error(`[save_disputa] Error:`, saveErr);
+          const saveErrMsg = saveErr instanceof Error ? saveErr.message : 'Erro desconhecido';
+          return new Response(
+            JSON.stringify({ error: 'Falha ao salvar disputa', details: saveErrMsg, success: false }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
         break;
       }
 
