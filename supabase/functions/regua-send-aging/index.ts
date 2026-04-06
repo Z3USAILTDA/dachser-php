@@ -284,11 +284,11 @@ serve(async (req: Request): Promise<Response> => {
   let connection: mysql.Connection | null = null;
 
   try {
-    const { cnpj, cnpjs, cliente, email_to, custom_text }: AgingRequest = await req.json();
+    const { cnpj, cnpjs, razao_base, razao_bases, cliente, email_to, custom_text }: AgingRequest = await req.json();
 
-    if (!cnpj && (!cnpjs || cnpjs.length === 0)) {
+    if (!cnpj && (!cnpjs || cnpjs.length === 0) && !razao_base && (!razao_bases || razao_bases.length === 0)) {
       return new Response(
-        JSON.stringify({ error: "cnpj ou cnpjs é obrigatório" }),
+        JSON.stringify({ error: "cnpj, cnpjs, razao_base ou razao_bases é obrigatório" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -317,10 +317,32 @@ serve(async (req: Request): Promise<Response> => {
       idleTimeout: 60000,
     });
 
-    // Determine target CNPJs
+    // Determine target CNPJs — prefer razao_base grouping over CNPJ root
     let allCnpjs: string[] = [];
 
-    if (cnpjs && Array.isArray(cnpjs) && cnpjs.length > 0) {
+    // Collect all razao_base values to resolve
+    const allRazaoBases: string[] = [];
+    if (razao_bases && Array.isArray(razao_bases) && razao_bases.length > 0) {
+      allRazaoBases.push(...razao_bases);
+    } else if (razao_base) {
+      allRazaoBases.push(razao_base);
+    }
+
+    if (allRazaoBases.length > 0) {
+      // Resolve CNPJs by razao_base (commercial grouping)
+      const placeholders = allRazaoBases.map(() => "?").join(",");
+      const [rows] = await connection.query(`
+        SELECT DISTINCT t.cnpj 
+        FROM dados_dachser.t_dados_financeiro_nfs t
+        WHERE SUBSTRING_INDEX(t.razao_social, ' - ', 1) IN (${placeholders})
+          AND DATEDIFF(CURDATE(), t.data_vencimento) >= 1
+          AND NOT EXISTS (SELECT 1 FROM dados_dachser.tbaixas b WHERE b.IdLancamentoRM = t.id_rm AND b.StatusLan IN (1, 2, 3))
+          AND (t.disputa IS NULL OR t.disputa = 0)
+      `, allRazaoBases);
+      allCnpjs = (rows as any[]).map(r => r.cnpj);
+      console.log(`[regua-send-aging] Resolved ${allCnpjs.length} CNPJs from ${allRazaoBases.length} razao_base(s)`);
+    } else if (cnpjs && Array.isArray(cnpjs) && cnpjs.length > 0) {
+      // Fallback: resolve by CNPJ root
       for (const c of cnpjs) {
         const baseCnpj = c.replace(/\D/g, "").substring(0, 8);
         const [rows] = await connection.query(`
