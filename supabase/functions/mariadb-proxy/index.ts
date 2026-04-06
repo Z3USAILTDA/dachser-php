@@ -3545,6 +3545,15 @@ Deno.serve(async (req) => {
                 AND (a.master_insert >= '2026-03-20' OR a.created_at >= '2026-03-20')
             ) x
             WHERE x.rn = 1
+          ),
+          tracking_status AS (
+            SELECT
+              tdaf.awb,
+              tdaf.last_status_code,
+              tdaf.hawbs_json
+            FROM ${database}.t_fato_aereo tdaf
+            WHERE tdaf.last_status_code IN ('DEP','TFD','TRF','TRM','OFS','RCT','RDP','ARR','RCF','NFD','AWD','PDD','CUS','CCD','DDL')
+              AND json_valid(tdaf.hawbs_json)
           )
           SELECT
             c.id,
@@ -3613,10 +3622,13 @@ Deno.serve(async (req) => {
             c.data_integracao_lead,
             c.json_frete,
             c.json_manuseios_especiais,
-            c.json_bloqueios_ativos
+            c.json_bloqueios_ativos,
+            ts.last_status_code AS tracking_status
           FROM base_cct c
           LEFT JOIN aereo_latest a
             ON TRIM(a.hawb) COLLATE utf8mb4_unicode_ci = TRIM(c.hawb) COLLATE utf8mb4_unicode_ci
+          INNER JOIN tracking_status ts
+            ON json_contains(ts.hawbs_json, JSON_ARRAY(c.hawb))
           WHERE 1=1
           ORDER BY c.consulted_at DESC, c.id DESC
         `);
