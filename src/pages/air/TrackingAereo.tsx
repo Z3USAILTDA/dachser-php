@@ -388,7 +388,8 @@ const TrackingAereo = () => {
 
           // Determine if critical: discrepancy in timeline or NIL/NIF/OFLD or tracking_failed
           const upperEvent = resolvedLastEvent.toUpperCase();
-          const isCritical = trackingFailed || ["NIL", "NIF", "OFLD"].includes(upperEvent) || checkTimelineDiscrepancy(item.timeline_json);
+          const discResult = checkTimelineDiscrepancy(item.timeline_json);
+          const isCritical = trackingFailed || ["NIL", "NIF", "OFLD"].includes(upperEvent) || discResult.discrepancy || discResult.hasDis;
 
           return {
             id: `scraper-${index}`,
@@ -410,7 +411,9 @@ const TrackingAereo = () => {
             last_event_location: lastLoc,
             penultimate_location: penultLoc,
             is_critical: isCritical,
-            pieces_discrepancy: checkTimelineDiscrepancy(item.timeline_json),
+            pieces_discrepancy: discResult.discrepancy,
+            baseline_pieces: discResult.baseline,
+            has_dis_event: discResult.hasDis,
             is_invalid: isInvalid,
             tracking_failed: trackingFailed,
           };
