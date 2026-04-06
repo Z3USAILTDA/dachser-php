@@ -81,22 +81,6 @@ serve(async (req) => {
   let client: Client | null = null;
 
   try {
-    // Load hidden AWBs from Supabase
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    let hiddenAwbs: Set<string> = new Set();
-    try {
-      const res = await fetch(`${supabaseUrl}/rest/v1/air_hidden_awbs?select=awb`, {
-        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
-      });
-      if (res.ok) {
-        const rows = await res.json();
-        hiddenAwbs = new Set((rows || []).map((r: any) => r.awb));
-      }
-    } catch (e) {
-      console.warn("Failed to load hidden AWBs:", e);
-    }
-
     const host = Deno.env.get("MARIADB_HOST");
     const port = parseInt(Deno.env.get("MARIADB_PORT") || "3306");
     const database = Deno.env.get("MARIADB_DATABASE");
@@ -305,10 +289,7 @@ serve(async (req) => {
       sendFailureEmail(failed).catch((e) => console.error("sendFailureEmail error:", e));
     }
 
-    // Filter out hidden AWBs
-    const filteredData = hiddenAwbs.size > 0 ? data.filter((d: any) => !hiddenAwbs.has(d.awb_number)) : data;
-
-    return new Response(JSON.stringify({ success: true, data: filteredData, failed_count: failed.length }), {
+    return new Response(JSON.stringify({ success: true, data, failed_count: failed.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

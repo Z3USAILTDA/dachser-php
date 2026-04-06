@@ -326,63 +326,32 @@ const TrackingAereo = () => {
 
   // Fetch data from edge function
   const fetchData = useCallback(async () => {
-    setIsLoadingData(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("fetch-tracking-aereo");
-      if (error) {
-        console.error("Error fetching tracking aereo:", error);
-        return;
-      }
-      if (data?.success && data?.data) {
-        const converted: AWBData[] = data.data.map((item: any, index: number) => {
-          const timeline = item.timeline_json || [];
-          const disc = checkTimelineDiscrepancy(timeline);
-          return {
-            id: `tracking-${item.awb_number || index}-${index}`,
-            awb: item.awb_number || "",
-            hawb: item.hawb_number || "-",
-            airline_code: (item.awb_number || "").substring(0, 3),
-            consignee_name: item.consignee_nome || "-",
-            nome_analista: item.clerk || "-",
-            origem: item.origin || "N/A",
-            destino: item.destination || "N/A",
-            last_event: item.last_event || "-",
-            status: item.last_event || "-",
-            last_event_date: item.last_event_date || null,
-            last_event_location: item.last_event_location || "",
-            penultimate_location: item.penultimate_location || "",
-            timeline_json: timeline,
-            tipo_servico: "N/A",
-            tipo_processo: null,
-            pieces_discrepancy: disc.discrepancy,
-            baseline_pieces: disc.baseline,
-            has_dis_event: disc.hasDis,
-            tracking_failed: !item.last_event,
-          };
-        });
-
-        // Dedup by awb|hawb, keeping most recent
-        const deduped = converted.reduce((acc: AWBData[], cur) => {
-          const key = `${cur.awb}|${cur.hawb || "-"}`;
-          const existingIdx = acc.findIndex(i => `${i.awb}|${i.hawb || "-"}` === key);
-          if (existingIdx === -1) {
-            acc.push(cur);
-          } else {
-            const existing = acc[existingIdx];
-            if ((cur.last_event_date || "") > (existing.last_event_date || "")) {
-              acc[existingIdx] = cur;
-            }
-          }
-          return acc;
-        }, []);
-
-        setAwbsData(deduped);
-      }
-    } catch (error) {
-      console.error("Error in fetchData:", error);
-    } finally {
-      setIsLoadingData(false);
-    }
+    // TEMPORARIAMENTE DESABILITADO - conexão com banco comentada
+    // setIsLoadingData(true);
+    // try {
+    //   const { data, error } = await supabase.functions.invoke("fetch-tracking-aereo");
+    //   if (error) {
+    //     console.error("Error fetching tracking aereo:", error);
+    //     return;
+    //   }
+    //   if (data?.success && data?.data) {
+    //     const converted: AWBData[] = data.data.map((item: any, index: number) => {
+    //       ... todo o mapeamento ...
+    //     });
+    //     const deduped = converted.reduce((acc: AWBData[], cur) => {
+    //       const key = `${cur.awb}|${cur.hawb || "-"}`;
+    //       const existing = acc.findIndex(i => `${i.awb}|${i.hawb || "-"}` === key);
+    //       if (existing === -1) acc.push(cur);
+    //       return acc;
+    //     }, []);
+    //     setAwbsData(deduped);
+    //   }
+    // } catch (error) {
+    //   console.error("Error in fetchData:", error);
+    // } finally {
+    //   setIsLoadingData(false);
+    // }
+    setAwbsData([]);
   }, []);
 
   // Check timeline for piece/weight discrepancy (enriched version matching /air/tracking)
