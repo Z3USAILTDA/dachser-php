@@ -2760,7 +2760,7 @@ Deno.serve(async (req) => {
       case 'get_disputas': {
         const { tipo } = body as { tipo?: string };
         
-        let whereClause = 't.disputa = 1 AND COALESCE(sd.active, 1) = 1';
+        let whereClause = '(t.disputa = 1 OR fd.nf IS NOT NULL) AND COALESCE(sd.active, 1) = 1';
         const params: string[] = [];
         
         if (tipo) {
@@ -3287,8 +3287,8 @@ Deno.serve(async (req) => {
             await client.execute(`
               UPDATE dados_dachser.t_dados_financeiro_nfs 
               SET disputa = 1, inicio_disputa = NOW(), responsavel_disp = ?
-              WHERE documento = ? AND numero_nf = ?
-            `, [item.responsavel || null, docData.documento || nd, docData.numero_nf || nd]);
+              WHERE nd = ?
+            `, [item.responsavel || null, nd]);
             
             // Upsert in t_dados_rm
             if (idRm) {
