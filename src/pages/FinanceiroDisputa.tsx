@@ -499,6 +499,7 @@ function FinanceiroDisputaContent() {
     departamento: string;
     responsavel: string;
     escalation: string;
+    prazo: string;
   }>> => {
     const items: Array<{
       nd: string;
@@ -506,6 +507,7 @@ function FinanceiroDisputaContent() {
       departamento: string;
       responsavel: string;
       escalation: string;
+      prazo: string;
     }> = [];
 
     const ext = file.name.toLowerCase();
@@ -564,6 +566,7 @@ function FinanceiroDisputaContent() {
             departamento: (deptIdx >= 0 ? cols[deptIdx] : cols[9])?.toString().trim() || '',
             responsavel: (respIdx >= 0 ? cols[respIdx] : cols[10])?.toString().trim() || '',
             escalation: (escIdx >= 0 ? cols[escIdx] : cols[13])?.toString().trim() || '',
+            prazo: (prazoIdx >= 0 ? cols[prazoIdx] : '')?.toString().trim() || '',
           });
         }
       }
@@ -618,6 +621,7 @@ function FinanceiroDisputaContent() {
             departamento: (deptIdx >= 0 ? cols[deptIdx] : cols[9])?.trim() || '',
             responsavel: (respIdx >= 0 ? cols[respIdx] : cols[10])?.trim() || '',
             escalation: (escIdx >= 0 ? cols[escIdx] : cols[13])?.trim() || '',
+            prazo: (prazoIdx >= 0 ? cols[prazoIdx] : '')?.trim() || '',
           });
         }
       }

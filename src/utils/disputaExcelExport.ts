@@ -163,7 +163,7 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     formatDate(r.vencimento),
     formatElapsed(r.created_at),
     r.responsavel || "-",
-    r.valor ?? 0,
+    Number(r.valor) || 0,
     r.tipo || "-",
     r.observacoes || "-",
   ]);
@@ -177,7 +177,7 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
   const obsColumnWidth = Math.min(Math.max(maxObsLength + 2, 20), 100); // Min 20, max 100
 
   // Calculate totals
-  const totalValor = rows.reduce((sum, r) => sum + (r.valor || 0), 0);
+  const totalValor = rows.reduce((sum, r) => sum + (Number(r.valor) || 0), 0);
   const totalRegistros = rows.length;
 
   // Generate subtitle
