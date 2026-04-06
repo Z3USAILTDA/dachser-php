@@ -262,7 +262,7 @@ function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalVa
 
   ws['!cols'] = [
     { wch: 14 }, { wch: 14 }, { wch: 50 }, { wch: 18 }, { wch: 6 }, { wch: 10 },
-    { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 28 }, { wch: 14 },
+    { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 28 }, { wch: 22 },
     { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 16 },
   ];
   ws['!rows'] = [{ hpt: 30 }, { hpt: 35 }, { hpt: 20 }, { hpt: 22 }, { hpt: 25 }];
