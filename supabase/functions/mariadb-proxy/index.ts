@@ -2853,21 +2853,40 @@ Deno.serve(async (req) => {
           );
         }
         
-        // Update responsavel_disp in t_dados_financeiro_nfs
-        await client.execute(`
-          UPDATE dados_dachser.t_dados_financeiro_nfs 
-          SET responsavel_disp = ?
-          WHERE documento = ? OR numero_nf = ? OR nd = ?
-        `, [responsavel || null, doc_key, doc_key, doc_key]);
-        
-        // Also update in t_dados_rm if record exists
-        await client.execute(`
-          UPDATE dados_dachser.t_dados_rm rm
-          INNER JOIN dados_dachser.t_dados_financeiro_nfs nf 
-            ON rm.id_rm = nf.id_rm
-          SET rm.responsavel_disp = ?
-          WHERE nf.documento = ? OR nf.numero_nf = ? OR nf.nd = ?
-        `, [responsavel || null, doc_key, doc_key, doc_key]);
+        // Update responsavel_disp in t_dados_financeiro_nfs using composite key parts
+        const parts = doc_key.split('|');
+        if (parts.length === 2) {
+          const [documento, numero_nf] = parts;
+          await client.execute(`
+            UPDATE dados_dachser.t_dados_financeiro_nfs 
+            SET responsavel_disp = ?
+            WHERE documento = ? AND numero_nf = ?
+          `, [responsavel || null, documento, numero_nf]);
+          
+          // Also update in t_dados_rm if record exists
+          await client.execute(`
+            UPDATE dados_dachser.t_dados_rm rm
+            INNER JOIN dados_dachser.t_dados_financeiro_nfs nf 
+              ON rm.id_rm = nf.id_rm
+            SET rm.responsavel_disp = ?
+            WHERE nf.documento = ? AND nf.numero_nf = ?
+          `, [responsavel || null, documento, numero_nf]);
+        } else {
+          // Fallback for legacy simple keys
+          await client.execute(`
+            UPDATE dados_dachser.t_dados_financeiro_nfs 
+            SET responsavel_disp = ?
+            WHERE documento = ? OR numero_nf = ? OR nd = ?
+          `, [responsavel || null, doc_key, doc_key, doc_key]);
+          
+          await client.execute(`
+            UPDATE dados_dachser.t_dados_rm rm
+            INNER JOIN dados_dachser.t_dados_financeiro_nfs nf 
+              ON rm.id_rm = nf.id_rm
+            SET rm.responsavel_disp = ?
+            WHERE nf.documento = ? OR nf.numero_nf = ? OR nf.nd = ?
+          `, [responsavel || null, doc_key, doc_key, doc_key]);
+        }
         
         console.log(`Disputa responsavel updated for: ${doc_key} -> ${responsavel}`);
         result = { success: true };
@@ -3036,17 +3055,27 @@ Deno.serve(async (req) => {
         }
         
         try {
-          // Soft delete via t_financeiro_soft_delete
+          // Soft delete via t_financeiro_soft_delete (using composite key)
           await client.execute(
             `INSERT IGNORE INTO ai_agente.t_financeiro_soft_delete (documento, active) VALUES (?, 0)`,
             [doc_key]
           );
           
-          // Also remove from t_fin_disputas if exists
+          // Remove from t_fin_disputas
           await client.execute(
             `DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`,
             [doc_key]
           );
+          
+          // Reset disputa flag using composite key parts
+          const parts = doc_key.split('|');
+          if (parts.length === 2) {
+            const [documento, numero_nf] = parts;
+            await client.execute(
+              `UPDATE dados_dachser.t_dados_financeiro_nfs SET disputa = 0 WHERE documento = ? AND numero_nf = ?`,
+              [documento, numero_nf]
+            );
+          }
           
           console.log(`Disputa soft-deleted: ${doc_key}`);
           result = { success: true };
