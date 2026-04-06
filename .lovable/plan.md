@@ -1,34 +1,44 @@
 
 
-## Plano: Corrigir query `get_disputas` para mostrar todas as NFs importadas
+## Plano: Corrigir reimportação de disputas excluídas
 
 ### Problema
 
-A query `get_disputas` filtra por `t.disputa = 1` na tabela fonte (`t_dados_financeiro_nfs`). Porém, o UPDATE que marca `disputa = 1` durante a importação usa `WHERE documento = ? AND numero_nf = ?`, que falha quando esses campos estão vazios/nulos para alguns NDs. Resultado: 11 registros foram inseridos na `t_fin_disputas`, mas apenas 4 têm `disputa = 1` na tabela fonte.
+Existem **dois bugs** que impedem a reimportação:
 
-### Solução (duas correções)
+1. **`bulk_delete_disputas`** (exclusão em lote) apenas insere na `t_financeiro_soft_delete`, mas **NÃO** deleta os registros da `t_fin_disputas`. Diferente do `delete_disputa` (exclusão individual) que faz ambos.
 
-#### 1. Corrigir o UPDATE na importação (linha ~3287)
+2. **`check_disputas_planilha`** verifica se o registro existe na `t_fin_disputas` para classificar como "existente", mas não verifica se foi soft-deleted. Como os registros permanecem na `t_fin_disputas` após bulk delete, são classificados como "existing".
 
-Trocar o WHERE de `documento = ? AND numero_nf = ?` para `nd = ?`, garantindo que todas as NFs do ND recebam `disputa = 1`:
+### Solução
 
-```sql
--- De:
-UPDATE ... WHERE documento = ? AND numero_nf = ?
--- Para:
-UPDATE ... WHERE nd = ?
-```
+**Arquivo: `supabase/functions/mariadb-proxy/index.ts`**
 
-#### 2. Corrigir a query `get_disputas` (linha ~2763)
+#### 1. Corrigir `bulk_delete_disputas` (~linha 14371)
 
-Alterar o WHERE para incluir NFs que existam na `t_fin_disputas`, mesmo que `disputa` não esteja marcada na tabela fonte. Trocar o LEFT JOIN por uma condição que também traga registros da `t_fin_disputas`:
+Adicionar `DELETE FROM ai_agente.t_fin_disputas` para cada `docKey`, igual ao `delete_disputa` individual:
 
 ```sql
-WHERE (t.disputa = 1 OR fd.nf IS NOT NULL) AND COALESCE(sd.active, 1) = 1
+-- Após INSERT IGNORE em t_financeiro_soft_delete:
+DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?
 ```
 
-Isso garante que qualquer NF importada via planilha apareça na tela, independentemente do flag `disputa` na tabela fonte.
+Também resetar `disputa = 0` na tabela fonte para os documentos excluídos.
+
+#### 2. Corrigir `check_disputas_planilha` (~linha 3147)
+
+Adicionar verificação da `t_financeiro_soft_delete` para ignorar registros soft-deleted:
+
+```sql
+SELECT id FROM ai_agente.t_fin_disputas fd
+WHERE fd.nf = ?
+AND NOT EXISTS (
+  SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd 
+  WHERE sd.documento = fd.nf AND sd.active = 0
+)
+LIMIT 1
+```
 
 ### Arquivo alterado
-- `supabase/functions/mariadb-proxy/index.ts` — case `get_disputas` (~linha 2763) e case `import_disputas_planilha` (~linha 3287)
+- `supabase/functions/mariadb-proxy/index.ts` — cases `bulk_delete_disputas` e `check_disputas_planilha`
 
