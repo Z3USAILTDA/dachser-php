@@ -2917,6 +2917,7 @@ Deno.serve(async (req) => {
       }
 
       case 'save_disputa': {
+        try {
         const { nf, responsavel, departamento, observacoes, escalation } = body as { 
           nf?: string; 
           responsavel?: string;
@@ -3015,6 +3016,14 @@ Deno.serve(async (req) => {
         
         console.log(`Disputa saved for: ${searchTerm} (doc_key: ${docKey})`);
         result = { success: true };
+        } catch (saveErr) {
+          console.error(`[save_disputa] Error:`, saveErr);
+          const saveErrMsg = saveErr instanceof Error ? saveErr.message : 'Erro desconhecido';
+          return new Response(
+            JSON.stringify({ error: 'Falha ao salvar disputa', details: saveErrMsg, success: false }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
         break;
       }
 
@@ -3226,13 +3235,14 @@ Deno.serve(async (req) => {
               // Update existing record
               await client.execute(`
                 UPDATE ai_agente.t_fin_disputas 
-                SET responsavel = ?, departamento = ?, observacoes = ?, escalation = ?, updated_at = NOW()
+                SET responsavel = ?, departamento = ?, observacoes = ?, escalation = ?, prazo = ?, updated_at = NOW()
                 WHERE nf = ?
               `, [
                 item.responsavel || docData.responsavel_disp || null,
                 item.departamento || null,
                 item.descricao || null,
                 item.escalation || null,
+                item.prazo || null,
                 docKey
               ]);
               
@@ -3277,8 +3287,8 @@ Deno.serve(async (req) => {
           
           // Insert new disputa (only if not exists)
           const insertSql = `
-            INSERT INTO ai_agente.t_fin_disputas (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+            INSERT INTO ai_agente.t_fin_disputas (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, prazo, is_disputa, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
           `;
           await client.execute(insertSql, [
             docKey, 
@@ -3289,7 +3299,8 @@ Deno.serve(async (req) => {
             item.responsavel || docData.responsavel_disp || null,
             item.departamento || null, 
             item.descricao || null,
-            item.escalation || null
+            item.escalation || null,
+            item.prazo || null
           ]);
           
           successCount++;
