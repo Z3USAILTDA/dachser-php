@@ -3261,9 +3261,15 @@ Deno.serve(async (req) => {
             const docKey = docData.doc_key;
             const idRm = docData.id_rm;
             
-            // Check if already exists in t_fin_disputas
+            // Check if already exists in t_fin_disputas (excluding soft-deleted)
             const existingDisputa = await client.query(
-              `SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
+              `SELECT fd.id FROM ai_agente.t_fin_disputas fd
+               WHERE fd.nf = ?
+               AND NOT EXISTS (
+                 SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd 
+                 WHERE sd.documento = fd.nf AND sd.active = 0
+               )
+               LIMIT 1`,
               [docKey]
             );
             
@@ -3288,6 +3294,10 @@ Deno.serve(async (req) => {
               }
               continue;
             }
+            
+            // Clean up any soft-deleted residual records before inserting
+            await client.execute(`DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`, [docKey]);
+            await client.execute(`DELETE FROM ai_agente.t_financeiro_soft_delete WHERE documento = ?`, [docKey]);
             
             // Mark as disputa in source table
             await client.execute(`
