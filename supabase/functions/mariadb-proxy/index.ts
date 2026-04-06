@@ -3247,13 +3247,28 @@ Deno.serve(async (req) => {
               ]);
               
               // Also update responsavel in source tables
-              await client.execute(`
-                UPDATE dados_dachser.t_dados_financeiro_nfs SET responsavel_disp = ?
-                WHERE documento = ? OR numero_nf = ? OR nd = ?
-              `, [item.responsavel || null, nd, nd, nd]);
-              
-              updatedCount++;
-              continue;
+               await client.execute(`
+                 UPDATE dados_dachser.t_dados_financeiro_nfs SET responsavel_disp = ?
+                 WHERE documento = ? OR numero_nf = ? OR nd = ?
+               `, [item.responsavel || null, nd, nd, nd]);
+               
+               // Propagate observation to all NFs of the same ND (only if they don't have one yet)
+               if (item.descricao && nd) {
+                 await client.execute(`
+                   UPDATE ai_agente.t_fin_disputas 
+                   SET observacoes = ?, updated_at = NOW()
+                   WHERE nf IN (
+                     SELECT DISTINCT CONCAT(COALESCE(documento,''), '|', COALESCE(numero_nf,''))
+                     FROM dados_dachser.t_dados_financeiro_nfs 
+                     WHERE nd = ? AND nd IS NOT NULL AND nd != ''
+                   )
+                   AND nf != ?
+                   AND (observacoes IS NULL OR observacoes = '')
+                 `, [item.descricao, nd, docKey]);
+               }
+               
+               updatedCount++;
+               continue;
             } else {
               // Skip
               skippedCount++;
@@ -3300,10 +3315,25 @@ Deno.serve(async (req) => {
              item.departamento || null, 
              item.descricao || null,
              item.escalation || null
-          ]);
-          
-          successCount++;
-        }
+           ]);
+           
+           // Propagate observation to all NFs of the same ND (only if they don't have one yet)
+           if (item.descricao && nd) {
+             await client.execute(`
+               UPDATE ai_agente.t_fin_disputas 
+               SET observacoes = ?, updated_at = NOW()
+               WHERE nf IN (
+                 SELECT DISTINCT CONCAT(COALESCE(documento,''), '|', COALESCE(numero_nf,''))
+                 FROM dados_dachser.t_dados_financeiro_nfs 
+                 WHERE nd = ? AND nd IS NOT NULL AND nd != ''
+               )
+               AND nf != ?
+               AND (observacoes IS NULL OR observacoes = '')
+             `, [item.descricao, nd, docKey]);
+           }
+           
+           successCount++;
+         }
         
         console.log(`Disputas import: ${successCount} new, ${updatedCount} updated, ${skippedCount} skipped, ${notFoundCount} not found`);
         result = { 
