@@ -322,6 +322,9 @@ serve(async (req) => {
         }
       }
 
+      const visKey = `${row.AWB || ""}|${row.HAWB || ""}`;
+      const hideReason = visibilityMap[visKey] || "";
+
       const normalized = {
         awb_number: row.AWB || "",
         hawb_number: row.HAWB || "",
@@ -337,6 +340,7 @@ serve(async (req) => {
         last_event_location: row.loc0 || "",
         penultimate_location: row.loc1 || "",
         arr_destino_date: arrDestinoDate,
+        hide_reason: hideReason,
       };
 
       if (!finalCode) {
