@@ -230,6 +230,7 @@ interface AWBData {
   timeline_json?: any[];
   last_event_location?: string;
   penultimate_location?: string;
+  arr_destino_date?: string | null;
   tipo_servico?: string;
   tipo_processo?: string;
   pieces_discrepancy?: boolean;
@@ -354,6 +355,7 @@ const TrackingAereo = () => {
             last_event_date: item.last_event_date || null,
             last_event_location: item.last_event_location || "",
             penultimate_location: item.penultimate_location || "",
+            arr_destino_date: item.arr_destino_date || null,
             timeline_json: timeline,
             pieces_discrepancy: discrepancy.discrepancy,
             baseline_pieces: discrepancy.baseline,
@@ -487,12 +489,11 @@ const TrackingAereo = () => {
       const isDLV = code === "DLV" || code === "POD";
       // Hide DLV unless actively searching
       if (isDLV && !searchTerm) return false;
-      // Hide ARR - DESTINO after 5 days unless searching
-      const isArrDestino = code === "ARR - DESTINO";
-      if (isArrDestino && !searchTerm && awb.last_event_date) {
-        const eventDate = parseDBDate(awb.last_event_date);
-        if (eventDate) {
-          const diffDays = (Date.now() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
+      // Hide processes where ARR at destination happened > 5 days ago (regardless of current status)
+      if (!searchTerm && awb.arr_destino_date) {
+        const arrDate = parseDBDate(awb.arr_destino_date);
+        if (arrDate) {
+          const diffDays = (Date.now() - arrDate.getTime()) / (1000 * 60 * 60 * 24);
           if (diffDays > 5) return false;
         }
       }
