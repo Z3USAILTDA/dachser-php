@@ -487,6 +487,15 @@ const TrackingAereo = () => {
       const isDLV = code === "DLV" || code === "POD";
       // Hide DLV unless actively searching
       if (isDLV && !searchTerm) return false;
+      // Hide ARR - DESTINO after 5 days unless searching
+      const isArrDestino = code === "ARR - DESTINO";
+      if (isArrDestino && !searchTerm && awb.last_event_date) {
+        const eventDate = parseDBDate(awb.last_event_date);
+        if (eventDate) {
+          const diffDays = (Date.now() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
+          if (diffDays > 5) return false;
+        }
+      }
       // Hide invalid unless actively searching
       if (awb.is_invalid && !searchTerm) return false;
       // Hide tracking failed unless actively searching by AWB
