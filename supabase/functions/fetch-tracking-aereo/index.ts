@@ -73,6 +73,15 @@ async function sendFailureEmail(failedRows: any[]) {
   }
 }
 
+function extractIATA(loc: string): string {
+  if (!loc) return "";
+  const t = loc.trim();
+  const paren = t.match(/\(([A-Z]{3})\)/i);
+  if (paren) return paren[1].toUpperCase();
+  if (/^[A-Z]{3}$/i.test(t)) return t.toUpperCase();
+  return t.substring(0, 3).toUpperCase();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
