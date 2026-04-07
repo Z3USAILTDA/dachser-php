@@ -34,7 +34,7 @@ import { TablePagination } from "@/components/layout/TablePagination";
 import { EmailClienteRegrasDialog } from "@/components/air/EmailClienteRegrasDialog";
 import { CadastroNovaModal } from "@/components/air/CadastroNovaModal";
 import { AwbTimelineModalScraper } from "@/components/air/AwbTimelineModalScraper";
-import { formatDateTimeBR } from "@/utils/timezone";
+import { formatDateTimeBR, parseDBDate } from "@/utils/timezone";
 
 // ─── Status code helpers (reused from Index.tsx) ───
 
@@ -487,6 +487,15 @@ const TrackingAereo = () => {
       const isDLV = code === "DLV" || code === "POD";
       // Hide DLV unless actively searching
       if (isDLV && !searchTerm) return false;
+      // Hide ARR - DESTINO after 5 days unless searching
+      const isArrDestino = code === "ARR - DESTINO";
+      if (isArrDestino && !searchTerm && awb.last_event_date) {
+        const eventDate = parseDBDate(awb.last_event_date);
+        if (eventDate) {
+          const diffDays = (Date.now() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
+          if (diffDays > 5) return false;
+        }
+      }
       // Hide invalid unless actively searching
       if (awb.is_invalid && !searchTerm) return false;
       // Hide tracking failed unless actively searching by AWB
@@ -516,7 +525,7 @@ const TrackingAereo = () => {
       awbs = awbs.filter(awb => {
         const code = getStatusCode(awb.last_event).toUpperCase();
         switch (cardFilter) {
-          case "transito": return ["DEP", "MAN", "RCF", "ARR"].includes(code);
+          case "transito": return ["DEP", "MAN", "RCF", "ARR", "ARR - DESTINO", "ARR - CONEXÃO"].includes(code);
           case "alerta": return code === "DIS";
           case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy;
           default: return true;

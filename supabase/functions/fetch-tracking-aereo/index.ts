@@ -259,6 +259,17 @@ serve(async (req) => {
         }
       }
 
+      // Enrich ARR with destination context
+      if (finalCode === "ARR") {
+        const loc = (row.loc0 || "").toUpperCase().trim().substring(0, 3);
+        const dest = (row.DESTINO || "").toUpperCase().trim().substring(0, 3);
+        if (dest && loc && loc === dest) {
+          finalCode = "ARR - DESTINO";
+        } else if (dest && loc && loc !== dest) {
+          finalCode = "ARR - CONEXÃO";
+        }
+      }
+
       const dateStr = ((row.date0 || "") + " " + (row.time0 || "")).trim() || null;
 
       const normalized = {
