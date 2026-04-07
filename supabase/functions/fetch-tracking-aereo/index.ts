@@ -179,6 +179,19 @@ serve(async (req) => {
       console.log(`Fetched ${Object.keys(clienteMap).length} client names from t_master_dados for ${uniqueHawbs.length} missing`);
     }
 
+    // Step 3c: Load visibility table
+    let visibilityMap: Record<string, string> = {};
+    try {
+      const visRows = await queryWithRetry(client, `SELECT awb, hawb, hide_reason FROM dados_dachser.t_air_process_visibility`);
+      for (const v of visRows || []) {
+        const key = `${v.awb || ""}|${v.hawb || ""}`;
+        visibilityMap[key] = v.hide_reason || "";
+      }
+      console.log(`Loaded ${Object.keys(visibilityMap).length} visibility records`);
+    } catch (err) {
+      console.warn("Could not load t_air_process_visibility (may not exist yet):", err);
+    }
+
     await client.close();
     client = null;
 
