@@ -298,6 +298,7 @@ verify_jwt = false
 
 [functions.sea-tracking-cron]
 verify_jwt = false
+timeout = 300
 
 [functions.sea-tracking-transship-backfill]
 verify_jwt = false
