@@ -11169,90 +11169,37 @@ Deno.serve(async (req) => {
           params.push(audit_status);
         }
 
-        // Step 1: Fetch base containers
+        // Single query with JOINs for enrichment (avoids separate queries that cause CPU timeout)
         const containers = await queryWithRetry(() => client.query(`
-          SELECT dc.*
+          SELECT dc.*,
+            cb.dchr_customer_number AS partner_id,
+            COALESCE(sm.hawb, md.hawb) AS hbl,
+            pi1.status_info AS pi_status_info,
+            pi1.misk AS pi_misk,
+            pi1.othello_registro AS pi_othello_registro,
+            pi1.observacao AS pi_observacao,
+            pi1.exchange_rate AS pi_exchange_rate
           FROM dados_dachser.t_dachser_demurrage_containers dc
+          LEFT JOIN dados_dachser.t_clientes_base cb
+            ON cb.nome_cliente COLLATE utf8mb4_unicode_ci = dc.cliente COLLATE utf8mb4_unicode_ci
+          LEFT JOIN dados_dachser.t_sea_master sm
+            ON sm.master COLLATE utf8mb4_unicode_ci = dc.mbl COLLATE utf8mb4_unicode_ci
+          LEFT JOIN dados_dachser.t_master_dados md
+            ON md.mawb COLLATE utf8mb4_unicode_ci = dc.mbl COLLATE utf8mb4_unicode_ci
+          LEFT JOIN dados_dachser.t_dachser_demurrage_pre_invoices pi1
+            ON pi1.shipment_mbl = dc.mbl
+            AND pi1.created_at = (
+              SELECT MAX(pi2.created_at)
+              FROM dados_dachser.t_dachser_demurrage_pre_invoices pi2
+              WHERE pi2.shipment_mbl = dc.mbl
+            )
           WHERE ${whereConditions.join(' AND ')}
           ORDER BY dc.updated_at DESC
           LIMIT ?
         `, [...params, safeLimit]), {
-          label: 'demurrage_get_containers_base',
+          label: 'demurrage_get_containers_full',
           attempts: 3,
         });
-
-        // Step 2: Enrich in parallel with single queries (no batching to save CPU)
-        if (containers && containers.length > 0) {
-          const mbls = [...new Set(containers.map((c: any) => c.mbl).filter(Boolean))];
-          const clientes = [...new Set(containers.map((c: any) => c.cliente).filter(Boolean))];
-          console.log(`[demurrage_get_containers] Base query returned ${containers.length} containers, ${mbls.length} unique MBLs and ${clientes.length} unique clients`);
-
-          // Run all enrichment queries concurrently (single query each, no loops)
-          const mblPlaceholders = mbls.map(() => '?').join(',');
-          const clientePlaceholders = clientes.map(() => '?').join(',');
-
-          const [partnerRows, hblRows, piRows] = await Promise.all([
-            // Partners
-            clientes.length > 0 ? queryWithRetry(() => client.query(
-              `SELECT nome_cliente, dchr_customer_number FROM dados_dachser.t_clientes_base WHERE nome_cliente COLLATE utf8mb4_unicode_ci IN (${clientePlaceholders})`,
-              clientes
-            ), { label: 'demurrage_partner', attempts: 2 }).catch(() => []) : Promise.resolve([]),
-            // HBLs (single query with COALESCE)
-            mbls.length > 0 ? queryWithRetry(() => client.query(
-              `SELECT sm.master as mbl, COALESCE(sm.hawb, md.hawb) as hawb
-               FROM dados_dachser.t_sea_master sm
-               LEFT JOIN dados_dachser.t_master_dados md ON md.mawb COLLATE utf8mb4_unicode_ci = sm.master COLLATE utf8mb4_unicode_ci
-               WHERE sm.master COLLATE utf8mb4_unicode_ci IN (${mblPlaceholders})`,
-              mbls
-            ), { label: 'demurrage_hbl', attempts: 2 }).catch(() => []) : Promise.resolve([]),
-            // Pre-invoices (latest per MBL)
-            mbls.length > 0 ? queryWithRetry(() => client.query(
-              `SELECT pi1.shipment_mbl, pi1.status_info, pi1.misk, pi1.othello_registro, pi1.observacao, pi1.exchange_rate
-               FROM dados_dachser.t_dachser_demurrage_pre_invoices pi1
-               INNER JOIN (
-                 SELECT shipment_mbl, MAX(created_at) as max_created
-                 FROM dados_dachser.t_dachser_demurrage_pre_invoices
-                 WHERE shipment_mbl IN (${mblPlaceholders})
-                 GROUP BY shipment_mbl
-               ) pi2 ON pi1.shipment_mbl = pi2.shipment_mbl AND pi1.created_at = pi2.max_created`,
-              mbls
-            ), { label: 'demurrage_pi', attempts: 2 }).catch(() => []) : Promise.resolve([]),
-          ]);
-
-          // Build maps
-          const partnerMap: Record<string, string> = {};
-          for (const r of (partnerRows || [])) partnerMap[r.nome_cliente] = r.dchr_customer_number;
-
-          const hblMap: Record<string, string> = {};
-          for (const r of (hblRows || [])) if (r.hawb) hblMap[r.mbl] = r.hawb;
-
-          // Fill missing HBLs from t_master_dados directly
-          const missingMbls = mbls.filter(m => !hblMap[m as string]);
-          if (missingMbls.length > 0) {
-            try {
-              const mdRows = await queryWithRetry(() => client.query(
-                `SELECT mawb, hawb FROM dados_dachser.t_master_dados WHERE mawb COLLATE utf8mb4_unicode_ci IN (${missingMbls.map(() => '?').join(',')})`,
-                missingMbls
-              ), { label: 'demurrage_hbl_fallback', attempts: 2 });
-              for (const r of (mdRows || [])) if (r.hawb && !hblMap[r.mawb]) hblMap[r.mawb] = r.hawb;
-            } catch (e) { /* skip */ }
-          }
-
-          const piMap: Record<string, any> = {};
-          for (const r of (piRows || [])) piMap[r.shipment_mbl] = r;
-
-          // Merge
-          for (const c of containers) {
-            c.partner_id = partnerMap[c.cliente] || null;
-            c.hbl = hblMap[c.mbl] || null;
-            const pi = piMap[c.mbl];
-            c.pi_status_info = pi?.status_info || null;
-            c.pi_misk = pi?.misk || null;
-            c.pi_othello_registro = pi?.othello_registro || null;
-            c.pi_observacao = pi?.observacao || null;
-            c.pi_exchange_rate = pi?.exchange_rate || null;
-          }
-        }
 
         result = { success: true, data: containers || [] };
         break;
