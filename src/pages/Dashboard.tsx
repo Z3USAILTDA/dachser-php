@@ -128,7 +128,7 @@ const menuItems: MenuItem[] = [
         href: "/fin/regua",
       },
       {
-        label: "Análise Documental",
+        label: "Conferencia ACR's x CRAS",
         href: "/fin/analise-documental",
       },
       {
