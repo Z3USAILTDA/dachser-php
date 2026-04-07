@@ -270,8 +270,8 @@ serve(async (req) => {
 
       // Enrich ARR with destination context
       if (finalCode === "ARR") {
-        const loc = (row.loc0 || "").toUpperCase().trim().substring(0, 3);
-        const dest = (row.DESTINO || "").toUpperCase().trim().substring(0, 3);
+        const loc = extractIATA(row.loc0 || "");
+        const dest = extractIATA(row.DESTINO || "");
         if (dest && loc && loc === dest) {
           finalCode = "ARR - DESTINO";
         } else if (dest && loc && loc !== dest) {
@@ -297,12 +297,12 @@ serve(async (req) => {
 
       // Scan timeline for ARR at destination (regardless of finalCode)
       let arrDestinoDate: string | null = null;
-      const destUpper = (row.DESTINO || "").toUpperCase().trim().substring(0, 3);
-      if (destUpper && timeline && timeline.length > 0) {
+      const destIATA = extractIATA(row.DESTINO || "");
+      if (destIATA && timeline && timeline.length > 0) {
         for (const evt of timeline) {
           const desc = (evt.description || "").toUpperCase();
-          const evtLoc = (evt.location || "").toUpperCase().trim().substring(0, 3);
-          if (desc.includes("ARRIVED") && evtLoc === destUpper) {
+          const evtLoc = extractIATA(evt.location || "");
+          if (desc.includes("ARRIVED") && evtLoc === destIATA) {
             const d = (evt.date || "").trim();
             if (d) { arrDestinoDate = d; break; }
           }
