@@ -270,7 +270,21 @@ serve(async (req) => {
         }
       }
 
-      const dateStr = ((row.date0 || "") + " " + (row.time0 || "")).trim() || null;
+      // Find the first non-empty date in the timeline
+      let dateStr: string | null = null;
+      if (timeline && timeline.length > 0) {
+        for (const evt of timeline) {
+          const d = (evt.date || "").trim();
+          if (d) {
+            dateStr = d;
+            break;
+          }
+        }
+      }
+      // Fallback to SQL-extracted date0/time0
+      if (!dateStr) {
+        dateStr = ((row.date0 || "") + " " + (row.time0 || "")).trim() || null;
+      }
 
       const normalized = {
         awb_number: row.AWB || "",
