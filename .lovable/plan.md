@@ -1,44 +1,42 @@
 
 
-## Plano: Ocultar ARR no destino após 5 dias + Corrigir bug ARR - DESTINO
+## Plano: Corrigir coluna Data/Hora definitivamente
 
-### Problema 1: Bug — ARR nunca é classificado como "ARR - DESTINO"
+### Causa raiz
 
-O edge function `fetch-tracking-aereo` resolve descrições como "ARRIVED" para o código genérico `"ARR"`, sem distinguir se a carga chegou no **destino final** ou em uma **conexão**. O campo `destination` e `last_event_location` estão disponíveis na resposta, mas nunca são comparados.
+A linha 273 do edge function monta `last_event_date` apenas a partir de `date0` e `time0`, que são extraídos via SQL de `$[0].date` e `$[0].time` (o primeiro evento da timeline). Porém, os eventos mais recentes (índice 0) frequentemente têm `"date": ""` — as datas só aparecem em eventos mais antigos (índice 5, 10, etc.).
 
-Como resultado, processos que já chegaram no destino final aparecem como "ARR" em vez de "ARR - DESTINO", impedindo qualquer lógica de ocultação baseada nesse status.
-
-### Problema 2: Processos ARR - DESTINO devem sumir após 5 dias
-
-Processos com status "ARR - DESTINO" devem permanecer visíveis por apenas 5 dias após a data do evento. Após isso, devem ser ocultados automaticamente (mas ainda acessíveis via busca, como já funciona com DLV).
+Resultado: `last_event_date` é `null` ou `""` para a maioria dos processos.
 
 ### Solução
 
-**1. Edge function `fetch-tracking-aereo` — Enriquecer ARR com sufixo**
+No edge function `fetch-tracking-aereo/index.ts`, após o parse da timeline (linha ~217-222), percorrer a timeline e extrair a **primeira data não-vazia** encontrada. Usar esse valor como `last_event_date` em vez de depender apenas de `date0`/`time0` do SQL.
 
-Após resolver o `finalCode`, se o código for `"ARR"`, comparar `last_event_location` com `destination`:
-- Se `loc0` (normalizado, 3 chars) == `destination` → `finalCode = "ARR - DESTINO"`
-- Se diferente e `destination` não é vazio → `finalCode = "ARR - CONEXÃO"`
-- Se `destination` está vazio, manter `"ARR"`
-
-Inserir esta lógica após a linha 259 (após determinar o `finalCode`), antes de montar o objeto `normalized`.
-
-**2. Front-end `TrackingAereo.tsx` — Ocultar ARR - DESTINO após 5 dias**
-
-No `filteredAwbs` (useMemo), após o bloco que oculta DLV, adicionar:
+**Lógica (substituir linha 273):**
 
 ```typescript
-const isArrDestino = code === "ARR - DESTINO";
-if (isArrDestino && !searchTerm && awb.last_event_date) {
-  const eventDate = parseDBDate(awb.last_event_date);
-  if (eventDate) {
-    const diffDays = (Date.now() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
-    if (diffDays > 5) return false;
+// Find the first non-empty date in the timeline
+let dateStr: string | null = null;
+if (timeline && timeline.length > 0) {
+  for (const evt of timeline) {
+    const d = (evt.date || "").trim();
+    if (d) {
+      dateStr = d;
+      break;
+    }
   }
+}
+// Fallback to SQL-extracted date0/time0
+if (!dateStr) {
+  dateStr = ((row.date0 || "") + " " + (row.time0 || "")).trim() || null;
 }
 ```
 
-### Arquivos alterados
-- `supabase/functions/fetch-tracking-aereo/index.ts` — lógica de sufixo ARR → ARR - DESTINO / ARR - CONEXÃO
-- `src/pages/air/TrackingAereo.tsx` — filtro de ocultação no `filteredAwbs`
+### Arquivo alterado
+- `supabase/functions/fetch-tracking-aereo/index.ts` — substituir linha 273 pela lógica de busca na timeline
+
+### Resultado esperado
+- A coluna Data/Hora exibirá a data do evento mais recente disponível na timeline
+- Funciona mesmo quando os primeiros eventos não têm data preenchida
+- O parsing no front-end (`parseDBDate`) já suporta o formato `"31 Mar 2026 23:00"`
 
