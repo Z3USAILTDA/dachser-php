@@ -11180,9 +11180,9 @@ Deno.serve(async (req) => {
             pi_latest.observacao AS pi_observacao,
             pi_latest.exchange_rate AS pi_exchange_rate
           FROM dados_dachser.t_dachser_demurrage_containers dc
-          LEFT JOIN dados_dachser.t_clientes_base cb ON cb.nome_cliente = dc.cliente
-          LEFT JOIN dados_dachser.t_sea_master sm ON sm.master = dc.mbl
-          LEFT JOIN dados_dachser.t_master_dados md ON md.mawb = dc.mbl AND sm.hawb IS NULL
+          LEFT JOIN dados_dachser.t_clientes_base cb ON cb.nome_cliente COLLATE utf8mb4_unicode_ci = dc.cliente COLLATE utf8mb4_unicode_ci
+          LEFT JOIN dados_dachser.t_sea_master sm ON sm.master COLLATE utf8mb4_unicode_ci = dc.mbl COLLATE utf8mb4_unicode_ci
+          LEFT JOIN dados_dachser.t_master_dados md ON md.mawb COLLATE utf8mb4_unicode_ci = dc.mbl COLLATE utf8mb4_unicode_ci AND sm.hawb IS NULL
           LEFT JOIN (
             SELECT pi1.* FROM dados_dachser.t_dachser_demurrage_pre_invoices pi1
             INNER JOIN (
@@ -11190,7 +11190,7 @@ Deno.serve(async (req) => {
               FROM dados_dachser.t_dachser_demurrage_pre_invoices
               GROUP BY shipment_mbl
             ) pi2 ON pi1.shipment_mbl = pi2.shipment_mbl AND pi1.created_at = pi2.max_created
-          ) pi_latest ON pi_latest.shipment_mbl = dc.mbl
+          ) pi_latest ON pi_latest.shipment_mbl COLLATE utf8mb4_unicode_ci = dc.mbl COLLATE utf8mb4_unicode_ci
           WHERE ${whereConditions.join(' AND ')}
           ORDER BY dc.updated_at DESC
           LIMIT ?
