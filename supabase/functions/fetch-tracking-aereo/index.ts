@@ -286,6 +286,20 @@ serve(async (req) => {
         dateStr = ((row.date0 || "") + " " + (row.time0 || "")).trim() || null;
       }
 
+      // Scan timeline for ARR at destination (regardless of finalCode)
+      let arrDestinoDate: string | null = null;
+      const destUpper = (row.DESTINO || "").toUpperCase().trim().substring(0, 3);
+      if (destUpper && timeline && timeline.length > 0) {
+        for (const evt of timeline) {
+          const desc = (evt.description || "").toUpperCase();
+          const evtLoc = (evt.location || "").toUpperCase().trim().substring(0, 3);
+          if (desc.includes("ARRIVED") && evtLoc === destUpper) {
+            const d = (evt.date || "").trim();
+            if (d) { arrDestinoDate = d; break; }
+          }
+        }
+      }
+
       const normalized = {
         awb_number: row.AWB || "",
         hawb_number: row.HAWB || "",
@@ -300,6 +314,7 @@ serve(async (req) => {
         last_event_date: dateStr,
         last_event_location: row.loc0 || "",
         penultimate_location: row.loc1 || "",
+        arr_destino_date: arrDestinoDate,
       };
 
       if (!finalCode) {
