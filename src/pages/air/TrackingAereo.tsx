@@ -34,7 +34,7 @@ import { TablePagination } from "@/components/layout/TablePagination";
 import { EmailClienteRegrasDialog } from "@/components/air/EmailClienteRegrasDialog";
 import { CadastroNovaModal } from "@/components/air/CadastroNovaModal";
 import { AwbTimelineModalScraper } from "@/components/air/AwbTimelineModalScraper";
-import { formatDateTimeBR } from "@/utils/timezone";
+import { formatDateTimeBR, parseDBDate } from "@/utils/timezone";
 
 // ─── Status code helpers (reused from Index.tsx) ───
 
