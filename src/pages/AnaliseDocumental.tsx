@@ -9,7 +9,16 @@ import { FilterBar, filterPresets } from "@/components/layout/FilterBar";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { BadgeStatus } from "@/components/maritimo/BadgeStatus";
 import { toast } from "sonner";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -31,7 +40,7 @@ const AnaliseDocumental = () => {
   useUsageLog({ endpoint: "/fin/analise-documental" });
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
-  
+
   const [processes, setProcesses] = useState<AnaliseProcess[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -40,16 +49,16 @@ const AnaliseDocumental = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string } | null>(null);
-  
+
   const PAGE_SIZE = 10;
 
   const fetchHistory = useCallback(async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = (await supabase
         .from("analise_documental_historico" as any)
         .select("*")
-        .order("created_at", { ascending: false }) as { data: AnaliseProcess[] | null; error: any };
+        .order("created_at", { ascending: false })) as { data: AnaliseProcess[] | null; error: any };
 
       if (error) throw error;
       setProcesses(data || []);
@@ -73,38 +82,39 @@ const AnaliseDocumental = () => {
 
   const filteredData = useMemo(() => {
     let data = [...processes];
-    
+
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
-      data = data.filter(item => 
-        item.pdf_file_name?.toLowerCase().includes(q) || 
-        item.excel_file_name?.toLowerCase().includes(q)
+      data = data.filter(
+        (item) => item.pdf_file_name?.toLowerCase().includes(q) || item.excel_file_name?.toLowerCase().includes(q),
       );
     }
-    
+
     if (statusFilter !== "todos") {
       const statusMap: Record<string, string> = {
-        "pendente": "pending",
-        "realizado": "success",
-        "erro": "error"
+        pendente: "pending",
+        realizado: "success",
+        erro: "error",
       };
-      data = data.filter(item => item.overall_status === statusMap[statusFilter] || item.overall_status === statusFilter);
+      data = data.filter(
+        (item) => item.overall_status === statusMap[statusFilter] || item.overall_status === statusFilter,
+      );
     }
-    
+
     if (periodFilter !== "todos") {
       const days = parseInt(periodFilter, 10);
       const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-      data = data.filter(item => {
+      data = data.filter((item) => {
         const created = new Date(item.created_at).getTime();
         return created >= cutoff;
       });
     }
-    
+
     return data;
   }, [processes, searchTerm, statusFilter, periodFilter]);
 
-  const pendingCount = useMemo(() => processes.filter(p => p.overall_status === "pending").length, [processes]);
-  
+  const pendingCount = useMemo(() => processes.filter((p) => p.overall_status === "pending").length, [processes]);
+
   const totalPages = Math.max(1, Math.ceil(filteredData.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const paginatedData = filteredData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
@@ -144,7 +154,7 @@ const AnaliseDocumental = () => {
 
   const confirmDelete = async () => {
     if (!itemToDelete) return;
-    
+
     try {
       const { error } = await supabase
         .from("analise_documental_historico" as any)
@@ -152,8 +162,8 @@ const AnaliseDocumental = () => {
         .eq("id", itemToDelete.id);
 
       if (error) throw error;
-      
-      setProcesses(prev => prev.filter(p => p.id !== itemToDelete.id));
+
+      setProcesses((prev) => prev.filter((p) => p.id !== itemToDelete.id));
       toast.success("Análise excluída com sucesso");
     } catch (error) {
       console.error("Error deleting:", error);
@@ -166,10 +176,14 @@ const AnaliseDocumental = () => {
 
   const getStatusDisplay = (status: string): "pendente" | "realizado" | "erro" => {
     switch (status) {
-      case "success": return "realizado";
-      case "error": return "erro";
-      case "warning": return "realizado";
-      default: return "pendente";
+      case "success":
+        return "realizado";
+      case "error":
+        return "erro";
+      case "warning":
+        return "realizado";
+      default:
+        return "pendente";
     }
   };
 
@@ -207,10 +221,10 @@ const AnaliseDocumental = () => {
   }
 
   return (
-    <PageLayout 
-      title="DACHSER" 
-      subtitle="Análise Documental" 
-      pageIcon={FileSearch} 
+    <PageLayout
+      title="DACHSER"
+      subtitle="Conferencia ACR's x CRAS"
+      pageIcon={FileSearch}
       backTo="/dashboard"
       rightContent={
         <button
@@ -224,17 +238,17 @@ const AnaliseDocumental = () => {
     >
       {/* Card de Filtros */}
       <PageCard>
-        <FilterBar 
-          searchValue={searchTerm} 
-          onSearchChange={handleSearchChange} 
-          searchPlaceholder="Buscar por arquivo" 
+        <FilterBar
+          searchValue={searchTerm}
+          onSearchChange={handleSearchChange}
+          searchPlaceholder="Buscar por arquivo"
           filters={[
-            filterPresets.status(statusFilter, handleStatusChange), 
-            filterPresets.period(periodFilter, handlePeriodChange)
-          ]} 
-          showRefresh 
-          onRefresh={handleRefresh} 
-          isRefreshing={isLoading} 
+            filterPresets.status(statusFilter, handleStatusChange),
+            filterPresets.period(periodFilter, handlePeriodChange),
+          ]}
+          showRefresh
+          onRefresh={handleRefresh}
+          isRefreshing={isLoading}
         />
       </PageCard>
 
@@ -249,8 +263,8 @@ const AnaliseDocumental = () => {
                 Total: <span className="text-[#ffc800] font-semibold">{processes.length}</span>
               </span>
             </div>
-            <button 
-              onClick={handleNovoProcesso} 
+            <button
+              onClick={handleNovoProcesso}
               className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.78rem] font-semibold flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)]"
             >
               <Play className="w-4 h-4" />
@@ -265,9 +279,9 @@ const AnaliseDocumental = () => {
           </div>
         ) : filteredData.length === 0 ? (
           <div className="text-center py-12 text-[0.85rem] text-[#aaaaaa]">
-            {searchTerm || statusFilter !== "todos" 
-              ? "Nenhum item encontrado com os filtros aplicados" 
-              : "Nenhuma comparação realizada ainda. Clique em \"Nova Análise\" para começar."}
+            {searchTerm || statusFilter !== "todos"
+              ? "Nenhum item encontrado com os filtros aplicados"
+              : 'Nenhuma comparação realizada ainda. Clique em "Nova Análise" para começar.'}
           </div>
         ) : (
           <>
@@ -296,16 +310,22 @@ const AnaliseDocumental = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedData.map(item => (
-                    <tr 
-                      key={item.id} 
+                  {paginatedData.map((item) => (
+                    <tr
+                      key={item.id}
                       className="border-b border-[rgba(255,255,255,.06)] hover:bg-[rgba(255,255,255,.03)] transition-colors cursor-pointer"
                       onClick={() => handleViewDetails(item.id)}
                     >
-                      <td className="px-[10px] py-[9px] text-[0.82rem] text-[#f5f5f5] max-w-[200px] truncate" title={item.pdf_file_name}>
+                      <td
+                        className="px-[10px] py-[9px] text-[0.82rem] text-[#f5f5f5] max-w-[200px] truncate"
+                        title={item.pdf_file_name}
+                      >
                         {item.pdf_file_name}
                       </td>
-                      <td className="px-[10px] py-[9px] text-[0.82rem] text-[#aaaaaa] max-w-[200px] truncate" title={item.excel_file_name}>
+                      <td
+                        className="px-[10px] py-[9px] text-[0.82rem] text-[#aaaaaa] max-w-[200px] truncate"
+                        title={item.excel_file_name}
+                      >
                         {item.excel_file_name}
                       </td>
                       <td className="px-[10px] py-[9px]">{getResultBadge(item)}</td>
@@ -315,18 +335,18 @@ const AnaliseDocumental = () => {
                       <td className="px-[10px] py-[9px] text-[0.82rem] text-[#aaaaaa]">
                         {format(new Date(item.created_at), "dd/MM/yyyy HH:mm")}
                       </td>
-                      <td className="px-[10px] py-[9px]" onClick={e => e.stopPropagation()}>
+                      <td className="px-[10px] py-[9px]" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1.5">
-                          <button 
-                            onClick={() => handleViewDetails(item.id)} 
-                            className="w-7 h-7 rounded-full border border-[rgba(255,255,255,.2)] bg-transparent text-[#aaaaaa] flex items-center justify-center hover:bg-[rgba(255,255,255,.1)] hover:text-white transition" 
+                          <button
+                            onClick={() => handleViewDetails(item.id)}
+                            className="w-7 h-7 rounded-full border border-[rgba(255,255,255,.2)] bg-transparent text-[#aaaaaa] flex items-center justify-center hover:bg-[rgba(255,255,255,.1)] hover:text-white transition"
                             title="Ver detalhes"
                           >
                             <Eye className="h-3.5 w-3.5" />
                           </button>
-                          <button 
-                            onClick={() => handleDeleteClick(item.id, item.pdf_file_name)} 
-                            className="w-7 h-7 rounded-full border border-rose-400/30 bg-transparent text-rose-400 flex items-center justify-center hover:bg-rose-500/10 transition" 
+                          <button
+                            onClick={() => handleDeleteClick(item.id, item.pdf_file_name)}
+                            className="w-7 h-7 rounded-full border border-rose-400/30 bg-transparent text-rose-400 flex items-center justify-center hover:bg-rose-500/10 transition"
                             title="Excluir"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -340,12 +360,12 @@ const AnaliseDocumental = () => {
             </div>
 
             {filteredData.length > PAGE_SIZE && (
-              <TablePagination 
-                currentPage={safeCurrentPage} 
-                totalPages={totalPages} 
-                onPageChange={setCurrentPage} 
-                maxVisiblePages={5} 
-                showFirstLast={false} 
+              <TablePagination
+                currentPage={safeCurrentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                maxVisiblePages={5}
+                showFirstLast={false}
               />
             )}
           </>
@@ -358,9 +378,9 @@ const AnaliseDocumental = () => {
           <AlertDialogHeader>
             <AlertDialogTitle className="text-xl text-[#f5f5f5]">Confirmar Exclusão</AlertDialogTitle>
             <AlertDialogDescription className="text-[#aaaaaa]">
-              Tem certeza que deseja excluir a análise de{" "}
-              <strong>{itemToDelete?.name}</strong> permanentemente?
-              <br /><br />
+              Tem certeza que deseja excluir a análise de <strong>{itemToDelete?.name}</strong> permanentemente?
+              <br />
+              <br />
               Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
