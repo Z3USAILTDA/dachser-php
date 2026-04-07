@@ -472,10 +472,19 @@ const TrackingAereo = () => {
 
     let total = 0, transit = 0, alert = 0, critical = 0;
     awbsData.forEach(awb => {
-      if (awb.is_invalid) return; // Skip invalid
-      if (awb.tracking_failed) return; // Skip tracking failed
+      if (awb.is_invalid) return;
+      if (awb.tracking_failed) return;
       const code = getStatusCode(awb.last_event).toUpperCase();
-      if (code === "DLV" || code === "POD") return; // Skip delivered
+      if (code === "DLV" || code === "POD") return;
+      // Skip hidden processes (persisted or fallback)
+      if (awb.hide_reason) return;
+      if (awb.arr_destino_date) {
+        const arrDate = parseDBDate(awb.arr_destino_date);
+        if (arrDate) {
+          const diffDays = (Date.now() - arrDate.getTime()) / (1000 * 60 * 60 * 24);
+          if (diffDays > 5) return;
+        }
+      }
       total++;
       if (inTransitCodes.has(code)) transit++;
       if (code === "DIS") alert++;
