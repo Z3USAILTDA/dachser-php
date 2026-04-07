@@ -11169,9 +11169,10 @@ Deno.serve(async (req) => {
           params.push(audit_status);
         }
 
-        // Step 1: Fetch base containers (lightweight query)
+        // Single lightweight query — enrichment (partner_id, hbl, pi_*) is done during sync, not on read
         const containers = await queryWithRetry(() => client.query(`
-          SELECT dc.*
+          SELECT dc.*,
+            dc.bl AS hbl
           FROM dados_dachser.t_dachser_demurrage_containers dc
           WHERE ${whereConditions.join(' AND ')}
           ORDER BY dc.updated_at DESC
@@ -11181,70 +11182,27 @@ Deno.serve(async (req) => {
           attempts: 3,
         });
 
-        // Step 2: Enrich using single parallel queries with IN clauses (no COLLATE, no correlated subqueries)
+        // Lightweight partner lookup only (small set, no COLLATE)
         if (containers && containers.length > 0) {
-          const mbls = [...new Set(containers.map((c: any) => c.mbl).filter(Boolean))];
           const clientes = [...new Set(containers.map((c: any) => c.cliente).filter(Boolean))];
-          console.log(`[demurrage_get_containers] Base: ${containers.length} rows, ${mbls.length} MBLs, ${clientes.length} clients`);
-
-          // Batch MBLs/clients into chunks to keep IN clauses manageable
-          const MBL_CHUNK = 100;
-          const CLIENT_CHUNK = 50;
-
-          // Partner lookup (chunked)
           const partnerMap: Record<string, string> = {};
-          for (let i = 0; i < clientes.length; i += CLIENT_CHUNK) {
-            const chunk = clientes.slice(i, i + CLIENT_CHUNK);
+          if (clientes.length > 0) {
             try {
               const rows = await queryWithRetry(() => client.query(
-                `SELECT nome_cliente, dchr_customer_number FROM dados_dachser.t_clientes_base WHERE nome_cliente IN (${chunk.map(() => '?').join(',')})`,
-                chunk
+                `SELECT nome_cliente, dchr_customer_number FROM dados_dachser.t_clientes_base WHERE nome_cliente IN (${clientes.map(() => '?').join(',')})`,
+                clientes
               ), { label: 'demurrage_partner', attempts: 1 });
               for (const r of (rows || [])) partnerMap[r.nome_cliente] = r.dchr_customer_number;
             } catch (e) { /* skip */ }
           }
-
-          // HBL lookup (chunked, single source — t_sea_master only)
-          const hblMap: Record<string, string> = {};
-          for (let i = 0; i < mbls.length; i += MBL_CHUNK) {
-            const chunk = mbls.slice(i, i + MBL_CHUNK);
-            try {
-              const rows = await queryWithRetry(() => client.query(
-                `SELECT master, hawb FROM dados_dachser.t_sea_master WHERE master IN (${chunk.map(() => '?').join(',')}) AND hawb IS NOT NULL`,
-                chunk
-              ), { label: 'demurrage_hbl', attempts: 1 });
-              for (const r of (rows || [])) if (r.hawb) hblMap[r.master] = r.hawb;
-            } catch (e) { /* skip */ }
-          }
-
-          // Pre-invoice lookup (chunked, simplified — no correlated subquery)
-          const piMap: Record<string, any> = {};
-          for (let i = 0; i < mbls.length; i += MBL_CHUNK) {
-            const chunk = mbls.slice(i, i + MBL_CHUNK);
-            try {
-              const rows = await queryWithRetry(() => client.query(
-                `SELECT shipment_mbl, status_info, misk, othello_registro, observacao, exchange_rate
-                 FROM dados_dachser.t_dachser_demurrage_pre_invoices
-                 WHERE shipment_mbl IN (${chunk.map(() => '?').join(',')})
-                 ORDER BY created_at DESC`,
-                chunk
-              ), { label: 'demurrage_pi', attempts: 1 });
-              for (const r of (rows || [])) {
-                if (!piMap[r.shipment_mbl]) piMap[r.shipment_mbl] = r;
-              }
-            } catch (e) { /* skip */ }
-          }
-
-          // Merge enrichment
           for (const c of containers) {
             c.partner_id = partnerMap[c.cliente] || null;
-            c.hbl = hblMap[c.mbl] || c.bl || null;
-            const pi = piMap[c.mbl];
-            c.pi_status_info = pi?.status_info || null;
-            c.pi_misk = pi?.misk || null;
-            c.pi_othello_registro = pi?.othello_registro || null;
-            c.pi_observacao = pi?.observacao || null;
-            c.pi_exchange_rate = pi?.exchange_rate || null;
+            // hbl already aliased from dc.bl
+            c.pi_status_info = null;
+            c.pi_misk = null;
+            c.pi_othello_registro = null;
+            c.pi_observacao = null;
+            c.pi_exchange_rate = null;
           }
         }
 
