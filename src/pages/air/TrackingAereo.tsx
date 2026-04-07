@@ -525,7 +525,7 @@ const TrackingAereo = () => {
       awbs = awbs.filter(awb => {
         const code = getStatusCode(awb.last_event).toUpperCase();
         switch (cardFilter) {
-          case "transito": return ["DEP", "MAN", "RCF", "ARR"].includes(code);
+          case "transito": return ["DEP", "MAN", "RCF", "ARR", "ARR - DESTINO", "ARR - CONEXÃO"].includes(code);
           case "alerta": return code === "DIS";
           case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy;
           default: return true;
