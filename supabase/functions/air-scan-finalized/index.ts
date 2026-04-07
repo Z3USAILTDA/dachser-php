@@ -17,7 +17,6 @@ function extractIATA(loc: string): string {
 
 function parseTextDate(dateStr: string): Date | null {
   if (!dateStr) return null;
-  // Format: "31 Mar 2026 23:00" or "31 Mar 2026"
   const months: Record<string, number> = {
     JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
     JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
@@ -50,7 +49,7 @@ serve(async (req) => {
 
     client = await new Client().connect({ hostname: host, port, db: database, username, password });
 
-    // Step 1: Create table if not exists
+    // Create table if not exists
     await client.execute(`
       CREATE TABLE IF NOT EXISTS dados_dachser.t_air_process_visibility (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -64,7 +63,7 @@ serve(async (req) => {
     `);
     console.log("Table t_air_process_visibility ensured");
 
-    // Step 2: Fetch all tracking data via the same query as fetch-tracking-aereo
+    // Fetch all tracking data
     const sql = `
       select
           tda.awb_number as AWB,
@@ -86,7 +85,9 @@ serve(async (req) => {
 
     const now = Date.now();
     const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
-    let insertedCount = 0;
+
+    // Collect records to insert
+    const toInsert: Array<{ awb: string; hawb: string; reason: string; arrDate: string | null }> = [];
 
     for (const row of rows || []) {
       const awb = row.AWB || "";
@@ -109,13 +110,7 @@ serve(async (req) => {
       });
 
       if (isDLV) {
-        try {
-          await client.execute(
-            `INSERT INTO dados_dachser.t_air_process_visibility (awb, hawb, hide_reason) VALUES (?, ?, 'DLV') ON DUPLICATE KEY UPDATE hide_reason = 'DLV', detected_at = CURRENT_TIMESTAMP`,
-            [awb, hawb]
-          );
-          insertedCount++;
-        } catch (_) {}
+        toInsert.push({ awb, hawb, reason: "DLV", arrDate: null });
         continue;
       }
 
@@ -132,17 +127,33 @@ serve(async (req) => {
             const parsed = parseTextDate(d);
             if (parsed && (now - parsed.getTime()) > FIVE_DAYS_MS) {
               const mysqlDate = parsed.toISOString().slice(0, 19).replace("T", " ");
-              try {
-                await client.execute(
-                  `INSERT INTO dados_dachser.t_air_process_visibility (awb, hawb, hide_reason, arr_destino_date) VALUES (?, ?, 'ARR_DESTINO_5D', ?) ON DUPLICATE KEY UPDATE hide_reason = 'ARR_DESTINO_5D', arr_destino_date = VALUES(arr_destino_date), detected_at = CURRENT_TIMESTAMP`,
-                  [awb, hawb, mysqlDate]
-                );
-                insertedCount++;
-              } catch (_) {}
+              toInsert.push({ awb, hawb, reason: "ARR_DESTINO_5D", arrDate: mysqlDate });
             }
           }
           break;
         }
+      }
+    }
+
+    console.log(`Found ${toInsert.length} processes to persist`);
+
+    // Batch insert in chunks of 50
+    let insertedCount = 0;
+    for (let i = 0; i < toInsert.length; i += 50) {
+      const chunk = toInsert.slice(i, i + 50);
+      const values = chunk.map(() => "(?, ?, ?, ?)").join(", ");
+      const params: any[] = [];
+      for (const r of chunk) {
+        params.push(r.awb, r.hawb, r.reason, r.arrDate);
+      }
+      try {
+        await client.execute(
+          `INSERT INTO dados_dachser.t_air_process_visibility (awb, hawb, hide_reason, arr_destino_date) VALUES ${values} ON DUPLICATE KEY UPDATE hide_reason = VALUES(hide_reason), arr_destino_date = VALUES(arr_destino_date), detected_at = CURRENT_TIMESTAMP`,
+          params
+        );
+        insertedCount += chunk.length;
+      } catch (err) {
+        console.error(`Batch insert error at chunk ${i}:`, err);
       }
     }
 
