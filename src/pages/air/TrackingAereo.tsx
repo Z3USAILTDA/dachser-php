@@ -231,6 +231,7 @@ interface AWBData {
   last_event_location?: string;
   penultimate_location?: string;
   arr_destino_date?: string | null;
+  hide_reason?: string;
   tipo_servico?: string;
   tipo_processo?: string;
   pieces_discrepancy?: boolean;
@@ -356,6 +357,7 @@ const TrackingAereo = () => {
             last_event_location: item.last_event_location || "",
             penultimate_location: item.penultimate_location || "",
             arr_destino_date: item.arr_destino_date || null,
+            hide_reason: item.hide_reason || "",
             timeline_json: timeline,
             pieces_discrepancy: discrepancy.discrepancy,
             baseline_pieces: discrepancy.baseline,
@@ -489,7 +491,9 @@ const TrackingAereo = () => {
       const isDLV = code === "DLV" || code === "POD";
       // Hide DLV unless actively searching
       if (isDLV && !searchTerm) return false;
-      // Hide processes where ARR at destination happened > 5 days ago (regardless of current status)
+      // Hide processes with persisted hide_reason (from backend scan)
+      if (!searchTerm && awb.hide_reason) return false;
+      // Hide processes where ARR at destination happened > 5 days ago (fallback)
       if (!searchTerm && awb.arr_destino_date) {
         const arrDate = parseDBDate(awb.arr_destino_date);
         if (arrDate) {
