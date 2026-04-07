@@ -67,9 +67,73 @@ export const parseDBDate = (dateStr: string | null | undefined): Date | null => 
     if (dateStr.includes('+') || /[-+]\d{2}:\d{2}$/.test(dateStr)) {
       return new Date(dateStr);
     }
-    
+
+    // === MULTI-FORMAT DETECTION ===
+
+    const MONTH_MAP: Record<string, string> = {
+      Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06",
+      Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12",
+      jan: "01", fev: "02", mar: "03", abr: "04", mai: "05", jun: "06",
+      jul: "07", ago: "08", set: "09", out: "10", nov: "11", dez: "12",
+    };
+
+    // 1) "DD Mon YYYY HH:MM" / "DD Mon YYYY" (Firecrawl/timeline)
+    const textMatch = dateStr.trim().match(/^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})(?:\s+(\d{1,2}:\d{2}))?/);
+    if (textMatch) {
+      const mm = MONTH_MAP[textMatch[2].substring(0, 3)];
+      if (mm) {
+        const dd = textMatch[1].padStart(2, "0");
+        const time = textMatch[4] || "00:00";
+        return new Date(`${textMatch[3]}-${mm}-${dd}T${time}:00${TIMEZONE_CONFIG.offsetString}`);
+      }
+    }
+
+    // 2) "Mon DD, YYYY" / "March 15, 2026" (English long)
+    const enLongMatch = dateStr.trim().match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})(?:\s+(\d{1,2}:\d{2}))?/);
+    if (enLongMatch) {
+      const mm = MONTH_MAP[enLongMatch[1].substring(0, 3)];
+      if (mm) {
+        const dd = enLongMatch[2].padStart(2, "0");
+        const time = enLongMatch[4] || "00:00";
+        return new Date(`${enLongMatch[3]}-${mm}-${dd}T${time}:00${TIMEZONE_CONFIG.offsetString}`);
+      }
+    }
+
+    // 3) "DD/MM/YYYY HH:mm" or "DD/MM/YYYY" (BR format)
+    const brMatch = dateStr.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?$/);
+    if (brMatch) {
+      const dd = brMatch[1].padStart(2, "0");
+      const mm = brMatch[2].padStart(2, "0");
+      const time = brMatch[4] || "00:00:00";
+      return new Date(`${brMatch[3]}-${mm}-${dd}T${time}${TIMEZONE_CONFIG.offsetString}`);
+    }
+
+    // 4) "DD-MM-YYYY" or "DD.MM.YYYY" (European)
+    const euMatch = dateStr.trim().match(/^(\d{1,2})[.\-](\d{1,2})[.\-](\d{4})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?$/);
+    if (euMatch) {
+      const dd = euMatch[1].padStart(2, "0");
+      const mm = euMatch[2].padStart(2, "0");
+      const time = euMatch[4] || "00:00:00";
+      return new Date(`${euMatch[3]}-${mm}-${dd}T${time}${TIMEZONE_CONFIG.offsetString}`);
+    }
+
+    // 5) "YYYY/MM/DD HH:mm:ss" (alternative ISO with /)
+    const altIsoMatch = dateStr.trim().match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?$/);
+    if (altIsoMatch) {
+      const mm = altIsoMatch[2].padStart(2, "0");
+      const dd = altIsoMatch[3].padStart(2, "0");
+      const time = altIsoMatch[4] || "00:00:00";
+      return new Date(`${altIsoMatch[1]}-${mm}-${dd}T${time}${TIMEZONE_CONFIG.offsetString}`);
+    }
+
+    // 6) Unix timestamp (seconds or milliseconds)
+    if (/^\d{10,13}$/.test(dateStr.trim())) {
+      const ts = parseInt(dateStr.trim(), 10);
+      return new Date(ts < 1e12 ? ts * 1000 : ts);
+    }
+
     // MariaDB datetime format "YYYY-MM-DD HH:mm:ss" - add São Paulo offset
-    if (dateStr.includes(' ')) {
+    if (dateStr.includes(' ') && /^\d{4}-\d{2}-\d{2}\s/.test(dateStr)) {
       return new Date(dateStr.replace(' ', 'T') + TIMEZONE_CONFIG.offsetString);
     }
     
@@ -82,13 +146,14 @@ export const parseDBDate = (dateStr: string | null | undefined): Date | null => 
     const parts = dateStr.split('-');
     if (parts.length === 3) {
       const year = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1; // JavaScript months are 0-indexed
+      const month = parseInt(parts[1], 10) - 1;
       const day = parseInt(parts[2], 10);
-      return new Date(year, month, day); // Creates local date at 00:00
+      return new Date(year, month, day);
     }
     
-    // Fallback: try native parsing
-    return new Date(dateStr);
+    // Fallback: try native parsing, validate result
+    const fallback = new Date(dateStr);
+    return isNaN(fallback.getTime()) ? null : fallback;
   } catch {
     console.warn(`[Timezone] Failed to parse date: ${dateStr}`);
     return null;
