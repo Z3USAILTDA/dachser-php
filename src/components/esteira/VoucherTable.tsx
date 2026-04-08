@@ -515,7 +515,9 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       <TableCell className="font-mono font-medium">
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-2">
-                            {voucher.numeroSPO}
+                            {(voucher.isMaster || voucher.origemCriacao === "MASTER") && voucher.nomeMaster
+                              ? voucher.nomeMaster
+                              : voucher.numeroSPO}
                             {(voucher.isMaster || voucher.origemCriacao === "MASTER") && (
                               <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-[10px] gap-1">
                                 <Layers className="h-3 w-3" />
@@ -538,11 +540,16 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                               </Tooltip>
                             )}
                           </div>
-                          {voucher.isMaster && voucher.nomeMaster && (
-                            <span className="text-xs text-muted-foreground font-normal truncate max-w-[200px]" title={voucher.nomeMaster}>
-                              {voucher.nomeMaster}
-                            </span>
-                          )}
+                          {(voucher.isMaster || voucher.origemCriacao === "MASTER") && (() => {
+                            const children = masterChildrenMap.get(voucher.id);
+                            if (!children || children.length === 0) return null;
+                            const display = children.slice(0, 5).join(", ") + (children.length > 5 ? ` +${children.length - 5}` : "");
+                            return (
+                              <span className="text-[11px] text-muted-foreground font-normal truncate max-w-[280px]" title={children.join(", ")}>
+                                ↳ {display}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </TableCell>
                       <TableCell className="font-mono text-xs">
