@@ -32,12 +32,28 @@ interface VoucherDetailsViewProps {
 }
 
 export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = false }: VoucherDetailsViewProps) => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [vouchersFilhos, setVouchersFilhos] = useState<any[]>([]);
+  const [loadingFilhos, setLoadingFilhos] = useState(false);
   const tempoNaEtapa = calcularTempoNaEtapa(voucher);
   const slaLimit = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA] || 24;
   const slaExcedido = tempoNaEtapa >= slaLimit;
+
+  useEffect(() => {
+    if (voucher.isMaster) {
+      setLoadingFilhos(true);
+      supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "get_voucher_filhos", master_id: voucher.id },
+      }).then(({ data }) => {
+        setVouchersFilhos(data?.filhos || []);
+      }).catch(() => {
+        setVouchersFilhos([]);
+      }).finally(() => setLoadingFilhos(false));
+    }
+  }, [voucher.id, voucher.isMaster]);
 
   const isImageFile = (fileName: string) => {
     const ext = fileName.toLowerCase().split('.').pop();
