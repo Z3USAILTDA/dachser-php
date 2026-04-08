@@ -4,8 +4,8 @@ import { Resend } from "https://esm.sh/resend@2.0.0";
 import { jsPDF } from "https://esm.sh/jspdf@2.5.1";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 interface TableStats {
@@ -18,7 +18,7 @@ interface TableStats {
   totalRecords: number;
   recentInserts: number;
   minutesSinceUpdate: number;
-  status: 'healthy' | 'warning' | 'critical';
+  status: "healthy" | "warning" | "critical";
 }
 
 interface AlertRecord {
@@ -27,60 +27,61 @@ interface AlertRecord {
 }
 
 const TABLES_CONFIG = [
-  { 
-    name: 't_master_dados', 
-    displayName: 'Master Dados', 
-    businessName: 'Dados Operacionais',
-    businessDescription: 'Processos de importação e exportação (aéreo e marítimo) - CCT, Tracking, Olimpo',
-    applications: ['AIR', 'SEA', 'CCT', 'TRACKING', 'OLIMPO'] 
+  {
+    name: "t_master_dados",
+    displayName: "Master Dados",
+    businessName: "Dados Operacionais",
+    businessDescription: "Processos de importação e exportação (aéreo e marítimo) - CCT, Tracking, Olimpo",
+    applications: ["AIR", "SEA", "CCT", "TRACKING", "OLIMPO"],
   },
-  { 
-    name: 't_dados_financeiro_nfs', 
-    displayName: 'Financeiro NFs', 
-    businessName: 'Notas Fiscais',
-    businessDescription: 'Dados de faturamento para régua de cobrança automática',
-    applications: ['REGUA'] 
+  {
+    name: "t_dados_financeiro_nfs",
+    displayName: "Financeiro NFs",
+    businessName: "Notas Fiscais",
+    businessDescription: "Dados de faturamento para régua de cobrança automática",
+    applications: ["REGUA"],
   },
-  { 
-    name: 't_dados_financeiro_voucher', 
-    displayName: 'Financeiro Voucher', 
-    businessName: 'Vouchers/SPO',
-    businessDescription: 'Solicitações de pagamento e despesas operacionais',
-    applications: ['ESTEIRA'] 
+  {
+    name: "t_dados_financeiro_voucher",
+    displayName: "Financeiro Voucher",
+    businessName: "Vouchers/SPO",
+    businessDescription: "Solicitações de pagamento e despesas operacionais",
+    applications: ["ESTEIRA"],
   },
-  { 
-    name: 'tbaixas', 
-    displayName: 'Baixas', 
-    businessName: 'Baixas Financeiras',
-    businessDescription: 'Comprovantes de pagamento processados pelo robô financeiro',
-    applications: ['ESTEIRA'] 
+  {
+    name: "tbaixas",
+    displayName: "Baixas",
+    businessName: "Baixas Financeiras",
+    businessDescription: "Comprovantes de pagamento processados pelo robô financeiro",
+    applications: ["ESTEIRA"],
   },
 ];
 
 const CRITICAL_THRESHOLD_MINUTES = 60;
 
-const TEST_RECIPIENTS = ['larissa@z3us.ai'];
+const TEST_RECIPIENTS = ["larissa@z3us.ai"];
 const PRODUCTION_RECIPIENTS = [
-  'larissa@z3us.ai',
-  'rodrigo@z3us.ai',
-  'ana.tozzo@dachser.com',
-  'danilo.pedroso@dachser.com',
-  'herbert@z3us.ai'
+  "larissa@z3us.ai",
+  "rodrigo@z3us.ai",
+  "ana.tozzo@dachser.com",
+  "danilo.pedroso@dachser.com",
+  "herbert@z3us.ai",
+  "reinaldo.fascina@dachser.com",
 ];
 
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function connectWithRetry(maxRetries = 3): Promise<Client> {
-  const host = Deno.env.get('MARIADB_HOST');
-  const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-  const database = Deno.env.get('MARIADB_DATABASE');
-  const username = Deno.env.get('MARIADB_USER');
-  const password = Deno.env.get('MARIADB_PASSWORD');
+  const host = Deno.env.get("MARIADB_HOST");
+  const port = parseInt(Deno.env.get("MARIADB_PORT") || "3306");
+  const database = Deno.env.get("MARIADB_DATABASE");
+  const username = Deno.env.get("MARIADB_USER");
+  const password = Deno.env.get("MARIADB_PASSWORD");
 
   if (!host || !database || !username || !password) {
-    throw new Error('MariaDB credentials not configured');
+    throw new Error("MariaDB credentials not configured");
   }
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -93,16 +94,17 @@ async function connectWithRetry(maxRetries = 3): Promise<Client> {
         username: username,
         password: password,
       });
-      console.log('Connected to MariaDB successfully');
+      console.log("Connected to MariaDB successfully");
       return client;
     } catch (err) {
       const error = err as Error;
       console.error(`Connection attempt ${attempt} failed:`, error.message);
-      const isTransient = error.message.toLowerCase().includes('connection reset') || 
-                          error.message.includes('os error 104') ||
-                          error.message.toLowerCase().includes('broken pipe') ||
-                          error.message.toLowerCase().includes('timed out');
-      
+      const isTransient =
+        error.message.toLowerCase().includes("connection reset") ||
+        error.message.includes("os error 104") ||
+        error.message.toLowerCase().includes("broken pipe") ||
+        error.message.toLowerCase().includes("timed out");
+
       if (isTransient && attempt < maxRetries) {
         const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
         console.log(`Waiting ${delay}ms before retry...`);
@@ -112,13 +114,13 @@ async function connectWithRetry(maxRetries = 3): Promise<Client> {
       }
     }
   }
-  throw new Error('Failed to connect after all retries');
+  throw new Error("Failed to connect after all retries");
 }
 
-function getStatusColor(minutes: number): 'healthy' | 'warning' | 'critical' {
-  if (minutes > 60) return 'critical';
-  if (minutes > 5) return 'warning';
-  return 'healthy';
+function getStatusColor(minutes: number): "healthy" | "warning" | "critical" {
+  if (minutes > 60) return "critical";
+  if (minutes > 5) return "warning";
+  return "healthy";
 }
 
 function formatMinutes(minutes: number): string {
@@ -129,43 +131,47 @@ function formatMinutes(minutes: number): string {
 }
 
 function formatDateTime(date: Date): string {
-  return date.toLocaleString('pt-BR', { 
-    timeZone: 'America/Sao_Paulo',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+  return date.toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
 function formatNumber(num: number): string {
-  return num.toLocaleString('pt-BR');
+  return num.toLocaleString("pt-BR");
 }
 
-function getStatusLabel(status: 'healthy' | 'warning' | 'critical'): string {
+function getStatusLabel(status: "healthy" | "warning" | "critical"): string {
   switch (status) {
-    case 'healthy': return 'Atualizado';
-    case 'warning': return 'Verificar';
-    case 'critical': return 'Ação Necessária';
+    case "healthy":
+      return "Atualizado";
+    case "warning":
+      return "Verificar";
+    case "critical":
+      return "Ação Necessária";
   }
 }
 
-const LOGO_URL = 'https://finktakbjcfmurqeiubz.supabase.co/storage/v1/object/public/maritime-files/email-assets/logo-z3us.png';
+const LOGO_URL =
+  "https://finktakbjcfmurqeiubz.supabase.co/storage/v1/object/public/maritime-files/email-assets/logo-z3us.png";
 
 // ========== PDF GENERATION (Same as db-status-report) ==========
 function generatePdfBuffer(stats: TableStats[], timestamp: Date): Uint8Array {
-  const healthyCount = stats.filter(s => s.status === 'healthy').length;
-  const warningCount = stats.filter(s => s.status === 'warning').length;
-  const criticalCount = stats.filter(s => s.status === 'critical').length;
+  const healthyCount = stats.filter((s) => s.status === "healthy").length;
+  const warningCount = stats.filter((s) => s.status === "warning").length;
+  const criticalCount = stats.filter((s) => s.status === "critical").length;
   const totalInserts = stats.reduce((sum, s) => sum + s.recentInserts, 0);
 
   const formattedDate = formatDateTime(timestamp);
 
   const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4'
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
   });
 
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -183,32 +189,35 @@ function generatePdfBuffer(stats: TableStats[], timestamp: Date): Uint8Array {
   const lightGray = [243, 244, 246];
   const borderGray = [229, 231, 235];
 
-  const setColor = (rgb: number[], type: 'fill' | 'text' | 'draw' = 'fill') => {
-    if (type === 'fill') doc.setFillColor(rgb[0], rgb[1], rgb[2]);
-    else if (type === 'text') doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+  const setColor = (rgb: number[], type: "fill" | "text" | "draw" = "fill") => {
+    if (type === "fill") doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+    else if (type === "text") doc.setTextColor(rgb[0], rgb[1], rgb[2]);
     else doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
   };
 
-  const getStatusColorRgb = (status: 'healthy' | 'warning' | 'critical'): number[] => {
+  const getStatusColorRgb = (status: "healthy" | "warning" | "critical"): number[] => {
     switch (status) {
-      case 'healthy': return greenColor;
-      case 'warning': return yellowColor;
-      case 'critical': return redColor;
+      case "healthy":
+        return greenColor;
+      case "warning":
+        return yellowColor;
+      case "critical":
+        return redColor;
     }
   };
 
   // ========== HEADER ==========
-  setColor(dachserYellow, 'fill');
-  doc.rect(0, 0, pageWidth, 35, 'F');
+  setColor(dachserYellow, "fill");
+  doc.rect(0, 0, pageWidth, 35, "F");
 
-  setColor(darkText, 'text');
+  setColor(darkText, "text");
   doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text('RELATÓRIO DE MONITORAMENTO DE DADOS', margin, 15);
+  doc.setFont("helvetica", "bold");
+  doc.text("RELATÓRIO DE MONITORAMENTO DE DADOS", margin, 15);
 
   doc.setFontSize(11);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Sistema Z3US.AI - DACHSER', margin, 22);
+  doc.setFont("helvetica", "normal");
+  doc.text("Sistema Z3US.AI - DACHSER", margin, 22);
 
   doc.setFontSize(9);
   doc.text(`Gerado em: ${formattedDate}`, margin, 29);
@@ -216,82 +225,82 @@ function generatePdfBuffer(stats: TableStats[], timestamp: Date): Uint8Array {
   y = 45;
 
   // ========== RESUMO EXECUTIVO ==========
-  setColor(lightGray, 'fill');
-  setColor(dachserYellow, 'draw');
-  doc.rect(margin, y, pageWidth - margin * 2, 10, 'F');
+  setColor(lightGray, "fill");
+  setColor(dachserYellow, "draw");
+  doc.rect(margin, y, pageWidth - margin * 2, 10, "F");
   doc.setLineWidth(0.8);
   doc.line(margin, y, margin, y + 10);
-  
-  setColor(darkText, 'text');
+
+  setColor(darkText, "text");
   doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.text('RESUMO EXECUTIVO', margin + 5, y + 7);
+  doc.setFont("helvetica", "bold");
+  doc.text("RESUMO EXECUTIVO", margin + 5, y + 7);
   y += 18;
 
   // Summary cards
   const cardWidth = (pageWidth - margin * 2 - 10) / 2;
 
   // Card 1: Processados
-  setColor(borderGray, 'draw');
+  setColor(borderGray, "draw");
   doc.setLineWidth(0.3);
-  doc.roundedRect(margin, y, cardWidth, 28, 3, 3, 'S');
+  doc.roundedRect(margin, y, cardWidth, 28, 3, 3, "S");
 
-  setColor(grayText, 'text');
+  setColor(grayText, "text");
   doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.text('PROCESSADOS NAS ÚLTIMAS 24H', margin + 5, y + 8);
+  doc.setFont("helvetica", "normal");
+  doc.text("PROCESSADOS NAS ÚLTIMAS 24H", margin + 5, y + 8);
 
-  setColor(greenColor, 'text');
+  setColor(greenColor, "text");
   doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont("helvetica", "bold");
   doc.text(`+${formatNumber(totalInserts)}`, margin + 5, y + 22);
 
   // Card 2: Status
   const card2X = margin + cardWidth + 10;
-  setColor(borderGray, 'draw');
-  doc.roundedRect(card2X, y, cardWidth, 28, 3, 3, 'S');
+  setColor(borderGray, "draw");
+  doc.roundedRect(card2X, y, cardWidth, 28, 3, 3, "S");
 
-  setColor(grayText, 'text');
+  setColor(grayText, "text");
   doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.text('SITUAÇÃO DAS ÁREAS', card2X + 5, y + 8);
+  doc.setFont("helvetica", "normal");
+  doc.text("SITUAÇÃO DAS ÁREAS", card2X + 5, y + 8);
 
   // Status indicators
   const statusY = y + 14;
   doc.setFontSize(10);
 
   // Green dot
-  setColor(greenColor, 'fill');
-  doc.circle(card2X + 7, statusY, 2, 'F');
-  setColor(darkText, 'text');
-  doc.setFont('helvetica', 'normal');
+  setColor(greenColor, "fill");
+  doc.circle(card2X + 7, statusY, 2, "F");
+  setColor(darkText, "text");
+  doc.setFont("helvetica", "normal");
   doc.text(`${healthyCount} OK`, card2X + 12, statusY + 1);
 
   // Yellow dot
-  setColor(yellowColor, 'fill');
-  doc.circle(card2X + 35, statusY, 2, 'F');
-  setColor(darkText, 'text');
+  setColor(yellowColor, "fill");
+  doc.circle(card2X + 35, statusY, 2, "F");
+  setColor(darkText, "text");
   doc.text(`${warningCount} Atenção`, card2X + 40, statusY + 1);
 
   // Red dot
-  setColor(redColor, 'fill');
-  doc.circle(card2X + 7, statusY + 8, 2, 'F');
-  setColor(darkText, 'text');
+  setColor(redColor, "fill");
+  doc.circle(card2X + 7, statusY + 8, 2, "F");
+  setColor(darkText, "text");
   doc.text(`${criticalCount} Crítico`, card2X + 12, statusY + 9);
 
   y += 38;
 
   // ========== SITUAÇÃO POR ÁREA ==========
-  setColor(lightGray, 'fill');
-  setColor(dachserYellow, 'draw');
-  doc.rect(margin, y, pageWidth - margin * 2, 10, 'F');
+  setColor(lightGray, "fill");
+  setColor(dachserYellow, "draw");
+  doc.rect(margin, y, pageWidth - margin * 2, 10, "F");
   doc.setLineWidth(0.8);
   doc.line(margin, y, margin, y + 10);
-  
-  setColor(darkText, 'text');
+
+  setColor(darkText, "text");
   doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.text('SITUAÇÃO POR ÁREA', margin + 5, y + 7);
+  doc.setFont("helvetica", "bold");
+  doc.text("SITUAÇÃO POR ÁREA", margin + 5, y + 7);
   y += 16;
 
   // Area cards
@@ -301,21 +310,25 @@ function generatePdfBuffer(stats: TableStats[], timestamp: Date): Uint8Array {
       y = 20;
     }
 
-    setColor(borderGray, 'draw');
+    setColor(borderGray, "draw");
     doc.setLineWidth(0.3);
-    doc.roundedRect(margin, y, pageWidth - margin * 2, 18, 2, 2, 'S');
+    doc.roundedRect(margin, y, pageWidth - margin * 2, 18, 2, 2, "S");
 
     // Area name
-    setColor(darkText, 'text');
+    setColor(darkText, "text");
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont("helvetica", "bold");
     doc.text(stat.businessName, margin + 5, y + 7);
 
     // Last update
-    setColor(grayText, 'text');
+    setColor(grayText, "text");
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Última atualização: ${stat.lastUpdate ? formatMinutes(stat.minutesSinceUpdate) : 'Nunca'}`, margin + 5, y + 14);
+    doc.setFont("helvetica", "normal");
+    doc.text(
+      `Última atualização: ${stat.lastUpdate ? formatMinutes(stat.minutesSinceUpdate) : "Nunca"}`,
+      margin + 5,
+      y + 14,
+    );
 
     // Status badge
     const statusColor = getStatusColorRgb(stat.status);
@@ -323,24 +336,24 @@ function generatePdfBuffer(stats: TableStats[], timestamp: Date): Uint8Array {
     const badgeX = pageWidth - margin - 55;
 
     // Badge background
-    const badgeBgColor = stat.status === 'healthy' ? [220, 252, 231] :
-                         stat.status === 'warning' ? [254, 243, 199] : [254, 226, 226];
-    setColor(badgeBgColor, 'fill');
-    doc.roundedRect(badgeX, y + 2, 50, 7, 2, 2, 'F');
+    const badgeBgColor =
+      stat.status === "healthy" ? [220, 252, 231] : stat.status === "warning" ? [254, 243, 199] : [254, 226, 226];
+    setColor(badgeBgColor, "fill");
+    doc.roundedRect(badgeX, y + 2, 50, 7, 2, 2, "F");
 
     // Badge text
-    const badgeTextColor = stat.status === 'healthy' ? [22, 101, 52] :
-                           stat.status === 'warning' ? [146, 64, 14] : [153, 27, 27];
-    setColor(badgeTextColor, 'text');
+    const badgeTextColor =
+      stat.status === "healthy" ? [22, 101, 52] : stat.status === "warning" ? [146, 64, 14] : [153, 27, 27];
+    setColor(badgeTextColor, "text");
     doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.text(statusLabel, badgeX + 25, y + 7, { align: 'center' });
+    doc.setFont("helvetica", "bold");
+    doc.text(statusLabel, badgeX + 25, y + 7, { align: "center" });
 
     // Inserts count
-    setColor(greenColor, 'text');
+    setColor(greenColor, "text");
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`+${formatNumber(stat.recentInserts)} processados`, badgeX + 25, y + 14, { align: 'center' });
+    doc.setFont("helvetica", "bold");
+    doc.text(`+${formatNumber(stat.recentInserts)} processados`, badgeX + 25, y + 14, { align: "center" });
 
     y += 22;
   });
@@ -353,16 +366,16 @@ function generatePdfBuffer(stats: TableStats[], timestamp: Date): Uint8Array {
     y = 20;
   }
 
-  setColor(lightGray, 'fill');
-  setColor(dachserYellow, 'draw');
-  doc.rect(margin, y, pageWidth - margin * 2, 10, 'F');
+  setColor(lightGray, "fill");
+  setColor(dachserYellow, "draw");
+  doc.rect(margin, y, pageWidth - margin * 2, 10, "F");
   doc.setLineWidth(0.8);
   doc.line(margin, y, margin, y + 10);
-  
-  setColor(darkText, 'text');
+
+  setColor(darkText, "text");
   doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.text('O QUE CADA ÁREA REPRESENTA', margin + 5, y + 7);
+  doc.setFont("helvetica", "bold");
+  doc.text("O QUE CADA ÁREA REPRESENTA", margin + 5, y + 7);
   y += 15;
 
   stats.forEach((stat) => {
@@ -371,13 +384,13 @@ function generatePdfBuffer(stats: TableStats[], timestamp: Date): Uint8Array {
       y = 20;
     }
 
-    setColor(darkText, 'text');
+    setColor(darkText, "text");
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont("helvetica", "bold");
     doc.text(`• ${stat.businessName}:`, margin + 3, y);
 
-    setColor(grayText, 'text');
-    doc.setFont('helvetica', 'normal');
+    setColor(grayText, "text");
+    doc.setFont("helvetica", "normal");
     const descLines = doc.splitTextToSize(stat.businessDescription, pageWidth - margin * 2 - 50);
     doc.text(descLines, margin + 45, y);
     y += descLines.length * 5 + 3;
@@ -391,77 +404,82 @@ function generatePdfBuffer(stats: TableStats[], timestamp: Date): Uint8Array {
     y = 20;
   }
 
-  setColor(lightGray, 'fill');
-  setColor(dachserYellow, 'draw');
-  doc.rect(margin, y, pageWidth - margin * 2, 10, 'F');
+  setColor(lightGray, "fill");
+  setColor(dachserYellow, "draw");
+  doc.rect(margin, y, pageWidth - margin * 2, 10, "F");
   doc.setLineWidth(0.8);
   doc.line(margin, y, margin, y + 10);
-  
-  setColor(darkText, 'text');
+
+  setColor(darkText, "text");
   doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.text('LEGENDA DE STATUS', margin + 5, y + 7);
+  doc.setFont("helvetica", "bold");
+  doc.text("LEGENDA DE STATUS", margin + 5, y + 7);
   y += 15;
 
   const legendItems = [
-    { color: greenColor, label: 'Atualizado', desc: 'Dados recebidos nos últimos 5 minutos' },
-    { color: yellowColor, label: 'Verificar', desc: 'Sem atualização entre 5 e 60 minutos' },
-    { color: redColor, label: 'Ação Necessária', desc: 'Sem atualização há mais de 60 minutos' },
+    { color: greenColor, label: "Atualizado", desc: "Dados recebidos nos últimos 5 minutos" },
+    { color: yellowColor, label: "Verificar", desc: "Sem atualização entre 5 e 60 minutos" },
+    { color: redColor, label: "Ação Necessária", desc: "Sem atualização há mais de 60 minutos" },
   ];
 
   legendItems.forEach((item) => {
-    setColor(item.color, 'fill');
-    doc.circle(margin + 5, y, 2.5, 'F');
+    setColor(item.color, "fill");
+    doc.circle(margin + 5, y, 2.5, "F");
 
-    setColor(darkText, 'text');
+    setColor(darkText, "text");
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont("helvetica", "bold");
     doc.text(item.label, margin + 12, y + 1);
 
-    setColor(grayText, 'text');
-    doc.setFont('helvetica', 'normal');
+    setColor(grayText, "text");
+    doc.setFont("helvetica", "normal");
     doc.text(item.desc, margin + 50, y + 1);
     y += 8;
   });
 
   // ========== FOOTER ==========
   y = pageHeight - 15;
-  setColor(borderGray, 'draw');
+  setColor(borderGray, "draw");
   doc.setLineWidth(0.3);
   doc.line(margin, y - 5, pageWidth - margin, y - 5);
 
-  setColor(grayText, 'text');
+  setColor(grayText, "text");
   doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Sistema Z3US.AI • Monitoramento de Dados • DACHSER', pageWidth / 2, y, { align: 'center' });
+  doc.setFont("helvetica", "normal");
+  doc.text("Sistema Z3US.AI • Monitoramento de Dados • DACHSER", pageWidth / 2, y, { align: "center" });
 
-  const pdfOutput = doc.output('arraybuffer');
+  const pdfOutput = doc.output("arraybuffer");
   return new Uint8Array(pdfOutput);
 }
 
 function generateCriticalAlertHtml(stats: TableStats[], criticalTables: TableStats[], timestamp: Date): string {
-  const healthyCount = stats.filter(s => s.status === 'healthy').length;
-  const warningCount = stats.filter(s => s.status === 'warning').length;
-  const criticalCount = stats.filter(s => s.status === 'critical').length;
+  const healthyCount = stats.filter((s) => s.status === "healthy").length;
+  const warningCount = stats.filter((s) => s.status === "warning").length;
+  const criticalCount = stats.filter((s) => s.status === "critical").length;
 
   const formattedDate = formatDateTime(timestamp);
 
-  const getStatusTextColor = (status: 'healthy' | 'warning' | 'critical') => {
+  const getStatusTextColor = (status: "healthy" | "warning" | "critical") => {
     switch (status) {
-      case 'healthy': return '#22c55e';
-      case 'warning': return '#F5B843';
-      case 'critical': return '#ef4444';
+      case "healthy":
+        return "#22c55e";
+      case "warning":
+        return "#F5B843";
+      case "critical":
+        return "#ef4444";
     }
   };
 
-  const tableRows = stats.map(stat => `
+  const tableRows = stats
+    .map(
+      (stat) => `
     <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
       <td style="padding: 16px; color: #ffffff; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
         <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: ${getStatusTextColor(stat.status)}; margin-right: 10px; box-shadow: 0 0 8px ${getStatusTextColor(stat.status)};"></span>
         ${stat.businessName}
       </td>
-      <td style="padding: 16px; text-align: center; color: ${stat.minutesSinceUpdate >= 30 ? '#F5B843' : '#B3B3B3'}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-        ${stat.lastUpdate ? formatMinutes(stat.minutesSinceUpdate) : 'N/A'}
+      <td style="padding: 16px; text-align: center; color: ${stat.minutesSinceUpdate >= 30 ? "#F5B843" : "#B3B3B3"}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        ${stat.lastUpdate ? formatMinutes(stat.minutesSinceUpdate) : "N/A"}
       </td>
       <td style="padding: 16px; text-align: right; color: #B3B3B3; font-family: 'Monaco', 'Menlo', monospace;">
         ${formatNumber(stat.totalRecords)}
@@ -472,9 +490,11 @@ function generateCriticalAlertHtml(stats: TableStats[], criticalTables: TableSta
         </span>
       </td>
     </tr>
-  `).join('');
+  `,
+    )
+    .join("");
 
-  const criticalTableNames = criticalTables.map(t => t.businessName).join(', ');
+  const criticalTableNames = criticalTables.map((t) => t.businessName).join(", ");
 
   return `
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
@@ -522,7 +542,7 @@ function generateCriticalAlertHtml(stats: TableStats[], criticalTables: TableSta
                           <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                             <tr>
                               <td style="background-color: rgba(239, 68, 68, 0.2); color: #ef4444; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                                ${criticalCount} Tabela${criticalCount > 1 ? 's' : ''} Crítica${criticalCount > 1 ? 's' : ''}
+                                ${criticalCount} Tabela${criticalCount > 1 ? "s" : ""} Crítica${criticalCount > 1 ? "s" : ""}
                               </td>
                             </tr>
                           </table>
@@ -636,7 +656,7 @@ function generateCriticalAlertHtml(stats: TableStats[], criticalTables: TableSta
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
@@ -647,7 +667,7 @@ serve(async (req) => {
     const testMode = body.test === true;
     const forceAlert = body.force === true;
 
-    console.log(`Running db-critical-alert in ${testMode ? 'TEST' : 'PRODUCTION'} mode`);
+    console.log(`Running db-critical-alert in ${testMode ? "TEST" : "PRODUCTION"} mode`);
 
     const recipients = testMode ? TEST_RECIPIENTS : PRODUCTION_RECIPIENTS;
 
@@ -670,7 +690,7 @@ serve(async (req) => {
       `);
     } catch (err) {
       const createError = err as Error;
-      console.warn('Could not create alerts table (may already exist):', createError.message);
+      console.warn("Could not create alerts table (may already exist):", createError.message);
     }
 
     // Ensure recovered_at column exists (for existing tables)
@@ -680,7 +700,7 @@ serve(async (req) => {
         ADD COLUMN IF NOT EXISTS recovered_at TIMESTAMP NULL DEFAULT NULL
       `);
     } catch (err) {
-      console.log('recovered_at column check completed');
+      console.log("recovered_at column check completed");
     }
 
     // Get FULL stats for all tables (same as db-status-report)
@@ -696,12 +716,12 @@ serve(async (req) => {
             TIMESTAMPDIFF(MINUTE, MAX(data_insert), NOW()) as minutes_since_update
           FROM ${tableConfig.name}
         `;
-        
+
         const result = await client.query(query);
         const row = result[0] || {};
-        
+
         const minutesSinceUpdate = row.minutes_since_update ?? 9999;
-        
+
         allStats.push({
           name: tableConfig.name,
           displayName: tableConfig.displayName,
@@ -727,40 +747,46 @@ serve(async (req) => {
           totalRecords: 0,
           recentInserts: 0,
           minutesSinceUpdate: 9999,
-          status: 'critical',
+          status: "critical",
         });
       }
     }
 
     // Filter critical tables (60+ minutes without update)
-    const criticalTables = allStats.filter(t => t.minutesSinceUpdate >= CRITICAL_THRESHOLD_MINUTES);
+    const criticalTables = allStats.filter((t) => t.minutesSinceUpdate >= CRITICAL_THRESHOLD_MINUTES);
 
     if (criticalTables.length === 0) {
       await client.close();
-      console.log('No critical tables found. No alert needed.');
-      return new Response(JSON.stringify({
-        success: true,
-        message: 'No critical tables found',
-        criticalCount: 0,
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      console.log("No critical tables found. No alert needed.");
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "No critical tables found",
+          criticalCount: 0,
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     // Mark any recovered tables
     for (const tableConfig of TABLES_CONFIG) {
-      const isCurrentlyCritical = criticalTables.some(t => t.name === tableConfig.name);
-      
+      const isCurrentlyCritical = criticalTables.some((t) => t.name === tableConfig.name);
+
       if (!isCurrentlyCritical) {
         try {
-          const updateResult = await client.execute(`
+          const updateResult = await client.execute(
+            `
             UPDATE ai_agente.t_db_monitor_alerts 
             SET recovered_at = NOW()
             WHERE alert_type = 'critical_alert' 
               AND table_name = ?
               AND recovered_at IS NULL
-          `, [tableConfig.name]);
-          
+          `,
+            [tableConfig.name],
+          );
+
           if (updateResult.affectedRows && updateResult.affectedRows > 0) {
             console.log(`Marked table ${tableConfig.name} as RECOVERED`);
           }
@@ -775,7 +801,7 @@ serve(async (req) => {
     const newCriticalTables: TableStats[] = [];
 
     if (forceAlert) {
-      console.log('Force mode enabled - treating all critical tables as new');
+      console.log("Force mode enabled - treating all critical tables as new");
       newCriticalTables.push(...criticalTables);
     } else {
       for (const table of criticalTables) {
@@ -789,9 +815,9 @@ serve(async (req) => {
             ORDER BY sent_at DESC
             LIMIT 1
           `;
-          
+
           const unresolvedAlerts = await client.query(checkQuery, [table.name]);
-          
+
           if (unresolvedAlerts.length === 0) {
             newCriticalTables.push(table);
             console.log(`Table ${table.name} is NEW in critical status`);
@@ -809,40 +835,43 @@ serve(async (req) => {
     // Only send alert if there are NEW critical tables
     if (newCriticalTables.length === 0) {
       await client.close();
-      console.log('No NEW critical tables detected.');
-      return new Response(JSON.stringify({
-        success: true,
-        message: 'No new critical tables - all were already alerted',
-        criticalCount: criticalTables.length,
-        newCriticalCount: 0,
-        alertedCount: 0,
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      console.log("No NEW critical tables detected.");
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "No new critical tables - all were already alerted",
+          criticalCount: criticalTables.length,
+          newCriticalCount: 0,
+          alertedCount: 0,
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     console.log(`Found ${newCriticalTables.length} NEW critical table(s). Sending alert.`);
 
     const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const timeStr = now.toTimeString().slice(0, 5).replace(':', '');
-    
+    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "");
+    const timeStr = now.toTimeString().slice(0, 5).replace(":", "");
+
     // Generate email HTML with critical alert styling but full table data
     const emailHtml = generateCriticalAlertHtml(allStats, criticalTables, now);
-    
+
     // Generate PDF using the SAME format as db-status-report (full report PDF)
     const pdfBuffer = generatePdfBuffer(allStats, now);
-    console.log('Generated report PDF buffer length:', pdfBuffer.length);
+    console.log("Generated report PDF buffer length:", pdfBuffer.length);
 
-    const resendApiKey = Deno.env.get('RESEND_API_KEY');
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
     if (!resendApiKey) {
-      throw new Error('RESEND_API_KEY not configured');
+      throw new Error("RESEND_API_KEY not configured");
     }
 
     const resend = new Resend(resendApiKey);
 
-    const tableNames = criticalTables.map(t => t.businessName).join(', ');
-    
+    const tableNames = criticalTables.map((t) => t.businessName).join(", ");
+
     // Create attachments array with PDF (same filename format as report)
     const attachments = [
       {
@@ -851,25 +880,31 @@ serve(async (req) => {
       },
     ];
 
-    console.log('Sending critical alert email with report PDF:', attachments.map(a => ({ filename: a.filename, contentLength: a.content.length })));
+    console.log(
+      "Sending critical alert email with report PDF:",
+      attachments.map((a) => ({ filename: a.filename, contentLength: a.content.length })),
+    );
 
     const emailResponse = await resend.emails.send({
-      from: 'Z3US Monitor <noreply@hermes.z3us.ai>',
+      from: "Z3US Monitor <noreply@hermes.z3us.ai>",
       to: recipients,
       subject: `🚨 ALERTA CRÍTICO - Banco de Dados: ${tableNames}`,
       html: emailHtml,
       attachments: attachments,
     });
 
-    console.log('Critical alert email sent successfully with report PDF:', emailResponse);
+    console.log("Critical alert email sent successfully with report PDF:", emailResponse);
 
     // Log the alerts to database
     for (const table of newCriticalTables) {
       try {
-        await client.execute(`
+        await client.execute(
+          `
           INSERT INTO ai_agente.t_db_monitor_alerts (alert_type, table_name, tables_affected, sent_to)
           VALUES ('critical_alert', ?, ?, ?)
-        `, [table.name, JSON.stringify(criticalTables.map(t => t.name)), JSON.stringify(recipients)]);
+        `,
+          [table.name, JSON.stringify(criticalTables.map((t) => t.name)), JSON.stringify(recipients)],
+        );
       } catch (err) {
         const logError = err as Error;
         console.warn(`Could not log alert for ${table.name}:`, logError.message);
@@ -879,31 +914,40 @@ serve(async (req) => {
     await client.close();
     client = null;
 
-    return new Response(JSON.stringify({
-      success: true,
-      message: 'Critical alert sent successfully',
-      recipients,
-      criticalCount: criticalTables.length,
-      newCriticalCount: newCriticalTables.length,
-      alertedTables: criticalTables.map(t => ({ name: t.name, minutesSinceUpdate: t.minutesSinceUpdate })),
-      newTables: newCriticalTables.map(t => t.name),
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: "Critical alert sent successfully",
+        recipients,
+        criticalCount: criticalTables.length,
+        newCriticalCount: newCriticalTables.length,
+        alertedTables: criticalTables.map((t) => ({ name: t.name, minutesSinceUpdate: t.minutesSinceUpdate })),
+        newTables: newCriticalTables.map((t) => t.name),
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (error) {
-    console.error('Error in db-critical-alert:', error);
+    console.error("Error in db-critical-alert:", error);
 
     if (client) {
-      try { await client.close(); } catch (e) { console.error('Error closing connection:', e); }
+      try {
+        await client.close();
+      } catch (e) {
+        console.error("Error closing connection:", e);
+      }
     }
 
-    return new Response(JSON.stringify({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });
