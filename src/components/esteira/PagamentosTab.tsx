@@ -321,7 +321,8 @@ export const PagamentosTab = () => {
       });
       if (error) throw error;
       toast({ title: "Tipo de execução atualizado" });
-      loadPagamentos();
+      // Local state update instead of full reload for performance
+      setPagamentos(prev => prev.map(p => p.id === id ? { ...p, tipo_execucao_pagamento: tipo } : p));
     } catch (error: unknown) {
       toast({ 
         title: "Erro ao atualizar", 
@@ -366,6 +367,16 @@ export const PagamentosTab = () => {
       toast({ 
         title: "Tipo de execução obrigatório", 
         description: "Defina o tipo de execução (Manual ou Remessa) antes de marcar como pronto",
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    // Bloquear se tipo for A_DEFINIR
+    if (isReady && tipoExecucao === "A_DEFINIR") {
+      toast({ 
+        title: "Defina o tipo de execução", 
+        description: "'A definir' não é permitido para marcar como pronto. Selecione Manual ou Remessa.",
         variant: "destructive" 
       });
       return;
