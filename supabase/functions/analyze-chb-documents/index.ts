@@ -59,34 +59,36 @@ async function extractTextWithOCR(
   mimeType: string,
   fileName: string
 ): Promise<OcrResult> {
-  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   
   console.log(`[OCR] Starting extraction for ${fileName} (${mimeType})`);
   
-  // For PDFs, try native extraction first using Gemini's inline_data (which does basic text extraction)
-  // Then validate if the extracted text is meaningful
+  // For PDFs, try native extraction first using Lovable AI Gateway
   
   if (mimeType === 'application/pdf') {
-    // Use Gemini Vision to extract text - it handles both native PDFs and scanned/image PDFs
-    console.log(`[OCR] Using Gemini Vision for PDF: ${fileName}`);
+    console.log(`[OCR] Using Lovable AI Gateway for PDF: ${fileName}`);
     
-    if (!geminiApiKey) {
-      console.error('[OCR] GEMINI_API_KEY not configured');
+    if (!LOVABLE_API_KEY) {
+      console.error('[OCR] LOVABLE_API_KEY not configured');
       return { text: '', method: 'vision-ocr', confidence: 'low' };
     }
     
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                {
-                  text: `Extraia TODO o texto deste documento PDF de forma precisa e completa.
-                  
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Extraia TODO o texto deste documento PDF de forma precisa e completa.
+                   
 INSTRUÇÕES CRÍTICAS:
 1. Extraia CADA palavra, número e símbolo exatamente como aparecem
 2. Mantenha a estrutura do documento (parágrafos, listas, tabelas)
@@ -97,31 +99,26 @@ INSTRUÇÕES CRÍTICAS:
 7. Para documentos em português, mantenha acentuação correta
 
 Retorne APENAS o texto extraído, sem explicações ou marcadores adicionais.`
-                },
-                {
-                  inline_data: {
-                    mime_type: 'application/pdf',
-                    data: base64Content,
-                  },
-                },
-              ],
-            }],
-            generationConfig: {
-              maxOutputTokens: 16000,
-              temperature: 0.1,
-            },
-          }),
-        }
-      );
+              },
+              {
+                type: 'image_url',
+                image_url: { url: `data:application/pdf;base64,${base64Content}` },
+              },
+            ],
+          }],
+          max_tokens: 32000,
+          temperature: 0.1,
+        }),
+      });
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[OCR] Gemini Vision error for ${fileName}:`, response.status, errorText);
+        console.error(`[OCR] AI Gateway error for ${fileName}:`, response.status, errorText);
         return { text: '', method: 'vision-ocr', confidence: 'low' };
       }
       
       const result = await response.json();
-      const extractedText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const extractedText = result.choices?.[0]?.message?.content || '';
       
       // Validate extraction quality
       const hasGoodText = extractedText.length > 100 &&
