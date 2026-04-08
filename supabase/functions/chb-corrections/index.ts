@@ -757,36 +757,64 @@ serve(async (req) => {
         }
 
         // ============================================================================
-        // PARALLEL RE-EXTRACTION: When location not found, trigger deep analysis
+        // SYNCHRONOUS RE-EXTRACTION: When Stage 1 fails, run Pro before responding
         // ============================================================================
         if (!locationResult.found && effectiveFileContent) {
-          console.log(`[chb-corrections] Location not found, starting parallel re-extraction for correction ${correctionId}`);
+          console.log(`[chb-corrections] Stage 1 location not found, running synchronous re-extraction (Pro) for correction ${correctionId}`);
           
-          // Dispatch parallel re-extraction (non-blocking)
-          // deno-lint-ignore no-explicit-any
-          const edgeRuntime = (globalThis as any).EdgeRuntime;
-          if (edgeRuntime?.waitUntil) {
-            edgeRuntime.waitUntil(
-              reextractAndUpdateCorrection(
-                correctionId,
-                item_id,
-                filename,
-                field_name,
-                corrected_value,
-                effectiveFileContent
-              )
-            );
-            console.log(`[chb-corrections] Parallel re-extraction dispatched for correction ${correctionId}`);
-          } else {
-            // Fallback: run async without waiting (best effort)
-            reextractAndUpdateCorrection(
-              correctionId,
-              item_id,
+          try {
+            const reextResult = await reextractFieldWithContext(
               filename,
               field_name,
               corrected_value,
               effectiveFileContent
-            ).catch(err => console.error('[chb-corrections] Re-extraction error:', err));
+            );
+
+            if (reextResult.success && reextResult.found) {
+              console.log(`[chb-corrections] Re-extraction found! Location: ${reextResult.location}, confidence: ${reextResult.confidence}`);
+              
+              // Update locationResult so the response includes the correct data
+              locationResult = {
+                found: true,
+                location: reextResult.location,
+                context: reextResult.nearbyText,
+                confidence: reextResult.confidence
+              };
+
+              // Update the correction in DB with better location
+              await client.execute(`
+                UPDATE ai_agente.t_dachser_chb_user_corrections
+                SET location_reference = ?,
+                    location_context = ?,
+                    location_confidence = ?,
+                    updated_at = NOW()
+                WHERE id = ?
+              `, [
+                reextResult.location,
+                reextResult.nearbyText,
+                reextResult.confidence,
+                correctionId
+              ]);
+
+              // Save extraction rule for future learning
+              const docType = detectDocumentType(filename);
+              await saveExtractionRule(
+                client,
+                field_name,
+                docType,
+                reextResult.pattern,
+                reextResult.extractionHint,
+                corrected_value,
+                reextResult.processingInstruction
+              );
+              
+              console.log(`[chb-corrections] Correction ${correctionId} updated with re-extraction result and extraction rule saved`);
+            } else {
+              console.log(`[chb-corrections] Re-extraction did not find value for correction ${correctionId}`);
+            }
+          } catch (reextError) {
+            console.error(`[chb-corrections] Synchronous re-extraction error:`, reextError);
+            // Continue — correction was already saved, just without location
           }
         }
 
