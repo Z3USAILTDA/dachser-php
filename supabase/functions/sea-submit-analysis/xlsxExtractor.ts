@@ -680,7 +680,7 @@ export async function extractXlsxWithLLM(fileUrl: string, fileName: string): Pro
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 8192,
+        max_tokens: 32000,
         messages: [
           {
             role: 'user',
