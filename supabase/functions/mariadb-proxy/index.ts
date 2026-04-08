@@ -2363,7 +2363,7 @@ Deno.serve(async (req) => {
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN t.valor_nf ELSE 0 END) AS aging_360,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 360 THEN t.valor_nf ELSE 0 END) AS aging_360_plus,
             COUNT(*) AS total_count,
-            MAX(t.condicao_pagamento) AS condicao_pagamento,
+            MAX(t.condicao_pag) AS condicao_pagamento,
             MAX(t.nome_vendedor) AS nome_vendedor
           FROM dados_dachser.t_dados_financeiro_nfs t
           LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
@@ -2449,7 +2449,7 @@ Deno.serve(async (req) => {
             DATE_FORMAT(t.data_emissao, '%d/%m/%Y') AS data_emissao,
             t.valor_nf,
             COALESCE(t.disputa, 0) AS disputa,
-            t.condicao_pagamento,
+            t.condicao_pag AS condicao_pagamento,
             t.nome_vendedor,
             n.numero_processo
           FROM dados_dachser.t_dados_financeiro_nfs t
@@ -2704,7 +2704,7 @@ Deno.serve(async (req) => {
             CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo_pagto,
             t.valor_nf,
             t.cnpj,
-            t.condicao_pagamento,
+            t.condicao_pag AS condicao_pagamento,
             t.nome_vendedor
           FROM dados_dachser.t_dados_financeiro_nfs t
           LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
