@@ -29,6 +29,8 @@ interface CnpjDetail {
   aging_360: number;
   aging_360_plus: number;
   totalCount: number;
+  condicao_pagamento: string | null;
+  nome_vendedor: string | null;
 }
 
 interface Observacao {
@@ -262,7 +264,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                     })}
                   </div>
 
-                  <div className="flex justify-between text-xs text-muted-foreground">
+                  <div className="flex flex-wrap justify-between text-xs text-muted-foreground gap-x-4 gap-y-1">
                     <span>Total: {formatBRL(cnpjTotal)}</span>
                     {overdue > 0 && (
                       <span className="text-red-400 flex items-center gap-1">
@@ -270,6 +272,18 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                       </span>
                     )}
                   </div>
+
+                  {/* Cond. Pagamento & Vendedor */}
+                  {(cnpj.condicao_pagamento || cnpj.nome_vendedor) && (
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      {cnpj.condicao_pagamento && (
+                        <span><strong className="text-foreground">Cond. Pagamento:</strong> {cnpj.condicao_pagamento}</span>
+                      )}
+                      {cnpj.nome_vendedor && (
+                        <span><strong className="text-foreground">Vendedor:</strong> {cnpj.nome_vendedor}</span>
+                      )}
+                    </div>
+                  )}
 
                   {/* Observação */}
                   <div className="space-y-1">
