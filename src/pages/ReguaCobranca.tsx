@@ -314,7 +314,7 @@ Financeiro Dachser`;
   };
 
   const handleSendAgingCliente = (cliente: ClienteResumo) => {
-    const row = {
+    const row: StageRow = {
       razao_base: cliente.razao_base,
       razao_social: cliente.razao_social,
       cnpj: cliente.cnpj,
@@ -323,7 +323,9 @@ Financeiro Dachser`;
       data_venc_br: "",
       dias: 0,
       tipo_pagto: "",
-      valor_br: ""
+      valor_br: "",
+      condicao_pagamento: "",
+      nome_vendedor: ""
     };
     setSelectedRow(row);
     setAgingEmailText(getDefaultAgingText(cliente.cnpj));
