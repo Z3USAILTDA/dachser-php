@@ -146,6 +146,8 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   const [docPreviewVoucherId, setDocPreviewVoucherId] = useState<string | null>(null);
   const [docPreviewAnexos, setDocPreviewAnexos] = useState<any[]>([]);
   const [docPreviewLoading, setDocPreviewLoading] = useState(false);
+  const masterChildrenCache = useRef<Map<string, string[]>>(new Map());
+  const [masterChildrenMap, setMasterChildrenMap] = useState<Map<string, string[]>>(new Map());
 
   const handleRetornarPendente = async (justificativa: string) => {
     if (!selectedVoucherForRetorno) return;
