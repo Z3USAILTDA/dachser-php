@@ -1247,7 +1247,7 @@ const EsteiraIndex = () => {
       if (filters.search) {
         const searchLower = filters.search.toLowerCase().trim();
         const spoMatch = voucher.numeroSPO.toLowerCase().startsWith(searchLower);
-        const masterNameMatch = voucher.nomeMaster?.toLowerCase().includes(searchLower);
+        const masterNameMatch = voucher.nomeMaster?.toLowerCase().startsWith(searchLower);
         if (!spoMatch && !masterNameMatch) return false;
       }
 
