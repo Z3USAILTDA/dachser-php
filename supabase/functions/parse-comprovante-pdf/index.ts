@@ -206,9 +206,9 @@ serve(async (req) => {
     // If filename didn't work, use Lovable AI to extract from PDF content
     console.log('Filename extraction failed, attempting AI content extraction...');
 
-    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-    if (!GEMINI_API_KEY) {
-      console.warn('GEMINI_API_KEY not configured, returning filename-only result');
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      console.warn('LOVABLE_API_KEY not configured, returning filename-only result');
       return new Response(
         JSON.stringify({ success: true, data: filenameResult }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -238,35 +238,31 @@ serve(async (req) => {
     }`;
 
     try {
-      const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`, {
+      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          contents: [
-            { 
-              role: 'user', 
-              parts: [
-                { text: prompt },
-                { 
-                  inline_data: { 
-                    mime_type: 'application/pdf',
-                    data: pdfBase64.substring(0, 50000)
-                  }
-                }
-              ]
-            }
-          ],
-          generationConfig: {
-            maxOutputTokens: 1000,
-          },
+          model: 'google/gemini-2.5-flash',
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              {
+                type: 'image_url',
+                image_url: { url: `data:application/pdf;base64,${pdfBase64.substring(0, 50000)}` },
+              },
+            ],
+          }],
+          max_tokens: 8000,
         }),
       });
 
       if (aiResponse.ok) {
         const aiData = await aiResponse.json();
-        const content = aiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const content = aiData.choices?.[0]?.message?.content || '';
         
         // Try to parse JSON from the response
         const jsonMatch = content.match(/\{[\s\S]*\}/);
