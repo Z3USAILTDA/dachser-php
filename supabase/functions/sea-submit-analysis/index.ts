@@ -272,9 +272,9 @@ function validateAndCorrectNcmAnalysis(
  * This is used as fallback when native PDF text extraction fails
  */
 async function extractTextViaVisionAPI(pdfBase64: string, fileName: string): Promise<string> {
-  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-  if (!geminiApiKey) {
-    console.warn('⚠️ [OCR] GEMINI_API_KEY not configured, cannot perform OCR');
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) {
+    console.warn('⚠️ [OCR] LOVABLE_API_KEY not configured, cannot perform OCR');
     return '';
   }
   
@@ -282,17 +282,20 @@ async function extractTextViaVisionAPI(pdfBase64: string, fileName: string): Pro
   const startTime = Date.now();
   
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=${geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            role: 'user',
-            parts: [
-              { 
-                text: `Extract ALL text from this PDF document. This is a Bill of Lading document.
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [{
+          role: 'user',
+          content: [
+            { 
+              type: 'text',
+              text: `Extract ALL text from this PDF document. This is a Bill of Lading document.
 
 CRITICAL: Focus on extracting these elements with EXACT values:
 1. NCM CODES - Look for sections labeled "NCM-CODES:", "NCM:", "NCM CODE:" - extract ALL 4-digit and 8-digit codes
@@ -314,32 +317,31 @@ IMPORTANT:
 
 Output the raw text content, preserving the structure and layout as much as possible.
 Format NCM codes as a comma-separated list when you find them.`
-              },
-              { inline_data: { mime_type: 'application/pdf', data: pdfBase64 } }
-            ]
-          }],
-          generationConfig: { 
-            maxOutputTokens: 12000,
-            temperature: 0.1
-          }
-        })
-      }
-    );
+            },
+            {
+              type: 'image_url',
+              image_url: { url: `data:application/pdf;base64,${pdfBase64}` },
+            },
+          ],
+        }],
+        max_tokens: 32000,
+        temperature: 0.1,
+      }),
+    });
     
     const elapsed = Date.now() - startTime;
     
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
-      console.error(`❌ [OCR] Vision API failed: ${response.status} - ${errorText.substring(0, 200)}`);
+      console.error(`❌ [OCR] AI Gateway failed: ${response.status} - ${errorText.substring(0, 200)}`);
       return '';
     }
     
     const data = await response.json();
-    const extractedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const extractedText = data.choices?.[0]?.message?.content || '';
     
     console.log(`✅ [OCR] Extracted ${extractedText.length} chars from ${fileName} in ${elapsed}ms`);
     
-    // Log if NCM codes were found
     const ncmMatches = extractedText.match(/NCM[:\s-]*(\d{4,8})/gi) || [];
     console.log(`🔍 [OCR] Found ${ncmMatches.length} potential NCM codes in extracted text`);
     
@@ -951,8 +953,8 @@ async function analyzeWithGeminiPro(
   approvedExamplesText: string = '',
   analysisType: string = ''
 ): Promise<{ text: string; model: string }> {
-  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-  if (!geminiApiKey) throw new Error('GEMINI_API_KEY not configured');
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
   
   let fullPrompt = prompt;
   
@@ -967,18 +969,15 @@ async function analyzeWithGeminiPro(
     fullPrompt += `\n\n=== CONTEÚDO DO MANIFESTO (extraído do arquivo XLSX) ===\n${manifestText}\n=== FIM DO MANIFESTO ===`;
   }
   
-  // Add shipping data extraction instructions based on analysis type
   fullPrompt += getShippingDataExtractionInstructions(analysisType);
   
-  console.log(`🔄 Fallback: Calling Gemini Pro API directly with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars)`);
+  console.log(`🔄 Fallback: Calling Lovable AI Gateway (gemini-2.5-pro) with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars)`);
   
-  // Build parts for Gemini native format
-  const parts: any[] = [{ text: fullPrompt }];
+  const contentParts: any[] = [{ type: 'text', text: fullPrompt }];
   
   for (let i = 0; i < pdfFiles.length; i++) {
     const file = pdfFiles[i];
     
-    // Determine document type based on file_type
     let docLabel = `Document ${i + 1}`;
     if (file.file_type === 'base') {
       docLabel = '★★★ THIS IS THE HBL (House Bill of Lading) - Extract NCM codes FROM THIS DOCUMENT for "HBL NCMs" ★★★';
@@ -988,37 +987,35 @@ async function analyzeWithGeminiPro(
       docLabel = '★★★ THIS IS THE HBL (House Bill of Lading) ★★★';
     }
     
-    parts.push({ text: `[${docLabel}]\n[Arquivo PDF: ${file.name}]` });
-    parts.push({
-      inline_data: {
-        mime_type: 'application/pdf',
-        data: file.base64
-      }
+    contentParts.push({ type: 'text', text: `[${docLabel}]\n[Arquivo PDF: ${file.name}]` });
+    contentParts.push({
+      type: 'image_url',
+      image_url: { url: `data:application/pdf;base64,${file.base64}` },
     });
   }
   
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=${geminiApiKey}`, {
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: {
+      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts }],
-      generationConfig: {
-        maxOutputTokens: 32000,
-      },
+      model: 'google/gemini-2.5-pro',
+      messages: [{ role: 'user', content: contentParts }],
+      max_tokens: 65536,
     }),
   });
   
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
-    console.error(`❌ Gemini Pro error: ${response.status} - ${errorText}`);
-    throw new Error(`Gemini Pro error: ${response.status}`);
+    console.error(`❌ AI Gateway Pro error: ${response.status} - ${errorText}`);
+    throw new Error(`AI Gateway Pro error: ${response.status}`);
   }
   
   const data = await response.json();
-  const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  console.log(`✅ Gemini Pro response: ${resultText.length} chars`);
+  const resultText = data.choices?.[0]?.message?.content || '';
+  console.log(`✅ AI Gateway Pro response: ${resultText.length} chars`);
   
   return { text: resultText, model: 'gemini-2.5-pro' };
 }
@@ -1060,10 +1057,10 @@ async function runDualAnalysis(
   metadata: { consignee?: string; container?: string },
   hblPdfData?: { base64: string; fileName: string }
 ): Promise<{ geminiResult: string; claudeResult: string }> {
-  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
   
-  if (!geminiApiKey) throw new Error('GEMINI_API_KEY not configured');
+  if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
   if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY not configured');
 
   const basePrompt = getPromptForAnalysisType(analysisType);
@@ -1116,32 +1113,32 @@ Do NOT use "not individually specified" — each exporter must have specific val
 
   const geminiPromise = (async (): Promise<string> => {
     try {
-      console.log(`🤖 [Dual Analysis] Calling Gemini 3 Pro...`);
-      const parts: any[] = [{ text: analysisPrompt }];
+      console.log(`🤖 [Dual Analysis] Calling Lovable AI Gateway (gemini-2.5-pro)...`);
+      const contentParts: any[] = [{ type: 'text', text: analysisPrompt }];
       
-      // Attach HBL PDF for direct reading of rider pages
       if (hblPdfData) {
-        parts.push({ text: `\n\n[★★★ ATTACHED: HBL PDF DOCUMENT — Use this to find individual supplier weights, CBM, and package counts in the rider pages ★★★]\n[File: ${hblPdfData.fileName}]` });
-        parts.push({ inline_data: { mime_type: 'application/pdf', data: hblPdfData.base64 } });
+        contentParts.push({ type: 'text', text: `\n\n[★★★ ATTACHED: HBL PDF DOCUMENT — Use this to find individual supplier weights, CBM, and package counts in the rider pages ★★★]\n[File: ${hblPdfData.fileName}]` });
+        contentParts.push({ type: 'image_url', image_url: { url: `data:application/pdf;base64,${hblPdfData.base64}` } });
       }
       
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=${geminiApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts }],
-            generationConfig: { maxOutputTokens: 32000 },
-          }),
-        }
-      );
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-pro',
+          messages: [{ role: 'user', content: contentParts }],
+          max_tokens: 65536,
+        }),
+      });
       if (!response.ok) {
         const err = await response.text().catch(() => '');
-        throw new Error(`Gemini error: ${response.status} - ${err.substring(0, 200)}`);
+        throw new Error(`AI Gateway error: ${response.status} - ${err.substring(0, 200)}`);
       }
       const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const text = data.choices?.[0]?.message?.content || '';
       console.log(`✅ [Dual Analysis] Gemini response: ${text.length} chars`);
       return text;
     } catch (e) {
