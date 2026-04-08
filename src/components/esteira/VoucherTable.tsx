@@ -149,6 +149,32 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   const masterChildrenCache = useRef<Map<string, string[]>>(new Map());
   const [masterChildrenMap, setMasterChildrenMap] = useState<Map<string, string[]>>(new Map());
 
+  // Load children SPOs for master vouchers visible on current page
+  useEffect(() => {
+    const loadMasterChildren = async () => {
+      const startIdx = (currentPage - 1) * PAGE_SIZE;
+      const visibleVouchers = vouchers.slice(startIdx, startIdx + PAGE_SIZE);
+      const masters = visibleVouchers.filter(v => v.isMaster || v.origemCriacao === "MASTER");
+      const uncachedMasters = masters.filter(m => !masterChildrenCache.current.has(m.id));
+      
+      if (uncachedMasters.length === 0) return;
+      
+      for (const master of uncachedMasters) {
+        try {
+          const { data } = await supabase.functions.invoke("mariadb-proxy", {
+            body: { action: "get_voucher_filhos", master_id: master.id },
+          });
+          const childSPOs = (data?.data || []).map((f: any) => f.numero_spo || f.numeroSPO || "");
+          masterChildrenCache.current.set(master.id, childSPOs);
+        } catch {
+          masterChildrenCache.current.set(master.id, []);
+        }
+      }
+      setMasterChildrenMap(new Map(masterChildrenCache.current));
+    };
+    loadMasterChildren();
+  }, [vouchers, currentPage]);
+
   const handleRetornarPendente = async (justificativa: string) => {
     if (!selectedVoucherForRetorno) return;
     
