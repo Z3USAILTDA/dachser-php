@@ -1,26 +1,53 @@
 
 
-## Plano: Corrigir busca de Master por SPO de voucher filho
+## Plano: Corrigir localização automática nas correções CHB
 
-### Causa raiz
-O campo `voucherMasterId` **nunca é mapeado** no `mapVoucherFromDB` (linhas 732-785 de `EsteiraIndex.tsx`). O campo `voucher_master_id` vem do banco mas é ignorado no mapeamento. Resultado: o `masterChildSPOsMap` está sempre vazio e a busca por SPO de filho nunca encontra o Master.
+### Problema
+A função `chb-corrections` usa a API Gemini diretamente com `GEMINI_API_KEY`, mas essa chave está inválida (erro `API_KEY_INVALID` nos logs). Isso faz com que tanto a localização inicial (Gemini Flash) quanto a re-extração profunda (Gemini Pro) falhem, e a correção é salva sem dados de localização — quebrando o loop de aprendizado.
 
-### Correção
+### Solução
+Migrar as duas chamadas de IA para usar o **Lovable AI Gateway** (`ai.gateway.lovable.dev`) com `LOVABLE_API_KEY`, que já funciona no projeto (ex: `parse-manifest-swap`). Manter os mesmos modelos equivalentes via gateway.
 
-**`src/pages/esteira/EsteiraIndex.tsx`** — `mapVoucherFromDB` (~linha 768)
+### Alterações
 
-Adicionar a linha faltante no mapeamento:
+**`supabase/functions/chb-corrections/index.ts`**
+
+1. **Função `locateValueInFile`** (linha ~28-121):
+   - Trocar `GEMINI_API_KEY` por `LOVABLE_API_KEY`
+   - Trocar URL `generativelanguage.googleapis.com` por `ai.gateway.lovable.dev/v1/chat/completions`
+   - Converter formato de request de Gemini nativo para OpenAI-compatible (usado pelo gateway)
+   - Usar modelo `google/gemini-2.5-flash` (equivalente ao Flash atual)
+
+2. **Função `reextractFieldWithContext`** (linha ~141-297):
+   - Mesma migração: `LOVABLE_API_KEY` + gateway URL
+   - Usar modelo `google/gemini-2.5-pro` (equivalente ao Pro atual)
+   - Converter formato de request para OpenAI-compatible
+
+### Formato da chamada (antes → depois)
+
+Antes (Gemini direto — quebrado):
 ```typescript
-voucherMasterId: v.voucher_master_id || null,
+const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview:generateContent?key=${geminiApiKey}`, {
+  body: JSON.stringify({ contents: [...], generationConfig: {...} })
+});
 ```
 
-Isso alimenta o `useMemo` do `masterChildSPOsMap` e faz a busca por SPO de filho funcionar como esperado.
-
-### Arquivo alterado
-| Arquivo | Alteração |
-|---------|-----------|
-| `src/pages/esteira/EsteiraIndex.tsx` | Adicionar `voucherMasterId: v.voucher_master_id` no `mapVoucherFromDB` |
+Depois (Lovable AI Gateway — funcional):
+```typescript
+const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+  headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    model: 'google/gemini-2.5-flash',
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: 500,
+    temperature: 0.1
+  })
+});
+// Parse: result.choices[0].message.content
+```
 
 ### Resultado esperado
-Ao buscar pelo número de um voucher filho (ex: `SPO-001`), o voucher Master correspondente aparecerá nos resultados junto com o próprio filho.
+- Localização automática passa a funcionar
+- Re-extração profunda grava regras de extração no banco
+- Próximas análises usam as regras aprendidas para extrair corretamente
 
