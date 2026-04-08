@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VoucherActionsMenu } from "./VoucherActionsMenu";
-import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown, Layers, FileQuestion } from "lucide-react";
+import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown, Layers, FileQuestion, Paperclip, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FilePreview } from "./FilePreview";
 import { format, isToday, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -684,6 +686,29 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Ver documentos"
+                            onClick={async () => {
+                              setDocPreviewVoucherId(voucher.id);
+                              setDocPreviewOpen(true);
+                              setDocPreviewLoading(true);
+                              setDocPreviewAnexos([]);
+                              try {
+                                const { data } = await supabase.functions.invoke("mariadb-proxy", {
+                                  body: { action: "get_voucher_anexos", voucher_id: voucher.id }
+                                });
+                                setDocPreviewAnexos(data?.data || []);
+                              } catch (e) {
+                                console.error("Erro ao carregar anexos:", e);
+                              } finally {
+                                setDocPreviewLoading(false);
+                              }
+                            }}
+                          >
+                            <Paperclip className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
