@@ -142,6 +142,10 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   const [currentPage, setCurrentPage] = useState(1);
   const [showRetornarDialog, setShowRetornarDialog] = useState(false);
   const [selectedVoucherForRetorno, setSelectedVoucherForRetorno] = useState<Voucher | null>(null);
+  const [docPreviewOpen, setDocPreviewOpen] = useState(false);
+  const [docPreviewVoucherId, setDocPreviewVoucherId] = useState<string | null>(null);
+  const [docPreviewAnexos, setDocPreviewAnexos] = useState<any[]>([]);
+  const [docPreviewLoading, setDocPreviewLoading] = useState(false);
 
   const handleRetornarPendente = async (justificativa: string) => {
     if (!selectedVoucherForRetorno) return;
