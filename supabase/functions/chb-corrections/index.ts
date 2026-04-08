@@ -62,19 +62,17 @@ Se não encontrar o valor exato, busque valores similares e indique com confiden
 Se o valor for numérico, considere formatações diferentes (97,3 vs 97.30 vs 97,30).`;
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${geminiApiKey}`, {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        contents: [
-          { role: 'user', parts: [{ text: prompt }] }
-        ],
-        generationConfig: {
-          maxOutputTokens: 500,
-          temperature: 0.1,
-        },
+        model: 'google/gemini-2.5-flash',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 500,
+        temperature: 0.1,
       }),
     });
 
