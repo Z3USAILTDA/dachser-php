@@ -442,7 +442,8 @@ export const PagamentosTab = () => {
       }
 
       toast({ title: isReady ? "Marcado como pronto" : "Desmarcado" });
-      loadPagamentos();
+      // Local state update for performance
+      setPagamentos(prev => prev.map(p => p.id === id ? { ...p, is_pronto_para_robo: isReady } : p));
     } catch (error: unknown) {
       toast({ 
         title: "Erro ao atualizar", 
