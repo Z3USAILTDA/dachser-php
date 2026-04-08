@@ -56,8 +56,6 @@ interface StageRow {
   tipo_pagto: string;
   valor_br: string;
   cnpj: string;
-  condicao_pagamento: string;
-  nome_vendedor: string;
 }
 
 interface ClienteResumo {
@@ -324,8 +322,6 @@ Financeiro Dachser`;
       dias: 0,
       tipo_pagto: "",
       valor_br: "",
-      condicao_pagamento: "",
-      nome_vendedor: ""
     };
     setSelectedRow(row);
     setAgingEmailText(getDefaultAgingText(cliente.cnpj));
@@ -890,12 +886,6 @@ Financeiro Dachser`;
                         Tipo
                       </th>
                       <th className="bg-[#15151f] sticky top-0 z-[5] px-3 py-[10px] text-left text-[0.75rem] uppercase tracking-wider font-bold">
-                        Cond. Pagamento
-                      </th>
-                      <th className="bg-[#15151f] sticky top-0 z-[5] px-3 py-[10px] text-left text-[0.75rem] uppercase tracking-wider font-bold">
-                        Vendedor
-                      </th>
-                      <th className="bg-[#15151f] sticky top-0 z-[5] px-3 py-[10px] text-left text-[0.75rem] uppercase tracking-wider font-bold">
                         Ação
                       </th>
                     </tr>
@@ -913,8 +903,6 @@ Financeiro Dachser`;
                         </td>
                         <td className="px-3 py-[10px]">{r.valor_br}</td>
                         <td className="px-3 py-[10px]">{r.tipo_pagto}</td>
-                        <td className="px-3 py-[10px] text-xs">{r.condicao_pagamento || "—"}</td>
-                        <td className="px-3 py-[10px] text-xs">{r.nome_vendedor || "—"}</td>
                         <td className="px-3 py-[10px]">
                           <Button
                             size="sm"
