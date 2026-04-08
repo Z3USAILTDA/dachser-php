@@ -892,8 +892,11 @@ const EsteiraIndex = () => {
         const mappedSPOs = new Set(mappedVouchers.map(v => v.numeroSPO));
         const deduplicatedRMPending = rmPendingVouchers.filter(rm => !mappedSPOs.has(rm.numeroSPO));
         
-        // Merge both arrays
+        // Merge both arrays with client-side deduplication
+        const seenIds = new Set<string>();
         const allVouchers = [...deduplicatedRMPending, ...mappedVouchers].filter(v => {
+          if (seenIds.has(v.id)) return false;
+          seenIds.add(v.id);
           if ((v.isMaster || v.origemCriacao === "MASTER") && v.etapaAtual === "A_PROCESSAR") {
             return false;
           }
@@ -1247,7 +1250,7 @@ const EsteiraIndex = () => {
       if (filters.search) {
         const searchLower = filters.search.toLowerCase().trim();
         const spoMatch = voucher.numeroSPO.toLowerCase().startsWith(searchLower);
-        const masterNameMatch = voucher.nomeMaster?.toLowerCase().includes(searchLower);
+        const masterNameMatch = voucher.nomeMaster?.toLowerCase().startsWith(searchLower);
         if (!spoMatch && !masterNameMatch) return false;
       }
 
@@ -1397,6 +1400,11 @@ const EsteiraIndex = () => {
         const isMaster = voucher.isMaster || voucher.origemCriacao === "MASTER";
         if (filters.isMaster === "true" && !isMaster) return false;
         if (filters.isMaster === "false" && isMaster) return false;
+      }
+
+      // Filtro de status baixa
+      if (filters.statusBaixa && filters.statusBaixa !== "all") {
+        if (voucher.statusBaixa !== filters.statusBaixa) return false;
       }
 
       // Quick filter: Fornecedor

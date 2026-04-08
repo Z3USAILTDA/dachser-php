@@ -123,9 +123,15 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
 
       onUpdate();
     } catch (error: any) {
+      const msg = error.message || "";
+      const friendlyMsg = msg.includes("WORKER_LIMIT") 
+        ? "O servidor está sobrecarregado. Tente novamente em alguns segundos."
+        : msg.includes("timeout") || msg.includes("Timeout")
+        ? "A operação demorou demais. Tente novamente."
+        : msg || "Erro desconhecido ao baixar o voucher.";
       toast({
         title: "Erro ao baixar voucher/SPO",
-        description: error.message,
+        description: friendlyMsg,
         variant: "destructive",
       });
     } finally {
@@ -182,9 +188,15 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
 
       onUpdate();
     } catch (error: any) {
+      const msg = error.message || "";
+      const friendlyMsg = msg.includes("WORKER_LIMIT") 
+        ? "O servidor está sobrecarregado. Tente novamente em alguns segundos."
+        : msg.includes("timeout") || msg.includes("Timeout")
+        ? "A operação demorou demais. Tente novamente."
+        : msg || "Erro desconhecido ao devolver o voucher.";
       toast({
         title: "Erro ao devolver voucher/SPO",
-        description: error.message,
+        description: friendlyMsg,
         variant: "destructive",
       });
     } finally {
@@ -260,9 +272,15 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
 
       onUpdate();
     } catch (error: any) {
+      const msg = error.message || "";
+      const friendlyMsg = msg.includes("WORKER_LIMIT") 
+        ? "O servidor está sobrecarregado. Tente novamente em alguns segundos."
+        : msg.includes("timeout") || msg.includes("Timeout")
+        ? "A operação demorou demais. Tente novamente."
+        : msg || "Erro desconhecido ao devolver o voucher.";
       toast({
         title: "Erro ao devolver voucher/SPO",
-        description: error.message,
+        description: friendlyMsg,
         variant: "destructive",
       });
     } finally {
@@ -348,8 +366,7 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
             </Label>
           </div>
 
-          {voucher.cobrancaEmNomeDe === "DACHSER" && (
-            <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2">
               <Checkbox
                 id="ajuste-fiscal"
                 checked={necessitaAjusteFiscal}
@@ -362,7 +379,6 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
                 Necessita ajuste do Fiscal?
               </Label>
             </div>
-          )}
         </div>
 
         {necessitaAjusteOperacao && (

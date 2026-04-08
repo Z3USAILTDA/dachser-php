@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Copy, 
   Check, 
@@ -79,6 +79,11 @@ export const DadosPagamentoPanel = ({
   const [linhaDigitavelInput, setLinhaDigitavelInput] = useState(linhaDigitavel || "");
   const [savingLinhaDigitavel, setSavingLinhaDigitavel] = useState(false);
   const { toast } = useToast();
+
+  // Sync linhaDigitavel prop with local state
+  useEffect(() => {
+    setLinhaDigitavelInput(linhaDigitavel || "");
+  }, [linhaDigitavel]);
 
   const handleCopy = async (text: string, field: string) => {
     const ok = await copyToClipboard(text);

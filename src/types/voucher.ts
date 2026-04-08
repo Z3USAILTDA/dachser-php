@@ -79,7 +79,7 @@ export type UserRole =
 
 // New types for Pagamentos module
 // Simplificado para MANUAL ou REMESSA (10h ou 15h)
-export type TipoExecucaoPagamento = "MANUAL" | "REMESSA_10H" | "REMESSA_15H";
+export type TipoExecucaoPagamento = "MANUAL" | "REMESSA_10H" | "REMESSA_15H" | "A_DEFINIR";
 
 export type StatusPagamento = "PENDENTE_DADOS" | "PRONTO" | "EM_REMESSA" | "PAGO" | "ERRO";
 
@@ -134,6 +134,7 @@ export const TIPO_EXECUCAO_LABELS: Record<TipoExecucaoPagamento, string> = {
   MANUAL: "Manual",
   REMESSA_10H: "Remessa 10h",
   REMESSA_15H: "Remessa 15h",
+  A_DEFINIR: "A definir",
 };
 
 export const STATUS_LOTE_REMESSA_LABELS: Record<StatusLoteRemessa, string> = {

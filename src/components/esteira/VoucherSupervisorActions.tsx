@@ -93,9 +93,15 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
 
       onUpdate();
     } catch (error: any) {
+      const msg = error.message || "";
+      const friendlyMsg = msg.includes("WORKER_LIMIT") 
+        ? "O servidor está sobrecarregado. Tente novamente em alguns segundos."
+        : msg.includes("timeout") || msg.includes("Timeout")
+        ? "A operação demorou demais. Tente novamente."
+        : msg || "Erro desconhecido ao aprovar o voucher.";
       toast({
         title: "Erro ao aprovar voucher/SPO",
-        description: error.message,
+        description: friendlyMsg,
         variant: "destructive",
       });
     } finally {

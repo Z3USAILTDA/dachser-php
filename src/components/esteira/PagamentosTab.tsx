@@ -281,10 +281,15 @@ export const PagamentosTab = () => {
 
   const handleCopy = async (text: string, id: string) => {
     try {
-      await navigator.clipboard.writeText(text);
-      setCopiedId(id);
-      toast({ title: "Copiado!", description: "Texto copiado para a área de transferência" });
-      setTimeout(() => setCopiedId(null), 2000);
+      const { copyToClipboard } = await import("@/utils/clipboard");
+      const ok = await copyToClipboard(text);
+      if (ok) {
+        setCopiedId(id);
+        toast({ title: "Copiado!", description: "Texto copiado para a área de transferência" });
+        setTimeout(() => setCopiedId(null), 2000);
+      } else {
+        toast({ title: "Erro ao copiar", variant: "destructive" });
+      }
     } catch {
       toast({ title: "Erro ao copiar", variant: "destructive" });
     }
@@ -316,7 +321,8 @@ export const PagamentosTab = () => {
       });
       if (error) throw error;
       toast({ title: "Tipo de execução atualizado" });
-      loadPagamentos();
+      // Local state update instead of full reload for performance
+      setPagamentos(prev => prev.map(p => p.id === id ? { ...p, tipo_execucao_pagamento: tipo } : p));
     } catch (error: unknown) {
       toast({ 
         title: "Erro ao atualizar", 
@@ -361,6 +367,16 @@ export const PagamentosTab = () => {
       toast({ 
         title: "Tipo de execução obrigatório", 
         description: "Defina o tipo de execução (Manual ou Remessa) antes de marcar como pronto",
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    // Bloquear se tipo for A_DEFINIR
+    if (isReady && tipoExecucao === "A_DEFINIR") {
+      toast({ 
+        title: "Defina o tipo de execução", 
+        description: "'A definir' não é permitido para marcar como pronto. Selecione Manual ou Remessa.",
         variant: "destructive" 
       });
       return;
@@ -426,7 +442,8 @@ export const PagamentosTab = () => {
       }
 
       toast({ title: isReady ? "Marcado como pronto" : "Desmarcado" });
-      loadPagamentos();
+      // Local state update for performance
+      setPagamentos(prev => prev.map(p => p.id === id ? { ...p, is_pronto_para_robo: isReady } : p));
     } catch (error: unknown) {
       toast({ 
         title: "Erro ao atualizar", 
@@ -569,6 +586,7 @@ export const PagamentosTab = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos Tipo Exec.</SelectItem>
+              <SelectItem value="A_DEFINIR">A definir</SelectItem>
               <SelectItem value="MANUAL">Manual</SelectItem>
               <SelectItem value="REMESSA_10H">Remessa 10h</SelectItem>
               <SelectItem value="REMESSA_15H">Remessa 15h</SelectItem>
@@ -771,6 +789,9 @@ export const PagamentosTab = () => {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("A_DEFINIR")}>
+                A definir
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("MANUAL")}>
                 Manual
               </DropdownMenuItem>
@@ -788,11 +809,11 @@ export const PagamentosTab = () => {
             onClick={async () => {
               if (selectedIds.size === 0) return;
               const selected = pagamentos.filter(p => selectedIds.has(p.id));
-              const semTipo = selected.filter(p => !p.tipo_execucao_pagamento);
+              const semTipo = selected.filter(p => !p.tipo_execucao_pagamento || p.tipo_execucao_pagamento === "A_DEFINIR");
               if (semTipo.length > 0) {
                 toast({
                   title: "Tipo de execução obrigatório",
-                  description: `${semTipo.length} voucher(s) sem tipo de execução definido. Defina antes de marcar como pronto.`,
+                  description: `${semTipo.length} voucher(s) sem tipo de execução definido ou com 'A definir'. Defina antes de marcar como pronto.`,
                   variant: "destructive"
                 });
                 return;
@@ -923,6 +944,7 @@ export const PagamentosTab = () => {
                           <SelectValue placeholder="Definir..." />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="A_DEFINIR">A definir</SelectItem>
                           <SelectItem value="MANUAL">Manual</SelectItem>
                           <SelectItem value="REMESSA_10H">Remessa 10h</SelectItem>
                           <SelectItem value="REMESSA_15H">Remessa 15h</SelectItem>

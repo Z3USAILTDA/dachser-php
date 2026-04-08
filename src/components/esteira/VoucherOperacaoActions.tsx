@@ -354,9 +354,15 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
 
       onUpdate();
     } catch (error: any) {
+      const msg = error.message || "";
+      const friendlyMsg = msg.includes("WORKER_LIMIT") 
+        ? "O servidor está sobrecarregado. Tente novamente em alguns segundos."
+        : msg.includes("timeout") || msg.includes("Timeout")
+        ? "A operação demorou demais. Tente novamente."
+        : msg || "Erro desconhecido ao enviar o voucher.";
       toast({
         title: "Erro ao enviar voucher/SPO",
-        description: error.message,
+        description: friendlyMsg,
         variant: "destructive",
       });
     } finally {
