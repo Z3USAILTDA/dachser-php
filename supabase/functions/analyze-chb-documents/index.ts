@@ -1373,50 +1373,37 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
   
   for (const file of files) {
     if (file.mimeType === 'application/pdf') {
-      // For PDFs, use OCR extraction to handle scanned documents
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 100) {
-        // Use OCR extracted text for better analysis
-        parts.push({ text: ocrResult.text });
-        console.log(`[Gemini] Using OCR text for PDF ${file.name}: ${ocrResult.text.length} chars`);
+        contentParts.push({ type: 'text', text: ocrResult.text });
+        console.log(`[Gemini Fallback] Using OCR text for PDF ${file.name}: ${ocrResult.text.length} chars`);
       } else {
-        // Fallback to native Gemini PDF handling
-        console.log(`[Gemini] Using native inline_data for PDF ${file.name}`);
-        parts.push({
-          inline_data: {
-            mime_type: file.mimeType,
-            data: file.content,
-          },
+        console.log(`[Gemini Fallback] Using image_url for PDF ${file.name}`);
+        contentParts.push({
+          type: 'image_url',
+          image_url: { url: `data:${file.mimeType};base64,${file.content}` },
         });
-        parts.push({
-          text: `[Arquivo: ${file.name}]`,
-        });
+        contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}]` });
       }
     } else if (file.mimeType.startsWith('image/')) {
-      // For images, use OCR extraction
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 50) {
-        parts.push({ text: ocrResult.text });
-        console.log(`[Gemini] Using OCR text for image ${file.name}: ${ocrResult.text.length} chars`);
+        contentParts.push({ type: 'text', text: ocrResult.text });
+        console.log(`[Gemini Fallback] Using OCR text for image ${file.name}: ${ocrResult.text.length} chars`);
       } else {
-        // Fallback to native image handling
-        parts.push({
-          inline_data: {
-            mime_type: file.mimeType,
-            data: file.content,
-          },
+        contentParts.push({
+          type: 'image_url',
+          image_url: { url: `data:${file.mimeType};base64,${file.content}` },
         });
-        parts.push({
-          text: `[Arquivo: ${file.name}]`,
-        });
+        contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}]` });
       }
     } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') ||
                file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
       try {
         const excelText = await extractExcelText(file.content, file.name);
-        parts.push({ text: excelText });
+        contentParts.push({ type: 'text', text: excelText });
       } catch (e) {
         console.error(`Error processing Excel ${file.name}:`, e);
         warnings.push({
@@ -1425,44 +1412,36 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
           type: 'conversion',
           suggestion: 'Verifique se o arquivo não está corrompido.',
         });
-        parts.push({
-          text: `[Arquivo Excel: ${file.name}] - Não foi possível extrair conteúdo`,
-        });
+        contentParts.push({ type: 'text', text: `[Arquivo Excel: ${file.name}] - Não foi possível extrair conteúdo` });
       }
     } else {
       try {
         const textContent = atob(file.content);
-        parts.push({
-          text: `[Arquivo: ${file.name}]\n${textContent}`,
-        });
+        contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}]\n${textContent}` });
       } catch {
-        parts.push({
-          text: `[Arquivo: ${file.name}] - Conteúdo binário não legível`,
-        });
+        contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}] - Conteúdo binário não legível` });
       }
     }
   }
   
-  parts.push({ text: prompt });
+  contentParts.push({ type: 'text', text: prompt });
   
   const startTime = Date.now();
   
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${geminiApiKey}`, {
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: {
+      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      contents: [
-        {
-          role: 'user',
-          parts,
-        },
-      ],
-      generationConfig: {
-        maxOutputTokens: 32000,
-        temperature: 0.1,
-      },
+      model: 'google/gemini-2.5-pro',
+      messages: [{
+        role: 'user',
+        content: contentParts,
+      }],
+      max_tokens: 65536,
+      temperature: 0.1,
     }),
   });
   
@@ -1470,17 +1449,16 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
   
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('Gemini API error:', errorText);
-    throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+    console.error('AI Gateway error:', errorText);
+    throw new Error(`AI Gateway error: ${response.status} - ${errorText}`);
   }
   
   const result = await response.json();
   
-  // Extract text from Gemini response format
-  const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const text = result.choices?.[0]?.message?.content || '';
   
   if (!text) {
-    throw new Error('No text content in Gemini API response');
+    throw new Error('No text content in AI Gateway response');
   }
   
   return { text, warnings };
