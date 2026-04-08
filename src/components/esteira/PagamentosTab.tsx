@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { FilePreview } from "./FilePreview";
 import {
   FileDown,
@@ -78,7 +78,10 @@ interface PagamentoItem {
   status_baixa: string;
   created_at: string;
   updated_at: string;
-  id_rm?: string; // id_rm from t_dados_financeiro_voucher
+  id_rm?: string;
+  is_master?: boolean;
+  nome_master?: string;
+  voucher_master_id?: string;
 }
 
 interface DadosBancarios {
@@ -180,6 +183,36 @@ export const PagamentosTab = () => {
   const [anexosDialog, setAnexosDialog] = useState<any[]>([]);
   const [loadingAnexos, setLoadingAnexos] = useState(false);
   
+  // Master children state
+  const masterChildrenCache = useRef<Map<string, string[]>>(new Map());
+  const [masterChildrenMap, setMasterChildrenMap] = useState<Map<string, string[]>>(new Map());
+
+  // Load children SPOs for master vouchers
+  useEffect(() => {
+    const loadMasterChildren = async () => {
+      const masters = pagamentos.filter(p => p.is_master);
+      if (masters.length === 0) return;
+      let changed = false;
+      for (const master of masters) {
+        if (masterChildrenCache.current.has(master.id)) continue;
+        try {
+          const { data } = await supabase.functions.invoke("mariadb-proxy", {
+            body: { action: "get_voucher_filhos", master_id: master.id },
+          });
+          if (data?.data) {
+            const spos = data.data.map((f: any) => f.numero_spo);
+            masterChildrenCache.current.set(master.id, spos);
+            changed = true;
+          }
+        } catch (err) {
+          console.error("Erro ao carregar filhos do master:", err);
+        }
+      }
+      if (changed) setMasterChildrenMap(new Map(masterChildrenCache.current));
+    };
+    loadMasterChildren();
+  }, [pagamentos]);
+
   const { toast } = useToast();
 
   const loadPagamentos = async () => {
@@ -891,7 +924,8 @@ export const PagamentosTab = () => {
                     key={pag.id} 
                     className={cn(
                       "hover:bg-muted/30 transition-colors",
-                      selectedIds.has(pag.id) && "bg-primary/5"
+                      selectedIds.has(pag.id) && "bg-primary/5",
+                      pag.is_master && "border-l-2 border-l-purple-500"
                     )}
                   >
                     <td className="p-3">
@@ -901,8 +935,22 @@ export const PagamentosTab = () => {
                       />
                     </td>
                     <td className="p-3">
-                      <span className="font-mono font-medium text-foreground">{pag.numero_spo}</span>
-                      {/* Flag de erro de extração para boleto sem linha digitável */}
+                      {pag.is_master && pag.nome_master ? (
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-foreground">{pag.nome_master}</span>
+                            <Badge className="bg-purple-600 text-[9px] px-1.5">Master</Badge>
+                          </div>
+                          {(() => {
+                            const children = masterChildrenMap.get(pag.id);
+                            if (!children || children.length === 0) return null;
+                            const display = children.slice(0, 5).join(", ") + (children.length > 5 ? ` +${children.length - 5}` : "");
+                            return <span className="text-[10px] text-muted-foreground">↳ {display}</span>;
+                          })()}
+                        </div>
+                      ) : (
+                        <span className="font-mono font-medium text-foreground">{pag.numero_spo}</span>
+                      )}
                       {isBoleto(pag.forma_pagamento as any) && !pag.linha_digitavel && (
                         <Badge variant="outline" className="ml-2 text-[9px] bg-red-500/20 text-red-400 border-red-500/30">
                           Erro Extração
