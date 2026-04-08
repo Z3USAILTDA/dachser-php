@@ -41,6 +41,9 @@ export interface FilterValues {
   criadoEmInicio: string;
   criadoEmFim: string;
   isMaster: string;
+  // Filtros por responsável
+  enviadoPor: string;
+  criadoPor: string;
 }
 
 type SortField = "numeroSPO" | "fornecedor" | "valor" | "vencimento" | "etapaAtual" | "tempoNaEtapa" | "createdAt";
@@ -368,8 +371,22 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                     title="Emissão de"
                   />
                 </TableHead>
-                <TableHead className="py-2"></TableHead>
-                <TableHead className="py-2"></TableHead>
+                <TableHead className="py-2">
+                  <Input
+                    value={filters.enviadoPor || ""}
+                    onChange={(e) => handleFilterChange("enviadoPor", e.target.value)}
+                    placeholder="Filtrar..."
+                    className="h-8 text-xs w-24"
+                  />
+                </TableHead>
+                <TableHead className="py-2">
+                  <Input
+                    value={filters.criadoPor || ""}
+                    onChange={(e) => handleFilterChange("criadoPor", e.target.value)}
+                    placeholder="Filtrar..."
+                    className="h-8 text-xs w-24"
+                  />
+                </TableHead>
                 <TableHead className="py-2">
                   <Select value={filters.urgente} onValueChange={(value) => handleFilterChange("urgente", value)}>
                     <SelectTrigger className="h-8 text-xs bg-card w-28">

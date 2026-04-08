@@ -1041,9 +1041,14 @@ const EsteiraIndex = () => {
         } as Voucher;
       });
 
-      // Merge both arrays: RM pending vouchers first (A_PROCESSAR), then esteira vouchers
-      // Filter out master vouchers that shouldn't be in A_PROCESSAR (data inconsistency)
-      const allVouchers = [...rmPendingVouchers, ...mappedVouchers].filter(v => {
+      // Merge both arrays with client-side deduplication (legacy mode)
+      const mappedSPOs = new Set(mappedVouchers.map(v => v.numeroSPO));
+      const deduplicatedRMPending = rmPendingVouchers.filter(rm => !mappedSPOs.has(rm.numeroSPO));
+      
+      const seenIds = new Set<string>();
+      const allVouchers = [...deduplicatedRMPending, ...mappedVouchers].filter(v => {
+        if (seenIds.has(v.id)) return false;
+        seenIds.add(v.id);
         if ((v.isMaster || v.origemCriacao === "MASTER") && v.etapaAtual === "A_PROCESSAR") {
           console.warn(`Voucher Master ${v.numeroSPO} ignorado - inconsistência: etapa A_PROCESSAR`);
           return false;
@@ -1405,6 +1410,19 @@ const EsteiraIndex = () => {
       // Filtro de status baixa
       if (filters.statusBaixa && filters.statusBaixa !== "all") {
         if (voucher.statusBaixa !== filters.statusBaixa) return false;
+      }
+
+      // Filtro por enviado por
+      if (filters.enviadoPor) {
+        const searchVal = filters.enviadoPor.toLowerCase();
+        if (!voucher.enviadoPorUserName?.toLowerCase().includes(searchVal) && 
+            !voucher.criadoPorUserName?.toLowerCase().includes(searchVal)) return false;
+      }
+
+      // Filtro por criado por (DFV)
+      if (filters.criadoPor) {
+        const searchVal = filters.criadoPor.toLowerCase();
+        if (!voucher.criadoPorDfv?.toLowerCase().includes(searchVal)) return false;
       }
 
       // Quick filter: Fornecedor

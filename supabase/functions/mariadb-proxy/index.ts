@@ -9206,6 +9206,7 @@ Deno.serve(async (req) => {
           INNER JOIN dados_dachser.t_vouchers v ON a.voucher_id = v.id
           WHERE v.etapa_atual = 'CONCLUIDO'
             AND a.tipo = 'COMPROVANTE'
+            AND a.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
           ORDER BY a.created_at DESC
           LIMIT ? OFFSET ?
         `, [perPage, offset]);
