@@ -454,7 +454,10 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                         getRowClassName(voucher.vencimento),
                         // Highlight vouchers that returned from another stage (ajuste)
                         (voucher.etapaAtual === "AJUSTE_OPERACAO" || voucher.etapaAtual === "AJUSTE_FISCAL" || voucher.ajusteOperacao || voucher.ajusteFiscal)
-                          && "border-l-4 border-l-orange-500 bg-orange-500/5"
+                          && "border-l-4 border-l-orange-500 bg-orange-500/5",
+                        // Highlight master vouchers
+                        (voucher.isMaster || voucher.origemCriacao === "MASTER") 
+                          && "border-l-4 border-l-purple-500 bg-purple-500/5"
                       )}
                       onDoubleClick={() => onViewDetails(voucher)}
                     >
