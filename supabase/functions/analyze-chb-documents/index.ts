@@ -144,50 +144,49 @@ Retorne APENAS o texto extraído, sem explicações ou marcadores adicionais.`
   
   // For images, always use Vision OCR
   if (mimeType.startsWith('image/')) {
-    console.log(`[OCR] Using Gemini Vision for image: ${fileName}`);
+    console.log(`[OCR] Using Lovable AI Gateway for image: ${fileName}`);
     
-    if (!geminiApiKey) {
-      console.error('[OCR] GEMINI_API_KEY not configured');
+    if (!LOVABLE_API_KEY) {
+      console.error('[OCR] LOVABLE_API_KEY not configured');
       return { text: '', method: 'vision-ocr', confidence: 'low' };
     }
     
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                {
-                  text: `Extraia TODO o texto visível nesta imagem de forma precisa.
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Extraia TODO o texto visível nesta imagem de forma precisa.
 Mantenha a estrutura e formatação. Para tabelas, use: "Coluna1 | Coluna2".
 Preserve números exatamente como aparecem. Retorne APENAS o texto extraído.`
-                },
-                {
-                  inline_data: {
-                    mime_type: mimeType,
-                    data: base64Content,
-                  },
-                },
-              ],
-            }],
-            generationConfig: {
-              maxOutputTokens: 8000,
-              temperature: 0.1,
-            },
-          }),
-        }
-      );
+              },
+              {
+                type: 'image_url',
+                image_url: { url: `data:${mimeType};base64,${base64Content}` },
+              },
+            ],
+          }],
+          max_tokens: 16000,
+          temperature: 0.1,
+        }),
+      });
       
       if (!response.ok) {
-        console.error(`[OCR] Gemini Vision error for image ${fileName}`);
+        console.error(`[OCR] AI Gateway error for image ${fileName}`);
         return { text: '', method: 'vision-ocr', confidence: 'low' };
       }
       
       const result = await response.json();
-      const extractedText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const extractedText = result.choices?.[0]?.message?.content || '';
       
       console.log(`[OCR] Extracted ${extractedText.length} chars from image ${fileName}`);
       return {
