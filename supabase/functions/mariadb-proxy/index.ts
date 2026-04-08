@@ -2391,9 +2391,9 @@ Deno.serve(async (req) => {
           aging_360: Number(r.aging_360) || 0,
           aging_360_plus: Number(r.aging_360_plus) || 0,
           totalCount: Number(r.total_count) || 0,
+          condicao_pagamento: r.condicao_pagamento || null,
+          nome_vendedor: r.nome_vendedor || null,
         }));
-
-        // Also fetch observacoes for all CNPJs of this client
         const cnpjList = mapped.map((m: any) => m.cnpjClean).filter(Boolean);
         let observacoes: any[] = [];
         if (cnpjList.length > 0) {

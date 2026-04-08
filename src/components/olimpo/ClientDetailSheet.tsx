@@ -29,6 +29,8 @@ interface CnpjDetail {
   aging_360: number;
   aging_360_plus: number;
   totalCount: number;
+  condicao_pagamento: string | null;
+  nome_vendedor: string | null;
 }
 
 interface Observacao {
