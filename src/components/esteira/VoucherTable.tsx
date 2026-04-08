@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VoucherActionsMenu } from "./VoucherActionsMenu";
-import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown, Layers, FileQuestion } from "lucide-react";
+import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown, Layers, FileQuestion, Paperclip, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FilePreview } from "./FilePreview";
 import { format, isToday, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -41,6 +43,9 @@ export interface FilterValues {
   criadoEmInicio: string;
   criadoEmFim: string;
   isMaster: string;
+  // Filtros por responsável
+  enviadoPor: string;
+  criadoPor: string;
 }
 
 type SortField = "numeroSPO" | "fornecedor" | "valor" | "vencimento" | "etapaAtual" | "tempoNaEtapa" | "createdAt";
@@ -137,6 +142,10 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   const [currentPage, setCurrentPage] = useState(1);
   const [showRetornarDialog, setShowRetornarDialog] = useState(false);
   const [selectedVoucherForRetorno, setSelectedVoucherForRetorno] = useState<Voucher | null>(null);
+  const [docPreviewOpen, setDocPreviewOpen] = useState(false);
+  const [docPreviewVoucherId, setDocPreviewVoucherId] = useState<string | null>(null);
+  const [docPreviewAnexos, setDocPreviewAnexos] = useState<any[]>([]);
+  const [docPreviewLoading, setDocPreviewLoading] = useState(false);
 
   const handleRetornarPendente = async (justificativa: string) => {
     if (!selectedVoucherForRetorno) return;
@@ -368,8 +377,22 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                     title="Emissão de"
                   />
                 </TableHead>
-                <TableHead className="py-2"></TableHead>
-                <TableHead className="py-2"></TableHead>
+                <TableHead className="py-2">
+                  <Input
+                    value={filters.enviadoPor || ""}
+                    onChange={(e) => handleFilterChange("enviadoPor", e.target.value)}
+                    placeholder="Filtrar..."
+                    className="h-8 text-xs w-24"
+                  />
+                </TableHead>
+                <TableHead className="py-2">
+                  <Input
+                    value={filters.criadoPor || ""}
+                    onChange={(e) => handleFilterChange("criadoPor", e.target.value)}
+                    placeholder="Filtrar..."
+                    className="h-8 text-xs w-24"
+                  />
+                </TableHead>
                 <TableHead className="py-2">
                   <Select value={filters.urgente} onValueChange={(value) => handleFilterChange("urgente", value)}>
                     <SelectTrigger className="h-8 text-xs bg-card w-28">
@@ -670,6 +693,29 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                           <Button
                             variant="ghost"
                             size="sm"
+                            title="Ver documentos"
+                            onClick={async () => {
+                              setDocPreviewVoucherId(voucher.id);
+                              setDocPreviewOpen(true);
+                              setDocPreviewLoading(true);
+                              setDocPreviewAnexos([]);
+                              try {
+                                const { data } = await supabase.functions.invoke("mariadb-proxy", {
+                                  body: { action: "get_voucher_anexos", voucher_id: voucher.id }
+                                });
+                                setDocPreviewAnexos(data?.data || []);
+                              } catch (e) {
+                                console.error("Erro ao carregar anexos:", e);
+                              } finally {
+                                setDocPreviewLoading(false);
+                              }
+                            }}
+                          >
+                            <Paperclip className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => onViewDetails(voucher)}
                           >
                             <Eye className="h-4 w-4" />
@@ -735,6 +781,46 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
         onConfirm={handleRetornarPendente}
         voucherSpo={selectedVoucherForRetorno?.numeroSPO || ""}
       />
+
+      {/* Dialog para visualizar documentos sem abrir detalhes */}
+      <Dialog open={docPreviewOpen} onOpenChange={setDocPreviewOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Paperclip className="h-5 w-5" />
+              Documentos Anexados
+            </DialogTitle>
+          </DialogHeader>
+          {docPreviewLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : docPreviewAnexos.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">Nenhum documento anexado</p>
+          ) : (
+            <div className="space-y-3">
+              {docPreviewAnexos.map((anexo: any) => (
+                <div key={anexo.id} className="border border-border rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="text-sm font-medium">{anexo.file_name}</p>
+                      <p className="text-xs text-muted-foreground">{anexo.tipo || "Documento"}</p>
+                    </div>
+                  </div>
+                  {anexo.file_url && (
+                    <FilePreview 
+                      fileUrl={anexo.file_url} 
+                      fileName={anexo.file_name} 
+                      fileType={anexo.tipo || "Documento"}
+                      onDownload={() => window.open(anexo.file_url, "_blank")}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 };
