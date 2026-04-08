@@ -71,7 +71,7 @@ Se o valor for numérico, considere formatações diferentes (97,3 vs 97.30 vs 9
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 500,
+        max_tokens: 8000,
         temperature: 0.1,
       }),
     });
@@ -217,7 +217,7 @@ IMPORTANTE:
       body: JSON.stringify({
         model: 'google/gemini-2.5-pro',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 2000,
+        max_tokens: 16000,
         temperature: 0.1,
       }),
     });

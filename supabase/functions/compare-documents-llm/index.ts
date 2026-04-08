@@ -140,7 +140,7 @@ Por favor, extraia TODOS os itens e valores de ambos os documentos e realize a c
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 8000,
+        max_tokens: 32000,
         temperature: 0,
         messages: [
           {
