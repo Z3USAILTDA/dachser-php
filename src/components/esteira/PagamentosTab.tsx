@@ -281,10 +281,15 @@ export const PagamentosTab = () => {
 
   const handleCopy = async (text: string, id: string) => {
     try {
-      await navigator.clipboard.writeText(text);
-      setCopiedId(id);
-      toast({ title: "Copiado!", description: "Texto copiado para a área de transferência" });
-      setTimeout(() => setCopiedId(null), 2000);
+      const { copyToClipboard } = await import("@/utils/clipboard");
+      const ok = await copyToClipboard(text);
+      if (ok) {
+        setCopiedId(id);
+        toast({ title: "Copiado!", description: "Texto copiado para a área de transferência" });
+        setTimeout(() => setCopiedId(null), 2000);
+      } else {
+        toast({ title: "Erro ao copiar", variant: "destructive" });
+      }
     } catch {
       toast({ title: "Erro ao copiar", variant: "destructive" });
     }
