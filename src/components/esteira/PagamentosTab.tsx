@@ -924,7 +924,8 @@ export const PagamentosTab = () => {
                     key={pag.id} 
                     className={cn(
                       "hover:bg-muted/30 transition-colors",
-                      selectedIds.has(pag.id) && "bg-primary/5"
+                      selectedIds.has(pag.id) && "bg-primary/5",
+                      pag.is_master && "border-l-2 border-l-purple-500"
                     )}
                   >
                     <td className="p-3">
@@ -934,8 +935,22 @@ export const PagamentosTab = () => {
                       />
                     </td>
                     <td className="p-3">
-                      <span className="font-mono font-medium text-foreground">{pag.numero_spo}</span>
-                      {/* Flag de erro de extração para boleto sem linha digitável */}
+                      {pag.is_master && pag.nome_master ? (
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-foreground">{pag.nome_master}</span>
+                            <Badge className="bg-purple-600 text-[9px] px-1.5">Master</Badge>
+                          </div>
+                          {(() => {
+                            const children = masterChildrenMap.get(pag.id);
+                            if (!children || children.length === 0) return null;
+                            const display = children.slice(0, 5).join(", ") + (children.length > 5 ? ` +${children.length - 5}` : "");
+                            return <span className="text-[10px] text-muted-foreground">↳ {display}</span>;
+                          })()}
+                        </div>
+                      ) : (
+                        <span className="font-mono font-medium text-foreground">{pag.numero_spo}</span>
+                      )}
                       {isBoleto(pag.forma_pagamento as any) && !pag.linha_digitavel && (
                         <Badge variant="outline" className="ml-2 text-[9px] bg-red-500/20 text-red-400 border-red-500/30">
                           Erro Extração
