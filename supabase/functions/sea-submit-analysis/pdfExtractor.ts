@@ -179,7 +179,7 @@ async function callClaude(prompt: string, pdfBase64: string, fileName: string): 
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 8000,
+      max_tokens: 32000,
       temperature: 0,
       messages: [{
         role: 'user',
@@ -205,34 +205,35 @@ async function callClaude(prompt: string, pdfBase64: string, fileName: string): 
 }
 
 async function callGemini(prompt: string, pdfBase64: string, fileName: string): Promise<string> {
-  const apiKey = Deno.env.get('GEMINI_API_KEY');
-  if (!apiKey) throw new Error('GEMINI_API_KEY not configured');
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          role: 'user',
-          parts: [
-            { text: `${prompt}\n\n[File: ${fileName}]` },
-            { inline_data: { mime_type: 'application/pdf', data: pdfBase64 } },
-          ],
-        }],
-        generationConfig: { maxOutputTokens: 8000 },
-      }),
-    }
-  );
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-pro',
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: `${prompt}\n\n[File: ${fileName}]` },
+          { type: 'image_url', image_url: { url: `data:application/pdf;base64,${pdfBase64}` } },
+        ],
+      }],
+      max_tokens: 32000,
+    }),
+  });
 
   if (!response.ok) {
     const err = await response.text().catch(() => '');
-    throw new Error(`Gemini extraction error: ${response.status} - ${err.substring(0, 200)}`);
+    throw new Error(`AI Gateway extraction error: ${response.status} - ${err.substring(0, 200)}`);
   }
 
   const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return data.choices?.[0]?.message?.content || '';
 }
 
 // ============ MAIN EXTRACTOR ============
