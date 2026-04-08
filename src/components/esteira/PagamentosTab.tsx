@@ -941,6 +941,7 @@ export const PagamentosTab = () => {
                           <SelectValue placeholder="Definir..." />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="A_DEFINIR">A definir</SelectItem>
                           <SelectItem value="MANUAL">Manual</SelectItem>
                           <SelectItem value="REMESSA_10H">Remessa 10h</SelectItem>
                           <SelectItem value="REMESSA_15H">Remessa 15h</SelectItem>
