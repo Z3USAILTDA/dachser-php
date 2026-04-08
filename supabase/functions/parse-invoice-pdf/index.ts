@@ -16,9 +16,9 @@ serve(async (req) => {
   }
 
   try {
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
     }
 
     const formData = await req.formData();
@@ -69,35 +69,31 @@ Retorne um JSON válido no formato:
     const userPrompt = `Analise este documento PDF e extraia todos os itens com seus valores. 
 Retorne APENAS o JSON válido, sem explicações adicionais.`;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`, {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: "POST",
       headers: {
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: systemPrompt + "\n\n" + userPrompt },
-              {
-                inline_data: {
-                  mime_type: "application/pdf",
-                  data: base64File,
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          maxOutputTokens: 4096,
-        },
+        model: 'google/gemini-2.5-flash',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: systemPrompt + "\n\n" + userPrompt },
+            {
+              type: 'image_url',
+              image_url: { url: `data:application/pdf;base64,${base64File}` },
+            },
+          ],
+        }],
+        max_tokens: 16000,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Gemini API error:", response.status, errorText);
+      console.error("AI Gateway error:", response.status, errorText);
       
       if (response.status === 429) {
         return new Response(
@@ -105,12 +101,18 @@ Retorne APENAS o JSON válido, sem explicações adicionais.`;
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ error: "Credits exhausted. Please add funds." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       
-      throw new Error(`Gemini API error: ${response.status}`);
+      throw new Error(`AI Gateway error: ${response.status}`);
     }
 
     const aiResponse = await response.json();
-    const content = aiResponse.candidates?.[0]?.content?.parts?.[0]?.text;
+    const content = aiResponse.choices?.[0]?.message?.content;
 
     if (!content) {
       throw new Error("No content in AI response");

@@ -59,34 +59,36 @@ async function extractTextWithOCR(
   mimeType: string,
   fileName: string
 ): Promise<OcrResult> {
-  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   
   console.log(`[OCR] Starting extraction for ${fileName} (${mimeType})`);
   
-  // For PDFs, try native extraction first using Gemini's inline_data (which does basic text extraction)
-  // Then validate if the extracted text is meaningful
+  // For PDFs, try native extraction first using Lovable AI Gateway
   
   if (mimeType === 'application/pdf') {
-    // Use Gemini Vision to extract text - it handles both native PDFs and scanned/image PDFs
-    console.log(`[OCR] Using Gemini Vision for PDF: ${fileName}`);
+    console.log(`[OCR] Using Lovable AI Gateway for PDF: ${fileName}`);
     
-    if (!geminiApiKey) {
-      console.error('[OCR] GEMINI_API_KEY not configured');
+    if (!LOVABLE_API_KEY) {
+      console.error('[OCR] LOVABLE_API_KEY not configured');
       return { text: '', method: 'vision-ocr', confidence: 'low' };
     }
     
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                {
-                  text: `Extraia TODO o texto deste documento PDF de forma precisa e completa.
-                  
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Extraia TODO o texto deste documento PDF de forma precisa e completa.
+                   
 INSTRUÇÕES CRÍTICAS:
 1. Extraia CADA palavra, número e símbolo exatamente como aparecem
 2. Mantenha a estrutura do documento (parágrafos, listas, tabelas)
@@ -97,31 +99,26 @@ INSTRUÇÕES CRÍTICAS:
 7. Para documentos em português, mantenha acentuação correta
 
 Retorne APENAS o texto extraído, sem explicações ou marcadores adicionais.`
-                },
-                {
-                  inline_data: {
-                    mime_type: 'application/pdf',
-                    data: base64Content,
-                  },
-                },
-              ],
-            }],
-            generationConfig: {
-              maxOutputTokens: 16000,
-              temperature: 0.1,
-            },
-          }),
-        }
-      );
+              },
+              {
+                type: 'image_url',
+                image_url: { url: `data:application/pdf;base64,${base64Content}` },
+              },
+            ],
+          }],
+          max_tokens: 32000,
+          temperature: 0.1,
+        }),
+      });
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[OCR] Gemini Vision error for ${fileName}:`, response.status, errorText);
+        console.error(`[OCR] AI Gateway error for ${fileName}:`, response.status, errorText);
         return { text: '', method: 'vision-ocr', confidence: 'low' };
       }
       
       const result = await response.json();
-      const extractedText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const extractedText = result.choices?.[0]?.message?.content || '';
       
       // Validate extraction quality
       const hasGoodText = extractedText.length > 100 &&
@@ -147,50 +144,49 @@ Retorne APENAS o texto extraído, sem explicações ou marcadores adicionais.`
   
   // For images, always use Vision OCR
   if (mimeType.startsWith('image/')) {
-    console.log(`[OCR] Using Gemini Vision for image: ${fileName}`);
+    console.log(`[OCR] Using Lovable AI Gateway for image: ${fileName}`);
     
-    if (!geminiApiKey) {
-      console.error('[OCR] GEMINI_API_KEY not configured');
+    if (!LOVABLE_API_KEY) {
+      console.error('[OCR] LOVABLE_API_KEY not configured');
       return { text: '', method: 'vision-ocr', confidence: 'low' };
     }
     
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                {
-                  text: `Extraia TODO o texto visível nesta imagem de forma precisa.
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Extraia TODO o texto visível nesta imagem de forma precisa.
 Mantenha a estrutura e formatação. Para tabelas, use: "Coluna1 | Coluna2".
 Preserve números exatamente como aparecem. Retorne APENAS o texto extraído.`
-                },
-                {
-                  inline_data: {
-                    mime_type: mimeType,
-                    data: base64Content,
-                  },
-                },
-              ],
-            }],
-            generationConfig: {
-              maxOutputTokens: 8000,
-              temperature: 0.1,
-            },
-          }),
-        }
-      );
+              },
+              {
+                type: 'image_url',
+                image_url: { url: `data:${mimeType};base64,${base64Content}` },
+              },
+            ],
+          }],
+          max_tokens: 16000,
+          temperature: 0.1,
+        }),
+      });
       
       if (!response.ok) {
-        console.error(`[OCR] Gemini Vision error for image ${fileName}`);
+        console.error(`[OCR] AI Gateway error for image ${fileName}`);
         return { text: '', method: 'vision-ocr', confidence: 'low' };
       }
       
       const result = await response.json();
-      const extractedText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const extractedText = result.choices?.[0]?.message?.content || '';
       
       console.log(`[OCR] Extracted ${extractedText.length} chars from image ${fileName}`);
       return {
@@ -1364,63 +1360,50 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
 
 // Call Gemini API directly as fallback (with OCR support for scanned PDFs)
 async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<ApiResponse> {
-  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   
-  if (!geminiApiKey) {
-    throw new Error('GEMINI_API_KEY not configured');
+  if (!LOVABLE_API_KEY) {
+    throw new Error('LOVABLE_API_KEY not configured');
   }
   
   const warnings: ChbFileError[] = [];
   
-  // Build parts for Gemini native format
-  const parts: any[] = [];
+  // Build content parts for Lovable AI Gateway
+  const contentParts: any[] = [];
   
   for (const file of files) {
     if (file.mimeType === 'application/pdf') {
-      // For PDFs, use OCR extraction to handle scanned documents
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 100) {
-        // Use OCR extracted text for better analysis
-        parts.push({ text: ocrResult.text });
-        console.log(`[Gemini] Using OCR text for PDF ${file.name}: ${ocrResult.text.length} chars`);
+        contentParts.push({ type: 'text', text: ocrResult.text });
+        console.log(`[Gemini Fallback] Using OCR text for PDF ${file.name}: ${ocrResult.text.length} chars`);
       } else {
-        // Fallback to native Gemini PDF handling
-        console.log(`[Gemini] Using native inline_data for PDF ${file.name}`);
-        parts.push({
-          inline_data: {
-            mime_type: file.mimeType,
-            data: file.content,
-          },
+        console.log(`[Gemini Fallback] Using image_url for PDF ${file.name}`);
+        contentParts.push({
+          type: 'image_url',
+          image_url: { url: `data:${file.mimeType};base64,${file.content}` },
         });
-        parts.push({
-          text: `[Arquivo: ${file.name}]`,
-        });
+        contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}]` });
       }
     } else if (file.mimeType.startsWith('image/')) {
-      // For images, use OCR extraction
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 50) {
-        parts.push({ text: ocrResult.text });
-        console.log(`[Gemini] Using OCR text for image ${file.name}: ${ocrResult.text.length} chars`);
+        contentParts.push({ type: 'text', text: ocrResult.text });
+        console.log(`[Gemini Fallback] Using OCR text for image ${file.name}: ${ocrResult.text.length} chars`);
       } else {
-        // Fallback to native image handling
-        parts.push({
-          inline_data: {
-            mime_type: file.mimeType,
-            data: file.content,
-          },
+        contentParts.push({
+          type: 'image_url',
+          image_url: { url: `data:${file.mimeType};base64,${file.content}` },
         });
-        parts.push({
-          text: `[Arquivo: ${file.name}]`,
-        });
+        contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}]` });
       }
     } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') ||
                file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
       try {
         const excelText = await extractExcelText(file.content, file.name);
-        parts.push({ text: excelText });
+        contentParts.push({ type: 'text', text: excelText });
       } catch (e) {
         console.error(`Error processing Excel ${file.name}:`, e);
         warnings.push({
@@ -1429,44 +1412,36 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
           type: 'conversion',
           suggestion: 'Verifique se o arquivo não está corrompido.',
         });
-        parts.push({
-          text: `[Arquivo Excel: ${file.name}] - Não foi possível extrair conteúdo`,
-        });
+        contentParts.push({ type: 'text', text: `[Arquivo Excel: ${file.name}] - Não foi possível extrair conteúdo` });
       }
     } else {
       try {
         const textContent = atob(file.content);
-        parts.push({
-          text: `[Arquivo: ${file.name}]\n${textContent}`,
-        });
+        contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}]\n${textContent}` });
       } catch {
-        parts.push({
-          text: `[Arquivo: ${file.name}] - Conteúdo binário não legível`,
-        });
+        contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}] - Conteúdo binário não legível` });
       }
     }
   }
   
-  parts.push({ text: prompt });
+  contentParts.push({ type: 'text', text: prompt });
   
   const startTime = Date.now();
   
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${geminiApiKey}`, {
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: {
+      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      contents: [
-        {
-          role: 'user',
-          parts,
-        },
-      ],
-      generationConfig: {
-        maxOutputTokens: 32000,
-        temperature: 0.1,
-      },
+      model: 'google/gemini-2.5-pro',
+      messages: [{
+        role: 'user',
+        content: contentParts,
+      }],
+      max_tokens: 65536,
+      temperature: 0.1,
     }),
   });
   
@@ -1474,17 +1449,16 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
   
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('Gemini API error:', errorText);
-    throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+    console.error('AI Gateway error:', errorText);
+    throw new Error(`AI Gateway error: ${response.status} - ${errorText}`);
   }
   
   const result = await response.json();
   
-  // Extract text from Gemini response format
-  const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const text = result.choices?.[0]?.message?.content || '';
   
   if (!text) {
-    throw new Error('No text content in Gemini API response');
+    throw new Error('No text content in AI Gateway response');
   }
   
   return { text, warnings };
