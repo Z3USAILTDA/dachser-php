@@ -323,7 +323,7 @@ async function analyzeWithAnthropic(
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 16000,
+          max_tokens: 32000,
           temperature: 0, // Zero for deterministic/consistent output
           messages: [{ role: 'user', content: contentParts }]
         }),
