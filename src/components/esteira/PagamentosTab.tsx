@@ -183,6 +183,36 @@ export const PagamentosTab = () => {
   const [anexosDialog, setAnexosDialog] = useState<any[]>([]);
   const [loadingAnexos, setLoadingAnexos] = useState(false);
   
+  // Master children state
+  const masterChildrenCache = useRef<Map<string, string[]>>(new Map());
+  const [masterChildrenMap, setMasterChildrenMap] = useState<Map<string, string[]>>(new Map());
+
+  // Load children SPOs for master vouchers
+  useEffect(() => {
+    const loadMasterChildren = async () => {
+      const masters = pagamentos.filter(p => p.is_master);
+      if (masters.length === 0) return;
+      let changed = false;
+      for (const master of masters) {
+        if (masterChildrenCache.current.has(master.id)) continue;
+        try {
+          const { data } = await supabase.functions.invoke("mariadb-proxy", {
+            body: { action: "get_voucher_filhos", master_id: master.id },
+          });
+          if (data?.data) {
+            const spos = data.data.map((f: any) => f.numero_spo);
+            masterChildrenCache.current.set(master.id, spos);
+            changed = true;
+          }
+        } catch (err) {
+          console.error("Erro ao carregar filhos do master:", err);
+        }
+      }
+      if (changed) setMasterChildrenMap(new Map(masterChildrenCache.current));
+    };
+    loadMasterChildren();
+  }, [pagamentos]);
+
   const { toast } = useToast();
 
   const loadPagamentos = async () => {
