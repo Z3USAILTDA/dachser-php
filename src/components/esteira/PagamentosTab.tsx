@@ -78,7 +78,10 @@ interface PagamentoItem {
   status_baixa: string;
   created_at: string;
   updated_at: string;
-  id_rm?: string; // id_rm from t_dados_financeiro_voucher
+  id_rm?: string;
+  is_master?: boolean;
+  nome_master?: string;
+  voucher_master_id?: string;
 }
 
 interface DadosBancarios {
