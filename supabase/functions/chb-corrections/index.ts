@@ -87,7 +87,7 @@ Se o valor for numérico, considere formatações diferentes (97,3 vs 97.30 vs 9
     }
 
     const result = await response.json();
-    const content = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const content = result.choices?.[0]?.message?.content || '';
     
     // Parse JSON from response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
