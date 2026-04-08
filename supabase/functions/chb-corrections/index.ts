@@ -142,10 +142,10 @@ async function reextractFieldWithContext(
   correctedValue: string,
   fileContent: string
 ): Promise<ReextractionResult> {
-  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   
-  if (!geminiApiKey) {
-    console.log('[chb-corrections] GEMINI_API_KEY not found for re-extraction');
+  if (!LOVABLE_API_KEY) {
+    console.log('[chb-corrections] LOVABLE_API_KEY not found for re-extraction');
     return {
       success: false,
       found: false,
@@ -208,26 +208,23 @@ IMPORTANTE:
   try {
     console.log(`[chb-corrections] Re-extracting "${correctedValue}" for field "${fieldName}" in ${filename}`);
     
-    // Use more powerful model for deep analysis
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`, {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        contents: [
-          { role: 'user', parts: [{ text: prompt }] }
-        ],
-        generationConfig: {
-          maxOutputTokens: 2000,
-          temperature: 0.1,
-        },
+        model: 'google/gemini-2.5-pro',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2000,
+        temperature: 0.1,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[chb-corrections] Gemini Pro API error:', errorText);
+      console.error('[chb-corrections] AI Gateway Pro error:', response.status, errorText);
       return {
         success: false,
         found: false,
@@ -243,7 +240,7 @@ IMPORTANTE:
     }
 
     const result = await response.json();
-    const content = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const content = result.choices?.[0]?.message?.content || '';
     
     // Parse JSON from response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
