@@ -1244,7 +1244,7 @@ const EsteiraIndex = () => {
           const { data } = await supabase.functions.invoke("mariadb-proxy", {
             body: { action: "get_voucher_filhos", master_id: m.id },
           });
-          const childSPOs = (data?.data || []).map((f: any) => f.numero_spo || f.numeroSPO || "");
+          const childSPOs: string[] = (data?.data || []).map((f: any) => String(f.numero_spo || f.numeroSPO || ""));
           // Deduplicate
           map.set(m.id, [...new Set(childSPOs)]);
         } catch {
