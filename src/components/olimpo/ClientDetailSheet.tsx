@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
@@ -191,7 +192,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-4xl overflow-y-auto">
+      <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2 text-foreground">
             <Building2 className="h-5 w-5 text-primary" />
@@ -332,51 +333,39 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                   <p className="text-sm text-muted-foreground text-center py-4">Nenhuma fatura encontrada</p>
                 ) : (
                   <>
-                    <div className="overflow-x-auto border border-border rounded-lg">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="bg-muted/30 border-b border-border">
-                            <th className="px-2 py-2 text-left font-semibold text-muted-foreground">Documento</th>
-                            <th className="px-2 py-2 text-left font-semibold text-muted-foreground">ND</th>
-                            <th className="px-2 py-2 text-left font-semibold text-muted-foreground">Ref. Cliente</th>
-                            <th className="px-2 py-2 text-left font-semibold text-muted-foreground">NF</th>
-                            <th className="px-2 py-2 text-left font-semibold text-muted-foreground">Tipo</th>
-                            <th className="px-2 py-2 text-left font-semibold text-muted-foreground">Vencimento</th>
-                            <th className="px-2 py-2 text-left font-semibold text-muted-foreground">Emissão</th>
-                            <th className="px-2 py-2 text-right font-semibold text-muted-foreground">Valor</th>
-                            <th className="px-2 py-2 text-center font-semibold text-muted-foreground">Disputa</th>
-                            <th className="px-2 py-2 text-left font-semibold text-muted-foreground">Processo</th>
-                            <th className="px-2 py-2 text-left font-semibold text-muted-foreground">Cond. Pagamento</th>
-                            <th className="px-2 py-2 text-left font-semibold text-muted-foreground">Vendedor</th>
-                          </tr>
-                        </thead>
-                        <tbody>
+                    <div className="border border-border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>ND</TableHead>
+                            <TableHead>Vencimento</TableHead>
+                            <TableHead className="text-right">Valor</TableHead>
+                            <TableHead className="text-center">Disputa</TableHead>
+                            <TableHead>Cond. Pagamento</TableHead>
+                            <TableHead>Vendedor</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
                           {faturas.map((f, idx) => (
-                            <tr key={idx} className="border-b border-border/30 hover:bg-muted/20">
-                              <td className="px-2 py-1.5 font-mono">{f.documento || "—"}</td>
-                              <td className="px-2 py-1.5">{f.nd || "—"}</td>
-                              <td className="px-2 py-1.5">{f.referencia_cliente || "—"}</td>
-                              <td className="px-2 py-1.5">{f.numero_nf || "—"}</td>
-                              <td className="px-2 py-1.5">{f.tipo_documento || "—"}</td>
-                              <td className="px-2 py-1.5">{f.data_vencimento || "—"}</td>
-                              <td className="px-2 py-1.5">{f.data_emissao || "—"}</td>
-                              <td className="px-2 py-1.5 text-right font-mono">
+                            <TableRow key={idx}>
+                              <TableCell className="font-mono font-medium">{f.nd || "—"}</TableCell>
+                              <TableCell>{f.data_vencimento || "—"}</TableCell>
+                              <TableCell className="text-right font-mono">
                                 {f.valor_nf != null ? formatBRLFull(Number(f.valor_nf)) : "—"}
-                              </td>
-                              <td className="px-2 py-1.5 text-center">
+                              </TableCell>
+                              <TableCell className="text-center">
                                 {Number(f.disputa) === 1 ? (
                                   <Badge variant="destructive" className="text-[10px]">Sim</Badge>
                                 ) : (
-                                  <span className="text-muted-foreground">Não</span>
+                                  <Badge variant="outline" className="text-[10px] text-muted-foreground">Não</Badge>
                                 )}
-                              </td>
-                              <td className="px-2 py-1.5">{f.numero_processo || "—"}</td>
-                              <td className="px-2 py-1.5">{f.condicao_pagamento || "—"}</td>
-                              <td className="px-2 py-1.5">{f.nome_vendedor || "—"}</td>
-                            </tr>
+                              </TableCell>
+                              <TableCell>{f.condicao_pagamento || "—"}</TableCell>
+                              <TableCell>{f.nome_vendedor || "—"}</TableCell>
+                            </TableRow>
                           ))}
-                        </tbody>
-                      </table>
+                        </TableBody>
+                      </Table>
                     </div>
 
                     <TablePagination
