@@ -1227,16 +1227,30 @@ const EsteiraIndex = () => {
     }
     return vouchers;
   }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro, filters.etapa]);
+  // Map de masterId → SPOs dos filhos para busca expandida
+  const masterChildSPOsMap = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const v of vouchers) {
+      if (v.voucherMasterId) {
+        const existing = map.get(v.voucherMasterId) || [];
+        existing.push(v.numeroSPO);
+        map.set(v.voucherMasterId, existing);
+      }
+    }
+    return map;
+  }, [vouchers]);
+
   const filterVouchers = (vouchersList: Voucher[]) => {
     const now = new Date();
     const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
-    return vouchersList.filter(voucher => {
-      // Drill-down filter from metric cards
-      if (drillDownFilter !== "all") {
-        switch (drillDownFilter) {
+
+    return vouchersList.filter((voucher) => {
+      // Quick view filter
+      if (filters.quickView) {
+        switch (filters.quickView) {
           case "ativos":
             if (voucher.etapaAtual === "CONCLUIDO" || voucher.etapaAtual === "A_PROCESSAR") return false;
             break;
@@ -1256,12 +1270,15 @@ const EsteiraIndex = () => {
         }
       }
 
-      // Filtro de busca por SPO (startsWith para evitar matches parciais)
+      // Filtro de busca por SPO, nome do master ou SPO de filho vinculado
       if (filters.search) {
         const searchLower = filters.search.toLowerCase().trim();
         const spoMatch = voucher.numeroSPO.toLowerCase().startsWith(searchLower);
         const masterNameMatch = voucher.nomeMaster?.toLowerCase().startsWith(searchLower);
-        if (!spoMatch && !masterNameMatch) return false;
+        const childSPOMatch = voucher.isMaster && (masterChildSPOsMap.get(voucher.id) || []).some(
+          spo => spo.toLowerCase().startsWith(searchLower)
+        );
+        if (!spoMatch && !masterNameMatch && !childSPOMatch) return false;
       }
 
       // Filtro de processo
