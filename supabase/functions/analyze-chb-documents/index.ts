@@ -1360,16 +1360,16 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
 
 // Call Gemini API directly as fallback (with OCR support for scanned PDFs)
 async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<ApiResponse> {
-  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   
-  if (!geminiApiKey) {
-    throw new Error('GEMINI_API_KEY not configured');
+  if (!LOVABLE_API_KEY) {
+    throw new Error('LOVABLE_API_KEY not configured');
   }
   
   const warnings: ChbFileError[] = [];
   
-  // Build parts for Gemini native format
-  const parts: any[] = [];
+  // Build content parts for Lovable AI Gateway
+  const contentParts: any[] = [];
   
   for (const file of files) {
     if (file.mimeType === 'application/pdf') {
