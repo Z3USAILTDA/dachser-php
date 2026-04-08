@@ -77,7 +77,7 @@ Se o valor for numérico, considere formatações diferentes (97,3 vs 97.30 vs 9
     });
 
     if (!response.ok) {
-      console.error('[chb-corrections] Gemini API error:', await response.text());
+      console.error('[chb-corrections] AI Gateway error:', response.status, await response.text());
       return {
         found: false,
         location: 'Erro na localização automática',
