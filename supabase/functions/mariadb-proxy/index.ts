@@ -2429,15 +2429,9 @@ Deno.serve(async (req) => {
         console.log(`[get_client_faturas] client=${fatClientName} page=${fatPage} size=${fatPageSize}`);
 
         const offset = (fatPage - 1) * fatPageSize;
+        const likePattern = `${fatClientName} - %`;
 
-        const countSql = `
-          SELECT COUNT(*) as total
-          FROM dados_dachser.t_dados_financeiro_nfs t
-          WHERE SUBSTRING_INDEX(t.razao_social, ' - ', 1) = ?
-        `;
-        const countResult = await client.query(countSql, [fatClientName]);
-        const total = countResult[0]?.total || 0;
-
+        // Single optimized query with LIKE instead of SUBSTRING_INDEX for index usage
         const fatSql = `
           SELECT
             t.documento,
@@ -2454,11 +2448,20 @@ Deno.serve(async (req) => {
             n.numero_processo
           FROM dados_dachser.t_dados_financeiro_nfs t
           LEFT JOIN dados_dachser.t_dados_nfs n ON t.id_rm = n.id_rm
-          WHERE SUBSTRING_INDEX(t.razao_social, ' - ', 1) = ?
+          WHERE (t.razao_social LIKE ? OR t.razao_social = ?)
           ORDER BY t.data_vencimento DESC
           LIMIT ? OFFSET ?
         `;
-        const fatRows = await client.query(fatSql, [fatClientName, fatPageSize, offset]);
+        const fatRows = await client.query(fatSql, [likePattern, fatClientName, fatPageSize, offset]);
+
+        // Count query with same LIKE pattern (no JOIN needed)
+        const countSql = `
+          SELECT COUNT(*) as total
+          FROM dados_dachser.t_dados_financeiro_nfs t
+          WHERE (t.razao_social LIKE ? OR t.razao_social = ?)
+        `;
+        const countResult = await client.query(countSql, [likePattern, fatClientName]);
+        const total = countResult[0]?.total || 0;
 
         result = { success: true, rows: fatRows, total, page: fatPage, pageSize: fatPageSize };
         break;
