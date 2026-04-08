@@ -7,23 +7,28 @@ const corsHeaders = {
 };
 
 async function testGemini(customKey?: string): Promise<{ success: boolean; error?: string; details?: string }> {
-  const key = customKey || Deno.env.get("GEMINI_API_KEY");
-  if (!key) return { success: false, error: "GEMINI_API_KEY not configured" };
+  // Gemini is now accessed via Lovable AI Gateway
+  const key = Deno.env.get("LOVABLE_API_KEY");
+  if (!key) return { success: false, error: "LOVABLE_API_KEY not configured" };
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] }),
-    }
-  );
+  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [{ role: "user", content: "ping" }],
+      max_tokens: 10,
+    }),
+  });
   if (!res.ok) {
     const body = await res.text();
     return { success: false, error: `HTTP ${res.status}`, details: body.slice(0, 200) };
   }
   await res.text();
-  return { success: true, details: customKey ? "custom key" : "env secret" };
+  return { success: true, details: "Lovable AI Gateway (gemini-2.5-flash)" };
 }
 
 async function testAnthropic(customKey?: string): Promise<{ success: boolean; error?: string; details?: string }> {
@@ -90,7 +95,6 @@ async function testJsoncargo(customKey?: string): Promise<{ success: boolean; er
   const key = customKey || Deno.env.get("JSONCARGO_API_KEY");
   if (!key) return { success: false, error: "JSONCARGO_API_KEY not configured" };
 
-  // Test with a real MSC container for accurate results
   const testContainer = "MSBU4633186";
   const res = await fetch(`https://api.jsoncargo.com/v1/tracking?bl=${testContainer}`, {
     headers: { "x-api-key": key, "Accept": "application/json" },
@@ -99,7 +103,6 @@ async function testJsoncargo(customKey?: string): Promise<{ success: boolean; er
   if (res.status === 401 || res.status === 403) {
     return { success: false, error: `HTTP ${res.status}`, details: body.slice(0, 300) };
   }
-  // Try to parse JSON to check validity
   try {
     JSON.parse(body);
     return { success: true, details: `HTTP ${res.status} – container ${testContainer} – valid JSON (${body.length} chars)` };
@@ -124,7 +127,6 @@ async function testFlightradar(customKey?: string): Promise<{ success: boolean; 
 }
 
 async function testHapag(customKey?: string): Promise<{ success: boolean; error?: string; details?: string }> {
-  // For Hapag, customKey format: "clientId:apiKey"
   let clientId: string | undefined;
   let apiKey: string | undefined;
   if (customKey) {
