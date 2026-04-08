@@ -191,7 +191,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-4xl overflow-y-auto">
+      <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2 text-foreground">
             <Building2 className="h-5 w-5 text-primary" />
