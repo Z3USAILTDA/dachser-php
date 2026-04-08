@@ -1229,17 +1229,31 @@ const EsteiraIndex = () => {
     }
     return vouchers;
   }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro, filters.etapa]);
-  // Map de masterId → SPOs dos filhos para busca expandida
-  const masterChildSPOsMap = useMemo(() => {
-    const map = new Map<string, string[]>();
-    for (const v of vouchers) {
-      if (v.voucherMasterId) {
-        const existing = map.get(v.voucherMasterId) || [];
-        existing.push(v.numeroSPO);
-        map.set(v.voucherMasterId, existing);
-      }
+  // Map de masterId → SPOs dos filhos para busca expandida (carregado via API)
+  const [masterChildSPOsMap, setMasterChildSPOsMap] = useState<Map<string, string[]>>(new Map());
+  useEffect(() => {
+    const masters = vouchers.filter(v => v.isMaster || v.origemCriacao === "MASTER");
+    if (masters.length === 0) {
+      setMasterChildSPOsMap(new Map());
+      return;
     }
-    return map;
+    const loadChildSPOs = async () => {
+      const map = new Map<string, string[]>();
+      await Promise.all(masters.map(async (m) => {
+        try {
+          const { data } = await supabase.functions.invoke("mariadb-proxy", {
+            body: { action: "get_voucher_filhos", master_id: m.id },
+          });
+          const childSPOs: string[] = (data?.data || []).map((f: any) => String(f.numero_spo || f.numeroSPO || ""));
+          // Deduplicate
+          map.set(m.id, [...new Set(childSPOs)]);
+        } catch {
+          map.set(m.id, []);
+        }
+      }));
+      setMasterChildSPOsMap(map);
+    };
+    loadChildSPOs();
   }, [vouchers]);
 
   const filterVouchers = (vouchersList: Voucher[]) => {
