@@ -1399,6 +1399,11 @@ const EsteiraIndex = () => {
         if (filters.isMaster === "false" && isMaster) return false;
       }
 
+      // Filtro de status baixa
+      if (filters.statusBaixa && filters.statusBaixa !== "all") {
+        if (voucher.statusBaixa !== filters.statusBaixa) return false;
+      }
+
       // Quick filter: Fornecedor
       if (quickFilterFornecedor !== "all" && voucher.fornecedor !== quickFilterFornecedor) {
         return false;
