@@ -781,6 +781,41 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
         onConfirm={handleRetornarPendente}
         voucherSpo={selectedVoucherForRetorno?.numeroSPO || ""}
       />
+
+      {/* Dialog para visualizar documentos sem abrir detalhes */}
+      <Dialog open={docPreviewOpen} onOpenChange={setDocPreviewOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Paperclip className="h-5 w-5" />
+              Documentos Anexados
+            </DialogTitle>
+          </DialogHeader>
+          {docPreviewLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : docPreviewAnexos.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">Nenhum documento anexado</p>
+          ) : (
+            <div className="space-y-3">
+              {docPreviewAnexos.map((anexo: any) => (
+                <div key={anexo.id} className="border border-border rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="text-sm font-medium">{anexo.file_name}</p>
+                      <p className="text-xs text-muted-foreground">{anexo.tipo || "Documento"}</p>
+                    </div>
+                  </div>
+                  {anexo.file_url && (
+                    <FilePreview fileUrl={anexo.file_url} fileName={anexo.file_name} />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 };
