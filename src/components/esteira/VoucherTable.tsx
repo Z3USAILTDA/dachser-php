@@ -368,16 +368,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                     title="Emissão de"
                   />
                 </TableHead>
-                <TableHead className="py-2">
-                  <Input
-                    placeholder="Enviado..."
-                    value={filters.search ? "" : ""}
-                    onChange={(e) => {
-                      // Use a custom filter key for enviadoPor - stored in fornecedor temporarily
-                    }}
-                    className="h-8 text-xs w-24 hidden"
-                  />
-                </TableHead>
+                <TableHead className="py-2"></TableHead>
                 <TableHead className="py-2"></TableHead>
                 <TableHead className="py-2">
                   <Select value={filters.urgente} onValueChange={(value) => handleFilterChange("urgente", value)}>
