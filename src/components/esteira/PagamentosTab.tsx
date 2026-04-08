@@ -789,6 +789,9 @@ export const PagamentosTab = () => {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("A_DEFINIR")}>
+                A definir
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("MANUAL")}>
                 Manual
               </DropdownMenuItem>
