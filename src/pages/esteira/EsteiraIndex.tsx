@@ -1248,28 +1248,6 @@ const EsteiraIndex = () => {
     yesterday.setDate(yesterday.getDate() - 1);
 
     return vouchersList.filter((voucher) => {
-      // Quick view filter
-      if (filters.quickView) {
-        switch (filters.quickView) {
-          case "ativos":
-            if (voucher.etapaAtual === "CONCLUIDO" || voucher.etapaAtual === "A_PROCESSAR") return false;
-            break;
-          case "sla":
-            if (voucher.etapaAtual === "CONCLUIDO") return false;
-            if (voucher.vencimento > tomorrow) return false;
-            break;
-          case "pendencias":
-            if (voucher.etapaAtual === "CONCLUIDO") return false;
-            const aguardandoComprovante = voucher.etapaAtual === "FINANCEIRO" || voucher.etapaAtual === "ROBO";
-            const emExcecao = voucher.urgenciaTipo === "URGENTE_REAL";
-            if (!aguardandoComprovante && !emExcecao) return false;
-            break;
-          case "atividade":
-            if (voucher.updatedAt < yesterday) return false;
-            break;
-        }
-      }
-
       // Filtro de busca por SPO, nome do master ou SPO de filho vinculado
       if (filters.search) {
         const searchLower = filters.search.toLowerCase().trim();
