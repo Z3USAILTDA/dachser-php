@@ -1,40 +1,31 @@
 
 
-## Plano: Nome personalizado do Master + vouchers vinculados como subtítulo
+## Plano: Busca por nº do voucher vinculado e nome do Master
 
-### O que o usuário quer
-1. Onde aparece `MASTER-XYFBZRG5` (o `numeroSPO`), mostrar o `nomeMaster` (nome escolhido pelo usuário)
-2. Como subtítulo, listar os vouchers filhos vinculados ao master (ex: "SPO-001, SPO-002, SPO-003")
-3. Corrigir detalhes para carregar os vinculados (bug `data.filhos` → `data.data`)
+### Problema
+O filtro de busca atual (linhas 1260-1265 de `EsteiraIndex.tsx`) só compara com `voucher.numeroSPO` e `voucher.nomeMaster`. Quando o usuário digita o SPO de um voucher filho, o Master correspondente não aparece nos resultados.
 
-### Alterações
+### Solução
 
-**1. `src/components/esteira/VoucherTable.tsx`**
-- Linha 490: quando `isMaster && nomeMaster`, exibir `nomeMaster` como texto principal, e `numeroSPO` em parênteses ao lado ou como parte do texto
-- Linhas 513-517: substituir o subtítulo atual (que mostra `nomeMaster`) por uma lista dos vouchers filhos vinculados
-- Adicionar `useEffect` que, para cada voucher master visível, faz uma chamada `get_voucher_filhos` e armazena no estado local (com cache por `id` para evitar re-fetch)
-- Exibir os SPOs dos filhos como subtítulo: ex: `"SPO-123, SPO-456, SPO-789"` truncado se necessário
+**`src/pages/esteira/EsteiraIndex.tsx`**
 
-**2. `src/components/esteira/VoucherDetailsView.tsx`** — linha 51
-- Corrigir `data?.filhos` → `data?.data` para que os vouchers vinculados carreguem
-
-### Detalhes técnicos
-
-**Cache de filhos na tabela** — Para evitar N chamadas por render, usar um `useRef<Map>` que guarda os filhos já carregados por `masterId`. Carregar sob demanda apenas para masters visíveis na página atual.
-
-**Exibição na coluna SPO**:
+1. Antes do `filterVouchers`, criar um `useMemo` que monta um `Map<string, string[]>` de `masterId → [child SPOs]` a partir da própria lista de vouchers (usando `voucherMasterId`):
 ```
-┌─────────────────────────────────┐
-│ Nome Escolhido pelo Usuário  🟣 Master │
-│ ↳ SPO-001, SPO-002, SPO-003           │
-└─────────────────────────────────┘
+masterChildSPOs: Map onde key = id do master, value = array de numeroSPO dos filhos
 ```
 
-Se `nomeMaster` for null, mantém `numeroSPO` como principal (comportamento atual).
+2. No bloco de busca (linhas 1260-1265), além de `spoMatch` e `masterNameMatch`, adicionar:
+   - Se o voucher é Master (`voucher.isMaster`), verificar se algum SPO filho contém/começa com o texto buscado (consultando o map)
+   - Resultado: buscar "SPO-123" encontra tanto o voucher filho quanto o Master que o contém
 
-### Arquivos alterados
+### Arquivo alterado
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/components/esteira/VoucherTable.tsx` | Nome personalizado como título, filhos como subtítulo |
-| `src/components/esteira/VoucherDetailsView.tsx` | Fix: `data?.data` em vez de `data?.filhos` |
+| `src/pages/esteira/EsteiraIndex.tsx` | `useMemo` para map de filhos + lógica de busca expandida |
+
+### Lógica de match atualizada
+```
+spoMatch || masterNameMatch || childSPOMatch
+```
+Onde `childSPOMatch` = voucher é master E algum SPO filho começa com o texto buscado.
 
