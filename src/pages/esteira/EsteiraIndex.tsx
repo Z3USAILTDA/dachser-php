@@ -585,7 +585,9 @@ const EsteiraIndex = () => {
     moeda: "all",
     criadoEmInicio: "",
     criadoEmFim: "",
-    isMaster: "all"
+    isMaster: "all",
+    enviadoPor: "",
+    criadoPor: ""
   });
   const [metrics, setMetrics] = useState<DashboardMetrics>({
     ativos: 0,
@@ -2057,7 +2059,9 @@ const EsteiraIndex = () => {
                   moeda: "all",
                   criadoEmInicio: "",
                   criadoEmFim: "",
-                  isMaster: "all"
+                  isMaster: "all",
+                  enviadoPor: "",
+                  criadoPor: ""
                 });
               }} className="text-[#ffc800] hover:text-white text-[0.8rem] flex items-center gap-1">
                       ✕ Limpar Todos
