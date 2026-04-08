@@ -2431,7 +2431,7 @@ Deno.serve(async (req) => {
         const offset = (fatPage - 1) * fatPageSize;
         const likePattern = `${fatClientName} - %`;
 
-        // Single optimized query with LIKE instead of SUBSTRING_INDEX for index usage
+        // Data query first (no JOIN - fast)
         const fatSql = `
           SELECT
             t.documento,
@@ -2445,16 +2445,39 @@ Deno.serve(async (req) => {
             COALESCE(t.disputa, 0) AS disputa,
             t.condicao_pag AS condicao_pagamento,
             t.nome_vendedor,
-            n.numero_processo
+            t.id_rm
           FROM dados_dachser.t_dados_financeiro_nfs t
-          LEFT JOIN dados_dachser.t_dados_nfs n ON t.id_rm = n.id_rm
           WHERE (t.razao_social LIKE ? OR t.razao_social = ?)
           ORDER BY t.data_vencimento DESC
           LIMIT ? OFFSET ?
         `;
         const fatRows = await client.query(fatSql, [likePattern, fatClientName, fatPageSize, offset]);
 
-        // Count query with same LIKE pattern (no JOIN needed)
+        // Enrich with numero_processo via batch IN query
+        const idRms = fatRows.map((r: any) => r.id_rm).filter(Boolean);
+        let processoMap: Record<string, string> = {};
+        if (idRms.length > 0) {
+          try {
+            const placeholders = idRms.map(() => '?').join(',');
+            const processoRows = await client.query(
+              `SELECT id_rm, numero_processo FROM dados_dachser.t_dados_nfs WHERE id_rm IN (${placeholders})`,
+              idRms
+            );
+            for (const pr of processoRows) {
+              if (pr.id_rm) processoMap[String(pr.id_rm)] = pr.numero_processo || '';
+            }
+          } catch (e) {
+            console.warn('[get_client_faturas] Could not fetch processos:', e);
+          }
+        }
+
+        const enrichedRows = fatRows.map((r: any) => ({
+          ...r,
+          numero_processo: processoMap[String(r.id_rm)] || null,
+          id_rm: undefined, // don't expose internal id
+        }));
+
+        // Count (no JOIN)
         const countSql = `
           SELECT COUNT(*) as total
           FROM dados_dachser.t_dados_financeiro_nfs t
@@ -2463,7 +2486,7 @@ Deno.serve(async (req) => {
         const countResult = await client.query(countSql, [likePattern, fatClientName]);
         const total = countResult[0]?.total || 0;
 
-        result = { success: true, rows: fatRows, total, page: fatPage, pageSize: fatPageSize };
+        result = { success: true, rows: enrichedRows, total, page: fatPage, pageSize: fatPageSize };
         break;
       }
 
