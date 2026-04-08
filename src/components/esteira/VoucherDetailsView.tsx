@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Voucher, ETAPA_LABELS, calcularTempoNaEtapa, formatarTempoNaEtapa, SLA_POR_ETAPA } from "@/types/voucher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, AlertCircle, Building2, User, Clock, Trash2, Loader2 } from "lucide-react";
+import { FileText, AlertCircle, Building2, User, Clock, Trash2, Loader2, ExternalLink } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { FilePreview } from "./FilePreview";
 import { ProcessoOrigemCard } from "./ProcessoOrigemCard";
@@ -30,12 +32,28 @@ interface VoucherDetailsViewProps {
 }
 
 export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = false }: VoucherDetailsViewProps) => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [vouchersFilhos, setVouchersFilhos] = useState<any[]>([]);
+  const [loadingFilhos, setLoadingFilhos] = useState(false);
   const tempoNaEtapa = calcularTempoNaEtapa(voucher);
   const slaLimit = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA] || 24;
   const slaExcedido = tempoNaEtapa >= slaLimit;
+
+  useEffect(() => {
+    if (voucher.isMaster) {
+      setLoadingFilhos(true);
+      supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "get_voucher_filhos", master_id: voucher.id },
+      }).then(({ data }) => {
+        setVouchersFilhos(data?.filhos || []);
+      }).catch(() => {
+        setVouchersFilhos([]);
+      }).finally(() => setLoadingFilhos(false));
+    }
+  }, [voucher.id, voucher.isMaster]);
 
   const isImageFile = (fileName: string) => {
     const ext = fileName.toLowerCase().split('.').pop();
@@ -458,7 +476,79 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
         </CardContent>
       </Card>
 
-      {/* Confirm Delete Dialog */}
+      {/* Vouchers Vinculados (Master) */}
+      {voucher.isMaster && (
+        <Card 
+          className="border border-purple-500/30 backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]"
+          style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+        >
+          <CardHeader>
+            <CardTitle className="text-purple-400 flex items-center gap-2">
+              Vouchers Vinculados
+              <Badge className="bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                {loadingFilhos ? "..." : vouchersFilhos.length}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingFilhos ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-muted-foreground text-sm">Carregando vouchers vinculados...</span>
+              </div>
+            ) : vouchersFilhos.length === 0 ? (
+              <p className="text-muted-foreground text-center py-4">Nenhum voucher vinculado</p>
+            ) : (
+              <div className="rounded-lg border border-border/50 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>SPO</TableHead>
+                      <TableHead>Fornecedor</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead>Etapa</TableHead>
+                      <TableHead className="text-right">Ação</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {vouchersFilhos.map((filho: any) => (
+                      <TableRow 
+                        key={filho.id} 
+                        className="cursor-pointer hover:bg-muted/20"
+                        onDoubleClick={() => navigate(`/fin/esteira/voucher/${filho.id}`)}
+                      >
+                        <TableCell className="font-mono font-medium">{filho.numero_spo || filho.numeroSPO}</TableCell>
+                        <TableCell className="max-w-[200px] truncate">{filho.fornecedor}</TableCell>
+                        <TableCell>
+                          {filho.valor ? `${filho.moeda || 'BRL'} ${Number(filho.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
+                        </TableCell>
+                        <TableCell>{filho.vencimento ? formatDateOnlyBR(filho.vencimento) : '-'}</TableCell>
+                        <TableCell>
+                          <Badge className="bg-primary/20 text-primary border border-primary/30">
+                            {ETAPA_LABELS[filho.etapa_atual || filho.etapaAtual] || filho.etapa_atual || '-'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => navigate(`/fin/esteira/voucher/${filho.id}`)}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+
       <AlertDialog open={!!confirmDeleteId} onOpenChange={() => setConfirmDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
