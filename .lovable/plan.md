@@ -1,49 +1,33 @@
 
 
-## Plano: Corrigir localização automática nas correções CHB
+## Plano: Exibir vouchers filhos do Master na aba Pagamentos
 
-### Problema identificado
-Os logs confirmam o fluxo:
-1. **Stage 1 (Gemini Flash — quick search)**: retorna `found: false`
-2. **Stage 2 (Gemini Pro — re-extraction)**: roda em background, encontra com `confidence: "alta"`, mas o **response HTTP já foi enviado** com `found: false`
-3. O usuário vê o toast "Localização automática não disponível" mesmo quando a re-extração encontra
-
-### Causa raiz
-O Stage 1 (Flash) é fraco demais para localizar valores em documentos complexos. A re-extração (Pro) funciona mas é fire-and-forget — o resultado nunca chega ao frontend.
-
-### Solução
-Tornar a re-extração **síncrona** quando o Stage 1 falha, em vez de fire-and-forget. Isso garante que o usuário receba o resultado correto na mesma resposta.
+### Problema
+A aba Pagamentos (`PagamentosTab.tsx`) não tem noção de Voucher Master. O backend (`list_pagamentos`) não retorna `is_master` nem `nome_master`, e o frontend não exibe os filhos vinculados.
 
 ### Alterações
 
-**`supabase/functions/chb-corrections/index.ts`**
+**1. Backend — `mariadb-proxy/index.ts` (action `list_pagamentos`)**
+- Adicionar `v.is_master, v.nome_master, v.voucher_master_id` ao SELECT da query (linha ~8988)
 
-1. Quando `locationResult.found === false` e há `effectiveFileContent`, executar `reextractFieldWithContext` de forma **síncrona** (await) em vez de dispatch paralelo
-2. Se a re-extração encontrar (`found: true`), usar esse resultado como o `locationResult` da resposta
-3. Atualizar a correção no banco com os dados da re-extração antes de responder
-4. Manter o dispatch paralelo apenas como fallback se houver timeout
+**2. Frontend — `PagamentosTab.tsx`**
 
-Lógica simplificada:
-```
-if (!locationResult.found && effectiveFileContent) {
-  // Tenta re-extração síncrona (Pro) antes de responder
-  const reextResult = await reextractFieldWithContext(...);
-  if (reextResult.found) {
-    locationResult = { found: true, location: reextResult.location, ... };
-    // Atualiza correção no banco
-    // Salva extraction rule
-  }
-}
-// Responde com locationResult atualizado
-```
+- Adicionar campos `is_master`, `nome_master`, `voucher_master_id` na interface `PagamentoItem`
+- Adicionar estado `masterChildrenMap` + cache (mesmo padrão do `VoucherTable.tsx`):
+  - `useEffect` que detecta masters na lista e chama `get_voucher_filhos` para cada um
+  - Cache em `useRef` para evitar re-fetches
+- Na coluna SPO da tabela (linha ~903-904):
+  - Se `is_master && nome_master`: exibir `nomeMaster` em vez do SPO
+  - Adicionar badge "Master" (roxo)
+  - Subtítulo com `↳ SPO-001, SPO-002...` (lista dos filhos, máx 5 + contagem)
+  - Borda lateral roxa na row do master
 
-### Arquivo alterado
+### Arquivos alterados
 | Arquivo | Alteração |
 |---------|-----------|
-| `supabase/functions/chb-corrections/index.ts` | Re-extração síncrona quando Stage 1 falha, resultado devolvido na resposta |
+| `supabase/functions/mariadb-proxy/index.ts` | Adicionar `is_master, nome_master, voucher_master_id` ao SELECT de `list_pagamentos` |
+| `src/components/esteira/PagamentosTab.tsx` | Interface + estado + renderização de master/filhos |
 
 ### Resultado esperado
-- Usuário recebe a localização correta no toast (ex: "Localizado: Na seção Accounting Information...")
-- A correção é salva com `location_confidence: "alta"` desde o início
-- Extraction rules são criadas na mesma request
+Vouchers Master aparecem na aba Pagamentos com nome personalizado, badge "Master" e lista de SPOs filhos, igual ao comportamento da tabela principal da Esteira.
 
