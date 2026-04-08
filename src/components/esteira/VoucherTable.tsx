@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Voucher, ETAPA_LABELS, calcularTempoNaEtapa, formatarTempoNaEtapa, SLA_POR_ETAPA } from "@/types/voucher";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -146,6 +146,34 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   const [docPreviewVoucherId, setDocPreviewVoucherId] = useState<string | null>(null);
   const [docPreviewAnexos, setDocPreviewAnexos] = useState<any[]>([]);
   const [docPreviewLoading, setDocPreviewLoading] = useState(false);
+  const masterChildrenCache = useRef<Map<string, string[]>>(new Map());
+  const [masterChildrenMap, setMasterChildrenMap] = useState<Map<string, string[]>>(new Map());
+
+  // Load children SPOs for master vouchers visible on current page
+  useEffect(() => {
+    const loadMasterChildren = async () => {
+      const startIdx = (currentPage - 1) * PAGE_SIZE;
+      const visibleVouchers = vouchers.slice(startIdx, startIdx + PAGE_SIZE);
+      const masters = visibleVouchers.filter(v => v.isMaster || v.origemCriacao === "MASTER");
+      const uncachedMasters = masters.filter(m => !masterChildrenCache.current.has(m.id));
+      
+      if (uncachedMasters.length === 0) return;
+      
+      for (const master of uncachedMasters) {
+        try {
+          const { data } = await supabase.functions.invoke("mariadb-proxy", {
+            body: { action: "get_voucher_filhos", master_id: master.id },
+          });
+          const childSPOs = (data?.data || []).map((f: any) => f.numero_spo || f.numeroSPO || "");
+          masterChildrenCache.current.set(master.id, childSPOs);
+        } catch {
+          masterChildrenCache.current.set(master.id, []);
+        }
+      }
+      setMasterChildrenMap(new Map(masterChildrenCache.current));
+    };
+    loadMasterChildren();
+  }, [vouchers, currentPage]);
 
   const handleRetornarPendente = async (justificativa: string) => {
     if (!selectedVoucherForRetorno) return;
@@ -487,7 +515,9 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       <TableCell className="font-mono font-medium">
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-2">
-                            {voucher.numeroSPO}
+                            {(voucher.isMaster || voucher.origemCriacao === "MASTER") && voucher.nomeMaster
+                              ? voucher.nomeMaster
+                              : voucher.numeroSPO}
                             {(voucher.isMaster || voucher.origemCriacao === "MASTER") && (
                               <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-[10px] gap-1">
                                 <Layers className="h-3 w-3" />
@@ -510,11 +540,16 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                               </Tooltip>
                             )}
                           </div>
-                          {voucher.isMaster && voucher.nomeMaster && (
-                            <span className="text-xs text-muted-foreground font-normal truncate max-w-[200px]" title={voucher.nomeMaster}>
-                              {voucher.nomeMaster}
-                            </span>
-                          )}
+                          {(voucher.isMaster || voucher.origemCriacao === "MASTER") && (() => {
+                            const children = masterChildrenMap.get(voucher.id);
+                            if (!children || children.length === 0) return null;
+                            const display = children.slice(0, 5).join(", ") + (children.length > 5 ? ` +${children.length - 5}` : "");
+                            return (
+                              <span className="text-[11px] text-muted-foreground font-normal truncate max-w-[280px]" title={children.join(", ")}>
+                                ↳ {display}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </TableCell>
                       <TableCell className="font-mono text-xs">

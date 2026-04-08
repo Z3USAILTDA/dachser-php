@@ -48,7 +48,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
       supabase.functions.invoke("mariadb-proxy", {
         body: { action: "get_voucher_filhos", master_id: voucher.id },
       }).then(({ data }) => {
-        setVouchersFilhos(data?.filhos || []);
+        setVouchersFilhos(data?.data || []);
       }).catch(() => {
         setVouchersFilhos([]);
       }).finally(() => setLoadingFilhos(false));
