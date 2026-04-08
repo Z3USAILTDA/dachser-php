@@ -25,10 +25,10 @@ async function locateValueInFile(
   correctedValue: string,
   fileContent: string
 ): Promise<{ found: boolean; location: string; context: string; confidence: 'alta' | 'media' | 'baixa' }> {
-  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   
-  if (!geminiApiKey) {
-    console.log('[chb-corrections] GEMINI_API_KEY not found, using fallback location');
+  if (!LOVABLE_API_KEY) {
+    console.log('[chb-corrections] LOVABLE_API_KEY not found, using fallback location');
     return {
       found: false,
       location: 'Localização automática não disponível',
@@ -62,24 +62,22 @@ Se não encontrar o valor exato, busque valores similares e indique com confiden
 Se o valor for numérico, considere formatações diferentes (97,3 vs 97.30 vs 97,30).`;
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${geminiApiKey}`, {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        contents: [
-          { role: 'user', parts: [{ text: prompt }] }
-        ],
-        generationConfig: {
-          maxOutputTokens: 500,
-          temperature: 0.1,
-        },
+        model: 'google/gemini-2.5-flash',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 500,
+        temperature: 0.1,
       }),
     });
 
     if (!response.ok) {
-      console.error('[chb-corrections] Gemini API error:', await response.text());
+      console.error('[chb-corrections] AI Gateway error:', response.status, await response.text());
       return {
         found: false,
         location: 'Erro na localização automática',
@@ -89,7 +87,7 @@ Se o valor for numérico, considere formatações diferentes (97,3 vs 97.30 vs 9
     }
 
     const result = await response.json();
-    const content = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const content = result.choices?.[0]?.message?.content || '';
     
     // Parse JSON from response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -144,10 +142,10 @@ async function reextractFieldWithContext(
   correctedValue: string,
   fileContent: string
 ): Promise<ReextractionResult> {
-  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   
-  if (!geminiApiKey) {
-    console.log('[chb-corrections] GEMINI_API_KEY not found for re-extraction');
+  if (!LOVABLE_API_KEY) {
+    console.log('[chb-corrections] LOVABLE_API_KEY not found for re-extraction');
     return {
       success: false,
       found: false,
@@ -210,26 +208,23 @@ IMPORTANTE:
   try {
     console.log(`[chb-corrections] Re-extracting "${correctedValue}" for field "${fieldName}" in ${filename}`);
     
-    // Use more powerful model for deep analysis
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`, {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        contents: [
-          { role: 'user', parts: [{ text: prompt }] }
-        ],
-        generationConfig: {
-          maxOutputTokens: 2000,
-          temperature: 0.1,
-        },
+        model: 'google/gemini-2.5-pro',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2000,
+        temperature: 0.1,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[chb-corrections] Gemini Pro API error:', errorText);
+      console.error('[chb-corrections] AI Gateway Pro error:', response.status, errorText);
       return {
         success: false,
         found: false,
@@ -245,7 +240,7 @@ IMPORTANTE:
     }
 
     const result = await response.json();
-    const content = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const content = result.choices?.[0]?.message?.content || '';
     
     // Parse JSON from response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
