@@ -1,31 +1,26 @@
 
 
-## Plano: Busca por nº do voucher vinculado e nome do Master
+## Plano: Corrigir busca de Master por SPO de voucher filho
 
-### Problema
-O filtro de busca atual (linhas 1260-1265 de `EsteiraIndex.tsx`) só compara com `voucher.numeroSPO` e `voucher.nomeMaster`. Quando o usuário digita o SPO de um voucher filho, o Master correspondente não aparece nos resultados.
+### Causa raiz
+O campo `voucherMasterId` **nunca é mapeado** no `mapVoucherFromDB` (linhas 732-785 de `EsteiraIndex.tsx`). O campo `voucher_master_id` vem do banco mas é ignorado no mapeamento. Resultado: o `masterChildSPOsMap` está sempre vazio e a busca por SPO de filho nunca encontra o Master.
 
-### Solução
+### Correção
 
-**`src/pages/esteira/EsteiraIndex.tsx`**
+**`src/pages/esteira/EsteiraIndex.tsx`** — `mapVoucherFromDB` (~linha 768)
 
-1. Antes do `filterVouchers`, criar um `useMemo` que monta um `Map<string, string[]>` de `masterId → [child SPOs]` a partir da própria lista de vouchers (usando `voucherMasterId`):
+Adicionar a linha faltante no mapeamento:
+```typescript
+voucherMasterId: v.voucher_master_id || null,
 ```
-masterChildSPOs: Map onde key = id do master, value = array de numeroSPO dos filhos
-```
 
-2. No bloco de busca (linhas 1260-1265), além de `spoMatch` e `masterNameMatch`, adicionar:
-   - Se o voucher é Master (`voucher.isMaster`), verificar se algum SPO filho contém/começa com o texto buscado (consultando o map)
-   - Resultado: buscar "SPO-123" encontra tanto o voucher filho quanto o Master que o contém
+Isso alimenta o `useMemo` do `masterChildSPOsMap` e faz a busca por SPO de filho funcionar como esperado.
 
 ### Arquivo alterado
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/pages/esteira/EsteiraIndex.tsx` | `useMemo` para map de filhos + lógica de busca expandida |
+| `src/pages/esteira/EsteiraIndex.tsx` | Adicionar `voucherMasterId: v.voucher_master_id` no `mapVoucherFromDB` |
 
-### Lógica de match atualizada
-```
-spoMatch || masterNameMatch || childSPOMatch
-```
-Onde `childSPOMatch` = voucher é master E algum SPO filho começa com o texto buscado.
+### Resultado esperado
+Ao buscar pelo número de um voucher filho (ex: `SPO-001`), o voucher Master correspondente aparecerá nos resultados junto com o próprio filho.
 
