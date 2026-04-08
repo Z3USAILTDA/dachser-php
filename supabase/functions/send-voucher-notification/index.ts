@@ -166,6 +166,60 @@ async function getRecipientEmails(roles: string[]): Promise<string[]> {
   }
 }
 
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+async function generateSupervisorTokens(voucherId: string): Promise<{ approveToken: string; rejectToken: string } | null> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ action: "create_supervisor_token", voucher_id: voucherId }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      return { approveToken: data.approveToken, rejectToken: data.rejectToken };
+    }
+    console.error("Failed to generate supervisor tokens:", data.error);
+    return null;
+  } catch (e) {
+    console.error("Error generating supervisor tokens:", e);
+    return null;
+  }
+}
+
+function injectSupervisorButtons(html: string, approveToken: string, rejectToken: string): string {
+  const actionBaseUrl = `${SUPABASE_URL}/functions/v1/supervisor-email-action`;
+  const approveUrl = `${actionBaseUrl}?token=${approveToken}&action=approve`;
+  const rejectUrl = `${actionBaseUrl}?token=${rejectToken}&action=reject`;
+
+  const buttonsHtml = `
+  <tr><td style="padding:0 28px 8px" align="left">
+    <div style="background:rgba(245,184,67,.08);border:1px solid rgba(245,184,67,.25);border-radius:10px;padding:16px 20px;margin-bottom:8px">
+      <p style="margin:0 0 12px;font-size:13px;font-weight:700;color:#B45309">⚡ AÇÃO RÁPIDA — Aprovar ou Rejeitar diretamente:</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>
+        <td style="padding-right:12px">
+          <a href="${approveUrl}" style="display:inline-block;background:#22C55E;color:#fff;text-decoration:none;font-weight:700;border-radius:999px;padding:12px 28px;font-size:14px">✓ Aprovar</a>
+        </td>
+        <td>
+          <a href="${rejectUrl}" style="display:inline-block;background:#DC2626;color:#fff;text-decoration:none;font-weight:700;border-radius:999px;padding:12px 28px;font-size:14px">✗ Rejeitar</a>
+        </td>
+      </tr></table>
+      <p style="margin:8px 0 0;font-size:11px;color:#999">Links válidos por 48 horas. Uso único.</p>
+    </div>
+  </td></tr>`;
+
+  // Insert buttons before the CTA button row
+  return html.replace(
+    '<tr><td style="padding:4px 28px 24px" align="left">',
+    buttonsHtml + '\n  <tr><td style="padding:4px 28px 24px" align="left">'
+  );
+}
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -180,7 +234,16 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Sending to ${emails.length} recipients: ${emails.join(", ")}`);
 
-    const { subject, html } = getEmailContent(data);
+    let { subject, html } = getEmailContent(data);
+
+    // If sending to SUPERVISOR, generate tokens and inject approve/reject buttons
+    if (data.toStage === "SUPERVISOR" && data.type === "VOUCHER_ENVIADO") {
+      const tokens = await generateSupervisorTokens(data.voucherId);
+      if (tokens) {
+        html = injectSupervisorButtons(html, tokens.approveToken, tokens.rejectToken);
+        console.log("Supervisor action buttons injected into email");
+      }
+    }
 
     // Send via Resend
     const resendApiKey = Deno.env.get("RESEND_API_KEY");

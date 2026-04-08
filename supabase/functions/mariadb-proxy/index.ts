@@ -15454,6 +15454,91 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'setup_supervisor_tokens_table': {
+        try {
+          await client.execute(`
+            CREATE TABLE IF NOT EXISTS ai_agente.t_supervisor_email_tokens (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              token VARCHAR(36) NOT NULL UNIQUE,
+              voucher_id VARCHAR(100) NOT NULL,
+              action_type ENUM('APPROVE','REJECT') NOT NULL,
+              used TINYINT(1) NOT NULL DEFAULT 0,
+              expires_at DATETIME NOT NULL,
+              created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+          `);
+          result = { success: true, message: 'Table t_supervisor_email_tokens created/verified' };
+        } catch (e: any) {
+          console.error('[setup_supervisor_tokens_table] Error:', e);
+          result = { success: false, error: e.message };
+        }
+        break;
+      }
+
+      case 'create_supervisor_token': {
+        try {
+          const voucherId = body.voucher_id;
+          const approveToken = crypto.randomUUID();
+          const rejectToken = crypto.randomUUID();
+          const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+
+          await client.execute(
+            `INSERT INTO ai_agente.t_supervisor_email_tokens (token, voucher_id, action_type, expires_at) VALUES (?, ?, 'APPROVE', ?)`,
+            [approveToken, voucherId, expiresAt]
+          );
+          await client.execute(
+            `INSERT INTO ai_agente.t_supervisor_email_tokens (token, voucher_id, action_type, expires_at) VALUES (?, ?, 'REJECT', ?)`,
+            [rejectToken, voucherId, expiresAt]
+          );
+
+          result = { success: true, approveToken, rejectToken };
+        } catch (e: any) {
+          console.error('[create_supervisor_token] Error:', e);
+          result = { success: false, error: e.message };
+        }
+        break;
+      }
+
+      case 'validate_supervisor_token': {
+        try {
+          const token = body.token;
+          const rows = await client.query(
+            `SELECT id, token, voucher_id, action_type, used, expires_at FROM ai_agente.t_supervisor_email_tokens WHERE token = ? LIMIT 1`,
+            [token]
+          );
+          if (!rows || rows.length === 0) {
+            result = { success: false, error: 'Token não encontrado', code: 'NOT_FOUND' };
+          } else {
+            const row = rows[0];
+            if (row.used) {
+              result = { success: false, error: 'Token já utilizado', code: 'ALREADY_USED' };
+            } else if (new Date(row.expires_at) < new Date()) {
+              result = { success: false, error: 'Token expirado', code: 'EXPIRED' };
+            } else {
+              result = { success: true, voucher_id: row.voucher_id, action_type: row.action_type, token_id: row.id };
+            }
+          }
+        } catch (e: any) {
+          console.error('[validate_supervisor_token] Error:', e);
+          result = { success: false, error: e.message };
+        }
+        break;
+      }
+
+      case 'mark_supervisor_token_used': {
+        try {
+          await client.execute(
+            `UPDATE ai_agente.t_supervisor_email_tokens SET used = 1 WHERE token = ?`,
+            [body.token]
+          );
+          result = { success: true };
+        } catch (e: any) {
+          console.error('[mark_supervisor_token_used] Error:', e);
+          result = { success: false, error: e.message };
+        }
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
