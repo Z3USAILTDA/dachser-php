@@ -808,7 +808,12 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                     </div>
                   </div>
                   {anexo.file_url && (
-                    <FilePreview fileUrl={anexo.file_url} fileName={anexo.file_name} />
+                    <FilePreview 
+                      fileUrl={anexo.file_url} 
+                      fileName={anexo.file_name} 
+                      fileType={anexo.tipo || "Documento"}
+                      onDownload={() => window.open(anexo.file_url, "_blank")}
+                    />
                   )}
                 </div>
               ))}
