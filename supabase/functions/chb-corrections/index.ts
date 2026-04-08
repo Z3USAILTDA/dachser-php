@@ -27,8 +27,8 @@ async function locateValueInFile(
 ): Promise<{ found: boolean; location: string; context: string; confidence: 'alta' | 'media' | 'baixa' }> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   
-  if (!geminiApiKey) {
-    console.log('[chb-corrections] GEMINI_API_KEY not found, using fallback location');
+  if (!LOVABLE_API_KEY) {
+    console.log('[chb-corrections] LOVABLE_API_KEY not found, using fallback location');
     return {
       found: false,
       location: 'Localização automática não disponível',
