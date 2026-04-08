@@ -809,11 +809,11 @@ export const PagamentosTab = () => {
             onClick={async () => {
               if (selectedIds.size === 0) return;
               const selected = pagamentos.filter(p => selectedIds.has(p.id));
-              const semTipo = selected.filter(p => !p.tipo_execucao_pagamento);
+              const semTipo = selected.filter(p => !p.tipo_execucao_pagamento || p.tipo_execucao_pagamento === "A_DEFINIR");
               if (semTipo.length > 0) {
                 toast({
                   title: "Tipo de execução obrigatório",
-                  description: `${semTipo.length} voucher(s) sem tipo de execução definido. Defina antes de marcar como pronto.`,
+                  description: `${semTipo.length} voucher(s) sem tipo de execução definido ou com 'A definir'. Defina antes de marcar como pronto.`,
                   variant: "destructive"
                 });
                 return;
