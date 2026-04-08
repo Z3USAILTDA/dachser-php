@@ -368,7 +368,16 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                     title="Emissão de"
                   />
                 </TableHead>
-                <TableHead className="py-2"></TableHead>
+                <TableHead className="py-2">
+                  <Input
+                    placeholder="Enviado..."
+                    value={filters.search ? "" : ""}
+                    onChange={(e) => {
+                      // Use a custom filter key for enviadoPor - stored in fornecedor temporarily
+                    }}
+                    className="h-8 text-xs w-24 hidden"
+                  />
+                </TableHead>
                 <TableHead className="py-2"></TableHead>
                 <TableHead className="py-2">
                   <Select value={filters.urgente} onValueChange={(value) => handleFilterChange("urgente", value)}>
@@ -461,7 +470,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       <TableCell className="font-mono font-medium">
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-2">
-                            {voucher.nomeMaster || voucher.numeroSPO}
+                            {voucher.numeroSPO}
                             {(voucher.isMaster || voucher.origemCriacao === "MASTER") && (
                               <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-[10px] gap-1">
                                 <Layers className="h-3 w-3" />

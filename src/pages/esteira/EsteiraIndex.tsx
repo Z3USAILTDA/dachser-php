@@ -892,8 +892,11 @@ const EsteiraIndex = () => {
         const mappedSPOs = new Set(mappedVouchers.map(v => v.numeroSPO));
         const deduplicatedRMPending = rmPendingVouchers.filter(rm => !mappedSPOs.has(rm.numeroSPO));
         
-        // Merge both arrays
+        // Merge both arrays with client-side deduplication
+        const seenIds = new Set<string>();
         const allVouchers = [...deduplicatedRMPending, ...mappedVouchers].filter(v => {
+          if (seenIds.has(v.id)) return false;
+          seenIds.add(v.id);
           if ((v.isMaster || v.origemCriacao === "MASTER") && v.etapaAtual === "A_PROCESSAR") {
             return false;
           }
