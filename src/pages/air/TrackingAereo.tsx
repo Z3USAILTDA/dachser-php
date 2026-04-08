@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUsageLog } from "@/hooks/useUsageLog";
-import { DatabaseStatsPanel, DbStats } from "@/components/DatabaseStatsPanel";
+// import { DatabaseStatsPanel, DbStats } from "@/components/DatabaseStatsPanel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Search,
@@ -301,8 +301,8 @@ const TrackingAereo = () => {
   const [showMonitoredModal, setShowMonitoredModal] = useState(false);
   const [cadastroNovaOpen, setCadastroNovaOpen] = useState(false);
   const [regrasDialogOpen, setRegrasDialogOpen] = useState(false);
-  const [dbStats, setDbStats] = useState<DbStats | null>(null);
-  const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
+  // const [dbStats, setDbStats] = useState<DbStats | null>(null);
+  // const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
   const [timelineModal, setTimelineModal] = useState<{
     open: boolean;
     awb: string;
@@ -425,25 +425,23 @@ const TrackingAereo = () => {
     return result;
   }
 
-  // Fetch DB stats
-  const fetchDbStats = useCallback(async () => {
-    setIsLoadingDbStats(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("fetch-master-dados-stats");
-      if (error) return;
-      if (data?.success && data?.stats) setDbStats(data.stats);
-    } catch (_) {} finally {
-      setIsLoadingDbStats(false);
-    }
-  }, []);
+  // Fetch DB stats (commented out)
+  // const fetchDbStats = useCallback(async () => {
+  //   setIsLoadingDbStats(true);
+  //   try {
+  //     const { data, error } = await supabase.functions.invoke("fetch-master-dados-stats");
+  //     if (error) return;
+  //     if (data?.success && data?.stats) setDbStats(data.stats);
+  //   } catch (_) {} finally {
+  //     setIsLoadingDbStats(false);
+  //   }
+  // }, []);
 
   useEffect(() => {
     fetchData();
-    fetchDbStats();
     const interval = setInterval(fetchData, 30000);
-    const statsInterval = setInterval(fetchDbStats, 60000);
-    return () => { clearInterval(interval); clearInterval(statsInterval); };
-  }, [fetchData, fetchDbStats]);
+    return () => { clearInterval(interval); };
+  }, [fetchData]);
 
   // ─── Alert for tracking failures ───
   useEffect(() => {
@@ -622,7 +620,7 @@ const TrackingAereo = () => {
           </header>
         </div>
         <div className="flex items-center gap-2.5 text-[0.85rem]">
-          <DatabaseStatsPanel stats={dbStats} isLoading={isLoadingDbStats} onRefresh={fetchDbStats} />
+          {/* <DatabaseStatsPanel stats={dbStats} isLoading={isLoadingDbStats} onRefresh={fetchDbStats} /> */}
           <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[220px] truncate">
             @{user?.email?.split("@")[0] || "admin"}
           </div>
