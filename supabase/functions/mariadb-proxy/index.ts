@@ -2420,6 +2420,48 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ==================== OLIMPO CLIENT FATURAS (PAGINATED) ====================
+      case 'get_client_faturas': {
+        const { clientName: fatClientName, page: fatPage = 1, pageSize: fatPageSize = 20 } = body as { clientName: string; page?: number; pageSize?: number };
+        if (!fatClientName) { result = { success: false, error: 'clientName required' }; break; }
+        console.log(`[get_client_faturas] client=${fatClientName} page=${fatPage} size=${fatPageSize}`);
+
+        const offset = (fatPage - 1) * fatPageSize;
+
+        const countSql = `
+          SELECT COUNT(*) as total
+          FROM dados_dachser.t_dados_financeiro_nfs t
+          WHERE SUBSTRING_INDEX(t.razao_social, ' - ', 1) = ?
+        `;
+        const countResult = await client.query(countSql, [fatClientName]);
+        const total = countResult[0]?.total || 0;
+
+        const fatSql = `
+          SELECT
+            t.documento,
+            t.nd,
+            t.referencia_cliente,
+            t.numero_nf,
+            t.tipo_documento,
+            DATE_FORMAT(t.data_vencimento, '%d/%m/%Y') AS data_vencimento,
+            DATE_FORMAT(t.data_emissao, '%d/%m/%Y') AS data_emissao,
+            t.valor_nf,
+            COALESCE(t.disputa, 0) AS disputa,
+            t.condicao_pagamento,
+            t.nome_vendedor,
+            n.numero_processo
+          FROM dados_dachser.t_dados_financeiro_nfs t
+          LEFT JOIN dados_dachser.t_dados_nfs n ON t.id_rm = n.id_rm
+          WHERE SUBSTRING_INDEX(t.razao_social, ' - ', 1) = ?
+          ORDER BY t.data_vencimento DESC
+          LIMIT ? OFFSET ?
+        `;
+        const fatRows = await client.query(fatSql, [fatClientName, fatPageSize, offset]);
+
+        result = { success: true, rows: fatRows, total, page: fatPage, pageSize: fatPageSize };
+        break;
+      }
+
       // ==================== OLIMPO SAVE OBSERVACAO ====================
       case 'save_cobranca_observacao': {
         const { cnpj: obsCnpj, observacao: obsText, updatedBy } = body as { cnpj: string; observacao: string; updatedBy?: string };
@@ -2659,7 +2701,9 @@ Deno.serve(async (req) => {
             DATEDIFF(CURDATE(), t.data_vencimento) AS dias,
             CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo_pagto,
             t.valor_nf,
-            t.cnpj
+            t.cnpj,
+            t.condicao_pagamento,
+            t.nome_vendedor
           FROM dados_dachser.t_dados_financeiro_nfs t
           LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
           WHERE COALESCE(sd.active, 1) = 1
