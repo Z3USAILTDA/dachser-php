@@ -725,6 +725,106 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                          {/* Approve/Reject buttons for urgent supervisor vouchers */}
+                          {voucher.etapaAtual === "SUPERVISOR" && voucher.urgenciaTipo === "URGENTE_REAL" && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="Aprovar"
+                                className="h-7 px-2 text-xs bg-green-500/10 hover:bg-green-500/20 text-green-500 border border-green-500/30"
+                                onClick={async () => {
+                                  if (!confirm("Confirmar aprovação deste voucher urgente?")) return;
+                                  try {
+                                    const userDataStr = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+                                    const userData = userDataStr ? JSON.parse(userDataStr) : { id: 0, username: "sistema" };
+                                    await supabase.functions.invoke("mariadb-proxy", {
+                                      body: {
+                                        action: "update_voucher_esteira",
+                                        voucher_id: voucher.id,
+                                        etapa_atual: "FINANCEIRO",
+                                        status_financeiro: "APROVADO",
+                                        aprovado_por_user_id: userData.id?.toString(),
+                                        responsavel_supervisor_user_id: userData.id?.toString(),
+                                      },
+                                    });
+                                    await supabase.functions.invoke("mariadb-proxy", {
+                                      body: {
+                                        action: "save_voucher_log",
+                                        voucher_id: voucher.id,
+                                        user_id: userData.id?.toString(),
+                                        user_name: userData.username,
+                                        acao: "APROVADO_SUPERVISOR",
+                                        detalhe: "Voucher/SPO urgente aprovado pelo Supervisor (via tabela)",
+                                      },
+                                    });
+                                    try {
+                                      await supabase.functions.invoke("send-voucher-notification", {
+                                        body: {
+                                          type: "VOUCHER_ENVIADO",
+                                          voucherId: voucher.id,
+                                          voucherNumber: voucher.numeroSPO,
+                                          toStage: "FINANCEIRO",
+                                          fromStage: "SUPERVISOR",
+                                          senderName: userData.username,
+                                          fornecedor: voucher.fornecedor,
+                                          valor: voucher.valor?.toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
+                                          moeda: voucher.moeda,
+                                          vencimento: voucher.vencimento,
+                                        },
+                                      });
+                                    } catch (e) { console.log("Email skipped:", e); }
+                                    toast.success("Voucher aprovado e enviado ao Financeiro");
+                                    window.location.reload();
+                                  } catch (err: any) {
+                                    toast.error("Erro ao aprovar voucher", { description: err.message });
+                                  }
+                                }}
+                              >
+                                ✓ Aprovar
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="Rejeitar"
+                                className="h-7 px-2 text-xs bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30"
+                                onClick={async () => {
+                                  const motivo = prompt("Motivo da rejeição:");
+                                  if (!motivo?.trim()) return;
+                                  try {
+                                    const userDataStr = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+                                    const userData = userDataStr ? JSON.parse(userDataStr) : { id: 0, username: "sistema" };
+                                    await supabase.functions.invoke("mariadb-proxy", {
+                                      body: {
+                                        action: "update_voucher_esteira",
+                                        voucher_id: voucher.id,
+                                        etapa_atual: "OPERACAO",
+                                        status_financeiro: "REJEITADO",
+                                        ajuste_operacao: `REJEITADO PELO SUPERVISOR: ${motivo}`,
+                                        responsavel_supervisor_user_id: userData.id?.toString(),
+                                      },
+                                    });
+                                    await supabase.functions.invoke("mariadb-proxy", {
+                                      body: {
+                                        action: "save_voucher_log",
+                                        voucher_id: voucher.id,
+                                        user_id: userData.id?.toString(),
+                                        user_name: userData.username,
+                                        acao: "REJEITADO_SUPERVISOR",
+                                        detalhe: `Voucher/SPO rejeitado (via tabela): ${motivo}`,
+                                      },
+                                    });
+                                    toast.success("Voucher rejeitado e devolvido para Operação");
+                                    window.location.reload();
+                                  } catch (err: any) {
+                                    toast.error("Erro ao rejeitar voucher", { description: err.message });
+                                  }
+                                }}
+                              >
+                                ✗ Rejeitar
+                              </Button>
+                            </>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"

@@ -639,6 +639,28 @@ export const CreateVoucherDialog = ({
         },
       });
 
+      // Send email notification for the target stage
+      if (!isDraft) {
+        try {
+          await supabase.functions.invoke("send-voucher-notification", {
+            body: {
+              type: "VOUCHER_ENVIADO",
+              voucherId: voucherId,
+              voucherNumber: voucherData.numero_spo,
+              toStage: etapaAtual,
+              fromStage: "OPERACAO",
+              senderName: userData.username || "Sistema",
+              fornecedor: values.fornecedor || "",
+              valor: voucherData.valor?.toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
+              moeda: values.moeda,
+              vencimento: values.vencimento?.toISOString(),
+            },
+          });
+        } catch (emailErr) {
+          console.log("Email notification skipped:", emailErr);
+        }
+      }
+
       toast({
         title: "Voucher criado",
         description: `O voucher foi criado com sucesso.`,
