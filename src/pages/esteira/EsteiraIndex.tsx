@@ -874,23 +874,18 @@ const EsteiraIndex = () => {
         // DISABLED: runIncrementalSync was inserting incorrect data into t_vouchers
         // runIncrementalSync();
         
-        // Load active vouchers quickly (only from t_vouchers where sync_status = ATIVO)
-        const [ativosResult, rmPendingResult] = await Promise.all([
-          supabase.functions.invoke("mariadb-proxy", {
-            body: { action: "get_vouchers_ativos" }
-          }),
-          supabase.functions.invoke("mariadb-proxy", {
-            body: { action: "get_vouchers_pendentes_rm" }
-          })
-        ]);
+        // Load active vouchers + pending RM in a SINGLE call (saves 1 MariaDB connection)
+        const combinedResult = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "get_vouchers_combined" }
+        });
         
-        if (ativosResult.error) throw ativosResult.error;
+        if (combinedResult.error) throw combinedResult.error;
         
         // Map vouchers from ativos
-        const mappedVouchers: Voucher[] = (ativosResult.data?.data || []).map((v: any) => mapVoucherFromDB(v));
+        const mappedVouchers: Voucher[] = (combinedResult.data?.ativos || []).map((v: any) => mapVoucherFromDB(v));
         
         // Map pending RM vouchers
-        const rmPendingVouchers: Voucher[] = (rmPendingResult.data?.data || []).map((rm: any) => mapRMPendingVoucher(rm));
+        const rmPendingVouchers: Voucher[] = (combinedResult.data?.pendentes_rm || []).map((rm: any) => mapRMPendingVoucher(rm));
         
         // Deduplicate: remove RM pending vouchers that already exist in mappedVouchers
         const mappedSPOs = new Set(mappedVouchers.map(v => v.numeroSPO));
@@ -1157,12 +1152,12 @@ const EsteiraIndex = () => {
     }
   }, [hasEsteiraAccess]);
 
-  // Fetch DB stats on mount
+  // Fetch DB stats only when dashboard tab is active (deferred to reduce initial load)
   useEffect(() => {
-    if (hasEsteiraAccess) {
+    if (hasEsteiraAccess && activeTab === "dashboard") {
       fetchFinDbStats();
     }
-  }, [hasEsteiraAccess]);
+  }, [hasEsteiraAccess, activeTab]);
 
   // Reload vouchers when tab becomes visible after being hidden (tab switch only)
   // Removed window focus listener as it was triggering too frequently (e.g., when closing dialogs)

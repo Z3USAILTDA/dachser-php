@@ -191,25 +191,31 @@ export const PagamentosTab = () => {
   // Load children SPOs for master vouchers
   useEffect(() => {
     const loadMasterChildren = async () => {
-      const masters = pagamentos.filter(p => p.is_master);
+      const masters = pagamentos.filter(p => p.is_master && !masterChildrenCache.current.has(p.id));
       if (masters.length === 0) return;
-      let changed = false;
-      for (const master of masters) {
-        if (masterChildrenCache.current.has(master.id)) continue;
-        try {
-          const { data } = await supabase.functions.invoke("mariadb-proxy", {
-            body: { action: "get_voucher_filhos", master_id: master.id },
-          });
-          if (data?.data) {
-            const spos = data.data.map((f: any) => f.numero_spo);
-            masterChildrenCache.current.set(master.id, spos);
-            changed = true;
+      
+      // Batch fetch all master children in a single call
+      const masterIds = masters.map(m => m.id);
+      try {
+        const { data } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "get_voucher_filhos_batch", master_ids: masterIds },
+        });
+        if (data?.data) {
+          for (const [masterId, children] of Object.entries(data.data)) {
+            const spos = (children as any[]).map((f: any) => f.numero_spo);
+            masterChildrenCache.current.set(masterId, spos);
           }
-        } catch (err) {
-          console.error("Erro ao carregar filhos do master:", err);
+          // Also set empty arrays for masters with no children
+          for (const m of masters) {
+            if (!masterChildrenCache.current.has(m.id)) {
+              masterChildrenCache.current.set(m.id, []);
+            }
+          }
+          setMasterChildrenMap(new Map(masterChildrenCache.current));
         }
+      } catch (err) {
+        console.error("Erro ao carregar filhos dos masters (batch):", err);
       }
-      if (changed) setMasterChildrenMap(new Map(masterChildrenCache.current));
     };
     loadMasterChildren();
   }, [pagamentos]);
