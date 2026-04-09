@@ -17,10 +17,9 @@ serve(async (req) => {
   let client: Client | null = null;
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-    if (!LOVABLE_API_KEY || !RESEND_API_KEY) {
-      throw new Error("Missing LOVABLE_API_KEY or RESEND_API_KEY");
+    if (!RESEND_API_KEY) {
+      throw new Error("Missing RESEND_API_KEY");
     }
 
     // Connect to MariaDB
@@ -209,13 +208,12 @@ serve(async (req) => {
 </body>
 </html>`;
 
-    // Send via Resend
-    const emailRes = await fetch(`${GATEWAY_URL}/emails`, {
+    // Send via Resend directly
+    const emailRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "X-Connection-Api-Key": RESEND_API_KEY,
+        Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
         from: "Dachser Z3US <noreply@z3us.ai>",
