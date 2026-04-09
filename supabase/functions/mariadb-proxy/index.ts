@@ -9135,9 +9135,18 @@ Deno.serve(async (req) => {
           );
         }
 
+        // Map app values to MariaDB ENUM values
+        const tipoExecMap: Record<string, string> = {
+          'MANUAL': 'MANUAL',
+          'REMESSA_10H': 'REMESSA',
+          'REMESSA_15H': 'REMESSA',
+          'A_DEFINIR': 'MANUAL',
+        };
+        const dbTipoExec = tipoExecMap[tipo_execucao_pagamento] || 'MANUAL';
+
         await client.execute(
           `UPDATE dados_dachser.t_vouchers SET tipo_execucao_pagamento = ?, updated_at = NOW() WHERE id = ?`,
-          [tipo_execucao_pagamento, voucherId]
+          [dbTipoExec, voucherId]
         );
 
         console.log(`Updated tipo_execucao_pagamento for voucher ${voucherId} to ${tipo_execucao_pagamento}`);
