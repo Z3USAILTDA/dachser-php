@@ -6365,7 +6365,8 @@ Deno.serve(async (req) => {
               (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
                WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
                AND lc.acao = 'VOUCHER_CRIADO'
-               ORDER BY lc.data_hora ASC LIMIT 1)
+               ORDER BY lc.data_hora ASC LIMIT 1),
+              v.criado_por_user_id
             ) as dfv_created_by,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
              WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
@@ -6381,7 +6382,7 @@ Deno.serve(async (req) => {
                 MIN(numero_processo) as numero_processo
              FROM dados_dachser.t_dados_financeiro_voucher
              GROUP BY nd
-           ) dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
+           ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
            ${whereClause} 
            ORDER BY v.created_at DESC
          `, params);
@@ -13748,7 +13749,8 @@ Deno.serve(async (req) => {
               (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
                WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
                AND lc.acao = 'VOUCHER_CRIADO'
-               ORDER BY lc.data_hora ASC LIMIT 1)
+               ORDER BY lc.data_hora ASC LIMIT 1),
+              v.criado_por_user_id
             ) as dfv_created_by,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
              WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
@@ -13761,7 +13763,7 @@ Deno.serve(async (req) => {
             SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by
             FROM dados_dachser.t_dados_financeiro_voucher
             GROUP BY nd
-          ) dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
+          ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
           ${whereClause} ORDER BY v.created_at DESC
         `, params);
         
@@ -13782,7 +13784,8 @@ Deno.serve(async (req) => {
               (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
                WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
                AND lc.acao = 'VOUCHER_CRIADO'
-               ORDER BY lc.data_hora ASC LIMIT 1)
+               ORDER BY lc.data_hora ASC LIMIT 1),
+              v.criado_por_user_id
             ) as dfv_created_by,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
              WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
@@ -13795,7 +13798,7 @@ Deno.serve(async (req) => {
             SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by
             FROM dados_dachser.t_dados_financeiro_voucher
             GROUP BY nd
-          ) dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
+          ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
           WHERE sync_status = "ATIVO"
             AND (voucher_master_id IS NULL OR voucher_master_id = "")
             AND (etapa_atual != "CONCLUIDO" OR (etapa_atual = "CONCLUIDO" AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)))
@@ -13806,7 +13809,8 @@ Deno.serve(async (req) => {
           SELECT 
             dfv.id_rm, dfv.nd, dfv.documento, dfv.nome_beneficiario, dfv.nome_cobranca,
             dfv.numero_nf, dfv.numero_processo, dfv.modal, dfv.tipo_pag, dfv.forma_pag,
-            dfv.data_emissao, dfv.data_vencimento, dfv.valor_nf, dfv.moeda, dfv.cnpj, dfv.razao_social
+            dfv.data_emissao, dfv.data_vencimento, dfv.valor_nf, dfv.moeda, dfv.cnpj, dfv.razao_social,
+            dfv.created_by
           FROM dados_dachser.t_dados_financeiro_voucher dfv
           LEFT JOIN dados_dachser.t_vouchers v ON dfv.nd COLLATE utf8mb4_unicode_ci = v.numero_spo COLLATE utf8mb4_unicode_ci
           LEFT JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
