@@ -73,10 +73,11 @@ export const HistoricoBaixasTab = () => {
       const valor = Number(b.valor_baixa) || Number(b.valor_nf) || 0;
       if (valor === 0) return false;
       
-      // Filtrar registros com valores que começam com "null"
-      if (b.nd?.toLowerCase().startsWith("null")) return false;
-      if (b.nome_beneficiario?.toLowerCase().startsWith("null")) return false;
-      if (b.numero_processo?.toLowerCase().startsWith("null")) return false;
+      // Filtrar registros sem dados identificáveis (nd, beneficiário e processo todos vazios)
+      const hasNd = b.nd && b.nd.trim() !== '' && !b.nd.toLowerCase().startsWith("null");
+      const hasBeneficiario = b.nome_beneficiario && b.nome_beneficiario.trim() !== '' && !b.nome_beneficiario.toLowerCase().startsWith("null");
+      const hasProcesso = b.numero_processo && b.numero_processo.trim() !== '' && !b.numero_processo.toLowerCase().startsWith("null");
+      if (!hasNd && !hasBeneficiario && !hasProcesso) return false;
       
       const matchesSearch = searchTerm === "" || 
         b.nd?.toLowerCase().includes(searchTerm.toLowerCase()) ||
