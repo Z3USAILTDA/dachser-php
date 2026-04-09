@@ -831,7 +831,8 @@ const EsteiraIndex = () => {
       anexos: [],
       logs: [],
       idRm: rm.id_rm,
-      fonteDados: "RM_PENDENTE"
+      fonteDados: "RM_PENDENTE",
+      criadoPorDfv: rm.created_by || null
     } as Voucher;
   };
 
