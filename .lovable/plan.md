@@ -1,66 +1,42 @@
 
 
-## Plano: Página de Confirmação Funcional via App Publicado
+## Plano: Prevenção de Vouchers Duplicados na Esteira
 
-### Causa raiz definitiva
-O Supabase Edge Runtime **força** `Content-Type: text/plain` e adiciona `Content-Security-Policy: sandbox` em todas as respostas. Isso é uma restrição da plataforma — **não é possível servir HTML renderizado de uma edge function**. O código está correto, mas o gateway sobrescreve os headers.
+### Problema
+O mesmo número SPO (ex: `20251876986`) aparece duas vezes na tabela — um em etapa avançada (Financeiro) e outro em A Processar. Isso ocorre porque a verificação de duplicidade no backend (`save_voucher_esteira`) só bloqueia se o voucher existente **não** está em `A_PROCESSAR`. Quando um voucher já existe em qualquer etapa avançada (FISCAL, SUPERVISOR, FINANCEIRO, ROBO, CONCLUIDO), o sistema retorna erro 409 — mas há cenários onde essa validação falha ou é contornada.
+
+### Causa raiz provável
+1. A query de duplicidade usa `LIMIT 1` — se existem dois registros com o mesmo `numero_spo`, pode encontrar o `A_PROCESSAR` primeiro e deletá-lo, permitindo criar um novo, sem perceber que há outro em etapa avançada.
+2. Não há `UNIQUE INDEX` na coluna `numero_spo` da `t_vouchers`, então o banco não impede duplicatas a nível de constraint.
 
 ### Solução
-Usar a URL publicada do app (`stellar-route-hub.lovable.app`) com a rota pública `/supervisor-confirmacao`. A rota já existe e está fora de qualquer guarda de autenticação. O SPA routing do Lovable garante que funciona em acesso direto.
 
-```text
-Fluxo:
+**1. Backend (`mariadb-proxy/index.ts` — action `save_voucher_esteira`)**
+- Alterar a query de duplicidade para buscar TODOS os vouchers com o mesmo `numero_spo` (remover `LIMIT 1`)
+- Se **qualquer** registro existente estiver em etapa diferente de `A_PROCESSAR`, bloquear a criação com erro 409
+- Só substituir se **todos** os existentes estiverem em `A_PROCESSAR`
 
-E-mail do supervisor
-  → link: https://stellar-route-hub.lovable.app/supervisor-confirmacao?token=X&action=approve
-  → abre página React pública (sem login)
-  → página chama edge function como API JSON
-  → mostra resultado estilizado (aprovado/rejeitado/erro)
+```sql
+-- Antes
+SELECT id, numero_spo, etapa_atual FROM t_vouchers WHERE numero_spo = ? LIMIT 1
 
-Rejeição:
-  → mesma URL com action=reject
-  → página mostra formulário de motivo
-  → supervisor preenche e envia
-  → página chama edge function com motivo
-  → mostra confirmação
+-- Depois  
+SELECT id, numero_spo, etapa_atual FROM t_vouchers WHERE numero_spo = ?
 ```
 
-### Alterações
+Lógica revisada:
+- Se algum resultado tem `etapa_atual` diferente de `A_PROCESSAR` → retornar 409 com ID e etapa do existente
+- Se todos são `A_PROCESSAR` → deletar todos e prosseguir com a criação
 
-**1. `supabase/functions/supervisor-email-action/index.ts`**
-- Remover toda renderização HTML (não funciona na plataforma)
-- Retornar apenas **JSON** com status e mensagem
-- Manter toda a lógica de negócio (validar token, aprovar, rejeitar com motivo)
-- Aceitar POST com `Content-Type: application/json` (body: `{ reason }`)
-- Adicionar CORS headers para o app poder chamar
+**2. Frontend (`CreateVoucherDialog.tsx`)**
+- Quando receber erro 409 com `existingId`, oferecer botão para navegar até o voucher existente ao invés de apenas mostrar toast de erro
 
-**2. `src/pages/SupervisorConfirmacao.tsx`**
-- Transformar de página estática em página funcional:
-  - Ler `token` e `action` da URL
-  - `action=approve`: chamar a edge function automaticamente ao carregar, mostrar loading → sucesso/erro
-  - `action=reject`: validar token primeiro, mostrar formulário de motivo, enviar rejeição
-  - Estados visuais: loading, sucesso (verde), rejeitado (vermelho), erro (amarelo)
-  - Formulário de rejeição com textarea + botão estilizado
-- Manter design Z3US atual (logo, gradiente, card, animações)
-- Página 100% pública — sem dependência de auth
-
-**3. `supabase/functions/send-voucher-notification/index.ts`**
-- Trocar URL dos botões de `functions/v1/supervisor-email-action?...` para `https://stellar-route-hub.lovable.app/supervisor-confirmacao?token=X&action=approve|reject`
-- Links agora abrem a página React diretamente
-
-**4. Deploy** das duas edge functions
-
-### Por que funciona desta vez
-- A página `/supervisor-confirmacao` é uma rota React pública no app publicado
-- O Lovable hosting tem SPA fallback automático — acesso direto à URL funciona
-- A rota já está em `App.tsx` sem auth guard
-- A edge function só retorna JSON (sem problemas de Content-Type)
-- O visual fica controlado pelo React, não pelo edge runtime
+**3. Limpeza dos dados existentes**
+- Identificar e remover o voucher duplicado que está em `A Processar` (o que foi criado erroneamente), mantendo o que já avançou no fluxo
 
 ### Arquivos alterados
 | Arquivo | Alteração |
 |---------|-----------|
-| `supabase/functions/supervisor-email-action/index.ts` | Retornar JSON em vez de HTML, adicionar CORS |
-| `src/pages/SupervisorConfirmacao.tsx` | Página funcional com chamada à API e formulário de rejeição |
-| `supabase/functions/send-voucher-notification/index.ts` | URLs dos botões apontam para o app publicado |
+| `supabase/functions/mariadb-proxy/index.ts` | Melhorar query de duplicidade para buscar todos os registros e validar corretamente |
+| `src/components/esteira/CreateVoucherDialog.tsx` | Melhorar UX do erro de duplicidade com link para o voucher existente |
 
