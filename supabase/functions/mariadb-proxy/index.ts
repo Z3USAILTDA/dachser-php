@@ -8685,7 +8685,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        console.log('Inserting into t_dados_rm:', { idRm, formaPag, fornecedorRm, regrasFormaPag: regrasFormaPagFinal, chavePix, pixTipoChave });
+        console.log('Inserting into t_dados_rm:', { idRm: finalIdRm, nd: numeroSpoRm, formaPag, fornecedorRm, regrasFormaPag: regrasFormaPagFinal, chavePix, pixTipoChave });
         
         // Drop and recreate table if it has wrong structure
         try {
