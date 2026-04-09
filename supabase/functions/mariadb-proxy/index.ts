@@ -9896,26 +9896,34 @@ Deno.serve(async (req) => {
           `, [numero_spo]);
         }
 
-        // 4. Child-to-master fallback: if SPO belongs to a child voucher, return the master
-        if (!vouchers || vouchers.length === 0) {
+        // 4. Child-to-master: ALWAYS check if SPO belongs to a child and include the master
+        {
           const masterVouchers = await client.query(`
             SELECT m.id, m.numero_spo, m.fornecedor, m.valor, m.vencimento, m.etapa_atual,
                    m.cobranca_em_nome_de, m.moeda, m.is_master, m.nome_master,
                    c.id as child_voucher_id, c.numero_spo as child_spo
             FROM dados_dachser.t_vouchers c
             JOIN dados_dachser.t_vouchers m ON m.id = c.voucher_master_id
-            WHERE c.numero_spo = ? AND c.voucher_master_id IS NOT NULL AND c.voucher_master_id != ''
+            WHERE (c.numero_spo = ? OR ? LIKE CONCAT(c.numero_spo, '%'))
+              AND c.voucher_master_id IS NOT NULL AND c.voucher_master_id != ''
             LIMIT 5
-          `, [numero_spo]);
+          `, [numero_spo, numero_spo]);
 
           if (masterVouchers && masterVouchers.length > 0) {
-            // Return master vouchers with child context
-            vouchers = masterVouchers.map((mv: any) => ({
+            const masterResults = masterVouchers.map((mv: any) => ({
               ...mv,
               is_master: true,
               matched_via_child: true,
               child_spo: mv.child_spo,
             }));
+            // Deduplicate: don't add master if already in results
+            const existingIds = new Set((vouchers || []).map((v: any) => v.id));
+            for (const mr of masterResults) {
+              if (!existingIds.has(mr.id)) {
+                vouchers = vouchers || [];
+                vouchers.push(mr);
+              }
+            }
           }
         }
 
@@ -9985,8 +9993,8 @@ Deno.serve(async (req) => {
           `, [numero_nd]);
         }
 
-        // 5. Child-to-master fallback for ND
-        if (!vouchers || vouchers.length === 0) {
+        // 5. Child-to-master: ALWAYS check if ND belongs to a child and include the master
+        {
           const masterVouchers = await client.query(`
             SELECT m.id, m.numero_spo, m.fornecedor, m.valor, m.vencimento, m.etapa_atual,
                    m.cobranca_em_nome_de, m.moeda, m.is_master, m.nome_master, m.id_rm, m.processo_id,
@@ -9998,12 +10006,19 @@ Deno.serve(async (req) => {
           `, [numero_nd, numero_nd]);
 
           if (masterVouchers && masterVouchers.length > 0) {
-            vouchers = masterVouchers.map((mv: any) => ({
+            const masterResults = masterVouchers.map((mv: any) => ({
               ...mv,
               is_master: true,
               matched_via_child: true,
               child_spo: mv.child_spo,
             }));
+            const existingIds = new Set((vouchers || []).map((v: any) => v.id));
+            for (const mr of masterResults) {
+              if (!existingIds.has(mr.id)) {
+                vouchers = vouchers || [];
+                vouchers.push(mr);
+              }
+            }
           }
         }
 
