@@ -264,8 +264,8 @@ const handler = async (req: Request): Promise<Response> => {
           body: JSON.stringify({ action: "get_voucher_by_id", voucher_id: data.voucherId }),
         });
         const voucherData = await voucherRes.json();
-        if (voucherData.success && voucherData.data) {
-          const v = voucherData.data;
+        if (voucherData.success) {
+          const v = voucherData.data || voucherData;
           data = {
             ...data,
             cnpj: data.cnpj || v.cnpj || v.cnpj_fornecedor,
@@ -278,15 +278,16 @@ const handler = async (req: Request): Promise<Response> => {
             moeda: data.moeda || v.moeda,
             vencimento: data.vencimento || v.data_vencimento,
           };
-          // Fetch anexos
-          if (voucherData.data.anexos && Array.isArray(voucherData.data.anexos)) {
-            data.anexos = voucherData.data.anexos.map((a: any) => ({
+          // Fetch anexos - check multiple possible locations
+          const rawAnexos = v.anexos || voucherData.anexos || voucherData.data?.anexos;
+          if (rawAnexos && Array.isArray(rawAnexos)) {
+            data.anexos = rawAnexos.map((a: any) => ({
               tipo: a.tipo || a.type || '',
               file_name: a.file_name || a.nome || a.name || 'Documento',
               file_url: a.file_url || a.url || '',
             })).filter((a: any) => a.file_url);
           }
-          console.log(`Enriched voucher data: ${data.anexos?.length || 0} anexos found`);
+          console.log(`Enriched voucher data: ${data.anexos?.length || 0} anexos found, raw keys: ${JSON.stringify(Object.keys(voucherData))}`);
         }
       } catch (e) {
         console.error("Error fetching voucher details:", e);
@@ -321,12 +322,37 @@ const handler = async (req: Request): Promise<Response> => {
 
     const resend = new Resend(resendApiKey);
 
-    const emailResponse = await resend.emails.send({
+    // Download attachments if available
+    const attachments: Array<{ filename: string; content: string }> = [];
+    if (data.anexos && data.anexos.length > 0) {
+      for (const anexo of data.anexos) {
+        try {
+          const fileRes = await fetch(anexo.file_url);
+          if (fileRes.ok) {
+            const buffer = await fileRes.arrayBuffer();
+            const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+            attachments.push({ filename: anexo.file_name, content: base64 });
+            console.log(`Attached file: ${anexo.file_name}`);
+          } else {
+            console.warn(`Failed to download attachment ${anexo.file_name}: ${fileRes.status}`);
+          }
+        } catch (e) {
+          console.warn(`Error downloading attachment ${anexo.file_name}:`, e);
+        }
+      }
+    }
+
+    const emailPayload: any = {
       from: "Z3US Esteira <noreply@hermes.z3us.ai>",
       to: emails,
       subject,
       html,
-    });
+    };
+    if (attachments.length > 0) {
+      emailPayload.attachments = attachments;
+    }
+
+    const emailResponse = await resend.emails.send(emailPayload);
 
     console.log("Resend response:", JSON.stringify(emailResponse));
 
