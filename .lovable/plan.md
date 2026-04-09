@@ -1,70 +1,44 @@
 
-Objetivo: corrigir os dois problemas sem refatoração ampla, mantendo a estrutura atual.
+## Plano: Edge Function Serve HTML Diretamente (Sem Redirect)
 
-1. Corrigir anexos reais no e-mail
-- O problema atual não é só visual: a função `send-voucher-notification` hoje apenas lista links no HTML e não envia arquivos como anexos reais.
-- Além disso, ela lê os anexos no lugar errado:
-  - `mariadb-proxy/get_voucher_by_id` retorna `anexos` em `voucherRes.anexos`
-  - o código atual procura em `voucherRes.data.anexos`
-  - por isso os logs mostram `0 anexos found`
-- Ajuste planejado em `supabase/functions/send-voucher-notification/index.ts`:
-  - ler anexos do payload correto retornado pelo proxy
-  - manter a seção visual “Documentos Anexados” no HTML
-  - baixar cada arquivo público de `file_url`
-  - montar `attachments` no formato aceito pelo envio de e-mail
-  - anexar nome correto do arquivo e conteúdo binário/base64
-  - limitar aos documentos reais do voucher e ignorar URLs inválidas para não quebrar o envio inteiro
+### Problema
+O redirect para `dachser.z3us.app/supervisor-confirmacao` não funciona publicamente porque o app requer autenticação ou o SPA não carrega corretamente fora do contexto do app. Além disso, ao rejeitar, o supervisor precisa informar o motivo.
 
-2. Corrigir a abertura “crua” após aprovar/rejeitar
-- O `supervisor-email-action` já responde com `Content-Type: text/html`, então o comportamento de mostrar código-fonte tende a vir do contexto do clique no cliente de e-mail.
-- Para eliminar isso com robustez, a melhor correção é parar de depender da renderização direta do HTML da edge function.
-- Ajuste planejado:
-  - após processar aprovação/rejeição, a função fará redirect para uma rota web do app, com status e mensagem na querystring
-  - essa rota renderizará uma página polida dentro do próprio frontend, evitando exibição de HTML bruto pelo cliente de e-mail
-- Implementação mínima:
-  - criar uma página pública simples de confirmação com visual Z3US
-  - adicionar rota em `src/App.tsx`
-  - trocar os retornos finais de sucesso/erro em `supabase/functions/supervisor-email-action/index.ts` para redirecionamentos
+### Solução
+Eliminar o redirect. A edge function `supervisor-email-action` vai servir HTML diretamente com o design Z3US polido. Para rejeição, vai mostrar um formulário antes de processar.
 
-3. Preservar o comportamento atual
-- Os botões do e-mail continuam funcionando do mesmo jeito
-- A ação continua sendo uso único por token
-- O override para `larissa@z3us.ai` permanece como está
-- Não mexer na lógica de aprovação/rejeição além do necessário para a navegação final e anexos reais
+### Fluxo
 
-Arquivos a alterar
-- `supabase/functions/send-voucher-notification/index.ts`
-  - corrigir leitura dos anexos
-  - anexar arquivos reais no envio
-- `supabase/functions/supervisor-email-action/index.ts`
-  - substituir resposta HTML final por redirect para página do app
-- `src/App.tsx`
-  - registrar rota pública de confirmação
-- novo componente/página de confirmação
-  - tela polida para aprovado, rejeitado, erro, expirado, já utilizado
-
-Validação planejada
-- criar um voucher urgente com fatura/boleto
-- confirmar em logs que agora os anexos são encontrados
-- confirmar que o e-mail chega com arquivos anexados, não só links
-- clicar em Aprovar/Rejeitar pelo e-mail e validar que abre uma página bonita do app, sem mostrar código HTML bruto
-
-Detalhes técnicos
 ```text
-Fluxo corrigido
+APROVAR:
+  GET ?token=X&action=approve
+  → valida token → processa aprovação → retorna HTML "Voucher Aprovado" ✓
 
-send-voucher-notification
-  -> mariadb-proxy get_voucher_by_id
-  -> usa result.anexos
-  -> baixa arquivos de file_url
-  -> resend.emails.send({ html, attachments })
-
-supervisor-email-action
-  -> valida token
-  -> processa ação
-  -> redirect 302/303 para rota pública do app
-  -> frontend mostra página final estilizada
+REJEITAR (2 etapas):
+  GET ?token=X&action=reject
+  → valida token → retorna HTML com formulário "Motivo da Rejeição"
+  → supervisor preenche e clica "Confirmar Rejeição"
+  
+  POST ?token=X&action=reject  (form submit)
+  → processa rejeição com motivo → retorna HTML "Voucher Rejeitado" ✗
 ```
 
-Risco principal
-- Alguns anexos podem estar em formatos variados ou com URLs indisponíveis; por isso o envio deve tolerar falha individual de arquivo sem bloquear o e-mail inteiro.
+### Alterações
+
+**`supabase/functions/supervisor-email-action/index.ts`**
+- Remover função `redirect()` — não redireciona mais
+- Criar função `renderPage(status, message)` que retorna HTML completo inline com:
+  - Logo Z3US, gradiente escuro, card com sombra, ícone SVG, animação fade-in
+  - Mesmo design que já existe em `SupervisorConfirmacao.tsx`
+- Para `action=reject` com método GET: retornar HTML com formulário (textarea para motivo + botão "Confirmar Rejeição")
+- Para `action=reject` com método POST: ler o motivo do body, processar rejeição, salvar motivo no log e no campo `ajuste_operacao`
+- Para `action=approve`: processar e retornar página de sucesso diretamente
+- Content-Type: `text/html; charset=utf-8`
+
+**`src/pages/SupervisorConfirmacao.tsx`** e rota em `App.tsx`
+- Podem ser removidos ou mantidos (não serão mais usados pelo fluxo de e-mail)
+
+### Arquivo alterado
+| Arquivo | Alteração |
+|---------|-----------|
+| `supabase/functions/supervisor-email-action/index.ts` | Servir HTML diretamente com formulário de rejeição |
