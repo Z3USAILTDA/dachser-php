@@ -129,14 +129,11 @@ export function RoboTab() {
   };
 
   // Unified search: tries SPO first, then ND as fallback
-  const searchVoucher = async (numero: string): Promise<string | null> => {
-    // First try by SPO
-    let voucherId = await searchVoucherBySPO(numero);
-    if (voucherId) return voucherId;
-
-    // Fallback: try by ND
-    voucherId = await searchVoucherByND(numero);
-    return voucherId;
+  const searchVoucher = async (numero: string): Promise<{ id: string; masterName?: string; childSpo?: string } | null> => {
+    let result = await searchVoucherBySPO(numero);
+    if (result) return result;
+    result = await searchVoucherByND(numero);
+    return result;
   };
 
   const handleFilesSelected = async (selectedFiles: File[]) => {
@@ -145,19 +142,17 @@ export function RoboTab() {
     const fileMatches: FileMatch[] = await Promise.all(
       selectedFiles.map(async (file) => {
         const extracted = extractSPOFromFilename(file.name);
-        let voucherId = null;
+        let match: { id: string; masterName?: string; childSpo?: string } | null = null;
         let displaySPO: string | null = null;
 
         if (extracted) {
-          // Try formatted version first (e.g., "101-285230")
           if (extracted.formatted) {
-            voucherId = await searchVoucher(extracted.formatted);
+            match = await searchVoucher(extracted.formatted);
             displaySPO = extracted.formatted;
           }
           
-          // Fallback to raw number
-          if (!voucherId) {
-            voucherId = await searchVoucher(extracted.numero);
+          if (!match) {
+            match = await searchVoucher(extracted.numero);
             displaySPO = extracted.formatted || extracted.numero;
           }
         }
@@ -166,7 +161,9 @@ export function RoboTab() {
           file,
           fileName: file.name,
           numeroSPO: displaySPO,
-          voucherId,
+          voucherId: match?.id || null,
+          masterName: match?.masterName,
+          childSpo: match?.childSpo,
           status: "pending" as const,
           manualSpoInput: "",
           isEditingSpo: !extracted,
