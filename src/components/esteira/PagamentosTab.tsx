@@ -1251,6 +1251,85 @@ export const PagamentosTab = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Voltar para Operacional Dialog */}
+      <Dialog 
+        open={voltarOperacionalDialogOpen} 
+        onOpenChange={(open) => {
+          if (!voltarOperacionalLoading) {
+            setVoltarOperacionalDialogOpen(open);
+            if (!open) {
+              setVoltarOperacionalJustificativa("");
+              setVoltarOperacionalVoucher(null);
+            }
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Undo2 className="h-5 w-5 text-orange-500" />
+              Voltar para Operacional
+            </DialogTitle>
+            <DialogDescription>
+              Voucher/SPO: <strong>{voltarOperacionalVoucher?.is_master && voltarOperacionalVoucher?.nome_master ? voltarOperacionalVoucher.nome_master : voltarOperacionalVoucher?.numero_spo}</strong>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
+              <p className="text-sm text-orange-700 dark:text-orange-300">
+                Ao retornar para o Operacional, o voucher sairá da etapa Financeiro e voltará para revisão da equipe de Operações.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="voltarJustificativa" className="text-sm font-medium">
+                Justificativa <span className="text-red-500">*</span>
+              </Label>
+              <Textarea
+                id="voltarJustificativa"
+                placeholder="Descreva o motivo para retornar o voucher ao Operacional (mínimo 10 caracteres)..."
+                value={voltarOperacionalJustificativa}
+                onChange={(e) => setVoltarOperacionalJustificativa(e.target.value)}
+                rows={4}
+                className="resize-none"
+              />
+              <p className="text-xs text-muted-foreground">
+                Mínimo de 10 caracteres
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setVoltarOperacionalDialogOpen(false);
+                setVoltarOperacionalJustificativa("");
+                setVoltarOperacionalVoucher(null);
+              }}
+              disabled={voltarOperacionalLoading}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleVoltarOperacional}
+              disabled={voltarOperacionalLoading || voltarOperacionalJustificativa.trim().length < 10}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {voltarOperacionalLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                "Confirmar Retorno"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
