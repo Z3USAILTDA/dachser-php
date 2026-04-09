@@ -8648,9 +8648,10 @@ Deno.serve(async (req) => {
           numero_spo?: string;
         };
         
-        if (!idRm) {
+        const finalIdRm = idRm || numeroSpoRm;
+        if (!finalIdRm) {
           return new Response(
-            JSON.stringify({ error: 'id_rm é obrigatório' }),
+            JSON.stringify({ error: 'id_rm ou numero_spo é obrigatório' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
@@ -8684,7 +8685,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        console.log('Inserting into t_dados_rm:', { idRm, formaPag, fornecedorRm, regrasFormaPag: regrasFormaPagFinal, chavePix, pixTipoChave });
+        console.log('Inserting into t_dados_rm:', { idRm: finalIdRm, nd: numeroSpoRm, formaPag, fornecedorRm, regrasFormaPag: regrasFormaPagFinal, chavePix, pixTipoChave });
         
         // Drop and recreate table if it has wrong structure
         try {
@@ -8741,7 +8742,7 @@ Deno.serve(async (req) => {
           INSERT INTO dados_dachser.t_dados_rm 
           (id_rm, nd, nf_disputa, voucher_boleto, chave_pix, pix_tipo_chave, forma_pag, fornecedor, regras_forma_pag)
           VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)
-        `, [idRm, numeroSpoRm || null, voucherBoleto || null, chavePix || null, pixTipoChave || null, formaPag || null, fornecedorRm || null, regrasFormaPagFinal]);
+        `, [finalIdRm, numeroSpoRm || null, voucherBoleto || null, chavePix || null, pixTipoChave || null, formaPag || null, fornecedorRm || null, regrasFormaPagFinal]);
 
         console.log('Inserted into t_dados_rm successfully');
         result = { success: true };

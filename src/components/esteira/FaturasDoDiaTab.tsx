@@ -178,9 +178,10 @@ export const FaturasDoDiaTab = () => {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
         body: { 
           action: "insert_dados_rm",
-          id_rm: fatura.id_rm || fatura.numero_spo, // Usar id_rm de t_dados_financeiro_voucher se disponível
+          id_rm: fatura.id_rm || null,
+          numero_spo: fatura.numero_spo,
           voucher_boleto: isBoleto(fatura.forma_pagamento) ? fatura.linha_digitavel : null,
-          chave_pix: null, // PIX key would need to be loaded from voucher data if needed
+          chave_pix: null,
           pix_tipo_chave: null,
           forma_pag: fatura.forma_pagamento,
           fornecedor: fatura.fornecedor,
