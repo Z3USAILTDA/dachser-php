@@ -25,7 +25,8 @@ import {
   Eye,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Undo2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,7 +53,9 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { DadosPagamentoPanel } from "./DadosPagamentoPanel";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { parseDBDate, formatDateOnlyBR } from "@/utils/timezone";
 
 interface PagamentoItem {
@@ -185,6 +188,12 @@ export const PagamentosTab = () => {
   const [anexosDialog, setAnexosDialog] = useState<any[]>([]);
   const [loadingAnexos, setLoadingAnexos] = useState(false);
   
+  // Voltar para Operacional dialog state
+  const [voltarOperacionalDialogOpen, setVoltarOperacionalDialogOpen] = useState(false);
+  const [voltarOperacionalVoucher, setVoltarOperacionalVoucher] = useState<PagamentoItem | null>(null);
+  const [voltarOperacionalJustificativa, setVoltarOperacionalJustificativa] = useState("");
+  const [voltarOperacionalLoading, setVoltarOperacionalLoading] = useState(false);
+
   // Master children state
   const masterChildrenCache = useRef<Map<string, string[]>>(new Map());
   const [masterChildrenMap, setMasterChildrenMap] = useState<Map<string, string[]>>(new Map());
@@ -493,6 +502,46 @@ export const PagamentosTab = () => {
       });
     } finally {
       setProcessingAction(prev => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const handleVoltarOperacional = async () => {
+    if (!voltarOperacionalVoucher || voltarOperacionalJustificativa.trim().length < 10) return;
+    setVoltarOperacionalLoading(true);
+    try {
+      // 1. Update etapa_atual to OPERACAO
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voltarOperacionalVoucher.id,
+          etapa_atual: "OPERACAO",
+        }
+      });
+      if (error) throw error;
+
+      // 2. Log the action
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voltarOperacionalVoucher.id,
+          acao: "RETORNO_OPERACIONAL",
+          detalhe: `Voucher retornado para Operacional a partir da tela de Pagamentos. Justificativa: ${voltarOperacionalJustificativa.trim()}`
+        }
+      });
+
+      toast({ title: "Voucher retornado para Operacional com sucesso" });
+      setVoltarOperacionalDialogOpen(false);
+      setVoltarOperacionalJustificativa("");
+      setVoltarOperacionalVoucher(null);
+      loadPagamentos();
+    } catch (error: unknown) {
+      toast({
+        title: "Erro ao retornar voucher",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive"
+      });
+    } finally {
+      setVoltarOperacionalLoading(false);
     }
   };
 
@@ -1054,6 +1103,19 @@ export const PagamentosTab = () => {
                           <Check className="h-4 w-4 mr-1" />
                           {pag.is_pronto_para_robo ? "Pronto" : "Marcar Pronto"}
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-orange-500 hover:text-orange-600 hover:bg-orange-500/10"
+                          title="Voltar para Operacional"
+                          disabled={processingAction[pag.id]}
+                          onClick={() => {
+                            setVoltarOperacionalVoucher(pag);
+                            setVoltarOperacionalDialogOpen(true);
+                          }}
+                        >
+                          <Undo2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -1187,6 +1249,85 @@ export const PagamentosTab = () => {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Voltar para Operacional Dialog */}
+      <Dialog 
+        open={voltarOperacionalDialogOpen} 
+        onOpenChange={(open) => {
+          if (!voltarOperacionalLoading) {
+            setVoltarOperacionalDialogOpen(open);
+            if (!open) {
+              setVoltarOperacionalJustificativa("");
+              setVoltarOperacionalVoucher(null);
+            }
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Undo2 className="h-5 w-5 text-orange-500" />
+              Voltar para Operacional
+            </DialogTitle>
+            <DialogDescription>
+              Voucher/SPO: <strong>{voltarOperacionalVoucher?.is_master && voltarOperacionalVoucher?.nome_master ? voltarOperacionalVoucher.nome_master : voltarOperacionalVoucher?.numero_spo}</strong>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
+              <p className="text-sm text-orange-700 dark:text-orange-300">
+                Ao retornar para o Operacional, o voucher sairá da etapa Financeiro e voltará para revisão da equipe de Operações.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="voltarJustificativa" className="text-sm font-medium">
+                Justificativa <span className="text-red-500">*</span>
+              </Label>
+              <Textarea
+                id="voltarJustificativa"
+                placeholder="Descreva o motivo para retornar o voucher ao Operacional (mínimo 10 caracteres)..."
+                value={voltarOperacionalJustificativa}
+                onChange={(e) => setVoltarOperacionalJustificativa(e.target.value)}
+                rows={4}
+                className="resize-none"
+              />
+              <p className="text-xs text-muted-foreground">
+                Mínimo de 10 caracteres
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setVoltarOperacionalDialogOpen(false);
+                setVoltarOperacionalJustificativa("");
+                setVoltarOperacionalVoucher(null);
+              }}
+              disabled={voltarOperacionalLoading}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleVoltarOperacional}
+              disabled={voltarOperacionalLoading || voltarOperacionalJustificativa.trim().length < 10}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {voltarOperacionalLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                "Confirmar Retorno"
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
