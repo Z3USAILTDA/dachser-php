@@ -57,7 +57,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { parseDBDate, formatDateOnlyBR } from "@/utils/timezone";
-import { parseDBDate, formatDateOnlyBR } from "@/utils/timezone";
 
 interface PagamentoItem {
   id: string;
