@@ -1062,10 +1062,46 @@ export const PagamentosTab = () => {
       <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Dados de Pagamento - {selectedPagamento?.numero_spo}</DialogTitle>
+            <DialogTitle>
+              Dados de Pagamento - {selectedPagamento?.is_master && selectedPagamento?.nome_master 
+                ? selectedPagamento.nome_master 
+                : selectedPagamento?.numero_spo}
+            </DialogTitle>
           </DialogHeader>
           {selectedPagamento && (
             <div className="space-y-6">
+              {/* Master: show children */}
+              {selectedPagamento.is_master && (
+                <div className="p-4 rounded-xl border border-purple-500/30 bg-purple-500/10">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Badge className="bg-purple-600 text-white">Master</Badge>
+                    <span className="font-medium text-purple-400">
+                      {selectedPagamento.nome_master || selectedPagamento.numero_spo}
+                    </span>
+                  </div>
+                  {(() => {
+                    const children = masterChildrenMap.get(selectedPagamento.id);
+                    if (!children || children.length === 0) {
+                      return <p className="text-sm text-muted-foreground">Nenhum voucher filho vinculado</p>;
+                    }
+                    return (
+                      <div className="space-y-1.5">
+                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+                          Vouchers Filhos ({children.length})
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {children.map((spo, idx) => (
+                            <Badge key={idx} variant="outline" className="font-mono text-xs border-purple-500/30 text-purple-300">
+                              {spo}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               <DadosPagamentoPanel
                 voucherId={selectedPagamento.id}
                 formaPagamento={selectedPagamento.forma_pagamento}
