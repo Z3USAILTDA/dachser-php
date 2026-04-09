@@ -1446,6 +1446,25 @@ const EsteiraIndex = () => {
       if (quickFilterCobranca !== "all" && voucher.cobrancaEmNomeDe !== quickFilterCobranca) {
         return false;
       }
+
+      // Drill-down filter from metric cards
+      if (drillDownFilter === "ativos") {
+        if (voucher.etapaAtual === "CONCLUIDO" || voucher.etapaAtual === "A_PROCESSAR") return false;
+      }
+      if (drillDownFilter === "sla") {
+        if (voucher.etapaAtual === "CONCLUIDO") return false;
+        if (voucher.vencimento > tomorrow) return false;
+      }
+      if (drillDownFilter === "pendencias") {
+        if (voucher.etapaAtual === "CONCLUIDO" || voucher.etapaAtual === "A_PROCESSAR") return false;
+        const aguardandoComprovante = voucher.etapaAtual === "FINANCEIRO" || voucher.etapaAtual === "ROBO";
+        const emExcecao = voucher.urgenciaTipo === "URGENTE_REAL";
+        if (!aguardandoComprovante && !emExcecao) return false;
+      }
+      if (drillDownFilter === "atividade") {
+        if (voucher.updatedAt < yesterday) return false;
+      }
+
       return true;
     });
   };
