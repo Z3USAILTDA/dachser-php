@@ -68,6 +68,7 @@ interface VoucherTableProps {
   canCancelVoucher?: boolean;
   canDisassembleMaster?: boolean;
   canValidateComprovante?: boolean;
+  canApproveSupervisor?: boolean;
   lastUpdateTime?: Date | null;
 }
 
@@ -135,7 +136,7 @@ const getSlaColor = (status: "ok" | "warning" | "critical") => {
   return colors[status];
 };
 
-export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, onDisassemble, onValidateComprovante, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false, canDisassembleMaster = false, canValidateComprovante = false, lastUpdateTime }: VoucherTableProps) => {
+export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, onDisassemble, onValidateComprovante, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false, canDisassembleMaster = false, canValidateComprovante = false, canApproveSupervisor = false, lastUpdateTime }: VoucherTableProps) => {
   const [validatingVoucherId, setValidatingVoucherId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -726,7 +727,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                           {/* Approve/Reject buttons for urgent supervisor vouchers */}
-                          {voucher.etapaAtual === "SUPERVISOR" && voucher.urgenciaTipo === "URGENTE_REAL" && (
+                          {canApproveSupervisor && voucher.etapaAtual === "SUPERVISOR" && voucher.urgenciaTipo === "URGENTE_REAL" && (
                             <>
                               <Button
                                 variant="ghost"
