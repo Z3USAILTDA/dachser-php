@@ -20,6 +20,8 @@ interface FileMatch {
   error?: string;
   manualSpoInput?: string;
   isEditingSpo?: boolean;
+  masterName?: string;
+  childSpo?: string;
 }
 
 export function RoboTab() {
@@ -76,7 +78,7 @@ export function RoboTab() {
     return null;
   };
 
-  const searchVoucherBySPO = async (spo: string): Promise<string | null> => {
+  const searchVoucherBySPO = async (spo: string): Promise<{ id: string; masterName?: string; childSpo?: string } | null> => {
     try {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: {
@@ -86,10 +88,13 @@ export function RoboTab() {
       });
 
       if (!error && data?.vouchers?.length > 0) {
-        // Filter for ROBO stage vouchers
         const roboVoucher = data.vouchers.find((v: any) => v.etapa_atual === 'ROBO');
         if (roboVoucher) {
-          return roboVoucher.id;
+          return {
+            id: roboVoucher.id,
+            masterName: roboVoucher.matched_via_child ? (roboVoucher.nome_master || roboVoucher.numero_spo) : undefined,
+            childSpo: roboVoucher.child_spo,
+          };
         }
       }
     } catch (e) {
@@ -98,7 +103,7 @@ export function RoboTab() {
     return null;
   };
 
-  const searchVoucherByND = async (nd: string): Promise<string | null> => {
+  const searchVoucherByND = async (nd: string): Promise<{ id: string; masterName?: string; childSpo?: string } | null> => {
     try {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: {
@@ -108,10 +113,13 @@ export function RoboTab() {
       });
 
       if (!error && data?.vouchers?.length > 0) {
-        // Filter for ROBO stage vouchers
         const roboVoucher = data.vouchers.find((v: any) => v.etapa_atual === 'ROBO');
         if (roboVoucher) {
-          return roboVoucher.id;
+          return {
+            id: roboVoucher.id,
+            masterName: roboVoucher.matched_via_child ? (roboVoucher.nome_master || roboVoucher.numero_spo) : undefined,
+            childSpo: roboVoucher.child_spo,
+          };
         }
       }
     } catch (e) {
@@ -121,14 +129,11 @@ export function RoboTab() {
   };
 
   // Unified search: tries SPO first, then ND as fallback
-  const searchVoucher = async (numero: string): Promise<string | null> => {
-    // First try by SPO
-    let voucherId = await searchVoucherBySPO(numero);
-    if (voucherId) return voucherId;
-
-    // Fallback: try by ND
-    voucherId = await searchVoucherByND(numero);
-    return voucherId;
+  const searchVoucher = async (numero: string): Promise<{ id: string; masterName?: string; childSpo?: string } | null> => {
+    let result = await searchVoucherBySPO(numero);
+    if (result) return result;
+    result = await searchVoucherByND(numero);
+    return result;
   };
 
   const handleFilesSelected = async (selectedFiles: File[]) => {
@@ -137,19 +142,17 @@ export function RoboTab() {
     const fileMatches: FileMatch[] = await Promise.all(
       selectedFiles.map(async (file) => {
         const extracted = extractSPOFromFilename(file.name);
-        let voucherId = null;
+        let match: { id: string; masterName?: string; childSpo?: string } | null = null;
         let displaySPO: string | null = null;
 
         if (extracted) {
-          // Try formatted version first (e.g., "101-285230")
           if (extracted.formatted) {
-            voucherId = await searchVoucher(extracted.formatted);
+            match = await searchVoucher(extracted.formatted);
             displaySPO = extracted.formatted;
           }
           
-          // Fallback to raw number
-          if (!voucherId) {
-            voucherId = await searchVoucher(extracted.numero);
+          if (!match) {
+            match = await searchVoucher(extracted.numero);
             displaySPO = extracted.formatted || extracted.numero;
           }
         }
@@ -158,7 +161,9 @@ export function RoboTab() {
           file,
           fileName: file.name,
           numeroSPO: displaySPO,
-          voucherId,
+          voucherId: match?.id || null,
+          masterName: match?.masterName,
+          childSpo: match?.childSpo,
           status: "pending" as const,
           manualSpoInput: "",
           isEditingSpo: !extracted,
@@ -185,8 +190,7 @@ export function RoboTab() {
       return;
     }
 
-    // Use unified search (SPO + ND fallback)
-    const voucherId = await searchVoucher(file.manualSpoInput.trim());
+    const match = await searchVoucher(file.manualSpoInput.trim());
 
     setFiles((prev) =>
       prev.map((f, i) =>
@@ -194,17 +198,21 @@ export function RoboTab() {
           ? {
               ...f,
               numeroSPO: file.manualSpoInput?.trim() || null,
-              voucherId,
+              voucherId: match?.id || null,
+              masterName: match?.masterName,
+              childSpo: match?.childSpo,
               isEditingSpo: false,
             }
           : f
       )
     );
 
-    if (voucherId) {
+    if (match) {
       toast({
-        title: "Voucher encontrado",
-        description: `SPO ${file.manualSpoInput} vinculado com sucesso`,
+        title: match.masterName ? "Master encontrado" : "Voucher encontrado",
+        description: match.masterName 
+          ? `Vinculado ao Master "${match.masterName}" via filho SPO ${match.childSpo}`
+          : `SPO ${file.manualSpoInput} vinculado com sucesso`,
       });
     } else {
       toast({
@@ -306,7 +314,7 @@ export function RoboTab() {
             user_id: userData.user?.id || null,
             user_name: userData.user?.email || 'Sistema',
             acao: "COMPROVANTE_ANEXADO",
-            detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô`,
+            detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô${fileMatch.childSpo ? ` (filho SPO ${fileMatch.childSpo})` : ''}`,
           },
         });
 
@@ -376,6 +384,15 @@ export function RoboTab() {
     }
     if (!fileMatch.voucherId) {
       return <Badge variant="secondary">Voucher não encontrado</Badge>;
+    }
+    if (fileMatch.masterName) {
+      return (
+        <div className="flex items-center gap-1 flex-wrap">
+          <Badge variant="info">Master</Badge>
+          <Badge className="bg-primary text-primary-foreground">{fileMatch.masterName}</Badge>
+          <span className="text-xs text-muted-foreground">via filho {fileMatch.childSpo}</span>
+        </div>
+      );
     }
     return <Badge className="bg-primary text-primary-foreground">SPO {fileMatch.numeroSPO}</Badge>;
   };

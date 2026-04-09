@@ -9896,6 +9896,29 @@ Deno.serve(async (req) => {
           `, [numero_spo]);
         }
 
+        // 4. Child-to-master fallback: if SPO belongs to a child voucher, return the master
+        if (!vouchers || vouchers.length === 0) {
+          const masterVouchers = await client.query(`
+            SELECT m.id, m.numero_spo, m.fornecedor, m.valor, m.vencimento, m.etapa_atual,
+                   m.cobranca_em_nome_de, m.moeda, m.is_master, m.nome_master,
+                   c.id as child_voucher_id, c.numero_spo as child_spo
+            FROM dados_dachser.t_vouchers c
+            JOIN dados_dachser.t_vouchers m ON m.id = c.voucher_master_id
+            WHERE c.numero_spo = ? AND c.voucher_master_id IS NOT NULL AND c.voucher_master_id != ''
+            LIMIT 5
+          `, [numero_spo]);
+
+          if (masterVouchers && masterVouchers.length > 0) {
+            // Return master vouchers with child context
+            vouchers = masterVouchers.map((mv: any) => ({
+              ...mv,
+              is_master: true,
+              matched_via_child: true,
+              child_spo: mv.child_spo,
+            }));
+          }
+        }
+
         result = { success: true, vouchers: vouchers || [] };
         console.log(`Found ${vouchers?.length || 0} vouchers for SPO ${numero_spo}`);
         break;
@@ -9960,6 +9983,28 @@ Deno.serve(async (req) => {
             ORDER BY CHAR_LENGTH(numero_spo) DESC, created_at DESC
             LIMIT 5
           `, [numero_nd]);
+        }
+
+        // 5. Child-to-master fallback for ND
+        if (!vouchers || vouchers.length === 0) {
+          const masterVouchers = await client.query(`
+            SELECT m.id, m.numero_spo, m.fornecedor, m.valor, m.vencimento, m.etapa_atual,
+                   m.cobranca_em_nome_de, m.moeda, m.is_master, m.nome_master, m.id_rm, m.processo_id,
+                   c.id as child_voucher_id, c.numero_spo as child_spo
+            FROM dados_dachser.t_vouchers c
+            JOIN dados_dachser.t_vouchers m ON m.id = c.voucher_master_id
+            WHERE (c.id_rm = ? OR c.processo_id = ?) AND c.voucher_master_id IS NOT NULL AND c.voucher_master_id != ''
+            LIMIT 5
+          `, [numero_nd, numero_nd]);
+
+          if (masterVouchers && masterVouchers.length > 0) {
+            vouchers = masterVouchers.map((mv: any) => ({
+              ...mv,
+              is_master: true,
+              matched_via_child: true,
+              child_spo: mv.child_spo,
+            }));
+          }
         }
 
         result = { success: true, vouchers: vouchers || [] };
