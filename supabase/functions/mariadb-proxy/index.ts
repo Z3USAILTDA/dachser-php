@@ -6360,7 +6360,13 @@ Deno.serve(async (req) => {
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
         
         const vouchers = await client.query(`
-           SELECT v.*, dfv.id_rm as dfv_id_rm, dfv.created_by as dfv_created_by,
+           SELECT v.*, dfv.id_rm as dfv_id_rm, 
+            COALESCE(dfv.created_by, v.criado_por_user_name,
+              (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
+               WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+               AND lc.acao = 'VOUCHER_CRIADO'
+               ORDER BY lc.data_hora ASC LIMIT 1)
+            ) as dfv_created_by,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
              WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
              AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
@@ -13737,7 +13743,13 @@ Deno.serve(async (req) => {
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
         
         const vouchers = await client.query(`
-           SELECT v.*, dfv.id_rm as dfv_id_rm, dfv.created_by as dfv_created_by,
+           SELECT v.*, dfv.id_rm as dfv_id_rm, 
+            COALESCE(dfv.created_by, v.criado_por_user_name,
+              (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
+               WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+               AND lc.acao = 'VOUCHER_CRIADO'
+               ORDER BY lc.data_hora ASC LIMIT 1)
+            ) as dfv_created_by,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
              WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
              AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
@@ -13765,7 +13777,13 @@ Deno.serve(async (req) => {
         console.log('[get_vouchers_combined] Fetching active + pending RM vouchers in single connection');
         
         const combinedAtivos = await client.query(`
-           SELECT v.*, dfv.id_rm as dfv_id_rm, dfv.created_by as dfv_created_by,
+           SELECT v.*, dfv.id_rm as dfv_id_rm, 
+            COALESCE(dfv.created_by, v.criado_por_user_name,
+              (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
+               WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+               AND lc.acao = 'VOUCHER_CRIADO'
+               ORDER BY lc.data_hora ASC LIMIT 1)
+            ) as dfv_created_by,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
              WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
              AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
