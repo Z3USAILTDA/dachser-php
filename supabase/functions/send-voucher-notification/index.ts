@@ -248,8 +248,50 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const data: NotificationRequest = await req.json();
+    let data: NotificationRequest = await req.json();
     console.log("Notification request:", JSON.stringify({ type: data.type, toStage: data.toStage, voucherNumber: data.voucherNumber }));
+
+    // If sending to SUPERVISOR, enrich with voucher details (anexos, CNPJ, etc.)
+    if (data.toStage === "SUPERVISOR" && data.voucherId) {
+      try {
+        const voucherRes = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+            "apikey": SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ action: "get_voucher_by_id", voucher_id: data.voucherId }),
+        });
+        const voucherData = await voucherRes.json();
+        if (voucherData.success && voucherData.data) {
+          const v = voucherData.data;
+          data = {
+            ...data,
+            cnpj: data.cnpj || v.cnpj || v.cnpj_fornecedor,
+            filial: data.filial || v.filial,
+            centroCusto: data.centroCusto || v.centro_custo,
+            formaPagamento: data.formaPagamento || v.forma_pagamento,
+            motivoUrgencia: data.motivoUrgencia || v.urgencia_motivo,
+            fornecedor: data.fornecedor || v.fornecedor,
+            valor: data.valor || v.valor?.toString(),
+            moeda: data.moeda || v.moeda,
+            vencimento: data.vencimento || v.data_vencimento,
+          };
+          // Fetch anexos
+          if (voucherData.data.anexos && Array.isArray(voucherData.data.anexos)) {
+            data.anexos = voucherData.data.anexos.map((a: any) => ({
+              tipo: a.tipo || a.type || '',
+              file_name: a.file_name || a.nome || a.name || 'Documento',
+              file_url: a.file_url || a.url || '',
+            })).filter((a: any) => a.file_url);
+          }
+          console.log(`Enriched voucher data: ${data.anexos?.length || 0} anexos found`);
+        }
+      } catch (e) {
+        console.error("Error fetching voucher details:", e);
+      }
+    }
 
     // OVERRIDE: Enviar todos os emails para larissa@z3us.ai independente do cargo/stage
     const emails = ["larissa@z3us.ai"];
