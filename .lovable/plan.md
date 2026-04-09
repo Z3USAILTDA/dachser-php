@@ -1,45 +1,44 @@
 
 
-## Plano: Corrigir filtros dos cards (drillDown) na Esteira
+## Plano: Corrigir mapeamento de `id_rm` e `nd` na `t_dados_rm`
 
 ### Problema
-Os 4 cards (Em Andamento, SLA, Pendências, Atividade 24h) definem `drillDownFilter` ao serem clicados, mas a função `filterVouchers` **nunca lê** essa variável. O filtro visual (badge com "✕") aparece, porém a lista de vouchers não muda.
+Atualmente, quando `id_rm` não existe, o sistema coloca o `numero_spo` no lugar do `id_rm` (`id_rm: voucher.idRm || voucher.numeroSPO`). Além disso, o `numero_spo` não é enviado como parâmetro em nenhum dos chamadores, resultando em `nd` vazio.
 
-### Solução
-Adicionar a lógica de `drillDownFilter` dentro de `filterVouchers`, replicando exatamente os mesmos critérios usados em `calculateMetrics`:
+**Comportamento errado:**
+- `id_rm` = numero_spo (quando id_rm não existe)
+- `nd` = NULL (porque numero_spo não é passado)
 
-| Card | Filtro | Critério (já existente em `calculateMetrics`) |
-|------|--------|-----------------------------------------------|
-| Em Andamento | `ativos` | `etapaAtual !== "CONCLUIDO" && etapaAtual !== "A_PROCESSAR"` |
-| SLA | `sla` | `etapaAtual !== "CONCLUIDO" && vencimento <= amanhã` |
-| Pendências | `pendencias` | `etapaAtual !== "CONCLUIDO" && etapaAtual !== "A_PROCESSAR" && (etapa FINANCEIRO/ROBO ou urgência URGENTE_REAL)` |
-| Atividade 24h | `atividade` | `updatedAt >= ontem` |
+**Comportamento correto esperado:**
+- `id_rm` = id_rm real (se não existir, pode ficar vazio ou o próprio id_rm)
+- `nd` = numero_spo (nunca vazio)
 
-### Alteração
+### Alterações
 
-**Arquivo: `src/pages/esteira/EsteiraIndex.tsx`**
+**1. Frontend — 3 arquivos** (passar `numero_spo` e corrigir `id_rm`)
 
-Dentro de `filterVouchers`, após os filtros existentes e antes do `return true`, adicionar um bloco que aplica o drillDown:
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/esteira/VoucherFinanceiroActions.tsx` | Passar `numero_spo: voucher.numeroSPO` e usar `id_rm: voucher.idRm` (sem fallback para numeroSPO) |
+| `src/components/esteira/PagamentosTab.tsx` | Passar `numero_spo: pagamento.numero_spo` e usar `id_rm: pagamento.id_rm` (sem fallback) |
+| `src/components/esteira/FaturasDoDiaTab.tsx` | Passar `numero_spo: fatura.numero_spo` e usar `id_rm: fatura.id_rm` (sem fallback) |
 
-```typescript
-// Drill-down filter from metric cards
-if (drillDownFilter === "ativos") {
-  if (voucher.etapaAtual === "CONCLUIDO" || voucher.etapaAtual === "A_PROCESSAR") return false;
-}
-if (drillDownFilter === "sla") {
-  if (voucher.etapaAtual === "CONCLUIDO") return false;
-  if (voucher.vencimento > tomorrow) return false;
-}
-if (drillDownFilter === "pendencias") {
-  if (voucher.etapaAtual === "CONCLUIDO" || voucher.etapaAtual === "A_PROCESSAR") return false;
-  const aguardandoComprovante = voucher.etapaAtual === "FINANCEIRO" || voucher.etapaAtual === "ROBO";
-  const emExcecao = voucher.urgenciaTipo === "URGENTE_REAL";
-  if (!aguardandoComprovante && !emExcecao) return false;
-}
-if (drillDownFilter === "atividade") {
-  if (voucher.updatedAt < yesterday) return false;
-}
+**2. Backend — `supabase/functions/mariadb-proxy/index.ts`**
+
+- **Action `insert_dados_rm`** (linha ~8740): Garantir que `nd` recebe `numeroSpoRm` e que `id_rm` não recebe o SPO como fallback. Se `id_rm` não existir, usar o próprio `numero_spo` como `id_rm` apenas se realmente não houver `id_rm`.
+- **Action `sync_baixa_remessa_to_dados_rm`** (linha ~8807): Já está correto (`v.id_rm || v.numero_spo` para id_rm e `v.numero_spo` para nd), mas manter consistência.
+
+**Resumo da lógica corrigida:**
+```
+id_rm  = id_rm real (obrigatório, fallback para numero_spo apenas como último recurso)
+nd     = numero_spo (sempre preenchido)
 ```
 
-Nenhum outro arquivo ou estrutura será alterado.
+### Arquivos alterados
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/components/esteira/VoucherFinanceiroActions.tsx` | Adicionar `numero_spo`, manter `id_rm` sem fallback SPO |
+| `src/components/esteira/PagamentosTab.tsx` | Idem |
+| `src/components/esteira/FaturasDoDiaTab.tsx` | Idem |
+| `supabase/functions/mariadb-proxy/index.ts` | Validar que `nd` sempre recebe o SPO |
 
