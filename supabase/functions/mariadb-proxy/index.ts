@@ -13676,6 +13676,90 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ==================== GET VOUCHERS COMBINED (ativos + pendentes_rm) ====================
+      case 'get_vouchers_combined': {
+        // Single call that returns both active vouchers and pending RM vouchers
+        // Saves 1 MariaDB connection vs calling get_vouchers_ativos + get_vouchers_pendentes_rm separately
+        console.log('[get_vouchers_combined] Fetching active + pending RM vouchers in single connection');
+        
+        const combinedAtivos = await client.query(`
+           SELECT v.*, dfv.id_rm as dfv_id_rm, dfv.created_by as dfv_created_by,
+            (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
+             WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+             AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
+                           'REENVIO_APOS_AJUSTE', 'APROVADO_URGENTE', 'BAIXA_MANUAL', 'VOUCHER_CRIADO',
+                           'RASCUNHO_ENVIADO', 'MASTER_APROVADO_OPERACAO')
+             ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
+          FROM dados_dachser.t_vouchers v
+          LEFT JOIN (
+            SELECT nd, MIN(id_rm) as id_rm, MIN(created_by) as created_by
+            FROM dados_dachser.t_dados_financeiro_voucher
+            GROUP BY nd
+          ) dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
+          WHERE sync_status = "ATIVO"
+            AND (voucher_master_id IS NULL OR voucher_master_id = "")
+            AND (etapa_atual != "CONCLUIDO" OR (etapa_atual = "CONCLUIDO" AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)))
+          ORDER BY v.created_at DESC
+        `);
+        
+        const combinedPendentes = await client.query(`
+          SELECT 
+            dfv.id_rm, dfv.nd, dfv.documento, dfv.nome_beneficiario, dfv.nome_cobranca,
+            dfv.numero_nf, dfv.numero_processo, dfv.modal, dfv.tipo_pag, dfv.forma_pag,
+            dfv.data_emissao, dfv.data_vencimento, dfv.valor_nf, dfv.moeda, dfv.cnpj, dfv.razao_social
+          FROM dados_dachser.t_dados_financeiro_voucher dfv
+          LEFT JOIN dados_dachser.t_vouchers v ON dfv.nd COLLATE utf8mb4_unicode_ci = v.numero_spo COLLATE utf8mb4_unicode_ci
+          LEFT JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
+          WHERE v.id IS NULL
+            AND b.IdLancamentoRM IS NULL
+            AND (dfv.nome_beneficiario IS NULL OR LOWER(dfv.nome_beneficiario) NOT LIKE '%dachser%')
+            AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')
+          ORDER BY dfv.data_vencimento ASC
+        `);
+        
+        console.log(`[get_vouchers_combined] Found ${combinedAtivos?.length || 0} active + ${combinedPendentes?.length || 0} pending RM`);
+        result = { 
+          success: true, 
+          ativos: combinedAtivos || [], 
+          pendentes_rm: combinedPendentes || [],
+          count_ativos: combinedAtivos?.length || 0,
+          count_pendentes: combinedPendentes?.length || 0
+        };
+        break;
+      }
+
+      // ==================== GET VOUCHER FILHOS BATCH ====================
+      case 'get_voucher_filhos_batch': {
+        // Batch fetch children for multiple master vouchers in a single query
+        const { master_ids } = body as { master_ids: string[] };
+        console.log('[get_voucher_filhos_batch] Fetching children for', master_ids?.length, 'masters');
+        
+        if (!master_ids || master_ids.length === 0) {
+          result = { success: true, data: {} };
+          break;
+        }
+        
+        const placeholdersBatch = master_ids.map(() => '?').join(',');
+        const filhosBatch = await client.query(`
+          SELECT voucher_master_id, id, numero_spo, fornecedor, valor, moeda, vencimento, etapa_atual
+          FROM dados_dachser.t_vouchers 
+          WHERE voucher_master_id IN (${placeholdersBatch})
+          ORDER BY numero_spo ASC
+        `, master_ids);
+        
+        // Group by master_id
+        const grouped: Record<string, any[]> = {};
+        for (const filho of (filhosBatch || [])) {
+          const mid = filho.voucher_master_id;
+          if (!grouped[mid]) grouped[mid] = [];
+          grouped[mid].push(filho);
+        }
+        
+        result = { success: true, data: grouped };
+        break;
+      }
+
+
       // ==================== SYNC VOUCHERS BAIXADOS ====================
       case 'sync_vouchers_baixados': {
         // Mark vouchers as BAIXADO if they exist in tbaixas
