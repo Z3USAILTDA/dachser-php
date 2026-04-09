@@ -188,6 +188,12 @@ export const PagamentosTab = () => {
   const [anexosDialog, setAnexosDialog] = useState<any[]>([]);
   const [loadingAnexos, setLoadingAnexos] = useState(false);
   
+  // Voltar para Operacional dialog state
+  const [voltarOperacionalDialogOpen, setVoltarOperacionalDialogOpen] = useState(false);
+  const [voltarOperacionalVoucher, setVoltarOperacionalVoucher] = useState<PagamentoItem | null>(null);
+  const [voltarOperacionalJustificativa, setVoltarOperacionalJustificativa] = useState("");
+  const [voltarOperacionalLoading, setVoltarOperacionalLoading] = useState(false);
+
   // Master children state
   const masterChildrenCache = useRef<Map<string, string[]>>(new Map());
   const [masterChildrenMap, setMasterChildrenMap] = useState<Map<string, string[]>>(new Map());
