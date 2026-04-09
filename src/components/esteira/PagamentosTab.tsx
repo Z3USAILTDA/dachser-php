@@ -1103,6 +1103,19 @@ export const PagamentosTab = () => {
                           <Check className="h-4 w-4 mr-1" />
                           {pag.is_pronto_para_robo ? "Pronto" : "Marcar Pronto"}
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-orange-500 hover:text-orange-600 hover:bg-orange-500/10"
+                          title="Voltar para Operacional"
+                          disabled={processingAction[pag.id]}
+                          onClick={() => {
+                            setVoltarOperacionalVoucher(pag);
+                            setVoltarOperacionalDialogOpen(true);
+                          }}
+                        >
+                          <Undo2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </td>
                   </tr>
