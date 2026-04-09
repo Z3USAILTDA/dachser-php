@@ -1152,12 +1152,12 @@ const EsteiraIndex = () => {
     }
   }, [hasEsteiraAccess]);
 
-  // Fetch DB stats on mount
+  // Fetch DB stats only when dashboard tab is active (deferred to reduce initial load)
   useEffect(() => {
-    if (hasEsteiraAccess) {
+    if (hasEsteiraAccess && activeTab === "dashboard") {
       fetchFinDbStats();
     }
-  }, [hasEsteiraAccess]);
+  }, [hasEsteiraAccess, activeTab]);
 
   // Reload vouchers when tab becomes visible after being hidden (tab switch only)
   // Removed window focus listener as it was triggering too frequently (e.g., when closing dialogs)
