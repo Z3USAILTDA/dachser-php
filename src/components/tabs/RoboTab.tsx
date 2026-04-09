@@ -34,18 +34,9 @@ export function RoboTab() {
     // Remove extension for cleaner matching
     const nameWithoutExt = filename.replace(/\.\w+$/, '');
     
-    // Special pattern for concatenated XXX-YYYYYY format (e.g., 101285230010206 → 101-285230)
-    // This is commonly used: 3 digits + 6 digits + optional extra digits
-    const concatenatedPattern = /^(\d{3})(\d{6})\d*/;
-    const concatMatch = nameWithoutExt.match(concatenatedPattern);
-    if (concatMatch) {
-      const formatted = `${concatMatch[1]}-${concatMatch[2]}`;
-      return { numero: concatMatch[1] + concatMatch[2], formatted };
-    }
-    
-    // Enhanced patterns for SPO extraction
+    // Enhanced patterns for SPO extraction — try full number FIRST
     const patterns = [
-      /^(\d{6,})$/,                   // Pure number filename: 20262478210.pdf
+      /^(\d{6,})$/,                   // Pure number filename: 20262478848.pdf → full number
       /^(\d{5,})[-_]/,                // 12345_comprovante.pdf
       /SPO[-_]?(\d{5,})/i,            // SPO12345.pdf or SPO-12345.pdf
       /[-_](\d{5,})\./,               // comprovante_12345.pdf
@@ -56,7 +47,6 @@ export function RoboTab() {
       /voucher[-_]?(\d{5,})/i,        // voucher_12345.pdf
       /^(\d{5,})\s/,                  // "12345 alguma coisa.pdf"
       /\s(\d{5,})\./,                 // "alguma coisa 12345.pdf"
-      /^(\d{5,})$/,                   // Fallback: pure number with 5+ digits
     ];
 
     // First try against name without extension (for pure number patterns)
@@ -73,6 +63,14 @@ export function RoboTab() {
       if (match && match[1]) {
         return { numero: match[1], formatted: null };
       }
+    }
+
+    // Last resort: concatenated XXX-YYYYYY format (e.g., 101285230D10206 → 101-285230)
+    const concatenatedPattern = /^(\d{3})[-]?(\d{6})/;
+    const concatMatch = nameWithoutExt.match(concatenatedPattern);
+    if (concatMatch) {
+      const formatted = `${concatMatch[1]}-${concatMatch[2]}`;
+      return { numero: concatMatch[1] + concatMatch[2], formatted };
     }
 
     return null;
