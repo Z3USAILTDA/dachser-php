@@ -78,7 +78,7 @@ export function RoboTab() {
     return null;
   };
 
-  const searchVoucherBySPO = async (spo: string): Promise<string | null> => {
+  const searchVoucherBySPO = async (spo: string): Promise<{ id: string; masterName?: string; childSpo?: string } | null> => {
     try {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: {
@@ -88,10 +88,13 @@ export function RoboTab() {
       });
 
       if (!error && data?.vouchers?.length > 0) {
-        // Filter for ROBO stage vouchers
         const roboVoucher = data.vouchers.find((v: any) => v.etapa_atual === 'ROBO');
         if (roboVoucher) {
-          return roboVoucher.id;
+          return {
+            id: roboVoucher.id,
+            masterName: roboVoucher.matched_via_child ? (roboVoucher.nome_master || roboVoucher.numero_spo) : undefined,
+            childSpo: roboVoucher.child_spo,
+          };
         }
       }
     } catch (e) {
@@ -100,7 +103,7 @@ export function RoboTab() {
     return null;
   };
 
-  const searchVoucherByND = async (nd: string): Promise<string | null> => {
+  const searchVoucherByND = async (nd: string): Promise<{ id: string; masterName?: string; childSpo?: string } | null> => {
     try {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: {
@@ -110,10 +113,13 @@ export function RoboTab() {
       });
 
       if (!error && data?.vouchers?.length > 0) {
-        // Filter for ROBO stage vouchers
         const roboVoucher = data.vouchers.find((v: any) => v.etapa_atual === 'ROBO');
         if (roboVoucher) {
-          return roboVoucher.id;
+          return {
+            id: roboVoucher.id,
+            masterName: roboVoucher.matched_via_child ? (roboVoucher.nome_master || roboVoucher.numero_spo) : undefined,
+            childSpo: roboVoucher.child_spo,
+          };
         }
       }
     } catch (e) {
