@@ -952,6 +952,11 @@ export const PagamentosTab = () => {
                       ) : (
                         <span className="font-mono font-medium text-foreground">{pag.numero_spo}</span>
                       )}
+                      {pag.urgencia_tipo === "URGENTE_REAL" && (
+                        <Badge className="ml-2 text-[9px] px-1.5 bg-red-500/15 text-red-400 border border-red-500/30">
+                          ⚡ Urgente
+                        </Badge>
+                      )}
                       {isBoleto(pag.forma_pagamento as any) && !pag.linha_digitavel && (
                         <Badge variant="outline" className="ml-2 text-[9px] bg-red-500/20 text-red-400 border-red-500/30">
                           Erro Extração
