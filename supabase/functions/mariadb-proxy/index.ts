@@ -10370,13 +10370,9 @@ Deno.serve(async (req) => {
             b.UsuarioBaixa as usuario_baixa,
             b.StatusLan as status_lan
           FROM dados_dachser.tbaixas b
-          LEFT JOIN dados_dachser.t_dados_financeiro_nfs nfs
-            ON nfs.id_rm = b.IdLancamentoRM
-          WHERE b.StatusLan IN (0, 1, 2, 3) 
-            AND nfs.id_rm IS NULL
-            ${dateFilter}
+          WHERE b.StatusLan IN (0, 1, 2, 3) ${dateFilter}
           ORDER BY b.DataDaBaixa DESC
-          LIMIT 1000
+          LIMIT 1500
         `);
 
         if (!baixasRaw || baixasRaw.length === 0) {
@@ -10384,26 +10380,38 @@ Deno.serve(async (req) => {
           break;
         }
 
-        // Step 2: Get unique IdLancamentoRM values and fetch dfv data
+        // Step 2: Get unique IdLancamentoRM values and fetch dfv + nfs data in parallel
         const idRms = [...new Set(baixasRaw.map((b: any) => b.IdLancamentoRM).filter(Boolean))];
         
         let dfvMap: Record<string, any> = {};
+        let nfsIdSet: Set<string> = new Set();
         if (idRms.length > 0) {
           const placeholders = idRms.map(() => '?').join(',');
-          const dfvRows = await client.query(`
-            SELECT id_rm, nd, documento, nome_beneficiario, nome_cobranca, 
-                   numero_processo, forma_pag, data_vencimento, valor_nf, moeda, modal
-            FROM dados_dachser.t_dados_financeiro_voucher
-            WHERE id_rm IN (${placeholders})
-          `, idRms);
+          const [dfvRows, nfsRows] = await Promise.all([
+            client.query(`
+              SELECT id_rm, nd, documento, nome_beneficiario, nome_cobranca, 
+                     numero_processo, forma_pag, data_vencimento, valor_nf, moeda, modal
+              FROM dados_dachser.t_dados_financeiro_voucher
+              WHERE id_rm IN (${placeholders})
+            `, idRms),
+            client.query(`
+              SELECT DISTINCT id_rm
+              FROM dados_dachser.t_dados_financeiro_nfs
+              WHERE id_rm IN (${placeholders})
+            `, idRms)
+          ]);
           
           for (const row of (dfvRows || [])) {
             dfvMap[String(row.id_rm)] = row;
           }
+          for (const row of (nfsRows || [])) {
+            nfsIdSet.add(String(row.id_rm));
+          }
         }
 
-        // Step 3: Merge in-memory and filter out ADM modal
+        // Step 3: Merge in-memory, filter out ADM modal and NFs from régua de cobrança
         const baixas = baixasRaw
+          .filter((b: any) => !nfsIdSet.has(String(b.IdLancamentoRM)))
           .map((b: any) => {
             const dfv = dfvMap[String(b.IdLancamentoRM)] || {};
             return {
