@@ -41,6 +41,12 @@ interface NotificationRequest {
   valor?: string;
   moeda?: string;
   vencimento?: string;
+  cnpj?: string;
+  filial?: string;
+  centroCusto?: string;
+  formaPagamento?: string;
+  motivoUrgencia?: string;
+  anexos?: Array<{ tipo: string; file_name: string; file_url: string }>;
 }
 
 function getEmailContent(data: NotificationRequest) {
@@ -117,11 +123,27 @@ function getEmailContent(data: NotificationRequest) {
       <tr style="background:rgba(0,0,0,.03)"><td style="font-size:12px;font-weight:700;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="muted" colspan="2">DADOS DO VOUCHER</td></tr>
       <tr><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06);width:140px" class="muted">Número</td><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06);font-weight:700" class="text">${data.voucherNumber}</td></tr>
       ${data.fornecedor ? `<tr><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="muted">Fornecedor</td><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="text">${data.fornecedor}</td></tr>` : ""}
+      ${data.cnpj ? `<tr><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="muted">CNPJ</td><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="text">${data.cnpj}</td></tr>` : ""}
       ${data.valor ? `<tr><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="muted">Valor</td><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06);font-weight:700" class="text">${data.moeda || "BRL"} ${data.valor}</td></tr>` : ""}
       ${data.vencimento ? `<tr><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="muted">Vencimento</td><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="text">${data.vencimento}</td></tr>` : ""}
+      ${data.filial ? `<tr><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="muted">Filial</td><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="text">${data.filial}</td></tr>` : ""}
+      ${data.centroCusto ? `<tr><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="muted">Centro de Custo</td><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="text">${data.centroCusto}</td></tr>` : ""}
+      ${data.formaPagamento ? `<tr><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="muted">Forma Pgto</td><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="text">${data.formaPagamento}</td></tr>` : ""}
+      ${data.motivoUrgencia ? `<tr><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="muted">Motivo Urgencia</td><td style="font-size:13px;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06);color:#DC2626;font-weight:600" class="text">${data.motivoUrgencia}</td></tr>` : ""}
       <tr><td style="font-size:13px;padding:8px 14px" class="muted">Etapa</td><td style="font-size:13px;padding:8px 14px" class="text"><span style="display:inline-block;background:${cfg.titleColor};color:#fff;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700">${data.toStage}</span></td></tr>
     </table>
   </td></tr>
+  ${data.anexos && data.anexos.length > 0 ? `
+  <tr><td style="padding:0 28px 16px" align="left">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;border:1px solid rgba(0,0,0,.08);border-radius:8px;overflow:hidden">
+      <tr style="background:rgba(0,0,0,.03)"><td style="font-size:12px;font-weight:700;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="muted" colspan="2">DOCUMENTOS ANEXADOS</td></tr>
+      ${data.anexos.map((a: any, i: number) => `
+      <tr><td style="font-size:13px;padding:8px 14px;${i < data.anexos!.length - 1 ? 'border-bottom:1px solid rgba(0,0,0,.06);' : ''}" colspan="2">
+        <a href="${a.file_url}" target="_blank" style="color:#F5B843;text-decoration:none;font-weight:600">${a.file_name}</a>
+        <span style="font-size:11px;color:#999;margin-left:8px">${a.tipo || ''}</span>
+      </td></tr>`).join('')}
+    </table>
+  </td></tr>` : ''}
   <tr><td style="padding:4px 28px 24px" align="left">
     <a href="${voucherLink}" style="display:inline-block;background:${cfg.btnBg};color:${cfg.btnColor};text-decoration:none;font-weight:700;border-radius:999px;padding:12px 28px;font-size:14px">${ctaLabel}</a>
   </td></tr>
@@ -226,8 +248,50 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const data: NotificationRequest = await req.json();
+    let data: NotificationRequest = await req.json();
     console.log("Notification request:", JSON.stringify({ type: data.type, toStage: data.toStage, voucherNumber: data.voucherNumber }));
+
+    // If sending to SUPERVISOR, enrich with voucher details (anexos, CNPJ, etc.)
+    if (data.toStage === "SUPERVISOR" && data.voucherId) {
+      try {
+        const voucherRes = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+            "apikey": SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ action: "get_voucher_by_id", voucher_id: data.voucherId }),
+        });
+        const voucherData = await voucherRes.json();
+        if (voucherData.success && voucherData.data) {
+          const v = voucherData.data;
+          data = {
+            ...data,
+            cnpj: data.cnpj || v.cnpj || v.cnpj_fornecedor,
+            filial: data.filial || v.filial,
+            centroCusto: data.centroCusto || v.centro_custo,
+            formaPagamento: data.formaPagamento || v.forma_pagamento,
+            motivoUrgencia: data.motivoUrgencia || v.urgencia_motivo,
+            fornecedor: data.fornecedor || v.fornecedor,
+            valor: data.valor || v.valor?.toString(),
+            moeda: data.moeda || v.moeda,
+            vencimento: data.vencimento || v.data_vencimento,
+          };
+          // Fetch anexos
+          if (voucherData.data.anexos && Array.isArray(voucherData.data.anexos)) {
+            data.anexos = voucherData.data.anexos.map((a: any) => ({
+              tipo: a.tipo || a.type || '',
+              file_name: a.file_name || a.nome || a.name || 'Documento',
+              file_url: a.file_url || a.url || '',
+            })).filter((a: any) => a.file_url);
+          }
+          console.log(`Enriched voucher data: ${data.anexos?.length || 0} anexos found`);
+        }
+      } catch (e) {
+        console.error("Error fetching voucher details:", e);
+      }
+    }
 
     // OVERRIDE: Enviar todos os emails para larissa@z3us.ai independente do cargo/stage
     const emails = ["larissa@z3us.ai"];
