@@ -385,6 +385,15 @@ export function RoboTab() {
     if (!fileMatch.voucherId) {
       return <Badge variant="secondary">Voucher não encontrado</Badge>;
     }
+    if (fileMatch.masterName) {
+      return (
+        <div className="flex items-center gap-1 flex-wrap">
+          <Badge variant="info">Master</Badge>
+          <Badge className="bg-primary text-primary-foreground">{fileMatch.masterName}</Badge>
+          <span className="text-xs text-muted-foreground">via filho {fileMatch.childSpo}</span>
+        </div>
+      );
+    }
     return <Badge className="bg-primary text-primary-foreground">SPO {fileMatch.numeroSPO}</Badge>;
   };
 
