@@ -8742,7 +8742,7 @@ Deno.serve(async (req) => {
           INSERT INTO dados_dachser.t_dados_rm 
           (id_rm, nd, nf_disputa, voucher_boleto, chave_pix, pix_tipo_chave, forma_pag, fornecedor, regras_forma_pag)
           VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)
-        `, [idRm, numeroSpoRm || null, voucherBoleto || null, chavePix || null, pixTipoChave || null, formaPag || null, fornecedorRm || null, regrasFormaPagFinal]);
+        `, [finalIdRm, numeroSpoRm || null, voucherBoleto || null, chavePix || null, pixTipoChave || null, formaPag || null, fornecedorRm || null, regrasFormaPagFinal]);
 
         console.log('Inserted into t_dados_rm successfully');
         result = { success: true };
