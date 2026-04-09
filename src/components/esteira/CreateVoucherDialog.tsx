@@ -501,7 +501,7 @@ export const CreateVoucherDialog = ({
         if (errorMessage.includes("já existe") || errorMessage.includes("409")) {
           toast({
             title: "Voucher duplicado",
-            description: `Este voucher já foi cadastrado na esteira. Verifique na lista principal.`,
+            description: `Este voucher já existe na esteira. Verifique na lista principal.`,
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -510,12 +510,13 @@ export const CreateVoucherDialog = ({
         throw new Error(`Erro ao salvar voucher no MariaDB: ${mariaError.message}`);
       }
       
-      // Check response data for duplicate error
+      // Check response data for duplicate error (409 returns existingId and existingEtapa)
       if (mariaResult?.error) {
-        if (mariaResult.error.includes("já existe")) {
+        if (mariaResult.error.includes("já existe") || mariaResult.existingId) {
+          const etapaLabel = mariaResult.existingEtapa || "outra etapa";
           toast({
             title: "Voucher duplicado",
-            description: mariaResult.error,
+            description: `Este voucher já existe na etapa "${etapaLabel}". Localize-o na lista principal usando o filtro de busca.`,
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -685,7 +686,7 @@ export const CreateVoucherDialog = ({
       let errorMessage = "Ocorreu um erro ao criar o voucher/SPO";
       
       if (error.message?.includes("409") || error.message?.includes("já existe")) {
-        errorMessage = "Este voucher já existe na esteira em outra etapa. Verifique na lista principal.";
+        errorMessage = "Este voucher já existe na esteira em outra etapa. Localize-o na lista principal usando o filtro de busca.";
       } else if (error.message?.includes("numero_spo")) {
         errorMessage = "Número do voucher/SPO é obrigatório.";
       } else if (error.message?.includes("MANUAL-")) {

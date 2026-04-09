@@ -5565,39 +5565,37 @@ Deno.serve(async (req) => {
           );
         }
         
-        // CHECK FOR DUPLICATES: Replace A_PROCESSAR vouchers, block others
-        const existingVoucher = await client.query(`
+        // CHECK FOR DUPLICATES: Fetch ALL records with same numero_spo to prevent duplicates
+        const existingVouchers = await client.query(`
           SELECT id, numero_spo, etapa_atual FROM dados_dachser.t_vouchers 
-          WHERE numero_spo = ? LIMIT 1
+          WHERE numero_spo = ?
         `, [numeroSpo]);
         
-        if (existingVoucher && existingVoucher.length > 0) {
-          const existing = existingVoucher[0];
+        if (existingVouchers && existingVouchers.length > 0) {
+          // Check if ANY existing voucher is in an advanced stage (not A_PROCESSAR)
+          const advancedVoucher = existingVouchers.find((v: any) => v.etapa_atual !== 'A_PROCESSAR');
           
-          // Se está em A_PROCESSAR, deletar para substituir pelo novo
-          if (existing.etapa_atual === 'A_PROCESSAR') {
-            console.log('Replacing A_PROCESSAR voucher:', existing.id, 'numero_spo:', numeroSpo);
-            
-            // Deletar logs do voucher antigo
-            await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id = ?`, [existing.id]);
-            // Deletar anexos do voucher antigo
-            await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id = ?`, [existing.id]);
-            // Deletar o voucher antigo
-            await client.execute(`DELETE FROM dados_dachser.t_vouchers WHERE id = ?`, [existing.id]);
-            
-            console.log('A_PROCESSAR voucher replaced successfully');
-          } else {
-            // Bloquear para outras etapas
-            console.log('Voucher already exists with numero_spo:', numeroSpo, 'ID:', existing.id, 'etapa:', existing.etapa_atual);
+          if (advancedVoucher) {
+            // Block creation — voucher already progressed in the workflow
+            console.log('Voucher already exists in advanced stage. numero_spo:', numeroSpo, 'ID:', advancedVoucher.id, 'etapa:', advancedVoucher.etapa_atual);
             return new Response(
               JSON.stringify({ 
-                error: `Voucher com número ${numeroSpo} já existe na etapa ${existing.etapa_atual}`,
-                existingId: existing.id,
-                existingEtapa: existing.etapa_atual
+                error: `Voucher com número ${numeroSpo} já existe na etapa ${advancedVoucher.etapa_atual}`,
+                existingId: advancedVoucher.id,
+                existingEtapa: advancedVoucher.etapa_atual
               }),
               { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
           }
+          
+          // All existing are A_PROCESSAR — delete all of them before creating the new one
+          console.log('Replacing', existingVouchers.length, 'A_PROCESSAR voucher(s) for numero_spo:', numeroSpo);
+          for (const existing of existingVouchers) {
+            await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id = ?`, [existing.id]);
+            await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id = ?`, [existing.id]);
+            await client.execute(`DELETE FROM dados_dachser.t_vouchers WHERE id = ?`, [existing.id]);
+          }
+          console.log('A_PROCESSAR voucher(s) replaced successfully');
         }
         
         // Ensure id_rm column exists
