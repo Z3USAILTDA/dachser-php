@@ -119,15 +119,16 @@ export const HistoricoBaixasTab = () => {
     }
   };
 
-  const formatCurrency = (value: number | null, moeda: string = "BRL") => {
+  const formatCurrency = (value: number | null, moeda: string | null = "BRL") => {
     if (value == null) return "-";
+    const validMoeda = moeda && moeda.toLowerCase() !== "null" ? moeda : "BRL";
     const currencyMap: Record<string, string> = {
       BRL: "R$",
       USD: "US$",
       EUR: "€"
     };
-    const symbol = currencyMap[moeda] || moeda;
-    return `${symbol} ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+    const symbol = currencyMap[validMoeda] || validMoeda;
+    return `${symbol} ${Number(value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
   };
 
   const exportToExcel = () => {
