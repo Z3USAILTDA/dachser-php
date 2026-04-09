@@ -215,7 +215,7 @@ serve(async (req) => {
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: "Dachser Z3US <noreply@z3us.ai>",
+        from: "Dachser Z3US <noreply@hermes.z3us.ai>",
         to: [RECIPIENT],
         subject: `Relatório Mensal de Vouchers — ${monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}`,
         html,
