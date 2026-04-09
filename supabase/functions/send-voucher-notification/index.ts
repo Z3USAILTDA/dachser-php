@@ -215,9 +215,8 @@ async function generateSupervisorTokens(voucherId: string): Promise<{ approveTok
 }
 
 function injectSupervisorButtons(html: string, approveToken: string, rejectToken: string): string {
-  const appBaseUrl = "https://stellar-route-hub.lovable.app";
-  const approveUrl = `${appBaseUrl}/supervisor-confirmacao?token=${approveToken}&action=approve`;
-  const rejectUrl = `${appBaseUrl}/supervisor-confirmacao?token=${rejectToken}&action=reject`;
+  const approveUrl = `https://dachser.z3us.app/supervisor-approve.html?token=${approveToken}`;
+  const rejectUrl = `https://dachser.z3us.app/supervisor-reject.html?token=${rejectToken}`;
 
   const buttonsHtml = `
   <tr><td style="padding:0 28px 8px" align="left">
