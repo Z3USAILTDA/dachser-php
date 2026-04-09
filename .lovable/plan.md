@@ -1,42 +1,50 @@
 
 
-## Plano: Prevenção de Vouchers Duplicados na Esteira
+## Plano: Remover Notificações Individuais e Criar Relatório Mensal
 
-### Problema
-O mesmo número SPO (ex: `20251876986`) aparece duas vezes na tabela — um em etapa avançada (Financeiro) e outro em A Processar. Isso ocorre porque a verificação de duplicidade no backend (`save_voucher_esteira`) só bloqueia se o voucher existente **não** está em `A_PROCESSAR`. Quando um voucher já existe em qualquer etapa avançada (FISCAL, SUPERVISOR, FINANCEIRO, ROBO, CONCLUIDO), o sistema retorna erro 409 — mas há cenários onde essa validação falha ou é contornada.
+### Resumo
+Remover todas as notificações por e-mail da esteira **exceto** o fluxo de aprovação/rejeição de urgência do Supervisor. Criar uma nova Edge Function de relatório mensal que envia um resumo dos vouchers concluídos + em andamento, disparada via cron no final do mês.
 
-### Causa raiz provável
-1. A query de duplicidade usa `LIMIT 1` — se existem dois registros com o mesmo `numero_spo`, pode encontrar o `A_PROCESSAR` primeiro e deletá-lo, permitindo criar um novo, sem perceber que há outro em etapa avançada.
-2. Não há `UNIQUE INDEX` na coluna `numero_spo` da `t_vouchers`, então o banco não impede duplicatas a nível de constraint.
+### O que será removido
+Todas as chamadas `supabase.functions.invoke("send-voucher-notification", ...)` nos seguintes arquivos:
+- `CreateVoucherDialog.tsx` — notificação ao criar voucher
+- `VoucherOperacaoActions.tsx` — notificação ao enviar para próxima etapa
+- `VoucherFiscalActions.tsx` — notificação ao enviar para FINANCEIRO
+- `VoucherSupervisorActions.tsx` — notificação ao aprovar urgência (envia para FINANCEIRO)
+- `VoucherFinanceiroActions.tsx` — notificação de ajuste solicitado
+- `VoucherRoboActions.tsx` — notificação de comprovante retornado
+- `VoucherTable.tsx` — notificações de comprovante retornado pendente e envio
 
-### Solução
+### O que será MANTIDO
+- O e-mail de aprovação/rejeição de urgência para o Supervisor (os botões Aprovar/Rejeitar no e-mail) — este fluxo usa a mesma Edge Function `send-voucher-notification` mas com `toStage === "SUPERVISOR"` e `type === "VOUCHER_ENVIADO"`. Ele continuará funcionando normalmente.
+- A Edge Function `send-voucher-notification` permanece no projeto (usada apenas pelo fluxo de Supervisor).
 
-**1. Backend (`mariadb-proxy/index.ts` — action `save_voucher_esteira`)**
-- Alterar a query de duplicidade para buscar TODOS os vouchers com o mesmo `numero_spo` (remover `LIMIT 1`)
-- Se **qualquer** registro existente estiver em etapa diferente de `A_PROCESSAR`, bloquear a criação com erro 409
-- Só substituir se **todos** os existentes estiverem em `A_PROCESSAR`
+### Nova funcionalidade: Relatório Mensal
 
-```sql
--- Antes
-SELECT id, numero_spo, etapa_atual FROM t_vouchers WHERE numero_spo = ? LIMIT 1
+**Edge Function `voucher-monthly-report`**:
+- Consulta o MariaDB buscando:
+  - Vouchers com `etapa_atual = 'CONCLUIDO'` e `updated_at` no mês anterior
+  - Vouchers em andamento (etapas intermediárias) no último dia do mês
+- Monta um e-mail HTML com tabela resumo contendo: Número SPO, Fornecedor, Valor, Moeda, Etapa, Data Conclusão/Última Atualização
+- Inclui totalizadores (quantidade por etapa, valor total concluído)
+- Envia via Resend para `larissa@z3us.ai`
 
--- Depois  
-SELECT id, numero_spo, etapa_atual FROM t_vouchers WHERE numero_spo = ?
-```
-
-Lógica revisada:
-- Se algum resultado tem `etapa_atual` diferente de `A_PROCESSAR` → retornar 409 com ID e etapa do existente
-- Se todos são `A_PROCESSAR` → deletar todos e prosseguir com a criação
-
-**2. Frontend (`CreateVoucherDialog.tsx`)**
-- Quando receber erro 409 com `existingId`, oferecer botão para navegar até o voucher existente ao invés de apenas mostrar toast de erro
-
-**3. Limpeza dos dados existentes**
-- Identificar e remover o voucher duplicado que está em `A Processar` (o que foi criado erroneamente), mantendo o que já avançou no fluxo
+**Agendamento via pg_cron**:
+- Cron configurado para rodar no dia 1 de cada mês às 08:00 UTC
+- Schedule: `0 8 1 * *`
 
 ### Arquivos alterados
+
 | Arquivo | Alteração |
 |---------|-----------|
-| `supabase/functions/mariadb-proxy/index.ts` | Melhorar query de duplicidade para buscar todos os registros e validar corretamente |
-| `src/components/esteira/CreateVoucherDialog.tsx` | Melhorar UX do erro de duplicidade com link para o voucher existente |
+| `src/components/esteira/CreateVoucherDialog.tsx` | Remover bloco de invoke `send-voucher-notification` |
+| `src/components/esteira/VoucherOperacaoActions.tsx` | Remover bloco de invoke (manter apenas fluxo SUPERVISOR) |
+| `src/components/esteira/VoucherFiscalActions.tsx` | Remover bloco de invoke |
+| `src/components/esteira/VoucherSupervisorActions.tsx` | Remover bloco de invoke |
+| `src/components/esteira/VoucherFinanceiroActions.tsx` | Remover bloco de invoke |
+| `src/components/esteira/VoucherRoboActions.tsx` | Remover bloco de invoke |
+| `src/components/esteira/VoucherTable.tsx` | Remover blocos de invoke |
+| `supabase/functions/voucher-monthly-report/index.ts` | Nova Edge Function — consulta MariaDB, monta HTML, envia via Resend |
+| `supabase/config.toml` | Adicionar config para `voucher-monthly-report` |
+| SQL (insert tool) | Criar job pg_cron `0 8 1 * *` para disparar o relatório |
 
