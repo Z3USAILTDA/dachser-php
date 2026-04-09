@@ -1,36 +1,28 @@
 
 
-## Plano: Excluir NFs da régua de cobrança do Histórico de Baixas
+## Plano: Garantir que `created_by` da `t_dados_financeiro_voucher` popule a coluna "Criado por"
 
 ### Problema
-O Histórico de Baixas mostra registros da `tbaixas` que também existem na `t_dados_financeiro_nfs` (régua de cobrança). Esses registros de NF já são gerenciados na régua e não devem aparecer duplicados no histórico.
+A subquery que busca `created_by` usa `MIN(created_by)`, que retorna NULL quando o registro com menor valor alfabético é NULL (mesmo que outros registros do mesmo `nd` tenham o campo preenchido). Além disso, vouchers sem registro na `t_dados_financeiro_voucher` ficam sem valor.
 
 ### Solução
-Adicionar um `LEFT JOIN` + filtro `IS NULL` na query do backend para excluir registros cuja `IdLancamentoRM` exista na `t_dados_financeiro_nfs`.
+Trocar `MIN(created_by)` por `MAX(created_by)` nas 3 queries que fazem esse JOIN. O `MAX` prioriza valores não-nulos sobre NULL no MySQL/MariaDB, garantindo que se houver pelo menos um registro com `created_by` preenchido, ele será retornado.
 
-### Alteração
+### Alterações
 
-**Arquivo: `supabase/functions/mariadb-proxy/index.ts`** (action `get_historico_baixas`, ~linha 10363)
+**Arquivo: `supabase/functions/mariadb-proxy/index.ts`**
 
-Alterar a query de busca das baixas de:
+3 locais (queries `get_vouchers_esteira`, `get_vouchers_ativos`, `get_vouchers_combined`):
+
 ```sql
-SELECT ...
-FROM dados_dachser.tbaixas b
-WHERE b.StatusLan IN (0, 1, 2, 3) ...
+-- DE:
+MIN(created_by) as created_by
+
+-- PARA:
+MAX(created_by) as created_by
 ```
 
-Para:
-```sql
-SELECT ...
-FROM dados_dachser.tbaixas b
-LEFT JOIN dados_dachser.t_dados_financeiro_nfs nfs 
-  ON nfs.id_rm = b.IdLancamentoRM
-WHERE b.StatusLan IN (0, 1, 2, 3) 
-  AND nfs.id_rm IS NULL
-  ...
-```
+Linhas aproximadas: 6380, 13761, 13795.
 
-Isso exclui qualquer baixa cujo `IdLancamentoRM` tenha correspondência na tabela de NFs da régua de cobrança, mantendo apenas as baixas de vouchers.
-
-Nenhuma alteração no frontend — apenas a query do backend será ajustada.
+Nenhuma alteração no frontend — apenas a agregação no backend será ajustada para priorizar valores preenchidos.
 
