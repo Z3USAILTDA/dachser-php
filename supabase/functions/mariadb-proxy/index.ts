@@ -8648,9 +8648,10 @@ Deno.serve(async (req) => {
           numero_spo?: string;
         };
         
-        if (!idRm) {
+        const finalIdRm = idRm || numeroSpoRm;
+        if (!finalIdRm) {
           return new Response(
-            JSON.stringify({ error: 'id_rm é obrigatório' }),
+            JSON.stringify({ error: 'id_rm ou numero_spo é obrigatório' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
