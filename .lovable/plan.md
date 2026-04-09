@@ -1,32 +1,41 @@
 
 
-## Plano: Corrigir Envio de E-mail + Botões Aprovar/Rejeitar na Tabela
+## Plano: Página de Confirmação Polida + Anexos no E-mail do Supervisor
 
-### Problema 1: E-mail não enviado
-As edge functions `send-voucher-notification` e `supervisor-email-action` existem no código mas **não estão deployadas** (logs vazios). Além disso, o `CreateVoucherDialog.tsx` **não chama** `send-voucher-notification` após criar o voucher — então mesmo que as functions estivessem deployadas, nenhum e-mail seria disparado na criação.
+### Problema 1: Página de confirmação crua
+A função `supervisor-email-action` retorna HTML com caracteres quebrados (â em vez de ✓/✗) e visual muito básico. Precisa de uma página profissional com a identidade visual Z3US.
 
-### Problema 2: Botões na tela inicial
-Quando um voucher urgente está na etapa SUPERVISOR, a tabela principal (`VoucherTable.tsx`) mostra apenas o menu de ações padrão. Os botões de Aprovar/Rejeitar só aparecem na tela de detalhes (`VoucherSupervisorActions.tsx`). O usuário quer esses botões diretamente na linha da tabela.
+### Problema 2: E-mail sem anexos
+O e-mail enviado ao supervisor não inclui os documentos do voucher (faturas, boletos). O supervisor precisa analisar os documentos antes de aprovar/rejeitar.
+
+---
 
 ### Alterações
 
-**1. `src/components/esteira/CreateVoucherDialog.tsx`**
-- Após a criação bem-sucedida do voucher (depois dos uploads e log), enviar notificação via `send-voucher-notification` com `type: "VOUCHER_ENVIADO"` e `toStage: etapaAtual` (SUPERVISOR ou FISCAL)
-- Incluir dados completos: voucherId, voucherNumber, fornecedor, valor, moeda, vencimento
+**1. `supabase/functions/supervisor-email-action/index.ts` — Página de confirmação polida**
 
-**2. `src/components/esteira/VoucherTable.tsx`**
-- Na coluna de ações (última coluna), quando `voucher.etapaAtual === "SUPERVISOR"` e `voucher.urgenciaTipo === "URGENTE_REAL"`, renderizar dois botões inline:
-  - **✓ Aprovar** (verde) — chama a mesma lógica de `VoucherSupervisorActions.handleAprovar` (update voucher → FINANCEIRO, log, notificação)
-  - **✗ Rejeitar** (vermelho) — abre dialog para motivo, mesma lógica de `handleRejeitar` (update → OPERACAO, log)
-- Extrair a lógica de aprovar/rejeitar para um hook ou funções reutilizáveis, ou duplicar inline com os mesmos calls ao `mariadb-proxy`
+Redesenhar a função `htmlPage()` com:
+- Logo Z3US no topo
+- Gradiente sutil no fundo (similar ao design system do app)
+- Ícone SVG inline (em vez de emoji ✓/✗ que quebra encoding)
+- Tipografia moderna, card com sombra suave
+- Animação de entrada (fade-in)
+- Cores: verde (#22C55E) para aprovação, vermelho (#DC2626) para rejeição, amarelo (#F5B843) para erros
+- Footer com © Z3US.AI estilizado
+- Responsivo para mobile
 
-**3. Deploy das edge functions**
-- Deployar `send-voucher-notification` e `supervisor-email-action`
+**2. `supabase/functions/send-voucher-notification/index.ts` — Anexos no e-mail**
+
+Quando `toStage === "SUPERVISOR"`:
+- Buscar dados completos do voucher via `mariadb-proxy` (`get_voucher_by_id`) incluindo a lista de `anexos` (tipo, file_name, file_url)
+- Injetar no HTML do e-mail uma seção "📎 Documentos Anexados" com links clicáveis para cada documento (fatura, boleto, etc.)
+- Incluir também dados adicionais do voucher na tabela (CNPJ, filial, centro de custo, motivo urgência, etc.)
+
+**3. Deploy** das duas edge functions após as alterações.
 
 ### Arquivos alterados
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/components/esteira/CreateVoucherDialog.tsx` | Enviar notificação por e-mail após criação do voucher |
-| `src/components/esteira/VoucherTable.tsx` | Botões Aprovar/Rejeitar inline para vouchers SUPERVISOR + URGENTE_REAL |
-| Edge functions | Deploy de `send-voucher-notification` e `supervisor-email-action` |
+| `supabase/functions/supervisor-email-action/index.ts` | Redesign completo da página HTML de confirmação |
+| `supabase/functions/send-voucher-notification/index.ts` | Buscar anexos via proxy e incluir links no e-mail do supervisor |
 
