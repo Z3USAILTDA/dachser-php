@@ -974,7 +974,7 @@ const EsteiraIndex = () => {
         linhaDigitavel: v.linha_digitavel || null,
         codigoBarras: v.codigo_barras || null,
         statusIntegracaoRm: v.status_integracao_rm || null,
-        criadoPorDfv: v.dfv_created_by || null,
+        criadoPorDfv: v.dfv_created_by || v.criado_por_user_name || null,
         enviadoPorUserName: v.enviado_por_user_name || null,
         nomeMaster: v.nome_master || null,
         createdAt: parseMariaDBDate(v.created_at) || new Date(),
