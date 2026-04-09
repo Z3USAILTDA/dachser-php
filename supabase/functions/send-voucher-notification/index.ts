@@ -52,7 +52,7 @@ interface NotificationRequest {
 
 function getEmailContent(data: NotificationRequest) {
   const baseUrl = "https://dachser.z3us.app";
-  const voucherLink = `${baseUrl}/fin/esteira/voucher/${data.voucherId}`;
+  const voucherLink = `${baseUrl}`;
   const logoLight = "https://i.ibb.co/TgXzCqz/logo-preto.png";
   const logoDark = "https://i.ibb.co/sJkY7y5/logo-branco.png";
 
