@@ -332,3 +332,6 @@ verify_jwt = false
 
 [functions.air-tracking-failed-alert]
 verify_jwt = false
+
+[functions.voucher-monthly-report]
+verify_jwt = false
