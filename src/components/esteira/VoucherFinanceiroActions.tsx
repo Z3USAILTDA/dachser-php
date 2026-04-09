@@ -244,26 +244,7 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
         },
       });
 
-      // Try to send notification email (optional)
-      try {
-        await supabase.functions.invoke("send-voucher-notification", {
-          body: {
-            type: "AJUSTE_SOLICITADO",
-            voucherId: voucher.id,
-            voucherNumber: voucher.numeroSPO,
-            fromStage: "FINANCEIRO",
-            toStage: "AJUSTE_FISCAL",
-            reason: motivoAjusteFiscal,
-            senderName: userData.username,
-            fornecedor: voucher.fornecedor,
-            valor: voucher.valor?.toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
-            moeda: voucher.moeda,
-            vencimento: voucher.vencimento,
-          },
-        });
-      } catch (emailErr) {
-        console.log("Email notification skipped:", emailErr);
-      }
+      // Email notifications removed — monthly report only
 
       toast({
         title: "Voucher/SPO devolvido",

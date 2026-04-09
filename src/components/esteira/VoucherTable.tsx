@@ -211,16 +211,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
         },
       });
 
-      // Send notification to financial team
-      await supabase.functions.invoke("send-voucher-notification", {
-        body: {
-          type: "COMPROVANTE_RETORNADO_PENDENTE",
-          voucherId: selectedVoucherForRetorno.id,
-          numeroSPO: selectedVoucherForRetorno.numeroSPO,
-          justificativa,
-          userName,
-        },
-      });
+      // Email notifications removed — monthly report only
 
       toast.success("Comprovante retornado para pendente", {
         description: "A equipe financeira foi notificada.",
@@ -759,22 +750,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                                         detalhe: "Voucher/SPO urgente aprovado pelo Supervisor (via tabela)",
                                       },
                                     });
-                                    try {
-                                      await supabase.functions.invoke("send-voucher-notification", {
-                                        body: {
-                                          type: "VOUCHER_ENVIADO",
-                                          voucherId: voucher.id,
-                                          voucherNumber: voucher.numeroSPO,
-                                          toStage: "FINANCEIRO",
-                                          fromStage: "SUPERVISOR",
-                                          senderName: userData.username,
-                                          fornecedor: voucher.fornecedor,
-                                          valor: voucher.valor?.toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
-                                          moeda: voucher.moeda,
-                                          vencimento: voucher.vencimento,
-                                        },
-                                      });
-                                    } catch (e) { console.log("Email skipped:", e); }
+                                    // Email notifications removed — monthly report only
                                     toast.success("Voucher aprovado e enviado ao Financeiro");
                                     window.location.reload();
                                   } catch (err: any) {
