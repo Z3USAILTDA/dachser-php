@@ -327,24 +327,26 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         },
       });
 
-      // Send email notification (FISCAL, SUPERVISOR, FINANCEIRO only - not OPERACAO)
-      try {
-        await supabase.functions.invoke("send-voucher-notification", {
-          body: {
-            type: "VOUCHER_ENVIADO",
-            voucherId: voucher.id,
-            voucherNumber: voucher.numeroSPO,
-            toStage: proximaEtapa,
-            fromStage: "OPERACAO",
-            senderName: userData.username,
-            fornecedor: voucher.fornecedor,
-            valor: voucher.valor?.toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
-            moeda: voucher.moeda,
-            vencimento: voucher.vencimento,
-          },
-        });
-      } catch (emailErr) {
-        console.log("Email notification skipped:", emailErr);
+      // Send email notification only for SUPERVISOR urgency flow
+      if (proximaEtapa === "SUPERVISOR") {
+        try {
+          await supabase.functions.invoke("send-voucher-notification", {
+            body: {
+              type: "VOUCHER_ENVIADO",
+              voucherId: voucher.id,
+              voucherNumber: voucher.numeroSPO,
+              toStage: "SUPERVISOR",
+              fromStage: "OPERACAO",
+              senderName: userData.username,
+              fornecedor: voucher.fornecedor,
+              valor: voucher.valor?.toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
+              moeda: voucher.moeda,
+              vencimento: voucher.vencimento,
+            },
+          });
+        } catch (emailErr) {
+          console.log("Email notification skipped:", emailErr);
+        }
       }
 
       toast({

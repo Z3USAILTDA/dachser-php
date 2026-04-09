@@ -640,15 +640,15 @@ export const CreateVoucherDialog = ({
         },
       });
 
-      // Send email notification for the target stage
-      if (!isDraft) {
+      // Email notification for SUPERVISOR urgency only
+      if (!isDraft && etapaAtual === "SUPERVISOR") {
         try {
           await supabase.functions.invoke("send-voucher-notification", {
             body: {
               type: "VOUCHER_ENVIADO",
               voucherId: voucherId,
               voucherNumber: voucherData.numero_spo,
-              toStage: etapaAtual,
+              toStage: "SUPERVISOR",
               fromStage: "OPERACAO",
               senderName: userData.username || "Sistema",
               fornecedor: values.fornecedor || "",

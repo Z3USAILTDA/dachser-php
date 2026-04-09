@@ -163,21 +163,7 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
         },
       });
 
-      // Send notification to financial team
-      try {
-        await supabase.functions.invoke("send-voucher-notification", {
-          body: {
-            type: "COMPROVANTE_RETORNADO",
-            voucher_id: voucher.id,
-            voucher_spo: voucher.numeroSPO,
-            justificativa: justificativa,
-            usuario: userData.username,
-          },
-        });
-      } catch (notifyError) {
-        console.warn("Não foi possível enviar notificação:", notifyError);
-        // Don't fail the whole operation if notification fails
-      }
+      // Email notifications removed — monthly report only
 
       toast({
         title: "Status alterado!",
