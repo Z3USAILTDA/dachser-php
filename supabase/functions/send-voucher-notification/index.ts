@@ -215,9 +215,9 @@ async function generateSupervisorTokens(voucherId: string): Promise<{ approveTok
 }
 
 function injectSupervisorButtons(html: string, approveToken: string, rejectToken: string): string {
-  const actionBaseUrl = `${SUPABASE_URL}/functions/v1/supervisor-email-action`;
-  const approveUrl = `${actionBaseUrl}?token=${approveToken}&action=approve`;
-  const rejectUrl = `${actionBaseUrl}?token=${rejectToken}&action=reject`;
+  const appBaseUrl = "https://stellar-route-hub.lovable.app";
+  const approveUrl = `${appBaseUrl}/supervisor-confirmacao?token=${approveToken}&action=approve`;
+  const rejectUrl = `${appBaseUrl}/supervisor-confirmacao?token=${rejectToken}&action=reject`;
 
   const buttonsHtml = `
   <tr><td style="padding:0 28px 8px" align="left">
