@@ -70,11 +70,8 @@ export const HistoricoBaixasTab = () => {
   const filteredBaixas = useMemo(() => {
     return baixas.filter(b => {
       // Filtrar valores zerados
-      const valor = b.valor_baixa || b.valor_nf || 0;
+      const valor = Number(b.valor_baixa) || Number(b.valor_nf) || 0;
       if (valor === 0) return false;
-      
-      // Filtrar registros com moeda "null" ou inválida
-      if (!b.moeda || b.moeda.toLowerCase() === "null") return false;
       
       // Filtrar registros com valores que começam com "null"
       if (b.nd?.toLowerCase().startsWith("null")) return false;
@@ -85,7 +82,8 @@ export const HistoricoBaixasTab = () => {
         b.nd?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         b.documento?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         b.nome_beneficiario?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.numero_processo?.toLowerCase().includes(searchTerm.toLowerCase());
+        b.numero_processo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        b.usuario_baixa?.toLowerCase().includes(searchTerm.toLowerCase());
       
       return matchesSearch;
     });
