@@ -505,6 +505,46 @@ export const PagamentosTab = () => {
     }
   };
 
+  const handleVoltarOperacional = async () => {
+    if (!voltarOperacionalVoucher || voltarOperacionalJustificativa.trim().length < 10) return;
+    setVoltarOperacionalLoading(true);
+    try {
+      // 1. Update etapa_atual to OPERACAO
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voltarOperacionalVoucher.id,
+          etapa_atual: "OPERACAO",
+        }
+      });
+      if (error) throw error;
+
+      // 2. Log the action
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voltarOperacionalVoucher.id,
+          acao: "RETORNO_OPERACIONAL",
+          detalhe: `Voucher retornado para Operacional a partir da tela de Pagamentos. Justificativa: ${voltarOperacionalJustificativa.trim()}`
+        }
+      });
+
+      toast({ title: "Voucher retornado para Operacional com sucesso" });
+      setVoltarOperacionalDialogOpen(false);
+      setVoltarOperacionalJustificativa("");
+      setVoltarOperacionalVoucher(null);
+      loadPagamentos();
+    } catch (error: unknown) {
+      toast({
+        title: "Erro ao retornar voucher",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive"
+      });
+    } finally {
+      setVoltarOperacionalLoading(false);
+    }
+  };
+
   const formatCurrency = (value: number, moeda = "BRL") => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: moeda }).format(value);
   };
