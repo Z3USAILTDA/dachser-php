@@ -10370,7 +10370,11 @@ Deno.serve(async (req) => {
             b.UsuarioBaixa as usuario_baixa,
             b.StatusLan as status_lan
           FROM dados_dachser.tbaixas b
-          WHERE b.StatusLan IN (0, 1, 2, 3) ${dateFilter}
+          LEFT JOIN dados_dachser.t_dados_financeiro_nfs nfs
+            ON nfs.id_rm = b.IdLancamentoRM
+          WHERE b.StatusLan IN (0, 1, 2, 3) 
+            AND nfs.id_rm IS NULL
+            ${dateFilter}
           ORDER BY b.DataDaBaixa DESC
           LIMIT 1000
         `);
