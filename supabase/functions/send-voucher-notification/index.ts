@@ -133,6 +133,17 @@ function getEmailContent(data: NotificationRequest) {
       <tr><td style="font-size:13px;padding:8px 14px" class="muted">Etapa</td><td style="font-size:13px;padding:8px 14px" class="text"><span style="display:inline-block;background:${cfg.titleColor};color:#fff;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700">${data.toStage}</span></td></tr>
     </table>
   </td></tr>
+  ${data.anexos && data.anexos.length > 0 ? `
+  <tr><td style="padding:0 28px 16px" align="left">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;border:1px solid rgba(0,0,0,.08);border-radius:8px;overflow:hidden">
+      <tr style="background:rgba(0,0,0,.03)"><td style="font-size:12px;font-weight:700;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="muted" colspan="2">DOCUMENTOS ANEXADOS</td></tr>
+      ${data.anexos.map((a: any, i: number) => `
+      <tr><td style="font-size:13px;padding:8px 14px;${i < data.anexos!.length - 1 ? 'border-bottom:1px solid rgba(0,0,0,.06);' : ''}" colspan="2">
+        <a href="${a.file_url}" target="_blank" style="color:#F5B843;text-decoration:none;font-weight:600">${a.file_name}</a>
+        <span style="font-size:11px;color:#999;margin-left:8px">${a.tipo || ''}</span>
+      </td></tr>`).join('')}
+    </table>
+  </td></tr>` : ''}
   <tr><td style="padding:4px 28px 24px" align="left">
     <a href="${voucherLink}" style="display:inline-block;background:${cfg.btnBg};color:${cfg.btnColor};text-decoration:none;font-weight:700;border-radius:999px;padding:12px 28px;font-size:14px">${ctaLabel}</a>
   </td></tr>
