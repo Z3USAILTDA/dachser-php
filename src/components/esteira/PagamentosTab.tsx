@@ -53,7 +53,10 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { DadosPagamentoPanel } from "./DadosPagamentoPanel";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { parseDBDate, formatDateOnlyBR } from "@/utils/timezone";
 import { parseDBDate, formatDateOnlyBR } from "@/utils/timezone";
 
 interface PagamentoItem {
