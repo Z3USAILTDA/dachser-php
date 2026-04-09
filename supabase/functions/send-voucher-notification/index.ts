@@ -41,6 +41,12 @@ interface NotificationRequest {
   valor?: string;
   moeda?: string;
   vencimento?: string;
+  cnpj?: string;
+  filial?: string;
+  centroCusto?: string;
+  formaPagamento?: string;
+  motivoUrgencia?: string;
+  anexos?: Array<{ tipo: string; file_name: string; file_url: string }>;
 }
 
 function getEmailContent(data: NotificationRequest) {
