@@ -190,8 +190,7 @@ export function RoboTab() {
       return;
     }
 
-    // Use unified search (SPO + ND fallback)
-    const voucherId = await searchVoucher(file.manualSpoInput.trim());
+    const match = await searchVoucher(file.manualSpoInput.trim());
 
     setFiles((prev) =>
       prev.map((f, i) =>
@@ -199,17 +198,21 @@ export function RoboTab() {
           ? {
               ...f,
               numeroSPO: file.manualSpoInput?.trim() || null,
-              voucherId,
+              voucherId: match?.id || null,
+              masterName: match?.masterName,
+              childSpo: match?.childSpo,
               isEditingSpo: false,
             }
           : f
       )
     );
 
-    if (voucherId) {
+    if (match) {
       toast({
-        title: "Voucher encontrado",
-        description: `SPO ${file.manualSpoInput} vinculado com sucesso`,
+        title: match.masterName ? "Master encontrado" : "Voucher encontrado",
+        description: match.masterName 
+          ? `Vinculado ao Master "${match.masterName}" via filho SPO ${match.childSpo}`
+          : `SPO ${file.manualSpoInput} vinculado com sucesso`,
       });
     } else {
       toast({
