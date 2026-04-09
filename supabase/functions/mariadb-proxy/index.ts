@@ -9063,6 +9063,7 @@ Deno.serve(async (req) => {
             v.filial, v.linha_digitavel, v.codigo_barras, v.status_pagamento,
             v.tipo_execucao_pagamento, v.is_pronto_para_robo, v.lote_remessa_id,
             v.status_integracao_rm, v.etapa_atual, v.status_baixa, v.created_at, v.updated_at,
+            v.urgencia_tipo,
             v.is_master, v.nome_master, v.voucher_master_id,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
              WHERE l.voucher_id = v.id

@@ -82,6 +82,7 @@ interface PagamentoItem {
   is_master?: boolean;
   nome_master?: string;
   voucher_master_id?: string;
+  urgencia_tipo?: string;
 }
 
 interface DadosBancarios {
