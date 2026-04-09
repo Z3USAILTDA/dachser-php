@@ -314,7 +314,7 @@ export function RoboTab() {
             user_id: userData.user?.id || null,
             user_name: userData.user?.email || 'Sistema',
             acao: "COMPROVANTE_ANEXADO",
-            detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô`,
+            detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô${fileMatch.childSpo ? ` (filho SPO ${fileMatch.childSpo})` : ''}`,
           },
         });
 
