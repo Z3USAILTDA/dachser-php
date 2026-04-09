@@ -83,6 +83,7 @@ interface PagamentoItem {
   nome_master?: string;
   voucher_master_id?: string;
   urgencia_tipo?: string;
+  has_boleto_anexo?: number;
 }
 
 interface DadosBancarios {
@@ -963,7 +964,12 @@ export const PagamentosTab = () => {
                           ⚡ Urgente
                         </Badge>
                       )}
-                      {isBoleto(pag.forma_pagamento as any) && !pag.linha_digitavel && (
+                      {isBoleto(pag.forma_pagamento as any) && !pag.linha_digitavel && !pag.has_boleto_anexo && (
+                        <Badge variant="warning" className="ml-2 text-[9px]">
+                          Boleto não anexado
+                        </Badge>
+                      )}
+                      {isBoleto(pag.forma_pagamento as any) && !pag.linha_digitavel && !!pag.has_boleto_anexo && (
                         <Badge variant="outline" className="ml-2 text-[9px] bg-red-500/20 text-red-400 border-red-500/30">
                           Erro Extração
                         </Badge>

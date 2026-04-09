@@ -9063,6 +9063,8 @@ Deno.serve(async (req) => {
             v.status_integracao_rm, v.etapa_atual, v.status_baixa, v.created_at, v.updated_at,
             v.urgencia_tipo,
             v.is_master, v.nome_master, v.voucher_master_id,
+            (SELECT COUNT(*) FROM dados_dachser.t_voucher_anexos a 
+             WHERE a.voucher_id = v.id AND a.tipo IN ('BOLETO', 'BOLETO_INSTRUCOES')) AS has_boleto_anexo,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
              WHERE l.voucher_id = v.id
              AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
