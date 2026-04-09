@@ -20,6 +20,8 @@ interface FileMatch {
   error?: string;
   manualSpoInput?: string;
   isEditingSpo?: boolean;
+  masterName?: string;
+  childSpo?: string;
 }
 
 export function RoboTab() {
