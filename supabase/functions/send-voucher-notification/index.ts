@@ -4,7 +4,8 @@ import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 // Stage → roles mapping (mirrors src/utils/esteiraNotifications.ts)
@@ -55,16 +56,54 @@ function getEmailContent(data: NotificationRequest) {
   const logoLight = "https://i.ibb.co/TgXzCqz/logo-preto.png";
   const logoDark = "https://i.ibb.co/sJkY7y5/logo-branco.png";
 
-  const cfgMap: Record<string, { title: string; titleColor: string; btnBg: string; btnColor: string; subject: string }> = {
-    VOUCHER_ENVIADO: { title: "Novo Voucher para Análise", titleColor: "#F5B843", btnBg: "#F5B843", btnColor: "#111", subject: "Voucher Recebido" },
-    AJUSTE_SOLICITADO: { title: "Ajuste Solicitado", titleColor: "#F97316", btnBg: "#F97316", btnColor: "#fff", subject: "Ajuste Solicitado" },
-    URGENCIA_REJEITADA: { title: "Urgência Rejeitada", titleColor: "#DC2626", btnBg: "#DC2626", btnColor: "#fff", subject: "Urgência Rejeitada" },
-    VOUCHER_CONCLUIDO: { title: "Voucher Concluído com Sucesso", titleColor: "#22C55E", btnBg: "#22C55E", btnColor: "#fff", subject: "Voucher Concluído" },
-    VENCIMENTO_PROXIMO: { title: "⚠️ Atenção: Vencimento Próximo", titleColor: "#F59E0B", btnBg: "#F59E0B", btnColor: "#111", subject: "Vencimento Próximo" },
+  const cfgMap: Record<
+    string,
+    { title: string; titleColor: string; btnBg: string; btnColor: string; subject: string }
+  > = {
+    VOUCHER_ENVIADO: {
+      title: "Novo Voucher para Análise",
+      titleColor: "#F5B843",
+      btnBg: "#F5B843",
+      btnColor: "#111",
+      subject: "Voucher Recebido",
+    },
+    AJUSTE_SOLICITADO: {
+      title: "Ajuste Solicitado",
+      titleColor: "#F97316",
+      btnBg: "#F97316",
+      btnColor: "#fff",
+      subject: "Ajuste Solicitado",
+    },
+    URGENCIA_REJEITADA: {
+      title: "Urgência Rejeitada",
+      titleColor: "#DC2626",
+      btnBg: "#DC2626",
+      btnColor: "#fff",
+      subject: "Urgência Rejeitada",
+    },
+    VOUCHER_CONCLUIDO: {
+      title: "Voucher Concluído com Sucesso",
+      titleColor: "#22C55E",
+      btnBg: "#22C55E",
+      btnColor: "#fff",
+      subject: "Voucher Concluído",
+    },
+    VENCIMENTO_PROXIMO: {
+      title: "⚠️ Atenção: Vencimento Próximo",
+      titleColor: "#F59E0B",
+      btnBg: "#F59E0B",
+      btnColor: "#111",
+      subject: "Vencimento Próximo",
+    },
   };
 
   const cfg = cfgMap[data.type] || cfgMap.VOUCHER_ENVIADO;
-  const ctaLabel = data.type === "VOUCHER_CONCLUIDO" ? "Ver Detalhes" : data.type === "VOUCHER_ENVIADO" ? "Analisar Voucher" : "Ver Voucher";
+  const ctaLabel =
+    data.type === "VOUCHER_CONCLUIDO"
+      ? "Ver Detalhes"
+      : data.type === "VOUCHER_ENVIADO"
+        ? "Analisar Voucher"
+        : "Ver Voucher";
 
   let contentBlock = "";
   switch (data.type) {
@@ -133,17 +172,25 @@ function getEmailContent(data: NotificationRequest) {
       <tr><td style="font-size:13px;padding:8px 14px" class="muted">Etapa</td><td style="font-size:13px;padding:8px 14px" class="text"><span style="display:inline-block;background:${cfg.titleColor};color:#fff;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700">${data.toStage}</span></td></tr>
     </table>
   </td></tr>
-  ${data.anexos && data.anexos.length > 0 ? `
+  ${
+    data.anexos && data.anexos.length > 0
+      ? `
   <tr><td style="padding:0 28px 16px" align="left">
     <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;border:1px solid rgba(0,0,0,.08);border-radius:8px;overflow:hidden">
       <tr style="background:rgba(0,0,0,.03)"><td style="font-size:12px;font-weight:700;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,.06)" class="muted" colspan="2">DOCUMENTOS ANEXADOS</td></tr>
-      ${data.anexos.map((a: any, i: number) => `
-      <tr><td style="font-size:13px;padding:8px 14px;${i < data.anexos!.length - 1 ? 'border-bottom:1px solid rgba(0,0,0,.06);' : ''}" colspan="2">
+      ${data.anexos
+        .map(
+          (a: any, i: number) => `
+      <tr><td style="font-size:13px;padding:8px 14px;${i < data.anexos!.length - 1 ? "border-bottom:1px solid rgba(0,0,0,.06);" : ""}" colspan="2">
         <a href="${a.file_url}" target="_blank" style="color:#F5B843;text-decoration:none;font-weight:600">${a.file_name}</a>
-        <span style="font-size:11px;color:#999;margin-left:8px">${a.tipo || ''}</span>
-      </td></tr>`).join('')}
+        <span style="font-size:11px;color:#999;margin-left:8px">${a.tipo || ""}</span>
+      </td></tr>`,
+        )
+        .join("")}
     </table>
-  </td></tr>` : ''}
+  </td></tr>`
+      : ""
+  }
   <tr><td style="padding:4px 28px 24px" align="left">
     <a href="${voucherLink}" style="display:inline-block;background:${cfg.btnBg};color:${cfg.btnColor};text-decoration:none;font-weight:700;border-radius:999px;padding:12px 28px;font-size:14px">${ctaLabel}</a>
   </td></tr>
@@ -176,7 +223,7 @@ async function getRecipientEmails(roles: string[]): Promise<string[]> {
     const users = await client.query(
       `SELECT DISTINCT email FROM ai_agente.t_users_dachser 
        WHERE esteira_active = 1 AND email IS NOT NULL AND email != '' AND (${conditions})`,
-      roles
+      roles,
     );
 
     return (users || []).map((u: any) => u.email).filter(Boolean);
@@ -184,21 +231,26 @@ async function getRecipientEmails(roles: string[]): Promise<string[]> {
     console.error("Error fetching recipients from MariaDB:", err);
     return [];
   } finally {
-    if (client) try { await client.close(); } catch (_) {}
+    if (client)
+      try {
+        await client.close();
+      } catch (_) {}
   }
 }
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-async function generateSupervisorTokens(voucherId: string): Promise<{ approveToken: string; rejectToken: string } | null> {
+async function generateSupervisorTokens(
+  voucherId: string,
+): Promise<{ approveToken: string; rejectToken: string } | null> {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        "apikey": SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        apikey: SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({ action: "create_supervisor_token", voucher_id: voucherId }),
     });
@@ -215,13 +267,13 @@ async function generateSupervisorTokens(voucherId: string): Promise<{ approveTok
 }
 
 function injectSupervisorButtons(html: string, approveToken: string, rejectToken: string): string {
-  const approveUrl = `https://dachser.z3us.app/supervisor-approve.html?token=${approveToken}`;
-  const rejectUrl = `https://dachser.z3us.app/supervisor-reject.html?token=${rejectToken}`;
+  const appBaseUrl = "https://stellar-route-hub.lovable.app";
+  const approveUrl = `${appBaseUrl}/supervisor-confirmacao?token=${approveToken}&action=approve`;
+  const rejectUrl = `${appBaseUrl}/supervisor-confirmacao?token=${rejectToken}&action=reject`;
 
   const buttonsHtml = `
   <tr><td style="padding:0 28px 8px" align="left">
     <div style="background:rgba(245,184,67,.08);border:1px solid rgba(245,184,67,.25);border-radius:10px;padding:16px 20px;margin-bottom:8px">
-      <p style="margin:0 0 12px;font-size:13px;font-weight:700;color:#B45309">⚡ AÇÃO RÁPIDA — Aprovar ou Rejeitar diretamente:</p>
       <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>
         <td style="padding-right:12px">
           <a href="${approveUrl}" style="display:inline-block;background:#22C55E;color:#fff;text-decoration:none;font-weight:700;border-radius:999px;padding:12px 28px;font-size:14px">✓ Aprovar</a>
@@ -237,7 +289,7 @@ function injectSupervisorButtons(html: string, approveToken: string, rejectToken
   // Insert buttons before the CTA button row
   return html.replace(
     '<tr><td style="padding:4px 28px 24px" align="left">',
-    buttonsHtml + '\n  <tr><td style="padding:4px 28px 24px" align="left">'
+    buttonsHtml + '\n  <tr><td style="padding:4px 28px 24px" align="left">',
   );
 }
 
@@ -248,7 +300,10 @@ const handler = async (req: Request): Promise<Response> => {
 
   try {
     let data: NotificationRequest = await req.json();
-    console.log("Notification request:", JSON.stringify({ type: data.type, toStage: data.toStage, voucherNumber: data.voucherNumber }));
+    console.log(
+      "Notification request:",
+      JSON.stringify({ type: data.type, toStage: data.toStage, voucherNumber: data.voucherNumber }),
+    );
 
     // If sending to SUPERVISOR, enrich with voucher details (anexos, CNPJ, etc.)
     if (data.toStage === "SUPERVISOR" && data.voucherId) {
@@ -257,8 +312,8 @@ const handler = async (req: Request): Promise<Response> => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-            "apikey": SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            apikey: SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({ action: "get_voucher_by_id", voucher_id: data.voucherId }),
         });
@@ -280,13 +335,17 @@ const handler = async (req: Request): Promise<Response> => {
           // Fetch anexos - check multiple possible locations
           const rawAnexos = v.anexos || voucherData.anexos || voucherData.data?.anexos;
           if (rawAnexos && Array.isArray(rawAnexos)) {
-            data.anexos = rawAnexos.map((a: any) => ({
-              tipo: a.tipo || a.type || '',
-              file_name: a.file_name || a.nome || a.name || 'Documento',
-              file_url: a.file_url || a.url || '',
-            })).filter((a: any) => a.file_url);
+            data.anexos = rawAnexos
+              .map((a: any) => ({
+                tipo: a.tipo || a.type || "",
+                file_name: a.file_name || a.nome || a.name || "Documento",
+                file_url: a.file_url || a.url || "",
+              }))
+              .filter((a: any) => a.file_url);
           }
-          console.log(`Enriched voucher data: ${data.anexos?.length || 0} anexos found, raw keys: ${JSON.stringify(Object.keys(voucherData))}`);
+          console.log(
+            `Enriched voucher data: ${data.anexos?.length || 0} anexos found, raw keys: ${JSON.stringify(Object.keys(voucherData))}`,
+          );
         }
       } catch (e) {
         console.error("Error fetching voucher details:", e);
@@ -315,7 +374,7 @@ const handler = async (req: Request): Promise<Response> => {
       console.log("RESEND_API_KEY not configured, logging email");
       return new Response(
         JSON.stringify({ success: true, message: "Email logged (Resend not configured)", emails, subject, sent: 0 }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -357,14 +416,14 @@ const handler = async (req: Request): Promise<Response> => {
 
     return new Response(
       JSON.stringify({ success: true, sent: emails.length, emails, subject, resendId: emailResponse?.data?.id }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error: any) {
     console.error("Error in send-voucher-notification:", error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 };
 
