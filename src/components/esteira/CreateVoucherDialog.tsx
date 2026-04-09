@@ -686,7 +686,7 @@ export const CreateVoucherDialog = ({
       let errorMessage = "Ocorreu um erro ao criar o voucher/SPO";
       
       if (error.message?.includes("409") || error.message?.includes("já existe")) {
-        errorMessage = "Este voucher já existe na esteira em outra etapa. Verifique na lista principal.";
+        errorMessage = "Este voucher já existe na esteira em outra etapa. Localize-o na lista principal usando o filtro de busca.";
       } else if (error.message?.includes("numero_spo")) {
         errorMessage = "Número do voucher/SPO é obrigatório.";
       } else if (error.message?.includes("MANUAL-")) {
