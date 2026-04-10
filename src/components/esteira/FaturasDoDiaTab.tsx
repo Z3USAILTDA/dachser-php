@@ -136,19 +136,17 @@ export const FaturasDoDiaTab = () => {
 
   const handleCopy = async (text: string, id: string) => {
     try {
-      await navigator.clipboard.writeText(text);
-      setCopiedId(id);
-      toast({
-        title: "Copiado!",
-        description: "Texto copiado para a área de transferência"
-      });
-      setTimeout(() => setCopiedId(null), 2000);
-    } catch (error) {
-      toast({
-        title: "Erro ao copiar",
-        description: "Não foi possível copiar o texto",
-        variant: "destructive"
-      });
+      const { copyToClipboard } = await import("@/utils/clipboard");
+      const ok = await copyToClipboard(text);
+      if (ok) {
+        setCopiedId(id);
+        toast({ title: "Copiado!", description: "Texto copiado para a área de transferência" });
+        setTimeout(() => setCopiedId(null), 2000);
+      } else {
+        toast({ title: "Erro ao copiar", description: "Não foi possível copiar o texto", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Erro ao copiar", description: "Não foi possível copiar o texto", variant: "destructive" });
     }
   };
 
