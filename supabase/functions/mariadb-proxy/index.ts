@@ -10388,7 +10388,7 @@ Deno.serve(async (req) => {
             b.UsuarioBaixa as usuario_baixa,
             b.StatusLan as status_lan
           FROM dados_dachser.tbaixas b
-          WHERE b.StatusLan IN (0, 1, 2, 3) ${dateFilter}
+          WHERE b.TipoPagRec = 1 AND b.StatusLan IN (0, 1, 2, 3) ${dateFilter}
           ORDER BY b.DataDaBaixa DESC
           LIMIT 1500
         `);
