@@ -10454,6 +10454,34 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ==================== GET BAIXAS SEM VOUCHER ====================
+      case 'get_baixas_sem_voucher': {
+        console.log('Fetching baixas sem voucher...');
+        
+        const baixasSemVoucher = await client.query(`
+          SELECT 
+            b.IdLancamentoRM,
+            b.IdBaixa,
+            b.TipoPagRec as tipo_pag_rec,
+            b.ValorBaixado as valor_baixa,
+            b.DataDaBaixa as data_baixa,
+            b.UsuarioBaixa as usuario_baixa,
+            b.StatusLan as status_lan
+          FROM dados_dachser.tbaixas b
+          WHERE b.TipoPagRec = 1 
+            AND b.StatusLan IN (0, 1, 2, 3)
+            AND b.IdLancamentoRM NOT IN (
+              SELECT DISTINCT id_rm FROM dados_dachser.t_dados_financeiro_voucher WHERE id_rm IS NOT NULL
+            )
+          ORDER BY b.DataDaBaixa DESC
+          LIMIT 2000
+        `);
+
+        console.log(`Found ${baixasSemVoucher?.length || 0} baixas sem voucher`);
+        result = { success: true, data: baixasSemVoucher || [], count: baixasSemVoucher?.length || 0 };
+        break;
+      }
+
       // ==================== IMPORT VOUCHER FROM RM ====================
       case 'import_voucher_from_rm': {
         // Importa um voucher pendente do RM para a esteira como OPERACAO
