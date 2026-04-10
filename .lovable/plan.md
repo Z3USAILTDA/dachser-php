@@ -1,40 +1,24 @@
 
 
-## Plano: "Criado por" para voucher master deve vir do log MASTER_CRIADO
+## Plano: Filtrar Histórico de Baixas por TipoPagRec = 1
 
 ### Problema
 
-Atualmente o COALESCE que popula `dfv_created_by` prioriza `dfv.created_by` (da `t_dados_financeiro_voucher`) para **todos** os vouchers, incluindo masters. Para vouchers master, o valor correto é o `user_name` do log com ação `MASTER_CRIADO` — ou seja, quem criou o master na esteira.
+A query atual busca todas as linhas da `tbaixas` com `StatusLan IN (0, 1, 2, 3)`, sem filtrar por `TipoPagRec`. O usuário quer que apenas registros com `TipoPagRec = 1` sejam exibidos.
 
-### Solução
+### Alteração
 
-Alterar o COALESCE nos 3 locais para usar um `CASE WHEN v.is_master = 1` que prioriza o log `MASTER_CRIADO` para masters e mantém a lógica atual para vouchers normais:
+**Arquivo: `supabase/functions/mariadb-proxy/index.ts`** (linha ~10391)
+
+Adicionar filtro `AND b.TipoPagRec = 1` na cláusula WHERE da query de baixas:
 
 ```sql
-CASE 
-  WHEN v.is_master = 1 THEN
-    COALESCE(
-      (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
-       WHERE lc.voucher_id = v.id AND lc.acao = 'MASTER_CRIADO'
-       ORDER BY lc.data_hora ASC LIMIT 1),
-      v.criado_por_user_id
-    )
-  ELSE
-    COALESCE(
-      dfv.created_by,
-      (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
-       WHERE lc.voucher_id = v.id AND lc.acao = 'VOUCHER_CRIADO'
-       ORDER BY lc.data_hora ASC LIMIT 1),
-      v.criado_por_user_id
-    )
-END as dfv_created_by
+-- DE:
+WHERE b.StatusLan IN (0, 1, 2, 3) ${dateFilter}
+
+-- PARA:
+WHERE b.TipoPagRec = 1 AND b.StatusLan IN (0, 1, 2, 3) ${dateFilter}
 ```
-
-### Alterações
-
-**Arquivo: `supabase/functions/mariadb-proxy/index.ts`**
-
-3 locais (linhas ~6363, ~13748, ~13783): Substituir o COALESCE atual pelo `CASE WHEN` acima.
 
 Nenhuma alteração no frontend.
 
