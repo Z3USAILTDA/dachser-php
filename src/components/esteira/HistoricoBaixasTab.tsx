@@ -349,6 +349,17 @@ export const HistoricoBaixasTab = () => {
           <Download className="h-4 w-4 mr-2" />
           Exportar
         </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={loadSemVoucher}
+          disabled={semVoucherLoading}
+          className="rounded-full border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+        >
+          <AlertTriangle className={cn("h-4 w-4 mr-2", semVoucherLoading && "animate-spin")} />
+          Sem Voucher
+        </Button>
       </div>
 
       {/* Tabela */}
