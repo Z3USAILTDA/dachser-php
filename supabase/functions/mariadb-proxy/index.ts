@@ -6361,13 +6361,24 @@ Deno.serve(async (req) => {
         
         const vouchers = await client.query(`
            SELECT v.*, dfv.id_rm as dfv_id_rm, 
-            COALESCE(dfv.created_by,
-              (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
-               WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
-               AND lc.acao = 'VOUCHER_CRIADO'
-               ORDER BY lc.data_hora ASC LIMIT 1),
-              v.criado_por_user_id
-            ) as dfv_created_by,
+            CASE 
+              WHEN v.is_master = 1 THEN
+                COALESCE(
+                  (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
+                   WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+                   AND lc.acao = 'MASTER_CRIADO'
+                   ORDER BY lc.data_hora ASC LIMIT 1),
+                  v.criado_por_user_id
+                )
+              ELSE
+                COALESCE(dfv.created_by,
+                  (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
+                   WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+                   AND lc.acao = 'VOUCHER_CRIADO'
+                   ORDER BY lc.data_hora ASC LIMIT 1),
+                  v.criado_por_user_id
+                )
+            END as dfv_created_by,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
              WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
              AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
@@ -13745,13 +13756,24 @@ Deno.serve(async (req) => {
         
         const vouchers = await client.query(`
            SELECT v.*, dfv.id_rm as dfv_id_rm, 
-            COALESCE(dfv.created_by,
-              (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
-               WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
-               AND lc.acao = 'VOUCHER_CRIADO'
-               ORDER BY lc.data_hora ASC LIMIT 1),
-              v.criado_por_user_id
-            ) as dfv_created_by,
+            CASE 
+              WHEN v.is_master = 1 THEN
+                COALESCE(
+                  (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
+                   WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+                   AND lc.acao = 'MASTER_CRIADO'
+                   ORDER BY lc.data_hora ASC LIMIT 1),
+                  v.criado_por_user_id
+                )
+              ELSE
+                COALESCE(dfv.created_by,
+                  (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
+                   WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+                   AND lc.acao = 'VOUCHER_CRIADO'
+                   ORDER BY lc.data_hora ASC LIMIT 1),
+                  v.criado_por_user_id
+                )
+            END as dfv_created_by,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
              WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
              AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
@@ -13780,13 +13802,24 @@ Deno.serve(async (req) => {
         
         const combinedAtivos = await client.query(`
            SELECT v.*, dfv.id_rm as dfv_id_rm, 
-            COALESCE(dfv.created_by,
-              (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
-               WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
-               AND lc.acao = 'VOUCHER_CRIADO'
-               ORDER BY lc.data_hora ASC LIMIT 1),
-              v.criado_por_user_id
-            ) as dfv_created_by,
+            CASE 
+              WHEN v.is_master = 1 THEN
+                COALESCE(
+                  (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
+                   WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+                   AND lc.acao = 'MASTER_CRIADO'
+                   ORDER BY lc.data_hora ASC LIMIT 1),
+                  v.criado_por_user_id
+                )
+              ELSE
+                COALESCE(dfv.created_by,
+                  (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
+                   WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+                   AND lc.acao = 'VOUCHER_CRIADO'
+                   ORDER BY lc.data_hora ASC LIMIT 1),
+                  v.criado_por_user_id
+                )
+            END as dfv_created_by,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
              WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
              AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
