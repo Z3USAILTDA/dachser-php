@@ -1,35 +1,31 @@
 
 
-## Diagnóstico: SLA ainda vazio para alguns processos
+## Plano: Usar Data/Hora da coluna para calcular SLA
 
-### Causa Raiz
+### Problema Atual
 
-O cálculo de `hours_in_status` depende de `item.last_event_date`, que é `null` em dois cenários:
-
-1. **Sem timeline**: O LEFT JOIN com `t_fato_aereo` não encontra correspondência → TIMELINE é null → nenhuma data disponível
-2. **Data em formato não-parseável**: O `dateStr` vem do timeline (ex: `"10 Apr 2026"`, `"2026-04-10 14:30"`) e `new Date(dateStr)` pode retornar `NaN` para alguns formatos → `diff` é NaN → retorna `null`
+O cálculo de `hours_in_status` usa `new Date(eventDate)` diretamente, que falha para vários formatos de data do MariaDB. Enquanto isso, a coluna "Data/Hora" usa `formatDateTimeBR(awb.last_event_date)` que internamente chama `parseDBDate` — um parser robusto que suporta múltiplos formatos. O SLA deveria usar o mesmo parser.
 
 ### Solução
 
-**Arquivo: `src/pages/air/TrackingAereo.tsx`** — tornar o cálculo mais robusto:
+**Arquivo: `src/pages/air/TrackingAereo.tsx`** — alterar o cálculo de `hours_in_status` (linhas 365-377) para:
 
-1. **Tentar parsear a data com fallbacks** — se `new Date()` falha, tentar formatos comuns (DD MMM YYYY, DD/MM/YYYY)
-2. **Usar a data do primeiro evento da timeline como fallback** — se `last_event_date` é null mas a timeline tem eventos com data, extrair de lá
-3. **Proteger contra NaN** — verificar `isNaN` antes de retornar
+1. Usar `parseDBDate` (já importado) em vez de `new Date()` para parsear a data
+2. Manter o fallback para timeline se `last_event_date` estiver vazio
+3. O `statusCode` já está disponível no escopo e é usado na renderização do SLA (linha 934) para determinar o threshold correto
 
 ```typescript
 hours_in_status: (() => {
   let eventDate = item.last_event_date;
-  // Fallback: try first timeline event date
   if (!eventDate && Array.isArray(item.timeline_json) && item.timeline_json.length > 0) {
     for (const evt of item.timeline_json) {
       if (evt.date && evt.date.trim()) { eventDate = evt.date.trim(); break; }
     }
   }
   if (!eventDate) return null;
-  const parsed = new Date(eventDate).getTime();
-  if (isNaN(parsed)) return null;
-  const diff = Date.now() - parsed;
+  const parsed = parseDBDate(eventDate);
+  if (!parsed) return null;
+  const diff = Date.now() - parsed.getTime();
   return diff > 0 ? diff / (1000 * 60 * 60) : null;
 })(),
 ```
@@ -37,7 +33,7 @@ hours_in_status: (() => {
 ### Resumo
 | Local | Alteração |
 |-------|-----------|
-| `TrackingAereo.tsx` mapeamento | Fallback para timeline + proteção contra NaN |
+| `TrackingAereo.tsx` linha 365-377 | Trocar `new Date()` por `parseDBDate()` no cálculo de `hours_in_status` |
 
-Uma alteração cirúrgica, sem mudanças no backend.
+Alteração de uma linha. `parseDBDate` já está importado no arquivo (linha 37). Sem mudanças no backend.
 
