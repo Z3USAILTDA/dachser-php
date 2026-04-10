@@ -1,39 +1,43 @@
 
 
-## Diagnóstico: Coluna SLA vazia no /air/tracking-aereo
+## Diagnóstico: SLA ainda vazio para alguns processos
 
 ### Causa Raiz
 
-O campo `hours_in_status` **nunca é preenchido**. Ele existe na interface `AWBData` (linha 227), mas:
+O cálculo de `hours_in_status` depende de `item.last_event_date`, que é `null` em dois cenários:
 
-1. A Edge Function `fetch-tracking-aereo` não calcula nem retorna `hours_in_status`
-2. O mapeamento no frontend (linhas 345-368) não o popula — o campo fica `undefined`
-3. Na renderização (linha 920), `hours == null` é sempre verdadeiro → exibe "—"
-
-Para processos pós-chegada (ARR, DLV, etc.), o SLA mostra "✓" corretamente porque essa verificação ocorre **antes** do check de `hours_in_status`.
+1. **Sem timeline**: O LEFT JOIN com `t_fato_aereo` não encontra correspondência → TIMELINE é null → nenhuma data disponível
+2. **Data em formato não-parseável**: O `dateStr` vem do timeline (ex: `"10 Apr 2026"`, `"2026-04-10 14:30"`) e `new Date(dateStr)` pode retornar `NaN` para alguns formatos → `diff` é NaN → retorna `null`
 
 ### Solução
 
-Calcular `hours_in_status` no frontend durante o mapeamento dos dados, usando `last_event_date` (que já vem da Edge Function):
+**Arquivo: `src/pages/air/TrackingAereo.tsx`** — tornar o cálculo mais robusto:
 
-**Arquivo: `src/pages/air/TrackingAereo.tsx`** (no bloco de mapeamento, ~linha 356)
+1. **Tentar parsear a data com fallbacks** — se `new Date()` falha, tentar formatos comuns (DD MMM YYYY, DD/MM/YYYY)
+2. **Usar a data do primeiro evento da timeline como fallback** — se `last_event_date` é null mas a timeline tem eventos com data, extrair de lá
+3. **Proteger contra NaN** — verificar `isNaN` antes de retornar
 
-Adicionar cálculo:
 ```typescript
 hours_in_status: (() => {
-  const eventDate = item.last_event_date;
+  let eventDate = item.last_event_date;
+  // Fallback: try first timeline event date
+  if (!eventDate && Array.isArray(item.timeline_json) && item.timeline_json.length > 0) {
+    for (const evt of item.timeline_json) {
+      if (evt.date && evt.date.trim()) { eventDate = evt.date.trim(); break; }
+    }
+  }
   if (!eventDate) return null;
-  const diff = Date.now() - new Date(eventDate).getTime();
+  const parsed = new Date(eventDate).getTime();
+  if (isNaN(parsed)) return null;
+  const diff = Date.now() - parsed;
   return diff > 0 ? diff / (1000 * 60 * 60) : null;
 })(),
 ```
 
-Isso calcula as horas decorridas desde o último evento até agora, que é exatamente o que `fetch-status-aereo` faz para a tela `/air/tracking`.
-
 ### Resumo
 | Local | Alteração |
 |-------|-----------|
-| `TrackingAereo.tsx` mapeamento | Adicionar cálculo de `hours_in_status` a partir de `last_event_date` |
+| `TrackingAereo.tsx` mapeamento | Fallback para timeline + proteção contra NaN |
 
-Uma única linha de lógica. Nenhuma alteração no backend.
+Uma alteração cirúrgica, sem mudanças no backend.
 
