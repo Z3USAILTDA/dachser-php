@@ -122,32 +122,104 @@ serve(async (req) => {
       description: (d.description || "").toUpperCase(),
     }));
 
-    // Step 3: Main query — just base data, no heavy JOINs
+    // Step 3: Main query with SLA calculation via CTE
     const sql = `
+      with base as (
+        select
+            tda.awb_number as AWB,
+            tda.hawb_number as HAWB,
+            tda.consignee_nome as CLIENTE,
+            tdaf.origin as ORIGEM,
+            tdaf.destination as DESTINO,
+            tda.clerk as ANALISTA,
+            tdaf.last_status_code,
+            tdaf.timeline_json as TIMELINE,
+            convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc0,
+            convert(json_unquote(json_extract(tdaf.timeline_json, '$[1].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc1,
+            convert(json_unquote(json_extract(tdaf.timeline_json, '$[2].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc2,
+            convert(json_unquote(json_extract(tdaf.timeline_json, '$[3].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc3,
+            convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].location')) using utf8mb4) collate utf8mb4_unicode_ci as loc0,
+            convert(json_unquote(json_extract(tdaf.timeline_json, '$[1].location')) using utf8mb4) collate utf8mb4_unicode_ci as loc1,
+            convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].date')) using utf8mb4) collate utf8mb4_unicode_ci as date0,
+            convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].time')) using utf8mb4) collate utf8mb4_unicode_ci as time0
+        from dados_dachser.t_dados_aereo tda
+        left join dados_dachser.t_fato_aereo tdaf
+            on tdaf.awb collate utf8mb4_unicode_ci = tda.awb_number collate utf8mb4_unicode_ci
+           and json_valid(tdaf.hawbs_json)
+           and json_contains(tdaf.hawbs_json, json_array(tda.hawb_number))
+        where
+            (tda.master_insert >= '2026-03-20' or tda.created_at >= '2026-03-20')
+      ),
+      event_time as (
+        select
+            b.*,
+            str_to_date(
+                concat(
+                    nullif(b.date0, ''),
+                    case
+                        when nullif(b.time0, '') is not null then concat(' ', b.time0)
+                        else ' 00:00'
+                    end
+                ),
+                '%d %b %Y %H:%i'
+            ) as data_evento_base
+        from base b
+      ),
+      sla_calc as (
+        select
+            e.*,
+            timestampdiff(second, e.data_evento_base, now()) / 3600 as sla_hours_in_status,
+            case
+                when e.last_status_code in ('ARR', 'ARR - DESTINO', 'ARR - CONEXAO', 'ARR - CONEXÃO', 'RCF', 'NFD', 'AWD', 'AWR', 'CCD', 'DLV', 'POD')
+                    then null
+                when e.last_status_code = 'BKD' then 12
+                when e.last_status_code = 'RCS' then 12
+                when e.last_status_code = 'MAN' then 3
+                when e.last_status_code = 'PRE' then 6
+                when e.last_status_code = 'RCF' then 6
+                when e.last_status_code = 'DEP' then 48
+                when e.last_status_code = 'FOH' then 12
+                when e.last_status_code = 'FWB' then 24
+                when e.last_status_code = 'RDP' then 3
+                when e.last_status_code = 'RFC' then 6
+                else 24
+            end as sla_limite_horas
+        from event_time e
+      )
       select
-          tda.awb_number as AWB,
-          tda.hawb_number as HAWB,
-          tda.consignee_nome as CLIENTE,
-          tdaf.origin as ORIGEM,
-          tdaf.destination as DESTINO,
-          tda.clerk as ANALISTA,
-          tdaf.last_status_code,
-          tdaf.timeline_json as TIMELINE,
-          convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc0,
-          convert(json_unquote(json_extract(tdaf.timeline_json, '$[1].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc1,
-          convert(json_unquote(json_extract(tdaf.timeline_json, '$[2].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc2,
-          convert(json_unquote(json_extract(tdaf.timeline_json, '$[3].description')) using utf8mb4) collate utf8mb4_unicode_ci as desc3,
-          convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].location')) using utf8mb4) collate utf8mb4_unicode_ci as loc0,
-          convert(json_unquote(json_extract(tdaf.timeline_json, '$[1].location')) using utf8mb4) collate utf8mb4_unicode_ci as loc1,
-          convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].date')) using utf8mb4) collate utf8mb4_unicode_ci as date0,
-          convert(json_unquote(json_extract(tdaf.timeline_json, '$[0].time')) using utf8mb4) collate utf8mb4_unicode_ci as time0
-      from dados_dachser.t_dados_aereo tda
-      left join dados_dachser.t_fato_aereo tdaf
-          on tdaf.awb collate utf8mb4_unicode_ci = tda.awb_number collate utf8mb4_unicode_ci
-         and json_valid(tdaf.hawbs_json)
-         and json_contains(tdaf.hawbs_json, json_array(tda.hawb_number))
-      where
-          (tda.master_insert >= '2026-03-20' or tda.created_at >= '2026-03-20')
+          s.*,
+          round(s.sla_hours_in_status, 2) as hours_in_status_rounded,
+          case
+              when s.sla_limite_horas is null or s.sla_limite_horas = 0 then null
+              else round(s.sla_hours_in_status / s.sla_limite_horas, 4)
+          end as sla_ratio,
+          case
+              when s.last_status_code in ('ARR', 'ARR - DESTINO', 'ARR - CONEXAO', 'ARR - CONEXÃO', 'RCF', 'NFD', 'AWD', 'AWR', 'CCD', 'DLV', 'POD')
+                  then 'VERDE'
+              when s.sla_limite_horas is null or s.sla_limite_horas = 0 then null
+              when s.sla_hours_in_status / s.sla_limite_horas < 0.7 then 'VERDE'
+              when s.sla_hours_in_status / s.sla_limite_horas < 1.0 then 'AMARELO'
+              else 'VERMELHO'
+          end as sla_cor,
+          case
+              when s.sla_hours_in_status is null then null
+              when s.sla_hours_in_status < 24
+                  then concat(
+                      floor(s.sla_hours_in_status), 'h',
+                      lpad(floor((s.sla_hours_in_status - floor(s.sla_hours_in_status)) * 60), 2, '0')
+                  )
+              else concat(
+                  floor(s.sla_hours_in_status / 24), 'd',
+                  lpad(floor(mod(s.sla_hours_in_status, 24)), 2, '0'), 'h'
+              )
+          end as sla_tempo_formatado,
+          case
+              when s.last_status_code in ('ARR', 'ARR - DESTINO', 'ARR - CONEXAO', 'ARR - CONEXÃO', 'RCF', 'NFD', 'AWD', 'AWR', 'CCD', 'DLV', 'POD')
+                  then 'Status pós-chegada/final'
+              when s.sla_limite_horas is null then null
+              else concat(round(s.sla_hours_in_status / s.sla_limite_horas * 100, 1), '% do limite')
+          end as sla_tooltip
+      from sla_calc s
     `;
 
     console.log("Executing tracking aereo query (v2 optimized)...");
