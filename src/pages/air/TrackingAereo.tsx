@@ -370,8 +370,8 @@ const TrackingAereo = () => {
                 }
               }
               if (!eventDate) return null;
-              const parsed = new Date(eventDate).getTime();
-              if (isNaN(parsed)) return null;
+              const parsed = parseDBDate(eventDate);
+              if (!parsed) return null;
               const diff = Date.now() - parsed;
               return diff > 0 ? diff / (1000 * 60 * 60) : null;
             })(),
