@@ -372,7 +372,7 @@ const TrackingAereo = () => {
               if (!eventDate) return null;
               const parsed = parseDBDate(eventDate);
               if (!parsed) return null;
-              const diff = Date.now() - parsed;
+              const diff = Date.now() - parsed.getTime();
               return diff > 0 ? diff / (1000 * 60 * 60) : null;
             })(),
             tracking_failed: !lastEvent || lastEvent === "",
