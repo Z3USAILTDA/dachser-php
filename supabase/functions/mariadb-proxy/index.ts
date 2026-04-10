@@ -10458,7 +10458,14 @@ Deno.serve(async (req) => {
       case 'get_baixas_sem_voucher': {
         console.log('Fetching baixas sem voucher...');
         
-        const baixasSemVoucher = await client.query(`
+        // Step 1: Get distinct id_rm values from voucher table
+        const voucherIdRms = await client.query(`
+          SELECT DISTINCT id_rm FROM dados_dachser.t_dados_financeiro_voucher WHERE id_rm IS NOT NULL
+        `);
+        const voucherSet = new Set((voucherIdRms || []).map((r: any) => String(r.id_rm)));
+
+        // Step 2: Get recent baixas with TipoPagRec = 1
+        const allBaixas = await client.query(`
           SELECT 
             b.IdLancamentoRM,
             b.IdBaixa,
@@ -10470,12 +10477,14 @@ Deno.serve(async (req) => {
           FROM dados_dachser.tbaixas b
           WHERE b.TipoPagRec = 1 
             AND b.StatusLan IN (0, 1, 2, 3)
-            AND b.IdLancamentoRM NOT IN (
-              SELECT DISTINCT id_rm FROM dados_dachser.t_dados_financeiro_voucher WHERE id_rm IS NOT NULL
-            )
           ORDER BY b.DataDaBaixa DESC
-          LIMIT 2000
+          LIMIT 5000
         `);
+
+        // Step 3: Filter in-memory
+        const baixasSemVoucher = (allBaixas || [])
+          .filter((b: any) => !voucherSet.has(String(b.IdLancamentoRM)))
+          .slice(0, 2000);
 
         console.log(`Found ${baixasSemVoucher?.length || 0} baixas sem voucher`);
         result = { success: true, data: baixasSemVoucher || [], count: baixasSemVoucher?.length || 0 };
