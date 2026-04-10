@@ -224,7 +224,12 @@ interface AWBData {
   origem?: string;
   destino?: string;
   conexao?: string;
-  hours_in_status?: number;
+  hours_in_status?: number | null;
+  sla_limite_horas?: number | null;
+  sla_ratio?: number | null;
+  sla_cor?: string | null;
+  sla_tempo_formatado?: string | null;
+  sla_tooltip?: string | null;
   etd?: string | null;
   last_event_date?: string | null;
   timeline_json?: any[];
@@ -362,19 +367,12 @@ const TrackingAereo = () => {
             pieces_discrepancy: discrepancy.discrepancy,
             baseline_pieces: discrepancy.baseline,
             has_dis_event: discrepancy.hasDis,
-            hours_in_status: (() => {
-              let eventDate = item.last_event_date;
-              if (!eventDate && Array.isArray(item.timeline_json) && item.timeline_json.length > 0) {
-                for (const evt of item.timeline_json) {
-                  if (evt.date && evt.date.trim()) { eventDate = evt.date.trim(); break; }
-                }
-              }
-              if (!eventDate) return null;
-              const parsed = parseDBDate(eventDate);
-              if (!parsed) return null;
-              const diff = Date.now() - parsed.getTime();
-              return diff > 0 ? diff / (1000 * 60 * 60) : null;
-            })(),
+            hours_in_status: item.hours_in_status != null ? Number(item.hours_in_status) : null,
+            sla_limite_horas: item.sla_limite_horas != null ? Number(item.sla_limite_horas) : null,
+            sla_ratio: item.sla_ratio != null ? Number(item.sla_ratio) : null,
+            sla_cor: item.sla_cor || null,
+            sla_tempo_formatado: item.sla_tempo_formatado || null,
+            sla_tooltip: item.sla_tooltip || null,
             tracking_failed: !lastEvent || lastEvent === "",
             is_critical: false,
             is_invalid: false,
@@ -927,25 +925,19 @@ const TrackingAereo = () => {
                           {/* SLA */}
                           <td className="px-3 py-3 text-center">
                             {(() => {
-                              const POST_ARRIVAL = new Set(['ARR','ARR - DESTINO','ARR - CONEXAO','ARR - CONEXÃO','RCF','NFD','AWD','AWR','CCD','DLV','POD']);
-                              if (POST_ARRIVAL.has(statusCode)) return <span className="text-green-400 text-sm">✓</span>;
-                              const hours = awb.hours_in_status;
-                              if (hours == null) return <span className="text-muted-foreground text-xs">—</span>;
-                              const thresholds: Record<string,number> = { BKD:12,RCS:12,MAN:3,PRE:6,RCF:6,DEP:48,FOH:12,FWB:24,RDP:3,RFC:6 };
-                              const threshold = thresholds[statusCode] || 24;
-                              const ratio = hours / threshold;
-                              const h = Math.floor(hours);
-                              const m = Math.floor((hours - h) * 60);
-                              const display = h >= 24 ? `${Math.floor(h/24)}d${h%24}h` : m > 0 ? `${h}h${m.toString().padStart(2,'0')}` : `${h}h`;
-                              const color = ratio >= 1 ? "text-red-400 bg-red-500/15 border-red-500/30" : ratio >= 0.7 ? "text-amber-400 bg-amber-500/15 border-amber-500/30" : "text-green-400 bg-green-500/15 border-green-500/30";
+                              const slaCor = awb.sla_cor;
+                              // Post-arrival/final statuses show green check
+                              if (slaCor === 'VERDE' && !awb.sla_tempo_formatado) return <span className="text-green-400 text-sm">✓</span>;
+                              if (!awb.sla_tempo_formatado) return <span className="text-muted-foreground text-xs">—</span>;
+                              const color = slaCor === 'VERMELHO' ? "text-red-400 bg-red-500/15 border-red-500/30" : slaCor === 'AMARELO' ? "text-amber-400 bg-amber-500/15 border-amber-500/30" : "text-green-400 bg-green-500/15 border-green-500/30";
                               return (
                                 <TooltipProvider><Tooltip><TooltipTrigger asChild>
                                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.7rem] font-semibold border ${color}`}>
-                                    <Clock className="w-3 h-3" />{display}
+                                    <Clock className="w-3 h-3" />{awb.sla_tempo_formatado}
                                   </span>
                                 </TooltipTrigger><TooltipContent>
-                                  <p className="text-xs">SLA: {statusCode} — limite {threshold}h</p>
-                                  <p className="text-xs text-muted-foreground">{Math.round(ratio * 100)}% do tempo limite</p>
+                                  <p className="text-xs">SLA: {statusCode} — limite {awb.sla_limite_horas || '—'}h</p>
+                                  <p className="text-xs text-muted-foreground">{awb.sla_tooltip || '—'}</p>
                                 </TooltipContent></Tooltip></TooltipProvider>
                               );
                             })()}

@@ -413,6 +413,12 @@ serve(async (req) => {
         penultimate_location: row.loc1 || "",
         arr_destino_date: arrDestinoDate,
         hide_reason: hideReason,
+        hours_in_status: row.hours_in_status_rounded != null ? Number(row.hours_in_status_rounded) : null,
+        sla_limite_horas: row.sla_limite_horas != null ? Number(row.sla_limite_horas) : null,
+        sla_ratio: row.sla_ratio != null ? Number(row.sla_ratio) : null,
+        sla_cor: row.sla_cor || null,
+        sla_tempo_formatado: row.sla_tempo_formatado || null,
+        sla_tooltip: row.sla_tooltip || null,
       };
 
       if (!finalCode) {
