@@ -43,6 +43,14 @@ export const HistoricoBaixasTab = () => {
   const itemsPerPage = 20;
   const { toast } = useToast();
 
+  // Modal sem voucher
+  const [modalOpen, setModalOpen] = useState(false);
+  const [semVoucherData, setSemVoucherData] = useState<any[]>([]);
+  const [semVoucherLoading, setSemVoucherLoading] = useState(false);
+  const [semVoucherSearch, setSemVoucherSearch] = useState("");
+  const [semVoucherPage, setSemVoucherPage] = useState(1);
+  const semVoucherPerPage = 15;
+
   const loadBaixas = async () => {
     try {
       setLoading(true);
