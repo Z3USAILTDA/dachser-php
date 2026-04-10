@@ -1,39 +1,40 @@
 
 
-## Plano: Usar Data/Hora da coluna para calcular SLA
+## Plano: Mover cálculo de SLA para o backend (MariaDB)
 
-### Problema Atual
+### Problema
+O cálculo de SLA no frontend falha porque `parseDBDate` não consegue parsear todos os formatos de data. A solução é usar `STR_TO_DATE` do MariaDB (como na query fornecida), que faz o parsing nativamente.
 
-O cálculo de `hours_in_status` usa `new Date(eventDate)` diretamente, que falha para vários formatos de data do MariaDB. Enquanto isso, a coluna "Data/Hora" usa `formatDateTimeBR(awb.last_event_date)` que internamente chama `parseDBDate` — um parser robusto que suporta múltiplos formatos. O SLA deveria usar o mesmo parser.
+### Alterações
 
-### Solução
+**1. Edge Function `fetch-tracking-aereo/index.ts`** — adicionar colunas SLA ao SQL
 
-**Arquivo: `src/pages/air/TrackingAereo.tsx`** — alterar o cálculo de `hours_in_status` (linhas 365-377) para:
+A query existente já extrai `date0`, `time0` e `last_status_code`. Basta adicionar o cálculo de SLA diretamente no SQL usando subconsultas ou expressões inline:
 
-1. Usar `parseDBDate` (já importado) em vez de `new Date()` para parsear a data
-2. Manter o fallback para timeline se `last_event_date` estiver vazio
-3. O `statusCode` já está disponível no escopo e é usado na renderização do SLA (linha 934) para determinar o threshold correto
+- Adicionar ao SELECT da query principal (linha 126-151):
+  - `data_evento_base` via `STR_TO_DATE(CONCAT(date0, time0), '%d %b %Y %H:%i')`
+  - `hours_in_status` via `TIMESTAMPDIFF(SECOND, data_evento_base, NOW()) / 3600`
+  - `sla_limite_horas` via CASE no `last_status_code` (mesmos thresholds da query do usuário)
+  - `sla_ratio` = `hours_in_status / sla_limite_horas`
+  - `sla_cor` (VERDE/AMARELO/VERMELHO)
+  - `sla_tempo_formatado`
+  - `sla_tooltip`
 
-```typescript
-hours_in_status: (() => {
-  let eventDate = item.last_event_date;
-  if (!eventDate && Array.isArray(item.timeline_json) && item.timeline_json.length > 0) {
-    for (const evt of item.timeline_json) {
-      if (evt.date && evt.date.trim()) { eventDate = evt.date.trim(); break; }
-    }
-  }
-  if (!eventDate) return null;
-  const parsed = parseDBDate(eventDate);
-  if (!parsed) return null;
-  const diff = Date.now() - parsed.getTime();
-  return diff > 0 ? diff / (1000 * 60 * 60) : null;
-})(),
-```
+- Usar CTE ou subquery wrapping a query existente para não complicar o SQL principal
+
+- No objeto `normalized` (linha 328-344), incluir os novos campos: `hours_in_status`, `sla_limite_horas`, `sla_ratio`, `sla_cor`, `sla_tempo_formatado`, `sla_tooltip`
+
+**2. Frontend `TrackingAereo.tsx`** — usar campos pré-calculados
+
+- No mapeamento (linha 365-377): substituir o cálculo local por `item.hours_in_status` direto do backend
+- Na renderização SLA (linha 928-951): usar `sla_cor`, `sla_tempo_formatado` e `sla_tooltip` retornados pelo backend em vez de recalcular thresholds/ratio/display no frontend
+- Adicionar campos à interface `AWBData`: `sla_limite_horas`, `sla_ratio`, `sla_cor`, `sla_tempo_formatado`, `sla_tooltip`
 
 ### Resumo
 | Local | Alteração |
 |-------|-----------|
-| `TrackingAereo.tsx` linha 365-377 | Trocar `new Date()` por `parseDBDate()` no cálculo de `hours_in_status` |
-
-Alteração de uma linha. `parseDBDate` já está importado no arquivo (linha 37). Sem mudanças no backend.
+| `fetch-tracking-aereo/index.ts` SQL | Wrapping com CTE para calcular SLA no MariaDB usando `STR_TO_DATE` |
+| `fetch-tracking-aereo/index.ts` normalized | Adicionar campos SLA ao objeto retornado |
+| `TrackingAereo.tsx` mapeamento | Usar `item.hours_in_status` do backend |
+| `TrackingAereo.tsx` renderização SLA | Usar `sla_cor`, `sla_tempo_formatado`, `sla_tooltip` do backend |
 
