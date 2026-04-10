@@ -434,6 +434,89 @@ export const HistoricoBaixasTab = () => {
           />
         </div>
       )}
+
+      {/* Modal Sem Voucher */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col bg-[#0a0b10] border-white/10">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-400" />
+              Baixas sem Voucher Correspondente
+              <Badge variant="outline" className="ml-2">{filteredSemVoucher.length}</Badge>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="relative mb-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por ID ou usuário..."
+              value={semVoucherSearch}
+              onChange={(e) => { setSemVoucherSearch(e.target.value); setSemVoucherPage(1); }}
+              className="pl-9 bg-[#05060c] border-white/10 rounded-full"
+            />
+          </div>
+
+          <div className="overflow-auto flex-1 rounded-lg border border-white/10">
+            {semVoucherLoading ? (
+              <div className="p-4 space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-10 w-full bg-white/5" />
+                ))}
+              </div>
+            ) : filteredSemVoucher.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground text-sm">
+                Nenhuma baixa órfã encontrada
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-white/10 hover:bg-transparent">
+                    <TableHead className="text-muted-foreground text-xs">IdLancamentoRM</TableHead>
+                    <TableHead className="text-muted-foreground text-xs text-right">Valor Baixado</TableHead>
+                    <TableHead className="text-muted-foreground text-xs">Data Baixa</TableHead>
+                    <TableHead className="text-muted-foreground text-xs">Usuário</TableHead>
+                    <TableHead className="text-muted-foreground text-xs">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedSemVoucher.map((b: any, i: number) => (
+                    <TableRow key={`${b.IdLancamentoRM}-${i}`} className="border-white/5 hover:bg-white/5">
+                      <TableCell className="font-mono text-xs">{b.IdLancamentoRM}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">
+                        {formatCurrency(b.valor_baixa, "BRL")}
+                      </TableCell>
+                      <TableCell className="text-xs">{formatDate(b.data_baixa)}</TableCell>
+                      <TableCell className="text-xs">{b.usuario_baixa || "-"}</TableCell>
+                      <TableCell className="text-xs">
+                        {(() => {
+                          const s = String(b.status_lan);
+                          if (s === "1") return <Badge variant="success" className="text-[10px]">Finalizado</Badge>;
+                          if (s === "2") return <Badge variant="destructive" className="text-[10px]">Cancelado</Badge>;
+                          if (s === "3") return <Badge variant="warning" className="text-[10px]">Negociado</Badge>;
+                          return <Badge variant="outline" className="text-[10px]">Em Aberto</Badge>;
+                        })()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+
+          {filteredSemVoucher.length > semVoucherPerPage && (
+            <div className="flex items-center justify-between pt-2">
+              <div className="text-xs text-muted-foreground">
+                {((semVoucherPage - 1) * semVoucherPerPage) + 1} - {Math.min(semVoucherPage * semVoucherPerPage, filteredSemVoucher.length)} de {filteredSemVoucher.length}
+              </div>
+              <TablePagination
+                currentPage={semVoucherPage}
+                totalPages={semVoucherTotalPages}
+                onPageChange={setSemVoucherPage}
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
