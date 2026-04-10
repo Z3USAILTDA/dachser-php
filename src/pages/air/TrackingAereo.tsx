@@ -363,9 +363,16 @@ const TrackingAereo = () => {
             baseline_pieces: discrepancy.baseline,
             has_dis_event: discrepancy.hasDis,
             hours_in_status: (() => {
-              const eventDate = item.last_event_date;
+              let eventDate = item.last_event_date;
+              if (!eventDate && Array.isArray(item.timeline_json) && item.timeline_json.length > 0) {
+                for (const evt of item.timeline_json) {
+                  if (evt.date && evt.date.trim()) { eventDate = evt.date.trim(); break; }
+                }
+              }
               if (!eventDate) return null;
-              const diff = Date.now() - new Date(eventDate).getTime();
+              const parsed = new Date(eventDate).getTime();
+              if (isNaN(parsed)) return null;
+              const diff = Date.now() - parsed;
               return diff > 0 ? diff / (1000 * 60 * 60) : null;
             })(),
             tracking_failed: !lastEvent || lastEvent === "",
