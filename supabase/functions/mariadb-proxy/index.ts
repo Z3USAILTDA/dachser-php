@@ -9162,7 +9162,9 @@ Deno.serve(async (req) => {
             SELECT 1 FROM dados_dachser.t_dados_financeiro_voucher dfv 
             WHERE dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci 
             AND dfv.modal = 'ADM'
-          )`
+          )
+          AND v.sync_status = 'ATIVO'
+          AND (v.voucher_master_id IS NULL OR v.voucher_master_id = '')`
         );
 
         result = {
