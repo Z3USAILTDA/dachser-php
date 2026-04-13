@@ -881,7 +881,7 @@ export const PagamentosTab = () => {
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("A_DEFINIR")}>
-                A definir
+                Pendente
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("MANUAL")}>
                 Manual
@@ -993,10 +993,10 @@ export const PagamentosTab = () => {
                       />
                     </td>
                     <td className="p-3">
-                      {pag.is_master && pag.nome_master ? (
+                      {pag.is_master ? (
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-bold text-foreground">{pag.nome_master}</span>
+                            <span className="font-mono font-bold text-foreground">{pag.numero_spo}</span>
                             <Badge className="bg-purple-600 text-[9px] px-1.5">Master</Badge>
                           </div>
                           {(() => {
@@ -1060,7 +1060,7 @@ export const PagamentosTab = () => {
                           <SelectValue placeholder="Definir..." />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="A_DEFINIR">A definir</SelectItem>
+                          <SelectItem value="A_DEFINIR">Pendente</SelectItem>
                           <SelectItem value="MANUAL">Manual</SelectItem>
                           <SelectItem value="REMESSA_10H">Remessa 10h</SelectItem>
                           <SelectItem value="REMESSA_15H">Remessa 15h</SelectItem>
@@ -1132,9 +1132,7 @@ export const PagamentosTab = () => {
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              Dados de Pagamento - {selectedPagamento?.is_master && selectedPagamento?.nome_master 
-                ? selectedPagamento.nome_master 
-                : selectedPagamento?.numero_spo}
+              Dados de Pagamento - {selectedPagamento?.numero_spo}
             </DialogTitle>
           </DialogHeader>
           {selectedPagamento && (
@@ -1145,7 +1143,7 @@ export const PagamentosTab = () => {
                   <div className="flex items-center gap-2 mb-3">
                     <Badge className="bg-purple-600 text-white">Master</Badge>
                     <span className="font-medium text-purple-400">
-                      {selectedPagamento.nome_master || selectedPagamento.numero_spo}
+                      {selectedPagamento.numero_spo}
                     </span>
                   </div>
                   {(() => {
@@ -1273,7 +1271,7 @@ export const PagamentosTab = () => {
               Voltar para Operacional
             </DialogTitle>
             <DialogDescription>
-              Voucher/SPO: <strong>{voltarOperacionalVoucher?.is_master && voltarOperacionalVoucher?.nome_master ? voltarOperacionalVoucher.nome_master : voltarOperacionalVoucher?.numero_spo}</strong>
+              Voucher/SPO: <strong>{voltarOperacionalVoucher?.numero_spo}</strong>
             </DialogDescription>
           </DialogHeader>
 
