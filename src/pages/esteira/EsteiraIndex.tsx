@@ -1292,7 +1292,12 @@ const EsteiraIndex = () => {
       if (filters.etapa !== "all") {
         const vEtapa = (voucher.etapaAtual || "").trim().toUpperCase();
         const fEtapa = filters.etapa.trim().toUpperCase();
-        if (vEtapa !== fEtapa) return false;
+        // FINANCEIRO filter should also show ROBO stage
+        if (fEtapa === "FINANCEIRO") {
+          if (vEtapa !== "FINANCEIRO" && vEtapa !== "ROBO") return false;
+        } else {
+          if (vEtapa !== fEtapa) return false;
+        }
       }
 
       // Filtro de cobrança
