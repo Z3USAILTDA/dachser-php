@@ -355,7 +355,7 @@ export const VoucherRoboActions = ({ voucher, onUpdate, canRetornarPendente = tr
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {currentStatus !== "PENDENTE" && (
+                {currentStatus !== "PENDENTE" && canRetornarPendente && (
                   <>
                     <DropdownMenuItem 
                       onClick={() => setShowRetornarDialog(true)}
@@ -386,38 +386,51 @@ export const VoucherRoboActions = ({ voucher, onUpdate, canRetornarPendente = tr
           </div>
 
           <div className="space-y-3">
-            {!hasComprovante && (
-              <FileUpload
-                label="Comprovante de Pagamento"
-                required
-                onFileUpload={handleComprovanteUpload}
-                accept=".pdf,.jpg,.jpeg,.png"
-              />
-            )}
+            {/* Always show upload for additional comprovantes */}
+            <FileUpload
+              label={hasComprovante ? "Adicionar Comprovante" : "Comprovante de Pagamento"}
+              required={!hasComprovante}
+              onFileUpload={handleComprovanteUpload}
+              accept=".pdf,.jpg,.jpeg,.png"
+            />
 
-            {hasComprovante && comprovanteFile && (
+            {/* List existing comprovantes */}
+            {comprovantes.length > 0 && (
               <div className="space-y-2">
-                <FileUpload
-                  label="Comprovante de Pagamento"
-                  existingFile={{
-                    name: comprovanteFile.fileName,
-                    url: comprovanteFile.fileUrl,
-                  }}
-                  onFileUpload={handleComprovanteUpload}
-                />
-                
-                {currentStatus === "PENDENTE" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRemoverComprovante}
-                    disabled={deletingComprovante}
-                    className="w-full gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    {deletingComprovante ? "Removendo..." : "Remover e Substituir Comprovante"}
-                  </Button>
-                )}
+                <p className="text-sm font-medium text-muted-foreground">
+                  Comprovantes anexados ({comprovantes.length})
+                </p>
+                {comprovantes.map((comp) => (
+                  <div key={comp.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/30 border border-border">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileCheck className="h-4 w-4 text-blue-500 shrink-0" />
+                      <span className="text-sm truncate">{comp.fileName}</span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {comp.fileUrl && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => window.open(comp.fileUrl, '_blank')}
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {currentStatus === "PENDENTE" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-red-600 hover:text-red-700"
+                          onClick={() => handleRemoverComprovante(comp)}
+                          disabled={deletingComprovante === comp.id}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
