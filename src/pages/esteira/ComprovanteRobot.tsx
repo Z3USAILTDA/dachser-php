@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -10,8 +11,9 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Bot, Upload, CheckCircle2, XCircle, AlertCircle, FileText, Search, Link2 } from "lucide-react";
+import { Bot, Upload, CheckCircle2, XCircle, AlertCircle, FileText, Search, Link2, ShieldAlert } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserRole } from "@/hooks/useUserRole";
 
 interface VoucherMatch {
   id: string;
@@ -43,6 +45,8 @@ interface FileMatch {
 export default function ComprovanteRobot() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const { hasEsteiraAccess, loading: roleLoading } = useUserRole();
   const [files, setFiles] = useState<FileMatch[]>([]);
   const [processing, setProcessing] = useState(false);
   const [identifying, setIdentifying] = useState(false);
@@ -52,8 +56,8 @@ export default function ComprovanteRobot() {
 
   // Load available vouchers on mount
   useEffect(() => {
-    loadAvailableVouchers();
-  }, []);
+    if (hasEsteiraAccess) loadAvailableVouchers();
+  }, [hasEsteiraAccess]);
 
   const loadAvailableVouchers = async (search?: string) => {
     try {
@@ -81,6 +85,32 @@ export default function ComprovanteRobot() {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchVoucher]);
+
+  // Access guard - after all hooks
+  if (roleLoading) {
+    return (
+      <PageLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  if (!hasEsteiraAccess) {
+    return (
+      <PageLayout>
+        <div className="flex flex-col items-center justify-center h-64 gap-4">
+          <ShieldAlert className="h-16 w-16 text-destructive" />
+          <h2 className="text-xl font-semibold text-foreground">Acesso Negado</h2>
+          <p className="text-muted-foreground">Você não possui permissão para acessar esta página.</p>
+          <Button onClick={() => navigate("/fin/esteira")} variant="outline">
+            Voltar para Esteira
+          </Button>
+        </div>
+      </PageLayout>
+    );
+  }
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(event.target.files || []);
