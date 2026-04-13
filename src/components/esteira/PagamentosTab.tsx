@@ -682,7 +682,7 @@ export const PagamentosTab = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos Tipo Exec.</SelectItem>
-              <SelectItem value="A_DEFINIR">A definir</SelectItem>
+              <SelectItem value="A_DEFINIR">Pendente</SelectItem>
               <SelectItem value="MANUAL">Manual</SelectItem>
               <SelectItem value="REMESSA_10H">Remessa 10h</SelectItem>
               <SelectItem value="REMESSA_15H">Remessa 15h</SelectItem>
@@ -1057,12 +1057,12 @@ export const PagamentosTab = () => {
                     </td>
                     <td className="p-3">
                       <Select
-                        value={pag.tipo_execucao_pagamento || ""}
+                        value={pag.tipo_execucao_pagamento || "A_DEFINIR"}
                         onValueChange={(v) => handleSetTipoExecucao(pag.id, v as TipoExecucaoPagamento)}
                         disabled={processingAction[pag.id]}
                       >
                         <SelectTrigger className="h-8 w-[120px] text-xs">
-                          <SelectValue placeholder="Definir..." />
+                          <SelectValue placeholder="Pendente" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="A_DEFINIR">Pendente</SelectItem>
