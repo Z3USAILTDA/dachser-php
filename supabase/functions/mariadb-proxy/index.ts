@@ -9979,6 +9979,17 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Priorizar masters: mover para o início do array
+        if (vouchers && vouchers.length > 1) {
+          vouchers.sort((a: any, b: any) => {
+            if (a.is_master && !b.is_master) return -1;
+            if (!a.is_master && b.is_master) return 1;
+            if (a.matched_via_child && !b.matched_via_child) return -1;
+            if (!a.matched_via_child && b.matched_via_child) return 1;
+            return 0;
+          });
+        }
+
         result = { success: true, vouchers: vouchers || [] };
         console.log(`Found ${vouchers?.length || 0} vouchers for SPO ${numero_spo}`);
         break;
