@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, Bot, AlertCircle, Clock, FileCheck, ChevronDown, RotateCcw, Trash2 } from "lucide-react";
+import { CheckCircle2, Bot, AlertCircle, Clock, FileCheck, ChevronDown, RotateCcw, Trash2, Eye } from "lucide-react";
 import { FileUpload } from "./FileUpload";
 import { RetornarPendenteDialog } from "./RetornarPendenteDialog";
 
