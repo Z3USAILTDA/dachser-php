@@ -9914,7 +9914,7 @@ Deno.serve(async (req) => {
         let vouchers = await client.query(`
           SELECT 
             id, numero_spo, fornecedor, valor, vencimento, etapa_atual, 
-            cobranca_em_nome_de, moeda
+            cobranca_em_nome_de, moeda, is_master, id_rm, nome_master, voucher_master_id
           FROM dados_dachser.t_vouchers
           WHERE numero_spo = ?
           ORDER BY created_at DESC
@@ -9926,7 +9926,7 @@ Deno.serve(async (req) => {
           vouchers = await client.query(`
             SELECT 
               id, numero_spo, fornecedor, valor, vencimento, etapa_atual, 
-              cobranca_em_nome_de, moeda
+              cobranca_em_nome_de, moeda, is_master, id_rm, nome_master, voucher_master_id
             FROM dados_dachser.t_vouchers
             WHERE numero_spo LIKE ?
             ORDER BY created_at DESC
@@ -9940,7 +9940,7 @@ Deno.serve(async (req) => {
           vouchers = await client.query(`
             SELECT 
               id, numero_spo, fornecedor, valor, vencimento, etapa_atual, 
-              cobranca_em_nome_de, moeda
+              cobranca_em_nome_de, moeda, is_master, id_rm, nome_master, voucher_master_id
             FROM dados_dachser.t_vouchers
             WHERE ? LIKE CONCAT(numero_spo, '%') AND CHAR_LENGTH(numero_spo) >= 5
             ORDER BY CHAR_LENGTH(numero_spo) DESC, created_at DESC
