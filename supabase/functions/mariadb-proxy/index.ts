@@ -11358,6 +11358,56 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'fix_master_numero_spo': {
+        // One-time fix: update all existing master vouchers to use numero_spo from child with lowest id_rm
+        console.log('Fixing numero_spo for all existing master vouchers');
+
+        const allMasters = await client.query(`
+          SELECT id, numero_spo, nome_master FROM dados_dachser.t_vouchers WHERE is_master = 1
+        `);
+
+        let fixedCount = 0;
+        const details: any[] = [];
+
+        for (const master of (allMasters || [])) {
+          // Get children with their id_rm
+          const children = await client.query(`
+            SELECT v.id, v.numero_spo, v.id_rm,
+                   COALESCE(v.id_rm, dfv.id_rm) as resolved_id_rm
+            FROM dados_dachser.t_vouchers v
+            LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
+              ON v.numero_spo COLLATE utf8mb4_general_ci = dfv.nd COLLATE utf8mb4_general_ci
+            WHERE v.voucher_master_id = ?
+          `, [master.id]);
+
+          const withIdRm = (children || []).filter((c: any) => c.resolved_id_rm != null);
+          if (withIdRm.length > 0) {
+            const lowest = withIdRm.reduce((prev: any, curr: any) => {
+              return (parseInt(prev.resolved_id_rm) || Infinity) < (parseInt(curr.resolved_id_rm) || Infinity) ? prev : curr;
+            });
+            const newSpo = lowest.numero_spo;
+            if (newSpo && newSpo !== master.numero_spo) {
+              await client.execute(`
+                UPDATE dados_dachser.t_vouchers 
+                SET numero_spo = ?, nome_master = ?, updated_at = NOW()
+                WHERE id = ?
+              `, [newSpo, master.nome_master || master.numero_spo, master.id]);
+              fixedCount++;
+              details.push({ masterId: master.id, oldSpo: master.numero_spo, newSpo, lowestIdRm: lowest.resolved_id_rm });
+              console.log(`Fixed master ${master.id}: ${master.numero_spo} -> ${newSpo} (id_rm=${lowest.resolved_id_rm})`);
+            } else {
+              details.push({ masterId: master.id, spo: master.numero_spo, status: 'already_correct' });
+            }
+          } else {
+            details.push({ masterId: master.id, spo: master.numero_spo, status: 'no_children_with_id_rm' });
+          }
+        }
+
+        console.log(`Fixed ${fixedCount} of ${allMasters?.length || 0} master vouchers`);
+        result = { success: true, fixedCount, totalMasters: allMasters?.length || 0, details };
+        break;
+      }
+
       // ==================== DEMURRAGE ====================
       case 'demurrage_get_containers': {
         const { search, risk_status, cronos_status, cronos_status_list, cliente, armador, pre_invoice_status, dispute_status, audit_status, limit = 500 } = body as any;
