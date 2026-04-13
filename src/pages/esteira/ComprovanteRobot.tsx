@@ -45,6 +45,8 @@ interface FileMatch {
 export default function ComprovanteRobot() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const { hasEsteiraAccess, loading: roleLoading } = useUserRole();
   const [files, setFiles] = useState<FileMatch[]>([]);
   const [processing, setProcessing] = useState(false);
   const [identifying, setIdentifying] = useState(false);

@@ -24,7 +24,7 @@ const EsteiraVoucherDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { role, isAdmin, hasRole } = useUserRole();
+  const { role, isAdmin, hasRole, hasEsteiraAccess } = useUserRole();
   const [voucher, setVoucher] = useState<Voucher | null>(null);
   const [loading, setLoading] = useState(true);
 
