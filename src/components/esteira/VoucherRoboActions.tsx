@@ -262,7 +262,8 @@ export const VoucherRoboActions = ({ voucher, onUpdate, canRetornarPendente = tr
           voucher_id: voucher.id,
           status_comprovante: "ANEXADO",
           etapa_atual: "CONCLUIDO",
-          status_baixa: "BAIXADO_RM",
+          status_baixa: "BAIXA_SOLICITADA",
+          status_financeiro: "CONCLUIDO",
         },
       });
 

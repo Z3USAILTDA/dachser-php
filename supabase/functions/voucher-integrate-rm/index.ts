@@ -458,10 +458,10 @@ const handler = async (req: Request): Promise<Response> => {
         const idBaixa = Date.now();
         const rmProtocol = `RM-${idBaixa}`;
 
-        // Atualizar voucher para CONCLUIDO e status BAIXADO_RM no MariaDB
+        // Atualizar voucher para CONCLUIDO e status REALIZADA no MariaDB
         await mariaClient.execute(
           `UPDATE dados_dachser.t_vouchers 
-           SET etapa_atual = 'CONCLUIDO', status_baixa = 'BAIXADO_RM', updated_at = NOW()
+           SET etapa_atual = 'CONCLUIDO', status_baixa = 'REALIZADA', status_financeiro = 'CONCLUIDO', updated_at = NOW()
            WHERE id = ?`,
           [voucherId]
         );
