@@ -21,7 +21,7 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
   const [comentarios, setComentarios] = useState(voucher.comentariosFiscal || "");
   const [necessitaAjuste, setNecessitaAjuste] = useState(false);
   const [motivoAjuste, setMotivoAjuste] = useState("");
-  const [novoNumeroSpo, setNovoNumeroSpo] = useState("");
+  const [novoNumeroSpo, setNovoNumeroSpo] = useState(voucher.numeroSPO || "");
   const [isUpdatingNumero, setIsUpdatingNumero] = useState(false);
   const [vouchersFilhos, setVouchersFilhos] = useState<VoucherFilho[]>([]);
   const [filhosExpanded, setFilhosExpanded] = useState(false);
@@ -282,10 +282,10 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
           <div className="mt-4 pt-4 border-t border-purple-500/20">
             <Label htmlFor="novo-numero-spo" className="text-sm text-purple-400 flex items-center gap-2">
               <Edit3 className="h-4 w-4" />
-              Atualizar Nº SPO (número do RM)
+              Nº SPO (identificado automaticamente, edite se divergente)
             </Label>
             <p className="text-xs text-muted-foreground mb-2">
-              Substitua o número gerado automaticamente pelo número oficial do RM
+              O número abaixo foi identificado automaticamente. Altere apenas se houver divergência no RM.
             </p>
             <div className="flex gap-2">
               <Input

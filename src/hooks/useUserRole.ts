@@ -193,7 +193,7 @@ export function useUserRole() {
   const canGoBackStage = isAdmin || isSupervisor || isFinanceiro;
 
   // Verifica se pode cancelar voucher (Admin, Supervisor, Financeiro)
-  const canCancelVoucher = isAdmin || isSupervisor || isFinanceiro;
+  const canCancelVoucher = isAdmin || isSupervisor || isFinanceiro || isOperacao || isFiscal;
 
   // Verifica se pode desmembrar voucher master (Admin, Supervisor, Financeiro)
   const canDisassembleMaster = isAdmin || isSupervisor || isFinanceiro;

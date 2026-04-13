@@ -10958,10 +10958,9 @@ Deno.serve(async (req) => {
           console.log('Note: ALTER TABLE might have failed (columns may already exist)');
         }
 
-        // Generate master voucher ID and numero_spo
+        // Generate master voucher ID
         const masterId = crypto.randomUUID();
-        const randomSuffix = Math.random().toString(36).substring(2, 10).toUpperCase();
-        const numeroSpoMaster = `MASTER-${randomSuffix}`;
+        // numero_spo will be determined from the child with the lowest id_rm
 
         // voucher_ids now contains "processo" values (numero_spo), not UUIDs
         // First, resolve the actual UUIDs from t_vouchers by numero_spo

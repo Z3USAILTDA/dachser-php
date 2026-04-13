@@ -134,7 +134,7 @@ export const TIPO_EXECUCAO_LABELS: Record<TipoExecucaoPagamento, string> = {
   MANUAL: "Manual",
   REMESSA_10H: "Remessa 10h",
   REMESSA_15H: "Remessa 15h",
-  A_DEFINIR: "A definir",
+  A_DEFINIR: "Pendente",
 };
 
 export const STATUS_LOTE_REMESSA_LABELS: Record<StatusLoteRemessa, string> = {
