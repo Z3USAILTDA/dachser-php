@@ -22,6 +22,8 @@ interface FileMatch {
   isEditingSpo?: boolean;
   masterName?: string;
   childSpo?: string;
+  isMaster?: boolean;
+  matchedViaChild?: boolean;
 }
 
 export function RoboTab() {
@@ -76,7 +78,7 @@ export function RoboTab() {
     return null;
   };
 
-  const searchVoucherBySPO = async (spo: string): Promise<{ id: string; masterName?: string; childSpo?: string } | null> => {
+  const searchVoucherBySPO = async (spo: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null> => {
     try {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: {
@@ -91,6 +93,8 @@ export function RoboTab() {
         if (roboVoucher) {
           return {
             id: roboVoucher.id,
+            isMaster: !!roboVoucher.is_master,
+            matchedViaChild: !!roboVoucher.matched_via_child,
             masterName: (roboVoucher.is_master || roboVoucher.matched_via_child) 
               ? (roboVoucher.nome_master || roboVoucher.numero_spo) 
               : undefined,
@@ -104,7 +108,7 @@ export function RoboTab() {
     return null;
   };
 
-  const searchVoucherByND = async (nd: string): Promise<{ id: string; masterName?: string; childSpo?: string } | null> => {
+  const searchVoucherByND = async (nd: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null> => {
     try {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: {
@@ -119,6 +123,8 @@ export function RoboTab() {
         if (roboVoucher) {
           return {
             id: roboVoucher.id,
+            isMaster: !!roboVoucher.is_master,
+            matchedViaChild: !!roboVoucher.matched_via_child,
             masterName: (roboVoucher.is_master || roboVoucher.matched_via_child) 
               ? (roboVoucher.nome_master || roboVoucher.numero_spo) 
               : undefined,
@@ -133,7 +139,7 @@ export function RoboTab() {
   };
 
   // Unified search: tries SPO first, then ND as fallback
-  const searchVoucher = async (numero: string): Promise<{ id: string; masterName?: string; childSpo?: string } | null> => {
+  const searchVoucher = async (numero: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null> => {
     let result = await searchVoucherBySPO(numero);
     if (result) return result;
     result = await searchVoucherByND(numero);
@@ -146,7 +152,7 @@ export function RoboTab() {
     const fileMatches: FileMatch[] = await Promise.all(
       selectedFiles.map(async (file) => {
         const extracted = extractSPOFromFilename(file.name);
-        let match: { id: string; masterName?: string; childSpo?: string } | null = null;
+        let match: { id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null = null;
         let displaySPO: string | null = null;
 
         if (extracted) {
@@ -168,6 +174,8 @@ export function RoboTab() {
           voucherId: match?.id || null,
           masterName: match?.masterName,
           childSpo: match?.childSpo,
+          isMaster: match?.isMaster,
+          matchedViaChild: match?.matchedViaChild,
           status: "pending" as const,
           manualSpoInput: "",
           isEditingSpo: !extracted,
@@ -205,6 +213,8 @@ export function RoboTab() {
               voucherId: match?.id || null,
               masterName: match?.masterName,
               childSpo: match?.childSpo,
+              isMaster: match?.isMaster,
+              matchedViaChild: match?.matchedViaChild,
               isEditingSpo: false,
             }
           : f
@@ -212,11 +222,15 @@ export function RoboTab() {
     );
 
     if (match) {
+      const isMasterDirect = match.isMaster && !match.matchedViaChild;
+      const isViaChild = !!match.matchedViaChild;
       toast({
-        title: match.masterName ? "Master encontrado" : "Voucher encontrado",
-        description: match.masterName 
+        title: (isMasterDirect || isViaChild) ? "Master encontrado" : "Voucher encontrado",
+        description: isViaChild
           ? `Vinculado ao Master "${match.masterName}" via filho SPO ${match.childSpo}`
-          : `SPO ${file.manualSpoInput} vinculado com sucesso`,
+          : isMasterDirect
+            ? `Master "${match.masterName}" vinculado com sucesso`
+            : `SPO ${file.manualSpoInput} vinculado com sucesso`,
       });
     } else {
       toast({
@@ -389,12 +403,14 @@ export function RoboTab() {
     if (!fileMatch.voucherId) {
       return <Badge variant="secondary">Voucher não encontrado</Badge>;
     }
-    if (fileMatch.masterName) {
+    if (fileMatch.isMaster || fileMatch.matchedViaChild) {
       return (
         <div className="flex items-center gap-1 flex-wrap">
           <Badge variant="info">Master</Badge>
           <Badge className="bg-primary text-primary-foreground">{fileMatch.masterName}</Badge>
-          <span className="text-xs text-muted-foreground">via filho {fileMatch.childSpo}</span>
+          {fileMatch.matchedViaChild && fileMatch.childSpo && (
+            <span className="text-xs text-muted-foreground">via filho {fileMatch.childSpo}</span>
+          )}
         </div>
       );
     }
