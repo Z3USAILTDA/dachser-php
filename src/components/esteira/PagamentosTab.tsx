@@ -427,7 +427,7 @@ export const PagamentosTab = () => {
     if (isReady && tipoExecucao === "A_DEFINIR") {
       toast({ 
         title: "Defina o tipo de execução", 
-        description: "'A definir' não é permitido para marcar como pronto. Selecione Manual ou Remessa.",
+        description: "'Pendente' não é permitido para marcar como pronto. Selecione Manual ou Remessa.",
         variant: "destructive" 
       });
       return;
@@ -909,7 +909,7 @@ export const PagamentosTab = () => {
               if (semTipo.length > 0) {
                 toast({
                   title: "Tipo de execução obrigatório",
-                  description: `${semTipo.length} voucher(s) sem tipo de execução definido ou com 'A definir'. Defina antes de marcar como pronto.`,
+                  description: `${semTipo.length} voucher(s) sem tipo de execução definido ou com 'Pendente'. Defina antes de marcar como pronto.`,
                   variant: "destructive"
                 });
                 return;
