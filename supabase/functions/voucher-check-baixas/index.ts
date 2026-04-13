@@ -12,15 +12,15 @@ serve(async (req) => {
   }
 
   try {
-    console.log('[voucher-check-baixas] Starting baixas check...');
+    console.log('[voucher-check-baixas] Starting full status sync...');
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Call mariadb-proxy with the check_baixas_vouchers action
+    // Call mariadb-proxy with the sync_voucher_statuses action
     const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-      body: { action: 'check_baixas_vouchers' },
+      body: { action: 'sync_voucher_statuses' },
     });
 
     if (error) {

@@ -15909,66 +15909,102 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // ==================== CHECK BAIXAS VOUCHERS ====================
-      case 'check_baixas_vouchers': {
+      // ==================== SYNC VOUCHER STATUSES ====================
+      case 'sync_voucher_statuses': {
         try {
-          // Find all vouchers with status_baixa = BAIXA_SOLICITADA
+          console.log('[sync_voucher_statuses] Starting full status sync...');
+          let updatedFinanceiro = 0;
+          let updatedBaixa = 0;
+          let checkedBaixas = 0;
+
+          // --- Rule 1: PENDENTE → PROCESSADO ---
+          // If etapa_atual IN (ROBO, CONCLUIDO) AND is_pronto_para_robo = 1 AND status_financeiro = 'PENDENTE'
+          const rule1Result = await client.execute(`
+            UPDATE dados_dachser.t_vouchers
+            SET status_financeiro = 'PROCESSADO', updated_at = NOW()
+            WHERE etapa_atual NOT IN ('A_PROCESSAR')
+              AND etapa_atual IN ('ROBO', 'CONCLUIDO')
+              AND is_pronto_para_robo = 1
+              AND status_financeiro = 'PENDENTE'
+          `);
+          const rule1Count = rule1Result?.affectedRows || 0;
+          updatedFinanceiro += rule1Count;
+          if (rule1Count > 0) console.log(`[sync_voucher_statuses] Rule 1: ${rule1Count} vouchers PENDENTE → PROCESSADO`);
+
+          // --- Rule 2: status_financeiro → CONCLUIDO ---
+          // If status_comprovante IN (ANEXADO, VALIDADO) AND status_financeiro != 'CONCLUIDO'
+          const rule2Result = await client.execute(`
+            UPDATE dados_dachser.t_vouchers
+            SET status_financeiro = 'CONCLUIDO', updated_at = NOW()
+            WHERE etapa_atual NOT IN ('A_PROCESSAR')
+              AND status_comprovante IN ('ANEXADO', 'VALIDADO')
+              AND status_financeiro != 'CONCLUIDO'
+          `);
+          const rule2Count = rule2Result?.affectedRows || 0;
+          updatedFinanceiro += rule2Count;
+          if (rule2Count > 0) console.log(`[sync_voucher_statuses] Rule 2: ${rule2Count} vouchers → status_financeiro CONCLUIDO`);
+
+          // --- Rule 3: status_baixa → BAIXA_SOLICITADA ---
+          // If status_comprovante IN (ANEXADO, VALIDADO) AND status_baixa NOT IN (BAIXA_SOLICITADA, REALIZADA)
+          const rule3Result = await client.execute(`
+            UPDATE dados_dachser.t_vouchers
+            SET status_baixa = 'BAIXA_SOLICITADA', updated_at = NOW()
+            WHERE etapa_atual NOT IN ('A_PROCESSAR')
+              AND status_comprovante IN ('ANEXADO', 'VALIDADO')
+              AND status_baixa NOT IN ('BAIXA_SOLICITADA', 'REALIZADA')
+          `);
+          const rule3Count = rule3Result?.affectedRows || 0;
+          updatedBaixa += rule3Count;
+          if (rule3Count > 0) console.log(`[sync_voucher_statuses] Rule 3: ${rule3Count} vouchers → status_baixa BAIXA_SOLICITADA`);
+
+          // --- Rule 4: BAIXA_SOLICITADA → REALIZADA (via tbaixas) ---
           const pendingVouchers = await client.query(`
             SELECT v.id, v.numero_spo
             FROM dados_dachser.t_vouchers v
             WHERE v.status_baixa = 'BAIXA_SOLICITADA'
-              AND v.etapa_atual = 'CONCLUIDO'
+              AND v.etapa_atual NOT IN ('A_PROCESSAR')
           `);
 
-          if (!pendingVouchers || pendingVouchers.length === 0) {
-            console.log('[check_baixas_vouchers] No vouchers with BAIXA_SOLICITADA');
-            result = { success: true, updated: 0, checked: 0 };
-            break;
-          }
+          if (pendingVouchers && pendingVouchers.length > 0) {
+            console.log(`[sync_voucher_statuses] Rule 4: Checking ${pendingVouchers.length} vouchers against tbaixas`);
+            checkedBaixas = pendingVouchers.length;
 
-          console.log(`[check_baixas_vouchers] Found ${pendingVouchers.length} vouchers to check`);
-          let updatedCount = 0;
+            for (const voucher of pendingVouchers) {
+              const dfvRecords = await client.query(`
+                SELECT DISTINCT dfv.id_rm
+                FROM dados_dachser.t_dados_financeiro_voucher dfv
+                WHERE TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(?) COLLATE utf8mb4_general_ci
+                  AND dfv.id_rm IS NOT NULL
+              `, [voucher.numero_spo]);
 
-          for (const voucher of pendingVouchers) {
-            // Get ALL id_rm values from t_dados_financeiro_voucher for this numero_spo
-            const dfvRecords = await client.query(`
-              SELECT DISTINCT dfv.id_rm
-              FROM dados_dachser.t_dados_financeiro_voucher dfv
-              WHERE TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(?) COLLATE utf8mb4_general_ci
-                AND dfv.id_rm IS NOT NULL
-            `, [voucher.numero_spo]);
+              if (!dfvRecords || dfvRecords.length === 0) continue;
 
-            if (!dfvRecords || dfvRecords.length === 0) {
-              console.log(`[check_baixas_vouchers] No id_rm found for SPO ${voucher.numero_spo}`);
-              continue;
-            }
+              const idRmList = dfvRecords.map((r: any) => r.id_rm);
+              const placeholders = idRmList.map(() => '?').join(',');
 
-            const idRmList = dfvRecords.map((r: any) => r.id_rm);
-            const placeholders = idRmList.map(() => '?').join(',');
+              const baixaExists = await client.query(`
+                SELECT 1 FROM dados_dachser.tbaixas b
+                WHERE b.IdLancamentoRM IN (${placeholders})
+                  AND b.StatusLan IN (1, 2, 3)
+                LIMIT 1
+              `, idRmList);
 
-            // Check if ANY of these id_rm exist in tbaixas with StatusLan IN (1, 2, 3)
-            const baixaExists = await client.query(`
-              SELECT 1 FROM dados_dachser.tbaixas b
-              WHERE b.IdLancamentoRM IN (${placeholders})
-                AND b.StatusLan IN (1, 2, 3)
-              LIMIT 1
-            `, idRmList);
-
-            if (baixaExists && baixaExists.length > 0) {
-              await client.execute(`
-                UPDATE dados_dachser.t_vouchers
-                SET status_baixa = 'REALIZADA', updated_at = NOW()
-                WHERE id = ?
-              `, [voucher.id]);
-              updatedCount++;
-              console.log(`[check_baixas_vouchers] Voucher ${voucher.numero_spo} -> REALIZADA`);
+              if (baixaExists && baixaExists.length > 0) {
+                await client.execute(`
+                  UPDATE dados_dachser.t_vouchers
+                  SET status_baixa = 'REALIZADA', updated_at = NOW()
+                  WHERE id = ?
+                `, [voucher.id]);
+                updatedBaixa++;
+                console.log(`[sync_voucher_statuses] Rule 4: Voucher ${voucher.numero_spo} → REALIZADA`);
+              }
             }
           }
 
-          console.log(`[check_baixas_vouchers] Done. Checked ${pendingVouchers.length}, updated ${updatedCount}`);
-          result = { success: true, updated: updatedCount, checked: pendingVouchers.length };
+          console.log(`[sync_voucher_statuses] Done. Financeiro updated: ${updatedFinanceiro}, Baixa updated: ${updatedBaixa}, Baixas checked: ${checkedBaixas}`);
+          result = { success: true, updatedFinanceiro, updatedBaixa, checkedBaixas };
         } catch (e: any) {
-          console.error('[check_baixas_vouchers] Error:', e);
+          console.error('[sync_voucher_statuses] Error:', e);
           result = { success: false, error: e.message };
         }
         break;
