@@ -188,11 +188,12 @@ export const PagamentosTab = () => {
   const [anexosDialog, setAnexosDialog] = useState<any[]>([]);
   const [loadingAnexos, setLoadingAnexos] = useState(false);
   
-  // Voltar para Operacional dialog state
+  // Voltar dialog state
   const [voltarOperacionalDialogOpen, setVoltarOperacionalDialogOpen] = useState(false);
   const [voltarOperacionalVoucher, setVoltarOperacionalVoucher] = useState<PagamentoItem | null>(null);
   const [voltarOperacionalJustificativa, setVoltarOperacionalJustificativa] = useState("");
   const [voltarOperacionalLoading, setVoltarOperacionalLoading] = useState(false);
+  const [voltarDestinoEtapa, setVoltarDestinoEtapa] = useState<"OPERACAO" | "FISCAL">("OPERACAO");
 
   // Master children state
   const masterChildrenCache = useRef<Map<string, string[]>>(new Map());
@@ -510,30 +511,33 @@ export const PagamentosTab = () => {
     if (!voltarOperacionalVoucher || voltarOperacionalJustificativa.trim().length < 10) return;
     setVoltarOperacionalLoading(true);
     try {
-      // 1. Update etapa_atual to OPERACAO
+      // 1. Update etapa_atual to selected destination
       const { error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "update_voucher_esteira",
           voucher_id: voltarOperacionalVoucher.id,
-          etapa_atual: "OPERACAO",
+          etapa_atual: voltarDestinoEtapa,
         }
       });
       if (error) throw error;
 
       // 2. Log the action
+      const logAcao = voltarDestinoEtapa === "FISCAL" ? "RETORNO_FISCAL" : "RETORNO_OPERACIONAL";
+      const logLabel = voltarDestinoEtapa === "FISCAL" ? "Fiscal" : "Operacional";
       await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "save_voucher_log",
           voucher_id: voltarOperacionalVoucher.id,
-          acao: "RETORNO_OPERACIONAL",
-          detalhe: `Voucher retornado para Operacional a partir da tela de Pagamentos. Justificativa: ${voltarOperacionalJustificativa.trim()}`
+          acao: logAcao,
+          detalhe: `Voucher retornado para ${logLabel} a partir da tela de Pagamentos. Justificativa: ${voltarOperacionalJustificativa.trim()}`
         }
       });
 
-      toast({ title: "Voucher retornado para Operacional com sucesso" });
+      toast({ title: `Voucher retornado para ${logLabel} com sucesso` });
       setVoltarOperacionalDialogOpen(false);
       setVoltarOperacionalJustificativa("");
       setVoltarOperacionalVoucher(null);
+      setVoltarDestinoEtapa("OPERACAO");
       loadPagamentos();
     } catch (error: unknown) {
       toast({
