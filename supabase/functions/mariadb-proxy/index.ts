@@ -15909,6 +15909,71 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ==================== CHECK BAIXAS VOUCHERS ====================
+      case 'check_baixas_vouchers': {
+        try {
+          // Find all vouchers with status_baixa = BAIXA_SOLICITADA
+          const pendingVouchers = await client.query(`
+            SELECT v.id, v.numero_spo
+            FROM dados_dachser.t_vouchers v
+            WHERE v.status_baixa = 'BAIXA_SOLICITADA'
+              AND v.etapa_atual = 'CONCLUIDO'
+          `);
+
+          if (!pendingVouchers || pendingVouchers.length === 0) {
+            console.log('[check_baixas_vouchers] No vouchers with BAIXA_SOLICITADA');
+            result = { success: true, updated: 0, checked: 0 };
+            break;
+          }
+
+          console.log(`[check_baixas_vouchers] Found ${pendingVouchers.length} vouchers to check`);
+          let updatedCount = 0;
+
+          for (const voucher of pendingVouchers) {
+            // Get ALL id_rm values from t_dados_financeiro_voucher for this numero_spo
+            const dfvRecords = await client.query(`
+              SELECT DISTINCT dfv.id_rm
+              FROM dados_dachser.t_dados_financeiro_voucher dfv
+              WHERE TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(?) COLLATE utf8mb4_general_ci
+                AND dfv.id_rm IS NOT NULL
+            `, [voucher.numero_spo]);
+
+            if (!dfvRecords || dfvRecords.length === 0) {
+              console.log(`[check_baixas_vouchers] No id_rm found for SPO ${voucher.numero_spo}`);
+              continue;
+            }
+
+            const idRmList = dfvRecords.map((r: any) => r.id_rm);
+            const placeholders = idRmList.map(() => '?').join(',');
+
+            // Check if ANY of these id_rm exist in tbaixas with StatusLan IN (1, 2, 3)
+            const baixaExists = await client.query(`
+              SELECT 1 FROM dados_dachser.tbaixas b
+              WHERE b.IdLancamentoRM IN (${placeholders})
+                AND b.StatusLan IN (1, 2, 3)
+              LIMIT 1
+            `, idRmList);
+
+            if (baixaExists && baixaExists.length > 0) {
+              await client.execute(`
+                UPDATE dados_dachser.t_vouchers
+                SET status_baixa = 'REALIZADA', updated_at = NOW()
+                WHERE id = ?
+              `, [voucher.id]);
+              updatedCount++;
+              console.log(`[check_baixas_vouchers] Voucher ${voucher.numero_spo} -> REALIZADA`);
+            }
+          }
+
+          console.log(`[check_baixas_vouchers] Done. Checked ${pendingVouchers.length}, updated ${updatedCount}`);
+          result = { success: true, updated: updatedCount, checked: pendingVouchers.length };
+        } catch (e: any) {
+          console.error('[check_baixas_vouchers] Error:', e);
+          result = { success: false, error: e.message };
+        }
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
