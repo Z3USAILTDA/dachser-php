@@ -1,25 +1,39 @@
 
 
-## Plano: Alinhar stats do Pagamentos com os filtros da listagem
+## Plano: Mostrar FINANCEIRO + ROBO na tela de Processos para usuários Financeiro
 
-### Problema identificado
-
-Os filtros `sync_status = 'ATIVO'` e `voucher_master_id IS NULL OR ''` foram adicionados corretamente na query de **listagem** do `list_pagamentos` (linhas 9037-9038), mas a query de **stats** (linhas 9159-9165) tem seu próprio WHERE independente que **não inclui esses filtros**.
-
-Isso faz com que o card/contador de totais na aba Pagamentos mostre uma contagem maior que a aba Processos.
+### Problema
+Quando um usuário com role FINANCEIRO abre a aba Processos, o auto-filtro define `etapa: "FINANCEIRO"`. A função `filterVouchers` faz comparação estrita (`vEtapa !== fEtapa`), excluindo vouchers na etapa ROBO.
 
 ### Alteração
 
-**`supabase/functions/mariadb-proxy/index.ts`** — action `list_pagamentos`, query de stats (linhas 9159-9165)
+**`src/pages/esteira/EsteiraIndex.tsx`**
 
-Adicionar as duas condições faltantes ao WHERE da query de stats:
+1. **Auto-filtro de etapa** (linha ~661): Alterar o valor mapeado para FINANCEIRO incluir ROBO:
+   ```typescript
+   FINANCEIRO: "FINANCEIRO",
+   // Não muda aqui — mantém "FINANCEIRO" como valor do filtro
+   ```
 
-```sql
--- Linha 9160, após o AND NOT EXISTS...
-AND v.sync_status = 'ATIVO'
-AND (v.voucher_master_id IS NULL OR v.voucher_master_id = '')
-```
+2. **Lógica de filtragem** (linha ~1292-1295): Quando o filtro de etapa é "FINANCEIRO", aceitar também vouchers com etapa "ROBO":
+   ```typescript
+   if (filters.etapa !== "all") {
+     const vEtapa = (voucher.etapaAtual || "").trim().toUpperCase();
+     const fEtapa = filters.etapa.trim().toUpperCase();
+     // FINANCEIRO filter should also show ROBO stage
+     if (fEtapa === "FINANCEIRO") {
+       if (vEtapa !== "FINANCEIRO" && vEtapa !== "ROBO") return false;
+     } else {
+       if (vEtapa !== fEtapa) return false;
+     }
+   }
+   ```
+
+3. **Query de pagamentos** (backend `list_pagamentos`): Reverter para incluir ROBO novamente na condição de etapa, tanto na listagem quanto nas stats:
+   ```sql
+   v.etapa_atual IN ('FINANCEIRO', 'ROBO')
+   ```
 
 ### Resultado
-A contagem de vouchers nas stats da aba Pagamentos será idêntica à da aba Processos para a etapa FINANCEIRO.
+Usuários FINANCEIRO verão vouchers nas etapas FINANCEIRO e ROBO tanto na aba Processos quanto na aba Pagamentos, com contagens alinhadas.
 
