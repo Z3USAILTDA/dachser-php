@@ -148,7 +148,7 @@ export default function ComprovanteRobot() {
             },
           });
           if (spoResult?.vouchers?.length > 0) {
-            foundVoucher = spoResult.vouchers[0];
+            foundVoucher = spoResult.vouchers.find((v: any) => v.is_master) || spoResult.vouchers[0];
           }
         }
 
@@ -161,7 +161,7 @@ export default function ComprovanteRobot() {
             },
           });
           if (ndResult?.vouchers?.length > 0) {
-            foundVoucher = ndResult.vouchers[0];
+            foundVoucher = ndResult.vouchers.find((v: any) => v.is_master) || ndResult.vouchers[0];
           }
         }
 
