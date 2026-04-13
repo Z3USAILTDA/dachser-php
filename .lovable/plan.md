@@ -1,52 +1,24 @@
 
 
-## Plano: Automatizar Status Financeiro e Status Baixa
+## Plano: Cron de Sincronização de Status (1 min) + Expandir Lógica
 
-### Novos valores de status
+### O que será feito
 
-**Status Financeiro** (atual: PENDENTE, APROVADO, REJEITADO, BAIXADO):
-- `PENDENTE` → Estado inicial
-- `PROCESSADO` → Quando marcado como pronto (enviado ao Robô)
-- `CONCLUIDO` → Quando comprovante é anexado e processado
+1. **Expandir `check_baixas_vouchers` no `mariadb-proxy`** para se tornar `sync_voucher_statuses` — verificando **todos** os vouchers com `etapa_atual != 'A_PROCESSAR'` e corrigindo ambos os status:
 
-**Status Baixa** (atual: PENDENTE, BAIXA_MANUAL, BAIXA_REMESSA, BAIXADO_RM):
-- `PENDENTE` → Estado inicial
-- `BAIXA_SOLICITADA` → Quando comprovante é anexado
-- `REALIZADA` → Quando na tbaixas existe a baixa correspondente ao numero_spo
-- Manter `BAIXA_MANUAL` e `BAIXA_REMESSA` para compatibilidade
+   **Regras incrementais (nunca regride):**
+   - Se `etapa_atual IN ('ROBO','CONCLUIDO')` e `is_pronto_para_robo = 1` e `status_financeiro = 'PENDENTE'` → `status_financeiro = 'PROCESSADO'`
+   - Se `status_comprovante IN ('ANEXADO','VALIDADO')` e `status_financeiro != 'CONCLUIDO'` → `status_financeiro = 'CONCLUIDO'`
+   - Se `status_comprovante IN ('ANEXADO','VALIDADO')` e `status_baixa NOT IN ('BAIXA_SOLICITADA','REALIZADA')` → `status_baixa = 'BAIXA_SOLICITADA'`
+   - Se `status_baixa = 'BAIXA_SOLICITADA'` → checar tbaixas via id_rm (lógica existente) → `status_baixa = 'REALIZADA'`
 
-### Pontos de transição no código
+2. **Atualizar `voucher-check-baixas`** para chamar a nova action `sync_voucher_statuses`
 
-| Momento | Status Financeiro | Status Baixa |
-|---------|------------------|--------------|
-| Criação do voucher | PENDENTE | PENDENTE |
-| Financeiro envia ao Robô (`VoucherFinanceiroActions`) | **PROCESSADO** | mantém tipo definido (BAIXA_MANUAL/REMESSA) |
-| Comprovante anexado/salvo (`VoucherRoboActions` + `RoboTab`) | **CONCLUIDO** | **BAIXA_SOLICITADA** |
-| Baixa confirmada na tbaixas (cron ou integração RM) | CONCLUIDO | **REALIZADA** |
+3. **Criar cron job** a cada 1 minuto via SQL (pg_cron + pg_net) chamando a edge function `voucher-check-baixas`
 
 ### Arquivos a alterar
 
-1. **`src/types/voucher.ts`** — Atualizar tipos `StatusBaixa` e `StatusFinanceiro`
-
-2. **`src/components/esteira/VoucherFinanceiroActions.tsx`** (~linha 107) — Ao enviar para ROBO, setar `status_financeiro: "PROCESSADO"`
-
-3. **`src/components/esteira/VoucherRoboActions.tsx`** (~linha 263) — Ao salvar comprovante, setar `status_baixa: "BAIXA_SOLICITADA"` e `status_financeiro: "CONCLUIDO"`
-
-4. **`src/components/tabs/RoboTab.tsx`** (~linha 322) — Ao anexar comprovante pelo robô automático, setar `status_baixa: "BAIXA_SOLICITADA"` e `status_financeiro: "CONCLUIDO"`
-
-5. **`supabase/functions/voucher-integrate-rm/index.ts`** (~linha 464) — Ao confirmar baixa no RM, setar `status_baixa: "REALIZADA"` em vez de `BAIXADO_RM`
-
-6. **`supabase/functions/voucher-mariadb-setup/index.ts`** — Atualizar ENUMs (referência, já que a coluna é VARCHAR no MariaDB real)
-
-7. **`supabase/functions/mariadb-proxy/index.ts`** — Atualizar ALTER da coluna `status_baixa` para aceitar os novos valores
-
-8. **Badges/UI** — Atualizar `StatusComprovanteBadge`, filtros em `EsteiraReports` e `ReportsTab` para refletir novos valores
-
-9. **`src/components/esteira/FaturasDoDiaTab.tsx`** — Atualizar referências de `BAIXADO_RM` para `REALIZADA`
-
-10. **Verificação automática de tbaixas** — Criar/atualizar lógica (cron ou na consulta do robô) que checa se o `numero_spo` do voucher existe na `tbaixas` e, se sim, atualiza `status_baixa` para `REALIZADA`
-
-### Compatibilidade
-- Vouchers existentes com `BAIXADO_RM` continuarão funcionando (tratados como equivalente a `REALIZADA` onde necessário)
-- A coluna `status_baixa` já é VARCHAR no MariaDB real, então aceita os novos valores sem ALTER
+- `supabase/functions/mariadb-proxy/index.ts` — Substituir case `check_baixas_vouchers` por `sync_voucher_statuses` com as 4 regras
+- `supabase/functions/voucher-check-baixas/index.ts` — Alterar action para `sync_voucher_statuses`
+- SQL insert via Supabase tool — Criar cron job `cron.schedule('sync-voucher-statuses', '* * * * *', ...)`
 
