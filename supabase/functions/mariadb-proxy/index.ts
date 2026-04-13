@@ -8788,7 +8788,8 @@ Deno.serve(async (req) => {
         const updateResult = await client.execute(`
           UPDATE dados_dachser.t_dados_rm rm
           INNER JOIN dados_dachser.t_vouchers v 
-            ON (rm.nd = v.numero_spo OR rm.id_rm = v.id_rm)
+            ON (rm.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci 
+                OR rm.id_rm COLLATE utf8mb4_general_ci = v.id_rm COLLATE utf8mb4_general_ci)
           SET rm.tipo_exec = v.tipo_execucao_pagamento
           WHERE rm.tipo_exec IS NULL
             AND v.tipo_execucao_pagamento IS NOT NULL
