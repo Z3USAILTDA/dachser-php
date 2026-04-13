@@ -1112,7 +1112,7 @@ export const PagamentosTab = () => {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-orange-500 hover:text-orange-600 hover:bg-orange-500/10"
-                          title="Voltar para Operacional"
+                          title="Retornar voucher"
                           disabled={processingAction[pag.id]}
                           onClick={() => {
                             setVoltarOperacionalVoucher(pag);
