@@ -1,33 +1,51 @@
 
 
-## Plano: Adicionar coluna `tipo_exec` na `t_dados_rm`
+## Plano: Priorizar Masters na busca do Robô + Badge diferenciado
 
-### Alteração
+### Problema
+1. O badge na etapa robô não mudou — a alteração anterior do `getStatusBadge` com "MASTER" já está no código (linha 365-378), mas o `find_voucher_by_spo` retorna o voucher individual/filho PRIMEIRO, e o frontend pega `vouchers[0]` (linha 151). Então o master nunca aparece como resultado principal.
+2. O usuário quer que masters sejam priorizados na busca.
 
-**1. Backend — `supabase/functions/mariadb-proxy/index.ts`**
+### Alterações
 
-No case `insert_dados_rm` (~linha 8648):
-- Adicionar `tipo_exec` ao destructuring do body (aceitar valores `BAIXA_MANUAL`, `REMESSA_10H`, `REMESSA_15H`)
-- Na criação da tabela (linha 8722), adicionar: `tipo_exec VARCHAR(20) DEFAULT NULL`
-- Adicionar `ALTER TABLE ADD COLUMN IF NOT EXISTS` para tabelas existentes (junto aos outros ALTERs, linha 8742)
-- No INSERT (linha 8759), incluir `tipo_exec` na query e passar o valor
+**1. Backend — `supabase/functions/mariadb-proxy/index.ts` (~linha 9980)**
 
-**2. Frontend — enviar `tipo_exec` nas chamadas**
+Antes de retornar o resultado, reordenar o array `vouchers` para que masters (`is_master = true` ou `matched_via_child = true`) venham primeiro:
 
-- `src/components/esteira/VoucherFinanceiroActions.tsx` (linha 78-91): adicionar `tipo_exec: voucher.tipoExecucaoPagamento` no body do `insert_dados_rm`
-- `src/components/esteira/PagamentosTab.tsx` (linha 463-467): adicionar `tipo_exec: pagamento.tipo_execucao_pagamento` no body
-- `src/components/esteira/FaturasDoDiaTab.tsx` (linha 176-180): adicionar `tipo_exec` se disponível
+```typescript
+// Priorizar masters: mover para o início do array
+if (vouchers && vouchers.length > 1) {
+  vouchers.sort((a: any, b: any) => {
+    if (a.is_master && !b.is_master) return -1;
+    if (!a.is_master && b.is_master) return 1;
+    if (a.matched_via_child && !b.matched_via_child) return -1;
+    if (!a.matched_via_child && b.matched_via_child) return 1;
+    return 0;
+  });
+}
+```
 
-**3. Correção pendente da mensagem anterior**
+Inserir entre a linha 9980 e 9982 (antes do `result = { success: true, vouchers }`).
 
-Incluir também a correção da linha 21 do `VoucherFinanceiroActions.tsx` para reconhecer `"REMESSA"` como tipo válido de remessa (evitando que masters não sejam enviados para `t_dados_rm`).
+**2. Frontend — `src/pages/esteira/ComprovanteRobot.tsx` (linha 150-152)**
+
+Alterar a lógica de seleção do voucher para preferir master quando disponível:
+
+```typescript
+if (spoResult?.vouchers?.length > 0) {
+  // Prefer master voucher if available
+  foundVoucher = spoResult.vouchers.find((v: any) => v.is_master) || spoResult.vouchers[0];
+}
+```
+
+Mesma lógica para `find_voucher_by_nd` (linha 162).
 
 ### Resumo
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `mariadb-proxy/index.ts` | Coluna `tipo_exec` na tabela + INSERT |
-| `VoucherFinanceiroActions.tsx` | Enviar `tipo_exec` + fix `REMESSA` |
-| `PagamentosTab.tsx` | Enviar `tipo_exec` |
-| `FaturasDoDiaTab.tsx` | Enviar `tipo_exec` |
+| `mariadb-proxy/index.ts` | Reordenar resultados priorizando masters |
+| `ComprovanteRobot.tsx` | Preferir master no `vouchers[0]` selection |
+
+Duas alterações cirúrgicas, ~10 linhas no total.
 
