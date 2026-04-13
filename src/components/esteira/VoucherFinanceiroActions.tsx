@@ -108,6 +108,7 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
           voucher_id: voucher.id,
           etapa_atual: "ROBO",
           status_baixa: tipoBaixa,
+          status_financeiro: "PROCESSADO",
           comentarios_financeiro: comentarios || null,
           responsavel_financeiro_user_id: userData.id?.toString(),
           is_pronto_para_robo: true,

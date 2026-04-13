@@ -247,6 +247,8 @@ export function ReportsTab() {
                   <SelectItem value="BAIXA_MANUAL">Baixa Manual</SelectItem>
                   <SelectItem value="BAIXA_REMESSA">Baixa Remessa</SelectItem>
                   <SelectItem value="BAIXADO_RM">Baixado RM</SelectItem>
+                  <SelectItem value="BAIXA_SOLICITADA">Baixa Solicitada</SelectItem>
+                  <SelectItem value="REALIZADA">Realizada</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -290,17 +290,24 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Status Baixa</p>
-              <Badge variant="outline">{voucher.statusBaixa?.replace(/_/g, " ") || "PENDENTE"}</Badge>
+              <Badge variant="outline">{
+                voucher.statusBaixa === "BAIXA_SOLICITADA" ? "Baixa Solicitada" :
+                voucher.statusBaixa === "REALIZADA" ? "Realizada" :
+                voucher.statusBaixa?.replace(/_/g, " ") || "PENDENTE"
+              }</Badge>
             </div>
             {voucher.statusFinanceiro && (
               <div>
                 <p className="text-sm text-muted-foreground">Status Financeiro</p>
                 <Badge variant={
-                  voucher.statusFinanceiro === "APROVADO" ? "default" :
+                  voucher.statusFinanceiro === "APROVADO" || voucher.statusFinanceiro === "CONCLUIDO" ? "default" :
                   voucher.statusFinanceiro === "REJEITADO" ? "destructive" :
+                  voucher.statusFinanceiro === "PROCESSADO" ? "secondary" :
                   "secondary"
                 }>
-                  {voucher.statusFinanceiro}
+                  {voucher.statusFinanceiro === "PROCESSADO" ? "Processado" :
+                   voucher.statusFinanceiro === "CONCLUIDO" ? "Concluído" :
+                   voucher.statusFinanceiro}
                 </Badge>
               </div>
             )}

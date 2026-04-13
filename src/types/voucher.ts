@@ -17,9 +17,11 @@ export type StatusBaixa =
   | "PENDENTE" 
   | "BAIXA_MANUAL" 
   | "BAIXA_REMESSA" 
-  | "BAIXADO_RM";
+  | "BAIXADO_RM"
+  | "BAIXA_SOLICITADA"
+  | "REALIZADA";
 
-export type StatusFinanceiro = "PENDENTE" | "PROCESSANDO" | "CONCLUIDO" | "APROVADO" | "REJEITADO";
+export type StatusFinanceiro = "PENDENTE" | "PROCESSANDO" | "PROCESSADO" | "CONCLUIDO" | "APROVADO" | "REJEITADO";
 
 export type StatusEnvioCliente = "PENDENTE" | "ENVIADO" | "NAO_APLICAVEL" | "AGUARDANDO_CLIENTE" | "NAO_APLICA";
 

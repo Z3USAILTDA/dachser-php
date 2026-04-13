@@ -321,7 +321,8 @@ export function RoboTab() {
             updates: {
               status_comprovante: 'VALIDADO',
               etapa_atual: 'CONCLUIDO',
-              status_baixa: 'PROCESSADO',
+              status_baixa: 'BAIXA_SOLICITADA',
+              status_financeiro: 'CONCLUIDO',
             },
           },
         });
