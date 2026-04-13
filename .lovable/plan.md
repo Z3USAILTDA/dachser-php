@@ -1,23 +1,29 @@
 
 
-## Plano: Restringir acesso à tela Robô e aba Pagamento por role
+## Plano: Esconder apenas abas Robô e Pagamentos para usuários sem role
 
 ### Objetivo
-Usuários sem função (role) definida não poderão acessar:
-1. A página `/fin/esteira/robot` (ComprovanteRobot)
-2. A aba "Pagamento" nos detalhes do voucher
+Apenas as abas **Robô** e **Pagamentos** devem ser restritas. As demais abas (Comprovantes, Histórico Baixas, etc.) continuam visíveis para todos.
 
-### Alterações
+### Alteração
 
-**1. `src/pages/esteira/ComprovanteRobot.tsx`**
-- Importar `useUserRole` e verificar `hasEsteiraAccess`
-- Se o usuário não tiver role/acesso, exibir mensagem de acesso negado e redirecionar
+**`src/pages/esteira/EsteiraIndex.tsx`**
 
-**2. `src/pages/esteira/EsteiraVoucherDetails.tsx`**
-- Importar flags de role (já usa `useUserRole`)
-- Condicionar a renderização da `TabsTrigger` "Pagamento" (linhas 308-313) e do `TabsContent` "pagamento" (linhas 410-438) para que só apareçam se o usuário tiver uma role válida (`hasEsteiraAccess` ou roles específicas como FINANCEIRO, ADMIN, SUPERVISOR)
+1. **Filtrar abas no array** (linhas ~1925-1964): Adicionar `.filter()` antes do `.map()` para remover as abas `robo` e `pagamentos` quando `!hasEsteiraAccess`.
+
+2. **Proteger conteúdo** (linhas ~2115 e ~2117-2119): Envolver os renders de `robo` e `pagamentos` com `hasEsteiraAccess &&`.
+
+```text
+Antes:
+  [...tabs].map(tab => ...)
+
+Depois:
+  [...tabs].filter(tab => {
+    if ((tab.id === "robo" || tab.id === "pagamentos") && !hasEsteiraAccess) return false;
+    return true;
+  }).map(tab => ...)
+```
 
 ### Resultado
-- Usuários sem função verão os detalhes e histórico do voucher, mas não a aba de Pagamento
-- A rota `/fin/esteira/robot` redirecionará usuários sem função para a esteira principal
+Usuários sem role verão todas as abas exceto Robô e Pagamentos. As restrições já feitas em ComprovanteRobot.tsx e EsteiraVoucherDetails.tsx permanecem como estão.
 
