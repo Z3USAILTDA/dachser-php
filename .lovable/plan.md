@@ -1,51 +1,55 @@
 
 
-## Plano: Priorizar Masters na busca do Robô + Badge diferenciado
+## Plano: Corrigir priorização de Masters no Robô (ambos componentes)
 
-### Problema
-1. O badge na etapa robô não mudou — a alteração anterior do `getStatusBadge` com "MASTER" já está no código (linha 365-378), mas o `find_voucher_by_spo` retorna o voucher individual/filho PRIMEIRO, e o frontend pega `vouchers[0]` (linha 151). Então o master nunca aparece como resultado principal.
-2. O usuário quer que masters sejam priorizados na busca.
+### Causa raiz
+
+O problema está em **duas camadas** no `RoboTab.tsx` (aba Robô dentro de `/fin/esteira`) e parcialmente no `ComprovanteRobot.tsx`:
+
+1. **Seleção do voucher**: `searchVoucherBySPO` usa `data.vouchers.find(v => v.etapa_atual === 'ROBO')` — pega o primeiro ROBO, sem priorizar master.
+2. **Badge "Master"**: Só aparece quando `matched_via_child` é true (ou seja, quando o SPO pertence a um filho). Quando o master tem o mesmo `numero_spo` que o filename (match direto), `matched_via_child` NÃO é setado, e o badge mostra apenas "SPO XXXX".
+3. **Interface de retorno**: A função `searchVoucherBySPO` retorna `{ id, masterName?, childSpo? }` mas `masterName` só é preenchido quando `matched_via_child` — nunca quando o voucher é diretamente um master.
 
 ### Alterações
 
-**1. Backend — `supabase/functions/mariadb-proxy/index.ts` (~linha 9980)**
+**1. `src/components/tabs/RoboTab.tsx`** (aba Robô principal)
 
-Antes de retornar o resultado, reordenar o array `vouchers` para que masters (`is_master = true` ou `matched_via_child = true`) venham primeiro:
+- **Linhas 88-96 e 113-121**: Na seleção do voucher, priorizar master na etapa ROBO:
+  ```typescript
+  // Priorizar master na etapa ROBO
+  const roboVoucher = data.vouchers.find((v: any) => v.etapa_atual === 'ROBO' && v.is_master)
+    || data.vouchers.find((v: any) => v.etapa_atual === 'ROBO');
+  ```
 
-```typescript
-// Priorizar masters: mover para o início do array
-if (vouchers && vouchers.length > 1) {
-  vouchers.sort((a: any, b: any) => {
-    if (a.is_master && !b.is_master) return -1;
-    if (!a.is_master && b.is_master) return 1;
-    if (a.matched_via_child && !b.matched_via_child) return -1;
-    if (!a.matched_via_child && b.matched_via_child) return 1;
-    return 0;
-  });
-}
-```
+- **Linhas 91-95 e 116-120**: Incluir `is_master` direto no retorno:
+  ```typescript
+  return {
+    id: roboVoucher.id,
+    masterName: (roboVoucher.is_master || roboVoucher.matched_via_child) 
+      ? (roboVoucher.nome_master || roboVoucher.numero_spo) 
+      : undefined,
+    childSpo: roboVoucher.child_spo,
+  };
+  ```
 
-Inserir entre a linha 9980 e 9982 (antes do `result = { success: true, vouchers }`).
+- **Linha 386-393**: Badge já funciona baseado em `masterName` — com a correção acima, passará a funcionar para masters diretos também.
 
-**2. Frontend — `src/pages/esteira/ComprovanteRobot.tsx` (linha 150-152)**
+**2. `src/pages/esteira/ComprovanteRobot.tsx`** (página separada)
 
-Alterar a lógica de seleção do voucher para preferir master quando disponível:
+- **Linhas 150-152 e 163-165**: Já corrigidos anteriormente com `.find(v => v.is_master)`. Manter.
 
-```typescript
-if (spoResult?.vouchers?.length > 0) {
-  // Prefer master voucher if available
-  foundVoucher = spoResult.vouchers.find((v: any) => v.is_master) || spoResult.vouchers[0];
-}
-```
+**3. Backend `mariadb-proxy/index.ts`**
 
-Mesma lógica para `find_voucher_by_nd` (linha 162).
+- Já retorna `is_master` nas queries. Já tem sort de priorização. Sem alteração necessária.
 
 ### Resumo
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `mariadb-proxy/index.ts` | Reordenar resultados priorizando masters |
-| `ComprovanteRobot.tsx` | Preferir master no `vouchers[0]` selection |
+| `RoboTab.tsx` linhas 88-96 | Priorizar master ROBO no `find` |
+| `RoboTab.tsx` linhas 113-121 | Idem para busca por ND |
+| `RoboTab.tsx` linhas 91-95 | Preencher `masterName` quando `is_master` direto |
+| `ComprovanteRobot.tsx` | Sem alteração (já corrigido) |
 
-Duas alterações cirúrgicas, ~10 linhas no total.
+4 linhas alteradas no total. Fix cirúrgico.
 
