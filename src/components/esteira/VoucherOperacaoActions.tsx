@@ -252,11 +252,14 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
       if (!isMaster) {
         const hasFatura = voucher.anexos.some(a => a.tipo === "FATURA_DEMONSTRATIVO" || a.tipo === "FATURA");
         const hasBoleto = voucher.anexos.some(a => a.tipo === "BOLETO_INSTRUCOES" || a.tipo === "BOLETO");
+        const boletoObrigatorio = voucher.formaPagamento === "BOLETO";
 
-        if (!hasFatura || !hasBoleto) {
+        if (!hasFatura || (boletoObrigatorio && !hasBoleto)) {
           toast({
             title: "Anexos obrigatórios faltando",
-            description: "É necessário anexar Fatura/Demonstrativo e Boleto/Instruções",
+            description: boletoObrigatorio
+              ? "É necessário anexar Fatura/Demonstrativo e Boleto/Instruções"
+              : "É necessário anexar Fatura/Demonstrativo",
             variant: "destructive",
           });
           return;
