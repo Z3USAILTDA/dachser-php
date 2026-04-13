@@ -1148,17 +1148,17 @@ const EsteiraIndex = () => {
   };
 
   useEffect(() => {
-    if (hasEsteiraAccess) {
+    if (user) {
       loadVouchers();
     }
   }, [hasEsteiraAccess]);
 
   // Fetch DB stats only when dashboard tab is active (deferred to reduce initial load)
   useEffect(() => {
-    if (hasEsteiraAccess && activeTab === "dashboard") {
+    if (user && activeTab === "dashboard") {
       fetchFinDbStats();
     }
-  }, [hasEsteiraAccess, activeTab]);
+  }, [user, activeTab]);
 
   // Reload vouchers when tab becomes visible after being hidden (tab switch only)
   // Removed window focus listener as it was triggering too frequently (e.g., when closing dialogs)
@@ -1499,7 +1499,7 @@ const EsteiraIndex = () => {
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>;
   }
-  if (!hasEsteiraAccess) {
+  if (!user) {
     return <div className="min-h-screen flex items-center justify-center bg-[#050608] relative overflow-hidden">
         {/* Background */}
         <div className="absolute inset-0">
@@ -1511,10 +1511,9 @@ const EsteiraIndex = () => {
           <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-destructive/10 border border-destructive/30 flex items-center justify-center">
             <ShieldX className="h-10 w-10 text-destructive" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-3">Acesso Não Autorizado</h1>
+          <h1 className="text-2xl font-bold text-foreground mb-3">Login Necessário</h1>
           <p className="text-muted-foreground mb-6">
-            Você não possui permissão para acessar a Esteira de Vouchers. Entre em contato com um administrador para
-            solicitar acesso.
+            Você precisa estar logado para acessar a Esteira de Vouchers.
           </p>
           <Button onClick={() => navigate("/dashboard")} className="gap-2">
             <ArrowLeft className="h-4 w-4" />
