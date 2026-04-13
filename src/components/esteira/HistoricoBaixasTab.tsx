@@ -121,13 +121,13 @@ export const HistoricoBaixasTab = () => {
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "-";
     try {
-      const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (isoMatch) {
-        const [, y, m, d] = isoMatch;
+      // Extrair apenas YYYY-MM-DD do valor bruto, sem conversão de fuso
+      const match = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        const [, y, m, d] = match;
         return `${d}/${m}/${y}`;
       }
-      const date = parseISO(dateStr);
-      return format(date, "dd/MM/yyyy", { locale: ptBR });
+      return dateStr;
     } catch {
       return dateStr;
     }
