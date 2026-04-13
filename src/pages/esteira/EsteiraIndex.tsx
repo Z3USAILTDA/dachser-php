@@ -1185,7 +1185,10 @@ const EsteiraIndex = () => {
 
   // Apply role-based filtering first
   const roleFilteredVouchers = useMemo(() => {
-    if (isAdmin || isGestor) {
+    // If there's a search query, show ALL vouchers (no role-based stage filtering)
+    const hasSearchQuery = filters.search && filters.search.trim().length > 0;
+
+    if (isAdmin || isGestor || hasSearchQuery) {
       return vouchers;
     }
 
@@ -1224,8 +1227,9 @@ const EsteiraIndex = () => {
       if (filters.etapa && filters.etapa !== "all") return vouchers;
       return vouchers.filter(v => v.etapaAtual === "FISCAL" || v.etapaAtual === "AJUSTE_FISCAL" || v.responsavelFiscalUserId === currentUserId);
     }
+    // Users without any role: show all (view-only access)
     return vouchers;
-  }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro, filters.etapa]);
+  }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro, filters.etapa, filters.search]);
   // Map de masterId → SPOs dos filhos para busca expandida (carregado via API)
   const [masterChildSPOsMap, setMasterChildSPOsMap] = useState<Map<string, string[]>>(new Map());
   useEffect(() => {
