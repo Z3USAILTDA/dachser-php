@@ -1,29 +1,25 @@
 
 
-## Plano: Alinhar contagem de processos FINANCEIRO entre Processos e Pagamentos
+## Plano: Alinhar stats do Pagamentos com os filtros da listagem
 
 ### Problema identificado
 
-A query da aba **Processos** (`get_vouchers_combined`) filtra vouchers com:
-- `sync_status = "ATIVO"` 
-- `voucher_master_id IS NULL OR voucher_master_id = ""` (exclui filhos de masters)
-- Exclui CONCLUIDO com mais de 24h
+Os filtros `sync_status = 'ATIVO'` e `voucher_master_id IS NULL OR ''` foram adicionados corretamente na query de **listagem** do `list_pagamentos` (linhas 9037-9038), mas a query de **stats** (linhas 9159-9165) tem seu próprio WHERE independente que **não inclui esses filtros**.
 
-A query da aba **Pagamentos** (`list_pagamentos`) **não aplica** esses filtros — inclui filhos de masters e vouchers sem `sync_status = "ATIVO"`.
-
-Isso faz a aba Pagamentos mostrar mais vouchers na etapa FINANCEIRO do que a aba Processos.
+Isso faz com que o card/contador de totais na aba Pagamentos mostre uma contagem maior que a aba Processos.
 
 ### Alteração
 
-**`supabase/functions/mariadb-proxy/index.ts`** — action `list_pagamentos`
+**`supabase/functions/mariadb-proxy/index.ts`** — action `list_pagamentos`, query de stats (linhas 9159-9165)
 
-Adicionar os mesmos filtros de consistência na query de pagamentos:
+Adicionar as duas condições faltantes ao WHERE da query de stats:
 
-1. Adicionar condição `v.sync_status = 'ATIVO'` 
-2. Adicionar condição `(v.voucher_master_id IS NULL OR v.voucher_master_id = '')` para excluir filhos (masters já representam o grupo)
-
-Essas condições serão adicionadas ao array `conditions` (linha ~9034) para afetar tanto a listagem quanto as stats.
+```sql
+-- Linha 9160, após o AND NOT EXISTS...
+AND v.sync_status = 'ATIVO'
+AND (v.voucher_master_id IS NULL OR v.voucher_master_id = '')
+```
 
 ### Resultado
-Ambas as abas mostrarão a mesma quantidade de vouchers na etapa FINANCEIRO.
+A contagem de vouchers nas stats da aba Pagamentos será idêntica à da aba Processos para a etapa FINANCEIRO.
 
