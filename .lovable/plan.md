@@ -1,24 +1,23 @@
 
 
-## Plano: Cron de Sincronização de Status (1 min) + Expandir Lógica
+## Plano: Restringir acesso à tela Robô e aba Pagamento por role
 
-### O que será feito
+### Objetivo
+Usuários sem função (role) definida não poderão acessar:
+1. A página `/fin/esteira/robot` (ComprovanteRobot)
+2. A aba "Pagamento" nos detalhes do voucher
 
-1. **Expandir `check_baixas_vouchers` no `mariadb-proxy`** para se tornar `sync_voucher_statuses` — verificando **todos** os vouchers com `etapa_atual != 'A_PROCESSAR'` e corrigindo ambos os status:
+### Alterações
 
-   **Regras incrementais (nunca regride):**
-   - Se `etapa_atual IN ('ROBO','CONCLUIDO')` e `is_pronto_para_robo = 1` e `status_financeiro = 'PENDENTE'` → `status_financeiro = 'PROCESSADO'`
-   - Se `status_comprovante IN ('ANEXADO','VALIDADO')` e `status_financeiro != 'CONCLUIDO'` → `status_financeiro = 'CONCLUIDO'`
-   - Se `status_comprovante IN ('ANEXADO','VALIDADO')` e `status_baixa NOT IN ('BAIXA_SOLICITADA','REALIZADA')` → `status_baixa = 'BAIXA_SOLICITADA'`
-   - Se `status_baixa = 'BAIXA_SOLICITADA'` → checar tbaixas via id_rm (lógica existente) → `status_baixa = 'REALIZADA'`
+**1. `src/pages/esteira/ComprovanteRobot.tsx`**
+- Importar `useUserRole` e verificar `hasEsteiraAccess`
+- Se o usuário não tiver role/acesso, exibir mensagem de acesso negado e redirecionar
 
-2. **Atualizar `voucher-check-baixas`** para chamar a nova action `sync_voucher_statuses`
+**2. `src/pages/esteira/EsteiraVoucherDetails.tsx`**
+- Importar flags de role (já usa `useUserRole`)
+- Condicionar a renderização da `TabsTrigger` "Pagamento" (linhas 308-313) e do `TabsContent` "pagamento" (linhas 410-438) para que só apareçam se o usuário tiver uma role válida (`hasEsteiraAccess` ou roles específicas como FINANCEIRO, ADMIN, SUPERVISOR)
 
-3. **Criar cron job** a cada 1 minuto via SQL (pg_cron + pg_net) chamando a edge function `voucher-check-baixas`
-
-### Arquivos a alterar
-
-- `supabase/functions/mariadb-proxy/index.ts` — Substituir case `check_baixas_vouchers` por `sync_voucher_statuses` com as 4 regras
-- `supabase/functions/voucher-check-baixas/index.ts` — Alterar action para `sync_voucher_statuses`
-- SQL insert via Supabase tool — Criar cron job `cron.schedule('sync-voucher-statuses', '* * * * *', ...)`
+### Resultado
+- Usuários sem função verão os detalhes e histórico do voucher, mas não a aba de Pagamento
+- A rota `/fin/esteira/robot` redirecionará usuários sem função para a esteira principal
 
