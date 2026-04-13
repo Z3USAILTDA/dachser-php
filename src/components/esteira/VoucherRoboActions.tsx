@@ -19,18 +19,19 @@ import { RetornarPendenteDialog } from "./RetornarPendenteDialog";
 interface VoucherRoboActionsProps {
   voucher: Voucher;
   onUpdate: () => void;
+  canRetornarPendente?: boolean;
 }
 
-export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProps) => {
+export const VoucherRoboActions = ({ voucher, onUpdate, canRetornarPendente = true }: VoucherRoboActionsProps) => {
   const [loading, setLoading] = useState(false);
   const [uploadingComprovante, setUploadingComprovante] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
   const [showRetornarDialog, setShowRetornarDialog] = useState(false);
-  const [deletingComprovante, setDeletingComprovante] = useState(false);
+  const [deletingComprovante, setDeletingComprovante] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const hasComprovante = voucher.anexos.some((a) => a.tipo === "COMPROVANTE");
-  const comprovanteFile = voucher.anexos.find((a) => a.tipo === "COMPROVANTE");
+  const comprovantes = voucher.anexos.filter((a) => a.tipo === "COMPROVANTE");
+  const hasComprovante = comprovantes.length > 0;
   const currentStatus = voucher.statusComprovante || "PENDENTE";
 
   // Get user data from localStorage (MariaDB auth)
