@@ -9033,7 +9033,9 @@ Deno.serve(async (req) => {
         // Filtrar FINANCEIRO ou ROBO sem comprovante, e excluir modal ADM
         const conditions: string[] = [
           "(v.etapa_atual = 'FINANCEIRO' OR (v.etapa_atual = 'ROBO' AND NOT EXISTS (SELECT 1 FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id AND a.tipo = 'COMPROVANTE')))",
-          "(dfv.modal IS NULL OR dfv.modal <> 'ADM')"
+          "(dfv.modal IS NULL OR dfv.modal <> 'ADM')",
+          "v.sync_status = 'ATIVO'",
+          "(v.voucher_master_id IS NULL OR v.voucher_master_id = '')"
         ];
         const params: (string | number)[] = [];
 
