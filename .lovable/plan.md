@@ -1,29 +1,29 @@
 
 
-## Plano: Esconder apenas abas Robô e Pagamentos para usuários sem role
+## Plano: Alinhar contagem de processos FINANCEIRO entre Processos e Pagamentos
 
-### Objetivo
-Apenas as abas **Robô** e **Pagamentos** devem ser restritas. As demais abas (Comprovantes, Histórico Baixas, etc.) continuam visíveis para todos.
+### Problema identificado
+
+A query da aba **Processos** (`get_vouchers_combined`) filtra vouchers com:
+- `sync_status = "ATIVO"` 
+- `voucher_master_id IS NULL OR voucher_master_id = ""` (exclui filhos de masters)
+- Exclui CONCLUIDO com mais de 24h
+
+A query da aba **Pagamentos** (`list_pagamentos`) **não aplica** esses filtros — inclui filhos de masters e vouchers sem `sync_status = "ATIVO"`.
+
+Isso faz a aba Pagamentos mostrar mais vouchers na etapa FINANCEIRO do que a aba Processos.
 
 ### Alteração
 
-**`src/pages/esteira/EsteiraIndex.tsx`**
+**`supabase/functions/mariadb-proxy/index.ts`** — action `list_pagamentos`
 
-1. **Filtrar abas no array** (linhas ~1925-1964): Adicionar `.filter()` antes do `.map()` para remover as abas `robo` e `pagamentos` quando `!hasEsteiraAccess`.
+Adicionar os mesmos filtros de consistência na query de pagamentos:
 
-2. **Proteger conteúdo** (linhas ~2115 e ~2117-2119): Envolver os renders de `robo` e `pagamentos` com `hasEsteiraAccess &&`.
+1. Adicionar condição `v.sync_status = 'ATIVO'` 
+2. Adicionar condição `(v.voucher_master_id IS NULL OR v.voucher_master_id = '')` para excluir filhos (masters já representam o grupo)
 
-```text
-Antes:
-  [...tabs].map(tab => ...)
-
-Depois:
-  [...tabs].filter(tab => {
-    if ((tab.id === "robo" || tab.id === "pagamentos") && !hasEsteiraAccess) return false;
-    return true;
-  }).map(tab => ...)
-```
+Essas condições serão adicionadas ao array `conditions` (linha ~9034) para afetar tanto a listagem quanto as stats.
 
 ### Resultado
-Usuários sem role verão todas as abas exceto Robô e Pagamentos. As restrições já feitas em ComprovanteRobot.tsx e EsteiraVoucherDetails.tsx permanecem como estão.
+Ambas as abas mostrarão a mesma quantidade de vouchers na etapa FINANCEIRO.
 
