@@ -43,13 +43,8 @@ export const HistoricoBaixasTab = () => {
   const itemsPerPage = 20;
   const { toast } = useToast();
 
-  // Modal sem voucher
-  const [modalOpen, setModalOpen] = useState(false);
-  const [semVoucherData, setSemVoucherData] = useState<any[]>([]);
-  const [semVoucherLoading, setSemVoucherLoading] = useState(false);
-  const [semVoucherSearch, setSemVoucherSearch] = useState("");
-  const [semVoucherPage, setSemVoucherPage] = useState(1);
-  const semVoucherPerPage = 15;
+
+
 
   const loadBaixas = async () => {
     try {
@@ -241,39 +236,8 @@ export const HistoricoBaixasTab = () => {
     });
   };
 
-  const loadSemVoucher = async () => {
-    try {
-      setSemVoucherLoading(true);
-      setSemVoucherSearch("");
-      setSemVoucherPage(1);
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_baixas_sem_voucher" }
-      });
-      if (error) throw error;
-      setSemVoucherData(data?.data || []);
-      setModalOpen(true);
-    } catch (err) {
-      console.error("Erro ao carregar baixas sem voucher:", err);
-      toast({ title: "Erro", description: "Falha ao carregar baixas sem voucher", variant: "destructive" });
-    } finally {
-      setSemVoucherLoading(false);
-    }
-  };
 
-  const filteredSemVoucher = useMemo(() => {
-    return semVoucherData.filter(b => {
-      if (semVoucherSearch === "") return true;
-      const s = semVoucherSearch.toLowerCase();
-      return String(b.IdLancamentoRM).includes(s) ||
-        b.usuario_baixa?.toLowerCase().includes(s);
-    });
-  }, [semVoucherData, semVoucherSearch]);
 
-  const semVoucherTotalPages = Math.ceil(filteredSemVoucher.length / semVoucherPerPage);
-  const paginatedSemVoucher = useMemo(() => {
-    const start = (semVoucherPage - 1) * semVoucherPerPage;
-    return filteredSemVoucher.slice(start, start + semVoucherPerPage);
-  }, [filteredSemVoucher, semVoucherPage]);
 
   return (
     <div className="space-y-4">
