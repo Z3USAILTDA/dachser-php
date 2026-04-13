@@ -182,33 +182,35 @@ export const VoucherRoboActions = ({ voucher, onUpdate, canRetornarPendente = tr
     }
   };
 
-  const handleRemoverComprovante = async () => {
-    if (!comprovanteFile) return;
+  const handleRemoverComprovante = async (comprovanteToRemove: typeof comprovantes[0]) => {
+    if (!comprovanteToRemove) return;
 
     try {
-      setDeletingComprovante(true);
+      setDeletingComprovante(comprovanteToRemove.id);
       const userData = getUserData();
 
       // Delete attachment from MariaDB
       const { error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "delete_voucher_anexo",
-          anexo_id: comprovanteFile.id,
+          anexo_id: comprovanteToRemove.id,
         },
       });
 
       if (error) throw error;
 
-      // Update status to PENDENTE
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "update_voucher_esteira",
-          voucher_id: voucher.id,
-          updates: {
-            status_comprovante: "PENDENTE",
+      // If no more comprovantes after removal, update status to PENDENTE
+      if (comprovantes.length <= 1) {
+        await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "update_voucher_esteira",
+            voucher_id: voucher.id,
+            updates: {
+              status_comprovante: "PENDENTE",
+            },
           },
-        },
-      });
+        });
+      }
 
       // Log the action
       await supabase.functions.invoke("mariadb-proxy", {
@@ -218,13 +220,13 @@ export const VoucherRoboActions = ({ voucher, onUpdate, canRetornarPendente = tr
           user_id: userData.id?.toString(),
           user_name: userData.username,
           acao: "COMPROVANTE_REMOVIDO",
-          detalhe: `Comprovante ${comprovanteFile.fileName} removido para substituição`,
+          detalhe: `Comprovante ${comprovanteToRemove.fileName} removido`,
         },
       });
 
       toast({
         title: "Comprovante removido!",
-        description: "Você pode anexar um novo comprovante",
+        description: "Comprovante removido com sucesso",
       });
 
       onUpdate();
@@ -235,7 +237,7 @@ export const VoucherRoboActions = ({ voucher, onUpdate, canRetornarPendente = tr
         variant: "destructive",
       });
     } finally {
-      setDeletingComprovante(false);
+      setDeletingComprovante(null);
     }
   };
 
