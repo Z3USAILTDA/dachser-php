@@ -398,7 +398,7 @@ export const validarProntoParaRobo = (voucher: Voucher): ValidacaoProntoParaRobo
   }
 
   // 3. Para REMESSA: dados bancários para transferência
-  if ((voucher.tipoExecucaoPagamento === 'REMESSA_10H' || voucher.tipoExecucaoPagamento === 'REMESSA_15H') && !isBoleto(voucher.formaPagamento)) {
+  if ((voucher.tipoExecucaoPagamento === 'REMESSA' || voucher.tipoExecucaoPagamento === 'REMESSA_10H' || voucher.tipoExecucaoPagamento === 'REMESSA_15H') && !isBoleto(voucher.formaPagamento)) {
     const db = voucher.dadosBancarios;
     if (!db?.banco || !db?.agencia || !db?.conta) {
       pendencias.push("Dados bancários incompletos para remessa");
