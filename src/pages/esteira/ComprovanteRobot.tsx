@@ -86,6 +86,32 @@ export default function ComprovanteRobot() {
     return () => clearTimeout(timer);
   }, [searchVoucher]);
 
+  // Access guard - after all hooks
+  if (roleLoading) {
+    return (
+      <PageLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  if (!hasEsteiraAccess) {
+    return (
+      <PageLayout>
+        <div className="flex flex-col items-center justify-center h-64 gap-4">
+          <ShieldAlert className="h-16 w-16 text-destructive" />
+          <h2 className="text-xl font-semibold text-foreground">Acesso Negado</h2>
+          <p className="text-muted-foreground">Você não possui permissão para acessar esta página.</p>
+          <Button onClick={() => navigate("/fin/esteira")} variant="outline">
+            Voltar para Esteira
+          </Button>
+        </div>
+      </PageLayout>
+    );
+  }
+
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(event.target.files || []);
     if (selectedFiles.length === 0) return;
