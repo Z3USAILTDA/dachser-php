@@ -1,33 +1,33 @@
 
 
-## Plano: Melhorar visualização de identificação Master vs Individual no Robô
-
-### Problema
-Quando o robô identifica um arquivo (ex: `20263776675.pdf`), exibe apenas `SPO 20263776675` sem indicar se encontrou um voucher individual ou se redirecionou para um Master (via filho). Isso confunde o usuário.
-
-### Contexto técnico
-O backend (`find_voucher_by_spo`) já retorna `is_master`, `matched_via_child` e `child_spo` quando o match é via filho→master. Porém o frontend ignora esses campos e exibe apenas o badge genérico.
-
-### Solução
-Alterar o badge de status em `ComprovanteRobot.tsx` para diferenciar visualmente:
-
-1. **Voucher Individual**: Badge verde `SPO 20263776675` (como hoje)
-2. **Voucher Master (match direto)**: Badge azul/roxo `MASTER · SPO 20263776675`
-3. **Voucher Master (match via filho)**: Badge azul/roxo `MASTER · SPO 20262478837` com subtexto explicativo: `Identificado via filho 20263776675`
+## Plano: Adicionar coluna `tipo_exec` na `t_dados_rm`
 
 ### Alteração
 
-**Arquivo:** `src/pages/esteira/ComprovanteRobot.tsx`
+**1. Backend — `supabase/functions/mariadb-proxy/index.ts`**
 
-- Na interface `VoucherMatch`, adicionar campos `is_master`, `matched_via_child`, `child_spo` (já vêm do backend)
-- Na função `getStatusBadge`, quando `voucherInfo.is_master`:
-  - Badge com cor diferenciada (azul/roxo) e prefixo "MASTER"
-  - Se `matched_via_child`, mostrar texto adicional indicando o filho usado no match
-- Na info abaixo do badge, incluir o `child_spo` quando aplicável
+No case `insert_dados_rm` (~linha 8648):
+- Adicionar `tipo_exec` ao destructuring do body (aceitar valores `BAIXA_MANUAL`, `REMESSA_10H`, `REMESSA_15H`)
+- Na criação da tabela (linha 8722), adicionar: `tipo_exec VARCHAR(20) DEFAULT NULL`
+- Adicionar `ALTER TABLE ADD COLUMN IF NOT EXISTS` para tabelas existentes (junto aos outros ALTERs, linha 8742)
+- No INSERT (linha 8759), incluir `tipo_exec` na query e passar o valor
+
+**2. Frontend — enviar `tipo_exec` nas chamadas**
+
+- `src/components/esteira/VoucherFinanceiroActions.tsx` (linha 78-91): adicionar `tipo_exec: voucher.tipoExecucaoPagamento` no body do `insert_dados_rm`
+- `src/components/esteira/PagamentosTab.tsx` (linha 463-467): adicionar `tipo_exec: pagamento.tipo_execucao_pagamento` no body
+- `src/components/esteira/FaturasDoDiaTab.tsx` (linha 176-180): adicionar `tipo_exec` se disponível
+
+**3. Correção pendente da mensagem anterior**
+
+Incluir também a correção da linha 21 do `VoucherFinanceiroActions.tsx` para reconhecer `"REMESSA"` como tipo válido de remessa (evitando que masters não sejam enviados para `t_dados_rm`).
+
+### Resumo
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/pages/esteira/ComprovanteRobot.tsx` | Badge diferenciado para Master vs Individual |
-
-Uma alteração em 1 arquivo, ~15 linhas.
+| `mariadb-proxy/index.ts` | Coluna `tipo_exec` na tabela + INSERT |
+| `VoucherFinanceiroActions.tsx` | Enviar `tipo_exec` + fix `REMESSA` |
+| `PagamentosTab.tsx` | Enviar `tipo_exec` |
+| `FaturasDoDiaTab.tsx` | Enviar `tipo_exec` |
 
