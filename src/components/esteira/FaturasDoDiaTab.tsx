@@ -200,7 +200,7 @@ export const FaturasDoDiaTab = () => {
         body: {
           action: "update_voucher_esteira",
           voucher_id: fatura.id,
-          status_baixa: "BAIXADO_RM"
+          status_baixa: "REALIZADA"
         }
       });
 
