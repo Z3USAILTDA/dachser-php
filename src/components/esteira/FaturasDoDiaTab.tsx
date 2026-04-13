@@ -183,7 +183,8 @@ export const FaturasDoDiaTab = () => {
           pix_tipo_chave: null,
           forma_pag: fatura.forma_pagamento,
           fornecedor: fatura.fornecedor,
-          regras_forma_pag: regraFormaPag
+          regras_forma_pag: regraFormaPag,
+          tipo_exec: (fatura as any).tipo_execucao_pagamento || null
         }
       });
 
