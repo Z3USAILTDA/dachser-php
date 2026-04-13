@@ -1255,7 +1255,7 @@ export const PagamentosTab = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Voltar para Operacional Dialog */}
+      {/* Retornar Voucher Dialog */}
       <Dialog 
         open={voltarOperacionalDialogOpen} 
         onOpenChange={(open) => {
@@ -1264,6 +1264,7 @@ export const PagamentosTab = () => {
             if (!open) {
               setVoltarOperacionalJustificativa("");
               setVoltarOperacionalVoucher(null);
+              setVoltarDestinoEtapa("OPERACAO");
             }
           }
         }}
@@ -1272,7 +1273,7 @@ export const PagamentosTab = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Undo2 className="h-5 w-5 text-orange-500" />
-              Voltar para Operacional
+              Retornar Voucher
             </DialogTitle>
             <DialogDescription>
               Voucher/SPO: <strong>{voltarOperacionalVoucher?.numero_spo}</strong>
@@ -1280,9 +1281,24 @@ export const PagamentosTab = () => {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                Retornar para <span className="text-red-500">*</span>
+              </Label>
+              <Select value={voltarDestinoEtapa} onValueChange={(v) => setVoltarDestinoEtapa(v as "OPERACAO" | "FISCAL")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="OPERACAO">Operacional</SelectItem>
+                  <SelectItem value="FISCAL">Fiscal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
               <p className="text-sm text-orange-700 dark:text-orange-300">
-                Ao retornar para o Operacional, o voucher sairá da etapa Financeiro e voltará para revisão da equipe de Operações.
+                Ao retornar, o voucher sairá da etapa Financeiro e voltará para revisão da equipe de {voltarDestinoEtapa === "FISCAL" ? "Fiscal" : "Operações"}.
               </p>
             </div>
 
@@ -1292,7 +1308,7 @@ export const PagamentosTab = () => {
               </Label>
               <Textarea
                 id="voltarJustificativa"
-                placeholder="Descreva o motivo para retornar o voucher ao Operacional (mínimo 10 caracteres)..."
+                placeholder={`Descreva o motivo para retornar o voucher (mínimo 10 caracteres)...`}
                 value={voltarOperacionalJustificativa}
                 onChange={(e) => setVoltarOperacionalJustificativa(e.target.value)}
                 rows={4}
@@ -1311,6 +1327,7 @@ export const PagamentosTab = () => {
                 setVoltarOperacionalDialogOpen(false);
                 setVoltarOperacionalJustificativa("");
                 setVoltarOperacionalVoucher(null);
+                setVoltarDestinoEtapa("OPERACAO");
               }}
               disabled={voltarOperacionalLoading}
             >
