@@ -8775,6 +8775,31 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'backfill_tipo_exec_dados_rm': {
+        // Ensure tipo_exec column exists
+        try {
+          await client.execute(`ALTER TABLE dados_dachser.t_dados_rm ADD COLUMN tipo_exec VARCHAR(20) DEFAULT NULL AFTER regras_forma_pag`);
+          console.log('Added tipo_exec column');
+        } catch (e) {
+          console.log('tipo_exec column already exists');
+        }
+
+        // Update t_dados_rm.tipo_exec based on matching voucher's tipo_execucao_pagamento
+        const updateResult = await client.execute(`
+          UPDATE dados_dachser.t_dados_rm rm
+          INNER JOIN dados_dachser.t_vouchers v 
+            ON (rm.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci 
+                OR rm.id_rm COLLATE utf8mb4_general_ci = v.id_rm COLLATE utf8mb4_general_ci)
+          SET rm.tipo_exec = v.tipo_execucao_pagamento
+          WHERE rm.tipo_exec IS NULL
+            AND v.tipo_execucao_pagamento IS NOT NULL
+        `);
+
+        console.log('Backfill tipo_exec result:', updateResult);
+        result = { success: true, affected: updateResult?.affectedRows || 0 };
+        break;
+      }
+
       case 'sync_baixa_remessa_to_dados_rm': {
         // Find vouchers with BAIXA_REMESSA that are not yet in t_dados_rm
         console.log('Syncing BAIXA_REMESSA vouchers to t_dados_rm...');
