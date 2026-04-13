@@ -9030,9 +9030,9 @@ Deno.serve(async (req) => {
         };
 
         const offset = (page - 1) * perPage;
-        // Filtrar FINANCEIRO ou ROBO sem comprovante, e excluir modal ADM
+        // Filtrar apenas FINANCEIRO para manter a mesma contagem da aba Processos, e excluir modal ADM
         const conditions: string[] = [
-          "(v.etapa_atual = 'FINANCEIRO' OR (v.etapa_atual = 'ROBO' AND NOT EXISTS (SELECT 1 FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id AND a.tipo = 'COMPROVANTE')))",
+          "v.etapa_atual = 'FINANCEIRO'",
           "(dfv.modal IS NULL OR dfv.modal <> 'ADM')",
           "v.sync_status = 'ATIVO'",
           "(v.voucher_master_id IS NULL OR v.voucher_master_id = '')"
@@ -9157,7 +9157,7 @@ Deno.serve(async (req) => {
             -- Total valor
             SUM(COALESCE(v.valor, 0)) as valor_total
           FROM dados_dachser.t_vouchers v
-          WHERE (v.etapa_atual = 'FINANCEIRO' OR (v.etapa_atual = 'ROBO' AND NOT EXISTS (SELECT 1 FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id AND a.tipo = 'COMPROVANTE')))
+          WHERE v.etapa_atual = 'FINANCEIRO'
           AND NOT EXISTS (
             SELECT 1 FROM dados_dachser.t_dados_financeiro_voucher dfv 
             WHERE dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci 
