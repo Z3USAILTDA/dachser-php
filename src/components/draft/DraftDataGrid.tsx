@@ -671,10 +671,11 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
                     variant="ghost"
                     size="sm"
                     className="h-7 w-7 p-0 shrink-0"
-                    onClick={() => {
+                    onClick={async () => {
                       const hash = detailsData.apiMetadata?.transactionId || selectedMBL?.trackingData?.transaction_id;
                       if (hash) {
-                        navigator.clipboard.writeText(hash);
+                        const { copyToClipboard } = await import('@/utils/clipboard');
+                        await copyToClipboard(hash);
                         toast.success("Hash copiado!");
                       }
                     }}

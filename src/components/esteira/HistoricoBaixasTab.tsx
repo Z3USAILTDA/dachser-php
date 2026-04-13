@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { RefreshCw, Search, Download, Calendar, DollarSign, CheckCircle2, CircleDot, AlertTriangle } from "lucide-react";
+import { RefreshCw, Search, Download, Calendar, DollarSign, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { TablePagination } from "@/components/layout/TablePagination";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
 import * as XLSX from "xlsx-js-style";
 
 interface BaixaRecord {
@@ -43,13 +43,8 @@ export const HistoricoBaixasTab = () => {
   const itemsPerPage = 20;
   const { toast } = useToast();
 
-  // Modal sem voucher
-  const [modalOpen, setModalOpen] = useState(false);
-  const [semVoucherData, setSemVoucherData] = useState<any[]>([]);
-  const [semVoucherLoading, setSemVoucherLoading] = useState(false);
-  const [semVoucherSearch, setSemVoucherSearch] = useState("");
-  const [semVoucherPage, setSemVoucherPage] = useState(1);
-  const semVoucherPerPage = 15;
+
+
 
   const loadBaixas = async () => {
     try {
@@ -241,39 +236,8 @@ export const HistoricoBaixasTab = () => {
     });
   };
 
-  const loadSemVoucher = async () => {
-    try {
-      setSemVoucherLoading(true);
-      setSemVoucherSearch("");
-      setSemVoucherPage(1);
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_baixas_sem_voucher" }
-      });
-      if (error) throw error;
-      setSemVoucherData(data?.data || []);
-      setModalOpen(true);
-    } catch (err) {
-      console.error("Erro ao carregar baixas sem voucher:", err);
-      toast({ title: "Erro", description: "Falha ao carregar baixas sem voucher", variant: "destructive" });
-    } finally {
-      setSemVoucherLoading(false);
-    }
-  };
 
-  const filteredSemVoucher = useMemo(() => {
-    return semVoucherData.filter(b => {
-      if (semVoucherSearch === "") return true;
-      const s = semVoucherSearch.toLowerCase();
-      return String(b.IdLancamentoRM).includes(s) ||
-        b.usuario_baixa?.toLowerCase().includes(s);
-    });
-  }, [semVoucherData, semVoucherSearch]);
 
-  const semVoucherTotalPages = Math.ceil(filteredSemVoucher.length / semVoucherPerPage);
-  const paginatedSemVoucher = useMemo(() => {
-    const start = (semVoucherPage - 1) * semVoucherPerPage;
-    return filteredSemVoucher.slice(start, start + semVoucherPerPage);
-  }, [filteredSemVoucher, semVoucherPage]);
 
   return (
     <div className="space-y-4">
@@ -355,16 +319,6 @@ export const HistoricoBaixasTab = () => {
           Exportar
         </Button>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={loadSemVoucher}
-          disabled={semVoucherLoading}
-          className="rounded-full border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
-        >
-          <AlertTriangle className={cn("h-4 w-4 mr-2", semVoucherLoading && "animate-spin")} />
-          Sem Voucher
-        </Button>
       </div>
 
       {/* Tabela */}
@@ -440,88 +394,6 @@ export const HistoricoBaixasTab = () => {
         </div>
       )}
 
-      {/* Modal Sem Voucher */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col bg-[#0a0b10] border-white/10">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-400" />
-              Baixas sem Voucher Correspondente
-              <Badge variant="outline" className="ml-2">{filteredSemVoucher.length}</Badge>
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por ID ou usuário..."
-              value={semVoucherSearch}
-              onChange={(e) => { setSemVoucherSearch(e.target.value); setSemVoucherPage(1); }}
-              className="pl-9 bg-[#05060c] border-white/10 rounded-full"
-            />
-          </div>
-
-          <div className="overflow-auto flex-1 rounded-lg border border-white/10">
-            {semVoucherLoading ? (
-              <div className="p-4 space-y-3">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Skeleton key={i} className="h-10 w-full bg-white/5" />
-                ))}
-              </div>
-            ) : filteredSemVoucher.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground text-sm">
-                Nenhuma baixa órfã encontrada
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-white/10 hover:bg-transparent">
-                    <TableHead className="text-muted-foreground text-xs">IdLancamentoRM</TableHead>
-                    <TableHead className="text-muted-foreground text-xs text-right">Valor Baixado</TableHead>
-                    <TableHead className="text-muted-foreground text-xs">Data Baixa</TableHead>
-                    <TableHead className="text-muted-foreground text-xs">Usuário</TableHead>
-                    <TableHead className="text-muted-foreground text-xs">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedSemVoucher.map((b: any, i: number) => (
-                    <TableRow key={`${b.IdLancamentoRM}-${i}`} className="border-white/5 hover:bg-white/5">
-                      <TableCell className="font-mono text-xs">{b.IdLancamentoRM}</TableCell>
-                      <TableCell className="text-right font-mono text-xs">
-                        {formatCurrency(b.valor_baixa, "BRL")}
-                      </TableCell>
-                      <TableCell className="text-xs">{formatDate(b.data_baixa)}</TableCell>
-                      <TableCell className="text-xs">{b.usuario_baixa || "-"}</TableCell>
-                      <TableCell className="text-xs">
-                        {(() => {
-                          const s = String(b.status_lan);
-                          if (s === "1") return <Badge variant="success" className="text-[10px]">Finalizado</Badge>;
-                          if (s === "2") return <Badge variant="destructive" className="text-[10px]">Cancelado</Badge>;
-                          if (s === "3") return <Badge variant="warning" className="text-[10px]">Negociado</Badge>;
-                          return <Badge variant="outline" className="text-[10px]">Em Aberto</Badge>;
-                        })()}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
-
-          {filteredSemVoucher.length > semVoucherPerPage && (
-            <div className="flex items-center justify-between pt-2">
-              <div className="text-xs text-muted-foreground">
-                {((semVoucherPage - 1) * semVoucherPerPage) + 1} - {Math.min(semVoucherPage * semVoucherPerPage, filteredSemVoucher.length)} de {filteredSemVoucher.length}
-              </div>
-              <TablePagination
-                currentPage={semVoucherPage}
-                totalPages={semVoucherTotalPages}
-                onPageChange={setSemVoucherPage}
-              />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

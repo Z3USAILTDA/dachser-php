@@ -12,25 +12,26 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, Bot, AlertCircle, Clock, FileCheck, ChevronDown, RotateCcw, Trash2 } from "lucide-react";
+import { CheckCircle2, Bot, AlertCircle, Clock, FileCheck, ChevronDown, RotateCcw, Trash2, Eye } from "lucide-react";
 import { FileUpload } from "./FileUpload";
 import { RetornarPendenteDialog } from "./RetornarPendenteDialog";
 
 interface VoucherRoboActionsProps {
   voucher: Voucher;
   onUpdate: () => void;
+  canRetornarPendente?: boolean;
 }
 
-export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProps) => {
+export const VoucherRoboActions = ({ voucher, onUpdate, canRetornarPendente = true }: VoucherRoboActionsProps) => {
   const [loading, setLoading] = useState(false);
   const [uploadingComprovante, setUploadingComprovante] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
   const [showRetornarDialog, setShowRetornarDialog] = useState(false);
-  const [deletingComprovante, setDeletingComprovante] = useState(false);
+  const [deletingComprovante, setDeletingComprovante] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const hasComprovante = voucher.anexos.some((a) => a.tipo === "COMPROVANTE");
-  const comprovanteFile = voucher.anexos.find((a) => a.tipo === "COMPROVANTE");
+  const comprovantes = voucher.anexos.filter((a) => a.tipo === "COMPROVANTE");
+  const hasComprovante = comprovantes.length > 0;
   const currentStatus = voucher.statusComprovante || "PENDENTE";
 
   // Get user data from localStorage (MariaDB auth)
@@ -181,33 +182,35 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
     }
   };
 
-  const handleRemoverComprovante = async () => {
-    if (!comprovanteFile) return;
+  const handleRemoverComprovante = async (comprovanteToRemove: typeof comprovantes[0]) => {
+    if (!comprovanteToRemove) return;
 
     try {
-      setDeletingComprovante(true);
+      setDeletingComprovante(comprovanteToRemove.id);
       const userData = getUserData();
 
       // Delete attachment from MariaDB
       const { error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "delete_voucher_anexo",
-          anexo_id: comprovanteFile.id,
+          anexo_id: comprovanteToRemove.id,
         },
       });
 
       if (error) throw error;
 
-      // Update status to PENDENTE
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "update_voucher_esteira",
-          voucher_id: voucher.id,
-          updates: {
-            status_comprovante: "PENDENTE",
+      // If no more comprovantes after removal, update status to PENDENTE
+      if (comprovantes.length <= 1) {
+        await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "update_voucher_esteira",
+            voucher_id: voucher.id,
+            updates: {
+              status_comprovante: "PENDENTE",
+            },
           },
-        },
-      });
+        });
+      }
 
       // Log the action
       await supabase.functions.invoke("mariadb-proxy", {
@@ -217,13 +220,13 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
           user_id: userData.id?.toString(),
           user_name: userData.username,
           acao: "COMPROVANTE_REMOVIDO",
-          detalhe: `Comprovante ${comprovanteFile.fileName} removido para substituição`,
+          detalhe: `Comprovante ${comprovanteToRemove.fileName} removido`,
         },
       });
 
       toast({
         title: "Comprovante removido!",
-        description: "Você pode anexar um novo comprovante",
+        description: "Comprovante removido com sucesso",
       });
 
       onUpdate();
@@ -234,7 +237,7 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
         variant: "destructive",
       });
     } finally {
-      setDeletingComprovante(false);
+      setDeletingComprovante(null);
     }
   };
 
@@ -352,7 +355,7 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {currentStatus !== "PENDENTE" && (
+                {currentStatus !== "PENDENTE" && canRetornarPendente && (
                   <>
                     <DropdownMenuItem 
                       onClick={() => setShowRetornarDialog(true)}
@@ -383,38 +386,51 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
           </div>
 
           <div className="space-y-3">
-            {!hasComprovante && (
-              <FileUpload
-                label="Comprovante de Pagamento"
-                required
-                onFileUpload={handleComprovanteUpload}
-                accept=".pdf,.jpg,.jpeg,.png"
-              />
-            )}
+            {/* Always show upload for additional comprovantes */}
+            <FileUpload
+              label={hasComprovante ? "Adicionar Comprovante" : "Comprovante de Pagamento"}
+              required={!hasComprovante}
+              onFileUpload={handleComprovanteUpload}
+              accept=".pdf,.jpg,.jpeg,.png"
+            />
 
-            {hasComprovante && comprovanteFile && (
+            {/* List existing comprovantes */}
+            {comprovantes.length > 0 && (
               <div className="space-y-2">
-                <FileUpload
-                  label="Comprovante de Pagamento"
-                  existingFile={{
-                    name: comprovanteFile.fileName,
-                    url: comprovanteFile.fileUrl,
-                  }}
-                  onFileUpload={handleComprovanteUpload}
-                />
-                
-                {currentStatus === "PENDENTE" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRemoverComprovante}
-                    disabled={deletingComprovante}
-                    className="w-full gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    {deletingComprovante ? "Removendo..." : "Remover e Substituir Comprovante"}
-                  </Button>
-                )}
+                <p className="text-sm font-medium text-muted-foreground">
+                  Comprovantes anexados ({comprovantes.length})
+                </p>
+                {comprovantes.map((comp) => (
+                  <div key={comp.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/30 border border-border">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileCheck className="h-4 w-4 text-blue-500 shrink-0" />
+                      <span className="text-sm truncate">{comp.fileName}</span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {comp.fileUrl && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => window.open(comp.fileUrl, '_blank')}
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {currentStatus === "PENDENTE" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-red-600 hover:text-red-700"
+                          onClick={() => handleRemoverComprovante(comp)}
+                          disabled={deletingComprovante === comp.id}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 

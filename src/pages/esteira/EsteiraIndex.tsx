@@ -1148,17 +1148,17 @@ const EsteiraIndex = () => {
   };
 
   useEffect(() => {
-    if (hasEsteiraAccess) {
+    if (user) {
       loadVouchers();
     }
   }, [hasEsteiraAccess]);
 
   // Fetch DB stats only when dashboard tab is active (deferred to reduce initial load)
   useEffect(() => {
-    if (hasEsteiraAccess && activeTab === "dashboard") {
+    if (user && activeTab === "dashboard") {
       fetchFinDbStats();
     }
-  }, [hasEsteiraAccess, activeTab]);
+  }, [user, activeTab]);
 
   // Reload vouchers when tab becomes visible after being hidden (tab switch only)
   // Removed window focus listener as it was triggering too frequently (e.g., when closing dialogs)
@@ -1185,7 +1185,10 @@ const EsteiraIndex = () => {
 
   // Apply role-based filtering first
   const roleFilteredVouchers = useMemo(() => {
-    if (isAdmin || isGestor) {
+    // If there's a search query, show ALL vouchers (no role-based stage filtering)
+    const hasSearchQuery = filters.search && filters.search.trim().length > 0;
+
+    if (isAdmin || isGestor || hasSearchQuery) {
       return vouchers;
     }
 
@@ -1224,8 +1227,9 @@ const EsteiraIndex = () => {
       if (filters.etapa && filters.etapa !== "all") return vouchers;
       return vouchers.filter(v => v.etapaAtual === "FISCAL" || v.etapaAtual === "AJUSTE_FISCAL" || v.responsavelFiscalUserId === currentUserId);
     }
+    // Users without any role: show all (view-only access)
     return vouchers;
-  }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro, filters.etapa]);
+  }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro, filters.etapa, filters.search]);
   // Map de masterId → SPOs dos filhos para busca expandida (carregado via API)
   const [masterChildSPOsMap, setMasterChildSPOsMap] = useState<Map<string, string[]>>(new Map());
   useEffect(() => {
@@ -1499,7 +1503,7 @@ const EsteiraIndex = () => {
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>;
   }
-  if (!hasEsteiraAccess) {
+  if (!user) {
     return <div className="min-h-screen flex items-center justify-center bg-[#050608] relative overflow-hidden">
         {/* Background */}
         <div className="absolute inset-0">
@@ -1511,10 +1515,9 @@ const EsteiraIndex = () => {
           <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-destructive/10 border border-destructive/30 flex items-center justify-center">
             <ShieldX className="h-10 w-10 text-destructive" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-3">Acesso Não Autorizado</h1>
+          <h1 className="text-2xl font-bold text-foreground mb-3">Login Necessário</h1>
           <p className="text-muted-foreground mb-6">
-            Você não possui permissão para acessar a Esteira de Vouchers. Entre em contato com um administrador para
-            solicitar acesso.
+            Você precisa estar logado para acessar a Esteira de Vouchers.
           </p>
           <Button onClick={() => navigate("/dashboard")} className="gap-2">
             <ArrowLeft className="h-4 w-4" />
@@ -2103,7 +2106,7 @@ const EsteiraIndex = () => {
           {/* Tab Content */}
           {activeTab === "processos" && <div className="mt-3">
               {loading ? <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" /> : <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)] overflow-hidden">
-                    <VoucherTable vouchers={filteredVouchers} onViewDetails={handleViewDetails} onEdit={handleEdit} onDelete={handleDelete} onGoBack={handleGoBack} onCancel={handleCancel} onDisassemble={handleDisassemble} onValidateComprovante={handleValidateComprovante} filters={filters} onFilterChange={(newFilters) => { setFilters(newFilters); setDrillDownFilter("all"); }} canEdit={canEditVoucher} canDelete={canDeleteVoucher} canGoBackStage={canGoBackStage} canCancelVoucher={canCancelVoucher} canDisassembleMaster={canDisassembleMaster} canValidateComprovante={isFinanceiro || isAdmin || isSystemAdmin} canApproveSupervisor={canApproveSupervisor} lastUpdateTime={lastUpdateTime} />
+                    <VoucherTable vouchers={filteredVouchers} onViewDetails={handleViewDetails} onEdit={handleEdit} onDelete={handleDelete} onGoBack={handleGoBack} onCancel={handleCancel} onDisassemble={handleDisassemble} onValidateComprovante={handleValidateComprovante} filters={filters} onFilterChange={(newFilters) => { setFilters(newFilters); setDrillDownFilter("all"); }} canEdit={canEditVoucher} canDelete={canDeleteVoucher} canGoBackStage={canGoBackStage} canCancelVoucher={canCancelVoucher} canDisassembleMaster={canDisassembleMaster} canValidateComprovante={isFinanceiro || isAdmin || isSystemAdmin} canApproveSupervisor={canApproveSupervisor} canRetornarPendente={isFinanceiro || isAdmin || isSystemAdmin} lastUpdateTime={lastUpdateTime} />
                 </div>}
             </div>}
 

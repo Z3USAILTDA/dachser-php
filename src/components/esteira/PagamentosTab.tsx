@@ -188,11 +188,12 @@ export const PagamentosTab = () => {
   const [anexosDialog, setAnexosDialog] = useState<any[]>([]);
   const [loadingAnexos, setLoadingAnexos] = useState(false);
   
-  // Voltar para Operacional dialog state
+  // Voltar dialog state
   const [voltarOperacionalDialogOpen, setVoltarOperacionalDialogOpen] = useState(false);
   const [voltarOperacionalVoucher, setVoltarOperacionalVoucher] = useState<PagamentoItem | null>(null);
   const [voltarOperacionalJustificativa, setVoltarOperacionalJustificativa] = useState("");
   const [voltarOperacionalLoading, setVoltarOperacionalLoading] = useState(false);
+  const [voltarDestinoEtapa, setVoltarDestinoEtapa] = useState<"OPERACAO" | "FISCAL">("OPERACAO");
 
   // Master children state
   const masterChildrenCache = useRef<Map<string, string[]>>(new Map());
@@ -510,30 +511,33 @@ export const PagamentosTab = () => {
     if (!voltarOperacionalVoucher || voltarOperacionalJustificativa.trim().length < 10) return;
     setVoltarOperacionalLoading(true);
     try {
-      // 1. Update etapa_atual to OPERACAO
+      // 1. Update etapa_atual to selected destination
       const { error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "update_voucher_esteira",
           voucher_id: voltarOperacionalVoucher.id,
-          etapa_atual: "OPERACAO",
+          etapa_atual: voltarDestinoEtapa,
         }
       });
       if (error) throw error;
 
       // 2. Log the action
+      const logAcao = voltarDestinoEtapa === "FISCAL" ? "RETORNO_FISCAL" : "RETORNO_OPERACIONAL";
+      const logLabel = voltarDestinoEtapa === "FISCAL" ? "Fiscal" : "Operacional";
       await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "save_voucher_log",
           voucher_id: voltarOperacionalVoucher.id,
-          acao: "RETORNO_OPERACIONAL",
-          detalhe: `Voucher retornado para Operacional a partir da tela de Pagamentos. Justificativa: ${voltarOperacionalJustificativa.trim()}`
+          acao: logAcao,
+          detalhe: `Voucher retornado para ${logLabel} a partir da tela de Pagamentos. Justificativa: ${voltarOperacionalJustificativa.trim()}`
         }
       });
 
-      toast({ title: "Voucher retornado para Operacional com sucesso" });
+      toast({ title: `Voucher retornado para ${logLabel} com sucesso` });
       setVoltarOperacionalDialogOpen(false);
       setVoltarOperacionalJustificativa("");
       setVoltarOperacionalVoucher(null);
+      setVoltarDestinoEtapa("OPERACAO");
       loadPagamentos();
     } catch (error: unknown) {
       toast({
@@ -881,7 +885,7 @@ export const PagamentosTab = () => {
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("A_DEFINIR")}>
-                A definir
+                Pendente
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("MANUAL")}>
                 Manual
@@ -993,10 +997,10 @@ export const PagamentosTab = () => {
                       />
                     </td>
                     <td className="p-3">
-                      {pag.is_master && pag.nome_master ? (
+                      {pag.is_master ? (
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-bold text-foreground">{pag.nome_master}</span>
+                            <span className="font-mono font-bold text-foreground">{pag.numero_spo}</span>
                             <Badge className="bg-purple-600 text-[9px] px-1.5">Master</Badge>
                           </div>
                           {(() => {
@@ -1060,7 +1064,7 @@ export const PagamentosTab = () => {
                           <SelectValue placeholder="Definir..." />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="A_DEFINIR">A definir</SelectItem>
+                          <SelectItem value="A_DEFINIR">Pendente</SelectItem>
                           <SelectItem value="MANUAL">Manual</SelectItem>
                           <SelectItem value="REMESSA_10H">Remessa 10h</SelectItem>
                           <SelectItem value="REMESSA_15H">Remessa 15h</SelectItem>
@@ -1108,7 +1112,7 @@ export const PagamentosTab = () => {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-orange-500 hover:text-orange-600 hover:bg-orange-500/10"
-                          title="Voltar para Operacional"
+                          title="Retornar voucher"
                           disabled={processingAction[pag.id]}
                           onClick={() => {
                             setVoltarOperacionalVoucher(pag);
@@ -1132,9 +1136,7 @@ export const PagamentosTab = () => {
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              Dados de Pagamento - {selectedPagamento?.is_master && selectedPagamento?.nome_master 
-                ? selectedPagamento.nome_master 
-                : selectedPagamento?.numero_spo}
+              Dados de Pagamento - {selectedPagamento?.numero_spo}
             </DialogTitle>
           </DialogHeader>
           {selectedPagamento && (
@@ -1145,7 +1147,7 @@ export const PagamentosTab = () => {
                   <div className="flex items-center gap-2 mb-3">
                     <Badge className="bg-purple-600 text-white">Master</Badge>
                     <span className="font-medium text-purple-400">
-                      {selectedPagamento.nome_master || selectedPagamento.numero_spo}
+                      {selectedPagamento.numero_spo}
                     </span>
                   </div>
                   {(() => {
@@ -1253,7 +1255,7 @@ export const PagamentosTab = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Voltar para Operacional Dialog */}
+      {/* Retornar Voucher Dialog */}
       <Dialog 
         open={voltarOperacionalDialogOpen} 
         onOpenChange={(open) => {
@@ -1262,6 +1264,7 @@ export const PagamentosTab = () => {
             if (!open) {
               setVoltarOperacionalJustificativa("");
               setVoltarOperacionalVoucher(null);
+              setVoltarDestinoEtapa("OPERACAO");
             }
           }
         }}
@@ -1270,17 +1273,32 @@ export const PagamentosTab = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Undo2 className="h-5 w-5 text-orange-500" />
-              Voltar para Operacional
+              Retornar Voucher
             </DialogTitle>
             <DialogDescription>
-              Voucher/SPO: <strong>{voltarOperacionalVoucher?.is_master && voltarOperacionalVoucher?.nome_master ? voltarOperacionalVoucher.nome_master : voltarOperacionalVoucher?.numero_spo}</strong>
+              Voucher/SPO: <strong>{voltarOperacionalVoucher?.numero_spo}</strong>
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                Retornar para <span className="text-red-500">*</span>
+              </Label>
+              <Select value={voltarDestinoEtapa} onValueChange={(v) => setVoltarDestinoEtapa(v as "OPERACAO" | "FISCAL")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="OPERACAO">Operacional</SelectItem>
+                  <SelectItem value="FISCAL">Fiscal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
               <p className="text-sm text-orange-700 dark:text-orange-300">
-                Ao retornar para o Operacional, o voucher sairá da etapa Financeiro e voltará para revisão da equipe de Operações.
+                Ao retornar, o voucher sairá da etapa Financeiro e voltará para revisão da equipe de {voltarDestinoEtapa === "FISCAL" ? "Fiscal" : "Operações"}.
               </p>
             </div>
 
@@ -1290,7 +1308,7 @@ export const PagamentosTab = () => {
               </Label>
               <Textarea
                 id="voltarJustificativa"
-                placeholder="Descreva o motivo para retornar o voucher ao Operacional (mínimo 10 caracteres)..."
+                placeholder={`Descreva o motivo para retornar o voucher (mínimo 10 caracteres)...`}
                 value={voltarOperacionalJustificativa}
                 onChange={(e) => setVoltarOperacionalJustificativa(e.target.value)}
                 rows={4}
@@ -1309,6 +1327,7 @@ export const PagamentosTab = () => {
                 setVoltarOperacionalDialogOpen(false);
                 setVoltarOperacionalJustificativa("");
                 setVoltarOperacionalVoucher(null);
+                setVoltarDestinoEtapa("OPERACAO");
               }}
               disabled={voltarOperacionalLoading}
             >

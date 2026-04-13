@@ -69,6 +69,7 @@ interface VoucherTableProps {
   canDisassembleMaster?: boolean;
   canValidateComprovante?: boolean;
   canApproveSupervisor?: boolean;
+  canRetornarPendente?: boolean;
   lastUpdateTime?: Date | null;
 }
 
@@ -136,7 +137,7 @@ const getSlaColor = (status: "ok" | "warning" | "critical") => {
   return colors[status];
 };
 
-export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, onDisassemble, onValidateComprovante, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false, canDisassembleMaster = false, canValidateComprovante = false, canApproveSupervisor = false, lastUpdateTime }: VoucherTableProps) => {
+export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, onDisassemble, onValidateComprovante, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false, canDisassembleMaster = false, canValidateComprovante = false, canApproveSupervisor = false, canRetornarPendente = false, lastUpdateTime }: VoucherTableProps) => {
   const [validatingVoucherId, setValidatingVoucherId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -507,9 +508,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       <TableCell className="font-mono font-medium">
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-2">
-                            {(voucher.isMaster || voucher.origemCriacao === "MASTER") && voucher.nomeMaster
-                              ? voucher.nomeMaster
-                              : voucher.numeroSPO}
+                            {voucher.numeroSPO}
                             {(voucher.isMaster || voucher.origemCriacao === "MASTER") && (
                               <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-[10px] gap-1">
                                 <Layers className="h-3 w-3" />
@@ -850,7 +849,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                             canDelete={canDelete && voucher.etapaAtual !== "CANCELADO"}
                             canCancelVoucher={canCancelVoucher && voucher.etapaAtual !== "CANCELADO" && voucher.etapaAtual !== "CONCLUIDO"}
                             canDisassemble={canDisassembleMaster && (voucher.isMaster || voucher.origemCriacao === "MASTER")}
-                            canRetornarPendente={voucher.etapaAtual === "CONCLUIDO" && (voucher.statusComprovante === "ANEXADO" || voucher.statusComprovante === "VALIDADO")}
+                            canRetornarPendente={canRetornarPendente && voucher.etapaAtual === "CONCLUIDO" && (voucher.statusComprovante === "ANEXADO" || voucher.statusComprovante === "VALIDADO")}
                             isCancelled={voucher.etapaAtual === "CANCELADO"}
                             vouchersFilhos={voucher.vouchersFilhos || []}
                             masterId={voucher.id}

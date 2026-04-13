@@ -46,9 +46,10 @@ export const BookingResultCard = ({ bookingInfo, apiMetadata }: BookingResultCar
   const commodity = bookingInfo?.commodity || '-';
   const status = bookingInfo?.documentStatus || 'Unknown';
 
-  const handleCopyTransactionId = () => {
+  const handleCopyTransactionId = async () => {
     if (apiMetadata?.transactionId) {
-      navigator.clipboard.writeText(apiMetadata.transactionId);
+      const { copyToClipboard } = await import('@/utils/clipboard');
+      await copyToClipboard(apiMetadata.transactionId);
       setCopied(true);
       toast.success('Transaction ID copiado!');
       setTimeout(() => setCopied(false), 2000);
