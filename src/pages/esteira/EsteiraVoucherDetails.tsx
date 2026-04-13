@@ -305,12 +305,14 @@ const EsteiraVoucherDetails = () => {
           >
             Detalhes
           </TabsTrigger>
-          <TabsTrigger 
-            value="pagamento" 
-            className="rounded-full px-6 text-[#aaaaaa] data-[state=active]:bg-[#ffc800] data-[state=active]:text-black data-[state=active]:font-semibold"
-          >
-            Pagamento
-          </TabsTrigger>
+          {hasEsteiraAccess && (
+            <TabsTrigger 
+              value="pagamento" 
+              className="rounded-full px-6 text-[#aaaaaa] data-[state=active]:bg-[#ffc800] data-[state=active]:text-black data-[state=active]:font-semibold"
+            >
+              Pagamento
+            </TabsTrigger>
+          )}
           <TabsTrigger 
             value="historico" 
             className="rounded-full px-6 text-[#aaaaaa] data-[state=active]:bg-[#ffc800] data-[state=active]:text-black data-[state=active]:font-semibold"
@@ -407,36 +409,38 @@ const EsteiraVoucherDetails = () => {
             )}
           </TabsContent>
 
-          <TabsContent value="pagamento" className="mt-3">
-            <Card 
-              className="p-6 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] animate-fade-in"
-              style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
-            >
-              <h3 className="text-lg font-semibold mb-4 text-foreground">Dados de Pagamento</h3>
-              <DadosPagamentoPanel
-                voucherId={voucher.id}
-                formaPagamento={voucher.formaPagamento}
-                tipoExecucao={voucher.tipoExecucaoPagamento}
-                linhaDigitavel={voucher.linhaDigitavel}
-                codigoBarras={voucher.codigoBarras}
-                cnpjFornecedor={voucher.cnpjFornecedor}
-                chavePix={voucher.chavePix}
-                anexos={voucher.anexos}
-                dadosBancarios={voucher.dadosBancarios ? {
-                  banco: voucher.dadosBancarios.banco || "",
-                  agencia: voucher.dadosBancarios.agencia || "",
-                  digito_agencia: "",
-                  conta_corrente: voucher.dadosBancarios.conta || "",
-                  digito_conta: "",
-                  razao_social: voucher.dadosBancarios.favorecidoNome || voucher.fornecedor,
-                  cnpj: voucher.dadosBancarios.favorecidoDocumento || voucher.cnpjFornecedor || "",
-                  chave_pix: voucher.dadosBancarios.chavePix,
-                  pix_tipo_chave: voucher.dadosBancarios.pixTipoChave,
-                } : undefined}
-                onUpdate={loadVoucher}
-              />
-            </Card>
-          </TabsContent>
+          {hasEsteiraAccess && (
+            <TabsContent value="pagamento" className="mt-3">
+              <Card 
+                className="p-6 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] animate-fade-in"
+                style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+              >
+                <h3 className="text-lg font-semibold mb-4 text-foreground">Dados de Pagamento</h3>
+                <DadosPagamentoPanel
+                  voucherId={voucher.id}
+                  formaPagamento={voucher.formaPagamento}
+                  tipoExecucao={voucher.tipoExecucaoPagamento}
+                  linhaDigitavel={voucher.linhaDigitavel}
+                  codigoBarras={voucher.codigoBarras}
+                  cnpjFornecedor={voucher.cnpjFornecedor}
+                  chavePix={voucher.chavePix}
+                  anexos={voucher.anexos}
+                  dadosBancarios={voucher.dadosBancarios ? {
+                    banco: voucher.dadosBancarios.banco || "",
+                    agencia: voucher.dadosBancarios.agencia || "",
+                    digito_agencia: "",
+                    conta_corrente: voucher.dadosBancarios.conta || "",
+                    digito_conta: "",
+                    razao_social: voucher.dadosBancarios.favorecidoNome || voucher.fornecedor,
+                    cnpj: voucher.dadosBancarios.favorecidoDocumento || voucher.cnpjFornecedor || "",
+                    chave_pix: voucher.dadosBancarios.chavePix,
+                    pix_tipo_chave: voucher.dadosBancarios.pixTipoChave,
+                  } : undefined}
+                  onUpdate={loadVoucher}
+                />
+              </Card>
+            </TabsContent>
+          )}
 
           <TabsContent value="historico" className="mt-3">
             <Card 
