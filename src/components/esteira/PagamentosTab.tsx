@@ -427,7 +427,7 @@ export const PagamentosTab = () => {
     if (isReady && tipoExecucao === "A_DEFINIR") {
       toast({ 
         title: "Defina o tipo de execução", 
-        description: "'A definir' não é permitido para marcar como pronto. Selecione Manual ou Remessa.",
+        description: "'Pendente' não é permitido para marcar como pronto. Selecione Manual ou Remessa.",
         variant: "destructive" 
       });
       return;
@@ -682,7 +682,7 @@ export const PagamentosTab = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos Tipo Exec.</SelectItem>
-              <SelectItem value="A_DEFINIR">A definir</SelectItem>
+              <SelectItem value="A_DEFINIR">Pendente</SelectItem>
               <SelectItem value="MANUAL">Manual</SelectItem>
               <SelectItem value="REMESSA_10H">Remessa 10h</SelectItem>
               <SelectItem value="REMESSA_15H">Remessa 15h</SelectItem>
@@ -909,7 +909,7 @@ export const PagamentosTab = () => {
               if (semTipo.length > 0) {
                 toast({
                   title: "Tipo de execução obrigatório",
-                  description: `${semTipo.length} voucher(s) sem tipo de execução definido ou com 'A definir'. Defina antes de marcar como pronto.`,
+                  description: `${semTipo.length} voucher(s) sem tipo de execução definido ou com 'Pendente'. Defina antes de marcar como pronto.`,
                   variant: "destructive"
                 });
                 return;
@@ -1057,12 +1057,12 @@ export const PagamentosTab = () => {
                     </td>
                     <td className="p-3">
                       <Select
-                        value={pag.tipo_execucao_pagamento || ""}
+                        value={pag.tipo_execucao_pagamento || "A_DEFINIR"}
                         onValueChange={(v) => handleSetTipoExecucao(pag.id, v as TipoExecucaoPagamento)}
                         disabled={processingAction[pag.id]}
                       >
                         <SelectTrigger className="h-8 w-[120px] text-xs">
-                          <SelectValue placeholder="Definir..." />
+                          <SelectValue placeholder="Pendente" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="A_DEFINIR">Pendente</SelectItem>
