@@ -849,7 +849,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                             canDelete={canDelete && voucher.etapaAtual !== "CANCELADO"}
                             canCancelVoucher={canCancelVoucher && voucher.etapaAtual !== "CANCELADO" && voucher.etapaAtual !== "CONCLUIDO"}
                             canDisassemble={canDisassembleMaster && (voucher.isMaster || voucher.origemCriacao === "MASTER")}
-                            canRetornarPendente={voucher.etapaAtual === "CONCLUIDO" && (voucher.statusComprovante === "ANEXADO" || voucher.statusComprovante === "VALIDADO")}
+                            canRetornarPendente={canRetornarPendente && voucher.etapaAtual === "CONCLUIDO" && (voucher.statusComprovante === "ANEXADO" || voucher.statusComprovante === "VALIDADO")}
                             isCancelled={voucher.etapaAtual === "CANCELADO"}
                             vouchersFilhos={voucher.vouchersFilhos || []}
                             masterId={voucher.id}
