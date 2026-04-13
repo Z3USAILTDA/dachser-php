@@ -22,6 +22,9 @@ interface VoucherMatch {
   etapa_atual: string;
   moeda: string | null;
   id_rm?: string;
+  is_master?: boolean;
+  matched_via_child?: boolean;
+  child_spo?: string;
 }
 
 interface FileMatch {
@@ -358,9 +361,24 @@ export default function ComprovanteRobot() {
 
   const getStatusBadge = (fileMatch: FileMatch) => {
     if (fileMatch.status === "identified" && fileMatch.voucherInfo) {
+      const vi = fileMatch.voucherInfo;
+      if (vi.is_master) {
+        return (
+          <div className="flex flex-col gap-0.5">
+            <Badge className="bg-accent text-accent-foreground">
+              MASTER · SPO {vi.numero_spo}
+            </Badge>
+            {vi.matched_via_child && vi.child_spo && (
+              <span className="text-[10px] text-muted-foreground">
+                Identificado via filho {vi.child_spo}
+              </span>
+            )}
+          </div>
+        );
+      }
       return (
         <Badge className="bg-primary text-primary-foreground">
-          SPO {fileMatch.voucherInfo.numero_spo}
+          SPO {vi.numero_spo}
         </Badge>
       );
     }
