@@ -267,6 +267,8 @@ export function RoboTab() {
 
     const { data: userData } = await supabase.auth.getUser();
     let processed = 0;
+    let successCount = 0;
+    let errorCount = 0;
 
     for (const fileMatch of files) {
       setFiles((prev) =>
@@ -348,6 +350,7 @@ export function RoboTab() {
           },
         });
 
+        successCount++;
         setFiles((prev) =>
           prev.map((f) =>
             f.fileName === fileMatch.fileName
@@ -358,6 +361,7 @@ export function RoboTab() {
       } catch (error: any) {
         console.error("Erro ao processar arquivo:", error);
         
+        errorCount++;
         setFiles((prev) =>
           prev.map((f) =>
             f.fileName === fileMatch.fileName
@@ -372,9 +376,6 @@ export function RoboTab() {
     }
 
     setProcessing(false);
-
-    const successCount = files.filter((f) => f.status === "success").length;
-    const errorCount = files.filter((f) => f.status === "error").length;
 
     toast({
       title: "Processamento concluído",
