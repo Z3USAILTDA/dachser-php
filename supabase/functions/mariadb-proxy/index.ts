@@ -10965,14 +10965,32 @@ Deno.serve(async (req) => {
         // voucher_ids now contains "processo" values (numero_spo), not UUIDs
         // First, resolve the actual UUIDs from t_vouchers by numero_spo
         const resolvedChildren = await client.query(`
-          SELECT id, numero_spo, valor, vencimento, origem_processo, processo_id
-          FROM dados_dachser.t_vouchers 
-          WHERE numero_spo COLLATE utf8mb4_general_ci IN (${voucher_ids.map(() => '?').join(',')})
+          SELECT v.id, v.numero_spo, v.valor, v.vencimento, v.origem_processo, v.processo_id, v.id_rm,
+                 COALESCE(v.id_rm, dfv.id_rm) as resolved_id_rm
+          FROM dados_dachser.t_vouchers v
+          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
+            ON v.numero_spo COLLATE utf8mb4_general_ci = dfv.nd COLLATE utf8mb4_general_ci
+          WHERE v.numero_spo COLLATE utf8mb4_general_ci IN (${voucher_ids.map(() => '?').join(',')})
         `, voucher_ids);
 
         const resolvedIds = (resolvedChildren || []).map((c: any) => c.id);
         const resolvedProcessos = (resolvedChildren || []).map((c: any) => c.numero_spo);
         console.log(`Resolved ${resolvedIds.length} child voucher IDs from ${voucher_ids.length} processo values`);
+
+        // Determine numero_spo for master from child with lowest id_rm
+        let numeroSpoMaster: string;
+        const childrenWithIdRm = (resolvedChildren || []).filter((c: any) => c.resolved_id_rm != null);
+        if (childrenWithIdRm.length > 0) {
+          const lowestChild = childrenWithIdRm.reduce((prev: any, curr: any) => {
+            return (parseInt(prev.resolved_id_rm) || Infinity) < (parseInt(curr.resolved_id_rm) || Infinity) ? prev : curr;
+          });
+          numeroSpoMaster = lowestChild.numero_spo;
+          console.log(`Master numero_spo determined from child with lowest id_rm (${lowestChild.resolved_id_rm}): ${numeroSpoMaster}`);
+        } else {
+          // Fallback: use first child's numero_spo or generate random
+          numeroSpoMaster = resolvedProcessos[0] || voucher_ids[0] || `MASTER-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+          console.log(`Master numero_spo fallback: ${numeroSpoMaster}`);
+        }
 
         // Find processo values NOT found in t_vouchers — these exist only in t_dados_financeiro_voucher
         const missingProcessos = voucher_ids.filter((p: string) => !resolvedProcessos.includes(p));
