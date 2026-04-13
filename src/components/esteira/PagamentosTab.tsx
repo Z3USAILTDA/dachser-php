@@ -473,7 +473,8 @@ export const PagamentosTab = () => {
               forma_pag: pagamento.forma_pagamento,
               fornecedor: pagamento.fornecedor,
               cnpj_fornecedor: pagamento.cnpj_fornecedor,
-              regras_forma_pag: regrasFormaPag
+              regras_forma_pag: regrasFormaPag,
+              tipo_exec: pagamento.tipo_execucao_pagamento
             }
           });
 

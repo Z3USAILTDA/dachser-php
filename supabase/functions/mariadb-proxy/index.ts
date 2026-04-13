@@ -8654,7 +8654,8 @@ Deno.serve(async (req) => {
           cnpj_fornecedor: cnpjFornecedorRm,
           chave_pix: chavePix,
           pix_tipo_chave: pixTipoChave,
-          numero_spo: numeroSpoRm
+          numero_spo: numeroSpoRm,
+          tipo_exec: tipoExec
         } = body as { 
           id_rm?: string; 
           voucher_boleto?: string; 
@@ -8664,6 +8665,7 @@ Deno.serve(async (req) => {
           chave_pix?: string;
           pix_tipo_chave?: string;
           numero_spo?: string;
+          tipo_exec?: string;
         };
         
         const finalIdRm = idRm || numeroSpoRm;
@@ -8731,6 +8733,7 @@ Deno.serve(async (req) => {
             forma_pag VARCHAR(50) DEFAULT NULL,
             fornecedor VARCHAR(255) DEFAULT NULL,
             regras_forma_pag VARCHAR(100) DEFAULT NULL,
+            tipo_exec VARCHAR(20) DEFAULT NULL,
             inicio_disputa DATE DEFAULT NULL,
             fim_disputa DATE DEFAULT NULL,
             responsavel_disp VARCHAR(100) DEFAULT NULL,
@@ -8755,12 +8758,17 @@ Deno.serve(async (req) => {
         } catch (alterErr) {
           // Column might already exist
         }
+        try {
+          await client.execute(`ALTER TABLE dados_dachser.t_dados_rm ADD COLUMN tipo_exec VARCHAR(20) DEFAULT NULL AFTER regras_forma_pag`);
+        } catch (alterErr) {
+          // Column might already exist
+        }
 
         await client.execute(`
           INSERT INTO dados_dachser.t_dados_rm 
-          (id_rm, nd, nf_disputa, voucher_boleto, chave_pix, pix_tipo_chave, forma_pag, fornecedor, regras_forma_pag)
-          VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)
-        `, [finalIdRm, numeroSpoRm || null, voucherBoleto || null, chavePix || null, pixTipoChave || null, formaPag || null, fornecedorRm || null, regrasFormaPagFinal]);
+          (id_rm, nd, nf_disputa, voucher_boleto, chave_pix, pix_tipo_chave, forma_pag, fornecedor, regras_forma_pag, tipo_exec)
+          VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
+        `, [finalIdRm, numeroSpoRm || null, voucherBoleto || null, chavePix || null, pixTipoChave || null, formaPag || null, fornecedorRm || null, regrasFormaPagFinal, tipoExec || null]);
 
         console.log('Inserted into t_dados_rm successfully');
         result = { success: true };
