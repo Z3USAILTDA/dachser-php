@@ -1954,7 +1954,10 @@ const EsteiraIndex = () => {
             id: "comprovantes" as const,
             label: "Comprovantes",
             icon: FileSearch
-          }].map(tab => {
+}].filter(tab => {
+              if ((tab.id === "robo" || tab.id === "pagamentos") && !hasEsteiraAccess) return false;
+              return true;
+            }).map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={cn("flex items-center gap-2 px-4 py-2 rounded-full text-[0.8rem] font-medium transition-all duration-200", isActive ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border border-[#ffc800]/40 shadow-[0_0_12px_rgba(255,200,0,0.3)]" : "text-[#aaaaaa] hover:text-white hover:bg-white/5")}>
@@ -2112,9 +2115,9 @@ const EsteiraIndex = () => {
 
           {activeTab === "dashboard" && <DashboardTab vouchers={vouchers} />}
           {activeTab === "analytics" && <AnalyticsDashboard vouchers={vouchers} />}
-          {activeTab === "robo" && <RoboTab />}
+          {activeTab === "robo" && hasEsteiraAccess && <RoboTab />}
           {activeTab === "relatorios" && <ReportsTab />}
-          {activeTab === "pagamentos" && <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+          {activeTab === "pagamentos" && hasEsteiraAccess && <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
               <PagamentosTab />
             </div>}
           {activeTab === "historico" && <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
