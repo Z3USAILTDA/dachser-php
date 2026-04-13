@@ -86,11 +86,14 @@ export function RoboTab() {
       });
 
       if (!error && data?.vouchers?.length > 0) {
-        const roboVoucher = data.vouchers.find((v: any) => v.etapa_atual === 'ROBO');
+        const roboVoucher = data.vouchers.find((v: any) => v.etapa_atual === 'ROBO' && v.is_master)
+          || data.vouchers.find((v: any) => v.etapa_atual === 'ROBO');
         if (roboVoucher) {
           return {
             id: roboVoucher.id,
-            masterName: roboVoucher.matched_via_child ? (roboVoucher.nome_master || roboVoucher.numero_spo) : undefined,
+            masterName: (roboVoucher.is_master || roboVoucher.matched_via_child) 
+              ? (roboVoucher.nome_master || roboVoucher.numero_spo) 
+              : undefined,
             childSpo: roboVoucher.child_spo,
           };
         }
@@ -111,11 +114,14 @@ export function RoboTab() {
       });
 
       if (!error && data?.vouchers?.length > 0) {
-        const roboVoucher = data.vouchers.find((v: any) => v.etapa_atual === 'ROBO');
+        const roboVoucher = data.vouchers.find((v: any) => v.etapa_atual === 'ROBO' && v.is_master)
+          || data.vouchers.find((v: any) => v.etapa_atual === 'ROBO');
         if (roboVoucher) {
           return {
             id: roboVoucher.id,
-            masterName: roboVoucher.matched_via_child ? (roboVoucher.nome_master || roboVoucher.numero_spo) : undefined,
+            masterName: (roboVoucher.is_master || roboVoucher.matched_via_child) 
+              ? (roboVoucher.nome_master || roboVoucher.numero_spo) 
+              : undefined,
             childSpo: roboVoucher.child_spo,
           };
         }
