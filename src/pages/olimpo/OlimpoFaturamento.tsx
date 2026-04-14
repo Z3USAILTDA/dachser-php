@@ -289,8 +289,8 @@ export default function OlimpoFaturamento() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="name" tick={tickStyle} axisLine={false} tickLine={false} />
-                <YAxis tick={tickStyle} axisLine={false} tickLine={false} />
+                <XAxis dataKey="name" tick={tickStyle} />
+                <YAxis tick={tickStyle} />
                 <Tooltip
                   contentStyle={tooltipStyle}
                   labelStyle={tooltipLabelStyle}
@@ -377,8 +377,8 @@ export default function OlimpoFaturamento() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="name" tick={tickStyle} axisLine={false} tickLine={false} />
-                <YAxis tick={tickStyle} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
+                <XAxis dataKey="name" tick={tickStyle} />
+                <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => [formatBRLFull(v), "Valor"]} />
                 <Bar dataKey="Valor" fill="url(#barGradVal)" radius={[4, 4, 0, 0]} barSize={24}>
                   <LabelList dataKey="Valor" position="top" formatter={(v: number) => formatCompact(v)} style={labelStyle} />
@@ -394,8 +394,8 @@ export default function OlimpoFaturamento() {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={chartModalValor} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="name" tick={tickStyle} axisLine={false} tickLine={false} />
-                <YAxis tick={tickStyle} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
+                <XAxis dataKey="name" tick={tickStyle} />
+                <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => formatBRLFull(v)} />
                 <Legend wrapperStyle={legendStyle} />
                 {allModals.map((mod) => (
@@ -409,8 +409,8 @@ export default function OlimpoFaturamento() {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={lastMonthModalData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="name" tick={tickStyle} axisLine={false} tickLine={false} />
-                <YAxis tick={tickStyle} axisLine={false} tickLine={false} />
+                <XAxis dataKey="name" tick={tickStyle} />
+                <YAxis tick={tickStyle} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
                 <Bar dataKey="count" name="Quantidade" radius={[4, 4, 0, 0]} barSize={28}>
                   {lastMonthModalData.map((entry, i) => (
@@ -429,8 +429,8 @@ export default function OlimpoFaturamento() {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={divisionData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="name" tick={tickStyle} axisLine={false} tickLine={false} />
-                <YAxis tick={tickStyle} axisLine={false} tickLine={false} />
+                <XAxis dataKey="name" tick={tickStyle} />
+                <YAxis tick={tickStyle} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
                 <Bar dataKey="count" name="Quantidade" fill="#4a6fa5" radius={[4, 4, 0, 0]} barSize={28}>
                   <LabelList dataKey="count" position="top" style={labelStyle} />
@@ -443,8 +443,8 @@ export default function OlimpoFaturamento() {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={divisionData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="name" tick={tickStyle} axisLine={false} tickLine={false} />
-                <YAxis tick={tickStyle} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
+                <XAxis dataKey="name" tick={tickStyle} />
+                <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => formatBRLFull(v)} />
                 <Bar dataKey="valor" name="Valor" radius={[4, 4, 0, 0]} barSize={28}>
                   <defs>
