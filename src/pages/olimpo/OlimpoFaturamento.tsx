@@ -279,7 +279,7 @@ export default function OlimpoFaturamento() {
             </Badge>
           </div>
           <div className="px-4 pb-4">
-            <ResponsiveContainer width="100%" height={340}>
+            <ResponsiveContainer width="100%" height={240}>
               {chartMonthlyCount.length > 2 ? (
                 <AreaChart data={chartMonthlyCount} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
                   <defs>
@@ -327,7 +327,7 @@ export default function OlimpoFaturamento() {
         {/* Row 2 — 3 cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <ChartCard title="Qtd. por Modal" badge="Por Modal">
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={200}>
               <BarChart data={chartModalCount} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
@@ -342,7 +342,7 @@ export default function OlimpoFaturamento() {
           </ChartCard>
 
           <ChartCard title="Distribuição Regional" badge="Regiões">
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={180}>
               <PieChart>
                 <Pie
                   data={regionData}
@@ -350,8 +350,8 @@ export default function OlimpoFaturamento() {
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  innerRadius={50}
-                  outerRadius={85}
+                  innerRadius={40}
+                  outerRadius={70}
                   paddingAngle={4}
                   strokeWidth={0}
                 >
@@ -381,7 +381,7 @@ export default function OlimpoFaturamento() {
           </ChartCard>
 
           <ChartCard title="Valor Total Mensal" badge="Mensal">
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={200}>
               <BarChart data={chartMonthlyValor} margin={chartMargin}>
                 <defs>
                   <linearGradient id="barGradVal" x1="0" y1="0" x2="0" y2="1">
@@ -404,7 +404,7 @@ export default function OlimpoFaturamento() {
         {/* Row 3 — Valor por Modal + Divisão */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ChartCard title="Valor Faturado por Modal" badge="Modal">
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={180}>
               <BarChart data={chartModalValor} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
@@ -419,7 +419,7 @@ export default function OlimpoFaturamento() {
           </ChartCard>
 
           <ChartCard title="Qtd. por Modal — Último Mês" badge="Último Mês">
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={180}>
               <BarChart data={lastMonthModalData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
@@ -439,7 +439,7 @@ export default function OlimpoFaturamento() {
         {/* Row 4 — Divisão Modal */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ChartCard title="Qtd. por Divisão Modal" badge="Divisão">
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={180}>
               <BarChart data={divisionData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
@@ -453,7 +453,7 @@ export default function OlimpoFaturamento() {
           </ChartCard>
 
           <ChartCard title="Valor por Divisão Modal" badge="Divisão">
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={180}>
               <BarChart data={divisionData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
