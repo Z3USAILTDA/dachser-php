@@ -178,7 +178,7 @@ export default function OlimpoFaturamento() {
       const div = r.divisao_por_modal || "Outros";
       if (!divMap[div]) divMap[div] = { count: 0, valor: 0 };
       divMap[div].count++;
-      divMap[div].valor += r.valor_total_faturado || 0;
+      divMap[div].valor += safeNum(r.valor_total_faturado);
     });
     return Object.entries(divMap).map(([name, v]) => ({ name, ...v }));
   }, [data, monthlyData]);
