@@ -1,6 +1,6 @@
 import { PageLayout } from "@/components/layout/PageLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Globe, DollarSign, Building2 } from "lucide-react";
+import { Globe, DollarSign, Building2, BarChart3 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const modules = [
@@ -17,6 +17,13 @@ const modules = [
     icon: DollarSign,
     description: "Aging de recebíveis por produto — visão analítica",
     href: "/olimpo/cobranca",
+  },
+  {
+    id: "faturamento",
+    label: "Faturamento",
+    icon: BarChart3,
+    description: "Analytics de faturamento — Totvs RM",
+    href: "/olimpo/faturamento",
   },
 ];
 

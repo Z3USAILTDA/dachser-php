@@ -168,6 +168,10 @@ const menuItems: MenuItem[] = [
         label: "Cobrança",
         href: "/olimpo/cobranca",
       },
+      {
+        label: "Faturamento",
+        href: "/olimpo/faturamento",
+      },
     ],
   },
 ];
