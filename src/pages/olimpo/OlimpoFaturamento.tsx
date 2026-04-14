@@ -24,17 +24,17 @@ interface FaturamentoRow {
 }
 
 const MODAL_COLORS: Record<string, string> = {
-  AI: "#6366f1",
-  SI: "#f59e0b",
-  TCK: "#8b5cf6",
-  ASO: "#10b981",
-  SE: "#ec4899",
-  AE: "#06b6d4",
+  AI: "#4a6fa5",
+  SI: "#e8913a",
+  TCK: "#8b9dc3",
+  ASO: "#48a868",
+  SE: "#b065a1",
+  AE: "#5cb3c8",
 };
 
 const REGION_COLORS: Record<string, string> = {
-  Sudeste: "#6366f1",
-  Sul: "#8b5cf6",
+  Sudeste: "#4a6fa5",
+  Sul: "#8b9dc3",
 };
 
 const MONTH_NAMES = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
@@ -69,17 +69,16 @@ const formatCompact = (v: any) => {
 };
 
 const tooltipStyle = {
-  backgroundColor: "rgba(15,15,30,0.95)",
-  border: "1px solid rgba(99,102,241,0.3)",
-  borderRadius: 12,
-  boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+  backgroundColor: "rgba(0,0,0,0.85)",
+  border: "1px solid rgba(255,255,255,0.15)",
+  borderRadius: 8,
 };
-const tooltipLabelStyle = { color: "#fff", fontSize: 12, fontWeight: 600 };
+const tooltipLabelStyle = { color: "#fff", fontSize: 11 };
 
-const gridStroke = "rgba(255,255,255,0.04)";
-const tickStyle = { fill: "#64748b", fontSize: 11 };
-const labelStyle = { fill: "#94a3b8", fontSize: 10, fontWeight: 600 };
-const legendStyle = { fontSize: 11, color: "#64748b" };
+const gridStroke = "rgba(255,255,255,0.08)";
+const tickStyle = { fill: "#aaa", fontSize: 11 };
+const labelStyle = { fill: "#ccc", fontSize: 10, fontWeight: 600 };
+const legendStyle = { fontSize: 11, color: "#aaa" };
 const chartMargin = { top: 10, right: 10, left: 10, bottom: 5 };
 
 export default function OlimpoFaturamento() {
@@ -275,7 +274,7 @@ export default function OlimpoFaturamento() {
               <h3 className="text-sm font-semibold text-foreground">Quantidade de Files — Total Faturado</h3>
               <p className="text-[10px] text-muted-foreground/60 mt-0.5">Evolução mensal de processos faturados</p>
             </div>
-            <Badge variant="outline" className="text-[10px] px-2.5 py-1 font-medium text-indigo-400 border-indigo-500/30 bg-indigo-500/10">
+            <Badge variant="outline" className="text-[10px] px-2.5 py-1 font-medium text-primary border-primary/30 bg-primary/10">
               Tendência
             </Badge>
           </div>
@@ -284,9 +283,9 @@ export default function OlimpoFaturamento() {
               <AreaChart data={chartMonthlyCount} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
                 <defs>
                   <linearGradient id="areaGradientMain" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#6366f1" stopOpacity={0.35} />
-                    <stop offset="50%" stopColor="#6366f1" stopOpacity={0.1} />
-                    <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
+                    <stop offset="0%" stopColor="#4a6fa5" stopOpacity={0.35} />
+                    <stop offset="50%" stopColor="#4a6fa5" stopOpacity={0.1} />
+                    <stop offset="100%" stopColor="#4a6fa5" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -296,16 +295,16 @@ export default function OlimpoFaturamento() {
                   contentStyle={tooltipStyle}
                   labelStyle={tooltipLabelStyle}
                   formatter={(v: number) => [v.toLocaleString("pt-BR"), "Total"]}
-                  cursor={{ stroke: "#6366f1", strokeWidth: 1, strokeDasharray: "4 4" }}
+                  cursor={{ stroke: "#4a6fa5", strokeWidth: 1, strokeDasharray: "4 4" }}
                 />
                 <Area
                   type="monotone"
                   dataKey="Quantidade"
-                  stroke="#6366f1"
+                  stroke="#4a6fa5"
                   strokeWidth={2.5}
                   fill="url(#areaGradientMain)"
-                  dot={{ r: 4, fill: "#6366f1", stroke: "#1e1b4b", strokeWidth: 2 }}
-                  activeDot={{ r: 7, fill: "#818cf8", stroke: "#fff", strokeWidth: 2 }}
+                  dot={{ r: 4, fill: "#4a6fa5", stroke: "#0a0e1a", strokeWidth: 2 }}
+                  activeDot={{ r: 7, fill: "#6b8fc5", stroke: "#fff", strokeWidth: 2 }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -318,12 +317,12 @@ export default function OlimpoFaturamento() {
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={chartModalCount} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="name" tick={tickStyle} axisLine={false} tickLine={false} />
-                <YAxis tick={tickStyle} axisLine={false} tickLine={false} />
+                <XAxis dataKey="name" tick={tickStyle} />
+                <YAxis tick={tickStyle} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
                 <Legend wrapperStyle={legendStyle} />
                 {allModals.map((mod) => (
-                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#64748b"} radius={[3, 3, 0, 0]} barSize={16} />
+                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} barSize={16} />
                 ))}
               </BarChart>
             </ResponsiveContainer>
@@ -344,7 +343,7 @@ export default function OlimpoFaturamento() {
                   strokeWidth={0}
                 >
                   {regionData.map((entry, i) => (
-                    <Cell key={i} fill={REGION_COLORS[entry.name] || ["#6366f1", "#8b5cf6", "#06b6d4"][i % 3]} />
+                    <Cell key={i} fill={REGION_COLORS[entry.name] || ["#4a6fa5", "#8b9dc3", "#5cb3c8"][i % 3]} />
                   ))}
                 </Pie>
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
@@ -358,7 +357,7 @@ export default function OlimpoFaturamento() {
                   <div key={i} className="flex items-center gap-2 text-xs">
                     <span
                       className="w-2.5 h-2.5 rounded-full"
-                      style={{ backgroundColor: REGION_COLORS[entry.name] || ["#6366f1", "#8b5cf6", "#06b6d4"][i % 3] }}
+                      style={{ backgroundColor: REGION_COLORS[entry.name] || ["#4a6fa5", "#8b9dc3", "#5cb3c8"][i % 3] }}
                     />
                     <span className="text-muted-foreground">{entry.name}</span>
                     <span className="font-semibold text-foreground">{pct}%</span>
@@ -373,8 +372,8 @@ export default function OlimpoFaturamento() {
               <BarChart data={chartMonthlyValor} margin={chartMargin}>
                 <defs>
                   <linearGradient id="barGradVal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#8b5cf6" stopOpacity={1} />
-                    <stop offset="100%" stopColor="#6366f1" stopOpacity={0.7} />
+                    <stop offset="0%" stopColor="#5a7fb5" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#3a5f95" stopOpacity={0.8} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -400,7 +399,7 @@ export default function OlimpoFaturamento() {
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => formatBRLFull(v)} />
                 <Legend wrapperStyle={legendStyle} />
                 {allModals.map((mod) => (
-                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#64748b"} radius={[3, 3, 0, 0]} barSize={18} />
+                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} barSize={18} />
                 ))}
               </BarChart>
             </ResponsiveContainer>
@@ -415,7 +414,7 @@ export default function OlimpoFaturamento() {
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
                 <Bar dataKey="count" name="Quantidade" radius={[4, 4, 0, 0]} barSize={28}>
                   {lastMonthModalData.map((entry, i) => (
-                    <Cell key={i} fill={MODAL_COLORS[entry.name] || "#64748b"} />
+                    <Cell key={i} fill={MODAL_COLORS[entry.name] || "#999"} />
                   ))}
                   <LabelList dataKey="count" position="top" style={labelStyle} />
                 </Bar>
@@ -433,7 +432,7 @@ export default function OlimpoFaturamento() {
                 <XAxis dataKey="name" tick={tickStyle} axisLine={false} tickLine={false} />
                 <YAxis tick={tickStyle} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
-                <Bar dataKey="count" name="Quantidade" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={28}>
+                <Bar dataKey="count" name="Quantidade" fill="#4a6fa5" radius={[4, 4, 0, 0]} barSize={28}>
                   <LabelList dataKey="count" position="top" style={labelStyle} />
                 </Bar>
               </BarChart>
@@ -450,8 +449,8 @@ export default function OlimpoFaturamento() {
                 <Bar dataKey="valor" name="Valor" radius={[4, 4, 0, 0]} barSize={28}>
                   <defs>
                     <linearGradient id="barGradDiv" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#8b5cf6" stopOpacity={1} />
-                      <stop offset="100%" stopColor="#6366f1" stopOpacity={0.6} />
+                    <stop offset="0%" stopColor="#5a7fb5" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#3a5f95" stopOpacity={0.7} />
                     </linearGradient>
                   </defs>
                   {divisionData.map((_, i) => (
@@ -471,9 +470,9 @@ export default function OlimpoFaturamento() {
 /* ── Glass Card wrapper ── */
 function GlassCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur-sm shadow-xl shadow-black/20 ${className}`}>
+    <Card className={`bg-card border-border ${className}`}>
       {children}
-    </div>
+    </Card>
   );
 }
 
