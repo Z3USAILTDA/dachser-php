@@ -151,6 +151,9 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     "996": (iata, awb) => `https://uxtracking.com/tracking.asp?prefix=${iata}&Serial=${awb}`,
     "235": (iata, awb) =>
       `https://www.turkishcargo.com/en/online-services/shipment-tracking?quick=True&awbInput=${iata}-${awb}`,
+    "086": () => `https://www.siacargo.com/e-services/quicksearch_public/`,
+    "098": () => `https://cargo.airindia.com/in/en/track-shipment.html`,
+    "118": () => `https://cargo.koreanair.com/en/tracking`,
   };
 
   const builder = urlBuilders[airlineCode];
