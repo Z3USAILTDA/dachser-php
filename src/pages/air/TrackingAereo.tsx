@@ -513,8 +513,8 @@ const TrackingAereo = () => {
       }
       total++;
       if (inTransitCodes.has(code)) transit++;
-      if (code === "DIS") alert++;
-      if (criticalCodes.has(code) || awb.pieces_discrepancy) critical++;
+      if (code === "DIS" || awb.pieces_discrepancy || awb.has_dis_event) alert++;
+      if (criticalCodes.has(code) && !awb.pieces_discrepancy) critical++;
     });
     return { total, transit, alert, critical };
   }, [awbsData]);
@@ -566,8 +566,8 @@ const TrackingAereo = () => {
         const code = getStatusCode(awb.last_event).toUpperCase();
         switch (cardFilter) {
           case "transito": return ["DEP", "MAN", "RCF", "ARR", "ARR - DESTINO", "ARR - CONEXÃO"].includes(code);
-          case "alerta": return code === "DIS";
-          case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy;
+          case "alerta": return code === "DIS" || awb.pieces_discrepancy || awb.has_dis_event;
+          case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code);
           default: return true;
         }
       });
