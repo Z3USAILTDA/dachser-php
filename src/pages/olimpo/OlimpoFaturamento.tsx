@@ -236,11 +236,11 @@ export default function OlimpoFaturamento() {
         <p className="text-xs text-muted-foreground/70">Período: {firstMonth} – {lastMonthShort} · Base: TOTVS RM</p>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <KPICardEnhanced icon={DollarSign} value={formatCompact(kpis.total)} label="Faturamento Total" color={ZEUS_COLORS.amber} loading={loading} sparkData={sparklineValor} sparkType="bar" />
-          <KPICardEnhanced icon={FileText} value={kpis.count.toLocaleString("pt-BR")} label="Processos Faturados" color={ZEUS_COLORS.success} loading={loading} sparkData={sparklineCount} sparkType="bar" />
-          <KPICardEnhanced icon={kpis.variation >= 0 ? TrendingUp : TrendingDown} value={`${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`} label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`} color={kpis.variation >= 0 ? ZEUS_COLORS.success : ZEUS_COLORS.danger} loading={loading} sparkData={sparklineValor} sparkType="line" />
-          <KPICardEnhanced icon={Users} value={formatCompact(kpis.topClientVal)} label="Maior Cliente" color={ZEUS_COLORS.amber} loading={loading} subtitle={kpis.topClient !== "-" ? kpis.topClient : undefined} sparkData={sparklineValor} sparkType="line" />
+        <div className="grid gap-4 md:grid-cols-4">
+          <KpiCard icon={DollarSign} label="Faturamento Total" value={formatCompact(kpis.total)} loading={loading} />
+          <KpiCard icon={FileText} label="Processos Faturados" value={kpis.count.toLocaleString("pt-BR")} loading={loading} />
+          <KpiCard icon={kpis.variation >= 0 ? TrendingUp : TrendingDown} label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`} value={`${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`} loading={loading} accent={kpis.variation < 0} />
+          <KpiCard icon={Users} label="Maior Cliente" value={formatCompact(kpis.topClientVal)} loading={loading} subtitle={kpis.topClient !== "-" ? kpis.topClient : undefined} />
         </div>
 
         {/* Row 1 — 3 charts */}
