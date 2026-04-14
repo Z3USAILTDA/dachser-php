@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import ChartDetailPanel, { type ChartColumn } from "@/components/charts/ChartDetailPanel";
-import GaugeChart from "@/components/charts/GaugeChart";
+import DonutSingleChart from "@/components/charts/DonutSingleChart";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, LabelList,
@@ -59,7 +59,7 @@ const formatCurrencyCompact = (v: number) => { const abs = Math.abs(v); if (abs 
 function Z3usTooltip({ active, payload, label, valueFormatter }: { active?: boolean; payload?: any[]; label?: string; valueFormatter?: (v: number, name?: string) => string; }) {
   if (!active || !payload || payload.length === 0) return null;
   return (
-    <div style={{ background: "hsl(222 41% 5%)", border: "1px solid hsl(40 95% 48% / 0.25)", borderRadius: "10px", boxShadow: "0 10px 30px rgba(0,0,0,0.5), 0 0 20px rgba(242,160,7,0.1)", padding: "10px 14px", minWidth: "140px" }}>
+    <div style={{ background: "hsl(222 41% 5%)", border: "1px solid hsl(40 95% 48% / 0.25)", borderRadius: "10px", boxShadow: "0 10px 30px rgba(0,0,0,0.5)", padding: "10px 14px", minWidth: "140px" }}>
       {label && <p style={{ color: "hsl(210 20% 75%)", fontSize: "11px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: "8px" }}>{label}</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
         {payload.map((entry: any, index: number) => (
@@ -81,7 +81,7 @@ function Z3usPieTooltip({ active, payload, total }: { active?: boolean; payload?
   const entry = payload[0]; const value = entry?.value ?? 0; const name = entry?.payload?.name || entry?.name || "";
   const percent = total && total > 0 ? ((value / total) * 100).toFixed(1) : "0";
   return (
-    <div style={{ background: "hsl(222 41% 5%)", border: "1px solid hsl(40 95% 48% / 0.25)", borderRadius: "10px", boxShadow: "0 10px 30px rgba(0,0,0,0.5), 0 0 20px rgba(242,160,7,0.1)", padding: "12px 16px" }}>
+    <div style={{ background: "hsl(222 41% 5%)", border: "1px solid hsl(40 95% 48% / 0.25)", borderRadius: "10px", boxShadow: "0 10px 30px rgba(0,0,0,0.5)", padding: "12px 16px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
         <div style={{ width: "10px", height: "10px", borderRadius: "2px", backgroundColor: entry?.color || ZEUS_COLORS.amber }} />
         <span style={{ color: "hsl(210 20% 90%)", fontSize: "13px", fontWeight: 600 }}>{name}</span>
@@ -268,7 +268,7 @@ export default function OlimpoFaturamento() {
           <div>
             <ZeusChartCard title="Qtd. Files — Total Faturado" subtitle="Evolução mensal" headerRight={<ExpandButton chartId="evolucao" />}>
               {chartMonthlyCount.length <= 1 ? (
-                <GaugeChart value={chartMonthlyCount[0]?.Quantidade ?? 0} label="Quantidade" color={ZEUS_COLORS.amber} />
+                <DonutSingleChart value={chartMonthlyCount[0]?.Quantidade ?? 0} label="Quantidade" color={ZEUS_COLORS.amber} />
               ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={chartMonthlyCount} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
@@ -331,7 +331,7 @@ export default function OlimpoFaturamento() {
           <div>
             <ZeusChartCard title="Valor Total Mensal" subtitle="Evolução mensal" headerRight={<ExpandButton chartId="valor-mensal" />}>
               {chartMonthlyValor.length <= 1 ? (
-                <GaugeChart value={chartMonthlyValor[0]?.Valor ?? 0} label="Valor Faturado" color={ZEUS_COLORS.amber} valueFormatter={(v) => formatCompact(v)} />
+                <DonutSingleChart value={chartMonthlyValor[0]?.Valor ?? 0} label="Valor Faturado" color={ZEUS_COLORS.amber} valueFormatter={(v) => formatCompact(v)} />
               ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={chartMonthlyValor} margin={{ top: 25, right: 10, left: 0, bottom: 5 }}>
@@ -394,7 +394,7 @@ export default function OlimpoFaturamento() {
           <div>
             <ZeusChartCard title="Qtd. por Divisão Modal" subtitle="Divisão" headerRight={<ExpandButton chartId="div-qtd" />}>
               {divisionData.length <= 1 ? (
-                <GaugeChart value={divisionData[0]?.count ?? 0} label="Quantidade" color={ZEUS_COLORS.success} />
+                <DonutSingleChart value={divisionData[0]?.count ?? 0} label="Quantidade" color={ZEUS_COLORS.success} />
               ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={divisionData} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
@@ -412,7 +412,7 @@ export default function OlimpoFaturamento() {
           <div>
             <ZeusChartCard title="Valor por Divisão Modal" subtitle="Divisão" headerRight={<ExpandButton chartId="div-valor" />}>
               {divisionData.length <= 1 ? (
-                <GaugeChart value={divisionData[0]?.valor ?? 0} label="Valor Faturado" color={ZEUS_COLORS.amber} valueFormatter={(v) => formatCompact(v)} />
+                <DonutSingleChart value={divisionData[0]?.valor ?? 0} label="Valor Faturado" color={ZEUS_COLORS.amber} valueFormatter={(v) => formatCompact(v)} />
               ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={divisionData} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
