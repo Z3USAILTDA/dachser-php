@@ -1,34 +1,54 @@
 
 
-## Plano: Adicionar links de rastreio para companhias aéreas 118, 086 e 098
+## Plano: Sincronizar filtro de companhias e CIAs Monitoradas com todos os prefixos que possuem link
 
 ### Problema
-As companhias Korean Air (118), Singapore Airlines Cargo (086) e Air India Cargo (098) aparecem na tela de Tracking Aéreo sem o botão de link externo para o site da companhia.
+O `urlBuilders` tem 33 companhias com link de rastreio, mas o filtro de companhias (`airlines`) tem apenas 12 e o modal de CIAs Monitoradas (`monitoredAirlinesData`) tem apenas 16. Vários prefixos com link não aparecem em nenhum dos dois.
 
-### Alterações
+### Alteração
 
 **`src/pages/air/TrackingAereo.tsx`**
 
-1. **`getTrackingUrl` (linha ~92-123)**: Adicionar 3 novos builders:
-   - `"118"` → `https://cargo.koreanair.com/en/tracking` (Korean Air Cargo — página geral, sem deep link por AWB)
-   - `"086"` → `https://www.siacargo.com/e-services/quicksearch_public/` (Singapore Airlines Cargo)
-   - `"098"` → `https://cargo.airindia.com/in/en/track-shipment.html` (Air India Cargo)
+1. **`airlines` (lista de filtro)** — Substituir pela lista completa de 33 companhias, ordenada por código:
 
-2. **`airlines` (linha ~252-262)**: Adicionar as 3 companhias à lista de filtro:
-   - `{ code: "086", name: "Singapore Airlines Cargo" }`
-   - `{ code: "098", name: "Air India Cargo" }`
-   - `{ code: "118", name: "Korean Air Cargo" }`
+| Código | Nome |
+|--------|------|
+| 001 | American Airlines Cargo |
+| 006 | Delta Cargo |
+| 014 | Air Canada Cargo |
+| 016 | United Cargo |
+| 020 | Lufthansa Cargo |
+| 045 | LATAM Cargo |
+| 047 | TAP Air Portugal Cargo |
+| 055 | ITA Airways Cargo |
+| 057 | Air France Cargo |
+| 074 | KLM Cargo |
+| 075 | IAG Cargo |
+| 083 | South African Airways Cargo |
+| 086 | Singapore Airlines Cargo |
+| 098 | Air India Cargo |
+| 118 | Korean Air Cargo |
+| 125 | British Airways Cargo |
+| 127 | GOL Cargo (Gollog) |
+| 139 | Aeroméxico Cargo |
+| 147 | ABSA Cargo |
+| 157 | Qatar Airways Cargo |
+| 160 | Cathay Cargo |
+| 172 | Cargolux |
+| 176 | Emirates SkyCargo |
+| 235 | Turkish Cargo |
+| 369 | Atlas Air Cargo |
+| 549 | LATAM Cargo (Alt) |
+| 577 | Azul Cargo |
+| 605 | Sky Airline Cargo |
+| 615 | European Air Transport (DHL) |
+| 724 | Swiss WorldCargo |
+| 729 | Avianca Cargo |
+| 881 | Condor Cargo |
+| 996 | Air Europa Cargo |
 
-3. **`monitoredAirlinesData` (linha ~266-283)**: Adicionar as 3 companhias e atualizar `totalAirlines`.
-
-**`src/pages/Index.tsx`** (mesma função `getTrackingUrl`)
-
-4. Adicionar os mesmos 3 builders para manter consistência entre as duas telas.
-
-**`src/components/tracking/TrackingUtils.ts`** (mapeamento legado `airlineTrackingLinks`)
-
-5. Adicionar as 3 entradas para manter o mapeamento legado atualizado.
+2. **`monitoredAirlinesData`** — Substituir pela mesma lista completa de 33 companhias e atualizar `totalAirlines: 33`.
 
 ### Resultado
-As 3 companhias terão o botão de link externo funcional, abrindo o site de rastreio da respectiva companhia aérea.
+Todas as companhias com link de rastreio aparecerão no filtro de seleção e no modal de CIAs Monitoradas.
 
