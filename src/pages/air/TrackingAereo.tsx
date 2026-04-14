@@ -403,37 +403,7 @@ const TrackingAereo = () => {
     }
   }, []);
 
-  // Check timeline for piece/weight discrepancy (enriched version matching /air/tracking)
-  function checkTimelineDiscrepancy(timeline: any[]): { discrepancy: boolean; baseline: number | null; hasDis: boolean } {
-    const result = { discrepancy: false, baseline: null as number | null, hasDis: false };
-    if (!timeline || timeline.length < 2) return result;
-
-    // Check for DIS events
-    result.hasDis = timeline.some((e: any) => {
-      const code = (e.event_code || e.codigo_evento || '').toUpperCase();
-      return code === 'DIS' || (e.event_description || e.descricao_evento || '').toUpperCase().includes('DISCREPANCY');
-    });
-
-    const pieces = timeline.map((e: any) => e.pieces ?? e.pecas).filter((p: any) => p != null && p > 0);
-    if (pieces.length < 2) return result;
-
-    const unique = [...new Set(pieces)];
-    result.baseline = pieces[0]; // first recorded piece count
-
-    if (unique.length >= 2) {
-      // Check if resolved: last delivery event matches baseline
-      const lastEvent = timeline[timeline.length - 1];
-      const lastCode = (lastEvent?.event_code || lastEvent?.codigo_evento || '').toUpperCase();
-      const lastPieces = lastEvent?.pieces ?? lastEvent?.pecas;
-      if (['DLV', 'POD'].includes(lastCode) && lastPieces === result.baseline) {
-        result.discrepancy = false;
-      } else {
-        result.discrepancy = true;
-      }
-    }
-
-    return result;
-  }
+  // Discrepancy detection is now done server-side via SQL in fetch-tracking-aereo
 
   // Fetch DB stats (commented out)
   // const fetchDbStats = useCallback(async () => {
