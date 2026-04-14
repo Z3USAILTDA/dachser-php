@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, FileText, TrendingUp, TrendingDown, Users, RefreshCw, Building2, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { DollarSign, FileText, TrendingUp, TrendingDown, Users, RefreshCw, Building2, ArrowUpRight, ArrowDownRight, BarChart3, PieChartIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -24,17 +23,17 @@ interface FaturamentoRow {
 }
 
 const MODAL_COLORS: Record<string, string> = {
-  AI: "#4a6fa5",
-  SI: "#e8913a",
-  TCK: "#8b9dc3",
-  ASO: "#48a868",
-  SE: "#b065a1",
-  AE: "#5cb3c8",
+  AI: "#F2A007",
+  SI: "#22C55E",
+  TCK: "#3B82F6",
+  ASO: "#8B5CF6",
+  SE: "#EC4899",
+  AE: "#06B6D4",
 };
 
 const REGION_COLORS: Record<string, string> = {
-  Sudeste: "#4a6fa5",
-  Sul: "#8b9dc3",
+  Sudeste: "#F2A007",
+  Sul: "#3B82F6",
 };
 
 const MONTH_NAMES = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
@@ -56,11 +55,6 @@ const formatMonthLabel = (d: string) => {
   return `${MONTH_SHORT[parseInt(m) - 1]}/${y}`;
 };
 
-const formatMonthFull = (d: string) => {
-  const [y, m] = d.split("-");
-  return `${MONTH_NAMES[parseInt(m) - 1].charAt(0).toUpperCase() + MONTH_NAMES[parseInt(m) - 1].slice(1)} ${y}`;
-};
-
 const formatCompact = (v: any) => {
   const n = safeNum(v);
   if (n >= 1_000_000) return `R$ ${(n / 1_000_000).toFixed(2).replace(".", ",")}M`;
@@ -68,18 +62,18 @@ const formatCompact = (v: any) => {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
 };
 
-const tooltipStyle = {
-  backgroundColor: "rgba(0,0,0,0.85)",
-  border: "1px solid rgba(255,255,255,0.15)",
+/* ── Z3US Design Tokens ── */
+const z3usTooltip = {
+  backgroundColor: "hsl(222 41% 6%)",
+  border: "1px solid hsl(220 30% 22%)",
   borderRadius: 8,
 };
-const tooltipLabelStyle = { color: "#fff", fontSize: 11 };
-
-const gridStroke = "rgba(255,255,255,0.08)";
-const tickStyle = { fill: "#aaa", fontSize: 11 };
-const labelStyle = { fill: "#ccc", fontSize: 10, fontWeight: 600 };
-const legendStyle = { fontSize: 11, color: "#aaa" };
-const chartMargin = { top: 10, right: 10, left: 10, bottom: 5 };
+const z3usTooltipLabel = { color: "#F2A007", fontSize: 11, fontWeight: 600 };
+const z3usGrid = "rgba(255,255,255,0.06)";
+const z3usTick = { fill: "#94A3B8", fontSize: 10 };
+const z3usLabel = { fill: "#CBD5E1", fontSize: 10, fontWeight: 600, filter: "drop-shadow(0 0 4px rgba(242,160,7,0.3))" };
+const z3usLegend = { fontSize: 10, color: "#94A3B8" };
+const z3usMargin = { top: 12, right: 12, left: 8, bottom: 5 };
 
 export default function OlimpoFaturamento() {
   const [data, setData] = useState<FaturamentoRow[]>([]);
@@ -202,7 +196,6 @@ export default function OlimpoFaturamento() {
       return row;
     }), [monthlyData, allModals]);
 
-  // Sparkline data for KPI cards
   const sparklineCount = useMemo(() => monthlyData.slice(-6).map((m) => ({ v: m.count })), [monthlyData]);
   const sparklineValor = useMemo(() => monthlyData.slice(-6).map((m) => ({ v: m.valor })), [monthlyData]);
 
@@ -222,126 +215,117 @@ export default function OlimpoFaturamento() {
         </Button>
       }
     >
-      <div className="space-y-6">
+      <div className="space-y-5">
         <p className="text-xs text-muted-foreground/70">
           Período: {firstMonth} – {lastMonthShort} · Base: TOTVS RM
         </p>
 
-        {/* KPI Cards — inspired by reference with sparklines */}
+        {/* ── KPI Cards — Z3US Enhanced ── */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <SparklineKpiCard
+          <ZeusKpiCard
+            icon={DollarSign}
             label="Faturamento Total"
             value={formatCompact(kpis.total)}
             loading={loading}
             variation={kpis.variation}
+            color="#F2A007"
             sparkData={sparklineValor}
-            sparkColor="#4a6fa5"
             sparkType="bar"
           />
-          <SparklineKpiCard
+          <ZeusKpiCard
+            icon={FileText}
             label="Processos Faturados"
             value={kpis.count.toLocaleString("pt-BR")}
             loading={loading}
             variation={kpis.countVariation}
+            color="#22C55E"
             sparkData={sparklineCount}
-            sparkColor="#22c55e"
             sparkType="bar"
           />
-          <SparklineKpiCard
+          <ZeusKpiCard
+            icon={kpis.variation >= 0 ? TrendingUp : TrendingDown}
             label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`}
             value={`${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`}
             loading={loading}
-            accent={kpis.variation < 0}
+            color={kpis.variation >= 0 ? "#22C55E" : "#EF4444"}
             sparkData={sparklineValor}
-            sparkColor={kpis.variation >= 0 ? "#22c55e" : "#ef4444"}
             sparkType="line"
           />
-          <SparklineKpiCard
+          <ZeusKpiCard
+            icon={Users}
             label="Maior Cliente"
             value={formatCompact(kpis.topClientVal)}
             loading={loading}
             subtitle={kpis.topClient !== "-" ? kpis.topClient : undefined}
+            color="#F2A007"
             sparkData={sparklineValor}
-            sparkColor="#e8913a"
             sparkType="line"
           />
         </div>
 
-        {/* Main Chart — AreaChart like reference */}
-        <GlassCard className="p-0">
-          <div className="flex items-center justify-between px-6 pt-5 pb-2">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Quantidade de Files — Total Faturado</h3>
-              <p className="text-[10px] text-muted-foreground/60 mt-0.5">Evolução mensal de processos faturados</p>
-            </div>
-            <Badge variant="outline" className="text-[10px] px-2.5 py-1 font-medium text-primary border-primary/30 bg-primary/10">
-              Tendência
-            </Badge>
-          </div>
-          <div className="px-4 pb-4">
-            <ResponsiveContainer width="100%" height={240}>
-              {chartMonthlyCount.length > 2 ? (
-                <AreaChart data={chartMonthlyCount} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
-                  <defs>
-                    <linearGradient id="areaGradientMain" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#4a6fa5" stopOpacity={0.35} />
-                      <stop offset="50%" stopColor="#4a6fa5" stopOpacity={0.1} />
-                      <stop offset="100%" stopColor="#4a6fa5" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                  <XAxis dataKey="name" tick={tickStyle} />
-                  <YAxis tick={tickStyle} />
-                  <Tooltip
-                    contentStyle={tooltipStyle}
-                    labelStyle={tooltipLabelStyle}
-                    formatter={(v: number) => [v.toLocaleString("pt-BR"), "Total"]}
-                    cursor={{ stroke: "#4a6fa5", strokeWidth: 1, strokeDasharray: "4 4" }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="Quantidade"
-                    stroke="#4a6fa5"
-                    strokeWidth={2.5}
-                    fill="url(#areaGradientMain)"
-                    dot={{ r: 4, fill: "#4a6fa5", stroke: "#0a0e1a", strokeWidth: 2 }}
-                    activeDot={{ r: 7, fill: "#6b8fc5", stroke: "#fff", strokeWidth: 2 }}
-                  />
-                </AreaChart>
-              ) : (
-                <BarChart data={chartMonthlyCount} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                  <XAxis dataKey="name" tick={tickStyle} />
-                  <YAxis tick={tickStyle} />
-                  <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => [v.toLocaleString("pt-BR"), "Total"]} />
-                  <Legend wrapperStyle={legendStyle} />
-                  <Bar dataKey="Quantidade" name="Total" fill="#4a6fa5" radius={[4, 4, 0, 0]} barSize={28}>
-                    <LabelList dataKey="Quantidade" position="top" style={labelStyle} />
-                  </Bar>
-                </BarChart>
-              )}
-            </ResponsiveContainer>
-          </div>
-        </GlassCard>
+        {/* ── Main Chart — Area ── */}
+        <ZeusChartCard title="Quantidade de Files — Total Faturado" subtitle="Evolução mensal de processos faturados">
+          <ResponsiveContainer width="100%" height={240}>
+            {chartMonthlyCount.length > 2 ? (
+              <AreaChart data={chartMonthlyCount} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="areaGradZ3us" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#F2A007" stopOpacity={0.3} />
+                    <stop offset="50%" stopColor="#F2A007" stopOpacity={0.08} />
+                    <stop offset="100%" stopColor="#F2A007" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={z3usGrid} vertical={false} />
+                <XAxis dataKey="name" tick={z3usTick} tickLine={false} axisLine={false} />
+                <YAxis tick={z3usTick} tickLine={false} axisLine={false} />
+                <Tooltip
+                  contentStyle={z3usTooltip}
+                  labelStyle={z3usTooltipLabel}
+                  formatter={(v: number) => [v.toLocaleString("pt-BR"), "Total"]}
+                  cursor={{ stroke: "#F2A007", strokeWidth: 1, strokeDasharray: "4 4" }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="Quantidade"
+                  stroke="#F2A007"
+                  strokeWidth={2.5}
+                  fill="url(#areaGradZ3us)"
+                  dot={{ r: 4, fill: "#F2A007", stroke: "#080C16", strokeWidth: 2 }}
+                  activeDot={{ r: 7, fill: "#F5B843", stroke: "#fff", strokeWidth: 2 }}
+                />
+              </AreaChart>
+            ) : (
+              <BarChart data={chartMonthlyCount} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={z3usGrid} vertical={false} />
+                <XAxis dataKey="name" tick={z3usTick} tickLine={false} axisLine={false} />
+                <YAxis tick={z3usTick} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={z3usTooltip} labelStyle={z3usTooltipLabel} formatter={(v: number) => [v.toLocaleString("pt-BR"), "Total"]} />
+                <Bar dataKey="Quantidade" name="Total" fill="#F2A007" radius={[4, 4, 0, 0]} barSize={28}>
+                  <LabelList dataKey="Quantidade" position="top" style={z3usLabel} />
+                </Bar>
+              </BarChart>
+            )}
+          </ResponsiveContainer>
+        </ZeusChartCard>
 
-        {/* Row 2 — 3 cards */}
+        {/* ── Row 2 — 3 cards ── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <ChartCard title="Qtd. por Modal" badge="Por Modal">
+          <ZeusChartCard title="Qtd. por Modal" subtitle="Distribuição por modal">
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chartModalCount} margin={chartMargin}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="name" tick={tickStyle} />
-                <YAxis tick={tickStyle} />
-                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
-                <Legend wrapperStyle={legendStyle} />
+              <BarChart data={chartModalCount} margin={z3usMargin}>
+                <CartesianGrid strokeDasharray="3 3" stroke={z3usGrid} vertical={false} />
+                <XAxis dataKey="name" tick={z3usTick} tickLine={false} axisLine={false} />
+                <YAxis tick={z3usTick} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={z3usTooltip} labelStyle={z3usTooltipLabel} formatter={(v: number) => v.toLocaleString("pt-BR")} />
+                <Legend wrapperStyle={z3usLegend} />
                 {allModals.map((mod) => (
-                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} barSize={16} />
+                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#64748B"} radius={[3, 3, 0, 0]} barSize={16} />
                 ))}
               </BarChart>
             </ResponsiveContainer>
-          </ChartCard>
+          </ZeusChartCard>
 
-          <ChartCard title="Distribuição Regional" badge="Regiões">
+          <ZeusChartCard title="Distribuição Regional" subtitle="Último mês">
             <ResponsiveContainer width="100%" height={180}>
               <PieChart>
                 <Pie
@@ -356,10 +340,10 @@ export default function OlimpoFaturamento() {
                   strokeWidth={0}
                 >
                   {regionData.map((entry, i) => (
-                    <Cell key={i} fill={REGION_COLORS[entry.name] || ["#4a6fa5", "#8b9dc3", "#5cb3c8"][i % 3]} />
+                    <Cell key={i} fill={REGION_COLORS[entry.name] || ["#F2A007", "#3B82F6", "#06B6D4"][i % 3]} />
                   ))}
                 </Pie>
-                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
+                <Tooltip contentStyle={z3usTooltip} labelStyle={z3usTooltipLabel} formatter={(v: number) => v.toLocaleString("pt-BR")} />
               </PieChart>
             </ResponsiveContainer>
             <div className="flex flex-wrap justify-center gap-4 px-2 pb-2">
@@ -370,7 +354,7 @@ export default function OlimpoFaturamento() {
                   <div key={i} className="flex items-center gap-2 text-xs">
                     <span
                       className="w-2.5 h-2.5 rounded-full"
-                      style={{ backgroundColor: REGION_COLORS[entry.name] || ["#4a6fa5", "#8b9dc3", "#5cb3c8"][i % 3] }}
+                      style={{ backgroundColor: REGION_COLORS[entry.name] || ["#F2A007", "#3B82F6", "#06B6D4"][i % 3] }}
                     />
                     <span className="text-muted-foreground">{entry.name}</span>
                     <span className="font-semibold text-foreground">{pct}%</span>
@@ -378,145 +362,160 @@ export default function OlimpoFaturamento() {
                 );
               })}
             </div>
-          </ChartCard>
+          </ZeusChartCard>
 
-          <ChartCard title="Valor Total Mensal" badge="Mensal">
+          <ZeusChartCard title="Valor Total Mensal" subtitle="Evolução mensal">
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chartMonthlyValor} margin={chartMargin}>
+              <BarChart data={chartMonthlyValor} margin={z3usMargin}>
                 <defs>
-                  <linearGradient id="barGradVal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#5a7fb5" stopOpacity={1} />
-                    <stop offset="100%" stopColor="#3a5f95" stopOpacity={0.8} />
+                  <linearGradient id="barGradValZ3" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#F2A007" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#F2A007" stopOpacity={0.5} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="name" tick={tickStyle} />
-                <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
-                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => [formatBRLFull(v), "Valor"]} />
-                <Bar dataKey="Valor" fill="url(#barGradVal)" radius={[4, 4, 0, 0]} barSize={24}>
-                  <LabelList dataKey="Valor" position="top" formatter={(v: number) => formatCompact(v)} style={labelStyle} />
+                <CartesianGrid strokeDasharray="3 3" stroke={z3usGrid} vertical={false} />
+                <XAxis dataKey="name" tick={z3usTick} tickLine={false} axisLine={false} />
+                <YAxis tick={z3usTick} tickLine={false} axisLine={false} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
+                <Tooltip contentStyle={z3usTooltip} labelStyle={z3usTooltipLabel} formatter={(v: number) => [formatBRLFull(v), "Valor"]} />
+                <Bar dataKey="Valor" fill="url(#barGradValZ3)" radius={[4, 4, 0, 0]} barSize={24}>
+                  <LabelList dataKey="Valor" position="top" formatter={(v: number) => formatCompact(v)} style={z3usLabel} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          </ChartCard>
+          </ZeusChartCard>
         </div>
 
-        {/* Row 3 — 3 cards */}
+        {/* ── Row 3 — 3 cards ── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <ChartCard title="Valor Faturado por Modal" badge="Modal">
+          <ZeusChartCard title="Valor Faturado por Modal" subtitle="Por modal">
             <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={chartModalValor} margin={chartMargin}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="name" tick={tickStyle} />
-                <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
-                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => formatBRLFull(v)} />
-                <Legend wrapperStyle={legendStyle} />
+              <BarChart data={chartModalValor} margin={z3usMargin}>
+                <CartesianGrid strokeDasharray="3 3" stroke={z3usGrid} vertical={false} />
+                <XAxis dataKey="name" tick={z3usTick} tickLine={false} axisLine={false} />
+                <YAxis tick={z3usTick} tickLine={false} axisLine={false} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
+                <Tooltip contentStyle={z3usTooltip} labelStyle={z3usTooltipLabel} formatter={(v: number) => formatBRLFull(v)} />
+                <Legend wrapperStyle={z3usLegend} />
                 {allModals.map((mod) => (
-                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} barSize={18} />
+                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#64748B"} radius={[3, 3, 0, 0]} barSize={18} />
                 ))}
               </BarChart>
             </ResponsiveContainer>
-          </ChartCard>
+          </ZeusChartCard>
 
-          <ChartCard title="Qtd. por Modal — Último Mês" badge="Último Mês">
+          <ZeusChartCard title="Qtd. por Modal — Último Mês" subtitle="Último mês">
             <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={lastMonthModalData} margin={chartMargin}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="name" tick={tickStyle} />
-                <YAxis tick={tickStyle} />
-                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
+              <BarChart data={lastMonthModalData} margin={z3usMargin}>
+                <CartesianGrid strokeDasharray="3 3" stroke={z3usGrid} vertical={false} />
+                <XAxis dataKey="name" tick={z3usTick} tickLine={false} axisLine={false} />
+                <YAxis tick={z3usTick} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={z3usTooltip} labelStyle={z3usTooltipLabel} formatter={(v: number) => v.toLocaleString("pt-BR")} />
                 <Bar dataKey="count" name="Quantidade" radius={[4, 4, 0, 0]} barSize={28}>
                   {lastMonthModalData.map((entry, i) => (
-                    <Cell key={i} fill={MODAL_COLORS[entry.name] || "#999"} />
+                    <Cell key={i} fill={MODAL_COLORS[entry.name] || "#64748B"} />
                   ))}
-                  <LabelList dataKey="count" position="top" style={labelStyle} />
+                  <LabelList dataKey="count" position="top" style={z3usLabel} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          </ChartCard>
+          </ZeusChartCard>
+
+          <ZeusChartCard title="Qtd. por Divisão Modal" subtitle="Divisão">
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={divisionData} margin={z3usMargin}>
+                <CartesianGrid strokeDasharray="3 3" stroke={z3usGrid} vertical={false} />
+                <XAxis dataKey="name" tick={z3usTick} tickLine={false} axisLine={false} />
+                <YAxis tick={z3usTick} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={z3usTooltip} labelStyle={z3usTooltipLabel} formatter={(v: number) => v.toLocaleString("pt-BR")} />
+                <Bar dataKey="count" name="Quantidade" fill="#F2A007" radius={[4, 4, 0, 0]} barSize={28}>
+                  <LabelList dataKey="count" position="top" style={z3usLabel} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </ZeusChartCard>
         </div>
 
-        {/* Row 4 — 3 cards */}
+        {/* ── Row 4 ── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <ChartCard title="Qtd. por Divisão Modal" badge="Divisão">
+          <ZeusChartCard title="Valor por Divisão Modal" subtitle="Divisão">
             <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={divisionData} margin={chartMargin}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="name" tick={tickStyle} />
-                <YAxis tick={tickStyle} />
-                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
-                <Bar dataKey="count" name="Quantidade" fill="#4a6fa5" radius={[4, 4, 0, 0]} barSize={28}>
-                  <LabelList dataKey="count" position="top" style={labelStyle} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartCard>
-
-          <ChartCard title="Valor por Divisão Modal" badge="Divisão">
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={divisionData} margin={chartMargin}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="name" tick={tickStyle} />
-                <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
-                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => formatBRLFull(v)} />
+              <BarChart data={divisionData} margin={z3usMargin}>
+                <defs>
+                  <linearGradient id="barGradDivZ3" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#F2A007" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#F2A007" stopOpacity={0.4} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={z3usGrid} vertical={false} />
+                <XAxis dataKey="name" tick={z3usTick} tickLine={false} axisLine={false} />
+                <YAxis tick={z3usTick} tickLine={false} axisLine={false} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
+                <Tooltip contentStyle={z3usTooltip} labelStyle={z3usTooltipLabel} formatter={(v: number) => formatBRLFull(v)} />
                 <Bar dataKey="valor" name="Valor" radius={[4, 4, 0, 0]} barSize={28}>
-                  <defs>
-                    <linearGradient id="barGradDiv" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#5a7fb5" stopOpacity={1} />
-                    <stop offset="100%" stopColor="#3a5f95" stopOpacity={0.7} />
-                    </linearGradient>
-                  </defs>
                   {divisionData.map((_, i) => (
-                    <Cell key={i} fill="url(#barGradDiv)" />
+                    <Cell key={i} fill="url(#barGradDivZ3)" />
                   ))}
-                  <LabelList dataKey="valor" position="top" formatter={(v: number) => formatCompact(v)} style={labelStyle} />
+                  <LabelList dataKey="valor" position="top" formatter={(v: number) => formatCompact(v)} style={z3usLabel} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          </ChartCard>
+          </ZeusChartCard>
         </div>
       </div>
     </PageLayout>
   );
 }
 
-/* ── Glass Card wrapper ── */
-function GlassCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return (
-    <Card className={`bg-card border-border ${className}`}>
-      {children}
-    </Card>
-  );
-}
+/* ══════════════════════════════════════════════
+   Z3US Design Components
+   ══════════════════════════════════════════════ */
 
-/* ── KPI Card with Sparkline ── */
-function SparklineKpiCard({ label, value, loading, variation, subtitle, accent, sparkData, sparkColor, sparkType }: {
+/* ── Z3US KPI Card ── */
+function ZeusKpiCard({ icon: Icon, label, value, loading, variation, subtitle, color, sparkData, sparkType }: {
+  icon: React.ElementType;
   label: string; value: string; loading: boolean;
-  variation?: number; subtitle?: string; accent?: boolean;
-  sparkData: { v: number }[]; sparkColor: string; sparkType: "bar" | "line";
+  variation?: number; subtitle?: string;
+  color: string;
+  sparkData: { v: number }[]; sparkType: "bar" | "line";
 }) {
   const hasVariation = variation !== undefined && variation !== 0;
   const isPositive = (variation ?? 0) >= 0;
 
   return (
-    <GlassCard>
-      <div className="p-4 flex flex-col gap-2">
+    <div
+      className="relative overflow-hidden rounded-xl border border-border/30"
+      style={{ background: "linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(2, 6, 23, 0.98))" }}
+    >
+      {/* Top color bar */}
+      <div className="h-1 w-full" style={{ background: `linear-gradient(90deg, ${color}, ${color}80)` }} />
+
+      <div className="p-4 flex flex-col gap-2.5">
         <div className="flex items-center justify-between">
-          <p className="text-[11px] font-medium text-muted-foreground/70 tracking-wide uppercase">{label}</p>
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: `${color}18`, border: `1px solid ${color}30` }}
+            >
+              <Icon className="h-4 w-4" style={{ color }} />
+            </div>
+            <p className="text-[11px] font-semibold tracking-wider uppercase" style={{ color: "#94A3B8" }}>{label}</p>
+          </div>
           {!loading && hasVariation && (
-            <div className={`flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${isPositive ? "text-emerald-400 bg-emerald-500/10" : "text-red-400 bg-red-500/10"}`}>
+            <div className={`flex items-center gap-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full ${isPositive ? "text-emerald-400 bg-emerald-500/10" : "text-red-400 bg-red-500/10"}`}>
               {isPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
               {isPositive ? "+" : ""}{variation!.toFixed(1)}%
             </div>
           )}
         </div>
+
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
-            <p className={`text-2xl font-bold tracking-tight ${loading ? "animate-pulse text-muted-foreground" : accent ? "text-red-400" : "text-foreground"}`}>
+            <p
+              className={`text-2xl font-bold tracking-tight ${loading ? "animate-pulse" : ""}`}
+              style={{ color: loading ? "#64748B" : "#F1F5F9", filter: loading ? "none" : `drop-shadow(0 0 8px ${color}40)` }}
+            >
               {loading ? "..." : value}
             </p>
             {!loading && subtitle && (
-              <p className="text-[10px] text-muted-foreground/60 truncate mt-0.5 max-w-[140px]">{subtitle}</p>
+              <p className="text-[10px] truncate mt-0.5 max-w-[140px]" style={{ color: "#64748B" }}>{subtitle}</p>
             )}
           </div>
           {!loading && sparkData.length > 0 && (
@@ -524,11 +523,11 @@ function SparklineKpiCard({ label, value, loading, variation, subtitle, accent, 
               <ResponsiveContainer width="100%" height="100%">
                 {sparkType === "bar" ? (
                   <BarChart data={sparkData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                    <Bar dataKey="v" fill={sparkColor} radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="v" fill={color} radius={[2, 2, 0, 0]} opacity={0.7} />
                   </BarChart>
                 ) : (
                   <LineChart data={sparkData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                    <Line type="monotone" dataKey="v" stroke={sparkColor} strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} />
                   </LineChart>
                 )}
               </ResponsiveContainer>
@@ -536,23 +535,32 @@ function SparklineKpiCard({ label, value, loading, variation, subtitle, accent, 
           )}
         </div>
       </div>
-    </GlassCard>
+    </div>
   );
 }
 
-/* ── Chart Card ── */
-function ChartCard({ title, badge, children }: { title: string; badge?: string; children: React.ReactNode }) {
+/* ── Z3US Chart Card ── */
+function ZeusChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <GlassCard>
+    <div
+      className="rounded-xl overflow-hidden"
+      style={{
+        background: "rgba(8, 12, 22, 0.9)",
+        border: "1px solid rgba(255,255,255,0.06)",
+      }}
+    >
       <div className="flex items-center justify-between px-5 pt-4 pb-2">
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        {badge && (
-          <Badge variant="outline" className="text-[10px] px-2 py-0.5 font-normal text-muted-foreground border-white/10 bg-white/[0.03]">
-            {badge}
-          </Badge>
-        )}
+        <div>
+          <h3 className="text-xs font-semibold tracking-wide uppercase" style={{ color: "#E2E8F0" }}>{title}</h3>
+          {subtitle && <p className="text-[10px] mt-0.5" style={{ color: "#64748B" }}>{subtitle}</p>}
+        </div>
+        <button className="text-[10px] font-medium px-2.5 py-1 rounded-md transition-colors"
+          style={{ color: "#F2A007", background: "rgba(242,160,7,0.08)", border: "1px solid rgba(242,160,7,0.15)" }}
+        >
+          Ver detalhes
+        </button>
       </div>
       <div className="px-3 pb-4">{children}</div>
-    </GlassCard>
+    </div>
   );
 }
