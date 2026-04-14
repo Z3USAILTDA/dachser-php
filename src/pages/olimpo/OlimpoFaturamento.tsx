@@ -60,19 +60,17 @@ const formatCompact = (v: number) => {
   return formatBRL(v);
 };
 
-const DarkTooltip = ({ active, payload, label, isCurrency }: any) => {
-  if (!active || !payload) return null;
-  return (
-    <div className="bg-popover border border-border rounded-md px-3 py-2 shadow-lg">
-      <p className="text-xs text-muted-foreground mb-1">{label}</p>
-      {payload.map((p: any, i: number) => (
-        <p key={i} className="text-xs font-semibold" style={{ color: p.color }}>
-          {p.name}: {isCurrency ? formatBRLFull(p.value) : p.value.toLocaleString("pt-BR")}
-        </p>
-      ))}
-    </div>
-  );
+const tooltipStyle = {
+  backgroundColor: "rgba(0,0,0,0.85)",
+  border: "1px solid rgba(255,255,255,0.15)",
+  borderRadius: 8,
 };
+const tooltipLabelStyle = { color: "#fff", fontSize: 11 };
+
+const gridStroke = "rgba(255,255,255,0.08)";
+const tickStyle = { fill: "#aaa", fontSize: 10 };
+const labelStyle = { fill: "#ccc", fontSize: 9, fontWeight: 600 };
+const legendStyle = { fontSize: 12, color: "#aaa" };
 
 export default function OlimpoFaturamento() {
   const [data, setData] = useState<FaturamentoRow[]>([]);
@@ -97,7 +95,6 @@ export default function OlimpoFaturamento() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // Group by month
   const monthlyData = useMemo(() => {
     const map = new Map<string, { count: number; valor: number; byModal: Record<string, { count: number; valor: number }> }>();
     data.forEach((r) => {
@@ -123,7 +120,6 @@ export default function OlimpoFaturamento() {
     return Array.from(s).sort();
   }, [monthlyData]);
 
-  // KPIs from last month
   const kpis = useMemo(() => {
     if (monthlyData.length === 0) return { total: 0, count: 0, variation: 0, topClient: "-", topClientVal: 0, lastMonth: "", prevMonthLabel: "" };
     const last = monthlyData[monthlyData.length - 1];
@@ -142,7 +138,6 @@ export default function OlimpoFaturamento() {
     return { total: last.valor, count: last.count, variation, topClient, topClientVal, lastMonth: last.month, prevMonthLabel };
   }, [monthlyData, data]);
 
-  // Region data
   const regionData = useMemo(() => {
     const map = new Map<string, number>();
     const lastMonth = monthlyData.length > 0 ? monthlyData[monthlyData.length - 1].month : null;
@@ -155,7 +150,6 @@ export default function OlimpoFaturamento() {
     return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
   }, [data, monthlyData]);
 
-  // Last month modal data
   const lastMonthModalData = useMemo(() => {
     if (monthlyData.length === 0) return [];
     const last = monthlyData[monthlyData.length - 1];
@@ -164,7 +158,6 @@ export default function OlimpoFaturamento() {
       .sort((a, b) => b.count - a.count);
   }, [monthlyData]);
 
-  // Division data (last month)
   const divisionData = useMemo(() => {
     const lastMonth = monthlyData.length > 0 ? monthlyData[monthlyData.length - 1].month : null;
     const divMap: Record<string, { count: number; valor: number }> = {};
@@ -179,7 +172,6 @@ export default function OlimpoFaturamento() {
     return Object.entries(divMap).map(([name, v]) => ({ name, ...v }));
   }, [data, monthlyData]);
 
-  // Chart data
   const chartMonthlyCount = useMemo(() =>
     monthlyData.map((m) => ({ name: formatMonthLabel(m.month), Quantidade: m.count })), [monthlyData]);
 
@@ -204,10 +196,6 @@ export default function OlimpoFaturamento() {
   const firstMonth = monthlyData.length > 0 ? formatMonthLabel(monthlyData[0].month) : "";
   const lastMonthShort = monthlyData.length > 0 ? formatMonthLabel(monthlyData[monthlyData.length - 1].month) : "";
 
-  const gridStroke = "rgba(255,255,255,0.08)";
-  const tickStyle = { fill: "#aaa", fontSize: 10 };
-  const labelStyle = { fill: "#ccc", fontSize: 9, fontWeight: 600 };
-
   return (
     <PageLayout
       title="DACHSER"
@@ -221,7 +209,6 @@ export default function OlimpoFaturamento() {
       }
     >
       <div className="space-y-6">
-        {/* Period info */}
         <p className="text-xs text-muted-foreground">
           Período: {firstMonth} – {lastMonthShort} | Base: TOTVS RM
         </p>
@@ -237,14 +224,14 @@ export default function OlimpoFaturamento() {
         {/* Row 1 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ChartCard title="Quantidade de Files — Total Faturado" sub="Contagem de PROCESSO">
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height={320}>
               <BarChart data={chartMonthlyCount} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} />
-                <Tooltip content={<DarkTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11, color: "#aaa" }} />
-                <Bar dataKey="Quantidade" name="Total" fill="#4a6fa5" radius={[3, 3, 0, 0]} maxBarSize={40}>
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => [v.toLocaleString("pt-BR"), "Total"]} />
+                <Legend wrapperStyle={legendStyle} />
+                <Bar dataKey="Quantidade" name="Total" fill="#4a6fa5" radius={[3, 3, 0, 0]} barSize={28}>
                   <LabelList dataKey="Quantidade" position="top" style={labelStyle} />
                 </Bar>
               </BarChart>
@@ -252,15 +239,15 @@ export default function OlimpoFaturamento() {
           </ChartCard>
 
           <ChartCard title="Quantidade Total Faturada por Modal" sub="Contagem de PROCESSO">
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height={320}>
               <BarChart data={chartModalCount} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} />
-                <Tooltip content={<DarkTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11, color: "#aaa" }} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
+                <Legend wrapperStyle={legendStyle} />
                 {allModals.map((mod) => (
-                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} barSize={20} />
                 ))}
               </BarChart>
             </ResponsiveContainer>
@@ -270,14 +257,14 @@ export default function OlimpoFaturamento() {
         {/* Row 2 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ChartCard title="Valor Total Faturado no RM" sub="Soma de VALOR TOTAL FATURADO">
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height={320}>
               <BarChart data={chartMonthlyValor} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
-                <Tooltip content={<DarkTooltip isCurrency />} />
-                <Legend wrapperStyle={{ fontSize: 11, color: "#aaa" }} />
-                <Bar dataKey="Valor" fill="#4a6fa5" radius={[3, 3, 0, 0]} maxBarSize={40}>
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => [formatBRLFull(v), "Valor"]} />
+                <Legend wrapperStyle={legendStyle} />
+                <Bar dataKey="Valor" fill="#4a6fa5" radius={[3, 3, 0, 0]} barSize={28}>
                   <LabelList dataKey="Valor" position="top" formatter={(v: number) => formatCompact(v)} style={labelStyle} />
                 </Bar>
               </BarChart>
@@ -285,15 +272,15 @@ export default function OlimpoFaturamento() {
           </ChartCard>
 
           <ChartCard title="Valor Total Faturado no RM por Modal" sub="Soma de VALOR TOTAL FATURADO">
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height={320}>
               <BarChart data={chartModalValor} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
-                <Tooltip content={<DarkTooltip isCurrency />} />
-                <Legend wrapperStyle={{ fontSize: 11, color: "#aaa" }} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => formatBRLFull(v)} />
+                <Legend wrapperStyle={legendStyle} />
                 {allModals.map((mod) => (
-                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} barSize={20} />
                 ))}
               </BarChart>
             </ResponsiveContainer>
@@ -303,7 +290,7 @@ export default function OlimpoFaturamento() {
         {/* Row 3 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <ChartCard title="Quantidade por Região" sub="Contagem de PROCESSO">
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={320}>
               <PieChart>
                 <Pie
                   data={regionData}
@@ -311,29 +298,33 @@ export default function OlimpoFaturamento() {
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  innerRadius={55}
-                  outerRadius={90}
+                  innerRadius={60}
+                  outerRadius={110}
                   paddingAngle={2}
-                  label={({ name, value }) => `${name}: ${value.toLocaleString("pt-BR")}`}
-                  labelLine={{ stroke: "#666" }}
+                  labelLine={false}
+                  label={({ name, value, cx, x, y }) => (
+                    <text x={x} y={y} fill="#ccc" fontSize={11} textAnchor={x > cx ? "start" : "end"} dominantBaseline="central">
+                      {name}: {value.toLocaleString("pt-BR")}
+                    </text>
+                  )}
                 >
                   {regionData.map((entry, i) => (
                     <Cell key={i} fill={REGION_COLORS[entry.name] || ["#4a6fa5", "#8b9dc3", "#5cb3c8"][i % 3]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(v: number) => v.toLocaleString("pt-BR")} contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 6 }} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
               </PieChart>
             </ResponsiveContainer>
           </ChartCard>
 
           <ChartCard title="Quantidade por Modal" sub="Contagem de PROCESSO">
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={320}>
               <BarChart data={lastMonthModalData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} />
-                <Tooltip content={<DarkTooltip />} />
-                <Bar dataKey="count" name="Quantidade" radius={[3, 3, 0, 0]} maxBarSize={45}>
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
+                <Bar dataKey="count" name="Quantidade" radius={[3, 3, 0, 0]} barSize={28}>
                   {lastMonthModalData.map((entry, i) => (
                     <Cell key={i} fill={MODAL_COLORS[entry.name] || "#999"} />
                   ))}
@@ -344,13 +335,13 @@ export default function OlimpoFaturamento() {
           </ChartCard>
 
           <ChartCard title="Valor por Modal" sub="Soma de VALOR TOTAL FATURADO">
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={320}>
               <BarChart data={lastMonthModalData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip content={<DarkTooltip isCurrency />} />
-                <Bar dataKey="valor" name="Valor" radius={[3, 3, 0, 0]} maxBarSize={45}>
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => formatBRLFull(v)} />
+                <Bar dataKey="valor" name="Valor" radius={[3, 3, 0, 0]} barSize={28}>
                   {lastMonthModalData.map((entry, i) => (
                     <Cell key={i} fill={MODAL_COLORS[entry.name] || "#999"} />
                   ))}
@@ -364,13 +355,13 @@ export default function OlimpoFaturamento() {
         {/* Row 4 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ChartCard title="Quantidade por Divisão Modal" sub="Contagem de PROCESSO">
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={320}>
               <BarChart data={divisionData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} />
-                <Tooltip content={<DarkTooltip />} />
-                <Bar dataKey="count" name="Quantidade" fill="#4a6fa5" radius={[3, 3, 0, 0]} maxBarSize={60}>
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
+                <Bar dataKey="count" name="Quantidade" fill="#4a6fa5" radius={[3, 3, 0, 0]} barSize={28}>
                   <LabelList dataKey="count" position="top" style={{ ...labelStyle, fontSize: 11 }} />
                 </Bar>
               </BarChart>
@@ -378,13 +369,13 @@ export default function OlimpoFaturamento() {
           </ChartCard>
 
           <ChartCard title="Valor por Divisão Modal" sub="Soma de VALOR TOTAL FATURADO">
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={320}>
               <BarChart data={divisionData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
-                <Tooltip content={<DarkTooltip isCurrency />} />
-                <Bar dataKey="valor" name="Valor" fill="#2c5282" radius={[3, 3, 0, 0]} maxBarSize={60}>
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => formatBRLFull(v)} />
+                <Bar dataKey="valor" name="Valor" fill="#2c5282" radius={[3, 3, 0, 0]} barSize={28}>
                   <LabelList dataKey="valor" position="top" formatter={(v: number) => formatCompact(v)} style={{ ...labelStyle, fontSize: 10 }} />
                 </Bar>
               </BarChart>
