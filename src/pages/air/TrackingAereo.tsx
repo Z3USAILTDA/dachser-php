@@ -343,7 +343,6 @@ const TrackingAereo = () => {
       if (data?.success && data?.data) {
         const converted: AWBData[] = data.data.map((item: any, index: number) => {
           const timeline = Array.isArray(item.timeline_json) ? item.timeline_json : [];
-          const discrepancy = checkTimelineDiscrepancy(timeline);
           const lastEvent = item.last_event || "";
           const statusCode = getStatusCode(lastEvent);
 
@@ -364,9 +363,9 @@ const TrackingAereo = () => {
             arr_destino_date: item.arr_destino_date || null,
             hide_reason: item.hide_reason || "",
             timeline_json: timeline,
-            pieces_discrepancy: discrepancy.discrepancy,
-            baseline_pieces: discrepancy.baseline,
-            has_dis_event: discrepancy.hasDis,
+            pieces_discrepancy: !!item.pieces_discrepancy,
+            baseline_pieces: item.baseline_pieces ?? null,
+            has_dis_event: !!item.has_dis_event,
             hours_in_status: item.hours_in_status != null ? Number(item.hours_in_status) : null,
             sla_limite_horas: item.sla_limite_horas != null ? Number(item.sla_limite_horas) : null,
             sla_ratio: item.sla_ratio != null ? Number(item.sla_ratio) : null,

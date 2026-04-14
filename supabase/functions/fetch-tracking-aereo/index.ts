@@ -484,6 +484,10 @@ serve(async (req) => {
       const visKey = `${row.AWB || ""}|${row.HAWB || ""}`;
       const hideReason = visibilityMap[visKey] || "";
 
+      // Discrepancy lookup
+      const discKey = `${row.AWB || ""}|${row.HAWB || ""}`;
+      const disc = discrepancyMap[discKey] || { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
+
       const normalized = {
         awb_number: row.AWB || "",
         hawb_number: row.HAWB || "",
@@ -500,6 +504,9 @@ serve(async (req) => {
         penultimate_location: row.loc1 || "",
         arr_destino_date: arrDestinoDate,
         hide_reason: hideReason,
+        pieces_discrepancy: disc.pieces_discrepancy,
+        baseline_pieces: disc.baseline_pieces,
+        has_dis_event: disc.has_dis_event,
         hours_in_status: row.hours_in_status_rounded != null ? Number(row.hours_in_status_rounded) : null,
         sla_limite_horas: row.sla_limite_horas != null ? Number(row.sla_limite_horas) : null,
         sla_ratio: row.sla_ratio != null ? Number(row.sla_ratio) : null,
