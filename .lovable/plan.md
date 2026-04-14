@@ -1,25 +1,34 @@
 
 
-## Plano: Mostrar STATUS_CRITICIDADE na coluna Situação
+## Plano: Adicionar links de rastreio para companhias aéreas 118, 086 e 098
 
 ### Problema
-A coluna "Situação" na tela de Tracking Aéreo só mostra badges de discrepância quando `isCritical` é `true`, mas `is_critical` é sempre definido como `false` (linha 376). Os dados de `pieces_discrepancy` e `has_dis_event` vêm do backend corretamente, mas nunca são exibidos.
+As companhias Korean Air (118), Singapore Airlines Cargo (086) e Air India Cargo (098) aparecem na tela de Tracking Aéreo sem o botão de link externo para o site da companhia.
 
-### Alteração
+### Alterações
 
 **`src/pages/air/TrackingAereo.tsx`**
 
-1. **Linha 376**: Calcular `is_critical` com base nos dados de discrepância e status críticos:
-   ```typescript
-   is_critical: !!item.pieces_discrepancy || !!item.has_dis_event || 
-                ["NIL","NIF","OFLD"].includes(getStatusCode(lastEvent).toUpperCase()),
-   ```
+1. **`getTrackingUrl` (linha ~92-123)**: Adicionar 3 novos builders:
+   - `"118"` → `https://cargo.koreanair.com/en/tracking` (Korean Air Cargo — página geral, sem deep link por AWB)
+   - `"086"` → `https://www.siacargo.com/e-services/quicksearch_public/` (Singapore Airlines Cargo)
+   - `"098"` → `https://cargo.airindia.com/in/en/track-shipment.html` (Air India Cargo)
 
-2. **Coluna Situação (linhas 854-892)**: Reorganizar a lógica para priorizar discrepância antes de `isCritical` genérico, garantindo que:
-   - `has_dis_event && !pieces_discrepancy` → badge âmbar "DIS - Discrepância"
-   - `pieces_discrepancy` → badge vermelho "Discrepância Peças (baseline)"
-   - Outros críticos (NIL, NIF, OFLD) → badge vermelho "Crítico"
+2. **`airlines` (linha ~252-262)**: Adicionar as 3 companhias à lista de filtro:
+   - `{ code: "086", name: "Singapore Airlines Cargo" }`
+   - `{ code: "098", name: "Air India Cargo" }`
+   - `{ code: "118", name: "Korean Air Cargo" }`
+
+3. **`monitoredAirlinesData` (linha ~266-283)**: Adicionar as 3 companhias e atualizar `totalAirlines`.
+
+**`src/pages/Index.tsx`** (mesma função `getTrackingUrl`)
+
+4. Adicionar os mesmos 3 builders para manter consistência entre as duas telas.
+
+**`src/components/tracking/TrackingUtils.ts`** (mapeamento legado `airlineTrackingLinks`)
+
+5. Adicionar as 3 entradas para manter o mapeamento legado atualizado.
 
 ### Resultado
-Processos com discrepância de peças ou eventos DIS aparecerão com o badge correto na coluna Situação, refletindo o `STATUS_CRITICIDADE` da query SQL.
+As 3 companhias terão o botão de link externo funcional, abrindo o site de rastreio da respectiva companhia aérea.
 
