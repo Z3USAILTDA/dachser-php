@@ -314,7 +314,7 @@ export default function OlimpoFaturamento() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div>
             <ZeusChartCard title="Valor Total Mensal" subtitle="Evolução mensal" headerRight={<ExpandButton chartId="valor-mensal" />}>
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={chartMonthlyValor} margin={{ top: 25, right: 10, left: 0, bottom: 5 }}>
                   <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} tickFormatter={(v) => formatCurrencyCompact(v)} />
                   <Tooltip content={<Z3usTooltip valueFormatter={(v) => formatBRLFull(v)} />} cursor={{ fill: 'rgba(242, 160, 7, 0.08)' }} />
@@ -324,10 +324,7 @@ export default function OlimpoFaturamento() {
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "valor-mensal"} onClose={() => setExpandedChart(null)} title="Valor Total Mensal" columns={COL_MENSAL} data={chartMonthlyValor} exportName="valor_mensal" accentColor={ZEUS_COLORS.amber} />
           </div>
-        </div>
 
-        {/* Row 3 — 3 charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div>
             <ZeusChartCard title="Qtd. por Modal" subtitle="Distribuição por modal" headerRight={<ExpandButton chartId="qtd-modal" />}>
               <ResponsiveContainer width="100%" height={260}>
@@ -353,7 +350,10 @@ export default function OlimpoFaturamento() {
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "valor-modal"} onClose={() => setExpandedChart(null)} title="Valor por Modal (Mensal)" columns={[{ key: "name", label: "Mês", type: "text" }, ...allModals.map(m => ({ key: m, label: m, type: "currency" as const }))]} data={chartModalValor} exportName="valor_modal" accentColor={ZEUS_COLORS.amber} />
           </div>
+        </div>
 
+        {/* Row 3 — 3 charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div>
             <ZeusChartCard title="Qtd. por Modal — Último Mês" subtitle="Último mês" headerRight={<ExpandButton chartId="modal-ultimo" />}>
               <ResponsiveContainer width="100%" height={260}>
@@ -369,10 +369,7 @@ export default function OlimpoFaturamento() {
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "modal-ultimo"} onClose={() => setExpandedChart(null)} title="Modal — Último Mês" columns={COL_MODAL_LAST} data={lastMonthModalData} exportName="modal_ultimo_mes" accentColor={ZEUS_COLORS.teal} />
           </div>
-        </div>
 
-        {/* Row 4 — 3 charts (2 divisão + placeholder or stretch) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div>
             <ZeusChartCard title="Qtd. por Divisão Modal" subtitle="Divisão" headerRight={<ExpandButton chartId="div-qtd" />}>
               <ResponsiveContainer width="100%" height={260}>
@@ -398,8 +395,6 @@ export default function OlimpoFaturamento() {
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "div-valor"} onClose={() => setExpandedChart(null)} title="Divisão Modal — Valor" columns={COL_DIVISAO} data={divisionData} exportName="divisao_valor" accentColor={ZEUS_COLORS.amber} />
           </div>
-
-          <div className="hidden lg:block" />
         </div>
       </div>
     </PageLayout>
