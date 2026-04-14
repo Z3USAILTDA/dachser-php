@@ -978,7 +978,7 @@ const TrackingAereo = () => {
                                 const trackingUrl = getTrackingUrl(awb.airline_code, awb.awb);
                                 return trackingUrl ? (
                                   <TooltipProvider><Tooltip><TooltipTrigger asChild>
-                                    <Button variant="ghost" size="sm" onClick={() => window.open(trackingUrl, "_blank")} className="text-foreground hover:text-primary h-8 w-8 p-0">
+                                    <Button variant="ghost" size="sm" onClick={() => window.open(trackingUrl, "_blank", "noopener,noreferrer")} className="text-foreground hover:text-primary h-8 w-8 p-0">
                                       <ExternalLink className="w-4 h-4" />
                                     </Button>
                                   </TooltipTrigger><TooltipContent><p className="text-xs">Abrir Rastreio Externo</p></TooltipContent></Tooltip></TooltipProvider>
