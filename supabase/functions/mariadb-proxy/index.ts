@@ -16014,6 +16014,29 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ==================== FATURAMENTO DASHBOARD ====================
+      case 'get_faturamento_dashboard': {
+        try {
+          console.log('[get_faturamento_dashboard] Fetching billing data from t_base_totvs_rm...');
+          const rows = await queryWithRetry(
+            () => client!.query(`
+              SELECT processo, faturado_em, filial, modal, cliente,
+                     valor_total_faturado, regiao, divisao_por_modal
+              FROM dados_dachser.t_base_totvs_rm
+              WHERE faturado_em IS NOT NULL
+              ORDER BY faturado_em DESC
+            `),
+            { label: 'get_faturamento_dashboard', timeoutMs: 15000 }
+          );
+          console.log(`[get_faturamento_dashboard] Retrieved ${rows?.length || 0} rows`);
+          result = { data: rows || [] };
+        } catch (e: any) {
+          console.error('[get_faturamento_dashboard] Error:', e);
+          result = { data: [], error: e.message };
+        }
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
