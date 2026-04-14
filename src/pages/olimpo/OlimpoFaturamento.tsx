@@ -413,17 +413,19 @@ function KpiCard({ icon: Icon, label, value, loading, accent, subtitle }: {
   icon: any; label: string; value: string; loading: boolean; accent?: boolean; subtitle?: string;
 }) {
   return (
-    <Card className="bg-card border-border">
-      <CardContent className="p-4 flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${accent ? "bg-red-500/10 border border-red-500/30" : "bg-primary/10 border border-primary/30"}`}>
+    <Card className="bg-card border-border h-full">
+      <CardContent className="p-4 flex items-center gap-3 h-full">
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${accent ? "bg-red-500/10 border border-red-500/30" : "bg-primary/10 border border-primary/30"}`}>
           <Icon className={`h-5 w-5 ${accent ? "text-red-400" : "text-primary"}`} />
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs text-muted-foreground">{label}</p>
           <p className={`text-lg font-bold ${loading ? "animate-pulse text-muted-foreground" : accent ? "text-red-400" : "text-foreground"}`}>
             {loading ? "..." : value}
           </p>
-          {!loading && subtitle && <p className="text-[10px] text-muted-foreground truncate max-w-[140px]">{subtitle}</p>}
+          <p className="text-[10px] text-muted-foreground truncate max-w-[160px] min-h-[14px]">
+            {!loading && subtitle ? subtitle : "\u00A0"}
+          </p>
         </div>
       </CardContent>
     </Card>
