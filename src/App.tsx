@@ -222,8 +222,9 @@ const App = () => (
           {/* CHB Module Manual */}
           <Route path="/chb/manual" element={<ManualChb />} />
           
-          {/* FIN Module Manual */}
+          {/* FIN Module */}
           <Route path="/fin/manual" element={<ManualFinanceiro />} />
+          <Route path="/fin/othello-import" element={<OthelloImport />} />
           
           {/* Admin Module Manual */}
           <Route path="/admin/manual" element={<ManualAdmin />} />
