@@ -271,7 +271,7 @@ export default function OlimpoFaturamento() {
 
           <div>
             <ZeusChartCard title="Top Clientes por Faturamento" subtitle="Último mês" headerRight={<ExpandButton chartId="top-clientes" />}>
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={topClientesData.map(d => ({ ...d, cliente: d.clienteShort }))} layout="vertical" margin={{ top: 5, right: 90, left: 10, bottom: 5 }}>
                   <CartesianGrid {...GRID_PROPS} horizontal={false} />
                   <XAxis type="number" tick={AXIS_TICK} tickFormatter={(v) => formatCurrencyCompact(v)} tickLine={false} />
@@ -288,7 +288,7 @@ export default function OlimpoFaturamento() {
 
           <div>
             <ZeusChartCard title="Distribuição Regional" subtitle="Último mês" headerRight={<ExpandButton chartId="regiao" />}>
-              <ResponsiveContainer width="100%" height={240}>
+              <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
                   <Pie data={regionData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={95} paddingAngle={3} strokeWidth={0}>
                     {regionData.map((entry, i) => (<Cell key={i} fill={REGION_COLORS[entry.name] || CHART_PALETTE[i % CHART_PALETTE.length]} style={{ filter: `drop-shadow(0 0 12px ${REGION_COLORS[entry.name] || CHART_PALETTE[i % CHART_PALETTE.length]}44)` }} />))}
@@ -430,8 +430,8 @@ function ZeusChartCard({ title, subtitle, children, colSpan, minHeight = 200, he
   title: string; subtitle?: string; children: React.ReactNode; colSpan?: number; minHeight?: number; headerRight?: React.ReactNode;
 }) {
   return (
-    <Card className={`bg-card border-border ${colSpan === 2 ? "lg:col-span-2" : ""}`}>
-      <CardContent className="p-3 flex flex-col">
+    <Card className={`bg-card border-border h-full ${colSpan === 2 ? "lg:col-span-2" : ""}`}>
+      <CardContent className="p-3 flex flex-col h-full">
         <div className="flex items-center justify-between mb-2">
           <div>
             <h3 className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">{title}</h3>
