@@ -1,23 +1,26 @@
 
 
-## Plano: Corrigir link de rastreio da United Cargo (016)
+## Plano: Corrigir bloqueio do link United Cargo (016)
 
 ### Problema
-O link direto `https://www.unitedcargo.com/en/us/track/awb/016-XXXXXXXX` está sendo bloqueado pelo servidor da United Cargo (ERR_BLOCKED_BY_RESPONSE).
+O site da United Cargo bloqueia a abertura quando detecta que veio de uma origem externa (cross-origin referrer). O `window.open(url, "_blank")` envia o referrer, fazendo o servidor rejeitar a requisição.
 
 ### Alteração
 
-**`src/pages/air/TrackingAereo.tsx`** (linha 96)
+**`src/pages/air/TrackingAereo.tsx`** (linha ~981)
 
-Substituir o URL builder da `016` para apontar para a página de tracking genérica (sem deep link direto, pois o servidor bloqueia):
+Alterar o `window.open` para incluir `noopener,noreferrer`, removendo o referrer da requisição:
 
 ```typescript
 // Antes
-"016": (i,a) => `https://www.unitedcargo.com/en/us/track/awb/${i}-${a}`,
+window.open(trackingUrl, "_blank")
 
 // Depois
-"016": (i,a) => `https://www.unitedcargo.com/en/us/track`,
+window.open(trackingUrl, "_blank", "noopener,noreferrer")
 ```
 
-O usuário será direcionado à página de tracking da United Cargo onde poderá colar o AWB manualmente. Não há URL com parâmetros de query disponível neste site (o formulário usa JavaScript client-side).
+Essa alteração se aplica a **todos** os links de companhias (não apenas 016), o que é uma boa prática de segurança.
+
+### Resultado
+O link da United Cargo (e demais) abrirá sem enviar o referrer, evitando o bloqueio do servidor.
 
