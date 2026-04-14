@@ -1444,29 +1444,41 @@ serve(async (req) => {
       // If this AWB was enriched via t_aereo_api fallback, use that data directly
       const apiFb = ws._apiFallback;
       if (apiFb) {
+        const hawbVal = String(apiFb.hawb || '').trim() || null;
+        const discKey = `${awb}|${hawbVal || ''}`;
+        const disc = discrepancyMap.get(discKey) || { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
         processedRows.push({
           ...baseRow,
           source: 'api',
-          hawb: String(apiFb.hawb || '').trim() || null,
+          hawb: hawbVal,
           destinatário: apiFb.destinatario || null,
           nome_analista: apiFb.nome_analista || null,
           email_analista: apiFb.email_analista || null,
           email_cliente: apiFb.emaill_cliente || null,
           tipo_servico: apiFb.tipo_servico || null,
           tipo_processo: null,
+          pieces_discrepancy: disc.pieces_discrepancy,
+          baseline_pieces: disc.baseline_pieces,
+          has_dis_event: disc.has_dis_event,
         });
       } else if (masters && masters.length > 0) {
         for (const master of masters) {
+          const hawbVal = String(master.hawb || '').trim() || null;
+          const discKey = `${awb}|${hawbVal || ''}`;
+          const disc = discrepancyMap.get(discKey) || { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
           processedRows.push({
             ...baseRow,
             source: 'ws',
-            hawb: String(master.hawb || '').trim() || null,
+            hawb: hawbVal,
             destinatário: master.cliente || null,
             nome_analista: master.nome_analista || null,
             email_analista: master.email_analista || null,
             email_cliente: master.emails_cliente || null,
             tipo_servico: master.tipo_servico || null,
             tipo_processo: master.tipo_processo || null,
+            pieces_discrepancy: disc.pieces_discrepancy,
+            baseline_pieces: disc.baseline_pieces,
+            has_dis_event: disc.has_dis_event,
           });
         }
       } else {
