@@ -264,6 +264,93 @@ serve(async (req) => {
       console.warn("Could not load t_air_process_visibility (may not exist yet):", err);
     }
 
+    // Step 3d: Load discrepancy data via SQL (pieces divergence + DIS events)
+    let discrepancyMap: Record<string, { pieces_discrepancy: boolean; baseline_pieces: number | null; has_dis_event: boolean }> = {};
+    try {
+      const discrepancySql = `
+        WITH base_disc AS (
+          SELECT
+            tda.awb_number AS awb,
+            tda.hawb_number AS hawb,
+            tdaf.timeline_json
+          FROM dados_dachser.t_dados_aereo tda
+          INNER JOIN dados_dachser.t_fato_aereo tdaf
+            ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
+           AND JSON_VALID(tdaf.hawbs_json)
+           AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
+          WHERE (tda.master_insert >= '2026-03-20' OR tda.created_at >= '2026-03-20')
+            AND tdaf.timeline_json IS NOT NULL
+            AND JSON_VALID(tdaf.timeline_json)
+        ),
+        eventos_disc AS (
+          SELECT
+            b.awb, b.hawb,
+            CASE
+              WHEN UPPER(COALESCE(jt.description, '')) REGEXP 'OFFLOADED|OFLD'
+                   AND (
+                       UPPER(jt.description) REGEXP '(^|[^0-9])0[[:space:]]+PIECES?([^A-Z]|$)'
+                       OR UPPER(jt.description) REGEXP 'QTY:[[:space:]]*0([^0-9]|$)'
+                       OR UPPER(jt.description) REGEXP 'PIECES?:[[:space:]]*0([^0-9]|$)'
+                   )
+              THEN NULL
+              WHEN UPPER(COALESCE(jt.description, '')) REGEXP 'QTY:[[:space:]]*[1-9][0-9]*'
+              THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), 'QTY:[[:space:]]*[1-9][0-9]*'), '[1-9][0-9]*') AS UNSIGNED)
+              WHEN UPPER(COALESCE(jt.description, '')) REGEXP 'PIECES?:[[:space:]]*[1-9][0-9]*'
+              THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), 'PIECES?:[[:space:]]*[1-9][0-9]*'), '[1-9][0-9]*') AS UNSIGNED)
+              WHEN UPPER(COALESCE(jt.description, '')) REGEXP '[1-9][0-9]*[[:space:]]+PIECE\\\\(S\\\\)'
+              THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), '[1-9][0-9]*[[:space:]]+PIECE\\\\(S\\\\)'), '[1-9][0-9]*') AS UNSIGNED)
+              WHEN UPPER(COALESCE(jt.description, '')) REGEXP '[1-9][0-9]*[[:space:]]+PIECES?'
+              THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), '[1-9][0-9]*[[:space:]]+PIECES?'), '[1-9][0-9]*') AS UNSIGNED)
+              WHEN UPPER(COALESCE(jt.description, '')) REGEXP '[1-9][0-9]*[[:space:]]*/[[:space:]]*[0-9]+([.,][0-9]+)?[[:space:]]*(KGS|KG|LBS|LB)'
+              THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), '[1-9][0-9]*[[:space:]]*/[[:space:]]*[0-9]+([.,][0-9]+)?[[:space:]]*(KGS|KG|LBS|LB)'), '[1-9][0-9]*') AS UNSIGNED)
+              ELSE NULL
+            END AS pieces_extraidas,
+            CASE
+              WHEN UPPER(COALESCE(jt.description, '')) REGEXP '(^|[^A-Z])(DISCREP|DIS)([^A-Z]|$)' THEN 1
+              ELSE 0
+            END AS is_dis_event
+          FROM base_disc b
+          JOIN JSON_TABLE(
+            b.timeline_json,
+            '$[*]' COLUMNS (
+              ordem FOR ORDINALITY,
+              description VARCHAR(1000) PATH '$.description'
+            )
+          ) jt
+        ),
+        agregado_disc AS (
+          SELECT
+            ev.awb, ev.hawb,
+            MIN(CASE WHEN ev.pieces_extraidas IS NOT NULL AND ev.pieces_extraidas > 0 THEN ev.pieces_extraidas END) AS min_pieces,
+            MAX(CASE WHEN ev.pieces_extraidas IS NOT NULL AND ev.pieces_extraidas > 0 THEN ev.pieces_extraidas END) AS max_pieces,
+            MAX(ev.is_dis_event) AS has_dis_event
+          FROM eventos_disc ev
+          GROUP BY ev.awb, ev.hawb
+        )
+        SELECT
+          awb AS AWB, hawb AS HAWB,
+          min_pieces AS BASELINE_PECAS,
+          CASE WHEN min_pieces IS NOT NULL AND max_pieces IS NOT NULL AND min_pieces <> max_pieces THEN 1 ELSE 0 END AS PIECES_DISCREPANCY,
+          has_dis_event AS HAS_DIS_EVENT
+        FROM agregado_disc
+        WHERE (min_pieces IS NOT NULL AND max_pieces IS NOT NULL AND min_pieces <> max_pieces)
+           OR has_dis_event = 1
+      `;
+      console.log("Executing discrepancy query...");
+      const discRows = await queryWithRetry(client, discrepancySql);
+      for (const dr of discRows || []) {
+        const key = `${dr.AWB || ""}|${dr.HAWB || ""}`;
+        discrepancyMap[key] = {
+          pieces_discrepancy: Number(dr.PIECES_DISCREPANCY) === 1,
+          baseline_pieces: dr.BASELINE_PECAS != null ? Number(dr.BASELINE_PECAS) : null,
+          has_dis_event: Number(dr.HAS_DIS_EVENT) === 1,
+        };
+      }
+      console.log(`Loaded ${Object.keys(discrepancyMap).length} discrepancy records`);
+    } catch (err) {
+      console.warn("Could not load discrepancy data:", err);
+    }
+
     await client.close();
     client = null;
 
@@ -397,6 +484,10 @@ serve(async (req) => {
       const visKey = `${row.AWB || ""}|${row.HAWB || ""}`;
       const hideReason = visibilityMap[visKey] || "";
 
+      // Discrepancy lookup
+      const discKey = `${row.AWB || ""}|${row.HAWB || ""}`;
+      const disc = discrepancyMap[discKey] || { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
+
       const normalized = {
         awb_number: row.AWB || "",
         hawb_number: row.HAWB || "",
@@ -413,6 +504,9 @@ serve(async (req) => {
         penultimate_location: row.loc1 || "",
         arr_destino_date: arrDestinoDate,
         hide_reason: hideReason,
+        pieces_discrepancy: disc.pieces_discrepancy,
+        baseline_pieces: disc.baseline_pieces,
+        has_dis_event: disc.has_dis_event,
         hours_in_status: row.hours_in_status_rounded != null ? Number(row.hours_in_status_rounded) : null,
         sla_limite_horas: row.sla_limite_horas != null ? Number(row.sla_limite_horas) : null,
         sla_ratio: row.sla_ratio != null ? Number(row.sla_ratio) : null,
