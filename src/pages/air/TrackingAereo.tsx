@@ -373,7 +373,8 @@ const TrackingAereo = () => {
             sla_tempo_formatado: item.sla_tempo_formatado || null,
             sla_tooltip: item.sla_tooltip || null,
             tracking_failed: !lastEvent || lastEvent === "",
-            is_critical: false,
+            is_critical: !!item.pieces_discrepancy || !!item.has_dis_event || 
+              ["NIL","NIF","OFLD"].includes(getStatusCode(lastEvent).toUpperCase()),
             is_invalid: false,
           } as AWBData;
         });
