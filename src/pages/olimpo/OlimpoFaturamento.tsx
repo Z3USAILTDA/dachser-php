@@ -259,13 +259,13 @@ export default function OlimpoFaturamento() {
                     <XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
                     <YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
                     <Tooltip content={<Z3usTooltip />} cursor={{ stroke: ZEUS_COLORS.amber, strokeWidth: 1, strokeDasharray: "4 4" }} />
-                    <Area type="monotone" dataKey="Quantidade" stroke={ZEUS_COLORS.amber} strokeWidth={2.5} fill="url(#areaGradZ3us)" dot={{ r: 4, fill: ZEUS_COLORS.amber, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.amberLight, stroke: "#fff", strokeWidth: 2 }} style={{ filter: `drop-shadow(0 0 6px ${ZEUS_COLORS.amber}55)` }} />
+                    <Area type="monotone" dataKey="Quantidade" stroke={ZEUS_COLORS.amber} strokeWidth={2.5} fill="url(#areaGradZ3us)" dot={{ r: 4, fill: ZEUS_COLORS.amber, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.amberLight, stroke: "#fff", strokeWidth: 2 }} />
                   </AreaChart>
                 ) : (
                   <BarChart data={chartMonthlyCount} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
                     <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
                     <Tooltip content={<Z3usTooltip />} cursor={{ fill: `rgba(242, 160, 7, 0.08)` }} />
-                    <Bar dataKey="Quantidade" name="Total" fill={ZEUS_COLORS.amber} radius={[4, 4, 0, 0]} barSize={28} style={{ filter: `drop-shadow(0 0 10px ${ZEUS_COLORS.amber}55)` }}><LabelList dataKey="Quantidade" position="top" fill={ZEUS_COLORS.amber} fontSize={11} fontWeight={600} /></Bar>
+                    <Bar dataKey="Quantidade" name="Total" fill={ZEUS_COLORS.amber} radius={[4, 4, 0, 0]} barSize={28}><LabelList dataKey="Quantidade" position="top" fill={ZEUS_COLORS.amber} fontSize={11} fontWeight={600} /></Bar>
                   </BarChart>
                 )}
               </ResponsiveContainer>
@@ -281,7 +281,7 @@ export default function OlimpoFaturamento() {
                   <XAxis type="number" tick={AXIS_TICK} tickFormatter={(v) => formatCurrencyCompact(v)} tickLine={false} />
                   <YAxis type="category" dataKey="cliente" tick={{ fill: '#94a3b8', fontSize: 10 }} width={100} tickLine={false} />
                   <Tooltip content={<Z3usTooltip valueFormatter={(v) => formatBRLFull(v)} />} cursor={{ fill: 'rgba(242, 160, 7, 0.08)' }} />
-                  <Bar dataKey="frete" fill={ZEUS_COLORS.amber} radius={[0, 4, 4, 0]} style={{ filter: `drop-shadow(0 0 8px ${ZEUS_COLORS.amber}55)` }}>
+                  <Bar dataKey="frete" fill={ZEUS_COLORS.amber} radius={[0, 4, 4, 0]}>
                     <LabelList dataKey="frete" position="right" fill={ZEUS_COLORS.amber} fontSize={10} fontWeight={600} formatter={(v: number) => formatCurrencyCompact(v)} />
                   </Bar>
                 </BarChart>
@@ -295,7 +295,7 @@ export default function OlimpoFaturamento() {
               <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
                   <Pie data={regionData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={95} paddingAngle={3} strokeWidth={0}>
-                    {regionData.map((entry, i) => (<Cell key={i} fill={REGION_COLORS[entry.name] || CHART_PALETTE[i % CHART_PALETTE.length]} style={{ filter: `drop-shadow(0 0 12px ${REGION_COLORS[entry.name] || CHART_PALETTE[i % CHART_PALETTE.length]}44)` }} />))}
+                    {regionData.map((entry, i) => (<Cell key={i} fill={REGION_COLORS[entry.name] || CHART_PALETTE[i % CHART_PALETTE.length]} />))}
                   </Pie>
                   <Tooltip content={<Z3usPieTooltip total={totalRegion} />} />
                   <text x="50%" y="46%" textAnchor="middle" fill="#64748b" fontSize={11}>Total</text>
@@ -306,7 +306,7 @@ export default function OlimpoFaturamento() {
                 {regionData.map((entry, i) => {
                   const color = REGION_COLORS[entry.name] || CHART_PALETTE[i % CHART_PALETTE.length];
                   const pct = totalRegion > 0 ? ((entry.value / totalRegion) * 100).toFixed(1) : "0";
-                  return (<div key={i} className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}66` }} /><span className="text-[11px] text-slate-300">{entry.name} ({pct}%)</span></div>);
+                  return (<div key={i} className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} /><span className="text-[11px] text-slate-300">{entry.name} ({pct}%)</span></div>);
                 })}
               </div>
             </ZeusChartCard>
@@ -322,7 +322,7 @@ export default function OlimpoFaturamento() {
                 <BarChart data={chartMonthlyValor} margin={{ top: 25, right: 10, left: 0, bottom: 5 }}>
                   <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} tickFormatter={(v) => formatCurrencyCompact(v)} />
                   <Tooltip content={<Z3usTooltip valueFormatter={(v) => formatBRLFull(v)} />} cursor={{ fill: 'rgba(242, 160, 7, 0.08)' }} />
-                  <Bar dataKey="Valor" fill={ZEUS_COLORS.amber} radius={[4, 4, 0, 0]} barSize={24} style={{ filter: `drop-shadow(0 0 10px ${ZEUS_COLORS.amber}55)` }}><LabelList dataKey="Valor" position="top" fill={ZEUS_COLORS.amber} fontSize={11} fontWeight={600} formatter={(v: number) => formatCompact(v)} /></Bar>
+                  <Bar dataKey="Valor" fill={ZEUS_COLORS.amber} radius={[4, 4, 0, 0]} barSize={24}><LabelList dataKey="Valor" position="top" fill={ZEUS_COLORS.amber} fontSize={11} fontWeight={600} formatter={(v: number) => formatCompact(v)} /></Bar>
                 </BarChart>
               </ResponsiveContainer>
             </ZeusChartCard>
@@ -335,7 +335,7 @@ export default function OlimpoFaturamento() {
                 <BarChart data={chartModalCount} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
                   <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
                   <Tooltip content={<Z3usTooltip />} cursor={{ fill: 'rgba(242, 160, 7, 0.08)' }} /><Legend wrapperStyle={{ fontSize: 10, color: '#94a3b8' }} />
-                  {allModals.map((mod) => (<Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#64748B"} radius={[3, 3, 0, 0]} barSize={16} style={{ filter: `drop-shadow(0 0 8px ${MODAL_COLORS[mod] || "#64748B"}44)` }} />))}
+                  {allModals.map((mod) => (<Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#64748B"} radius={[3, 3, 0, 0]} barSize={16} />))}
                 </BarChart>
               </ResponsiveContainer>
             </ZeusChartCard>
@@ -348,7 +348,7 @@ export default function OlimpoFaturamento() {
                 <BarChart data={chartModalValor} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
                   <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} tickFormatter={(v) => formatCurrencyCompact(v)} />
                   <Tooltip content={<Z3usTooltip valueFormatter={(v) => formatBRLFull(v)} />} cursor={{ fill: 'rgba(242, 160, 7, 0.08)' }} /><Legend wrapperStyle={{ fontSize: 10, color: '#94a3b8' }} />
-                  {allModals.map((mod) => (<Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#64748B"} radius={[3, 3, 0, 0]} barSize={18} style={{ filter: `drop-shadow(0 0 8px ${MODAL_COLORS[mod] || "#64748B"}44)` }} />))}
+                  {allModals.map((mod) => (<Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#64748B"} radius={[3, 3, 0, 0]} barSize={18} />))}
                 </BarChart>
               </ResponsiveContainer>
             </ZeusChartCard>
@@ -365,7 +365,7 @@ export default function OlimpoFaturamento() {
                   <CartesianGrid {...GRID_PROPS} horizontal={false} /><XAxis type="number" tick={AXIS_TICK} tickLine={false} /><YAxis type="category" dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} width={60} tickLine={false} />
                   <Tooltip content={<Z3usTooltip />} cursor={{ fill: 'rgba(242, 160, 7, 0.08)' }} />
                   <Bar dataKey="count" name="Quantidade" radius={[0, 4, 4, 0]}>
-                    {lastMonthModalData.map((entry, i) => (<Cell key={i} fill={MODAL_COLORS[entry.name] || CHART_PALETTE[i % CHART_PALETTE.length]} style={{ filter: `drop-shadow(0 0 8px ${MODAL_COLORS[entry.name] || CHART_PALETTE[i % CHART_PALETTE.length]}55)` }} />))}
+                    {lastMonthModalData.map((entry, i) => (<Cell key={i} fill={MODAL_COLORS[entry.name] || CHART_PALETTE[i % CHART_PALETTE.length]} />))}
                     <LabelList dataKey="count" position="right" fill={ZEUS_COLORS.amber} fontSize={11} fontWeight={700} />
                   </Bar>
                 </BarChart>
@@ -380,7 +380,7 @@ export default function OlimpoFaturamento() {
                 <BarChart data={divisionData} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
                   <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
                   <Tooltip content={<Z3usTooltip />} cursor={{ fill: 'rgba(34, 197, 94, 0.08)' }} />
-                  <Bar dataKey="count" name="Quantidade" fill={ZEUS_COLORS.success} radius={[4, 4, 0, 0]} barSize={40} style={{ filter: `drop-shadow(0 0 10px ${ZEUS_COLORS.success}55)` }}><LabelList dataKey="count" position="top" fill={ZEUS_COLORS.success} fontSize={11} fontWeight={600} /></Bar>
+                  <Bar dataKey="count" name="Quantidade" fill={ZEUS_COLORS.success} radius={[4, 4, 0, 0]} barSize={40}><LabelList dataKey="count" position="top" fill={ZEUS_COLORS.success} fontSize={11} fontWeight={600} /></Bar>
                 </BarChart>
               </ResponsiveContainer>
             </ZeusChartCard>
@@ -393,7 +393,7 @@ export default function OlimpoFaturamento() {
                 <BarChart data={divisionData} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
                   <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} tickFormatter={(v) => formatCurrencyCompact(v)} />
                   <Tooltip content={<Z3usTooltip valueFormatter={(v) => formatBRLFull(v)} />} cursor={{ fill: 'rgba(242, 160, 7, 0.08)' }} />
-                  <Bar dataKey="valor" name="Valor" fill={ZEUS_COLORS.amber} radius={[4, 4, 0, 0]} barSize={40} style={{ filter: `drop-shadow(0 0 10px ${ZEUS_COLORS.amber}55)` }}><LabelList dataKey="valor" position="top" fill={ZEUS_COLORS.amber} fontSize={11} fontWeight={600} formatter={(v: number) => formatCompact(v)} /></Bar>
+                  <Bar dataKey="valor" name="Valor" fill={ZEUS_COLORS.amber} radius={[4, 4, 0, 0]} barSize={40}><LabelList dataKey="valor" position="top" fill={ZEUS_COLORS.amber} fontSize={11} fontWeight={600} formatter={(v: number) => formatCompact(v)} /></Bar>
                 </BarChart>
               </ResponsiveContainer>
             </ZeusChartCard>
