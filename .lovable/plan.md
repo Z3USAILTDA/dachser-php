@@ -1,26 +1,25 @@
 
 
-## Plano: Corrigir botões de copiar na tela de Pagamentos
+## Plano: Mostrar STATUS_CRITICIDADE na coluna Situação
 
 ### Problema
-Os botões de copiar (linha digitável, código de barras, dados bancários, PIX) no painel `DadosPagamentoPanel` não funcionam. O componente é renderizado dentro de um `Dialog`, onde o focus trap do dialog interfere com o fallback `execCommand('copy')` — o textarea criado fora do dialog perde o foco imediatamente.
+A coluna "Situação" na tela de Tracking Aéreo só mostra badges de discrepância quando `isCritical` é `true`, mas `is_critical` é sempre definido como `false` (linha 376). Os dados de `pieces_discrepancy` e `has_dis_event` vêm do backend corretamente, mas nunca são exibidos.
 
 ### Alteração
 
-**`src/utils/clipboard.ts`**
+**`src/pages/air/TrackingAereo.tsx`**
 
-Melhorar o fallback para funcionar dentro de dialogs:
+1. **Linha 376**: Calcular `is_critical` com base nos dados de discrepância e status críticos:
+   ```typescript
+   is_critical: !!item.pieces_discrepancy || !!item.has_dis_event || 
+                ["NIL","NIF","OFLD"].includes(getStatusCode(lastEvent).toUpperCase()),
+   ```
 
-1. Usar `window.getSelection()` + `Range` como método alternativo ao `textarea.select()`
-2. Inserir o textarea como filho do elemento ativo (`document.activeElement?.closest('[role="dialog"]')`) em vez de `document.body`, para manter o foco dentro do dialog
-3. Adicionar tentativa com `navigator.clipboard.write()` usando `ClipboardItem` como fallback intermediário
-
-```typescript
-// Fallback: inserir textarea no dialog ativo (se houver) para evitar perda de foco
-const container = document.activeElement?.closest('[role="dialog"]') || document.body;
-container.appendChild(textarea);
-```
+2. **Coluna Situação (linhas 854-892)**: Reorganizar a lógica para priorizar discrepância antes de `isCritical` genérico, garantindo que:
+   - `has_dis_event && !pieces_discrepancy` → badge âmbar "DIS - Discrepância"
+   - `pieces_discrepancy` → badge vermelho "Discrepância Peças (baseline)"
+   - Outros críticos (NIL, NIF, OFLD) → badge vermelho "Crítico"
 
 ### Resultado
-Botões de copiar funcionarão corretamente tanto na tela principal quanto dentro de dialogs na aba Pagamentos.
+Processos com discrepância de peças ou eventos DIS aparecerão com o badge correto na coluna Situação, refletindo o `STATUS_CRITICIDADE` da query SQL.
 
