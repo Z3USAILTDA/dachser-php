@@ -441,7 +441,7 @@ export default function OthelloImport() {
     <PageLayout title="DACHSER" subtitle="Importar Othello/RM" backTo="/dashboard">
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Upload Card */}
-        <div className="rounded-xl border border-white/10 bg-black/40 backdrop-blur-md p-6 space-y-5">
+        <div className="rounded-2xl border border-[#ffc800]/20 bg-[#0a0e1a] p-6 space-y-5 shadow-[0_0_30px_rgba(245,184,67,0.06)]">
           <div className="flex items-center gap-3">
             <FileSpreadsheet className="w-6 h-6 text-[#ffc800]" />
             <h2 className="text-lg font-semibold text-white">Importação Excel — Othello / Totvs RM</h2>
@@ -489,10 +489,10 @@ export default function OthelloImport() {
         {/* Result Card */}
         {result && (
           <div
-            className={`rounded-xl border p-6 backdrop-blur-md ${
+            className={`rounded-2xl border p-6 ${
               result.success
-                ? "border-green-500/30 bg-green-500/10"
-                : "border-red-500/30 bg-red-500/10"
+                ? "border-green-500/30 bg-[#0a1a0f]"
+                : "border-red-500/30 bg-[#1a0a0a]"
             }`}
           >
             <div className="flex items-center gap-3 mb-4">
