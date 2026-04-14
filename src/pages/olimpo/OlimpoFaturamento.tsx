@@ -213,6 +213,7 @@ export default function OlimpoFaturamento() {
       title="DACHSER"
       subtitle="Olimpo — Faturamento"
       pageIcon={Building2}
+      backTo="/dashboard"
       rightContent={
         <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
@@ -226,11 +227,11 @@ export default function OlimpoFaturamento() {
         </p>
 
         {/* KPI Cards */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <KpiCard icon={DollarSign} label="Faturamento Total" value={formatCompact(kpis.total)} sub={lastMonthFormatted} loading={loading} />
-          <KpiCard icon={FileText} label="Processos Faturados" value={kpis.count.toLocaleString("pt-BR")} sub={lastMonthFormatted} loading={loading} />
-          <KpiCard icon={TrendingUp} label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`} value={`${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`} sub="Mês a Mês" loading={loading} accent={kpis.variation >= 0 ? "green" : "red"} />
-          <KpiCard icon={Users} label="Maior Cliente" value={formatCompact(kpis.topClientVal)} sub={kpis.topClient} loading={loading} accent="amber" />
+        <div className="grid gap-6 md:grid-cols-4">
+          <KpiCard icon={DollarSign} label="Faturamento Total" value={formatCompact(kpis.total)} loading={loading} />
+          <KpiCard icon={FileText} label="Processos Faturados" value={kpis.count.toLocaleString("pt-BR")} loading={loading} />
+          <KpiCard icon={TrendingUp} label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`} value={`${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`} loading={loading} accent={kpis.variation < 0} />
+          <KpiCard icon={Users} label="Maior Cliente" value={formatCompact(kpis.topClientVal)} loading={loading} />
         </div>
 
         {/* Row 1 */}
@@ -300,7 +301,7 @@ export default function OlimpoFaturamento() {
         </div>
 
         {/* Row 3 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <ChartCard title="Quantidade por Região" sub="Contagem de PROCESSO">
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
@@ -399,28 +400,20 @@ export default function OlimpoFaturamento() {
   );
 }
 
-function KpiCard({ icon: Icon, label, value, sub, loading, accent }: {
-  icon: any; label: string; value: string; sub: string; loading: boolean; accent?: "green" | "red" | "amber";
+function KpiCard({ icon: Icon, label, value, loading, accent }: {
+  icon: any; label: string; value: string; loading: boolean; accent?: boolean;
 }) {
-  const accentClasses = {
-    green: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400",
-    red: "bg-red-500/10 border-red-500/30 text-red-400",
-    amber: "bg-amber-500/10 border-amber-500/30 text-amber-400",
-  };
-  const ac = accent ? accentClasses[accent] : null;
-
   return (
     <Card className="bg-card border-border">
       <CardContent className="p-4 flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center border ${ac ? ac : "bg-primary/10 border-primary/30"}`}>
-          <Icon className={`h-5 w-5 ${ac ? "" : "text-primary"}`} />
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center border ${accent ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-primary/10 border-primary/30"}`}>
+          <Icon className={`h-5 w-5 ${accent ? "" : "text-primary"}`} />
         </div>
         <div>
           <p className="text-xs text-muted-foreground">{label}</p>
-          <p className={`text-lg font-bold ${loading ? "animate-pulse text-muted-foreground" : "text-foreground"}`}>
+          <p className={`text-lg font-bold ${loading ? "animate-pulse text-muted-foreground" : accent ? "text-red-400" : "text-foreground"}`}>
             {loading ? "..." : value}
           </p>
-          <p className="text-[10px] text-muted-foreground">{sub}</p>
         </div>
       </CardContent>
     </Card>
