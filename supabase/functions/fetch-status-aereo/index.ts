@@ -1319,9 +1319,9 @@ serve(async (req) => {
           const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
           return days >= 0 ? days : null;
         })(),
-        pieces_discrepancy,
-        baseline_pieces,
-        has_dis_event,
+        pieces_discrepancy: false,
+        baseline_pieces: null as number | null,
+        has_dis_event: false,
         master_changed: swapChangedSet.has(awb) || wasSwapped,
         in_transit: (() => {
            const PRE_TRANSIT_STATUSES = new Set(['RCS', 'NEW', 'BOO', 'BOOKED', 'UNK', 'NIL', 'NIF', 'NOT_FOUND']);
