@@ -130,8 +130,18 @@ export default function OlimpoFaturamento() {
   const [loading, setLoading] = useState(true);
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const { isAdmin, loading: roleLoading } = useUserRole();
 
   const toggleChart = (id: string) => setExpandedChart((prev) => (prev === id ? null : id));
+
+  // Redirect non-admin users
+  useEffect(() => {
+    if (!roleLoading && !isAdmin) {
+      toast({ title: "Acesso negado", description: "Apenas administradores podem acessar esta página.", variant: "destructive" });
+      navigate("/dashboard", { replace: true });
+    }
+  }, [roleLoading, isAdmin, navigate, toast]);
 
   const fetchData = async () => {
     setLoading(true);
