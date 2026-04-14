@@ -430,8 +430,8 @@ function ZeusChartCard({ title, subtitle, children, colSpan, minHeight = 200, he
   title: string; subtitle?: string; children: React.ReactNode; colSpan?: number; minHeight?: number; headerRight?: React.ReactNode;
 }) {
   return (
-    <Card className={`bg-card border-border ${colSpan === 2 ? "lg:col-span-2" : ""}`}>
-      <CardContent className="p-3 flex flex-col">
+    <Card className={`bg-card border-border h-full ${colSpan === 2 ? "lg:col-span-2" : ""}`}>
+      <CardContent className="p-3 flex flex-col h-full">
         <div className="flex items-center justify-between mb-2">
           <div>
             <h3 className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">{title}</h3>
