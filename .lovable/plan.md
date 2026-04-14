@@ -1,40 +1,45 @@
 
 
-## Plano: Adaptar Faturamento ao design do Olimpo Cobrança
+## Plano: Alinhar visual do Faturamento ao Olimpo Cobrança
 
-### Problema
-O dashboard de Faturamento usa tema claro (fundo cinza, cards brancos, inline styles) enquanto o Cobrança usa o design system dark padrão do Olimpo com componentes `Card`/`CardContent`/`CardHeader`/`CardTitle` e classes Tailwind.
+### Problemas identificados
+
+1. **Tooltip "R$ NaN"** — O `DarkTooltip` customizado tem bug com valores monetários. No Cobrança, o tooltip usa `contentStyle` inline no componente `<Tooltip>` do Recharts, não um componente custom
+2. **Proporções dos gráficos** — Faturamento usa alturas 260/240/220px; Cobrança usa 320px
+3. **Estilo do tooltip** — Cobrança: `backgroundColor: "rgba(0,0,0,0.85)"`, `border: "1px solid rgba(255,255,255,0.15)"`, `borderRadius: 8`; Faturamento usa componente custom com classes Tailwind
+4. **Donut chart** — Precisa de `labelLine={false}` como no Cobrança
+5. **Bar sizes** — Cobrança usa `barSize={28}`; Faturamento usa `maxBarSize` variável
 
 ### Alteração — Arquivo único
 
-**`src/pages/olimpo/OlimpoFaturamento.tsx`** — Ajustes de estilo (sem mudar visualizações)
+**`src/pages/olimpo/OlimpoFaturamento.tsx`**
 
-1. **Remover o container claro**: Eliminar o wrapper `style={{ background: "#f0f2f5" }}` e o header azul `#1a2744`. Usar o layout natural do `PageLayout` (fundo escuro)
+1. **Remover `DarkTooltip`** — Substituir por `contentStyle`/`labelStyle`/`formatter` inline em cada `<Tooltip>`, exatamente como no Cobrança:
+   ```tsx
+   <Tooltip 
+     contentStyle={{ backgroundColor: "rgba(0,0,0,0.85)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8 }}
+     labelStyle={{ color: "#fff" }}
+     formatter={(v: number) => formatBRL(v)}
+   />
+   ```
 
-2. **KPI Cards**: Substituir `KpiExecCard` (inline styles, fundo branco) pelo padrão do Cobrança:
-   - Usar `Card className="bg-card border-border"` + `CardContent` com ícone + label + valor
-   - Ícones: `DollarSign` (faturamento), `FileText` (processos), `TrendingUp` (variação), `Users` (maior cliente)
-   - Mesma estrutura do `KpiCard` do Cobrança
+2. **Padronizar alturas** — Todos os gráficos com `height={320}` (como Cobrança)
 
-3. **Chart Cards**: Substituir `ChartCard` (inline styles, fundo branco) por:
-   - `Card className="bg-card border-border"` + `CardHeader` + `CardTitle className="text-sm text-foreground"` + `CardContent`
-   - Remover `SlicerBadge` decorativos
+3. **Donut chart** — Adicionar `labelLine={false}` e ajustar `outerRadius={110}` / `innerRadius={60}` (como Cobrança)
 
-4. **Gráficos Recharts**: Ajustar cores internas:
-   - `CartesianGrid stroke="rgba(255,255,255,0.08)"` (era `#edf2f7`)
-   - `XAxis/YAxis tick fill="#aaa"` (era `#718096`)
-   - `LabelList fill` para cores claras (era `#2d3748`)
-   - Tooltip com `backgroundColor: "rgba(0,0,0,0.85)"` e `border: "1px solid rgba(255,255,255,0.15)"` (era branco)
+4. **Padronizar barSize** — Usar `barSize={28}` nos gráficos de barras simples
 
-5. **Header**: Usar `rightContent` do PageLayout para o botão Atualizar, como no Cobrança. Subtítulo de período como texto `text-muted-foreground` abaixo dos KPIs
+5. **Tooltip do PieChart** — Usar mesmo `contentStyle` + `formatter` do Cobrança
+
+6. **Legend** — Usar `wrapperStyle={{ fontSize: 12 }}` em todos (como Cobrança usa `fontSize: 11-12`)
 
 ### Sem alteração
-- Todas as 9 visualizações permanecem idênticas (tipos de gráfico, dados, lógica)
-- Lógica de fetch e processamento inalterada
-- Nenhum outro arquivo modificado
+- Tipos de visualização (9 gráficos) permanecem idênticos
+- Lógica de fetch/processamento inalterada
+- KpiCard e ChartCard já estão no padrão correto
 
 ### Resumo
 | Arquivo | Ação |
 |---------|------|
-| `src/pages/olimpo/OlimpoFaturamento.tsx` | Ajuste de estilo: dark theme + componentes Card |
+| `src/pages/olimpo/OlimpoFaturamento.tsx` | Fix tooltip NaN, padronizar alturas/tamanhos ao Cobrança |
 
