@@ -1,49 +1,44 @@
 
 
-## Plano: Melhorar visual do Faturamento inspirado no design de referência
+## Plano: Aplicar estilo visual do Amazon Trans (Gestão de Frota / Rotas) ao Faturamento
 
-A imagem de referência mostra um dashboard moderno com: cards com sparklines/mini-gráficos, ícones mais elegantes, subtítulos nos KPIs, bordas mais suaves, e uma hierarquia visual mais clara. Vou aplicar essas melhorias mantendo a estrutura existente e o padrão dark do Olimpo.
+O objetivo é alinhar o dashboard de Faturamento com o design system Z3US usado nas telas "Gestão de Frota" e "Rotas mais utilizadas" do projeto Amazon Trans. As mudanças são puramente visuais — nenhuma lógica de dados será alterada.
 
-### Alterações — Arquivo único
+### Mudanças principais no `src/pages/olimpo/OlimpoFaturamento.tsx`
 
-**`src/pages/olimpo/OlimpoFaturamento.tsx`**
+1. **KPI Cards** — Substituir o `SparklineKpiCard` atual pelo estilo `KPICardEnhanced` do Amazon Trans:
+   - Background com `linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(2, 6, 23, 0.98))`
+   - Barra colorida no topo (`h-1` com gradiente da cor do KPI)
+   - Ícone dentro de box colorido com borda sutil
+   - Manter sparklines existentes integrados ao novo layout
 
-1. **KPI Cards mais ricos** (inspirado na imagem):
-   - Adicionar indicador de variação (seta + percentual) no card de Faturamento Total
-   - Mostrar o nome do maior cliente como subtítulo abaixo do valor
-   - Adicionar mini-indicador de tendência (ícone TrendingUp/Down) nos cards relevantes
-   - Usar `gap-4` nos KPIs (como referência) com cards mais compactos e informação densa
+2. **Chart Cards** — Substituir `ChartCard`/`GlassCard` pelo estilo `ZeusChartCard`:
+   - Background: `rgba(8, 12, 22, 0.9)` com borda `rgba(255,255,255,0.06)`
+   - Título uppercase, `text-xs font-semibold tracking-wide`
+   - Substituir badges por botão "Ver detalhes" sutil (como no Amazon Trans)
 
-2. **ChartCard com header melhorado**:
-   - Adicionar subtítulo e título na mesma linha (subtítulo à direita, menor, como badge)
-   - Bordas mais suaves com `border-border/50` em vez de `border-border`
-   - Adicionar `hover:border-border` transition para interatividade sutil
+3. **Cores** — Migrar para paleta ZEUS:
+   - Primário: `#F2A007` (amber) em vez de `#4a6fa5`
+   - Sucesso: `#22C55E`
+   - Manter cores de modal mas aplicar efeito glow (`drop-shadow`) nas barras
 
-3. **Gráfico principal (linha de tendência)**:
-   - Converter o primeiro gráfico "Quantidade de Files — Total Faturado" de BarChart para um **AreaChart** com gradiente, inspirado no gráfico principal da referência (curva suave com área preenchida)
-   - Manter tooltip com dados completos
-   - Usar gradiente de preenchimento da cor primária (#4a6fa5) com opacidade
+4. **Tooltip** — Atualizar para estilo Z3US:
+   - `backgroundColor: "hsl(222 41% 6%)"`, `border: "1px solid hsl(220 30% 22%)"`, `borderRadius: 8px`
 
-4. **Cores e polish**:
-   - Usar cores de barra com gradiente sutil (via `linearGradient` no SVG defs)
-   - Melhorar o `gridStroke` para `rgba(255,255,255,0.05)` (mais sutil)
-   - Cursor pointer nos tooltips com `cursor="pointer"` no `<Bar>`
+5. **Grid e Eixos** — Alinhamento com Amazon Trans:
+   - `vertical={false}` no CartesianGrid
+   - `tickLine={false}` nos eixos
+   - Grid stroke mais sutil: `rgba(255,255,255,0.06)`
 
-5. **Layout Row 3 (3 cards)**:
-   - Ajustar o donut chart (Região) para ter legenda embaixo com badges coloridos em vez de labels inline no gráfico
+6. **Labels com Glow** — Adicionar `filter: drop-shadow(0 0 6px color)` nos LabelList e valores de destaque
 
-6. **Espaçamento geral**:
-   - Adicionar `rounded-xl` nos Cards (bordas mais arredondadas, como na referência)
-   - Manter `space-y-6` entre seções
-
-### Sem alteração
-- Lógica de fetch/processamento de dados inalterada
-- 9 visualizações mantidas (apenas 1 muda de Bar para Area)
-- Tooltip styles, formatadores e proxy inalterados
-- Nenhum outro arquivo modificado
-
-### Resumo
+### Arquivo alterado
 | Arquivo | Ação |
 |---------|------|
-| `src/pages/olimpo/OlimpoFaturamento.tsx` | Melhorar KPIs, converter gráfico principal para AreaChart, polish visual |
+| `src/pages/olimpo/OlimpoFaturamento.tsx` | Refatorar componentes visuais (KPI, ChartCard, cores, tooltip, grid) |
+
+### Sem alteração
+- Lógica de fetch, processamento de dados, useMemo
+- Estrutura de grid (3 colunas mantida)
+- Nenhum outro arquivo modificado
 
