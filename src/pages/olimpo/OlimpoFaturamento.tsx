@@ -271,7 +271,7 @@ export default function OlimpoFaturamento() {
 
           <div>
             <ZeusChartCard title="Top Clientes por Faturamento" subtitle="Último mês" headerRight={<ExpandButton chartId="top-clientes" />}>
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={topClientesData.map(d => ({ ...d, cliente: d.clienteShort }))} layout="vertical" margin={{ top: 5, right: 90, left: 10, bottom: 5 }}>
                   <CartesianGrid {...GRID_PROPS} horizontal={false} />
                   <XAxis type="number" tick={AXIS_TICK} tickFormatter={(v) => formatCurrencyCompact(v)} tickLine={false} />
