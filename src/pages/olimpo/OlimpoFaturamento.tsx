@@ -235,10 +235,10 @@ export default function OlimpoFaturamento() {
         </div>
 
         {/* Row 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <ChartCard title="Quantidade de Files — Total Faturado" sub="Contagem de PROCESSO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={chartMonthlyCount} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={chartMonthlyCount} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} />
@@ -253,7 +253,7 @@ export default function OlimpoFaturamento() {
 
           <ChartCard title="Quantidade Total Faturada por Modal" sub="Contagem de PROCESSO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={chartModalCount} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={chartModalCount} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} />
@@ -268,10 +268,10 @@ export default function OlimpoFaturamento() {
         </div>
 
         {/* Row 2 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <ChartCard title="Valor Total Faturado no RM" sub="Soma de VALOR TOTAL FATURADO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={chartMonthlyValor} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={chartMonthlyValor} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
@@ -286,7 +286,7 @@ export default function OlimpoFaturamento() {
 
           <ChartCard title="Valor Total Faturado no RM por Modal" sub="Soma de VALOR TOTAL FATURADO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={chartModalValor} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={chartModalValor} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
@@ -332,7 +332,7 @@ export default function OlimpoFaturamento() {
 
           <ChartCard title="Quantidade por Modal" sub="Contagem de PROCESSO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={lastMonthModalData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={lastMonthModalData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} />
@@ -349,7 +349,7 @@ export default function OlimpoFaturamento() {
 
           <ChartCard title="Valor por Modal" sub="Soma de VALOR TOTAL FATURADO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={lastMonthModalData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={lastMonthModalData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
@@ -366,16 +366,16 @@ export default function OlimpoFaturamento() {
         </div>
 
         {/* Row 4 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <ChartCard title="Quantidade por Divisão Modal" sub="Contagem de PROCESSO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={divisionData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={divisionData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
                 <Bar dataKey="count" name="Quantidade" fill="#4a6fa5" radius={[3, 3, 0, 0]} barSize={28}>
-                  <LabelList dataKey="count" position="top" style={{ ...labelStyle, fontSize: 11 }} />
+                  <LabelList dataKey="count" position="top" style={labelStyle} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -383,13 +383,13 @@ export default function OlimpoFaturamento() {
 
           <ChartCard title="Valor por Divisão Modal" sub="Soma de VALOR TOTAL FATURADO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={divisionData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={divisionData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => formatBRLFull(v)} />
                 <Bar dataKey="valor" name="Valor" fill="#2c5282" radius={[3, 3, 0, 0]} barSize={28}>
-                  <LabelList dataKey="valor" position="top" formatter={(v: number) => formatCompact(v)} style={{ ...labelStyle, fontSize: 10 }} />
+                  <LabelList dataKey="valor" position="top" formatter={(v: number) => formatCompact(v)} style={labelStyle} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
