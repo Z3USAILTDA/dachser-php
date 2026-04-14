@@ -235,7 +235,7 @@ export default function OlimpoFaturamento() {
             loading={loading}
             variation={kpis.variation}
             sparkData={sparklineValor}
-            sparkColor="#6366f1"
+            sparkColor="#4a6fa5"
             sparkType="bar"
           />
           <SparklineKpiCard
@@ -244,7 +244,7 @@ export default function OlimpoFaturamento() {
             loading={loading}
             variation={kpis.countVariation}
             sparkData={sparklineCount}
-            sparkColor="#10b981"
+            sparkColor="#22c55e"
             sparkType="bar"
           />
           <SparklineKpiCard
@@ -253,7 +253,7 @@ export default function OlimpoFaturamento() {
             loading={loading}
             accent={kpis.variation < 0}
             sparkData={sparklineValor}
-            sparkColor={kpis.variation >= 0 ? "#10b981" : "#ef4444"}
+            sparkColor={kpis.variation >= 0 ? "#22c55e" : "#ef4444"}
             sparkType="line"
           />
           <SparklineKpiCard
@@ -262,7 +262,7 @@ export default function OlimpoFaturamento() {
             loading={loading}
             subtitle={kpis.topClient !== "-" ? kpis.topClient : undefined}
             sparkData={sparklineValor}
-            sparkColor="#8b5cf6"
+            sparkColor="#e8913a"
             sparkType="line"
           />
         </div>
