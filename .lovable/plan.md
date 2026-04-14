@@ -1,46 +1,64 @@
 
 
-## Plano: Apenas containers entregues não devem ser re-rastreados
+## Plano: Importação Excel Othello/Totvs RM — Tela filha de FIN
 
-### Situação atual
+### Visão Geral
 
-Existem **duas camadas** de filtragem que impedem containers de serem re-rastreados:
+Criar tela `/fin/othello-import` para importação de Excel `.xlsx` com 3 abas, processamento client-side com SheetJS, e persistência transacional via edge function no MariaDB (schema `dados_dachser`). Tabelas já existem e estão vazias.
 
-1. **`refresh_sea_tracking`** (modo normal): Usa `stale_hours=4` para pendentes e `refresh_valid_hours=48` para válidos, pulando containers atualizados recentemente. Também exclui status finais (DELIVERED, DLV, GOD, etc.).
+### Arquivos a criar
 
-2. **`sea_seed_smart`** (JsonCargo): Usa lógica de cache baseada em ETA — pula containers entregues, ETA > 7 dias, e ETA 1-7 dias se já atualizou hoje.
+#### 1. `src/pages/fin/OthelloImport.tsx` — Página de importação
 
-### O que muda
+- Upload de `.xlsx`, leitura client-side com `xlsx` (SheetJS, `raw: false` para valores calculados)
+- Validação das 3 abas e cabeçalhos exatos
+- Processamento: Base Totvs RM primeiro (indexar por `processo`), depois Nacional (cruzar `faturado_em`/`comentarios`), depois Interacional (colunas A-H)
+- Cálculos no frontend: `faturado_no_othello_por`, `faturado_no_rm_por`, `regiao`, `divisao_por_modal`, `othello_rm`, campos por pessoa/participação
+- Acesso restrito: `is_admin === 1` (Z3US e DACHSER)
+- Usa `PageLayout`, segue design existente (background dachser, cards, etc.)
+- Resumo final: linhas importadas por aba, erros
 
-A regra passa a ser: **todos os containers ativos devem ser re-rastreados, exceto os entregues (status final)**. Sem filtros de staleness/ETA.
+**Tipos de dados respeitados conforme schema MariaDB:**
+- `id_ref_object`, `processo`: BIGINT (número)
+- `service_date`, `faturado_em`: DATE
+- `revenue`, `revenue_transit`, `total_revenue`, `valor_total_faturado`: DECIMAL(18,2)
+- `filial`: INT
+- `participacao`: DECIMAL(10,4)
+- `faturado_em` (nacional): VARCHAR(50) — texto, não data
+- Demais: VARCHAR com tamanhos respeitados
 
-### Alterações
+#### 2. `supabase/functions/fin-othello-import/index.ts` — Edge function
 
-#### 1. `supabase/functions/olimpo-proxy/index.ts` — `refresh_sea_tracking`
+- Recebe JSON com dados das 3 abas já processados + nome do arquivo
+- Conecta ao MariaDB usando secrets existentes (MARIADB_HOST, etc.)
+- Transação completa: `START TRANSACTION` → `DELETE` das 3 tabelas → `INSERT` em batches de 50 → `COMMIT` (ou `ROLLBACK`)
+- Campos de controle preenchidos: `arquivo_origem`, `aba_origem`, `linha_excel`, `importado_em`
+- Retorna contagens por aba e erros
 
-- Alterar defaults de `stale_hours` de `4` para `0` e `refresh_valid_hours` de `48` para `0` (linha 2830-2831)
-- Isso remove a filtragem por "tempo desde último check", mantendo apenas a exclusão de status finais (DELIVERED, DLV, GOD, etc.) que já existe na linha 2862
+### Arquivos a modificar
 
-#### 2. `supabase/functions/olimpo-proxy/index.ts` — `sea_seed_smart`
+#### 3. `src/App.tsx`
+- Import `OthelloImport` + rota `/fin/othello-import`
 
-- Remover as regras de cache por ETA (linhas 747-753):
-  - Remover: "Entregue há mais de 1 dia → cache permanente"
-  - Remover: "ETA > 7 dias → usar cache"
-  - Remover: "ETA 1-7 dias e já atualizou hoje → usar cache"
-- Manter apenas: se `isDelivered` → `useCache = true` (entregues continuam pulados)
-- A lógica simplificada fica:
+#### 4. `src/pages/Dashboard.tsx`
+- Adicionar item filho em FIN (após Esteira Vouchers/SPO):
 ```typescript
-if (isDelivered) {
-  useCache = true; // Entregue = não re-rastrear
+{
+  label: "Importar Othello/RM",
+  href: "/fin/othello-import",
+  adminOnly: true,
 }
 ```
 
-#### 3. `src/pages/ContainerTracking.tsx` — Auto-sync do frontend
+### Dependências
+- Instalar `xlsx` (SheetJS) para leitura client-side do Excel
 
-- Atualizar as 2 chamadas que usam `stale_hours=4&refresh_valid_hours=48` (linhas 1076 e 1346) para `stale_hours=0&refresh_valid_hours=0`
-- A chamada da linha 1485 já usa `0` — sem alteração necessária
-
-### Arquivos alterados
-- `supabase/functions/olimpo-proxy/index.ts` (2 seções)
-- `src/pages/ContainerTracking.tsx` (2 URLs)
+### Resumo de alterações
+| Arquivo | Ação |
+|---------|------|
+| `src/pages/fin/OthelloImport.tsx` | Novo |
+| `supabase/functions/fin-othello-import/index.ts` | Novo |
+| `src/App.tsx` | +1 import, +1 rota |
+| `src/pages/Dashboard.tsx` | +1 item menu FIN |
+| `package.json` | +xlsx |
 
