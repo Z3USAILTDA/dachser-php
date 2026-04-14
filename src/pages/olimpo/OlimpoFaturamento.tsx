@@ -226,14 +226,18 @@ export default function OlimpoFaturamento() {
   return (
     <PageLayout title="DACHSER" subtitle="Faturamento" pageIcon={DollarSign} backTo="/dashboard"
       rightContent={
-        <Button size="sm" onClick={fetchData} disabled={loading}
-          className="h-8 border-border bg-card text-muted-foreground hover:text-foreground text-xs">
-          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} /> Atualizar
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="h-8 px-3 flex items-center rounded-md bg-card border border-border text-xs text-muted-foreground">
+            Período: {firstMonth} – {lastMonthShort} · Base: TOTVS RM
+          </div>
+          <Button size="sm" onClick={fetchData} disabled={loading}
+            className="h-8 border-border bg-card text-muted-foreground hover:text-foreground text-xs">
+            <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} /> Atualizar
+          </Button>
+        </div>
       }
     >
       <div className="space-y-5">
-        <p className="text-xs text-muted-foreground/70">Período: {firstMonth} – {lastMonthShort} · Base: TOTVS RM</p>
 
         {/* KPI Cards */}
         <div className="grid gap-4 md:grid-cols-4">
