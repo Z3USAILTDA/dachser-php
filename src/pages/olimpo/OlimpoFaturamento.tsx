@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { DollarSign, FileText, TrendingUp, TrendingDown, Users, RefreshCw, Building2, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import ChartDetailPanel, { type ChartColumn } from "@/components/charts/ChartDetailPanel";
@@ -223,10 +224,11 @@ export default function OlimpoFaturamento() {
   );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Olimpo — Faturamento" pageIcon={Building2} backTo="/dashboard"
+    <PageLayout title="DACHSER" subtitle="Faturamento" pageIcon={DollarSign} backTo="/dashboard"
       rightContent={
-        <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="border-border/30 hover:border-primary/50 transition-all">
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} /> Atualizar
+        <Button size="sm" onClick={fetchData} disabled={loading}
+          className="h-8 border-border bg-card text-muted-foreground hover:text-foreground text-xs">
+          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} /> Atualizar
         </Button>
       }
     >
@@ -234,11 +236,11 @@ export default function OlimpoFaturamento() {
         <p className="text-xs text-muted-foreground/70">Período: {firstMonth} – {lastMonthShort} · Base: TOTVS RM</p>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <KPICardEnhanced icon={DollarSign} value={formatCompact(kpis.total)} label="Faturamento Total" color={ZEUS_COLORS.amber} loading={loading} sparkData={sparklineValor} sparkType="bar" />
-          <KPICardEnhanced icon={FileText} value={kpis.count.toLocaleString("pt-BR")} label="Processos Faturados" color={ZEUS_COLORS.success} loading={loading} sparkData={sparklineCount} sparkType="bar" />
-          <KPICardEnhanced icon={kpis.variation >= 0 ? TrendingUp : TrendingDown} value={`${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`} label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`} color={kpis.variation >= 0 ? ZEUS_COLORS.success : ZEUS_COLORS.danger} loading={loading} sparkData={sparklineValor} sparkType="line" />
-          <KPICardEnhanced icon={Users} value={formatCompact(kpis.topClientVal)} label="Maior Cliente" color={ZEUS_COLORS.amber} loading={loading} subtitle={kpis.topClient !== "-" ? kpis.topClient : undefined} sparkData={sparklineValor} sparkType="line" />
+        <div className="grid gap-4 md:grid-cols-4">
+          <KpiCard icon={DollarSign} label="Faturamento Total" value={formatCompact(kpis.total)} loading={loading} />
+          <KpiCard icon={FileText} label="Processos Faturados" value={kpis.count.toLocaleString("pt-BR")} loading={loading} />
+          <KpiCard icon={kpis.variation >= 0 ? TrendingUp : TrendingDown} label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`} value={`${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`} loading={loading} accent={kpis.variation < 0} />
+          <KpiCard icon={Users} label="Maior Cliente" value={formatCompact(kpis.topClientVal)} loading={loading} subtitle={kpis.topClient !== "-" ? kpis.topClient : undefined} />
         </div>
 
         {/* Row 1 — 3 charts */}
@@ -408,30 +410,24 @@ export default function OlimpoFaturamento() {
 // Z3US Components
 // ══════════════════════════════════════
 
-function KPICardEnhanced({ icon: Icon, value, label, color, loading, subtitle, sparkData, sparkType }: {
-  icon: React.ElementType; value: string | number; label: string; color: string; loading: boolean; subtitle?: string; sparkData: { v: number }[]; sparkType: "bar" | "line";
+function KpiCard({ icon: Icon, label, value, loading, accent, subtitle }: {
+  icon: any; label: string; value: string; loading: boolean; accent?: boolean; subtitle?: string;
 }) {
   return (
-    <div className="relative rounded-xl p-4 overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(2, 6, 23, 0.98) 100%)', border: '1px solid rgba(148, 163, 184, 0.12)', boxShadow: `0 4px 20px -4px ${color}22, 0 0 0 1px ${color}15` }}>
-      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: `linear-gradient(90deg, ${color}, ${color}66)` }} />
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${color}15`, border: `1px solid ${color}30` }}>
-          <Icon className="w-5 h-5" style={{ color }} />
+    <Card className="bg-card border-border">
+      <CardContent className="p-4 flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${accent ? "bg-red-500/10 border border-red-500/30" : "bg-primary/10 border border-primary/30"}`}>
+          <Icon className={`h-5 w-5 ${accent ? "text-red-400" : "text-primary"}`} />
         </div>
-        <div className="min-w-0 flex-1">
-          <p className={`text-2xl font-bold ${loading ? "animate-pulse text-slate-500" : "text-white"}`}>{loading ? "..." : value}</p>
-          <p className="text-[11px] text-slate-400">{label}</p>
-          {!loading && subtitle && <p className="text-[10px] text-slate-500 truncate max-w-[140px]">{subtitle}</p>}
+        <div>
+          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className={`text-lg font-bold ${loading ? "animate-pulse text-muted-foreground" : accent ? "text-red-400" : "text-foreground"}`}>
+            {loading ? "..." : value}
+          </p>
+          {!loading && subtitle && <p className="text-[10px] text-muted-foreground truncate max-w-[140px]">{subtitle}</p>}
         </div>
-        {!loading && sparkData.length > 0 && (
-          <div className="w-20 h-8 shrink-0">
-            <ResponsiveContainer width="100%" height="100%">
-              {sparkType === "bar" ? (<BarChart data={sparkData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}><Bar dataKey="v" fill={color} radius={[2, 2, 0, 0]} opacity={0.6} /></BarChart>) : (<LineChart data={sparkData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}><Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} /></LineChart>)}
-            </ResponsiveContainer>
-          </div>
-        )}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -439,15 +435,17 @@ function ZeusChartCard({ title, subtitle, children, colSpan, minHeight = 200, he
   title: string; subtitle?: string; children: React.ReactNode; colSpan?: number; minHeight?: number; headerRight?: React.ReactNode;
 }) {
   return (
-    <div className={`rounded-2xl p-3 flex flex-col ${colSpan === 2 ? "lg:col-span-2" : ""}`} style={{ background: 'linear-gradient(180deg, hsl(220 20% 8%) 0%, hsl(222 45% 4%) 100%)', border: '1px solid hsl(220 10% 18% / 0.6)', boxShadow: '0 4px 20px -4px rgba(0,0,0,0.4)' }}>
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <h3 className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">{title}</h3>
-          {subtitle && <p className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</p>}
+    <Card className={`bg-card border-border ${colSpan === 2 ? "lg:col-span-2" : ""}`}>
+      <CardContent className="p-3 flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h3 className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">{title}</h3>
+            {subtitle && <p className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</p>}
+          </div>
+          {headerRight}
         </div>
-        {headerRight}
-      </div>
-      <div className="flex-1 min-h-0" style={{ minHeight }}>{children}</div>
-    </div>
+        <div className="flex-1 min-h-0" style={{ minHeight }}>{children}</div>
+      </CardContent>
+    </Card>
   );
 }
