@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { useUserRole } from "@/hooks/useUserRole";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { DollarSign, FileText, TrendingUp, TrendingDown, Users, RefreshCw, Building2, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -128,8 +130,18 @@ export default function OlimpoFaturamento() {
   const [loading, setLoading] = useState(true);
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const { isAdmin, loading: roleLoading } = useUserRole();
 
   const toggleChart = (id: string) => setExpandedChart((prev) => (prev === id ? null : id));
+
+  // Redirect non-admin users
+  useEffect(() => {
+    if (!roleLoading && !isAdmin) {
+      toast({ title: "Acesso negado", description: "Apenas administradores podem acessar esta página.", variant: "destructive" });
+      navigate("/dashboard", { replace: true });
+    }
+  }, [roleLoading, isAdmin, navigate, toast]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -143,7 +155,8 @@ export default function OlimpoFaturamento() {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { if (!roleLoading && isAdmin) fetchData(); }, [roleLoading, isAdmin]);
+
 
   // ── Data processing (unchanged logic) ──
   const monthlyData = useMemo(() => {
@@ -213,7 +226,9 @@ export default function OlimpoFaturamento() {
   const lastMonthShort = monthlyData.length > 0 ? formatMonthLabel(monthlyData[monthlyData.length - 1].month) : "";
   const totalRegion = regionData.reduce((s, e) => s + e.value, 0);
 
-  // ── Expand Button (Amazon Trans style) ──
+  if (roleLoading) return <PageLayout title="DACHSER" subtitle="Faturamento" pageIcon={DollarSign} backTo="/dashboard"><div className="flex items-center justify-center h-64 text-muted-foreground">Verificando permissões...</div></PageLayout>;
+  if (!isAdmin) return null;
+
   const ExpandButton = ({ chartId }: { chartId: string }) => (
     <button
       className="h-6 text-[10px] gap-1 text-slate-400 hover:text-white px-2 flex items-center transition-colors"
