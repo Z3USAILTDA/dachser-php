@@ -3182,7 +3182,7 @@ const Index = () => {
                                           <Button
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() => onClick={() => window.open(trackingUrl, "_blank", "noopener,noreferrer")}}
+                                            onClick={() => window.open(trackingUrl, "_blank", "noopener,noreferrer")}
                                             className="text-foreground hover:text-primary h-8 w-8 p-0"
                                           >
                                             <ExternalLink className="w-4 h-4" />
