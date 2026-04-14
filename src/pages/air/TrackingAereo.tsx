@@ -93,7 +93,7 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     "001": (i,a) => `https://www.aacargo.com/mobile/tracking-details.html?awb=${i}${a}`,
     "014": (i,a) => `https://cargo.aircanada.com/Tracking?shipmentCode=${i}${a}`,
     "006": (i,a) => `https://www.deltacargo.com/Cargo/home/trackShipment?awbNumber=${i}${a}&timeZoneOffset=180&t=${Date.now()}`,
-    "016": (i,a) => `https://www.unitedcargo.com/en/us/track/awb/${i}-${a}`,
+    "016": (i,a) => `https://www.unitedcargo.com/en/us/track`,
     "020": (i,a) => `https://www.lufthansa-cargo.com/en/eservices/etracking/tracking/-/awb/${i}/${a}`,
     "045": (i,a) => `https://www.latamcargo.com/en/trackshipment?docNumber=${a}&docPrefix=${i}&soType=MAWB`,
     "047": () => `https://www.tapcargo.com/en/e-tracking-results`,

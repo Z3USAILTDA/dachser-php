@@ -121,7 +121,7 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     "014": (iata, awb) => `https://cargo.aircanada.com/Tracking?shipmentCode=${iata}${awb}`,
     "006": (iata, awb) =>
       `https://www.deltacargo.com/Cargo/home/trackShipment?awbNumber=${iata}${awb}&timeZoneOffset=180&t=${Date.now()}`,
-    "016": (iata, awb) => `https://www.unitedcargo.com/en/us/track/awb/${iata}-${awb}`,
+    "016": (iata, awb) => `https://www.unitedcargo.com/en/us/track`,
     "020": (iata, awb) => `https://www.lufthansa-cargo.com/en/eservices/etracking/tracking/-/awb/${iata}/${awb}`,
     "045": (iata, awb) => `https://www.latamcargo.com/en/trackshipment?docNumber=${awb}&docPrefix=${iata}&soType=MAWB`,
     "047": () => `https://www.tapcargo.com/en/e-tracking-results`,
