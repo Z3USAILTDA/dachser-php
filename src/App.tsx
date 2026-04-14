@@ -95,6 +95,7 @@ import CadastroNova from "./pages/air/CadastroNova";
 import TrackingAereo from "./pages/air/TrackingAereo";
 // FIN Module
 import ManualFinanceiro from "./pages/fin/ManualFinanceiro";
+import OthelloImport from "./pages/fin/OthelloImport";
 
 // Admin Module
 import ManualAdmin from "./pages/admin/ManualAdmin";
