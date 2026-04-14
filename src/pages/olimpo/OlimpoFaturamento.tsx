@@ -324,8 +324,8 @@ export default function OlimpoFaturamento() {
           </div>
         </GlassCard>
 
-        {/* Row 2 — 3 cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Row 2 — 2 cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ChartCard title="Qtd. por Modal" badge="Por Modal">
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={chartModalCount} margin={chartMargin}>
