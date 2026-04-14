@@ -140,7 +140,7 @@ export default function OlimpoFaturamento() {
     data.forEach((r) => {
       if (!r.faturado_em || r.faturado_em.substring(0, 7) !== last.month) return;
       const c = r.cliente || "Desconhecido";
-      clientMap.set(c, (clientMap.get(c) || 0) + (r.valor_total_faturado || 0));
+      clientMap.set(c, (clientMap.get(c) || 0) + safeNum(r.valor_total_faturado));
     });
     let topClient = "-";
     let topClientVal = 0;
