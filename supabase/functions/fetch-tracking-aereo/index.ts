@@ -408,36 +408,16 @@ serve(async (req) => {
       const code2 = resolveCode(row.desc2);
       const code3 = resolveCode(row.desc3);
 
-      // Determine ultimo_status_correto using hierarchy
+      // Determine ultimo_status_correto using chronological order (most recent first)
       let finalCode: string | null = null;
       const codes = [code0, code1, code2, code3];
-      
-      // DLV takes priority
+
+      // DLV always takes priority (delivered is final)
       if (codes.some(c => c === "DLV") || lastStatusCode === "DLV") {
         finalCode = "DLV";
       } else {
-        const idLast = getEventId(lastStatusCode);
-        const id0 = getEventId(code0);
-        const id1 = getEventId(code1);
-        const id2 = getEventId(code2);
-        const id3 = getEventId(code3);
-
-        if (lastStatusCode && idLast >= id0 && idLast >= id1 && idLast >= id2 && idLast >= id3) {
-          finalCode = lastStatusCode;
-        } else {
-          const maxId = Math.max(id0, id1, id2, id3);
-          if (maxId === 0) {
-            finalCode = lastStatusCode || null;
-          } else if (maxId === id0) {
-            finalCode = code0;
-          } else if (maxId === id1) {
-            finalCode = code1;
-          } else if (maxId === id2) {
-            finalCode = code2;
-          } else {
-            finalCode = code3;
-          }
-        }
+        // Use last_status_code (most recent from scraper) or first timeline event
+        finalCode = lastStatusCode || code0 || null;
       }
 
       // Enrich ARR with destination context
