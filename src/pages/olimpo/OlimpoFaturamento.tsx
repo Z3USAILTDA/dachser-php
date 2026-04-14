@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
-import { Building2, RefreshCw } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DollarSign, FileText, TrendingUp, Users, RefreshCw, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -30,7 +31,7 @@ const MODAL_COLORS: Record<string, string> = {
 };
 
 const REGION_COLORS: Record<string, string> = {
-  Sudeste: "#1a2744",
+  Sudeste: "#4a6fa5",
   Sul: "#8b9dc3",
 };
 
@@ -59,14 +60,17 @@ const formatCompact = (v: number) => {
   return formatBRL(v);
 };
 
-// Custom label for bars
-const renderBarLabel = (props: any, isCurrency = false) => {
-  const { x, y, width, value } = props;
-  if (!value) return null;
+const DarkTooltip = ({ active, payload, label, isCurrency }: any) => {
+  if (!active || !payload) return null;
   return (
-    <text x={x + width / 2} y={y - 6} fill="#2d3748" fontSize={10} textAnchor="middle" fontWeight={600}>
-      {isCurrency ? formatCompact(value) : value?.toLocaleString("pt-BR")}
-    </text>
+    <div className="bg-popover border border-border rounded-md px-3 py-2 shadow-lg">
+      <p className="text-xs text-muted-foreground mb-1">{label}</p>
+      {payload.map((p: any, i: number) => (
+        <p key={i} className="text-xs font-semibold" style={{ color: p.color }}>
+          {p.name}: {isCurrency ? formatBRLFull(p.value) : p.value.toLocaleString("pt-BR")}
+        </p>
+      ))}
+    </div>
   );
 };
 
@@ -200,250 +204,234 @@ export default function OlimpoFaturamento() {
   const firstMonth = monthlyData.length > 0 ? formatMonthLabel(monthlyData[0].month) : "";
   const lastMonthShort = monthlyData.length > 0 ? formatMonthLabel(monthlyData[monthlyData.length - 1].month) : "";
 
-  const CorpTooltip = ({ active, payload, label, isCurrency }: any) => {
-    if (!active || !payload) return null;
-    return (
-      <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 12px", boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
-        <p style={{ fontSize: 11, color: "#718096", marginBottom: 4 }}>{label}</p>
-        {payload.map((p: any, i: number) => (
-          <p key={i} style={{ fontSize: 12, fontWeight: 600, color: p.color, margin: 0 }}>
-            {p.name}: {isCurrency ? formatBRLFull(p.value) : p.value.toLocaleString("pt-BR")}
-          </p>
-        ))}
-      </div>
-    );
-  };
-
-  const SlicerBadge = ({ label }: { label: string }) => (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", background: "#edf2f7", border: "1px solid #e2e8f0", borderRadius: 4, fontSize: 10, color: "#718096", cursor: "default" }}>
-      {label} <span style={{ fontSize: 8 }}>▼</span>
-    </div>
-  );
-
-  const ChartCard = ({ title, subtitle, slicer, children }: { title: string; subtitle?: string; slicer?: string; children: React.ReactNode }) => (
-    <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden" }}>
-      <div style={{ padding: "12px 16px 0" }}>
-        {subtitle && <p style={{ fontSize: 10, color: "#a0aec0", fontWeight: 500, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>{subtitle}</p>}
-        <h3 style={{ fontSize: 13, fontWeight: 700, color: "#2d3748", margin: 0 }}>{title}</h3>
-      </div>
-      <div style={{ padding: "8px 8px 4px" }}>{children}</div>
-      {slicer && (
-        <div style={{ padding: "4px 16px 10px", display: "flex", gap: 6 }}>
-          <SlicerBadge label={slicer} />
-        </div>
-      )}
-    </div>
-  );
+  const gridStroke = "rgba(255,255,255,0.08)";
+  const tickStyle = { fill: "#aaa", fontSize: 10 };
+  const labelStyle = { fill: "#ccc", fontSize: 9, fontWeight: 600 };
 
   return (
-    <PageLayout title="DACHSER" subtitle="Olimpo — Faturamento" pageIcon={Building2}>
-      <div style={{ background: "#f0f2f5", borderRadius: 16, minHeight: "100vh", margin: "-1rem", padding: 0 }}>
-        {/* Executive Header */}
-        <div style={{ background: "#1a2744", borderRadius: "16px 16px 0 0", padding: "24px 32px 12px" }}>
-          <div className="flex items-center justify-between">
-            <h1 style={{ color: "#fff", fontSize: 20, fontWeight: 800, letterSpacing: 1.5, margin: 0 }}>
-              DASHBOARD GERENCIAL DE FATURAMENTO — {lastMonthFormatted.toUpperCase()}
-            </h1>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fetchData}
-              disabled={loading}
-              style={{ borderColor: "rgba(255,255,255,0.3)", color: "#fff", background: "transparent" }}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-              Atualizar
-            </Button>
-          </div>
-          <div style={{ background: "#243555", marginTop: 10, padding: "6px 16px", borderRadius: 4, display: "inline-block" }}>
-            <p style={{ color: "#a0b4d0", fontSize: 11, margin: 0, fontWeight: 500 }}>
-              Período de análise: {firstMonth} – {lastMonthShort} | Base: TOTVS RM
-            </p>
-          </div>
+    <PageLayout
+      title="DACHSER"
+      subtitle="Olimpo — Faturamento"
+      pageIcon={Building2}
+      rightContent={
+        <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+          Atualizar
+        </Button>
+      }
+    >
+      <div className="space-y-6">
+        {/* Period info */}
+        <p className="text-xs text-muted-foreground">
+          Período: {firstMonth} – {lastMonthShort} | Base: TOTVS RM
+        </p>
+
+        {/* KPI Cards */}
+        <div className="grid gap-4 md:grid-cols-4">
+          <KpiCard icon={DollarSign} label="Faturamento Total" value={formatCompact(kpis.total)} sub={lastMonthFormatted} loading={loading} />
+          <KpiCard icon={FileText} label="Processos Faturados" value={kpis.count.toLocaleString("pt-BR")} sub={lastMonthFormatted} loading={loading} />
+          <KpiCard icon={TrendingUp} label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`} value={`${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`} sub="Mês a Mês" loading={loading} accent={kpis.variation >= 0 ? "green" : "red"} />
+          <KpiCard icon={Users} label="Maior Cliente" value={formatCompact(kpis.topClientVal)} sub={kpis.topClient} loading={loading} accent="amber" />
         </div>
 
-        <div style={{ padding: "20px 24px 32px" }}>
-          {/* KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <KpiExecCard header="FATURAMENTO TOTAL" headerColor="#2c5282" value={formatCompact(kpis.total)} subtitle={lastMonthFormatted} />
-            <KpiExecCard header="PROCESSOS FATURADOS" headerColor="#2b6cb0" value={kpis.count.toLocaleString("pt-BR")} subtitle={lastMonthFormatted} />
-            <KpiExecCard header={`VAR. vs ${kpis.prevMonthLabel || "MÊS ANT."}`} headerColor="#276749" value={`${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`} subtitle="Mês a Mês" />
-            <KpiExecCard header="MAIOR CLIENTE" headerColor="#c27803" value={formatCompact(kpis.topClientVal)} subtitle={kpis.topClient} />
-          </div>
+        {/* Row 1 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <ChartCard title="Quantidade de Files — Total Faturado" sub="Contagem de PROCESSO">
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={chartMonthlyCount} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="name" tick={tickStyle} />
+                <YAxis tick={tickStyle} />
+                <Tooltip content={<DarkTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 11, color: "#aaa" }} />
+                <Bar dataKey="Quantidade" name="Total" fill="#4a6fa5" radius={[3, 3, 0, 0]} maxBarSize={40}>
+                  <LabelList dataKey="Quantidade" position="top" style={labelStyle} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
 
-          {/* Row 1: Charts 1-2 */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-            <ChartCard title="Quantidade de Files — Total Faturado" subtitle="Contagem de PROCESSO" slicer="MÊS DO FATURAMENTO">
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={chartMonthlyCount} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#edf2f7" />
-                  <XAxis dataKey="name" tick={{ fill: "#718096", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#718096", fontSize: 10 }} />
-                  <Tooltip content={<CorpTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="Quantidade" name="Total" fill="#4a6fa5" radius={[3, 3, 0, 0]} maxBarSize={40}>
-                    <LabelList dataKey="Quantidade" position="top" style={{ fill: "#2d3748", fontSize: 9, fontWeight: 600 }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
+          <ChartCard title="Quantidade Total Faturada por Modal" sub="Contagem de PROCESSO">
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={chartModalCount} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="name" tick={tickStyle} />
+                <YAxis tick={tickStyle} />
+                <Tooltip content={<DarkTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 11, color: "#aaa" }} />
+                {allModals.map((mod) => (
+                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </div>
 
-            <ChartCard title="Quantidade Total Faturada por Modal" subtitle="Contagem de PROCESSO" slicer="MÊS DO FATURAMENTO">
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={chartModalCount} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#edf2f7" />
-                  <XAxis dataKey="name" tick={{ fill: "#718096", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#718096", fontSize: 10 }} />
-                  <Tooltip content={<CorpTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  {allModals.map((mod) => (
-                    <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} maxBarSize={20} />
+        {/* Row 2 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <ChartCard title="Valor Total Faturado no RM" sub="Soma de VALOR TOTAL FATURADO">
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={chartMonthlyValor} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="name" tick={tickStyle} />
+                <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
+                <Tooltip content={<DarkTooltip isCurrency />} />
+                <Legend wrapperStyle={{ fontSize: 11, color: "#aaa" }} />
+                <Bar dataKey="Valor" fill="#4a6fa5" radius={[3, 3, 0, 0]} maxBarSize={40}>
+                  <LabelList dataKey="Valor" position="top" formatter={(v: number) => formatCompact(v)} style={labelStyle} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+
+          <ChartCard title="Valor Total Faturado no RM por Modal" sub="Soma de VALOR TOTAL FATURADO">
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={chartModalValor} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="name" tick={tickStyle} />
+                <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
+                <Tooltip content={<DarkTooltip isCurrency />} />
+                <Legend wrapperStyle={{ fontSize: 11, color: "#aaa" }} />
+                {allModals.map((mod) => (
+                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </div>
+
+        {/* Row 3 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <ChartCard title="Quantidade por Região" sub="Contagem de PROCESSO">
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie
+                  data={regionData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={55}
+                  outerRadius={90}
+                  paddingAngle={2}
+                  label={({ name, value }) => `${name}: ${value.toLocaleString("pt-BR")}`}
+                  labelLine={{ stroke: "#666" }}
+                >
+                  {regionData.map((entry, i) => (
+                    <Cell key={i} fill={REGION_COLORS[entry.name] || ["#4a6fa5", "#8b9dc3", "#5cb3c8"][i % 3]} />
                   ))}
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-          </div>
+                </Pie>
+                <Tooltip formatter={(v: number) => v.toLocaleString("pt-BR")} contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 6 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </ChartCard>
 
-          {/* Row 2: Charts 3-4 */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-            <ChartCard title="Valor Total Faturado no RM" subtitle="Soma de VALOR TOTAL FATURADO" slicer="MÊS DO FATURAMENTO">
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={chartMonthlyValor} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#edf2f7" />
-                  <XAxis dataKey="name" tick={{ fill: "#718096", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#718096", fontSize: 10 }} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
-                  <Tooltip content={<CorpTooltip isCurrency />} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="Valor" fill="#4a6fa5" radius={[3, 3, 0, 0]} maxBarSize={40}>
-                    <LabelList dataKey="Valor" position="top" formatter={(v: number) => formatCompact(v)} style={{ fill: "#2d3748", fontSize: 9, fontWeight: 600 }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-
-            <ChartCard title="Valor Total Faturado no RM por Modal" subtitle="Soma de VALOR TOTAL FATURADO" slicer="MÊS DO FATURAMENTO">
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={chartModalValor} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#edf2f7" />
-                  <XAxis dataKey="name" tick={{ fill: "#718096", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#718096", fontSize: 10 }} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
-                  <Tooltip content={<CorpTooltip isCurrency />} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  {allModals.map((mod) => (
-                    <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} maxBarSize={20} />
+          <ChartCard title="Quantidade por Modal" sub="Contagem de PROCESSO">
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={lastMonthModalData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="name" tick={tickStyle} />
+                <YAxis tick={tickStyle} />
+                <Tooltip content={<DarkTooltip />} />
+                <Bar dataKey="count" name="Quantidade" radius={[3, 3, 0, 0]} maxBarSize={45}>
+                  {lastMonthModalData.map((entry, i) => (
+                    <Cell key={i} fill={MODAL_COLORS[entry.name] || "#999"} />
                   ))}
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-          </div>
+                  <LabelList dataKey="count" position="top" style={labelStyle} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
 
-          {/* Row 3: Charts 5-7 */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-            <ChartCard title="Quantidade Total Faturada por Região" subtitle="Contagem de PROCESSO" slicer="Região">
-              <ResponsiveContainer width="100%" height={240}>
-                <PieChart>
-                  <Pie
-                    data={regionData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={90}
-                    paddingAngle={2}
-                    label={({ name, value }) => `${name}: ${value.toLocaleString("pt-BR")}`}
-                    labelLine={{ stroke: "#a0aec0" }}
-                  >
-                    {regionData.map((entry, i) => (
-                      <Cell key={i} fill={REGION_COLORS[entry.name] || ["#1a2744", "#8b9dc3", "#4a6fa5"][i % 3]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => v.toLocaleString("pt-BR")} />
-                </PieChart>
-              </ResponsiveContainer>
-            </ChartCard>
+          <ChartCard title="Valor por Modal" sub="Soma de VALOR TOTAL FATURADO">
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={lastMonthModalData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="name" tick={tickStyle} />
+                <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                <Tooltip content={<DarkTooltip isCurrency />} />
+                <Bar dataKey="valor" name="Valor" radius={[3, 3, 0, 0]} maxBarSize={45}>
+                  {lastMonthModalData.map((entry, i) => (
+                    <Cell key={i} fill={MODAL_COLORS[entry.name] || "#999"} />
+                  ))}
+                  <LabelList dataKey="valor" position="top" formatter={(v: number) => formatCompact(v)} style={labelStyle} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </div>
 
-            <ChartCard title="Quantidade Total Faturada por Modal" subtitle="Contagem de PROCESSO" slicer="MODAL">
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={lastMonthModalData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#edf2f7" />
-                  <XAxis dataKey="name" tick={{ fill: "#718096", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#718096", fontSize: 10 }} />
-                  <Tooltip content={<CorpTooltip />} />
-                  <Bar dataKey="count" name="Quantidade" radius={[3, 3, 0, 0]} maxBarSize={45}>
-                    {lastMonthModalData.map((entry, i) => (
-                      <Cell key={i} fill={MODAL_COLORS[entry.name] || "#999"} />
-                    ))}
-                    <LabelList dataKey="count" position="top" style={{ fill: "#2d3748", fontSize: 10, fontWeight: 600 }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
+        {/* Row 4 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <ChartCard title="Quantidade por Divisão Modal" sub="Contagem de PROCESSO">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={divisionData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="name" tick={tickStyle} />
+                <YAxis tick={tickStyle} />
+                <Tooltip content={<DarkTooltip />} />
+                <Bar dataKey="count" name="Quantidade" fill="#4a6fa5" radius={[3, 3, 0, 0]} maxBarSize={60}>
+                  <LabelList dataKey="count" position="top" style={{ ...labelStyle, fontSize: 11 }} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
 
-            <ChartCard title="Valor Total Faturado no RM por Modal" subtitle="Soma de VALOR TOTAL FATURADO" slicer="MODAL">
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={lastMonthModalData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#edf2f7" />
-                  <XAxis dataKey="name" tick={{ fill: "#718096", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#718096", fontSize: 10 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip content={<CorpTooltip isCurrency />} />
-                  <Bar dataKey="valor" name="Valor" radius={[3, 3, 0, 0]} maxBarSize={45}>
-                    {lastMonthModalData.map((entry, i) => (
-                      <Cell key={i} fill={MODAL_COLORS[entry.name] || "#999"} />
-                    ))}
-                    <LabelList dataKey="valor" position="top" formatter={(v: number) => formatCompact(v)} style={{ fill: "#2d3748", fontSize: 9, fontWeight: 600 }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-          </div>
-
-          {/* Row 4: Charts 8-9 */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ChartCard title="Quantidade Total Faturada por Divisão Modal" subtitle="Contagem de PROCESSO" slicer="Divisão por Modal">
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={divisionData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#edf2f7" />
-                  <XAxis dataKey="name" tick={{ fill: "#718096", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#718096", fontSize: 10 }} />
-                  <Tooltip content={<CorpTooltip />} />
-                  <Bar dataKey="count" name="Quantidade" fill="#4a6fa5" radius={[3, 3, 0, 0]} maxBarSize={60}>
-                    <LabelList dataKey="count" position="top" style={{ fill: "#2d3748", fontSize: 11, fontWeight: 700 }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-
-            <ChartCard title="Valor Total Faturado no RM por Divisão Modal" subtitle="Soma de VALOR TOTAL FATURADO" slicer="Divisão por Modal">
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={divisionData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#edf2f7" />
-                  <XAxis dataKey="name" tick={{ fill: "#718096", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#718096", fontSize: 10 }} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
-                  <Tooltip content={<CorpTooltip isCurrency />} />
-                  <Bar dataKey="valor" name="Valor" fill="#2c5282" radius={[3, 3, 0, 0]} maxBarSize={60}>
-                    <LabelList dataKey="valor" position="top" formatter={(v: number) => formatCompact(v)} style={{ fill: "#2d3748", fontSize: 10, fontWeight: 700 }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-          </div>
+          <ChartCard title="Valor por Divisão Modal" sub="Soma de VALOR TOTAL FATURADO">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={divisionData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="name" tick={tickStyle} />
+                <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
+                <Tooltip content={<DarkTooltip isCurrency />} />
+                <Bar dataKey="valor" name="Valor" fill="#2c5282" radius={[3, 3, 0, 0]} maxBarSize={60}>
+                  <LabelList dataKey="valor" position="top" formatter={(v: number) => formatCompact(v)} style={{ ...labelStyle, fontSize: 10 }} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
         </div>
       </div>
     </PageLayout>
   );
 }
 
-function KpiExecCard({ header, headerColor, value, subtitle }: { header: string; headerColor: string; value: string; subtitle: string }) {
+function KpiCard({ icon: Icon, label, value, sub, loading, accent }: {
+  icon: any; label: string; value: string; sub: string; loading: boolean; accent?: "green" | "red" | "amber";
+}) {
+  const accentClasses = {
+    green: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400",
+    red: "bg-red-500/10 border-red-500/30 text-red-400",
+    amber: "bg-amber-500/10 border-amber-500/30 text-amber-400",
+  };
+  const ac = accent ? accentClasses[accent] : null;
+
   return (
-    <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden", textAlign: "center" }}>
-      <div style={{ background: headerColor, padding: "6px 12px" }}>
-        <p style={{ color: "#fff", fontSize: 10, fontWeight: 700, letterSpacing: 1, margin: 0, textTransform: "uppercase" }}>{header}</p>
-      </div>
-      <div style={{ padding: "14px 12px 10px" }}>
-        <p style={{ fontSize: 26, fontWeight: 800, color: "#2d3748", margin: 0, lineHeight: 1.2 }}>{value}</p>
-        <p style={{ fontSize: 11, color: "#718096", margin: "4px 0 0", fontWeight: 500 }}>{subtitle}</p>
-      </div>
-    </div>
+    <Card className="bg-card border-border">
+      <CardContent className="p-4 flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center border ${ac ? ac : "bg-primary/10 border-primary/30"}`}>
+          <Icon className={`h-5 w-5 ${ac ? "" : "text-primary"}`} />
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className={`text-lg font-bold ${loading ? "animate-pulse text-muted-foreground" : "text-foreground"}`}>
+            {loading ? "..." : value}
+          </p>
+          <p className="text-[10px] text-muted-foreground">{sub}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ChartCard({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+  return (
+    <Card className="bg-card border-border">
+      <CardHeader className="pb-2">
+        {sub && <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{sub}</p>}
+        <CardTitle className="text-sm text-foreground">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0">{children}</CardContent>
+    </Card>
   );
 }
