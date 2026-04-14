@@ -1,63 +1,40 @@
 
 
-## Plano: Redesign do Dashboard de Faturamento — Estilo Corporativo/Excel
+## Plano: Adaptar Faturamento ao design do Olimpo Cobrança
 
-### Visão Geral
+### Problema
+O dashboard de Faturamento usa tema claro (fundo cinza, cards brancos, inline styles) enquanto o Cobrança usa o design system dark padrão do Olimpo com componentes `Card`/`CardContent`/`CardHeader`/`CardTitle` e classes Tailwind.
 
-Reescrever completamente o `OlimpoFaturamento.tsx` para adotar visual corporativo claro (fundo cinza claro, cards brancos, cabeçalho azul escuro), saindo do tema dark/gold atual. O componente continuará dentro do `PageLayout` existente, mas todo o conteúdo interno terá estilo próprio que sobrepõe o fundo escuro com um container claro.
+### Alteração — Arquivo único
 
-### Alterações — Arquivo único
+**`src/pages/olimpo/OlimpoFaturamento.tsx`** — Ajustes de estilo (sem mudar visualizações)
 
-**`src/pages/olimpo/OlimpoFaturamento.tsx`** — Reescrita completa
+1. **Remover o container claro**: Eliminar o wrapper `style={{ background: "#f0f2f5" }}` e o header azul `#1a2744`. Usar o layout natural do `PageLayout` (fundo escuro)
 
-#### Estrutura visual
+2. **KPI Cards**: Substituir `KpiExecCard` (inline styles, fundo branco) pelo padrão do Cobrança:
+   - Usar `Card className="bg-card border-border"` + `CardContent` com ícone + label + valor
+   - Ícones: `DollarSign` (faturamento), `FileText` (processos), `TrendingUp` (variação), `Users` (maior cliente)
+   - Mesma estrutura do `KpiCard` do Cobrança
 
-1. **Container principal**: fundo `#f0f2f5` (cinza claro) com `rounded-2xl` para criar um "painel" claro sobre o background existente do PageLayout
+3. **Chart Cards**: Substituir `ChartCard` (inline styles, fundo branco) por:
+   - `Card className="bg-card border-border"` + `CardHeader` + `CardTitle className="text-sm text-foreground"` + `CardContent`
+   - Remover `SlicerBadge` decorativos
 
-2. **Cabeçalho executivo**: faixa azul escura (`#1a2744`) com título "DASHBOARD GERENCIAL DE FATURAMENTO — {MÊS ATUAL}" e subtítulo "Período de análise: {primeiro mês} – {último mês} | Base: TOTVS RM" — dados dinâmicos baseados nos registros
+4. **Gráficos Recharts**: Ajustar cores internas:
+   - `CartesianGrid stroke="rgba(255,255,255,0.08)"` (era `#edf2f7`)
+   - `XAxis/YAxis tick fill="#aaa"` (era `#718096`)
+   - `LabelList fill` para cores claras (era `#2d3748`)
+   - Tooltip com `backgroundColor: "rgba(0,0,0,0.85)"` e `border: "1px solid rgba(255,255,255,0.15)"` (era branco)
 
-3. **4 KPI cards** em linha horizontal:
-   - FATURAMENTO TOTAL (header azul `#2c5282`) — valor em R$ + subtítulo mês
-   - PROCESSOS FATURADOS (header azul `#2b6cb0`) — contagem + subtítulo mês
-   - VAR. vs {mês anterior} (header verde `#276749`) — percentual + "Mês a Mês"
-   - MAIOR CLIENTE (header laranja/dourado `#c27803`) — valor R$ + nome do cliente
-   - Estilo: borda fina cinza, header colorido compacto, valor centralizado grande, subtítulo menor
+5. **Header**: Usar `rightContent` do PageLayout para o botão Atualizar, como no Cobrança. Subtítulo de período como texto `text-muted-foreground` abaixo dos KPIs
 
-4. **Gráficos 1-4** (linhas de 2 colunas): cards brancos com borda cinza sutil
-   - Cada card com rótulo analítico cinza no topo (ex: "Contagem de PROCESSO"), título centralizado, gráfico, e "filtro" decorativo no rodapé
-   - Gráfico 1: Quantidade de Files - Total Faturado (barras azuis `#4a6fa5`, valores acima)
-   - Gráfico 2: Quantidade Total Faturada por Modal (barras agrupadas, NÃO empilhadas — cada modal lado a lado)
-   - Gráfico 3: Valor Total Faturado no RM (barras azuis, valores monetários acima)
-   - Gráfico 4: Valor Total Faturado no RM por Modal (barras agrupadas por modal)
-
-5. **Gráficos 5-9** (área inferior):
-   - Gráfico 5: Donut de Região (Sudeste azul escuro, Sul cinza) — valores dentro das fatias
-   - Gráfico 6: Qtd por Modal (barras verticais por modal, dados do mês mais recente)
-   - Gráfico 7: Valor por Modal (barras verticais, valores monetários, mês recente)
-   - Gráfico 8: Qtd por Divisão Modal (SI/SE/TCK/ASO vs AI/AE)
-   - Gráfico 9: Valor por Divisão Modal
-
-#### Paleta corporativa
-- Fundo geral: `#f0f2f5`
-- Cards: `#ffffff` com `border: 1px solid #e2e8f0`
-- Header principal: `#1a2744`
-- Gráficos: azuis (`#4a6fa5`, `#2c5282`), laranja (`#e8913a`), verde (`#48a868`), cinza (`#8b9dc3`)
-- Modais: AI=`#4a6fa5`, SI=`#e8913a`, TCK=`#8b9dc3`, ASO=`#48a868`, SE=`#b065a1`, AE=`#5cb3c8`
-- Texto: `#2d3748` (escuro), `#718096` (muted)
-- Tooltip: fundo branco, borda cinza
-
-#### Filtros decorativos
-- Pequenos badges cinza claro no rodapé de cada gráfico simulando slicers de Excel (ex: "MÊS DO FATURAMENTO ▼", "MODAL ▼", "Região ▼")
-
-#### Dados
-- Toda a lógica de fetch e processamento (useMemo) permanece igual
-- Novos useMemo adicionados para: dados do mês mais recente por modal (gráficos 6-7), dados por divisão modal com contagem e valor (gráficos 8-9)
-- Labels de mês no formato "março, 2025" (por extenso, como no anexo)
+### Sem alteração
+- Todas as 9 visualizações permanecem idênticas (tipos de gráfico, dados, lógica)
+- Lógica de fetch e processamento inalterada
+- Nenhum outro arquivo modificado
 
 ### Resumo
-| Arquivo | Acao |
+| Arquivo | Ação |
 |---------|------|
-| `src/pages/olimpo/OlimpoFaturamento.tsx` | Reescrita completa (visual corporativo claro, 9 gráficos) |
-
-Nenhum outro arquivo é alterado. Backend, rotas e menu permanecem iguais.
+| `src/pages/olimpo/OlimpoFaturamento.tsx` | Ajuste de estilo: dark theme + componentes Card |
 
