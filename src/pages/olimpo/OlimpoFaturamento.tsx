@@ -38,11 +38,21 @@ const REGION_COLORS: Record<string, string> = {
 const MONTH_NAMES = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
 const MONTH_SHORT = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
 
-const formatBRL = (v: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+const safeNum = (v: any): number => {
+  if (v == null) return 0;
+  const n = typeof v === "string" ? parseFloat(v) : Number(v);
+  return isNaN(n) || !isFinite(n) ? 0 : n;
+};
 
-const formatBRLFull = (v: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+const formatBRL = (v: any) => {
+  const n = safeNum(v);
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
+};
+
+const formatBRLFull = (v: any) => {
+  const n = safeNum(v);
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+};
 
 const formatMonthLabel = (d: string) => {
   const [y, m] = d.split("-");
