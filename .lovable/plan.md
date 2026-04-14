@@ -1,40 +1,46 @@
 
 
-## Plano: Renomear "Vouchers/SPO" e tornar "Origem do Processo" obrigatório
+## Plano: Apenas containers entregues não devem ser re-rastreados
 
-### Alteração 1 — Renomear no menu filho e título da tela
+### Situação atual
 
-**Locais a alterar:**
+Existem **duas camadas** de filtragem que impedem containers de serem re-rastreados:
 
-1. **`src/pages/Dashboard.tsx`** (linha 135): Mudar `"Voucher/SPO"` para `"Esteira Vouchers/SPO"` — este é o nome do item filho no menu do Dashboard.
+1. **`refresh_sea_tracking`** (modo normal): Usa `stale_hours=4` para pendentes e `refresh_valid_hours=48` para válidos, pulando containers atualizados recentemente. Também exclui status finais (DELIVERED, DLV, GOD, etc.).
 
-2. **`src/pages/esteira/EsteiraIndex.tsx`** (linha 1856): Mudar `"Intelligent Logistics — Vouchers/SPO"` para `"Intelligent Logistics — Esteira Vouchers/SPO"` — este é o subtítulo/título da tela principal.
+2. **`sea_seed_smart`** (JsonCargo): Usa lógica de cache baseada em ETA — pula containers entregues, ETA > 7 dias, e ETA 1-7 dias se já atualizou hoje.
 
-### Alteração 2 — Campo "Origem do Processo" obrigatório
+### O que muda
 
-**Arquivo:** `src/components/esteira/CreateVoucherDialog.tsx`
+A regra passa a ser: **todos os containers ativos devem ser re-rastreados, exceto os entregues (status final)**. Sem filtros de staleness/ETA.
 
-1. **Validação no submit** (após linha 395, dentro do bloco `!isDraft`): Adicionar verificação:
-   ```typescript
-   if (!origemProcesso) {
-     toast({
-       title: "Erro de validação",
-       description: "Origem do Processo é obrigatória",
-       variant: "destructive",
-     });
-     return;
-   }
-   ```
+### Alterações
 
-2. **Label visual** (linha 923-924): Adicionar asterisco vermelho ao label para indicar campo obrigatório:
-   ```tsx
-   <Label className="flex items-center gap-1.5 text-sm text-muted-foreground mb-2">
-     Origem do Processo <span className="text-destructive">*</span>
-   </Label>
-   ```
+#### 1. `supabase/functions/olimpo-proxy/index.ts` — `refresh_sea_tracking`
+
+- Alterar defaults de `stale_hours` de `4` para `0` e `refresh_valid_hours` de `48` para `0` (linha 2830-2831)
+- Isso remove a filtragem por "tempo desde último check", mantendo apenas a exclusão de status finais (DELIVERED, DLV, GOD, etc.) que já existe na linha 2862
+
+#### 2. `supabase/functions/olimpo-proxy/index.ts` — `sea_seed_smart`
+
+- Remover as regras de cache por ETA (linhas 747-753):
+  - Remover: "Entregue há mais de 1 dia → cache permanente"
+  - Remover: "ETA > 7 dias → usar cache"
+  - Remover: "ETA 1-7 dias e já atualizou hoje → usar cache"
+- Manter apenas: se `isDelivered` → `useCache = true` (entregues continuam pulados)
+- A lógica simplificada fica:
+```typescript
+if (isDelivered) {
+  useCache = true; // Entregue = não re-rastrear
+}
+```
+
+#### 3. `src/pages/ContainerTracking.tsx` — Auto-sync do frontend
+
+- Atualizar as 2 chamadas que usam `stale_hours=4&refresh_valid_hours=48` (linhas 1076 e 1346) para `stale_hours=0&refresh_valid_hours=0`
+- A chamada da linha 1485 já usa `0` — sem alteração necessária
 
 ### Arquivos alterados
-- `src/pages/Dashboard.tsx`
-- `src/pages/esteira/EsteiraIndex.tsx`
-- `src/components/esteira/CreateVoucherDialog.tsx`
+- `supabase/functions/olimpo-proxy/index.ts` (2 seções)
+- `src/pages/ContainerTracking.tsx` (2 URLs)
 
