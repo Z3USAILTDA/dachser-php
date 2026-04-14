@@ -1,11 +1,12 @@
 /**
- * ChartDetailPanel - Painel expandido de detalhamento de gráfico
- * Estilo alinhado ao Olimpo Cobrança
+ * ChartDetailPanel - Sheet lateral de detalhamento de gráfico
+ * Estilo alinhado ao ClientDetailSheet do Olimpo Cobrança
  */
 import { useMemo } from "react";
-import { X, Download, TrendingUp, Calculator, Percent } from "lucide-react";
+import { Download, TrendingUp, Calculator, Percent, FileText } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -62,7 +63,6 @@ const ChartDetailPanel = ({
   columns,
   data,
   exportName = "dados",
-  accentColor,
 }: ChartDetailPanelProps) => {
   const { toast } = useToast();
 
@@ -117,105 +117,109 @@ const ChartDetailPanel = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <Card className="mt-3 bg-card border-border animate-in fade-in slide-in-from-top-2 duration-300">
-      <CardContent className="p-0">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <div className="flex items-center gap-2">
-            <div className="w-1 h-5 rounded-full bg-primary" />
-            <h3 className="text-sm font-semibold text-foreground">Detalhamento: {title}</h3>
-            <span className="text-[10px] text-muted-foreground ml-2">{data.length} registros</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground" onClick={handleExport}>
-              <Download className="w-3.5 h-3.5" />
-              Exportar
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground" onClick={onClose}>
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
+    <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2 text-foreground">
+            <FileText className="h-5 w-5 text-primary" />
+            {title}
+          </SheetTitle>
+        </SheetHeader>
 
-        {/* Stats */}
-        {stats.length > 0 && (
-          <div className="px-4 py-3 border-b border-border grid grid-cols-2 md:grid-cols-4 gap-3">
-            {stats.map((stat) => (
-              <div key={stat.key} className="space-y-2">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{stat.label}</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <Calculator className="w-3 h-3 text-muted-foreground" />
-                    <div>
-                      <p className="text-[9px] text-muted-foreground">Total</p>
-                      <p className="text-xs font-semibold text-foreground">
-                        {stat.type === "currency" ? fmtCurrency(stat.sum) : fmtNumber(stat.sum)}
-                      </p>
+        <div className="mt-4 space-y-4">
+          {/* Summary stats */}
+          {stats.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {stats.map((stat) => (
+                <div key={stat.key} className="bg-muted/30 rounded-lg p-3 space-y-1">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{stat.label}</p>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <Calculator className="w-3 h-3 text-muted-foreground" />
+                      <div>
+                        <p className="text-[9px] text-muted-foreground">Total</p>
+                        <p className="text-xs font-semibold text-foreground">
+                          {stat.type === "currency" ? fmtCurrency(stat.sum) : fmtNumber(stat.sum)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <TrendingUp className="w-3 h-3 text-muted-foreground" />
-                    <div>
-                      <p className="text-[9px] text-muted-foreground">Média</p>
-                      <p className="text-xs font-semibold text-foreground">
-                        {stat.type === "currency" ? fmtCurrency(stat.avg) : fmtNumber(Math.round(stat.avg))}
-                      </p>
+                    <div className="flex items-center gap-1.5">
+                      <TrendingUp className="w-3 h-3 text-muted-foreground" />
+                      <div>
+                        <p className="text-[9px] text-muted-foreground">Média</p>
+                        <p className="text-xs font-semibold text-foreground">
+                          {stat.type === "currency" ? fmtCurrency(stat.avg) : fmtNumber(Math.round(stat.avg))}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Table */}
-        <ScrollArea className="max-h-[300px]">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-b border-border/50 hover:bg-transparent">
-                <TableHead className="text-[10px] text-muted-foreground font-medium w-10">#</TableHead>
-                {columns.map((col) => (
-                  <TableHead key={col.key} className="text-[10px] text-muted-foreground font-medium" style={{ width: col.width }}>
-                    {col.label}
-                  </TableHead>
-                ))}
-                <TableHead className="text-[10px] text-muted-foreground font-medium text-right w-20">
-                  <div className="flex items-center justify-end gap-1">
-                    <Percent className="w-3 h-3" />
-                    Total
-                  </div>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {dataWithPercent.map((row, idx) => (
-                <TableRow key={idx} className="border-b border-border/30 hover:bg-muted/10">
-                  <TableCell className="text-[10px] text-muted-foreground/60 py-2">{idx + 1}</TableCell>
-                  {columns.map((col) => (
-                    <TableCell
-                      key={col.key}
-                      className={`text-xs py-2 ${
-                        col.type === "currency" || col.type === "number" ? "text-right font-medium text-foreground" : "text-muted-foreground"
-                      }`}
-                    >
-                      {formatCell(row[col.key], col.type)}
-                    </TableCell>
-                  ))}
-                  <TableCell className="text-xs py-2 text-right">
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary">
-                      {fmtPercent(row._percent as number)}
-                    </span>
-                  </TableCell>
-                </TableRow>
               ))}
-            </TableBody>
-          </Table>
-        </ScrollArea>
-      </CardContent>
-    </Card>
+            </div>
+          )}
+
+          {/* Export button */}
+          <div className="flex justify-end">
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport}>
+              <Download className="w-3.5 h-3.5" />
+              Exportar CSV
+            </Button>
+          </div>
+
+          <Separator />
+
+          {/* Data count */}
+          <p className="text-xs text-muted-foreground">{data.length} registros</p>
+
+          {/* Table */}
+          <div className="border border-border rounded-lg overflow-hidden">
+            <ScrollArea className="max-h-[500px]">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b border-border/50 hover:bg-transparent">
+                    <TableHead className="text-xs text-muted-foreground font-medium w-10">#</TableHead>
+                    {columns.map((col) => (
+                      <TableHead key={col.key} className="text-xs text-muted-foreground font-medium" style={{ width: col.width }}>
+                        {col.label}
+                      </TableHead>
+                    ))}
+                    <TableHead className="text-xs text-muted-foreground font-medium text-right w-20">
+                      <div className="flex items-center justify-end gap-1">
+                        <Percent className="w-3 h-3" />
+                        Total
+                      </div>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dataWithPercent.map((row, idx) => (
+                    <TableRow key={idx} className="border-b border-border/30 hover:bg-muted/10">
+                      <TableCell className="text-xs text-muted-foreground/60 py-2">{idx + 1}</TableCell>
+                      {columns.map((col) => (
+                        <TableCell
+                          key={col.key}
+                          className={`text-sm py-2 ${
+                            col.type === "currency" || col.type === "number" ? "text-right font-mono font-medium text-foreground" : "text-muted-foreground"
+                          }`}
+                        >
+                          {formatCell(row[col.key], col.type)}
+                        </TableCell>
+                      ))}
+                      <TableCell className="text-xs py-2 text-right">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary">
+                          {fmtPercent(row._percent as number)}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 };
 
