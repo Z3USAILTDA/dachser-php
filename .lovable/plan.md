@@ -1,41 +1,44 @@
 
-## Plano: corrigir os gráficos com NaN no Faturamento
+## Plano: Alinhar visual do Faturamento exatamente ao Cobrança
 
-### Diagnóstico
-O problema provavelmente está no campo `valor_total_faturado`: ele entra no dashboard como se fosse `number`, mas vindo do MariaDB pode chegar como string decimal. Hoje o código soma direto (`entry.valor += r.valor_total_faturado || 0`), o que pode gerar concatenação de string em vez de soma numérica. Quando esses valores passam por `tickFormatter`, `Tooltip` e `LabelList`, alguns gráficos acabam exibindo `NaN`.
+### Diferenças identificadas
 
-### O que vou ajustar
+Comparando `OlimpoCobranca.tsx` com `OlimpoFaturamento.tsx`, encontrei estas inconsistências visuais:
 
-1. **Normalizar o valor monetário na origem**
-   - Revisar o retorno de `get_faturamento_dashboard` no `mariadb-proxy`
-   - Garantir que `valor_total_faturado` volte numérico no payload
+1. **KpiCard no Faturamento** tem extras que o Cobrança nao tem: linha `sub` (subtítulo), ícones com cores variadas (green/amber). No Cobrança, o KpiCard e mais simples: sem `sub`, accent e apenas boolean (vermelho ou padrao)
+2. **Tick fontSize** - Cobrança usa `11`, Faturamento usa `10`
+3. **Label fontSize no LabelList** - Faturamento usa `9`, deveria ser consistente
+4. **Legend fontSize** - Cobrança usa `11`, Faturamento usa `12`
+5. **PageLayout** - Faturamento nao tem `backTo="/dashboard"`
+6. **Spacing** - Cobrança usa `gap-6` entre seções de gráficos, Faturamento usa `gap-4`
 
-2. **Blindar o frontend contra dados inválidos**
-   - Em `src/pages/olimpo/OlimpoFaturamento.tsx`, criar uma função utilitária para converter qualquer valor em número seguro
-   - Usar essa conversão em todos os cálculos:
-     - `monthlyData`
-     - `kpis`
-     - `lastMonthModalData`
-     - `divisionData`
+### Alteracao - Arquivo unico
 
-3. **Endurecer os formatadores**
-   - Ajustar `formatBRL`, `formatBRLFull` e `formatCompact` para nunca retornarem `NaN`
-   - Proteger também `Tooltip`, `YAxis` e `LabelList` dos gráficos de valor
+**`src/pages/olimpo/OlimpoFaturamento.tsx`**
 
-4. **Manter o visual atual**
-   - Não vou mudar o tipo de gráfico nem o layout
-   - Só corrigir a base numérica e a exibição dos valores
+1. **KpiCard**: Simplificar para o mesmo modelo do Cobrança:
+   - Remover `sub` prop
+   - Mudar `accent` de string para boolean (vermelho quando ativo)
+   - Remover cores green/amber dos ícones - usar apenas primary (padrao) ou red (accent)
+   - Valor com accent em vermelho como no Cobrança
 
-### Validação
-Depois da correção, vou conferir especialmente os gráficos monetários:
-- Valor Total Faturado no RM
-- Valor Total Faturado no RM por Modal
-- Valor por Modal
-- Valor por Divisão Modal
-- KPIs de faturamento total e maior cliente
+2. **Ajustar tick/label/legend sizes**:
+   - `tickStyle fontSize: 11` (era 10)
+   - `labelStyle fontSize: 10` (era 9)
+   - `legendStyle fontSize: 11` (era 12)
 
-### Arquivos
-| Arquivo | Ação |
+3. **PageLayout**: Adicionar `backTo="/dashboard"`
+
+4. **Grid gaps**: Mudar de `gap-4` para `gap-6` nos grids de gráficos (como Cobrança)
+
+5. **Chart margins**: Padronizar `margin={{ top: 10, right: 10, left: 10, bottom: 5 }}` (como Cobrança) em vez de `margin={{ top: 20, right: 10, left: 0, bottom: 0 }}`
+
+### Sem alteracao
+- Tipos de visualizacao (9 graficos) permanecem identicos
+- Logica de fetch/processamento inalterada
+- Tooltip styles ja estao corretos
+
+### Resumo
+| Arquivo | Acao |
 |---------|------|
-| `src/pages/olimpo/OlimpoFaturamento.tsx` | Normalizar valores e proteger formatadores |
-| `supabase/functions/mariadb-proxy/index.ts` | Garantir retorno numérico de `valor_total_faturado` |
+| `src/pages/olimpo/OlimpoFaturamento.tsx` | Alinhar KpiCard, font sizes, gaps e margins ao padrao Cobranca |
