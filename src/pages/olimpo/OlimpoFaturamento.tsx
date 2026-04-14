@@ -79,9 +79,10 @@ const tooltipStyle = {
 const tooltipLabelStyle = { color: "#fff", fontSize: 11 };
 
 const gridStroke = "rgba(255,255,255,0.08)";
-const tickStyle = { fill: "#aaa", fontSize: 10 };
-const labelStyle = { fill: "#ccc", fontSize: 9, fontWeight: 600 };
-const legendStyle = { fontSize: 12, color: "#aaa" };
+const tickStyle = { fill: "#aaa", fontSize: 11 };
+const labelStyle = { fill: "#ccc", fontSize: 10, fontWeight: 600 };
+const legendStyle = { fontSize: 11, color: "#aaa" };
+const chartMargin = { top: 10, right: 10, left: 10, bottom: 5 };
 
 export default function OlimpoFaturamento() {
   const [data, setData] = useState<FaturamentoRow[]>([]);
@@ -212,6 +213,7 @@ export default function OlimpoFaturamento() {
       title="DACHSER"
       subtitle="Olimpo — Faturamento"
       pageIcon={Building2}
+      backTo="/dashboard"
       rightContent={
         <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
@@ -225,18 +227,18 @@ export default function OlimpoFaturamento() {
         </p>
 
         {/* KPI Cards */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <KpiCard icon={DollarSign} label="Faturamento Total" value={formatCompact(kpis.total)} sub={lastMonthFormatted} loading={loading} />
-          <KpiCard icon={FileText} label="Processos Faturados" value={kpis.count.toLocaleString("pt-BR")} sub={lastMonthFormatted} loading={loading} />
-          <KpiCard icon={TrendingUp} label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`} value={`${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`} sub="Mês a Mês" loading={loading} accent={kpis.variation >= 0 ? "green" : "red"} />
-          <KpiCard icon={Users} label="Maior Cliente" value={formatCompact(kpis.topClientVal)} sub={kpis.topClient} loading={loading} accent="amber" />
+        <div className="grid gap-6 md:grid-cols-4">
+          <KpiCard icon={DollarSign} label="Faturamento Total" value={formatCompact(kpis.total)} loading={loading} />
+          <KpiCard icon={FileText} label="Processos Faturados" value={kpis.count.toLocaleString("pt-BR")} loading={loading} />
+          <KpiCard icon={TrendingUp} label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`} value={`${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`} loading={loading} accent={kpis.variation < 0} />
+          <KpiCard icon={Users} label="Maior Cliente" value={formatCompact(kpis.topClientVal)} loading={loading} />
         </div>
 
         {/* Row 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <ChartCard title="Quantidade de Files — Total Faturado" sub="Contagem de PROCESSO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={chartMonthlyCount} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={chartMonthlyCount} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} />
@@ -251,7 +253,7 @@ export default function OlimpoFaturamento() {
 
           <ChartCard title="Quantidade Total Faturada por Modal" sub="Contagem de PROCESSO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={chartModalCount} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={chartModalCount} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} />
@@ -266,10 +268,10 @@ export default function OlimpoFaturamento() {
         </div>
 
         {/* Row 2 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <ChartCard title="Valor Total Faturado no RM" sub="Soma de VALOR TOTAL FATURADO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={chartMonthlyValor} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={chartMonthlyValor} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
@@ -284,7 +286,7 @@ export default function OlimpoFaturamento() {
 
           <ChartCard title="Valor Total Faturado no RM por Modal" sub="Soma de VALOR TOTAL FATURADO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={chartModalValor} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={chartModalValor} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
@@ -299,7 +301,7 @@ export default function OlimpoFaturamento() {
         </div>
 
         {/* Row 3 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <ChartCard title="Quantidade por Região" sub="Contagem de PROCESSO">
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
@@ -330,7 +332,7 @@ export default function OlimpoFaturamento() {
 
           <ChartCard title="Quantidade por Modal" sub="Contagem de PROCESSO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={lastMonthModalData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={lastMonthModalData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} />
@@ -347,7 +349,7 @@ export default function OlimpoFaturamento() {
 
           <ChartCard title="Valor por Modal" sub="Soma de VALOR TOTAL FATURADO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={lastMonthModalData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={lastMonthModalData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
@@ -364,16 +366,16 @@ export default function OlimpoFaturamento() {
         </div>
 
         {/* Row 4 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <ChartCard title="Quantidade por Divisão Modal" sub="Contagem de PROCESSO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={divisionData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={divisionData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
                 <Bar dataKey="count" name="Quantidade" fill="#4a6fa5" radius={[3, 3, 0, 0]} barSize={28}>
-                  <LabelList dataKey="count" position="top" style={{ ...labelStyle, fontSize: 11 }} />
+                  <LabelList dataKey="count" position="top" style={labelStyle} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -381,13 +383,13 @@ export default function OlimpoFaturamento() {
 
           <ChartCard title="Valor por Divisão Modal" sub="Soma de VALOR TOTAL FATURADO">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={divisionData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={divisionData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => formatBRLFull(v)} />
                 <Bar dataKey="valor" name="Valor" fill="#2c5282" radius={[3, 3, 0, 0]} barSize={28}>
-                  <LabelList dataKey="valor" position="top" formatter={(v: number) => formatCompact(v)} style={{ ...labelStyle, fontSize: 10 }} />
+                  <LabelList dataKey="valor" position="top" formatter={(v: number) => formatCompact(v)} style={labelStyle} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -398,28 +400,20 @@ export default function OlimpoFaturamento() {
   );
 }
 
-function KpiCard({ icon: Icon, label, value, sub, loading, accent }: {
-  icon: any; label: string; value: string; sub: string; loading: boolean; accent?: "green" | "red" | "amber";
+function KpiCard({ icon: Icon, label, value, loading, accent }: {
+  icon: any; label: string; value: string; loading: boolean; accent?: boolean;
 }) {
-  const accentClasses = {
-    green: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400",
-    red: "bg-red-500/10 border-red-500/30 text-red-400",
-    amber: "bg-amber-500/10 border-amber-500/30 text-amber-400",
-  };
-  const ac = accent ? accentClasses[accent] : null;
-
   return (
     <Card className="bg-card border-border">
       <CardContent className="p-4 flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center border ${ac ? ac : "bg-primary/10 border-primary/30"}`}>
-          <Icon className={`h-5 w-5 ${ac ? "" : "text-primary"}`} />
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center border ${accent ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-primary/10 border-primary/30"}`}>
+          <Icon className={`h-5 w-5 ${accent ? "" : "text-primary"}`} />
         </div>
         <div>
           <p className="text-xs text-muted-foreground">{label}</p>
-          <p className={`text-lg font-bold ${loading ? "animate-pulse text-muted-foreground" : "text-foreground"}`}>
+          <p className={`text-lg font-bold ${loading ? "animate-pulse text-muted-foreground" : accent ? "text-red-400" : "text-foreground"}`}>
             {loading ? "..." : value}
           </p>
-          <p className="text-[10px] text-muted-foreground">{sub}</p>
         </div>
       </CardContent>
     </Card>
