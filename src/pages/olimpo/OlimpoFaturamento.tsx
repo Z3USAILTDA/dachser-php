@@ -259,6 +259,7 @@ export default function OlimpoFaturamento() {
                   <YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
                   <Tooltip content={<Z3usTooltip />} cursor={{ stroke: ZEUS_COLORS.amber, strokeWidth: 1, strokeDasharray: "4 4" }} />
                   <Area type="monotone" dataKey="Quantidade" stroke={ZEUS_COLORS.amber} strokeWidth={2.5} fill="url(#areaGradZ3us)" dot={{ r: 4, fill: ZEUS_COLORS.amber, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.amberLight, stroke: "#fff", strokeWidth: 2 }} />
+                </AreaChart>
               </ResponsiveContainer>
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "evolucao"} onClose={() => setExpandedChart(null)} title="Evolução Mensal" columns={COL_MENSAL_QTD} data={chartMonthlyCount} exportName="evolucao_mensal" accentColor={ZEUS_COLORS.amber} />
