@@ -64,10 +64,11 @@ const formatMonthFull = (d: string) => {
   return `${MONTH_NAMES[parseInt(m) - 1].charAt(0).toUpperCase() + MONTH_NAMES[parseInt(m) - 1].slice(1)} ${y}`;
 };
 
-const formatCompact = (v: number) => {
-  if (v >= 1_000_000) return `R$ ${(v / 1_000_000).toFixed(2).replace(".", ",")}M`;
-  if (v >= 1_000) return `R$ ${(v / 1_000).toFixed(0)}k`;
-  return formatBRL(v);
+const formatCompact = (v: any) => {
+  const n = safeNum(v);
+  if (n >= 1_000_000) return `R$ ${(n / 1_000_000).toFixed(2).replace(".", ",")}M`;
+  if (n >= 1_000) return `R$ ${(n / 1_000).toFixed(0)}k`;
+  return formatBRL(n);
 };
 
 const tooltipStyle = {
@@ -113,11 +114,11 @@ export default function OlimpoFaturamento() {
       if (!map.has(mk)) map.set(mk, { count: 0, valor: 0, byModal: {} });
       const entry = map.get(mk)!;
       entry.count++;
-      entry.valor += r.valor_total_faturado || 0;
+      entry.valor += safeNum(r.valor_total_faturado);
       const modal = (r.modal || "OUTROS").toUpperCase();
       if (!entry.byModal[modal]) entry.byModal[modal] = { count: 0, valor: 0 };
       entry.byModal[modal].count++;
-      entry.byModal[modal].valor += r.valor_total_faturado || 0;
+      entry.byModal[modal].valor += safeNum(r.valor_total_faturado);
     });
     return Array.from(map.entries())
       .sort(([a], [b]) => a.localeCompare(b))
