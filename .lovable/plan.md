@@ -1,39 +1,22 @@
 
 
-## Plano: Gauge/Velocímetro para dados únicos
+## Plano: Trocar Gauge por Donut e remover brilho
 
-### Problema
-Quando os 4 gráficos de área (Qtd. Files, Valor Total Mensal, Qtd. por Divisão Modal, Valor por Divisão Modal) possuem apenas 1 ponto de dado, a visualização fica ruim. O BarChart com barra única também não agradou.
+### Mudanças
 
-### Solução
-Criar um componente **GaugeChart** customizado usando SVG puro (arco semicircular) e aplicá-lo como fallback quando `data.length <= 1` nos 4 gráficos.
-
-### Implementação
-
-**1. Criar `src/components/charts/GaugeChart.tsx`**
-- Componente SVG com arco semicircular (180°)
-- Props: `value`, `label`, `color`, `maxValue` (opcional, default = value * 1.5)
-- Arco de fundo em `muted/20`, arco preenchido com a cor do gráfico (amber ou success)
-- Valor grande centralizado no meio do arco
+**1. Reescrever `src/components/charts/GaugeChart.tsx` → `DonutSingleChart.tsx`**
+- Substituir o arco semicircular (gauge) por um **donut completo (360°)** usando SVG `circle` com `stroke-dasharray`/`stroke-dashoffset`
+- Círculo de fundo em `rgba(255,255,255,0.06)`, círculo preenchido com a cor passada
+- Valor grande centralizado no meio do donut
 - Label abaixo do valor
-- Estilo dark theme consistente com o dashboard
+- **Sem drop-shadow, sem filter, sem glow** — visual limpo e flat
+- Mesmas props: `value`, `label`, `color`, `maxValue?`, `valueFormatter?`
 
 **2. Editar `src/pages/olimpo/OlimpoFaturamento.tsx`**
-- Importar `GaugeChart`
-- Para cada um dos 4 gráficos, envolver com condicional:
-  ```tsx
-  {data.length <= 1 ? (
-    <GaugeChart 
-      value={data[0]?.Quantidade ?? 0} 
-      label="Quantidade" 
-      color={ZEUS_COLORS.amber} 
-    />
-  ) : (
-    <AreaChart ...> {/* existente */} </AreaChart>
-  )}
-  ```
-- Aplicar nas 4 seções: `chartMonthlyCount`, `chartMonthlyValor`, `divisionData` (qtd), `divisionData` (valor)
+- Trocar import de `GaugeChart` para o novo `DonutSingleChart`
+- Atualizar as 4 referências (linhas ~271, ~334, ~397, ~415) para usar `DonutSingleChart`
+- Remover o `boxShadow` com glow dos tooltips customizados (linhas ~62 e ~84): remover a parte `0 0 20px rgba(242,160,7,0.1)` mantendo apenas `0 10px 30px rgba(0,0,0,0.5)`
 
 ### Visual
-O gauge terá aparência moderna: arco com gradiente sutil, número grande no centro em `font-bold`, sublabel em `text-muted-foreground`. Ocupará o mesmo espaço do gráfico (260px de altura).
+Donut circular completo, espessura ~14px, valor bold no centro, label em muted abaixo. Sem efeitos de brilho em nenhum lugar.
 
