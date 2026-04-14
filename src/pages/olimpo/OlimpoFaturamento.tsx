@@ -252,22 +252,13 @@ export default function OlimpoFaturamento() {
           <div>
             <ZeusChartCard title="Qtd. Files — Total Faturado" subtitle="Evolução mensal" headerRight={<ExpandButton chartId="evolucao" />}>
               <ResponsiveContainer width="100%" height={260}>
-                {chartMonthlyCount.length > 2 ? (
-                  <AreaChart data={chartMonthlyCount} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
-                    <defs><linearGradient id="areaGradZ3us" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.3} /><stop offset="50%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.08} /><stop offset="100%" stopColor={ZEUS_COLORS.amber} stopOpacity={0} /></linearGradient></defs>
-                    <CartesianGrid {...GRID_PROPS} />
-                    <XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
-                    <YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
-                    <Tooltip content={<Z3usTooltip />} cursor={{ stroke: ZEUS_COLORS.amber, strokeWidth: 1, strokeDasharray: "4 4" }} />
-                    <Area type="monotone" dataKey="Quantidade" stroke={ZEUS_COLORS.amber} strokeWidth={2.5} fill="url(#areaGradZ3us)" dot={{ r: 4, fill: ZEUS_COLORS.amber, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.amberLight, stroke: "#fff", strokeWidth: 2 }} />
-                  </AreaChart>
-                ) : (
-                  <BarChart data={chartMonthlyCount} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
-                    <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
-                    <Tooltip content={<Z3usTooltip />} cursor={{ fill: `rgba(242, 160, 7, 0.08)` }} />
-                    <Bar dataKey="Quantidade" name="Total" fill={ZEUS_COLORS.amber} radius={[4, 4, 0, 0]} barSize={28}><LabelList dataKey="Quantidade" position="top" fill={ZEUS_COLORS.amber} fontSize={11} fontWeight={600} /></Bar>
-                  </BarChart>
-                )}
+                <AreaChart data={chartMonthlyCount} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
+                  <defs><linearGradient id="areaGradZ3us" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.3} /><stop offset="50%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.08} /><stop offset="100%" stopColor={ZEUS_COLORS.amber} stopOpacity={0} /></linearGradient></defs>
+                  <CartesianGrid {...GRID_PROPS} />
+                  <XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
+                  <YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
+                  <Tooltip content={<Z3usTooltip />} cursor={{ stroke: ZEUS_COLORS.amber, strokeWidth: 1, strokeDasharray: "4 4" }} />
+                  <Area type="monotone" dataKey="Quantidade" stroke={ZEUS_COLORS.amber} strokeWidth={2.5} fill="url(#areaGradZ3us)" dot={{ r: 4, fill: ZEUS_COLORS.amber, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.amberLight, stroke: "#fff", strokeWidth: 2 }} />
               </ResponsiveContainer>
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "evolucao"} onClose={() => setExpandedChart(null)} title="Evolução Mensal" columns={COL_MENSAL_QTD} data={chartMonthlyCount} exportName="evolucao_mensal" accentColor={ZEUS_COLORS.amber} />
@@ -319,11 +310,12 @@ export default function OlimpoFaturamento() {
           <div>
             <ZeusChartCard title="Valor Total Mensal" subtitle="Evolução mensal" headerRight={<ExpandButton chartId="valor-mensal" />}>
               <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={chartMonthlyValor} margin={{ top: 25, right: 10, left: 0, bottom: 5 }}>
+                <AreaChart data={chartMonthlyValor} margin={{ top: 25, right: 10, left: 0, bottom: 5 }}>
+                  <defs><linearGradient id="areaGradValorMensal" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.3} /><stop offset="50%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.08} /><stop offset="100%" stopColor={ZEUS_COLORS.amber} stopOpacity={0} /></linearGradient></defs>
                   <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} tickFormatter={(v) => formatCurrencyCompact(v)} />
-                  <Tooltip content={<Z3usTooltip valueFormatter={(v) => formatBRLFull(v)} />} cursor={{ fill: 'rgba(242, 160, 7, 0.08)' }} />
-                  <Bar dataKey="Valor" fill={ZEUS_COLORS.amber} radius={[4, 4, 0, 0]} barSize={24}><LabelList dataKey="Valor" position="top" fill={ZEUS_COLORS.amber} fontSize={11} fontWeight={600} formatter={(v: number) => formatCompact(v)} /></Bar>
-                </BarChart>
+                  <Tooltip content={<Z3usTooltip valueFormatter={(v) => formatBRLFull(v)} />} cursor={{ stroke: ZEUS_COLORS.amber, strokeWidth: 1, strokeDasharray: "4 4" }} />
+                  <Area type="monotone" dataKey="Valor" stroke={ZEUS_COLORS.amber} strokeWidth={2.5} fill="url(#areaGradValorMensal)" dot={{ r: 4, fill: ZEUS_COLORS.amber, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.amberLight, stroke: "#fff", strokeWidth: 2 }} />
+                </AreaChart>
               </ResponsiveContainer>
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "valor-mensal"} onClose={() => setExpandedChart(null)} title="Valor Total Mensal" columns={COL_MENSAL} data={chartMonthlyValor} exportName="valor_mensal" accentColor={ZEUS_COLORS.amber} />
@@ -377,11 +369,12 @@ export default function OlimpoFaturamento() {
           <div>
             <ZeusChartCard title="Qtd. por Divisão Modal" subtitle="Divisão" headerRight={<ExpandButton chartId="div-qtd" />}>
               <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={divisionData} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
+                <AreaChart data={divisionData} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
+                  <defs><linearGradient id="areaGradDivQtd" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={ZEUS_COLORS.success} stopOpacity={0.3} /><stop offset="50%" stopColor={ZEUS_COLORS.success} stopOpacity={0.08} /><stop offset="100%" stopColor={ZEUS_COLORS.success} stopOpacity={0} /></linearGradient></defs>
                   <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
-                  <Tooltip content={<Z3usTooltip />} cursor={{ fill: 'rgba(34, 197, 94, 0.08)' }} />
-                  <Bar dataKey="count" name="Quantidade" fill={ZEUS_COLORS.success} radius={[4, 4, 0, 0]} barSize={40}><LabelList dataKey="count" position="top" fill={ZEUS_COLORS.success} fontSize={11} fontWeight={600} /></Bar>
-                </BarChart>
+                  <Tooltip content={<Z3usTooltip />} cursor={{ stroke: ZEUS_COLORS.success, strokeWidth: 1, strokeDasharray: "4 4" }} />
+                  <Area type="monotone" dataKey="count" name="Quantidade" stroke={ZEUS_COLORS.success} strokeWidth={2.5} fill="url(#areaGradDivQtd)" dot={{ r: 4, fill: ZEUS_COLORS.success, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.success, stroke: "#fff", strokeWidth: 2 }} />
+                </AreaChart>
               </ResponsiveContainer>
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "div-qtd"} onClose={() => setExpandedChart(null)} title="Divisão Modal — Quantidade" columns={COL_DIVISAO} data={divisionData} exportName="divisao_qtd" accentColor={ZEUS_COLORS.success} />
@@ -390,11 +383,12 @@ export default function OlimpoFaturamento() {
           <div>
             <ZeusChartCard title="Valor por Divisão Modal" subtitle="Divisão" headerRight={<ExpandButton chartId="div-valor" />}>
               <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={divisionData} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
+                <AreaChart data={divisionData} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
+                  <defs><linearGradient id="areaGradDivValor" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.3} /><stop offset="50%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.08} /><stop offset="100%" stopColor={ZEUS_COLORS.amber} stopOpacity={0} /></linearGradient></defs>
                   <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} tickFormatter={(v) => formatCurrencyCompact(v)} />
-                  <Tooltip content={<Z3usTooltip valueFormatter={(v) => formatBRLFull(v)} />} cursor={{ fill: 'rgba(242, 160, 7, 0.08)' }} />
-                  <Bar dataKey="valor" name="Valor" fill={ZEUS_COLORS.amber} radius={[4, 4, 0, 0]} barSize={40}><LabelList dataKey="valor" position="top" fill={ZEUS_COLORS.amber} fontSize={11} fontWeight={600} formatter={(v: number) => formatCompact(v)} /></Bar>
-                </BarChart>
+                  <Tooltip content={<Z3usTooltip valueFormatter={(v) => formatBRLFull(v)} />} cursor={{ stroke: ZEUS_COLORS.amber, strokeWidth: 1, strokeDasharray: "4 4" }} />
+                  <Area type="monotone" dataKey="valor" name="Valor" stroke={ZEUS_COLORS.amber} strokeWidth={2.5} fill="url(#areaGradDivValor)" dot={{ r: 4, fill: ZEUS_COLORS.amber, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.amberLight, stroke: "#fff", strokeWidth: 2 }} />
+                </AreaChart>
               </ResponsiveContainer>
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "div-valor"} onClose={() => setExpandedChart(null)} title="Divisão Modal — Valor" columns={COL_DIVISAO} data={divisionData} exportName="divisao_valor" accentColor={ZEUS_COLORS.amber} />
