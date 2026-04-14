@@ -59,7 +59,7 @@ const formatCurrencyCompact = (v: number) => { const abs = Math.abs(v); if (abs 
 function Z3usTooltip({ active, payload, label, valueFormatter }: { active?: boolean; payload?: any[]; label?: string; valueFormatter?: (v: number, name?: string) => string; }) {
   if (!active || !payload || payload.length === 0) return null;
   return (
-    <div style={{ background: "hsl(222 41% 5%)", border: "1px solid hsl(40 95% 48% / 0.25)", borderRadius: "10px", <div style={{ background: "hsl(222 41% 5%)", border: "1px solid hsl(40 95% 48% / 0.25)", borderRadius: "10px", boxShadow: "0 10px 30px rgba(0,0,0,0.5)", padding: "10px 14px", minWidth: "140px" }}>
+    <div style={{ background: "hsl(222 41% 5%)", border: "1px solid hsl(40 95% 48% / 0.25)", borderRadius: "10px", boxShadow: "0 10px 30px rgba(0,0,0,0.5)", padding: "10px 14px", minWidth: "140px" }}>
       {label && <p style={{ color: "hsl(210 20% 75%)", fontSize: "11px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: "8px" }}>{label}</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
         {payload.map((entry: any, index: number) => (
