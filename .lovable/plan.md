@@ -1,44 +1,39 @@
 
 
-## Plano: Aplicar estilo visual do Amazon Trans (Gestão de Frota / Rotas) ao Faturamento
+## Plano: Gauge/Velocímetro para dados únicos
 
-O objetivo é alinhar o dashboard de Faturamento com o design system Z3US usado nas telas "Gestão de Frota" e "Rotas mais utilizadas" do projeto Amazon Trans. As mudanças são puramente visuais — nenhuma lógica de dados será alterada.
+### Problema
+Quando os 4 gráficos de área (Qtd. Files, Valor Total Mensal, Qtd. por Divisão Modal, Valor por Divisão Modal) possuem apenas 1 ponto de dado, a visualização fica ruim. O BarChart com barra única também não agradou.
 
-### Mudanças principais no `src/pages/olimpo/OlimpoFaturamento.tsx`
+### Solução
+Criar um componente **GaugeChart** customizado usando SVG puro (arco semicircular) e aplicá-lo como fallback quando `data.length <= 1` nos 4 gráficos.
 
-1. **KPI Cards** — Substituir o `SparklineKpiCard` atual pelo estilo `KPICardEnhanced` do Amazon Trans:
-   - Background com `linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(2, 6, 23, 0.98))`
-   - Barra colorida no topo (`h-1` com gradiente da cor do KPI)
-   - Ícone dentro de box colorido com borda sutil
-   - Manter sparklines existentes integrados ao novo layout
+### Implementação
 
-2. **Chart Cards** — Substituir `ChartCard`/`GlassCard` pelo estilo `ZeusChartCard`:
-   - Background: `rgba(8, 12, 22, 0.9)` com borda `rgba(255,255,255,0.06)`
-   - Título uppercase, `text-xs font-semibold tracking-wide`
-   - Substituir badges por botão "Ver detalhes" sutil (como no Amazon Trans)
+**1. Criar `src/components/charts/GaugeChart.tsx`**
+- Componente SVG com arco semicircular (180°)
+- Props: `value`, `label`, `color`, `maxValue` (opcional, default = value * 1.5)
+- Arco de fundo em `muted/20`, arco preenchido com a cor do gráfico (amber ou success)
+- Valor grande centralizado no meio do arco
+- Label abaixo do valor
+- Estilo dark theme consistente com o dashboard
 
-3. **Cores** — Migrar para paleta ZEUS:
-   - Primário: `#F2A007` (amber) em vez de `#4a6fa5`
-   - Sucesso: `#22C55E`
-   - Manter cores de modal mas aplicar efeito glow (`drop-shadow`) nas barras
+**2. Editar `src/pages/olimpo/OlimpoFaturamento.tsx`**
+- Importar `GaugeChart`
+- Para cada um dos 4 gráficos, envolver com condicional:
+  ```tsx
+  {data.length <= 1 ? (
+    <GaugeChart 
+      value={data[0]?.Quantidade ?? 0} 
+      label="Quantidade" 
+      color={ZEUS_COLORS.amber} 
+    />
+  ) : (
+    <AreaChart ...> {/* existente */} </AreaChart>
+  )}
+  ```
+- Aplicar nas 4 seções: `chartMonthlyCount`, `chartMonthlyValor`, `divisionData` (qtd), `divisionData` (valor)
 
-4. **Tooltip** — Atualizar para estilo Z3US:
-   - `backgroundColor: "hsl(222 41% 6%)"`, `border: "1px solid hsl(220 30% 22%)"`, `borderRadius: 8px`
-
-5. **Grid e Eixos** — Alinhamento com Amazon Trans:
-   - `vertical={false}` no CartesianGrid
-   - `tickLine={false}` nos eixos
-   - Grid stroke mais sutil: `rgba(255,255,255,0.06)`
-
-6. **Labels com Glow** — Adicionar `filter: drop-shadow(0 0 6px color)` nos LabelList e valores de destaque
-
-### Arquivo alterado
-| Arquivo | Ação |
-|---------|------|
-| `src/pages/olimpo/OlimpoFaturamento.tsx` | Refatorar componentes visuais (KPI, ChartCard, cores, tooltip, grid) |
-
-### Sem alteração
-- Lógica de fetch, processamento de dados, useMemo
-- Estrutura de grid (3 colunas mantida)
-- Nenhum outro arquivo modificado
+### Visual
+O gauge terá aparência moderna: arco com gradiente sutil, número grande no centro em `font-bold`, sublabel em `text-muted-foreground`. Ocupará o mesmo espaço do gráfico (260px de altura).
 
