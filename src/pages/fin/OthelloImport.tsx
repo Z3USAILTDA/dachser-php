@@ -225,6 +225,7 @@ export default function OthelloImport() {
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [step, setStep] = useState("");
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem("user");
@@ -455,8 +456,31 @@ export default function OthelloImport() {
             <span className="text-[#ffc800]">Base Totvs RM</span>
           </p>
 
-          <div className="flex items-center gap-3">
-            <label className="flex-1">
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              const f = e.dataTransfer.files?.[0];
+              if (f && f.name.endsWith(".xlsx")) {
+                setFile(f);
+                setResult(null);
+              }
+            }}
+            className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
+              dragging
+                ? "border-[#ffc800] bg-[#ffc800]/5"
+                : file
+                  ? "border-green-500/40 bg-green-500/5"
+                  : "border-white/15 hover:border-[#ffc800]/40"
+            }`}
+          >
+            <Upload className={`w-8 h-8 mx-auto mb-3 ${dragging ? "text-[#ffc800]" : "text-[#666]"}`} />
+            <p className="text-sm text-[#aaa] mb-2">
+              Arraste o arquivo aqui ou clique para selecionar
+            </p>
+            <label className="inline-block">
               <input
                 type="file"
                 accept=".xlsx"
@@ -465,18 +489,28 @@ export default function OthelloImport() {
                   setFile(e.target.files?.[0] || null);
                   setResult(null);
                 }}
-                className="block w-full text-sm text-[#aaa] file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#ffc800]/10 file:text-[#ffc800] hover:file:bg-[#ffc800]/20 cursor-pointer disabled:opacity-50"
+                className="hidden"
               />
+              <span className="px-4 py-1.5 rounded-lg text-sm font-medium bg-[#ffc800]/10 text-[#ffc800] hover:bg-[#ffc800]/20 cursor-pointer transition-all">
+                Escolher arquivo
+              </span>
             </label>
-            <button
-              onClick={handleImport}
-              disabled={!file || processing}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#ffc800] text-black font-semibold text-sm hover:bg-[#ffc800]/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              {processing ? "Importando..." : "Importar"}
-            </button>
+            {file && (
+              <p className="mt-3 text-sm text-green-400 font-medium">
+                <FileSpreadsheet className="w-4 h-4 inline mr-1" />
+                {file.name}
+              </p>
+            )}
           </div>
+
+          <button
+            onClick={handleImport}
+            disabled={!file || processing}
+            className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#ffc800] text-black font-semibold text-sm hover:bg-[#ffc800]/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          >
+            {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            {processing ? "Importando..." : "Importar"}
+          </button>
 
           {processing && step && (
             <div className="flex items-center gap-2 text-sm text-[#ffc800]">
