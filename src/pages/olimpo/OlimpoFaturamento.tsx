@@ -38,11 +38,21 @@ const REGION_COLORS: Record<string, string> = {
 const MONTH_NAMES = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
 const MONTH_SHORT = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
 
-const formatBRL = (v: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+const safeNum = (v: any): number => {
+  if (v == null) return 0;
+  const n = typeof v === "string" ? parseFloat(v) : Number(v);
+  return isNaN(n) || !isFinite(n) ? 0 : n;
+};
 
-const formatBRLFull = (v: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+const formatBRL = (v: any) => {
+  const n = safeNum(v);
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
+};
+
+const formatBRLFull = (v: any) => {
+  const n = safeNum(v);
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+};
 
 const formatMonthLabel = (d: string) => {
   const [y, m] = d.split("-");
@@ -54,10 +64,11 @@ const formatMonthFull = (d: string) => {
   return `${MONTH_NAMES[parseInt(m) - 1].charAt(0).toUpperCase() + MONTH_NAMES[parseInt(m) - 1].slice(1)} ${y}`;
 };
 
-const formatCompact = (v: number) => {
-  if (v >= 1_000_000) return `R$ ${(v / 1_000_000).toFixed(2).replace(".", ",")}M`;
-  if (v >= 1_000) return `R$ ${(v / 1_000).toFixed(0)}k`;
-  return formatBRL(v);
+const formatCompact = (v: any) => {
+  const n = safeNum(v);
+  if (n >= 1_000_000) return `R$ ${(n / 1_000_000).toFixed(2).replace(".", ",")}M`;
+  if (n >= 1_000) return `R$ ${(n / 1_000).toFixed(0)}k`;
+  return formatBRL(n);
 };
 
 const tooltipStyle = {
@@ -103,11 +114,11 @@ export default function OlimpoFaturamento() {
       if (!map.has(mk)) map.set(mk, { count: 0, valor: 0, byModal: {} });
       const entry = map.get(mk)!;
       entry.count++;
-      entry.valor += r.valor_total_faturado || 0;
+      entry.valor += safeNum(r.valor_total_faturado);
       const modal = (r.modal || "OUTROS").toUpperCase();
       if (!entry.byModal[modal]) entry.byModal[modal] = { count: 0, valor: 0 };
       entry.byModal[modal].count++;
-      entry.byModal[modal].valor += r.valor_total_faturado || 0;
+      entry.byModal[modal].valor += safeNum(r.valor_total_faturado);
     });
     return Array.from(map.entries())
       .sort(([a], [b]) => a.localeCompare(b))
@@ -129,7 +140,7 @@ export default function OlimpoFaturamento() {
     data.forEach((r) => {
       if (!r.faturado_em || r.faturado_em.substring(0, 7) !== last.month) return;
       const c = r.cliente || "Desconhecido";
-      clientMap.set(c, (clientMap.get(c) || 0) + (r.valor_total_faturado || 0));
+      clientMap.set(c, (clientMap.get(c) || 0) + safeNum(r.valor_total_faturado));
     });
     let topClient = "-";
     let topClientVal = 0;
@@ -167,7 +178,7 @@ export default function OlimpoFaturamento() {
       const div = r.divisao_por_modal || "Outros";
       if (!divMap[div]) divMap[div] = { count: 0, valor: 0 };
       divMap[div].count++;
-      divMap[div].valor += r.valor_total_faturado || 0;
+      divMap[div].valor += safeNum(r.valor_total_faturado);
     });
     return Object.entries(divMap).map(([name, v]) => ({ name, ...v }));
   }, [data, monthlyData]);

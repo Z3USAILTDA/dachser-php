@@ -16021,7 +16021,8 @@ Deno.serve(async (req) => {
           const rows = await queryWithRetry(
             () => client!.query(`
               SELECT processo, faturado_em, filial, modal, cliente,
-                     valor_total_faturado, regiao, divisao_por_modal
+                     CAST(COALESCE(valor_total_faturado, 0) AS DOUBLE) as valor_total_faturado,
+                     regiao, divisao_por_modal
               FROM dados_dachser.t_base_totvs_rm
               WHERE faturado_em IS NOT NULL
               ORDER BY faturado_em DESC
