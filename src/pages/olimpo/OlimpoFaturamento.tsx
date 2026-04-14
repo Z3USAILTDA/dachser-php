@@ -224,10 +224,11 @@ export default function OlimpoFaturamento() {
   );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Olimpo — Faturamento" pageIcon={Building2} backTo="/dashboard"
+    <PageLayout title="DACHSER" subtitle="Faturamento" pageIcon={DollarSign} backTo="/dashboard"
       rightContent={
-        <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="border-border/30 hover:border-primary/50 transition-all">
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} /> Atualizar
+        <Button size="sm" onClick={fetchData} disabled={loading}
+          className="h-8 border-border bg-card text-muted-foreground hover:text-foreground text-xs">
+          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} /> Atualizar
         </Button>
       }
     >
