@@ -79,9 +79,10 @@ const tooltipStyle = {
 const tooltipLabelStyle = { color: "#fff", fontSize: 11 };
 
 const gridStroke = "rgba(255,255,255,0.08)";
-const tickStyle = { fill: "#aaa", fontSize: 10 };
-const labelStyle = { fill: "#ccc", fontSize: 9, fontWeight: 600 };
-const legendStyle = { fontSize: 12, color: "#aaa" };
+const tickStyle = { fill: "#aaa", fontSize: 11 };
+const labelStyle = { fill: "#ccc", fontSize: 10, fontWeight: 600 };
+const legendStyle = { fontSize: 11, color: "#aaa" };
+const chartMargin = { top: 10, right: 10, left: 10, bottom: 5 };
 
 export default function OlimpoFaturamento() {
   const [data, setData] = useState<FaturamentoRow[]>([]);
