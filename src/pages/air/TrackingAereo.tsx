@@ -120,6 +120,9 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     "729": (i,a) => `https://cargoapps.aviancacargo.com/#/e-tracking/details/${i}-${a}`,
     "881": (i,a) => `https://www.condor.com/eu/en/cargo/tracking.jsp?awb=${i}${a}`,
     "996": (i,a) => `https://uxtracking.com/tracking.asp?prefix=${i}&Serial=${a}`,
+    "086": () => `https://www.siacargo.com/e-services/quicksearch_public/`,
+    "098": () => `https://cargo.airindia.com/in/en/track-shipment.html`,
+    "118": () => `https://cargo.koreanair.com/en/tracking`,
   };
   const builder = urlBuilders[airlineCode];
   return builder ? builder(airlineCode, awbNumber) : null;
@@ -255,6 +258,9 @@ const airlines = [
   { code: "045", name: "LATAM Cargo" },
   { code: "057", name: "Air France Cargo" },
   { code: "074", name: "KLM Cargo" },
+  { code: "086", name: "Singapore Airlines Cargo" },
+  { code: "098", name: "Air India Cargo" },
+  { code: "118", name: "Korean Air Cargo" },
   { code: "369", name: "Atlas Air Cargo" },
   { code: "577", name: "Azul Cargo" },
   { code: "615", name: "European Air Transport" },
@@ -272,6 +278,9 @@ const monitoredAirlinesData = {
     { code: "057", name: "Air France Cargo" },
     { code: "074", name: "AF/KL Cargo" },
     { code: "075", name: "IAG Cargo" },
+    { code: "086", name: "Singapore Airlines Cargo" },
+    { code: "098", name: "Air India Cargo" },
+    { code: "118", name: "Korean Air Cargo" },
     { code: "369", name: "Atlas Air" },
     { code: "549", name: "LATAM Cargo (Alt)" },
     { code: "577", name: "Azul Cargo" },
@@ -279,7 +288,7 @@ const monitoredAirlinesData = {
     { code: "724", name: "Swiss WorldCargo" },
     { code: "996", name: "Air Europa Cargo" },
   ],
-  totalAirlines: 13,
+  totalAirlines: 16,
 };
 
 // ─── Component ───
