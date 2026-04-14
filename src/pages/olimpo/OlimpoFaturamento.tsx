@@ -226,7 +226,9 @@ export default function OlimpoFaturamento() {
   const lastMonthShort = monthlyData.length > 0 ? formatMonthLabel(monthlyData[monthlyData.length - 1].month) : "";
   const totalRegion = regionData.reduce((s, e) => s + e.value, 0);
 
-  // ── Expand Button (Amazon Trans style) ──
+  if (roleLoading) return <PageLayout title="DACHSER" subtitle="Faturamento" pageIcon={DollarSign} backTo="/dashboard"><div className="flex items-center justify-center h-64 text-muted-foreground">Verificando permissões...</div></PageLayout>;
+  if (!isAdmin) return null;
+
   const ExpandButton = ({ chartId }: { chartId: string }) => (
     <button
       className="h-6 text-[10px] gap-1 text-slate-400 hover:text-white px-2 flex items-center transition-colors"
