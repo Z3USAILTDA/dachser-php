@@ -1,13 +1,15 @@
 import { useState, useEffect, useMemo } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, FileText, TrendingUp, Users, RefreshCw, Building2 } from "lucide-react";
+import { DollarSign, FileText, TrendingUp, TrendingDown, Users, RefreshCw, Building2, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, LabelList,
+  AreaChart, Area,
 } from "recharts";
 
 interface FaturamentoRow {
@@ -78,7 +80,7 @@ const tooltipStyle = {
 };
 const tooltipLabelStyle = { color: "#fff", fontSize: 11 };
 
-const gridStroke = "rgba(255,255,255,0.08)";
+const gridStroke = "rgba(255,255,255,0.05)";
 const tickStyle = { fill: "#aaa", fontSize: 11 };
 const labelStyle = { fill: "#ccc", fontSize: 10, fontWeight: 600 };
 const legendStyle = { fontSize: 11, color: "#aaa" };
@@ -133,10 +135,11 @@ export default function OlimpoFaturamento() {
   }, [monthlyData]);
 
   const kpis = useMemo(() => {
-    if (monthlyData.length === 0) return { total: 0, count: 0, variation: 0, topClient: "-", topClientVal: 0, lastMonth: "", prevMonthLabel: "" };
+    if (monthlyData.length === 0) return { total: 0, count: 0, variation: 0, countVariation: 0, topClient: "-", topClientVal: 0, lastMonth: "", prevMonthLabel: "" };
     const last = monthlyData[monthlyData.length - 1];
     const prev = monthlyData.length > 1 ? monthlyData[monthlyData.length - 2] : null;
     const variation = prev && prev.valor > 0 ? ((last.valor - prev.valor) / prev.valor) * 100 : 0;
+    const countVariation = prev && prev.count > 0 ? ((last.count - prev.count) / prev.count) * 100 : 0;
     const clientMap = new Map<string, number>();
     data.forEach((r) => {
       if (!r.faturado_em || r.faturado_em.substring(0, 7) !== last.month) return;
@@ -147,7 +150,7 @@ export default function OlimpoFaturamento() {
     let topClientVal = 0;
     clientMap.forEach((v, k) => { if (v > topClientVal) { topClient = k; topClientVal = v; } });
     const prevMonthLabel = prev ? formatMonthLabel(prev.month).toUpperCase() : "";
-    return { total: last.valor, count: last.count, variation, topClient, topClientVal, lastMonth: last.month, prevMonthLabel };
+    return { total: last.valor, count: last.count, variation, countVariation, topClient, topClientVal, lastMonth: last.month, prevMonthLabel };
   }, [monthlyData, data]);
 
   const regionData = useMemo(() => {
@@ -227,31 +230,68 @@ export default function OlimpoFaturamento() {
         </p>
 
         {/* KPI Cards */}
-        <div className="grid gap-6 md:grid-cols-4">
-          <KpiCard icon={DollarSign} label="Faturamento Total" value={formatCompact(kpis.total)} loading={loading} />
-          <KpiCard icon={FileText} label="Processos Faturados" value={kpis.count.toLocaleString("pt-BR")} loading={loading} />
-          <KpiCard icon={TrendingUp} label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`} value={`${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`} loading={loading} accent={kpis.variation < 0} />
-          <KpiCard icon={Users} label="Maior Cliente" value={formatCompact(kpis.topClientVal)} loading={loading} />
+        <div className="grid gap-4 md:grid-cols-4">
+          <EnhancedKpiCard
+            icon={DollarSign}
+            label="Faturamento Total"
+            value={formatCompact(kpis.total)}
+            loading={loading}
+            variation={kpis.variation}
+            variationLabel={kpis.prevMonthLabel || "Mês Ant."}
+          />
+          <EnhancedKpiCard
+            icon={FileText}
+            label="Processos Faturados"
+            value={kpis.count.toLocaleString("pt-BR")}
+            loading={loading}
+            variation={kpis.countVariation}
+            variationLabel={kpis.prevMonthLabel || "Mês Ant."}
+          />
+          <EnhancedKpiCard
+            icon={TrendingUp}
+            label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`}
+            value={`${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`}
+            loading={loading}
+            accent={kpis.variation < 0}
+          />
+          <EnhancedKpiCard
+            icon={Users}
+            label="Maior Cliente"
+            value={formatCompact(kpis.topClientVal)}
+            loading={loading}
+            subtitle={kpis.topClient !== "-" ? kpis.topClient : undefined}
+          />
         </div>
 
-        {/* Row 1 */}
+        {/* Row 1 — AreaChart + Modal Count */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ChartCard title="Quantidade de Files — Total Faturado" sub="Contagem de PROCESSO">
+          <ChartCard title="Quantidade de Files — Total Faturado" badge="Tendência">
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={chartMonthlyCount} margin={chartMargin}>
+              <AreaChart data={chartMonthlyCount} margin={chartMargin}>
+                <defs>
+                  <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#4a6fa5" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#4a6fa5" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => [v.toLocaleString("pt-BR"), "Total"]} />
-                <Legend wrapperStyle={legendStyle} />
-                <Bar dataKey="Quantidade" name="Total" fill="#4a6fa5" radius={[3, 3, 0, 0]} barSize={28}>
-                  <LabelList dataKey="Quantidade" position="top" style={labelStyle} />
-                </Bar>
-              </BarChart>
+                <Area
+                  type="monotone"
+                  dataKey="Quantidade"
+                  stroke="#4a6fa5"
+                  strokeWidth={2.5}
+                  fill="url(#areaGradient)"
+                  dot={{ r: 4, fill: "#4a6fa5", stroke: "#fff", strokeWidth: 1.5 }}
+                  activeDot={{ r: 6, fill: "#4a6fa5", stroke: "#fff", strokeWidth: 2 }}
+                />
+              </AreaChart>
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="Quantidade Total Faturada por Modal" sub="Contagem de PROCESSO">
+          <ChartCard title="Quantidade Total Faturada por Modal" badge="Por Modal">
             <ResponsiveContainer width="100%" height={320}>
               <BarChart data={chartModalCount} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -260,7 +300,7 @@ export default function OlimpoFaturamento() {
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
                 <Legend wrapperStyle={legendStyle} />
                 {allModals.map((mod) => (
-                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} barSize={20} />
+                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} barSize={20} cursor="pointer" />
                 ))}
               </BarChart>
             </ResponsiveContainer>
@@ -269,22 +309,28 @@ export default function OlimpoFaturamento() {
 
         {/* Row 2 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ChartCard title="Valor Total Faturado no RM" sub="Soma de VALOR TOTAL FATURADO">
+          <ChartCard title="Valor Total Faturado no RM" badge="Mensal">
             <ResponsiveContainer width="100%" height={320}>
               <BarChart data={chartMonthlyValor} margin={chartMargin}>
+                <defs>
+                  <linearGradient id="barGradientValor" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#5a7fb5" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#3a5f95" stopOpacity={0.8} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => [formatBRLFull(v), "Valor"]} />
                 <Legend wrapperStyle={legendStyle} />
-                <Bar dataKey="Valor" fill="#4a6fa5" radius={[3, 3, 0, 0]} barSize={28}>
+                <Bar dataKey="Valor" fill="url(#barGradientValor)" radius={[4, 4, 0, 0]} barSize={28} cursor="pointer">
                   <LabelList dataKey="Valor" position="top" formatter={(v: number) => formatCompact(v)} style={labelStyle} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="Valor Total Faturado no RM por Modal" sub="Soma de VALOR TOTAL FATURADO">
+          <ChartCard title="Valor Total Faturado no RM por Modal" badge="Por Modal">
             <ResponsiveContainer width="100%" height={320}>
               <BarChart data={chartModalValor} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -293,7 +339,7 @@ export default function OlimpoFaturamento() {
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => formatBRLFull(v)} />
                 <Legend wrapperStyle={legendStyle} />
                 {allModals.map((mod) => (
-                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} barSize={20} />
+                  <Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#999"} radius={[3, 3, 0, 0]} barSize={20} cursor="pointer" />
                 ))}
               </BarChart>
             </ResponsiveContainer>
@@ -302,8 +348,8 @@ export default function OlimpoFaturamento() {
 
         {/* Row 3 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <ChartCard title="Quantidade por Região" sub="Contagem de PROCESSO">
-            <ResponsiveContainer width="100%" height={320}>
+          <ChartCard title="Quantidade por Região" badge="Distribuição">
+            <ResponsiveContainer width="100%" height={260}>
               <PieChart>
                 <Pie
                   data={regionData}
@@ -311,15 +357,10 @@ export default function OlimpoFaturamento() {
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
-                  outerRadius={110}
-                  paddingAngle={2}
+                  innerRadius={55}
+                  outerRadius={100}
+                  paddingAngle={3}
                   labelLine={false}
-                  label={({ name, value, cx, x, y }) => (
-                    <text x={x} y={y} fill="#ccc" fontSize={11} textAnchor={x > cx ? "start" : "end"} dominantBaseline="central">
-                      {name}: {value.toLocaleString("pt-BR")}
-                    </text>
-                  )}
                 >
                   {regionData.map((entry, i) => (
                     <Cell key={i} fill={REGION_COLORS[entry.name] || ["#4a6fa5", "#8b9dc3", "#5cb3c8"][i % 3]} />
@@ -328,16 +369,28 @@ export default function OlimpoFaturamento() {
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
               </PieChart>
             </ResponsiveContainer>
+            {/* Legend badges below chart */}
+            <div className="flex flex-wrap justify-center gap-3 mt-2 px-2">
+              {regionData.map((entry, i) => (
+                <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full inline-block"
+                    style={{ backgroundColor: REGION_COLORS[entry.name] || ["#4a6fa5", "#8b9dc3", "#5cb3c8"][i % 3] }}
+                  />
+                  {entry.name}: {entry.value.toLocaleString("pt-BR")}
+                </div>
+              ))}
+            </div>
           </ChartCard>
 
-          <ChartCard title="Quantidade por Modal" sub="Contagem de PROCESSO">
+          <ChartCard title="Quantidade por Modal" badge="Último Mês">
             <ResponsiveContainer width="100%" height={320}>
               <BarChart data={lastMonthModalData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
-                <Bar dataKey="count" name="Quantidade" radius={[3, 3, 0, 0]} barSize={28}>
+                <Bar dataKey="count" name="Quantidade" radius={[4, 4, 0, 0]} barSize={28} cursor="pointer">
                   {lastMonthModalData.map((entry, i) => (
                     <Cell key={i} fill={MODAL_COLORS[entry.name] || "#999"} />
                   ))}
@@ -347,14 +400,14 @@ export default function OlimpoFaturamento() {
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="Valor por Modal" sub="Soma de VALOR TOTAL FATURADO">
+          <ChartCard title="Valor por Modal" badge="Último Mês">
             <ResponsiveContainer width="100%" height={320}>
               <BarChart data={lastMonthModalData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => formatBRLFull(v)} />
-                <Bar dataKey="valor" name="Valor" radius={[3, 3, 0, 0]} barSize={28}>
+                <Bar dataKey="valor" name="Valor" radius={[4, 4, 0, 0]} barSize={28} cursor="pointer">
                   {lastMonthModalData.map((entry, i) => (
                     <Cell key={i} fill={MODAL_COLORS[entry.name] || "#999"} />
                   ))}
@@ -367,28 +420,28 @@ export default function OlimpoFaturamento() {
 
         {/* Row 4 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ChartCard title="Quantidade por Divisão Modal" sub="Contagem de PROCESSO">
+          <ChartCard title="Quantidade por Divisão Modal" badge="Divisão">
             <ResponsiveContainer width="100%" height={320}>
               <BarChart data={divisionData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => v.toLocaleString("pt-BR")} />
-                <Bar dataKey="count" name="Quantidade" fill="#4a6fa5" radius={[3, 3, 0, 0]} barSize={28}>
+                <Bar dataKey="count" name="Quantidade" fill="#4a6fa5" radius={[4, 4, 0, 0]} barSize={28} cursor="pointer">
                   <LabelList dataKey="count" position="top" style={labelStyle} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="Valor por Divisão Modal" sub="Soma de VALOR TOTAL FATURADO">
+          <ChartCard title="Valor por Divisão Modal" badge="Divisão">
             <ResponsiveContainer width="100%" height={320}>
               <BarChart data={divisionData} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" tick={tickStyle} />
                 <YAxis tick={tickStyle} tickFormatter={(v) => `R$${(v / 1_000_000).toFixed(1)}M`} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => formatBRLFull(v)} />
-                <Bar dataKey="valor" name="Valor" fill="#2c5282" radius={[3, 3, 0, 0]} barSize={28}>
+                <Bar dataKey="valor" name="Valor" fill="url(#barGradientValor)" radius={[4, 4, 0, 0]} barSize={28} cursor="pointer">
                   <LabelList dataKey="valor" position="top" formatter={(v: number) => formatCompact(v)} style={labelStyle} />
                 </Bar>
               </BarChart>
@@ -400,32 +453,53 @@ export default function OlimpoFaturamento() {
   );
 }
 
-function KpiCard({ icon: Icon, label, value, loading, accent }: {
+/* ── Enhanced KPI Card ── */
+function EnhancedKpiCard({ icon: Icon, label, value, loading, accent, variation, variationLabel, subtitle }: {
   icon: any; label: string; value: string; loading: boolean; accent?: boolean;
+  variation?: number; variationLabel?: string; subtitle?: string;
 }) {
+  const hasVariation = variation !== undefined && variation !== 0;
+  const isPositive = (variation ?? 0) >= 0;
+
   return (
-    <Card className="bg-card border-border">
-      <CardContent className="p-4 flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center border ${accent ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-primary/10 border-primary/30"}`}>
+    <Card className="bg-card border-border/50 hover:border-border transition-colors duration-200">
+      <CardContent className="p-4 flex items-start gap-3">
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center border shrink-0 ${accent ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-primary/10 border-primary/30"}`}>
           <Icon className={`h-5 w-5 ${accent ? "" : "text-primary"}`} />
         </div>
-        <div>
-          <p className="text-xs text-muted-foreground">{label}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-muted-foreground truncate">{label}</p>
           <p className={`text-lg font-bold ${loading ? "animate-pulse text-muted-foreground" : accent ? "text-red-400" : "text-foreground"}`}>
             {loading ? "..." : value}
           </p>
+          {!loading && hasVariation && (
+            <div className={`flex items-center gap-1 mt-0.5 text-[10px] font-medium ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
+              {isPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+              <span>{isPositive ? "+" : ""}{variation!.toFixed(1)}% vs {variationLabel}</span>
+            </div>
+          )}
+          {!loading && subtitle && (
+            <p className="text-[10px] text-muted-foreground truncate mt-0.5">{subtitle}</p>
+          )}
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function ChartCard({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+/* ── Chart Card ── */
+function ChartCard({ title, badge, children }: { title: string; badge?: string; children: React.ReactNode }) {
   return (
-    <Card className="bg-card border-border">
+    <Card className="bg-card border-border/50 hover:border-border transition-colors duration-200">
       <CardHeader className="pb-2">
-        {sub && <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{sub}</p>}
-        <CardTitle className="text-sm text-foreground">{title}</CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-sm text-foreground">{title}</CardTitle>
+          {badge && (
+            <Badge variant="outline" className="text-[10px] px-2 py-0.5 font-normal text-muted-foreground border-border/50">
+              {badge}
+            </Badge>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="pt-0">{children}</CardContent>
     </Card>
