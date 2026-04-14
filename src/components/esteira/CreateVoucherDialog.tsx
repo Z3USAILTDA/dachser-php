@@ -395,6 +395,16 @@ export const CreateVoucherDialog = ({
       }
 
       // Boleto é opcional - removida obrigatoriedade
+
+      // Origem do Processo é obrigatória
+      if (!origemProcesso) {
+        toast({
+          title: "Erro de validação",
+          description: "Origem do Processo é obrigatória",
+          variant: "destructive",
+        });
+        return;
+      }
     } else {
       // Draft requires at least a voucher number
       if (!values.numeroRM?.trim()) {
@@ -921,7 +931,7 @@ export const CreateVoucherDialog = ({
                 
                 <div>
                   <Label className="flex items-center gap-1.5 text-sm text-muted-foreground mb-2">
-                    Origem do Processo
+                    Origem do Processo <span className="text-destructive">*</span>
                   </Label>
                   <div className="flex gap-2">
                     {(["AIR", "SEA", "CHB", "ROD"] as OrigemProcesso[]).map((tipo) => (

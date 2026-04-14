@@ -132,7 +132,7 @@ const menuItems: MenuItem[] = [
         href: "/fin/analise-documental",
       },
       {
-        label: "Voucher/SPO",
+        label: "Esteira Vouchers/SPO",
         href: "/fin/esteira",
       },
     ],
