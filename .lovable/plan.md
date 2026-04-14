@@ -1,45 +1,41 @@
 
+## Plano: corrigir os gráficos com NaN no Faturamento
 
-## Plano: Alinhar visual do Faturamento ao Olimpo Cobrança
+### Diagnóstico
+O problema provavelmente está no campo `valor_total_faturado`: ele entra no dashboard como se fosse `number`, mas vindo do MariaDB pode chegar como string decimal. Hoje o código soma direto (`entry.valor += r.valor_total_faturado || 0`), o que pode gerar concatenação de string em vez de soma numérica. Quando esses valores passam por `tickFormatter`, `Tooltip` e `LabelList`, alguns gráficos acabam exibindo `NaN`.
 
-### Problemas identificados
+### O que vou ajustar
 
-1. **Tooltip "R$ NaN"** — O `DarkTooltip` customizado tem bug com valores monetários. No Cobrança, o tooltip usa `contentStyle` inline no componente `<Tooltip>` do Recharts, não um componente custom
-2. **Proporções dos gráficos** — Faturamento usa alturas 260/240/220px; Cobrança usa 320px
-3. **Estilo do tooltip** — Cobrança: `backgroundColor: "rgba(0,0,0,0.85)"`, `border: "1px solid rgba(255,255,255,0.15)"`, `borderRadius: 8`; Faturamento usa componente custom com classes Tailwind
-4. **Donut chart** — Precisa de `labelLine={false}` como no Cobrança
-5. **Bar sizes** — Cobrança usa `barSize={28}`; Faturamento usa `maxBarSize` variável
+1. **Normalizar o valor monetário na origem**
+   - Revisar o retorno de `get_faturamento_dashboard` no `mariadb-proxy`
+   - Garantir que `valor_total_faturado` volte numérico no payload
 
-### Alteração — Arquivo único
+2. **Blindar o frontend contra dados inválidos**
+   - Em `src/pages/olimpo/OlimpoFaturamento.tsx`, criar uma função utilitária para converter qualquer valor em número seguro
+   - Usar essa conversão em todos os cálculos:
+     - `monthlyData`
+     - `kpis`
+     - `lastMonthModalData`
+     - `divisionData`
 
-**`src/pages/olimpo/OlimpoFaturamento.tsx`**
+3. **Endurecer os formatadores**
+   - Ajustar `formatBRL`, `formatBRLFull` e `formatCompact` para nunca retornarem `NaN`
+   - Proteger também `Tooltip`, `YAxis` e `LabelList` dos gráficos de valor
 
-1. **Remover `DarkTooltip`** — Substituir por `contentStyle`/`labelStyle`/`formatter` inline em cada `<Tooltip>`, exatamente como no Cobrança:
-   ```tsx
-   <Tooltip 
-     contentStyle={{ backgroundColor: "rgba(0,0,0,0.85)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8 }}
-     labelStyle={{ color: "#fff" }}
-     formatter={(v: number) => formatBRL(v)}
-   />
-   ```
+4. **Manter o visual atual**
+   - Não vou mudar o tipo de gráfico nem o layout
+   - Só corrigir a base numérica e a exibição dos valores
 
-2. **Padronizar alturas** — Todos os gráficos com `height={320}` (como Cobrança)
+### Validação
+Depois da correção, vou conferir especialmente os gráficos monetários:
+- Valor Total Faturado no RM
+- Valor Total Faturado no RM por Modal
+- Valor por Modal
+- Valor por Divisão Modal
+- KPIs de faturamento total e maior cliente
 
-3. **Donut chart** — Adicionar `labelLine={false}` e ajustar `outerRadius={110}` / `innerRadius={60}` (como Cobrança)
-
-4. **Padronizar barSize** — Usar `barSize={28}` nos gráficos de barras simples
-
-5. **Tooltip do PieChart** — Usar mesmo `contentStyle` + `formatter` do Cobrança
-
-6. **Legend** — Usar `wrapperStyle={{ fontSize: 12 }}` em todos (como Cobrança usa `fontSize: 11-12`)
-
-### Sem alteração
-- Tipos de visualização (9 gráficos) permanecem idênticos
-- Lógica de fetch/processamento inalterada
-- KpiCard e ChartCard já estão no padrão correto
-
-### Resumo
+### Arquivos
 | Arquivo | Ação |
 |---------|------|
-| `src/pages/olimpo/OlimpoFaturamento.tsx` | Fix tooltip NaN, padronizar alturas/tamanhos ao Cobrança |
-
+| `src/pages/olimpo/OlimpoFaturamento.tsx` | Normalizar valores e proteger formatadores |
+| `supabase/functions/mariadb-proxy/index.ts` | Garantir retorno numérico de `valor_total_faturado` |
