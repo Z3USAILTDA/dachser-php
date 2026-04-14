@@ -1,44 +1,49 @@
 
-## Plano: Alinhar visual do Faturamento exatamente ao Cobrança
 
-### Diferenças identificadas
+## Plano: Melhorar visual do Faturamento inspirado no design de referência
 
-Comparando `OlimpoCobranca.tsx` com `OlimpoFaturamento.tsx`, encontrei estas inconsistências visuais:
+A imagem de referência mostra um dashboard moderno com: cards com sparklines/mini-gráficos, ícones mais elegantes, subtítulos nos KPIs, bordas mais suaves, e uma hierarquia visual mais clara. Vou aplicar essas melhorias mantendo a estrutura existente e o padrão dark do Olimpo.
 
-1. **KpiCard no Faturamento** tem extras que o Cobrança nao tem: linha `sub` (subtítulo), ícones com cores variadas (green/amber). No Cobrança, o KpiCard e mais simples: sem `sub`, accent e apenas boolean (vermelho ou padrao)
-2. **Tick fontSize** - Cobrança usa `11`, Faturamento usa `10`
-3. **Label fontSize no LabelList** - Faturamento usa `9`, deveria ser consistente
-4. **Legend fontSize** - Cobrança usa `11`, Faturamento usa `12`
-5. **PageLayout** - Faturamento nao tem `backTo="/dashboard"`
-6. **Spacing** - Cobrança usa `gap-6` entre seções de gráficos, Faturamento usa `gap-4`
-
-### Alteracao - Arquivo unico
+### Alterações — Arquivo único
 
 **`src/pages/olimpo/OlimpoFaturamento.tsx`**
 
-1. **KpiCard**: Simplificar para o mesmo modelo do Cobrança:
-   - Remover `sub` prop
-   - Mudar `accent` de string para boolean (vermelho quando ativo)
-   - Remover cores green/amber dos ícones - usar apenas primary (padrao) ou red (accent)
-   - Valor com accent em vermelho como no Cobrança
+1. **KPI Cards mais ricos** (inspirado na imagem):
+   - Adicionar indicador de variação (seta + percentual) no card de Faturamento Total
+   - Mostrar o nome do maior cliente como subtítulo abaixo do valor
+   - Adicionar mini-indicador de tendência (ícone TrendingUp/Down) nos cards relevantes
+   - Usar `gap-4` nos KPIs (como referência) com cards mais compactos e informação densa
 
-2. **Ajustar tick/label/legend sizes**:
-   - `tickStyle fontSize: 11` (era 10)
-   - `labelStyle fontSize: 10` (era 9)
-   - `legendStyle fontSize: 11` (era 12)
+2. **ChartCard com header melhorado**:
+   - Adicionar subtítulo e título na mesma linha (subtítulo à direita, menor, como badge)
+   - Bordas mais suaves com `border-border/50` em vez de `border-border`
+   - Adicionar `hover:border-border` transition para interatividade sutil
 
-3. **PageLayout**: Adicionar `backTo="/dashboard"`
+3. **Gráfico principal (linha de tendência)**:
+   - Converter o primeiro gráfico "Quantidade de Files — Total Faturado" de BarChart para um **AreaChart** com gradiente, inspirado no gráfico principal da referência (curva suave com área preenchida)
+   - Manter tooltip com dados completos
+   - Usar gradiente de preenchimento da cor primária (#4a6fa5) com opacidade
 
-4. **Grid gaps**: Mudar de `gap-4` para `gap-6` nos grids de gráficos (como Cobrança)
+4. **Cores e polish**:
+   - Usar cores de barra com gradiente sutil (via `linearGradient` no SVG defs)
+   - Melhorar o `gridStroke` para `rgba(255,255,255,0.05)` (mais sutil)
+   - Cursor pointer nos tooltips com `cursor="pointer"` no `<Bar>`
 
-5. **Chart margins**: Padronizar `margin={{ top: 10, right: 10, left: 10, bottom: 5 }}` (como Cobrança) em vez de `margin={{ top: 20, right: 10, left: 0, bottom: 0 }}`
+5. **Layout Row 3 (3 cards)**:
+   - Ajustar o donut chart (Região) para ter legenda embaixo com badges coloridos em vez de labels inline no gráfico
 
-### Sem alteracao
-- Tipos de visualizacao (9 graficos) permanecem identicos
-- Logica de fetch/processamento inalterada
-- Tooltip styles ja estao corretos
+6. **Espaçamento geral**:
+   - Adicionar `rounded-xl` nos Cards (bordas mais arredondadas, como na referência)
+   - Manter `space-y-6` entre seções
+
+### Sem alteração
+- Lógica de fetch/processamento de dados inalterada
+- 9 visualizações mantidas (apenas 1 muda de Bar para Area)
+- Tooltip styles, formatadores e proxy inalterados
+- Nenhum outro arquivo modificado
 
 ### Resumo
-| Arquivo | Acao |
+| Arquivo | Ação |
 |---------|------|
-| `src/pages/olimpo/OlimpoFaturamento.tsx` | Alinhar KpiCard, font sizes, gaps e margins ao padrao Cobranca |
+| `src/pages/olimpo/OlimpoFaturamento.tsx` | Melhorar KPIs, converter gráfico principal para AreaChart, polish visual |
+
