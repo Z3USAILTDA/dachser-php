@@ -81,7 +81,7 @@ function Z3usPieTooltip({ active, payload, total }: { active?: boolean; payload?
   const entry = payload[0]; const value = entry?.value ?? 0; const name = entry?.payload?.name || entry?.name || "";
   const percent = total && total > 0 ? ((value / total) * 100).toFixed(1) : "0";
   return (
-    <div style={{ background: "hsl(222 41% 5%)", border: "1px solid hsl(40 95% 48% / 0.25)", borderRadius: "10px", <div style={{ background: "hsl(222 41% 5%)", border: "1px solid hsl(40 95% 48% / 0.25)", borderRadius: "10px", boxShadow: "0 10px 30px rgba(0,0,0,0.5)", padding: "12px 16px" }}>
+    <div style={{ background: "hsl(222 41% 5%)", border: "1px solid hsl(40 95% 48% / 0.25)", borderRadius: "10px", boxShadow: "0 10px 30px rgba(0,0,0,0.5)", padding: "12px 16px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
         <div style={{ width: "10px", height: "10px", borderRadius: "2px", backgroundColor: entry?.color || ZEUS_COLORS.amber }} />
         <span style={{ color: "hsl(210 20% 90%)", fontSize: "13px", fontWeight: 600 }}>{name}</span>
