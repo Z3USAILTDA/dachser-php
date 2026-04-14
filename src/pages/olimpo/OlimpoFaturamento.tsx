@@ -252,6 +252,9 @@ export default function OlimpoFaturamento() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div>
             <ZeusChartCard title="Qtd. Files — Total Faturado" subtitle="Evolução mensal" headerRight={<ExpandButton chartId="evolucao" />}>
+              {chartMonthlyCount.length <= 1 ? (
+                <GaugeChart value={chartMonthlyCount[0]?.Quantidade ?? 0} label="Quantidade" color={ZEUS_COLORS.amber} />
+              ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={chartMonthlyCount} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
                   <defs><linearGradient id="areaGradZ3us" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.3} /><stop offset="50%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.08} /><stop offset="100%" stopColor={ZEUS_COLORS.amber} stopOpacity={0} /></linearGradient></defs>
@@ -262,6 +265,7 @@ export default function OlimpoFaturamento() {
                   <Area type="monotone" dataKey="Quantidade" stroke={ZEUS_COLORS.amber} strokeWidth={2.5} fill="url(#areaGradZ3us)" dot={{ r: 4, fill: ZEUS_COLORS.amber, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.amberLight, stroke: "#fff", strokeWidth: 2 }} />
                 </AreaChart>
               </ResponsiveContainer>
+              )}
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "evolucao"} onClose={() => setExpandedChart(null)} title="Evolução Mensal" columns={COL_MENSAL_QTD} data={chartMonthlyCount} exportName="evolucao_mensal" accentColor={ZEUS_COLORS.amber} />
           </div>
@@ -311,6 +315,9 @@ export default function OlimpoFaturamento() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div>
             <ZeusChartCard title="Valor Total Mensal" subtitle="Evolução mensal" headerRight={<ExpandButton chartId="valor-mensal" />}>
+              {chartMonthlyValor.length <= 1 ? (
+                <GaugeChart value={chartMonthlyValor[0]?.Valor ?? 0} label="Valor Faturado" color={ZEUS_COLORS.amber} valueFormatter={(v) => formatCompact(v)} />
+              ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={chartMonthlyValor} margin={{ top: 25, right: 10, left: 0, bottom: 5 }}>
                   <defs><linearGradient id="areaGradValorMensal" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.3} /><stop offset="50%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.08} /><stop offset="100%" stopColor={ZEUS_COLORS.amber} stopOpacity={0} /></linearGradient></defs>
@@ -319,6 +326,7 @@ export default function OlimpoFaturamento() {
                   <Area type="monotone" dataKey="Valor" stroke={ZEUS_COLORS.amber} strokeWidth={2.5} fill="url(#areaGradValorMensal)" dot={{ r: 4, fill: ZEUS_COLORS.amber, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.amberLight, stroke: "#fff", strokeWidth: 2 }} />
                 </AreaChart>
               </ResponsiveContainer>
+              )}
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "valor-mensal"} onClose={() => setExpandedChart(null)} title="Valor Total Mensal" columns={COL_MENSAL} data={chartMonthlyValor} exportName="valor_mensal" accentColor={ZEUS_COLORS.amber} />
           </div>
@@ -370,6 +378,9 @@ export default function OlimpoFaturamento() {
 
           <div>
             <ZeusChartCard title="Qtd. por Divisão Modal" subtitle="Divisão" headerRight={<ExpandButton chartId="div-qtd" />}>
+              {divisionData.length <= 1 ? (
+                <GaugeChart value={divisionData[0]?.count ?? 0} label="Quantidade" color={ZEUS_COLORS.success} />
+              ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={divisionData} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
                   <defs><linearGradient id="areaGradDivQtd" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={ZEUS_COLORS.success} stopOpacity={0.3} /><stop offset="50%" stopColor={ZEUS_COLORS.success} stopOpacity={0.08} /><stop offset="100%" stopColor={ZEUS_COLORS.success} stopOpacity={0} /></linearGradient></defs>
@@ -378,12 +389,16 @@ export default function OlimpoFaturamento() {
                   <Area type="monotone" dataKey="count" name="Quantidade" stroke={ZEUS_COLORS.success} strokeWidth={2.5} fill="url(#areaGradDivQtd)" dot={{ r: 4, fill: ZEUS_COLORS.success, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.success, stroke: "#fff", strokeWidth: 2 }} />
                 </AreaChart>
               </ResponsiveContainer>
+              )}
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "div-qtd"} onClose={() => setExpandedChart(null)} title="Divisão Modal — Quantidade" columns={COL_DIVISAO} data={divisionData} exportName="divisao_qtd" accentColor={ZEUS_COLORS.success} />
           </div>
 
           <div>
             <ZeusChartCard title="Valor por Divisão Modal" subtitle="Divisão" headerRight={<ExpandButton chartId="div-valor" />}>
+              {divisionData.length <= 1 ? (
+                <GaugeChart value={divisionData[0]?.valor ?? 0} label="Valor Faturado" color={ZEUS_COLORS.amber} valueFormatter={(v) => formatCompact(v)} />
+              ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={divisionData} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
                   <defs><linearGradient id="areaGradDivValor" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.3} /><stop offset="50%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.08} /><stop offset="100%" stopColor={ZEUS_COLORS.amber} stopOpacity={0} /></linearGradient></defs>
@@ -392,6 +407,7 @@ export default function OlimpoFaturamento() {
                   <Area type="monotone" dataKey="valor" name="Valor" stroke={ZEUS_COLORS.amber} strokeWidth={2.5} fill="url(#areaGradDivValor)" dot={{ r: 4, fill: ZEUS_COLORS.amber, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.amberLight, stroke: "#fff", strokeWidth: 2 }} />
                 </AreaChart>
               </ResponsiveContainer>
+              )}
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "div-valor"} onClose={() => setExpandedChart(null)} title="Divisão Modal — Valor" columns={COL_DIVISAO} data={divisionData} exportName="divisao_valor" accentColor={ZEUS_COLORS.amber} />
           </div>
