@@ -1073,7 +1073,7 @@ const ContainerTracking = () => {
       let trackIteration = 0;
       while (trackRemaining > 0 && trackIteration < 30) {
         trackIteration++;
-        const trackRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=20&stale_hours=4&refresh_valid_hours=48`, {
+        const trackRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=20&stale_hours=0&refresh_valid_hours=0`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
@@ -1343,7 +1343,7 @@ const ContainerTracking = () => {
         const batchEl = document.getElementById('track-batch');
         if (progressEl) progressEl.style.width = `${iteration / maxIterations * 100}%`;
         if (batchEl) batchEl.textContent = `Batch ${iteration}/${maxIterations}`;
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=20&stale_hours=4&refresh_valid_hours=48`, {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=20&stale_hours=0&refresh_valid_hours=0`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,

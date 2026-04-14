@@ -739,19 +739,11 @@ serve(async (req) => {
             const statusLower = (cacheRow.container_status || '').toLowerCase();
             const isDelivered = /delivered|gate out|empty received/.test(statusLower);
 
-            // Regras de cache:
-            // 1. Status "Entregue" há mais de 24h → usar cache permanente
-            // 2. ETA > 7 dias do futuro → usar cache
-            // 3. ETA entre 1-7 dias → atualizar 1x por dia
-            // 4. ETA < 24h → sempre atualizar
-            if (isDelivered && lastApiTs && (nowTs - lastApiTs > ONE_DAY_MS)) {
-              useCache = true; // Entregue há mais de 1 dia, cache permanente
-            } else if (etaTs && (etaTs - nowTs > SEVEN_DAYS_MS)) {
-              useCache = true; // ETA > 7 dias, usar cache
-            } else if (etaTs && (etaTs - nowTs > ONE_DAY_MS) && (nowTs - lastApiTs < ONE_DAY_MS)) {
-              useCache = true; // ETA entre 1-7 dias e já atualizou hoje
+            // Regra simplificada: apenas entregues usam cache
+            if (isDelivered) {
+              useCache = true; // Entregue = não re-rastrear
             }
-            // Se ETA < 24h, sempre atualiza (useCache = false)
+            // Todos os demais containers são sempre re-rastreados
           }
 
           if (useCache && cacheRow) {
@@ -2827,8 +2819,8 @@ serve(async (req) => {
       // Batch processing parameters
       const batchSize = parseInt(url.searchParams.get('batch_size') || '20');
       const maxTimeMs = parseInt(url.searchParams.get('max_time_ms') || '45000');
-      const staleHours = parseInt(url.searchParams.get('stale_hours') || '4');
-      const refreshValidHours = parseInt(url.searchParams.get('refresh_valid_hours') || '48');
+      const staleHours = parseInt(url.searchParams.get('stale_hours') || '0');
+      const refreshValidHours = parseInt(url.searchParams.get('refresh_valid_hours') || '0');
       const forceRefresh = url.searchParams.get('force') === '1';
       const forceAll = url.searchParams.get('force_all') === '1'; // Re-track ALL containers regardless of status
       const carrierFilter = url.searchParams.get('carrier_filter') || '';
