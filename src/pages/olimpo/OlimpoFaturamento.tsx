@@ -155,7 +155,10 @@ export default function OlimpoFaturamento() {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { if (!roleLoading && isAdmin) fetchData(); }, [roleLoading, isAdmin]);
+
+  if (roleLoading) return <PageLayout title="DACHSER" subtitle="Faturamento" pageIcon={DollarSign} backTo="/dashboard"><div className="flex items-center justify-center h-64 text-muted-foreground">Verificando permissões...</div></PageLayout>;
+  if (!isAdmin) return null;
 
   // ── Data processing (unchanged logic) ──
   const monthlyData = useMemo(() => {
