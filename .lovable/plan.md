@@ -1,23 +1,23 @@
 
 
-## Plano: Separar DIS e Discrepância de Peças entre os cards
+## Plano: Corrigir link de rastreio da United Cargo (016)
 
-### Regra
-- **Em Alerta**: apenas `code === "DIS"` ou `has_dis_event` (sem discrepância de peças)
-- **Crítico**: `pieces_discrepancy`, além dos já existentes (NIL, NIF, OFLD, tracking_failed)
+### Problema
+O link direto `https://www.unitedcargo.com/en/us/track/awb/016-XXXXXXXX` está sendo bloqueado pelo servidor da United Cargo (ERR_BLOCKED_BY_RESPONSE).
 
 ### Alteração
 
-**`src/pages/air/TrackingAereo.tsx`**
+**`src/pages/air/TrackingAereo.tsx`** (linha 96)
 
-1. **Contagem (linhas ~516-517)**:
-   - `alert`: `code === "DIS" || (awb.has_dis_event && !awb.pieces_discrepancy)`
-   - `critical`: `criticalCodes.has(code) || awb.pieces_discrepancy`
+Substituir o URL builder da `016` para apontar para a página de tracking genérica (sem deep link direto, pois o servidor bloqueia):
 
-2. **Filtro de cards (linhas ~569-570)**:
-   - `case "alerta"`: `code === "DIS" || (awb.has_dis_event && !awb.pieces_discrepancy)`
-   - `case "criticos"`: `awb.tracking_failed || ["NIL","NIF","OFLD"].includes(code) || awb.pieces_discrepancy`
+```typescript
+// Antes
+"016": (i,a) => `https://www.unitedcargo.com/en/us/track/awb/${i}-${a}`,
 
-### Resultado
-Processos com evento DIS (sem discrepância de peças) vão para "Em Alerta". Processos com discrepância de peças vão para "Críticos".
+// Depois
+"016": (i,a) => `https://www.unitedcargo.com/en/us/track`,
+```
+
+O usuário será direcionado à página de tracking da United Cargo onde poderá colar o AWB manualmente. Não há URL com parâmetros de query disponível neste site (o formulário usa JavaScript client-side).
 
