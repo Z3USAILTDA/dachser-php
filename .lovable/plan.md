@@ -1,26 +1,37 @@
 
 
-## Plano: Corrigir bloqueio do link United Cargo (016)
+## Plano: Corrigir build errors + status do processo 045-13301256
 
-### Problema
-O site da United Cargo bloqueia a abertura quando detecta que veio de uma origem externa (cross-origin referrer). O `window.open(url, "_blank")` envia o referrer, fazendo o servidor rejeitar a requisição.
+### Parte 1: Build errors em Index.tsx
 
-### Alteração
+O código em `src/pages/Index.tsx` está sintaticamente correto nas linhas indicadas. Os erros parecem ser de cache/estado stale do build. A correção será forçar uma re-escrita mínima (adicionar/remover espaço) para limpar o cache do TypeScript.
 
-**`src/pages/air/TrackingAereo.tsx`** (linha ~981)
+### Parte 2: Corrigir status do 045-13301256
 
-Alterar o `window.open` para incluir `noopener,noreferrer`, removendo o referrer da requisição:
+**Problema**: O processo usa hierarquia IATA para determinar o `finalCode`. RCF tem ID maior que DEP na tabela `t_eventos_awb`, então RCF "vence" mesmo sendo cronologicamente anterior.
+
+**Correção cirúrgica** (conforme memory de data-mirroring-intent): Alterar a lógica de resolução para usar `lastStatusCode` ou `code0` (primeiro evento da timeline, que é o mais recente cronologicamente), sem hierarquia IATA.
+
+**Arquivo**: `supabase/functions/fetch-tracking-aereo/index.ts` (linhas 411-441)
+
+Substituir o bloco de hierarquia por:
 
 ```typescript
-// Antes
-window.open(trackingUrl, "_blank")
+let finalCode: string | null = null;
+const codes = [code0, code1, code2, code3];
 
-// Depois
-window.open(trackingUrl, "_blank", "noopener,noreferrer")
+// DLV always takes priority (delivered is final)
+if (codes.some(c => c === "DLV") || lastStatusCode === "DLV") {
+  finalCode = "DLV";
+} else {
+  // Use last_status_code (most recent from scraper) or first timeline event
+  finalCode = lastStatusCode || code0 || null;
+}
 ```
 
-Essa alteração se aplica a **todos** os links de companhias (não apenas 016), o que é uma boa prática de segurança.
+Isso remove a lógica de hierarquia e usa diretamente o status mais recente cronologicamente, alinhado com a diretriz de espelhamento.
 
-### Resultado
-O link da United Cargo (e demais) abrirá sem enviar o referrer, evitando o bloqueio do servidor.
+### Arquivos alterados
+1. `src/pages/Index.tsx` — re-save para limpar build errors
+2. `supabase/functions/fetch-tracking-aereo/index.ts` — simplificar resolução de status
 
