@@ -95,6 +95,7 @@ import CadastroNova from "./pages/air/CadastroNova";
 import TrackingAereo from "./pages/air/TrackingAereo";
 // FIN Module
 import ManualFinanceiro from "./pages/fin/ManualFinanceiro";
+import OthelloImport from "./pages/fin/OthelloImport";
 
 // Admin Module
 import ManualAdmin from "./pages/admin/ManualAdmin";
@@ -221,8 +222,9 @@ const App = () => (
           {/* CHB Module Manual */}
           <Route path="/chb/manual" element={<ManualChb />} />
           
-          {/* FIN Module Manual */}
+          {/* FIN Module */}
           <Route path="/fin/manual" element={<ManualFinanceiro />} />
+          <Route path="/fin/othello-import" element={<OthelloImport />} />
           
           {/* Admin Module Manual */}
           <Route path="/admin/manual" element={<ManualAdmin />} />

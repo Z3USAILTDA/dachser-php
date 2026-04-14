@@ -135,6 +135,11 @@ const menuItems: MenuItem[] = [
         label: "Esteira Vouchers/SPO",
         href: "/fin/esteira",
       },
+      {
+        label: "Importar Othello/RM",
+        href: "/fin/othello-import",
+        adminOnly: true,
+      },
     ],
   },
   {
