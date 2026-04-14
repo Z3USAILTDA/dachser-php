@@ -241,33 +241,32 @@ export default function OlimpoFaturamento() {
           <KPICardEnhanced icon={Users} value={formatCompact(kpis.topClientVal)} label="Maior Cliente" color={ZEUS_COLORS.amber} loading={loading} subtitle={kpis.topClient !== "-" ? kpis.topClient : undefined} sparkData={sparklineValor} sparkType="line" />
         </div>
 
-        {/* Main Chart */}
-        <div>
-          <ZeusChartCard title="Quantidade de Files — Total Faturado" subtitle="Evolução mensal de processos faturados" headerRight={<ExpandButton chartId="evolucao" />}>
-            <ResponsiveContainer width="100%" height={260}>
-              {chartMonthlyCount.length > 2 ? (
-                <AreaChart data={chartMonthlyCount} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
-                  <defs><linearGradient id="areaGradZ3us" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.3} /><stop offset="50%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.08} /><stop offset="100%" stopColor={ZEUS_COLORS.amber} stopOpacity={0} /></linearGradient></defs>
-                  <CartesianGrid {...GRID_PROPS} />
-                  <XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
-                  <YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
-                  <Tooltip content={<Z3usTooltip />} cursor={{ stroke: ZEUS_COLORS.amber, strokeWidth: 1, strokeDasharray: "4 4" }} />
-                  <Area type="monotone" dataKey="Quantidade" stroke={ZEUS_COLORS.amber} strokeWidth={2.5} fill="url(#areaGradZ3us)" dot={{ r: 4, fill: ZEUS_COLORS.amber, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.amberLight, stroke: "#fff", strokeWidth: 2 }} style={{ filter: `drop-shadow(0 0 6px ${ZEUS_COLORS.amber}55)` }} />
-                </AreaChart>
-              ) : (
-                <BarChart data={chartMonthlyCount} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
-                  <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
-                  <Tooltip content={<Z3usTooltip />} cursor={{ fill: `rgba(242, 160, 7, 0.08)` }} />
-                  <Bar dataKey="Quantidade" name="Total" fill={ZEUS_COLORS.amber} radius={[4, 4, 0, 0]} barSize={28} style={{ filter: `drop-shadow(0 0 10px ${ZEUS_COLORS.amber}55)` }}><LabelList dataKey="Quantidade" position="top" fill={ZEUS_COLORS.amber} fontSize={11} fontWeight={600} /></Bar>
-                </BarChart>
-              )}
-            </ResponsiveContainer>
-          </ZeusChartCard>
-          <ChartDetailPanel isOpen={expandedChart === "evolucao"} onClose={() => setExpandedChart(null)} title="Evolução Mensal" columns={COL_MENSAL_QTD} data={chartMonthlyCount} exportName="evolucao_mensal" accentColor={ZEUS_COLORS.amber} />
-        </div>
-
-        {/* Row 2 — 3 cards */}
+        {/* Row 1 — 3 charts */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div>
+            <ZeusChartCard title="Qtd. Files — Total Faturado" subtitle="Evolução mensal" headerRight={<ExpandButton chartId="evolucao" />}>
+              <ResponsiveContainer width="100%" height={260}>
+                {chartMonthlyCount.length > 2 ? (
+                  <AreaChart data={chartMonthlyCount} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
+                    <defs><linearGradient id="areaGradZ3us" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.3} /><stop offset="50%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.08} /><stop offset="100%" stopColor={ZEUS_COLORS.amber} stopOpacity={0} /></linearGradient></defs>
+                    <CartesianGrid {...GRID_PROPS} />
+                    <XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
+                    <YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
+                    <Tooltip content={<Z3usTooltip />} cursor={{ stroke: ZEUS_COLORS.amber, strokeWidth: 1, strokeDasharray: "4 4" }} />
+                    <Area type="monotone" dataKey="Quantidade" stroke={ZEUS_COLORS.amber} strokeWidth={2.5} fill="url(#areaGradZ3us)" dot={{ r: 4, fill: ZEUS_COLORS.amber, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.amberLight, stroke: "#fff", strokeWidth: 2 }} style={{ filter: `drop-shadow(0 0 6px ${ZEUS_COLORS.amber}55)` }} />
+                  </AreaChart>
+                ) : (
+                  <BarChart data={chartMonthlyCount} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
+                    <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
+                    <Tooltip content={<Z3usTooltip />} cursor={{ fill: `rgba(242, 160, 7, 0.08)` }} />
+                    <Bar dataKey="Quantidade" name="Total" fill={ZEUS_COLORS.amber} radius={[4, 4, 0, 0]} barSize={28} style={{ filter: `drop-shadow(0 0 10px ${ZEUS_COLORS.amber}55)` }}><LabelList dataKey="Quantidade" position="top" fill={ZEUS_COLORS.amber} fontSize={11} fontWeight={600} /></Bar>
+                  </BarChart>
+                )}
+              </ResponsiveContainer>
+            </ZeusChartCard>
+            <ChartDetailPanel isOpen={expandedChart === "evolucao"} onClose={() => setExpandedChart(null)} title="Evolução Mensal" columns={COL_MENSAL_QTD} data={chartMonthlyCount} exportName="evolucao_mensal" accentColor={ZEUS_COLORS.amber} />
+          </div>
+
           <div>
             <ZeusChartCard title="Top Clientes por Faturamento" subtitle="Último mês" headerRight={<ExpandButton chartId="top-clientes" />}>
               <ResponsiveContainer width="100%" height={280}>
@@ -307,7 +306,10 @@ export default function OlimpoFaturamento() {
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "regiao"} onClose={() => setExpandedChart(null)} title="Distribuição Regional" columns={COL_REGIAO} data={regionData} exportName="regiao" accentColor={ZEUS_COLORS.success} />
           </div>
+        </div>
 
+        {/* Row 2 — 3 charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div>
             <ZeusChartCard title="Valor Total Mensal" subtitle="Evolução mensal" headerRight={<ExpandButton chartId="valor-mensal" />}>
               <ResponsiveContainer width="100%" height={280}>
@@ -320,7 +322,6 @@ export default function OlimpoFaturamento() {
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "valor-mensal"} onClose={() => setExpandedChart(null)} title="Valor Total Mensal" columns={COL_MENSAL} data={chartMonthlyValor} exportName="valor_mensal" accentColor={ZEUS_COLORS.amber} />
           </div>
-        </div>
 
         {/* Row 3 — 3 cards */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
