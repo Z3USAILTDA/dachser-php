@@ -1,37 +1,40 @@
 
 
-## Plano: Corrigir build errors + status do processo 045-13301256
+## Plano: Renomear "Vouchers/SPO" e tornar "Origem do Processo" obrigatório
 
-### Parte 1: Build errors em Index.tsx
+### Alteração 1 — Renomear no menu filho e título da tela
 
-O código em `src/pages/Index.tsx` está sintaticamente correto nas linhas indicadas. Os erros parecem ser de cache/estado stale do build. A correção será forçar uma re-escrita mínima (adicionar/remover espaço) para limpar o cache do TypeScript.
+**Locais a alterar:**
 
-### Parte 2: Corrigir status do 045-13301256
+1. **`src/pages/Dashboard.tsx`** (linha 135): Mudar `"Voucher/SPO"` para `"Esteira Vouchers/SPO"` — este é o nome do item filho no menu do Dashboard.
 
-**Problema**: O processo usa hierarquia IATA para determinar o `finalCode`. RCF tem ID maior que DEP na tabela `t_eventos_awb`, então RCF "vence" mesmo sendo cronologicamente anterior.
+2. **`src/pages/esteira/EsteiraIndex.tsx`** (linha 1856): Mudar `"Intelligent Logistics — Vouchers/SPO"` para `"Intelligent Logistics — Esteira Vouchers/SPO"` — este é o subtítulo/título da tela principal.
 
-**Correção cirúrgica** (conforme memory de data-mirroring-intent): Alterar a lógica de resolução para usar `lastStatusCode` ou `code0` (primeiro evento da timeline, que é o mais recente cronologicamente), sem hierarquia IATA.
+### Alteração 2 — Campo "Origem do Processo" obrigatório
 
-**Arquivo**: `supabase/functions/fetch-tracking-aereo/index.ts` (linhas 411-441)
+**Arquivo:** `src/components/esteira/CreateVoucherDialog.tsx`
 
-Substituir o bloco de hierarquia por:
+1. **Validação no submit** (após linha 395, dentro do bloco `!isDraft`): Adicionar verificação:
+   ```typescript
+   if (!origemProcesso) {
+     toast({
+       title: "Erro de validação",
+       description: "Origem do Processo é obrigatória",
+       variant: "destructive",
+     });
+     return;
+   }
+   ```
 
-```typescript
-let finalCode: string | null = null;
-const codes = [code0, code1, code2, code3];
-
-// DLV always takes priority (delivered is final)
-if (codes.some(c => c === "DLV") || lastStatusCode === "DLV") {
-  finalCode = "DLV";
-} else {
-  // Use last_status_code (most recent from scraper) or first timeline event
-  finalCode = lastStatusCode || code0 || null;
-}
-```
-
-Isso remove a lógica de hierarquia e usa diretamente o status mais recente cronologicamente, alinhado com a diretriz de espelhamento.
+2. **Label visual** (linha 923-924): Adicionar asterisco vermelho ao label para indicar campo obrigatório:
+   ```tsx
+   <Label className="flex items-center gap-1.5 text-sm text-muted-foreground mb-2">
+     Origem do Processo <span className="text-destructive">*</span>
+   </Label>
+   ```
 
 ### Arquivos alterados
-1. `src/pages/Index.tsx` — re-save para limpar build errors
-2. `supabase/functions/fetch-tracking-aereo/index.ts` — simplificar resolução de status
+- `src/pages/Dashboard.tsx`
+- `src/pages/esteira/EsteiraIndex.tsx`
+- `src/components/esteira/CreateVoucherDialog.tsx`
 
