@@ -280,33 +280,46 @@ export default function OlimpoFaturamento() {
           </div>
           <div className="px-4 pb-4">
             <ResponsiveContainer width="100%" height={340}>
-              <AreaChart data={chartMonthlyCount} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
-                <defs>
-                  <linearGradient id="areaGradientMain" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#4a6fa5" stopOpacity={0.35} />
-                    <stop offset="50%" stopColor="#4a6fa5" stopOpacity={0.1} />
-                    <stop offset="100%" stopColor="#4a6fa5" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="name" tick={tickStyle} />
-                <YAxis tick={tickStyle} />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  labelStyle={tooltipLabelStyle}
-                  formatter={(v: number) => [v.toLocaleString("pt-BR"), "Total"]}
-                  cursor={{ stroke: "#4a6fa5", strokeWidth: 1, strokeDasharray: "4 4" }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="Quantidade"
-                  stroke="#4a6fa5"
-                  strokeWidth={2.5}
-                  fill="url(#areaGradientMain)"
-                  dot={{ r: 4, fill: "#4a6fa5", stroke: "#0a0e1a", strokeWidth: 2 }}
-                  activeDot={{ r: 7, fill: "#6b8fc5", stroke: "#fff", strokeWidth: 2 }}
-                />
-              </AreaChart>
+              {chartMonthlyCount.length > 2 ? (
+                <AreaChart data={chartMonthlyCount} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
+                  <defs>
+                    <linearGradient id="areaGradientMain" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#4a6fa5" stopOpacity={0.35} />
+                      <stop offset="50%" stopColor="#4a6fa5" stopOpacity={0.1} />
+                      <stop offset="100%" stopColor="#4a6fa5" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <XAxis dataKey="name" tick={tickStyle} />
+                  <YAxis tick={tickStyle} />
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    labelStyle={tooltipLabelStyle}
+                    formatter={(v: number) => [v.toLocaleString("pt-BR"), "Total"]}
+                    cursor={{ stroke: "#4a6fa5", strokeWidth: 1, strokeDasharray: "4 4" }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="Quantidade"
+                    stroke="#4a6fa5"
+                    strokeWidth={2.5}
+                    fill="url(#areaGradientMain)"
+                    dot={{ r: 4, fill: "#4a6fa5", stroke: "#0a0e1a", strokeWidth: 2 }}
+                    activeDot={{ r: 7, fill: "#6b8fc5", stroke: "#fff", strokeWidth: 2 }}
+                  />
+                </AreaChart>
+              ) : (
+                <BarChart data={chartMonthlyCount} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <XAxis dataKey="name" tick={tickStyle} />
+                  <YAxis tick={tickStyle} />
+                  <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => [v.toLocaleString("pt-BR"), "Total"]} />
+                  <Legend wrapperStyle={legendStyle} />
+                  <Bar dataKey="Quantidade" name="Total" fill="#4a6fa5" radius={[4, 4, 0, 0]} barSize={28}>
+                    <LabelList dataKey="Quantidade" position="top" style={labelStyle} />
+                  </Bar>
+                </BarChart>
+              )}
             </ResponsiveContainer>
           </div>
         </GlassCard>
