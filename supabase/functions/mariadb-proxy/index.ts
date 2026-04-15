@@ -8803,6 +8803,27 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'get_voucher_for_rm': {
+        const { voucher_id: voucherIdRm } = body as { voucher_id: string };
+        if (!voucherIdRm) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const voucherRm = await client.query(`
+          SELECT id, numero_spo, forma_pagamento, fornecedor, cnpj_fornecedor,
+                 linha_digitavel, codigo_barras, chave_pix, id_rm, tipo_execucao_pagamento
+          FROM dados_dachser.t_vouchers
+          WHERE id = ?
+          LIMIT 1
+        `, [voucherIdRm]);
+
+        result = { success: true, data: voucherRm?.[0] || null };
+        break;
+      }
+
       case 'backfill_tipo_exec_dados_rm': {
         // Ensure tipo_exec column exists
         try {
