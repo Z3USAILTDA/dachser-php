@@ -11,7 +11,22 @@ const REQUIRED_SHEETS = [
   "Othello Nacional-RLS",
   "Othello Interacional-RLS",
   "Base Totvs RM",
+  "Othello Nacional-Não RLS",
+  "Othello Internacional-Não RLS",
 ] as const;
+
+const HEADERS_NACIONAL_NAO_RLS = [
+  "ID Ref Object", "Settlement ID", "Branch", "Object Type", "Service Date",
+  "Cost Center IV", "Deb Cred No", "Deb Cred Name", "Settlement Type",
+  "Status Settl", "Status Interpreter", "Flag", "Revenue", "Revenue (Transit)",
+  "∑ Revenue", "ETD", "ATD", "ETA", "ATA", "Comentários",
+];
+
+const HEADERS_INTERNACIONAL_NAO_RLS = [
+  "ID Ref Object", "Branch", "Service Date", "Cost Center IV",
+  "Deb Cred Name", "Status Settl", "Flag", "Revenue",
+  "ETD", "ATD", "ETA", "ATA", "Comentários",
+];
 
 const HEADERS_NACIONAL = [
   "ID Ref Object", "Settlement ID", "Branch", "Object Type", "Service Date",
@@ -179,6 +194,13 @@ function toDateStr(v: any): string | null {
   return null;
 }
 
+/** Date conversion for logistics fields (ETD/ATD/ETA/ATA): treats "-" as NULL */
+function toLogisticsDateStr(v: any): string | null {
+  if (v == null || v === "") return null;
+  if (typeof v === "string" && v.trim() === "-") return null;
+  return toDateStr(v);
+}
+
 function validateHeaders(sheet: XLSX.WorkSheet, expected: string[], maxCols?: number): string | null {
   const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
   const lastCol = maxCols ? Math.min(range.e.c, maxCols - 1) : range.e.c;
@@ -214,7 +236,7 @@ function readSheetRows(sheet: XLSX.WorkSheet, maxCols?: number): any[][] {
 
 interface ImportResult {
   success: boolean;
-  counts?: { base_totvs: number; nacional: number; interacional: number };
+  counts?: { base_totvs: number; nacional: number; interacional: number; nacional_nao_rls: number; internacional_nao_rls: number };
   error?: string;
 }
 
@@ -269,6 +291,8 @@ export default function OthelloImport() {
       const sheetNacional = wb.Sheets["Othello Nacional-RLS"];
       const sheetInteracional = wb.Sheets["Othello Interacional-RLS"];
       const sheetTotvs = wb.Sheets["Base Totvs RM"];
+      const sheetNacionalNaoRls = wb.Sheets["Othello Nacional-Não RLS"];
+      const sheetInternacionalNaoRls = wb.Sheets["Othello Internacional-Não RLS"];
 
       let err = validateHeaders(sheetNacional, HEADERS_NACIONAL);
       if (err) throw new Error(`Cabeçalho inválido em Othello Nacional-RLS: ${err}`);
@@ -276,6 +300,10 @@ export default function OthelloImport() {
       if (err) throw new Error(`Cabeçalho inválido em Othello Interacional-RLS: ${err}`);
       err = validateHeaders(sheetTotvs, HEADERS_BASE_TOTVS);
       if (err) throw new Error(`Cabeçalho inválido em Base Totvs RM: ${err}`);
+      err = validateHeaders(sheetNacionalNaoRls, HEADERS_NACIONAL_NAO_RLS, 20);
+      if (err) throw new Error(`Cabeçalho inválido em Othello Nacional-Não RLS: ${err}`);
+      err = validateHeaders(sheetInternacionalNaoRls, HEADERS_INTERNACIONAL_NAO_RLS, 13);
+      if (err) throw new Error(`Cabeçalho inválido em Othello Internacional-Não RLS: ${err}`);
 
       const fileName = file.name;
 
@@ -404,6 +432,74 @@ export default function OthelloImport() {
         });
       }
 
+      // ── Process Othello Nacional-Não RLS ──
+      setStep("Processando Othello Nacional-Não RLS...");
+      const nacionalNaoRlsRows = readSheetRows(sheetNacionalNaoRls, 20);
+      const nacionalNaoRlsData: any[] = [];
+
+      for (let i = 0; i < nacionalNaoRlsRows.length; i++) {
+        const r = nacionalNaoRlsRows[i];
+        const idRefObject = toNum(r[0]);
+        const settlementId = trimVal(r[1]);
+        if (idRefObject == null && settlementId == null) continue;
+
+        nacionalNaoRlsData.push({
+          arquivo_origem: fileName,
+          aba_origem: "Othello Nacional-Não RLS",
+          linha_excel: i + 2,
+          id_ref_object: idRefObject,
+          settlement_id: settlementId,
+          branch: trimVal(r[2]),
+          object_type: trimVal(r[3]),
+          service_date: toDateStr(r[4]),
+          cost_center_iv: trimVal(r[5]),
+          deb_cred_no: trimVal(r[6]),
+          deb_cred_name: trimVal(r[7]),
+          settlement_type: trimVal(r[8]),
+          status_settl: trimVal(r[9]),
+          status_interpreter: trimVal(r[10]),
+          flag: trimVal(r[11]),
+          revenue: toNum(r[12]),
+          revenue_transit: toNum(r[13]),
+          total_revenue: toNum(r[14]),
+          etd: toLogisticsDateStr(r[15]),
+          atd: toLogisticsDateStr(r[16]),
+          eta: toLogisticsDateStr(r[17]),
+          ata: toLogisticsDateStr(r[18]),
+          comentarios: trimVal(r[19]),
+        });
+      }
+
+      // ── Process Othello Internacional-Não RLS ──
+      setStep("Processando Othello Internacional-Não RLS...");
+      const internacionalNaoRlsRows = readSheetRows(sheetInternacionalNaoRls, 13);
+      const internacionalNaoRlsData: any[] = [];
+
+      for (let i = 0; i < internacionalNaoRlsRows.length; i++) {
+        const r = internacionalNaoRlsRows[i];
+        const idRefObject = toNum(r[0]);
+        if (idRefObject == null) continue;
+
+        internacionalNaoRlsData.push({
+          arquivo_origem: fileName,
+          aba_origem: "Othello Internacional-Não RLS",
+          linha_excel: i + 2,
+          id_ref_object: idRefObject,
+          branch: trimVal(r[1]),
+          service_date: toDateStr(r[2]),
+          cost_center_iv: trimVal(r[3]),
+          deb_cred_name: trimVal(r[4]),
+          status_settl: trimVal(r[5]),
+          flag: trimVal(r[6]),
+          revenue: toNum(r[7]),
+          etd: toLogisticsDateStr(r[8]),
+          atd: toLogisticsDateStr(r[9]),
+          eta: toLogisticsDateStr(r[10]),
+          ata: toLogisticsDateStr(r[11]),
+          comentarios: trimVal(r[12]),
+        });
+      }
+
       // ── Send to edge function ──
       setStep("Gravando no banco de dados...");
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
@@ -420,6 +516,8 @@ export default function OthelloImport() {
           nacional: nacionalData,
           interacional: interacionalData,
           base_totvs: totvsData,
+          nacional_nao_rls: nacionalNaoRlsData,
+          internacional_nao_rls: internacionalNaoRlsData,
         }),
       });
 
@@ -449,11 +547,13 @@ export default function OthelloImport() {
           </div>
 
           <p className="text-sm text-[#aaa]">
-            Selecione um arquivo <strong>.xlsx</strong> com as 3 abas obrigatórias:
+            Selecione um arquivo <strong>.xlsx</strong> com as 5 abas obrigatórias:
             <br />
             <span className="text-[#ffc800]">Othello Nacional-RLS</span>,{" "}
             <span className="text-[#ffc800]">Othello Interacional-RLS</span>,{" "}
-            <span className="text-[#ffc800]">Base Totvs RM</span>
+            <span className="text-[#ffc800]">Base Totvs RM</span>,{" "}
+            <span className="text-[#ffc800]">Othello Nacional-Não RLS</span>,{" "}
+            <span className="text-[#ffc800]">Othello Internacional-Não RLS</span>
           </p>
 
           <div
@@ -550,9 +650,17 @@ export default function OthelloImport() {
                   <span>Othello Interacional-RLS</span>
                   <span className="text-green-400 font-medium">{result.counts.interacional} linhas</span>
                 </div>
-                <div className="flex justify-between text-[#ccc]">
+                <div className="flex justify-between text-[#ccc] border-b border-white/10 pb-2">
                   <span>Base Totvs RM</span>
                   <span className="text-green-400 font-medium">{result.counts.base_totvs} linhas</span>
+                </div>
+                <div className="flex justify-between text-[#ccc] border-b border-white/10 pb-2">
+                  <span>Othello Nacional-Não RLS</span>
+                  <span className="text-green-400 font-medium">{result.counts.nacional_nao_rls} linhas</span>
+                </div>
+                <div className="flex justify-between text-[#ccc]">
+                  <span>Othello Internacional-Não RLS</span>
+                  <span className="text-green-400 font-medium">{result.counts.internacional_nao_rls} linhas</span>
                 </div>
               </div>
             )}
