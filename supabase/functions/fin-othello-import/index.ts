@@ -13,9 +13,9 @@ serve(async (req) => {
 
   let client: Client | null = null;
   try {
-    const { arquivo_origem, nacional, interacional, base_totvs } = await req.json();
+    const { arquivo_origem, nacional, interacional, base_totvs, nacional_nao_rls, internacional_nao_rls } = await req.json();
 
-    if (!arquivo_origem || !nacional || !interacional || !base_totvs) {
+    if (!arquivo_origem || !nacional || !interacional || !base_totvs || !nacional_nao_rls || !internacional_nao_rls) {
       return new Response(JSON.stringify({ error: "Dados incompletos" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -36,6 +36,8 @@ serve(async (req) => {
       await client.execute("DELETE FROM dados_dachser.t_othello_nacional_rls");
       await client.execute("DELETE FROM dados_dachser.t_othello_interacional_rls");
       await client.execute("DELETE FROM dados_dachser.t_base_totvs_rm");
+      await client.execute("DELETE FROM dados_dachser.t_othello_nacional_nao_rls");
+      await client.execute("DELETE FROM dados_dachser.t_othello_internacional_nao_rls");
 
       // Insert Base Totvs RM
       let insertedTotvs = 0;
@@ -120,6 +122,48 @@ serve(async (req) => {
         insertedInteracional++;
       }
 
+      // Insert Othello Nacional-Não RLS
+      let insertedNacionalNaoRls = 0;
+      for (const row of nacional_nao_rls) {
+        await client.execute(
+          `INSERT INTO dados_dachser.t_othello_nacional_nao_rls (
+            arquivo_origem, aba_origem, linha_excel, importado_em,
+            id_ref_object, settlement_id, branch, object_type, service_date,
+            cost_center_iv, deb_cred_no, deb_cred_name, settlement_type,
+            status_settl, status_interpreter, flag, revenue, revenue_transit, total_revenue,
+            etd, atd, eta, ata, comentarios
+          ) VALUES (?,?,?,NOW(),?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULLIF(?,''),NULLIF(?,''),NULLIF(?,''),NULLIF(?,''),?)`,
+          [
+            row.arquivo_origem, row.aba_origem, row.linha_excel,
+            row.id_ref_object, row.settlement_id, row.branch, row.object_type, row.service_date,
+            row.cost_center_iv, row.deb_cred_no, row.deb_cred_name, row.settlement_type,
+            row.status_settl, row.status_interpreter, row.flag, row.revenue, row.revenue_transit, row.total_revenue,
+            row.etd || '', row.atd || '', row.eta || '', row.ata || '', row.comentarios,
+          ]
+        );
+        insertedNacionalNaoRls++;
+      }
+
+      // Insert Othello Internacional-Não RLS
+      let insertedInternacionalNaoRls = 0;
+      for (const row of internacional_nao_rls) {
+        await client.execute(
+          `INSERT INTO dados_dachser.t_othello_internacional_nao_rls (
+            arquivo_origem, aba_origem, linha_excel, importado_em,
+            id_ref_object, branch, service_date, cost_center_iv, deb_cred_name,
+            status_settl, flag, revenue,
+            etd, atd, eta, ata, comentarios
+          ) VALUES (?,?,?,NOW(),?,?,?,?,?,?,?,?,NULLIF(?,''),NULLIF(?,''),NULLIF(?,''),NULLIF(?,''),?)`,
+          [
+            row.arquivo_origem, row.aba_origem, row.linha_excel,
+            row.id_ref_object, row.branch, row.service_date, row.cost_center_iv, row.deb_cred_name,
+            row.status_settl, row.flag, row.revenue,
+            row.etd || '', row.atd || '', row.eta || '', row.ata || '', row.comentarios,
+          ]
+        );
+        insertedInternacionalNaoRls++;
+      }
+
       await client.execute("COMMIT");
 
       return new Response(
@@ -129,6 +173,8 @@ serve(async (req) => {
             base_totvs: insertedTotvs,
             nacional: insertedNacional,
             interacional: insertedInteracional,
+            nacional_nao_rls: insertedNacionalNaoRls,
+            internacional_nao_rls: insertedInternacionalNaoRls,
           },
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
