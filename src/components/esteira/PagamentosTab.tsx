@@ -441,55 +441,21 @@ export const PagamentosTab = () => {
       });
       if (error) throw error;
 
-      // 2. Para tipo REMESSA e marcando como pronto, inserir na t_dados_rm
-      if (isReady && (tipoExecucao === "REMESSA_10H" || tipoExecucao === "REMESSA_15H")) {
+      // 2. Ao marcar como pronto, atualizar apenas tipo_exec na t_dados_rm (registro já existe desde entrada no FINANCEIRO)
+      if (isReady) {
         const pagamento = pagamentos.find(p => p.id === id);
         if (pagamento) {
-          const dadosBancarios = dadosBancariosCache[pagamento.cnpj_fornecedor];
-          
-          // Determinar regra de forma de pagamento baseado no tipo
-          let regrasFormaPag = "DOC (Compe)";
-          
-          // Se é boleto, sempre "Boleto"
-          if (isBoleto(pagamento.forma_pagamento as any)) {
-            regrasFormaPag = "Boleto";
-          } else if (dadosBancarios) {
-            const bancoUpper = (dadosBancarios.banco || "").toUpperCase();
-            if (bancoUpper.includes("ITAU") || bancoUpper.includes("ITAÚ") || bancoUpper.includes("341")) {
-              regrasFormaPag = "Crédito em Conta Corrente da Mesma Titularidade";
-            }
-          }
-
           const { error: rmError } = await supabase.functions.invoke("mariadb-proxy", {
             body: {
-              action: "insert_dados_rm",
+              action: "update_tipo_exec_dados_rm",
               id_rm: pagamento.id_rm || null,
               numero_spo: pagamento.numero_spo,
-              voucher_boleto: isBoleto(pagamento.forma_pagamento as any) 
-                ? (pagamento.linha_digitavel || pagamento.codigo_barras || null) 
-                : null,
-              chave_pix: dadosBancarios?.chave_pix || null,
-              pix_tipo_chave: dadosBancarios?.pix_tipo_chave || null,
-              forma_pag: pagamento.forma_pagamento,
-              fornecedor: pagamento.fornecedor,
-              cnpj_fornecedor: pagamento.cnpj_fornecedor,
-              regras_forma_pag: regrasFormaPag,
-              tipo_exec: pagamento.tipo_execucao_pagamento
+              tipo_exec: tipoExecucao
             }
           });
 
           if (rmError) {
-            console.error("Erro ao inserir em t_dados_rm:", rmError);
-            // Não falhar a operação principal, apenas logar o erro
-          } else {
-            // Atualizar status de integração RM
-            await supabase.functions.invoke("mariadb-proxy", {
-              body: {
-                action: "update_status_integracao_rm",
-                voucher_id: id,
-                status_integracao_rm: "ENVIADO_T_DADOS_RM"
-              }
-            });
+            console.error("Erro ao atualizar tipo_exec em t_dados_rm:", rmError);
           }
         }
       }

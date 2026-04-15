@@ -8775,6 +8775,34 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'update_tipo_exec_dados_rm': {
+        const { 
+          id_rm: updateIdRm, 
+          numero_spo: updateNd, 
+          tipo_exec: updateTipoExec 
+        } = body as { id_rm?: string; numero_spo?: string; tipo_exec?: string };
+
+        const updateKey = updateIdRm || updateNd;
+        if (!updateKey) {
+          return new Response(
+            JSON.stringify({ error: 'id_rm ou numero_spo é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Updating tipo_exec in t_dados_rm:', { id_rm: updateIdRm, nd: updateNd, tipo_exec: updateTipoExec });
+
+        await client.execute(`
+          UPDATE dados_dachser.t_dados_rm 
+          SET tipo_exec = ?
+          WHERE id_rm = ? OR nd = ?
+        `, [updateTipoExec || null, updateKey, updateNd || updateKey]);
+
+        console.log('Updated tipo_exec in t_dados_rm successfully');
+        result = { success: true };
+        break;
+      }
+
       case 'backfill_tipo_exec_dados_rm': {
         // Ensure tipo_exec column exists
         try {
