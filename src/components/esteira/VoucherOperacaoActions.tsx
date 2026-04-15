@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
 import { Voucher, TipoAnexo } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -329,6 +330,11 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
           detalhe: detalheLog,
         },
       });
+
+      // Inserir na t_dados_rm ao entrar no FINANCEIRO
+      if (proximaEtapa === "FINANCEIRO") {
+        insertDadosRmOnFinanceiro(voucher);
+      }
 
       // Send email notification only for SUPERVISOR urgency flow
       if (proximaEtapa === "SUPERVISOR") {

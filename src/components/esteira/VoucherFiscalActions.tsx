@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
 import { Voucher, VoucherFilho } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -141,6 +142,9 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
           detalhe: "Voucher/SPO aprovado pelo Fiscal e enviado para Financeiro",
         },
       });
+
+      // Inserir na t_dados_rm ao entrar no FINANCEIRO
+      insertDadosRmOnFinanceiro(voucher);
 
       // Email notifications removed — monthly report only
 
