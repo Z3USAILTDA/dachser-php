@@ -1,30 +1,20 @@
 
 
-## Plano: Forçar eixo Y mínimo em 0 com `allowDataOverflow`
+## Plano: Top Clientes com dados de todos os meses
 
 ### Problema
-Mesmo com `domain={[0, 'auto']}`, o Recharts expande o domínio quando existem valores negativos nos dados. Os gráficos "Valor Total Mensal" e "Valor Faturado por Modal" ainda mostram -R$ 6M e -R$ 3M.
-
-### Causa
-`domain={[0, 'auto']}` é apenas uma "sugestão" — Recharts a ignora quando os dados ultrapassam o intervalo. Para forçar, é necessário `allowDataOverflow={true}`.
+O gráfico "Top Clientes" atualmente filtra apenas o último mês (`lastMonth`), mostrando o ranking de clientes somente do mês mais recente. O usuário quer ver o ranking consolidado de **todos os meses** disponíveis na base.
 
 ### Alteração
 
 **Arquivo: `src/pages/olimpo/OlimpoFaturamento.tsx`**
-Adicionar `allowDataOverflow={true}` em **todos** os `<YAxis>` e `<XAxis>` numéricos que já têm `domain={[0, 'auto']}`:
-- L476 — Valor Total Mensal (YAxis)
-- L493 — Qtd. por Modal (YAxis)
-- L506 — Valor Faturado por Modal (YAxis)
-- L519 — XAxis numérico do horizontal bar
-- L542 — Qtd. por Divisão (YAxis)
-- L560 — Valor por Divisão (YAxis)
 
-Também na Evolução Faturamento (L415, se existir).
+1. **Linha 212-218** — Remover o filtro por `lastMonth` no `topClientesData`. Em vez de filtrar `r.faturado_em.substring(0,7) !== lastMonth`, somar o valor de **todos** os registros, independente do mês.
 
-**Arquivo: `src/pages/cct/tabs/AnalyticsTab.tsx`**
-Adicionar `allowDataOverflow={true}` nos YAxis que já têm `domain={[0, 'auto']}`.
+2. **Linha 436** — Alterar o subtitle do card de `"Último mês"` para `"Todos os meses"` (ou `"Acumulado"`).
 
 ### O que NÃO muda
-- Nenhum dado, layout ou lógica de cálculo
-- Apenas o comportamento visual do eixo é forçado
+- Layout, cores, formatação de valores
+- Lógica dos demais gráficos
+- Filtro de clientes "N/A"/"Desconhecido" (se existente)
 
