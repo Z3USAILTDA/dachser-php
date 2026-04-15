@@ -1,20 +1,56 @@
 
 
-## Plano: Top Clientes com dados de todos os meses
+## Plano: Redesign do cabeçalho KPI — layout mosaico assimétrico
 
-### Problema
-O gráfico "Top Clientes" atualmente filtra apenas o último mês (`lastMonth`), mostrando o ranking de clientes somente do mês mais recente. O usuário quer ver o ranking consolidado de **todos os meses** disponíveis na base.
+### Estrutura atual
+- Grid `1fr 1fr` com hero card à esquerda e 3 MiniKpiCards empilhados verticalmente à direita
+- Hero card com `py-4 px-6`
+- MiniKpiCards são barras horizontais com `py-3 px-4`
 
-### Alteração
+### Nova estrutura
+
+```text
+┌──────────────────────────────────┬─────────────────────────────┐
+│                                  │ Processos   │  Var. vs mês  │
+│   FATURAMENTO TOTAL              │  Faturados  │   anterior    │
+│   R$ 12,3M                       ├─────────────┴───────────────┤
+│   +5.2% vs mar/2025              │       Maior Cliente         │
+│                                  │       R$ 2,1M — ACME Corp   │
+└──────────────────────────────────┴─────────────────────────────┘
+```
+
+### Alterações
 
 **Arquivo: `src/pages/olimpo/OlimpoFaturamento.tsx`**
 
-1. **Linha 212-218** — Remover o filtro por `lastMonth` no `topClientesData`. Em vez de filtrar `r.faturado_em.substring(0,7) !== lastMonth`, somar o valor de **todos** os registros, independente do mês.
+**1. Grid principal (L300)**
+- Mudar de `grid-cols-[1fr_1fr]` para `grid-cols-[3fr_2fr]` (~60/40)
 
-2. **Linha 436** — Alterar o subtitle do card de `"Último mês"` para `"Todos os meses"` (ou `"Acumulado"`).
+**2. Hero card (L302-336)**
+- Aumentar padding para `px-8 py-6`
+- Valor principal de `text-4xl` para `text-5xl`
+- Label de `text-[10px]` para `text-[11px]`
+- Adicionar borda inferior dourada sutil com gradiente
+- Ícone de `w-11 h-11` para `w-12 h-12`
+- Adicionar sombra interna dourada sutil
+
+**3. Bloco direito (L339-364)**
+- Substituir `grid-cols-1 gap-3` por layout mosaico:
+  - Linha superior: `grid-cols-2 gap-3` com 2 mini cards
+  - Linha inferior: 1 card "Maior Cliente" full-width
+- O bloco deve usar `flex flex-col gap-3` para organizar as duas linhas
+
+**4. MiniKpiCard (L562-590)**
+- Aumentar padding para `px-5 py-4`
+- Rounded de `rounded-xl` para `rounded-2xl`
+- Adicionar sombra sutil `boxShadow: '0 4px 20px rgba(0,0,0,0.3)'`
+- Borda mais definida `rgba(255,255,255,0.08)`
+
+**5. Card "Maior Cliente"**
+- Usar estilo diferenciado: padding `px-5 py-4`, full-width
+- Borda dourada sutil `rgba(242,160,7,0.1)`
+- Valor e subtitle na mesma linha para economizar altura
 
 ### O que NÃO muda
-- Layout, cores, formatação de valores
-- Lógica dos demais gráficos
-- Filtro de clientes "N/A"/"Desconhecido" (se existente)
+- Dados, lógica, cores, modais, gráficos abaixo do cabeçalho
 
