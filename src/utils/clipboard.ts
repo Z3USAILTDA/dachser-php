@@ -13,7 +13,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     }
   }
 
-  // Fallback com ClipboardItem (some browsers support this even when writeText fails)
+  // Fallback com ClipboardItem
   if (navigator.clipboard && typeof ClipboardItem !== "undefined") {
     try {
       const blob = new Blob([text], { type: "text/plain" });
@@ -24,10 +24,13 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     }
   }
 
-  // Fallback com execCommand — insere no dialog ativo para evitar perda de foco
+  // Fallback legado com execCommand — robusto para dialogs e focus traps
   try {
+    const previousActiveElement = document.activeElement as HTMLElement | null;
+
     const textarea = document.createElement('textarea');
     textarea.value = text;
+    textarea.setAttribute('readonly', '');
     textarea.style.position = 'fixed';
     textarea.style.left = '-9999px';
     textarea.style.top = '-9999px';
@@ -36,20 +39,20 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     // Inserir dentro do dialog ativo (se houver) para manter o foco dentro do focus trap
     const container = document.activeElement?.closest('[role="dialog"]') || document.body;
     container.appendChild(textarea);
+
     textarea.focus();
     textarea.select();
-
-    // Tenta com Range como alternativa
-    const range = document.createRange();
-    range.selectNodeContents(textarea);
-    const selection = window.getSelection();
-    if (selection) {
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
+    textarea.setSelectionRange(0, textarea.value.length);
 
     const ok = document.execCommand('copy');
+
     container.removeChild(textarea);
+
+    // Restaurar foco anterior
+    if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
+      previousActiveElement.focus();
+    }
+
     return ok;
   } catch {
     return false;
