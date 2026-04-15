@@ -178,7 +178,7 @@ export default function AnalyticsContent({
                     fontSize: 11
                   }} axisLine={{
                     stroke: "rgba(255,255,255,0.1)"
-                  }} />
+                  }} domain={[0, 'auto']} />
                 <Tooltip contentStyle={{
                     background: "rgba(5,6,18,0.95)",
                     border: "1px solid rgba(255,255,255,0.12)",
@@ -313,7 +313,7 @@ export default function AnalyticsContent({
                     fontSize: 10
                   }} axisLine={{
                     stroke: "rgba(255,255,255,0.1)"
-                  }} />
+                  }} domain={[0, 'auto']} />
                 <Tooltip contentStyle={{
                     background: "rgba(5,6,18,0.95)",
                     border: "1px solid rgba(255,255,255,0.12)",
