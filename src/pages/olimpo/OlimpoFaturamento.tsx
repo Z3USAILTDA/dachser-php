@@ -490,7 +490,7 @@ export default function OlimpoFaturamento() {
             <ZeusChartCard title="Qtd. por Modal" subtitle="Distribuição por modal" headerRight={<ExpandButton chartId="qtd-modal" />}>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={chartModalCount} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
-                  <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
+                  <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} domain={[0, 'auto']} />
                   <Tooltip content={<Z3usTooltip />} cursor={{ fill: 'rgba(242, 160, 7, 0.08)' }} /><Legend wrapperStyle={{ fontSize: 10, color: '#94a3b8' }} />
                   {allModals.map((mod) => (<Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#64748B"} radius={[3, 3, 0, 0]} barSize={16} />))}
                 </BarChart>
@@ -539,7 +539,7 @@ export default function OlimpoFaturamento() {
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={divisionData} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
                   <defs><linearGradient id="areaGradDivQtd" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={ZEUS_COLORS.success} stopOpacity={0.3} /><stop offset="50%" stopColor={ZEUS_COLORS.success} stopOpacity={0.08} /><stop offset="100%" stopColor={ZEUS_COLORS.success} stopOpacity={0} /></linearGradient></defs>
-                  <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} />
+                  <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} domain={[0, 'auto']} />
                   <Tooltip content={<Z3usTooltip />} cursor={{ stroke: ZEUS_COLORS.success, strokeWidth: 1, strokeDasharray: "4 4" }} />
                   <Area type="monotone" dataKey="count" name="Quantidade" stroke={ZEUS_COLORS.success} strokeWidth={2.5} fill="url(#areaGradDivQtd)" dot={{ r: 4, fill: ZEUS_COLORS.success, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.success, stroke: "#fff", strokeWidth: 2 }} />
                 </AreaChart>
@@ -557,7 +557,7 @@ export default function OlimpoFaturamento() {
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={divisionData} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
                   <defs><linearGradient id="areaGradDivValor" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.3} /><stop offset="50%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.08} /><stop offset="100%" stopColor={ZEUS_COLORS.amber} stopOpacity={0} /></linearGradient></defs>
-                  <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} tickFormatter={(v) => formatCurrencyCompact(v)} />
+                  <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} tickFormatter={(v) => formatCurrencyCompact(v)} domain={[0, 'auto']} />
                   <Tooltip content={<Z3usTooltip valueFormatter={(v) => formatBRLFull(v)} />} cursor={{ stroke: ZEUS_COLORS.amber, strokeWidth: 1, strokeDasharray: "4 4" }} />
                   <Area type="monotone" dataKey="valor" name="Valor" stroke={ZEUS_COLORS.amber} strokeWidth={2.5} fill="url(#areaGradDivValor)" dot={{ r: 4, fill: ZEUS_COLORS.amber, stroke: "#080C16", strokeWidth: 2 }} activeDot={{ r: 7, fill: ZEUS_COLORS.amberLight, stroke: "#fff", strokeWidth: 2 }} />
                 </AreaChart>
