@@ -329,22 +329,6 @@ export default function OlimpoFaturamento() {
                 <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-[rgba(242,160,7,0.1)] border border-[rgba(242,160,7,0.2)]">
                   <DollarSign className="h-5 w-5 text-[#F2A007]" />
                 </div>
-                {/* Inline sparkline */}
-                {sparklineValor.length > 1 && (
-                  <div className="mt-2">
-                    <ResponsiveContainer width={120} height={36}>
-                      <AreaChart data={sparklineValor} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                        <defs>
-                          <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.4} />
-                            <stop offset="100%" stopColor={ZEUS_COLORS.amber} stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <Area type="monotone" dataKey="v" stroke={ZEUS_COLORS.amber} strokeWidth={1.5} fill="url(#sparkGrad)" dot={false} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
               </div>
             </div>
             <div className="absolute bottom-3 right-4 text-[9px] text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -360,7 +344,7 @@ export default function OlimpoFaturamento() {
               value={loading ? "..." : kpis.count.toLocaleString("pt-BR")}
               loading={loading}
               onClick={() => setKpiModal("count")}
-              sparkData={sparklineCount}
+              
             />
             <MiniKpiCard
               icon={kpis.variation >= 0 ? TrendingUp : TrendingDown}
@@ -599,15 +583,6 @@ function MiniKpiCard({ icon: Icon, label, value, loading, accent, subtitle, onCl
         </p>
         {subtitle && <p className="text-[10px] text-slate-500 truncate max-w-[180px]">{subtitle}</p>}
       </div>
-      {sparkData && sparkData.length > 1 && (
-        <div className="shrink-0 hidden sm:block">
-          <ResponsiveContainer width={70} height={28}>
-            <AreaChart data={sparkData} margin={{ top: 1, right: 1, left: 1, bottom: 1 }}>
-              <Area type="monotone" dataKey="v" stroke={accent ? "#EF4444" : ZEUS_COLORS.amber} strokeWidth={1.2} fill="none" dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      )}
       <div className="text-[9px] text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
         →
       </div>
