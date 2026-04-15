@@ -2,13 +2,14 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
 import { PageLayout } from "@/components/layout/PageLayout";
-import { DollarSign, FileText, TrendingUp, TrendingDown, Users, RefreshCw, Building2, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronUp } from "lucide-react";
+import { DollarSign, FileText, TrendingUp, TrendingDown, Users, RefreshCw, Building2, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import ChartDetailPanel, { type ChartColumn } from "@/components/charts/ChartDetailPanel";
 import DonutSingleChart from "@/components/charts/DonutSingleChart";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, LabelList,
@@ -129,6 +130,7 @@ export default function OlimpoFaturamento() {
   const [data, setData] = useState<FaturamentoRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
+  const [kpiModal, setKpiModal] = useState<string | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
   const { isAdmin, loading: roleLoading } = useUserRole();
@@ -239,6 +241,46 @@ export default function OlimpoFaturamento() {
     </button>
   );
 
+  // KPI modal content
+  const kpiModalContent: Record<string, { title: string; items: { label: string; value: string }[] }> = {
+    total: {
+      title: "Faturamento Total",
+      items: [
+        { label: "Valor Total (último mês)", value: formatBRLFull(kpis.total) },
+        { label: "Variação vs mês anterior", value: `${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%` },
+        { label: "Período", value: `${firstMonth} — ${lastMonthShort}` },
+        { label: "Meses analisados", value: `${monthlyData.length}` },
+        { label: "Total acumulado", value: formatBRLFull(monthlyData.reduce((s, m) => s + m.valor, 0)) },
+      ],
+    },
+    count: {
+      title: "Processos Faturados",
+      items: [
+        { label: "Quantidade (último mês)", value: kpis.count.toLocaleString("pt-BR") },
+        { label: "Variação vs mês anterior", value: `${kpis.countVariation >= 0 ? "+" : ""}${kpis.countVariation.toFixed(1)}%` },
+        { label: "Total acumulado", value: formatNumber(monthlyData.reduce((s, m) => s + m.count, 0)) },
+        { label: "Média mensal", value: formatNumber(monthlyData.reduce((s, m) => s + m.count, 0) / (monthlyData.length || 1)) },
+      ],
+    },
+    variation: {
+      title: `Variação vs ${kpis.prevMonthLabel || "Mês Ant."}`,
+      items: [
+        { label: "Variação de valor", value: `${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%` },
+        { label: "Variação de quantidade", value: `${kpis.countVariation >= 0 ? "+" : ""}${kpis.countVariation.toFixed(1)}%` },
+        { label: "Mês atual", value: lastMonthShort },
+        { label: "Mês anterior", value: kpis.prevMonthLabel || "—" },
+      ],
+    },
+    client: {
+      title: "Maior Cliente",
+      items: [
+        { label: "Cliente", value: kpis.topClient },
+        { label: "Valor faturado", value: formatBRLFull(kpis.topClientVal) },
+        { label: "% do total", value: kpis.total > 0 ? `${((kpis.topClientVal / kpis.total) * 100).toFixed(1)}%` : "—" },
+      ],
+    },
+  };
+
   return (
     <PageLayout title="DACHSER" subtitle="Faturamento" pageIcon={DollarSign} backTo="/dashboard"
       rightContent={
@@ -253,24 +295,119 @@ export default function OlimpoFaturamento() {
         </div>
       }
     >
-      <div className="space-y-5">
+      <div className="space-y-6">
 
-        {/* KPI Cards */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <KpiCard icon={DollarSign} label="Faturamento Total" value={formatCompact(kpis.total)} loading={loading} />
-          <KpiCard icon={FileText} label="Processos Faturados" value={kpis.count.toLocaleString("pt-BR")} loading={loading} />
-          <KpiCard icon={kpis.variation >= 0 ? TrendingUp : TrendingDown} label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`} value={`${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`} loading={loading} accent={kpis.variation < 0} />
-          <KpiCard icon={Users} label="Maior Cliente" value={formatCompact(kpis.topClientVal)} loading={loading} subtitle={kpis.topClient !== "-" ? kpis.topClient : undefined} />
+        {/* ═══ KPI Section — Asymmetric Hero + Mini Cards ═══ */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-5">
+          {/* Hero KPI — Faturamento Total */}
+          <div
+            onClick={() => setKpiModal("total")}
+            className="group relative rounded-2xl p-6 cursor-pointer transition-all duration-300 hover:scale-[1.01]"
+            style={{
+              background: 'linear-gradient(135deg, rgba(5,6,18,0.95) 0%, rgba(15,16,30,0.9) 100%)',
+              border: '1px solid rgba(242,160,7,0.15)',
+            }}
+          >
+            <div className="flex items-start justify-between">
+              <div className="space-y-3">
+                <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-slate-400">Faturamento Total</p>
+                <p className={`text-4xl font-bold tracking-tight ${loading ? "animate-pulse text-muted-foreground" : "text-foreground"}`}>
+                  {loading ? "..." : formatCompact(kpis.total)}
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  {kpis.variation >= 0 ? (
+                    <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <ArrowDownRight className="w-3.5 h-3.5 text-red-400" />
+                  )}
+                  <span className={`text-xs font-medium ${kpis.variation >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    {kpis.variation >= 0 ? "+" : ""}{kpis.variation.toFixed(1)}% vs {kpis.prevMonthLabel || "mês ant."}
+                  </span>
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-[rgba(242,160,7,0.1)] border border-[rgba(242,160,7,0.2)]">
+                  <DollarSign className="h-5 w-5 text-[#F2A007]" />
+                </div>
+                {/* Inline sparkline */}
+                {sparklineValor.length > 1 && (
+                  <div className="mt-2">
+                    <ResponsiveContainer width={120} height={36}>
+                      <AreaChart data={sparklineValor} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                        <defs>
+                          <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.4} />
+                            <stop offset="100%" stopColor={ZEUS_COLORS.amber} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <Area type="monotone" dataKey="v" stroke={ZEUS_COLORS.amber} strokeWidth={1.5} fill="url(#sparkGrad)" dot={false} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="absolute bottom-3 right-4 text-[9px] text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">
+              Clique para detalhes
+            </div>
+          </div>
+
+          {/* 3 Mini KPI Cards stacked */}
+          <div className="grid grid-cols-1 gap-3">
+            <MiniKpiCard
+              icon={FileText}
+              label="Processos Faturados"
+              value={loading ? "..." : kpis.count.toLocaleString("pt-BR")}
+              loading={loading}
+              onClick={() => setKpiModal("count")}
+              sparkData={sparklineCount}
+            />
+            <MiniKpiCard
+              icon={kpis.variation >= 0 ? TrendingUp : TrendingDown}
+              label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`}
+              value={loading ? "..." : `${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`}
+              loading={loading}
+              accent={kpis.variation < 0}
+              onClick={() => setKpiModal("variation")}
+            />
+            <MiniKpiCard
+              icon={Users}
+              label="Maior Cliente"
+              value={loading ? "..." : formatCompact(kpis.topClientVal)}
+              loading={loading}
+              subtitle={kpis.topClient !== "-" ? kpis.topClient : undefined}
+              onClick={() => setKpiModal("client")}
+            />
+          </div>
         </div>
 
-        {/* Row 1 — 3 charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* KPI Detail Modal */}
+        <Dialog open={!!kpiModal} onOpenChange={() => setKpiModal(null)}>
+          <DialogContent className="bg-[hsl(222,41%,5%)] border-[rgba(242,160,7,0.15)] max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-foreground text-base font-semibold">
+                {kpiModal && kpiModalContent[kpiModal]?.title}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 pt-2">
+              {kpiModal && kpiModalContent[kpiModal]?.items.map((item, i) => (
+                <div key={i} className="flex items-center justify-between py-2 border-b border-[rgba(255,255,255,0.06)] last:border-0">
+                  <span className="text-xs text-slate-400">{item.label}</span>
+                  <span className="text-sm font-semibold text-foreground">{item.value}</span>
+                </div>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ═══ Row 1 — Asymmetric: Evolução (2fr) + Região (1fr) ═══ */}
+        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-5">
           <div>
             <ZeusChartCard title="Qtd. Files — Total Faturado" subtitle="Evolução mensal" headerRight={<ExpandButton chartId="evolucao" />}>
               {chartMonthlyCount.length <= 1 ? (
                 <DonutSingleChart value={chartMonthlyCount[0]?.Quantidade ?? 0} label="Quantidade" color={ZEUS_COLORS.amber} />
               ) : (
-              <ResponsiveContainer width="100%" height={260}>
+              <ResponsiveContainer width="100%" height={280}>
                 <AreaChart data={chartMonthlyCount} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
                   <defs><linearGradient id="areaGradZ3us" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.3} /><stop offset="50%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.08} /><stop offset="100%" stopColor={ZEUS_COLORS.amber} stopOpacity={0} /></linearGradient></defs>
                   <CartesianGrid {...GRID_PROPS} />
@@ -286,15 +423,41 @@ export default function OlimpoFaturamento() {
           </div>
 
           <div>
-            <ZeusChartCard title="Top Clientes por Faturamento" subtitle="Último mês" headerRight={<ExpandButton chartId="top-clientes" />}>
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={topClientesData.map(d => ({ ...d, cliente: d.clienteShort }))} layout="vertical" margin={{ top: 5, right: 90, left: 10, bottom: 5 }}>
+            <ZeusChartCard title="Distribuição Regional" subtitle="Último mês" headerRight={<ExpandButton chartId="regiao" />}>
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie data={regionData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} strokeWidth={0}>
+                    {regionData.map((entry, i) => (<Cell key={i} fill={REGION_COLORS[entry.name] || CHART_PALETTE[i % CHART_PALETTE.length]} />))}
+                  </Pie>
+                  <Tooltip content={<Z3usPieTooltip total={totalRegion} />} />
+                  <text x="50%" y="46%" textAnchor="middle" fill="#64748b" fontSize={11}>Total</text>
+                  <text x="50%" y="56%" textAnchor="middle" fill={ZEUS_COLORS.amber} fontSize={18} fontWeight={700}>{formatNumber(totalRegion)}</text>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="flex justify-center gap-4 mt-1 pb-2">
+                {regionData.map((entry, i) => {
+                  const color = REGION_COLORS[entry.name] || CHART_PALETTE[i % CHART_PALETTE.length];
+                  const pct = totalRegion > 0 ? ((entry.value / totalRegion) * 100).toFixed(1) : "0";
+                  return (<div key={i} className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} /><span className="text-[10px] text-slate-400">{entry.name} ({pct}%)</span></div>);
+                })}
+              </div>
+            </ZeusChartCard>
+            <ChartDetailPanel isOpen={expandedChart === "regiao"} onClose={() => setExpandedChart(null)} title="Distribuição Regional" columns={COL_REGIAO} data={regionData} exportName="regiao" accentColor={ZEUS_COLORS.success} />
+          </div>
+        </div>
+
+        {/* ═══ Row 2 — Asymmetric: Top Clientes (1fr) + Valor Total Mensal (2fr) ═══ */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-5">
+          <div>
+            <ZeusChartCard title="Top Clientes" subtitle="Último mês" headerRight={<ExpandButton chartId="top-clientes" />}>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={topClientesData.map(d => ({ ...d, cliente: d.clienteShort }))} layout="vertical" margin={{ top: 5, right: 60, left: 10, bottom: 5 }}>
                   <CartesianGrid {...GRID_PROPS} horizontal={false} />
                   <XAxis type="number" tick={AXIS_TICK} tickFormatter={(v) => formatCurrencyCompact(v)} tickLine={false} />
-                  <YAxis type="category" dataKey="cliente" tick={{ fill: '#94a3b8', fontSize: 10 }} width={100} tickLine={false} />
+                  <YAxis type="category" dataKey="cliente" tick={{ fill: '#94a3b8', fontSize: 9 }} width={90} tickLine={false} />
                   <Tooltip content={<Z3usTooltip valueFormatter={(v) => formatBRLFull(v)} />} cursor={{ fill: 'rgba(242, 160, 7, 0.08)' }} />
                   <Bar dataKey="frete" fill={ZEUS_COLORS.amber} radius={[0, 4, 4, 0]}>
-                    <LabelList dataKey="frete" position="right" fill={ZEUS_COLORS.amber} fontSize={10} fontWeight={600} formatter={(v: number) => formatCurrencyCompact(v)} />
+                    <LabelList dataKey="frete" position="right" fill={ZEUS_COLORS.amber} fontSize={9} fontWeight={600} formatter={(v: number) => formatCurrencyCompact(v)} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -303,37 +466,11 @@ export default function OlimpoFaturamento() {
           </div>
 
           <div>
-            <ZeusChartCard title="Distribuição Regional" subtitle="Último mês" headerRight={<ExpandButton chartId="regiao" />}>
-              <ResponsiveContainer width="100%" height={260}>
-                <PieChart>
-                  <Pie data={regionData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={95} paddingAngle={3} strokeWidth={0}>
-                    {regionData.map((entry, i) => (<Cell key={i} fill={REGION_COLORS[entry.name] || CHART_PALETTE[i % CHART_PALETTE.length]} />))}
-                  </Pie>
-                  <Tooltip content={<Z3usPieTooltip total={totalRegion} />} />
-                  <text x="50%" y="46%" textAnchor="middle" fill="#64748b" fontSize={11}>Total</text>
-                  <text x="50%" y="56%" textAnchor="middle" fill={ZEUS_COLORS.amber} fontSize={18} fontWeight={700}>{formatNumber(totalRegion)}</text>
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex justify-center gap-5 mt-1 pb-2">
-                {regionData.map((entry, i) => {
-                  const color = REGION_COLORS[entry.name] || CHART_PALETTE[i % CHART_PALETTE.length];
-                  const pct = totalRegion > 0 ? ((entry.value / totalRegion) * 100).toFixed(1) : "0";
-                  return (<div key={i} className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} /><span className="text-[11px] text-slate-300">{entry.name} ({pct}%)</span></div>);
-                })}
-              </div>
-            </ZeusChartCard>
-            <ChartDetailPanel isOpen={expandedChart === "regiao"} onClose={() => setExpandedChart(null)} title="Distribuição Regional" columns={COL_REGIAO} data={regionData} exportName="regiao" accentColor={ZEUS_COLORS.success} />
-          </div>
-        </div>
-
-        {/* Row 2 — 3 charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div>
             <ZeusChartCard title="Valor Total Mensal" subtitle="Evolução mensal" headerRight={<ExpandButton chartId="valor-mensal" />}>
               {chartMonthlyValor.length <= 1 ? (
                 <DonutSingleChart value={chartMonthlyValor[0]?.Valor ?? 0} label="Valor Faturado" color={ZEUS_COLORS.amber} valueFormatter={(v) => formatCompact(v)} />
               ) : (
-              <ResponsiveContainer width="100%" height={260}>
+              <ResponsiveContainer width="100%" height={280}>
                 <AreaChart data={chartMonthlyValor} margin={{ top: 25, right: 10, left: 0, bottom: 5 }}>
                   <defs><linearGradient id="areaGradValorMensal" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.3} /><stop offset="50%" stopColor={ZEUS_COLORS.amber} stopOpacity={0.08} /><stop offset="100%" stopColor={ZEUS_COLORS.amber} stopOpacity={0} /></linearGradient></defs>
                   <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} tickFormatter={(v) => formatCurrencyCompact(v)} />
@@ -345,7 +482,10 @@ export default function OlimpoFaturamento() {
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "valor-mensal"} onClose={() => setExpandedChart(null)} title="Valor Total Mensal" columns={COL_MENSAL} data={chartMonthlyValor} exportName="valor_mensal" accentColor={ZEUS_COLORS.amber} />
           </div>
+        </div>
 
+        {/* ═══ Row 3 — 3 equal charts: Modal Qtd, Modal Valor, Modal Último ═══ */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div>
             <ZeusChartCard title="Qtd. por Modal" subtitle="Distribuição por modal" headerRight={<ExpandButton chartId="qtd-modal" />}>
               <ResponsiveContainer width="100%" height={260}>
@@ -371,10 +511,7 @@ export default function OlimpoFaturamento() {
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "valor-modal"} onClose={() => setExpandedChart(null)} title="Valor por Modal (Mensal)" columns={[{ key: "name", label: "Mês", type: "text" }, ...allModals.map(m => ({ key: m, label: m, type: "currency" as const }))]} data={chartModalValor} exportName="valor_modal" accentColor={ZEUS_COLORS.amber} />
           </div>
-        </div>
 
-        {/* Row 3 — 3 charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div>
             <ZeusChartCard title="Qtd. por Modal — Último Mês" subtitle="Último mês" headerRight={<ExpandButton chartId="modal-ultimo" />}>
               <ResponsiveContainer width="100%" height={260}>
@@ -390,7 +527,10 @@ export default function OlimpoFaturamento() {
             </ZeusChartCard>
             <ChartDetailPanel isOpen={expandedChart === "modal-ultimo"} onClose={() => setExpandedChart(null)} title="Modal — Último Mês" columns={COL_MODAL_LAST} data={lastMonthModalData} exportName="modal_ultimo_mes" accentColor={ZEUS_COLORS.teal} />
           </div>
+        </div>
 
+        {/* ═══ Row 4 — 2 equal charts: Divisão Modal ═══ */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div>
             <ZeusChartCard title="Qtd. por Divisão Modal" subtitle="Divisão" headerRight={<ExpandButton chartId="div-qtd" />}>
               {divisionData.length <= 1 ? (
@@ -436,44 +576,66 @@ export default function OlimpoFaturamento() {
 // Z3US Components
 // ══════════════════════════════════════
 
-function KpiCard({ icon: Icon, label, value, loading, accent, subtitle }: {
+function MiniKpiCard({ icon: Icon, label, value, loading, accent, subtitle, onClick, sparkData }: {
   icon: any; label: string; value: string; loading: boolean; accent?: boolean; subtitle?: string;
+  onClick?: () => void; sparkData?: { v: number }[];
 }) {
   return (
-    <Card className="bg-card border-border h-full">
-      <CardContent className="p-4 flex items-center gap-3 h-full">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${accent ? "bg-red-500/10 border border-red-500/30" : "bg-primary/10 border border-primary/30"}`}>
-          <Icon className={`h-5 w-5 ${accent ? "text-red-400" : "text-primary"}`} />
+    <div
+      onClick={onClick}
+      className="group flex items-center gap-3 rounded-xl px-4 py-3 cursor-pointer transition-all duration-300 hover:scale-[1.01]"
+      style={{
+        background: 'rgba(5,6,18,0.9)',
+        border: '1px solid rgba(255,255,255,0.06)',
+      }}
+    >
+      <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${accent ? "bg-red-500/10 border border-red-500/20" : "bg-[rgba(242,160,7,0.08)] border border-[rgba(242,160,7,0.15)]"}`}>
+        <Icon className={`h-4 w-4 ${accent ? "text-red-400" : "text-[#F2A007]"}`} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
+        <p className={`text-lg font-bold leading-tight ${loading ? "animate-pulse text-muted-foreground" : accent ? "text-red-400" : "text-foreground"}`}>
+          {value}
+        </p>
+        {subtitle && <p className="text-[10px] text-slate-500 truncate max-w-[180px]">{subtitle}</p>}
+      </div>
+      {sparkData && sparkData.length > 1 && (
+        <div className="shrink-0 hidden sm:block">
+          <ResponsiveContainer width={70} height={28}>
+            <AreaChart data={sparkData} margin={{ top: 1, right: 1, left: 1, bottom: 1 }}>
+              <Area type="monotone" dataKey="v" stroke={accent ? "#EF4444" : ZEUS_COLORS.amber} strokeWidth={1.2} fill="none" dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
-        <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">{label}</p>
-          <p className={`text-lg font-bold ${loading ? "animate-pulse text-muted-foreground" : accent ? "text-red-400" : "text-foreground"}`}>
-            {loading ? "..." : value}
-          </p>
-          <p className="text-[10px] text-muted-foreground truncate max-w-[160px] min-h-[14px]">
-            {!loading && subtitle ? subtitle : "\u00A0"}
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+      )}
+      <div className="text-[9px] text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        →
+      </div>
+    </div>
   );
 }
 
-function ZeusChartCard({ title, subtitle, children, colSpan, minHeight = 200, headerRight }: {
+function ZeusChartCard({ title, subtitle, children, colSpan, minHeight = 220, headerRight }: {
   title: string; subtitle?: string; children: React.ReactNode; colSpan?: number; minHeight?: number; headerRight?: React.ReactNode;
 }) {
   return (
-    <Card className={`bg-card border-border h-full ${colSpan === 2 ? "lg:col-span-2" : ""}`}>
-      <CardContent className="p-3 flex flex-col h-full">
-        <div className="flex items-center justify-between mb-2">
+    <div
+      className={`rounded-2xl h-full transition-all duration-300 hover:border-[rgba(242,160,7,0.12)] ${colSpan === 2 ? "lg:col-span-2" : ""}`}
+      style={{
+        background: 'rgba(5,6,18,0.9)',
+        border: '1px solid rgba(255,255,255,0.06)',
+      }}
+    >
+      <div className="p-5 flex flex-col h-full">
+        <div className="flex items-center justify-between mb-3">
           <div>
-            <h3 className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">{title}</h3>
-            {subtitle && <p className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</p>}
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">{title}</h3>
+            {subtitle && <p className="text-[10px] text-slate-600 mt-0.5">{subtitle}</p>}
           </div>
           {headerRight}
         </div>
         <div className="flex-1 min-h-0" style={{ minHeight }}>{children}</div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
