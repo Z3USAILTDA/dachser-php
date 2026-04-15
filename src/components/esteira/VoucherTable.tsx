@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { TablePagination } from "@/components/layout/TablePagination";
 import { RetornarPendenteDialog } from "./RetornarPendenteDialog";
 import { supabase } from "@/integrations/supabase/client";
+import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
 import { toast } from "sonner";
 
 const PAGE_SIZE = 10;
@@ -749,6 +750,8 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                                         detalhe: "Voucher/SPO urgente aprovado pelo Supervisor (via tabela)",
                                       },
                                     });
+                                    // Inserir na t_dados_rm ao entrar no FINANCEIRO
+                                    insertDadosRmOnFinanceiro(voucher);
                                     // Email notifications removed — monthly report only
                                     toast.success("Voucher aprovado e enviado ao Financeiro");
                                     window.location.reload();

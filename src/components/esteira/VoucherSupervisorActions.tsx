@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
 import { Voucher } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -65,6 +66,9 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
           detalhe: "Voucher/SPO urgente aprovado pelo Supervisor",
         },
       });
+
+      // Inserir na t_dados_rm ao entrar no FINANCEIRO
+      insertDadosRmOnFinanceiro(voucher);
 
       // Email notifications removed — monthly report only
 

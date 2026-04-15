@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
 import { useNavigate } from "react-router-dom";
 import { Voucher, TipoAnexo } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
@@ -259,6 +260,11 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
             : `Rascunho finalizado e enviado para ${etapaLabel}`,
         },
       });
+
+      // Inserir na t_dados_rm ao entrar no FINANCEIRO
+      if (proximaEtapa === "FINANCEIRO") {
+        insertDadosRmOnFinanceiro(voucher);
+      }
 
       toast({
         title: "Voucher/SPO enviado!",

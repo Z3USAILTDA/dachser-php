@@ -93,6 +93,29 @@ const handler = async (req: Request): Promise<Response> => {
         detalhe: "Voucher/SPO urgente aprovado via link do e-mail",
       });
 
+      // Inserir na t_dados_rm ao entrar no FINANCEIRO
+      try {
+        const voucherData = await callProxy("get_voucher_for_rm", { voucher_id });
+        if (voucherData?.success && voucherData?.data) {
+          const v = voucherData.data;
+          await callProxy("insert_dados_rm", {
+            id_rm: v.id_rm || null,
+            numero_spo: v.numero_spo,
+            voucher_boleto: ["BOLETO", "DARF", "GPS"].includes(v.forma_pagamento || "")
+              ? (v.linha_digitavel || v.codigo_barras || null)
+              : null,
+            chave_pix: v.chave_pix || null,
+            pix_tipo_chave: null,
+            forma_pag: v.forma_pagamento,
+            fornecedor: v.fornecedor,
+            cnpj_fornecedor: v.cnpj_fornecedor || null,
+            tipo_exec: v.tipo_execucao_pagamento || null,
+          });
+        }
+      } catch (e) {
+        console.log("Insert t_dados_rm from email action skipped:", e);
+      }
+
       try {
         await fetch(`${SUPABASE_URL}/functions/v1/send-voucher-notification`, {
           method: "POST",
