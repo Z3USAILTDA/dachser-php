@@ -301,14 +301,14 @@ export default function OlimpoFaturamento() {
           {/* Hero KPI — Faturamento Total */}
           <div
             onClick={() => setKpiModal("total")}
-            className="group relative rounded-2xl p-6 cursor-pointer transition-all duration-300 hover:scale-[1.01]"
+            className="group relative rounded-2xl px-6 py-4 cursor-pointer transition-all duration-300 hover:scale-[1.01]"
             style={{
               background: 'linear-gradient(135deg, rgba(5,6,18,0.95) 0%, rgba(15,16,30,0.9) 100%)',
               border: '1px solid rgba(242,160,7,0.15)',
             }}
           >
-            <div className="flex items-start justify-between">
-              <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
                 <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-slate-400">Faturamento Total</p>
                 <p className={`text-4xl font-bold tracking-tight ${loading ? "animate-pulse text-muted-foreground" : "text-foreground"}`}>
                   {loading ? "..." : formatCompact(kpis.total)}
