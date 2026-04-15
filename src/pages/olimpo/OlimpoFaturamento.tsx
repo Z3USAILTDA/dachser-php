@@ -286,7 +286,7 @@ export default function OlimpoFaturamento() {
       rightContent={
         <div className="flex items-center gap-2">
           <div className="h-8 px-3 flex items-center rounded-md bg-card border border-border text-xs text-muted-foreground">
-            Período: {firstMonth} – {lastMonthShort} · Base: TOTVS RM
+            Período: {firstMonth} – {lastMonthShort} · Base: TOTVS RM + Othello
           </div>
           <Button size="sm" onClick={fetchData} disabled={loading}
             className="h-8 border-border bg-card text-muted-foreground hover:text-foreground text-xs">
