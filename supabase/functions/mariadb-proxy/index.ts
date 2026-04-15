@@ -16017,17 +16017,54 @@ Deno.serve(async (req) => {
       // ==================== FATURAMENTO DASHBOARD ====================
       case 'get_faturamento_dashboard': {
         try {
-          console.log('[get_faturamento_dashboard] Fetching billing data from t_base_totvs_rm...');
+          console.log('[get_faturamento_dashboard] Fetching billing data from 3 tables...');
           const rows = await queryWithRetry(
             () => client!.query(`
               SELECT processo, faturado_em, filial, modal, cliente,
                      CAST(COALESCE(valor_total_faturado, 0) AS DOUBLE) as valor_total_faturado,
-                     regiao, divisao_por_modal
+                     regiao, divisao_por_modal, 'TOTVS_RM' as fonte
               FROM dados_dachser.t_base_totvs_rm
               WHERE faturado_em IS NOT NULL
+
+              UNION ALL
+
+              SELECT CAST(id_ref_object AS CHAR) as processo,
+                     service_date as faturado_em,
+                     branch as filial,
+                     CASE
+                       WHEN cost_center_iv LIKE '%Air%' THEN 'AI'
+                       WHEN cost_center_iv LIKE '%Sea%' THEN 'SI'
+                       ELSE 'OUTROS'
+                     END as modal,
+                     deb_cred_name as cliente,
+                     CAST(COALESCE(total_revenue, 0) AS DOUBLE) as valor_total_faturado,
+                     NULL as regiao,
+                     NULL as divisao_por_modal,
+                     'NACIONAL_NAO_RLS' as fonte
+              FROM dados_dachser.t_othello_nacional_nao_rls
+              WHERE service_date IS NOT NULL
+
+              UNION ALL
+
+              SELECT CAST(id_ref_object AS CHAR) as processo,
+                     service_date as faturado_em,
+                     branch as filial,
+                     CASE
+                       WHEN cost_center_iv LIKE '%Air%' THEN 'AI'
+                       WHEN cost_center_iv LIKE '%Sea%' THEN 'SI'
+                       ELSE 'OUTROS'
+                     END as modal,
+                     deb_cred_name as cliente,
+                     CAST(COALESCE(revenue, 0) AS DOUBLE) as valor_total_faturado,
+                     NULL as regiao,
+                     NULL as divisao_por_modal,
+                     'INTERNACIONAL_NAO_RLS' as fonte
+              FROM dados_dachser.t_othello_internacional_nao_rls
+              WHERE service_date IS NOT NULL
+
               ORDER BY faturado_em DESC
             `),
-            { label: 'get_faturamento_dashboard', timeoutMs: 15000 }
+            { label: 'get_faturamento_dashboard', timeoutMs: 20000 }
           );
           console.log(`[get_faturamento_dashboard] Retrieved ${rows?.length || 0} rows`);
           result = { data: rows || [] };
