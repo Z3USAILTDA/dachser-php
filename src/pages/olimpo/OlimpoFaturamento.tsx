@@ -54,7 +54,7 @@ const formatBRLFull = (v: any) => new Intl.NumberFormat("pt-BR", { style: "curre
 const formatMonthLabel = (d: string) => { const [y, m] = d.split("-"); return `${MONTH_SHORT[parseInt(m) - 1]}/${y}`; };
 const formatCompact = (v: any) => { const n = safeNum(v); if (n >= 1_000_000) return `R$ ${(n / 1_000_000).toFixed(1).replace(".", ",")}M`; if (n >= 1_000) return `R$ ${(n / 1_000).toFixed(0)}K`; return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n); };
 const formatNumber = (v: number) => Math.round(v).toLocaleString("pt-BR");
-const formatCurrencyCompact = (v: number) => { const abs = Math.abs(v); if (abs >= 1_000_000) return `R$ ${(abs / 1_000_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}M`; if (abs >= 1_000) return `R$ ${(abs / 1_000).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}K`; return `R$ ${abs.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`; };
+const formatCurrencyCompact = (v: number) => { const sign = v < 0 ? "-" : ""; const abs = Math.abs(v); if (abs >= 1_000_000) return `${sign}R$ ${(abs / 1_000_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}M`; if (abs >= 1_000) return `${sign}R$ ${(abs / 1_000).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}K`; return `${sign}R$ ${abs.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`; };
 
 // ── Z3US Tooltips ──
 function Z3usTooltip({ active, payload, label, valueFormatter }: { active?: boolean; payload?: any[]; label?: string; valueFormatter?: (v: number, name?: string) => string; }) {
