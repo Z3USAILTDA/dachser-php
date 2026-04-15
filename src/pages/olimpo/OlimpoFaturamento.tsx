@@ -297,7 +297,7 @@ export default function OlimpoFaturamento() {
       <div className="space-y-6">
 
         {/* ═══ KPI Section — Asymmetric Hero + Mini Cards ═══ */}
-        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-5 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-5 items-stretch">
           {/* Hero KPI — Faturamento Total */}
           <div
             onClick={() => setKpiModal("total")}
