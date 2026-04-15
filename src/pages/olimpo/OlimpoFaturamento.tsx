@@ -566,10 +566,11 @@ function MiniKpiCard({ icon: Icon, label, value, loading, accent, subtitle, onCl
   return (
     <div
       onClick={onClick}
-      className="group flex items-center gap-3 rounded-xl px-4 py-3 cursor-pointer transition-all duration-300 hover:scale-[1.01]"
+      className="group flex items-center gap-3 rounded-2xl px-5 py-4 cursor-pointer transition-all duration-300 hover:scale-[1.01]"
       style={{
         background: 'rgba(5,6,18,0.9)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
       }}
     >
       <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${accent ? "bg-red-500/10 border border-red-500/20" : "bg-[rgba(242,160,7,0.08)] border border-[rgba(242,160,7,0.15)]"}`}>
