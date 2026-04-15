@@ -297,23 +297,24 @@ export default function OlimpoFaturamento() {
       <div className="space-y-6">
 
         {/* ═══ KPI Section — Asymmetric Hero + Mini Cards ═══ */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-5 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-5 items-start">
           {/* Hero KPI — Faturamento Total */}
           <div
             onClick={() => setKpiModal("total")}
-            className="group relative rounded-2xl px-6 py-4 cursor-pointer transition-all duration-300 hover:scale-[1.01]"
+            className="group relative rounded-2xl px-8 py-6 cursor-pointer transition-all duration-300 hover:scale-[1.01]"
             style={{
               background: 'linear-gradient(135deg, rgba(5,6,18,0.95) 0%, rgba(15,16,30,0.9) 100%)',
               border: '1px solid rgba(242,160,7,0.15)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(242,160,7,0.05)',
             }}
           >
             <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-slate-400">Faturamento Total</p>
-                <p className={`text-4xl font-bold tracking-tight ${loading ? "animate-pulse text-muted-foreground" : "text-foreground"}`}>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-medium uppercase tracking-[0.15em] text-slate-400">Faturamento Total</p>
+                <p className={`text-5xl font-bold tracking-tight ${loading ? "animate-pulse text-muted-foreground" : "text-foreground"}`}>
                   {loading ? "..." : formatCompact(kpis.total)}
                 </p>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-2 mt-1.5">
                   {kpis.variation >= 0 ? (
                     <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
                   ) : (
@@ -325,42 +326,64 @@ export default function OlimpoFaturamento() {
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2">
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-[rgba(242,160,7,0.1)] border border-[rgba(242,160,7,0.2)]">
-                  <DollarSign className="h-5 w-5 text-[#F2A007]" />
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-[rgba(242,160,7,0.1)] border border-[rgba(242,160,7,0.2)]">
+                  <DollarSign className="h-6 w-6 text-[#F2A007]" />
                 </div>
               </div>
             </div>
-            <div className="absolute bottom-3 right-4 text-[9px] text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute bottom-3 right-5 text-[9px] text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">
               Clique para detalhes
             </div>
           </div>
 
-          {/* 3 Mini KPI Cards stacked */}
-          <div className="grid grid-cols-1 gap-3">
-            <MiniKpiCard
-              icon={FileText}
-              label="Processos Faturados"
-              value={loading ? "..." : kpis.count.toLocaleString("pt-BR")}
-              loading={loading}
-              onClick={() => setKpiModal("count")}
-              
-            />
-            <MiniKpiCard
-              icon={kpis.variation >= 0 ? TrendingUp : TrendingDown}
-              label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`}
-              value={loading ? "..." : `${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`}
-              loading={loading}
-              accent={kpis.variation < 0}
-              onClick={() => setKpiModal("variation")}
-            />
-            <MiniKpiCard
-              icon={Users}
-              label="Maior Cliente"
-              value={loading ? "..." : formatCompact(kpis.topClientVal)}
-              loading={loading}
-              subtitle={kpis.topClient !== "-" ? kpis.topClient : undefined}
+          {/* Mosaic: 2 mini cards top + 1 medium card bottom */}
+          <div className="flex flex-col gap-3">
+            {/* Top row: 2 mini cards side by side */}
+            <div className="grid grid-cols-2 gap-3">
+              <MiniKpiCard
+                icon={FileText}
+                label="Processos Faturados"
+                value={loading ? "..." : kpis.count.toLocaleString("pt-BR")}
+                loading={loading}
+                onClick={() => setKpiModal("count")}
+              />
+              <MiniKpiCard
+                icon={kpis.variation >= 0 ? TrendingUp : TrendingDown}
+                label={`Var. vs ${kpis.prevMonthLabel || "Mês Ant."}`}
+                value={loading ? "..." : `${kpis.variation >= 0 ? "+" : ""}${kpis.variation.toFixed(1)}%`}
+                loading={loading}
+                accent={kpis.variation < 0}
+                onClick={() => setKpiModal("variation")}
+              />
+            </div>
+            {/* Bottom row: Maior Cliente full-width */}
+            <div
               onClick={() => setKpiModal("client")}
-            />
+              className="group rounded-2xl px-5 py-4 cursor-pointer transition-all duration-300 hover:scale-[1.005]"
+              style={{
+                background: 'rgba(5,6,18,0.9)',
+                border: '1px solid rgba(242,160,7,0.1)',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-[rgba(242,160,7,0.08)] border border-[rgba(242,160,7,0.15)]">
+                  <Users className="h-4 w-4 text-[#F2A007]" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Maior Cliente</p>
+                  <div className="flex items-baseline gap-2">
+                    <p className={`text-lg font-bold leading-tight ${loading ? "animate-pulse text-muted-foreground" : "text-foreground"}`}>
+                      {loading ? "..." : formatCompact(kpis.topClientVal)}
+                    </p>
+                    {kpis.topClient !== "-" && (
+                      <span className="text-[11px] text-slate-400 truncate max-w-[200px]">— {kpis.topClient}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-[9px] text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">→</div>
+              </div>
+            </div>
           </div>
         </div>
 
