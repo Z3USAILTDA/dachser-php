@@ -210,12 +210,11 @@ export default function OlimpoFaturamento() {
   }, [data, monthlyData]);
 
   const topClientesData = useMemo(() => {
-    const lastMonth = monthlyData.length > 0 ? monthlyData[monthlyData.length - 1].month : null;
-    if (!lastMonth) return [];
+    if (data.length === 0) return [];
     const clientMap = new Map<string, number>();
-    data.forEach((r) => { if (!r.faturado_em || r.faturado_em.substring(0, 7) !== lastMonth) return; const c = r.cliente || "Desconhecido"; clientMap.set(c, (clientMap.get(c) || 0) + safeNum(r.valor_total_faturado)); });
+    data.forEach((r) => { const c = r.cliente || "Desconhecido"; if (c === "N/A" || c === "Desconhecido") return; clientMap.set(c, (clientMap.get(c) || 0) + safeNum(r.valor_total_faturado)); });
     return Array.from(clientMap.entries()).sort(([, a], [, b]) => b - a).slice(0, 10).map(([cliente, frete]) => ({ cliente, clienteShort: cliente.length > 14 ? cliente.substring(0, 14) + "…" : cliente, frete }));
-  }, [data, monthlyData]);
+  }, [data]);
 
   const chartMonthlyCount = useMemo(() => monthlyData.map((m) => ({ name: formatMonthLabel(m.month), Quantidade: m.count })), [monthlyData]);
   const chartMonthlyValor = useMemo(() => monthlyData.map((m) => ({ name: formatMonthLabel(m.month), Valor: m.valor })), [monthlyData]);
@@ -433,7 +432,7 @@ export default function OlimpoFaturamento() {
         {/* ═══ Row 2 — Asymmetric: Top Clientes (1fr) + Valor Total Mensal (2fr) ═══ */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-5">
           <div>
-            <ZeusChartCard title="Top Clientes" subtitle="Último mês" headerRight={<ExpandButton chartId="top-clientes" />}>
+            <ZeusChartCard title="Top Clientes" subtitle="Acumulado" headerRight={<ExpandButton chartId="top-clientes" />}>
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={topClientesData.map(d => ({ ...d, cliente: d.clienteShort }))} layout="vertical" margin={{ top: 5, right: 60, left: 10, bottom: 5 }}>
                   <CartesianGrid {...GRID_PROPS} horizontal={false} />
