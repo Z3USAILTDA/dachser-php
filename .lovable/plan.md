@@ -1,87 +1,55 @@
 
 
-## Plano: Redesign Premium Assimétrico do Dashboard de Faturamento
+## Plano: Adicionar 2 novas abas à importação Othello
 
-### Visão Geral
-Refatoração puramente visual do `OlimpoFaturamento.tsx` e seus componentes internos (`KpiCard`, `ZeusChartCard`). Zero alteração em lógica, dados ou identidade visual. O layout passa de grade 4+3+3+3 uniforme para uma composição assimétrica com hierarquia editorial.
+### Resumo
+Estender a importação existente em `/fin/othello-import` para processar as abas **"Othello Nacional-Não RLS"** e **"Othello Internacional-Não RLS"**, gravando nas tabelas MariaDB `t_othello_nacional_nao_rls` e `t_othello_internacional_nao_rls`.
 
-### Estrutura Proposta
+### Arquivos alterados
 
-```text
-┌─────────────────────────────────────────────────────┐
-│  HEADER (existente, refinado)                       │
-├──────────────────────┬──────────────────────────────┤
-│                      │  ┌──────┐ ┌──────┐          │
-│   HERO KPI           │  │ KPI2 │ │ KPI3 │          │
-│   Faturamento Total  │  └──────┘ └──────┘          │
-│   (bloco grande,     │  ┌──────────────────┐       │
-│    sparkline inline)  │  │   KPI4 (Cliente) │       │
-│                      │  └──────────────────┘       │
-├──────────────────────┴──────────────────────────────┤
-│                                                     │
-│  ┌──────────────────────────┐  ┌───────────────┐   │
-│  │ Evolução Qtd Files       │  │ Dist Regional │   │
-│  │ (col-span 2, largo)      │  │ (pie, menor)  │   │
-│  └──────────────────────────┘  └───────────────┘   │
-│                                                     │
-│  ┌───────────────┐  ┌──────────────────────────┐   │
-│  │ Top Clientes  │  │ Valor Total Mensal       │   │
-│  │ (menor)       │  │ (col-span 2, largo)      │   │
-│  └───────────────┘  └──────────────────────────┘   │
-│                                                     │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐           │
-│  │Qtd Modal │ │Val Modal │ │Modal Últ │           │
-│  └──────────┘ └──────────┘ └──────────┘           │
-│                                                     │
-│  ┌─────────────────────┐  ┌────────────────────┐   │
-│  │ Qtd Divisão Modal   │  │ Valor Divisão Modal│   │
-│  │ (col-span 1)        │  │ (col-span 1)       │   │
-│  └─────────────────────┘  └────────────────────┘   │
-└─────────────────────────────────────────────────────┘
-```
+#### 1. `src/pages/fin/OthelloImport.tsx`
 
-### Detalhamento
+- Adicionar constantes de headers para as 2 novas abas
+- Adicionar nomes das novas abas em `REQUIRED_SHEETS` (total: 5)
+- Criar função `toDateStrOrNull(v)` que trata `-` como NULL (regra especial de datas logísticas ETD/ATD/ETA/ATA)
+- No `handleImport`:
+  - Validar existência e headers das 2 novas abas
+  - Processar **Othello Nacional-Não RLS** (20 colunas, valida `id_ref_object || settlement_id`)
+  - Processar **Othello Internacional-Não RLS** (13 colunas, valida `id_ref_object`)
+  - Enviar os 2 arrays adicionais (`nacional_nao_rls`, `internacional_nao_rls`) no payload ao edge function
+- Atualizar `ImportResult.counts` para incluir `nacional_nao_rls` e `internacional_nao_rls`
+- Adicionar 2 linhas no resumo final
+- Atualizar texto descritivo para "5 abas obrigatórias"
 
-**1. KPI Cards — Composição Assimétrica (Topo)**
-- O KPI principal (Faturamento Total) vira um **hero card** ocupando ~50% da largura, mais alto (~140px), com valor em `text-4xl`, sparkline dos últimos 6 meses inline (usando `sparklineValor` já calculado), e ícone maior
-- Os 3 KPIs restantes ficam empilhados ao lado em cards compactos (~60px altura cada), com valor em `text-lg`, layout horizontal icon+texto
-- Grid: `grid-cols-[1fr_1fr]` com o hero ocupando 1 coluna e os 3 mini cards empilhados na outra
-- Cards com `bg-[rgba(5,6,18,0.9)]`, `border border-[rgba(255,200,0,0.12)]`, `rounded-2xl`
-- Cada mini KPI clicável → abre modal com detalhes (Dialog do shadcn)
+#### 2. `supabase/functions/fin-othello-import/index.ts`
 
-**2. Gráficos — Assimetria Intencional**
-- **Linha 1**: `grid-cols-[2fr_1fr]` — Evolução Qtd Files (largo) + Distribuição Regional (compacto)
-- **Linha 2**: `grid-cols-[1fr_2fr]` — Top Clientes (compacto) + Valor Total Mensal (largo)
-- **Linha 3**: `grid-cols-3` uniforme — Qtd Modal, Valor Modal, Modal Último Mês (estes são de importância equivalente)
-- **Linha 4**: `grid-cols-2` — Divisão Modal Qtd + Divisão Modal Valor (2 colunas, mais respiro)
+- Receber `nacional_nao_rls` e `internacional_nao_rls` do payload
+- Validar presença dos 2 novos arrays
+- Dentro da transação:
+  - `DELETE FROM dados_dachser.t_othello_nacional_nao_rls`
+  - `DELETE FROM dados_dachser.t_othello_internacional_nao_rls`
+  - INSERT loop para `t_othello_nacional_nao_rls` (campos: arquivo_origem, aba_origem, linha_excel, importado_em, id_ref_object, settlement_id, branch, object_type, service_date, cost_center_iv, deb_cred_no, deb_cred_name, settlement_type, status_settl, status_interpreter, flag, revenue, revenue_transit, total_revenue, etd, atd, eta, ata, comentarios)
+  - INSERT loop para `t_othello_internacional_nao_rls` (campos: arquivo_origem, aba_origem, linha_excel, importado_em, id_ref_object, branch, service_date, cost_center_iv, deb_cred_name, status_settl, flag, revenue, etd, atd, eta, ata, comentarios)
+  - Usar `NULLIF(?, '')` para colunas DATE (etd, atd, eta, ata) conforme regra MariaDB
+  - `importado_em = NOW()` direto no SQL
+- Retornar contagens das 2 novas tabelas no response
 
-**3. ZeusChartCard — Refinamento Visual**
-- Padding interno mais generoso: `p-5` em vez de `p-3`
-- Título com `text-[11px]` uppercase + tracking + `text-slate-400`
-- Borda sutil `border-[rgba(255,255,255,0.06)]` em vez de `border-border`
-- Hover suave: `hover:border-[rgba(255,200,0,0.15)]` com `transition-all duration-300`
-- Sem glow, sem sombras pesadas
+### Detalhes técnicos
 
-**4. KPI Detail Modal**
-- Usar `Dialog` do shadcn para expandir qualquer KPI ao clicar
-- Conteúdo: valor completo, variação, contexto do período, mini gráfico expandido
-- Animação suave via `DialogContent` padrão
-- Estilo dark consistente com o dashboard
+**Headers Nacional-Não RLS (20 colunas):**
+ID Ref Object, Settlement ID, Branch, Object Type, Service Date, Cost Center IV, Deb Cred No, Deb Cred Name, Settlement Type, Status Settl, Status Interpreter, Flag, Revenue, Revenue (Transit), ∑ Revenue, ETD, ATD, ETA, ATA, Comentários
 
-**5. Espaçamento e Respiro**
-- Gap entre seções: `gap-6` (mais respiro)
-- Gap interno nas grids: `gap-4`
-- `space-y-6` no container principal em vez de `space-y-5`
+**Headers Internacional-Não RLS (13 colunas):**
+ID Ref Object, Branch, Service Date, Cost Center IV, Deb Cred Name, Status Settl, Flag, Revenue, ETD, ATD, ETA, ATA, Comentários
 
-### Arquivos Alterados
-- `src/pages/olimpo/OlimpoFaturamento.tsx` — Layout, KpiCard, ZeusChartCard, adição de Dialog para detalhes
+**Regra de datas ETD/ATD/ETA/ATA:**
+- `"-"` → NULL
+- `""` → NULL  
+- Data Excel válida → formato `YYYY-MM-DD`
+- String `"2010-01-01"` → mantém
 
 ### O que NÃO muda
-- Nenhuma lógica de dados, useMemo, fetch, filtros
-- Nenhum dado do CSV
-- Nenhuma cor principal removida
-- Todos os 9 gráficos permanecem
-- Todos os 4 KPIs permanecem
-- ChartDetailPanel continua funcionando
-- DonutSingleChart para dados únicos continua
+- Lógica das 3 abas existentes (Nacional-RLS, Interacional-RLS, Base Totvs RM)
+- Layout, design e componentes visuais
+- Fluxo de autenticação e navegação
 
