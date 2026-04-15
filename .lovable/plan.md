@@ -1,30 +1,30 @@
 
 
-## Plano: Forçar `domain={[0, 'auto']}` em todos os gráficos
+## Plano: Forçar eixo Y mínimo em 0 com `allowDataOverflow`
 
 ### Problema
-Alguns gráficos no Olimpo Faturamento e no Analytics CCT não têm `domain={[0, 'auto']}` no `YAxis`, permitindo que o Recharts calcule automaticamente o mínimo — que pode ser negativo.
+Mesmo com `domain={[0, 'auto']}`, o Recharts expande o domínio quando existem valores negativos nos dados. Os gráficos "Valor Total Mensal" e "Valor Faturado por Modal" ainda mostram -R$ 6M e -R$ 3M.
+
+### Causa
+`domain={[0, 'auto']}` é apenas uma "sugestão" — Recharts a ignora quando os dados ultrapassam o intervalo. Para forçar, é necessário `allowDataOverflow={true}`.
 
 ### Alteração
 
-**Arquivo 1: `src/pages/olimpo/OlimpoFaturamento.tsx`**
-Adicionar `domain={[0, 'auto']}` em todos os `<YAxis>` numéricos (não nos `type="category"`). Linhas afetadas:
-- L415 — Evolução Faturamento (Quantidade)
-- L476 — Evolução Mensal (Valor)
-- L493 — Qtd. por Modal
-- L506 — já tem ✓
-- L519 — XAxis numérico (horizontal bar) — adicionar `domain={[0, 'auto']}` no XAxis
-- L542 — Qtd. por Divisão
-- L560 — Valor por Divisão
+**Arquivo: `src/pages/olimpo/OlimpoFaturamento.tsx`**
+Adicionar `allowDataOverflow={true}` em **todos** os `<YAxis>` e `<XAxis>` numéricos que já têm `domain={[0, 'auto']}`:
+- L476 — Valor Total Mensal (YAxis)
+- L493 — Qtd. por Modal (YAxis)
+- L506 — Valor Faturado por Modal (YAxis)
+- L519 — XAxis numérico do horizontal bar
+- L542 — Qtd. por Divisão (YAxis)
+- L560 — Valor por Divisão (YAxis)
 
-Também no XAxis numérico do Top Clientes (L456) — adicionar `domain={[0, 'auto']}`.
+Também na Evolução Faturamento (L415, se existir).
 
-**Arquivo 2: `src/pages/cct/tabs/AnalyticsTab.tsx`**
-Adicionar `domain={[0, 'auto']}` nos `<YAxis>` numéricos:
-- L176 — Volume por Dia
-- L311 — Por Analista
+**Arquivo: `src/pages/cct/tabs/AnalyticsTab.tsx`**
+Adicionar `allowDataOverflow={true}` nos YAxis que já têm `domain={[0, 'auto']}`.
 
 ### O que NÃO muda
 - Nenhum dado, layout ou lógica de cálculo
-- YAxis do tipo `category` (rotas, clientes) não são alterados
+- Apenas o comportamento visual do eixo é forçado
 
