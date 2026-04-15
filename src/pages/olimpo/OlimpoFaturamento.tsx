@@ -503,7 +503,7 @@ export default function OlimpoFaturamento() {
             <ZeusChartCard title="Valor Faturado por Modal" subtitle="Por modal" headerRight={<ExpandButton chartId="valor-modal" />}>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={chartModalValor} margin={{ top: 25, right: 20, left: 0, bottom: 5 }}>
-                  <CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} tickFormatter={(v) => formatCurrencyCompact(v)} />
+<CartesianGrid {...GRID_PROPS} /><XAxis dataKey="name" tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} /><YAxis tick={AXIS_TICK} axisLine={AXIS_LINE} tickLine={false} tickFormatter={(v) => formatCurrencyCompact(v)} domain={[0, 'auto']} />
                   <Tooltip content={<Z3usTooltip valueFormatter={(v) => formatBRLFull(v)} />} cursor={{ fill: 'rgba(242, 160, 7, 0.08)' }} /><Legend wrapperStyle={{ fontSize: 10, color: '#94a3b8' }} />
                   {allModals.map((mod) => (<Bar key={mod} dataKey={mod} fill={MODAL_COLORS[mod] || "#64748B"} radius={[3, 3, 0, 0]} barSize={18} />))}
                 </BarChart>
