@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { ArrowLeft, Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, Bot, FileSpreadsheet, Filter, Building2, Users, LayoutDashboard, CheckCircle2, FileWarning, HelpCircle, Receipt, ShieldX, Settings, Search, CreditCard, Layers, FileSearch } from "lucide-react";
@@ -866,6 +866,11 @@ const EsteiraIndex = () => {
   };
 
   const loadVouchers = async (fastMode: boolean = true) => {
+    if (isLoadingVouchersRef.current) {
+      console.log("[loadVouchers] Skipped — already in flight");
+      return;
+    }
+    isLoadingVouchersRef.current = true;
     try {
       setLoading(true);
       setIsRefetching(true);
@@ -917,15 +922,13 @@ const EsteiraIndex = () => {
       await syncFromRM();
 
       // Load from MariaDB t_vouchers AND ALL pending RM vouchers in parallel (no limits)
-      const [esteiraResult, rmPendingResult] = await Promise.all([supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "get_vouchers_esteira"
-        }
-      }), supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "get_vouchers_pendentes_rm"
-        }
-      })]);
+      // Sequential calls to reduce concurrent DB connections (max_user_connections = 30)
+      const esteiraResult = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "get_vouchers_esteira" }
+      });
+      const rmPendingResult = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "get_vouchers_pendentes_rm" }
+      });
       if (esteiraResult.error) throw esteiraResult.error;
 
       // Map vouchers from esteira
@@ -1101,6 +1104,7 @@ const EsteiraIndex = () => {
         variant: "destructive"
       });
     } finally {
+      isLoadingVouchersRef.current = false;
       setLoading(false);
       setIsRefetching(false);
       setLastUpdateTime(new Date());
@@ -1233,6 +1237,7 @@ const EsteiraIndex = () => {
   // Map de masterId → SPOs dos filhos para busca expandida (lazy, via backend search)
   const [masterChildSPOsMap, setMasterChildSPOsMap] = useState<Map<string, string[]>>(new Map());
   const searchDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLoadingVouchersRef = useRef(false);
   
   // Lazy search: only fetch matching master IDs when user types a search term
   useEffect(() => {
