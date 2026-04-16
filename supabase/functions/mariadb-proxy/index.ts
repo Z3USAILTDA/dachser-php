@@ -14106,6 +14106,28 @@ Deno.serve(async (req) => {
       }
 
 
+      // ==================== SEARCH MASTERS BY CHILD SPO ====================
+      case 'search_masters_by_child_spo': {
+        const { spo_prefix } = body as { spo_prefix: string };
+        console.log('[search_masters_by_child_spo] prefix:', spo_prefix);
+        
+        if (!spo_prefix || spo_prefix.length < 2) {
+          result = { success: true, data: [] };
+          break;
+        }
+        
+        const searchResults = await client.query(`
+          SELECT DISTINCT voucher_master_id, numero_spo
+          FROM dados_dachser.t_vouchers
+          WHERE voucher_master_id IS NOT NULL
+            AND numero_spo LIKE ? COLLATE utf8mb4_unicode_ci
+          LIMIT 50
+        `, [`${spo_prefix}%`]);
+        
+        result = { success: true, data: searchResults || [] };
+        break;
+      }
+
       // ==================== SYNC VOUCHERS BAIXADOS ====================
       case 'sync_vouchers_baixados': {
         // Mark vouchers as BAIXADO if they exist in tbaixas
