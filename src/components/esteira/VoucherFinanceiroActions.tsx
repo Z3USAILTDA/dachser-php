@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, XCircle, AlertTriangle, Loader2, FileWarning } from "lucide-react";
 import { ProntidaoChecklist } from "./ProntidaoChecklist";
+import { buildAjusteWithRequester } from "@/utils/voucherAjusteRouting";
 
 interface VoucherFinanceiroActionsProps {
   voucher: Voucher;
