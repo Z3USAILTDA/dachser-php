@@ -392,6 +392,25 @@ export const CreateVoucherDialog = ({
 
       // Boleto é opcional - removida obrigatoriedade
 
+      // Tipo de Documento e Forma de Pagamento são obrigatórios
+      if (!values.tipoDocumento?.trim()) {
+        toast({
+          title: "Erro de validação",
+          description: "Tipo de Documento é obrigatório",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!values.formaPagamento?.trim()) {
+        toast({
+          title: "Erro de validação",
+          description: "Forma de Pagamento é obrigatória",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Origem do Processo é obrigatória
       if (!origemProcesso) {
         toast({
@@ -1454,8 +1473,7 @@ export const CreateVoucherDialog = ({
                 disabled={isSubmitting} 
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={() => {
-                  const values = form.getValues();
-                  handleSubmitVoucher(values, false);
+                   form.handleSubmit((values) => handleSubmitVoucher(values, false))();
                 }}
               >
                 {isSubmitting ? "Enviando..." : "Enviar Voucher/SPO"}
