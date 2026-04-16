@@ -527,7 +527,14 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
                         className="cursor-pointer hover:bg-muted/20"
                         onDoubleClick={() => navigate(`/fin/esteira/voucher/${filho.id}`)}
                       >
-                        <TableCell className="font-mono font-medium">{filho.numero_spo || filho.numeroSPO}</TableCell>
+                        <TableCell className="font-mono font-medium">
+                          {filho.numero_spo || filho.numeroSPO}
+                          {filho.qtd_duplicados > 1 && (
+                            <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 border-amber-500/30 text-amber-400">
+                              ×{filho.qtd_duplicados}
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="max-w-[200px] truncate">{filho.fornecedor}</TableCell>
                         <TableCell>
                           {filho.valor ? `${filho.moeda || 'BRL'} ${Number(filho.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
