@@ -1,33 +1,28 @@
 
 
-## Plano: Reduzir pressão de conexões no MariaDB (sem alterar limite do servidor)
+## Plano: Mover Tipo de Documento e Forma de Pagamento para Campos Adicionais
 
 ### Contexto
-O `max_user_connections = 30` não pode ser alterado. A solução é puramente no código: impedir chamadas duplicadas e reduzir concorrência.
+Atualmente, "Tipo de Documento" está na seção principal de informações (junto com dados do RM) e é preenchido automaticamente pela busca RM (`form.setValue("tipoDocumento", rmData.tipoDocumento)`). "Forma de Pagamento" já está na seção "Campos Adicionais" mas também é preenchida pelo RM (`form.setValue("formaPagamento", rmData.formaPagamento)`).
+
+O pedido é que ambos os campos sejam tratados como campos adicionais manuais, sem usar dados do banco.
 
 ### Alterações
 
-**1. Guard de concorrência em `loadVouchers` — `src/pages/esteira/EsteiraIndex.tsx`**
-- Adicionar `useRef<boolean>` (`isLoadingRef`) para evitar chamadas simultâneas
-- No início de `loadVouchers`, se `isLoadingRef.current === true`, retornar imediatamente
-- Setar `true` no início, `false` no finally
-- No modo LEGACY (refresh manual), trocar `Promise.all` por chamadas sequenciais (2 conexões simultâneas → 1 por vez)
+**Arquivo: `src/components/esteira/CreateVoucherDialog.tsx`**
 
-**2. Guard de in-flight no batch fetch — `src/components/esteira/VoucherTable.tsx`**
-- Adicionar `useRef<boolean>` para evitar que o `useEffect` (L156-184) dispare requests duplicados durante re-renders do React StrictMode
-- Se já estiver em flight, retornar imediatamente
+1. **Remover auto-fill do RM** (L241-242):
+   - Remover `form.setValue("formaPagamento", rmData.formaPagamento)` 
+   - Remover `form.setValue("tipoDocumento", rmData.tipoDocumento || "")`
+   - Os campos manterão seus valores padrão (BOLETO e vazio)
 
-**3. Sequencializar chamadas no modo legacy**
-- Em `loadVouchers`, o modo legacy (L920-928) faz `Promise.all` com 2 chamadas simultâneas. Trocar por `await` sequencial para reduzir pico.
+2. **Mover "Tipo de Documento"** da seção principal (L1109-1138) para a seção "Campos Adicionais (não do RM)" (L1159+):
+   - Remover o campo da grid de Row 2 (onde está junto com Valor/Moeda)
+   - Colocar na grid de 3 colunas dos Campos Adicionais, junto com Filial, Cobrança em Nome De e Forma de Pagamento
+   - A grid passará de 3 para 4 colunas (ou 2 rows de 2)
 
-### Arquivos alterados
-| Arquivo | Mudança |
-|---|---|
-| `src/pages/esteira/EsteiraIndex.tsx` | Ref guard + sequencializar legacy mode |
-| `src/components/esteira/VoucherTable.tsx` | Ref guard no batch fetch |
-
-### Resultado esperado
-- Cada carregamento da esteira gera no máximo 1 conexão por vez (em vez de 2+ simultâneas)
-- Re-renders e StrictMode não duplicam chamadas
-- Redução de ~50% no pico de conexões concorrentes
+### Resultado
+- Os dois campos ficam explicitamente na seção "Campos Adicionais (não do RM)"
+- O operador sempre preenche manualmente, mesmo quando busca pelo RM
+- Valores padrão mantidos: Forma de Pagamento = BOLETO, Tipo de Documento = vazio (obrigatório selecionar)
 
