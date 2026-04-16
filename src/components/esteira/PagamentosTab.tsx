@@ -53,6 +53,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { DadosPagamentoPanel } from "./DadosPagamentoPanel";
+import { ExtraAnexoUpload } from "./ExtraAnexoUpload";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -1164,12 +1165,29 @@ export const PagamentosTab = () => {
 
               {/* Documentos Anexados */}
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Paperclip className="h-4 w-4 text-primary" />
-                  <span>Documentos Anexados</span>
-                  {!loadingAnexos && (
-                    <Badge variant="secondary" className="text-[10px]">{anexosDialog.length}</Badge>
-                  )}
+                <div className="flex items-center justify-between gap-2 text-sm font-medium">
+                  <div className="flex items-center gap-2">
+                    <Paperclip className="h-4 w-4 text-primary" />
+                    <span>Documentos Anexados</span>
+                    {!loadingAnexos && (
+                      <Badge variant="secondary" className="text-[10px]">{anexosDialog.length}</Badge>
+                    )}
+                  </div>
+                  <ExtraAnexoUpload
+                    voucherId={selectedPagamento.id}
+                    etapaAtual={selectedPagamento.etapa_atual || "FINANCEIRO"}
+                    compact
+                    onUploaded={async () => {
+                      try {
+                        const { data } = await supabase.functions.invoke("mariadb-proxy", {
+                          body: { action: "get_voucher_anexos", voucher_id: selectedPagamento.id },
+                        });
+                        setAnexosDialog(data?.data || []);
+                      } catch (e) {
+                        console.error("Erro ao recarregar anexos:", e);
+                      }
+                    }}
+                  />
                 </div>
 
                 <div className="rounded-lg bg-card border border-border p-4">
