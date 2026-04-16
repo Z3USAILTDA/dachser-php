@@ -1104,6 +1104,7 @@ const EsteiraIndex = () => {
         variant: "destructive"
       });
     } finally {
+      isLoadingVouchersRef.current = false;
       setLoading(false);
       setIsRefetching(false);
       setLastUpdateTime(new Date());
