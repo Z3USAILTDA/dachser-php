@@ -176,7 +176,7 @@ export const CreateVoucherDialog = ({
       valor: "",
       moeda: "BRL",
       cobrancaEmNomeDe: "DACHSER",
-      formaPagamento: "BOLETO",
+      formaPagamento: "",
       tipoDocumento: "",
       filial: "",
       urgente: false,
@@ -1140,7 +1140,7 @@ export const CreateVoucherDialog = ({
                       </FormLabel>
                       <Select 
                         onValueChange={field.onChange} 
-                        defaultValue={field.value}
+                        value={field.value || undefined}
                       >
                         <FormControl>
                           <SelectTrigger className="bg-background/50 border-border">
@@ -1208,10 +1208,10 @@ export const CreateVoucherDialog = ({
                       <FormLabel className="text-sm">
                         Forma de Pagamento <span className="text-destructive">*</span>
                       </FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value || undefined}>
                         <FormControl>
                           <SelectTrigger className="bg-background/50 border-border">
-                            <SelectValue />
+                            <SelectValue placeholder="Selecione..." />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
