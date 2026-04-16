@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
-import { parseRequesterFromAjuste } from "@/utils/voucherAjusteRouting";
+import { parseRequesterFromAjuste, stripRequesterMarker } from "@/utils/voucherAjusteRouting";
 import { Voucher, TipoAnexo } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
