@@ -8,6 +8,7 @@ import { FileText, AlertCircle, Building2, User, Clock, Trash2, Loader2, Externa
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { FilePreview } from "./FilePreview";
+import { ExtraAnexoUpload } from "./ExtraAnexoUpload";
 import { ProcessoOrigemCard } from "./ProcessoOrigemCard";
 import { AccrualMatchBadge } from "./AccrualMatchBadge";
 import { StatusComprovanteBadge } from "./StatusComprovanteBadge";
@@ -419,11 +420,20 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
       >
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-[#f5f5f5]">Anexos</CardTitle>
-          {canEditAttachments && (
-            <Badge variant="outline" className="text-warning border-warning">
-              Modo Edição
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {["FISCAL", "SUPERVISOR", "FINANCEIRO", "AJUSTE_FISCAL"].includes(voucher.etapaAtual) && (
+              <ExtraAnexoUpload
+                voucherId={voucher.id}
+                etapaAtual={voucher.etapaAtual}
+                onUploaded={onUpdate}
+              />
+            )}
+            {canEditAttachments && (
+              <Badge variant="outline" className="text-warning border-warning">
+                Modo Edição
+              </Badge>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {(!voucher.anexos || voucher.anexos.length === 0) ? (
