@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
+import { parseRequesterFromAjuste, stripRequesterMarker } from "@/utils/voucherAjusteRouting";
 import { Voucher, VoucherFilho } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -124,12 +125,18 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
       setLoading(true);
       const userData = getUserData();
 
+      // Se este voucher veio de AJUSTE_FISCAL com marcador de etapa solicitante,
+      // ele deve voltar diretamente à etapa que pediu o ajuste (ex.: FINANCEIRO).
+      const isAjusteFiscal = voucher.etapaAtual === "AJUSTE_FISCAL";
+      const requester = isAjusteFiscal ? parseRequesterFromAjuste(voucher.ajusteFiscal) : null;
+      const proximaEtapa: "FINANCEIRO" | "SUPERVISOR" = requester === "SUPERVISOR" ? "SUPERVISOR" : "FINANCEIRO";
+
       // Update voucher in MariaDB
       const { error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "update_voucher_esteira",
           voucher_id: voucher.id,
-          etapa_atual: "FINANCEIRO",
+          etapa_atual: proximaEtapa,
           comentarios_fiscal: comentarios || null,
           responsavel_fiscal_user_id: userData.id?.toString(),
         },
@@ -138,6 +145,9 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
       if (error) throw error;
 
       // Log the action
+      const detalheLog = isAjusteFiscal && requester
+        ? `Voucher/SPO ajustado pelo Fiscal e retornado diretamente para ${proximaEtapa} (etapa solicitante)`
+        : `Voucher/SPO aprovado pelo Fiscal e enviado para ${proximaEtapa}`;
       await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "save_voucher_log",
@@ -145,7 +155,7 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
           user_id: userData.id?.toString(),
           user_name: userData.username,
           acao: "APROVADO_FISCAL",
-          detalhe: "Voucher/SPO aprovado pelo Fiscal e enviado para Financeiro",
+          detalhe: detalheLog,
         },
       });
 

@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, XCircle, AlertTriangle, Loader2, FileWarning } from "lucide-react";
 import { ProntidaoChecklist } from "./ProntidaoChecklist";
+import { buildAjusteWithRequester } from "@/utils/voucherAjusteRouting";
 
 interface VoucherFinanceiroActionsProps {
   voucher: Voucher;
@@ -162,7 +163,7 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
           action: "update_voucher_esteira",
           voucher_id: voucher.id,
           etapa_atual: "AJUSTE_OPERACAO",
-          ajuste_operacao: motivoAjusteOperacao,
+          ajuste_operacao: buildAjusteWithRequester("FINANCEIRO", motivoAjusteOperacao),
           comentarios_financeiro: comentarios || null,
           responsavel_financeiro_user_id: userData.id?.toString(),
         },
@@ -227,7 +228,7 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
           action: "update_voucher_esteira",
           voucher_id: voucher.id,
           etapa_atual: "AJUSTE_FISCAL",
-          ajuste_fiscal: motivoAjusteFiscal,
+          ajuste_fiscal: buildAjusteWithRequester("FINANCEIRO", motivoAjusteFiscal),
           comentarios_financeiro: comentarios || null,
           responsavel_financeiro_user_id: userData.id?.toString(),
         },

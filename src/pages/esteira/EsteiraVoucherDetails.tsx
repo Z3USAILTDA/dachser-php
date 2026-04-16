@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Voucher, STATUS_INTEGRACAO_RM_LABELS, StatusIntegracaoRM } from "@/types/voucher";
+import { stripRequesterMarker } from "@/utils/voucherAjusteRouting";
 import { Loader2, Receipt, AlertCircle, Clock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -397,14 +398,14 @@ const EsteiraVoucherDetails = () => {
             {voucher.ajusteOperacao && voucher.etapaAtual === "AJUSTE_OPERACAO" && (
               <Card className="p-4 bg-orange-500/10 border-orange-500/30">
                 <h4 className="font-semibold text-orange-500 mb-2">Ajuste Solicitado</h4>
-                <p className="text-foreground">{voucher.ajusteOperacao}</p>
+                <p className="text-foreground">{stripRequesterMarker(voucher.ajusteOperacao)}</p>
               </Card>
             )}
 
             {voucher.ajusteFiscal && voucher.etapaAtual === "AJUSTE_FISCAL" && (
               <Card className="p-4 bg-red-500/10 border-red-500/30">
                 <h4 className="font-semibold text-red-500 mb-2">Ajuste Fiscal Solicitado</h4>
-                <p className="text-foreground">{voucher.ajusteFiscal}</p>
+                <p className="text-foreground">{stripRequesterMarker(voucher.ajusteFiscal)}</p>
               </Card>
             )}
           </TabsContent>
