@@ -450,6 +450,11 @@ Deno.serve(async (req) => {
       } catch (connError) {
         lastError = connError as Error;
         console.warn(`Connection attempt ${attempt}/${maxRetries} failed: ${lastError.message}`);
+        // Fail-fast on max_user_connections — retrying only worsens saturation
+        if (lastError.message.includes('max_user_connections')) {
+          console.warn('max_user_connections reached — skipping retries to reduce pressure');
+          break;
+        }
         if (attempt < maxRetries) {
           await sleep(500 * attempt);
         }

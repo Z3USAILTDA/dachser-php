@@ -352,7 +352,7 @@ export const CreateVoucherDialog = ({
     }
   };
 
-  const handleSubmitVoucher = async (values: FormValues, isDraft: boolean = false) => {
+  const handleSubmitVoucher = async (values: FormValues, isDraft: boolean = false, retryAttempt: number = 0) => {
     // Skip validations for draft
     if (!isDraft) {
       // Validation
@@ -503,6 +503,19 @@ export const CreateVoucherDialog = ({
           status_documento_fiscal: voucherData.status_documento_fiscal,
         },
       });
+
+      // Check for retryable transient errors (max_user_connections)
+      const isRetryable = mariaResult?.retryable === true || 
+        (mariaError?.message || "").includes("temporariamente");
+      
+      if ((mariaError || mariaResult?.error) && isRetryable && retryAttempt < 2) {
+        toast({
+          title: "Conexão ocupada",
+          description: "Tentando novamente em alguns segundos...",
+        });
+        await new Promise(resolve => setTimeout(resolve, 2500));
+        return handleSubmitVoucher(values, isDraft, retryAttempt + 1);
+      }
 
       if (mariaError) {
         // Check if it's a duplicate error (status 409)
