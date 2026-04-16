@@ -238,8 +238,7 @@ export const CreateVoucherDialog = ({
       // Fill form with RM data from t_dados_financeiro_voucher
       form.setValue("fornecedor", rmData.fornecedor || "");
       form.setValue("filial", rmData.filial || "");
-      form.setValue("formaPagamento", rmData.formaPagamento);
-      form.setValue("tipoDocumento", rmData.tipoDocumento || "");
+      // tipoDocumento e formaPagamento são campos adicionais manuais - não preencher do RM
       form.setValue("moeda", rmData.moeda || "BRL");
       form.setValue("processoId", rmData.numeroProcesso || "");
       
