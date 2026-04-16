@@ -6395,6 +6395,7 @@ Deno.serve(async (req) => {
              GROUP BY nd
            ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
            ${whereClause} 
+           GROUP BY v.id
            ORDER BY v.created_at DESC
          `, params);
         
@@ -8768,7 +8769,7 @@ Deno.serve(async (req) => {
           INSERT INTO dados_dachser.t_dados_rm 
           (id_rm, nd, nf_disputa, voucher_boleto, chave_pix, pix_tipo_chave, forma_pag, fornecedor, regras_forma_pag, tipo_exec)
           VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
-        `, [finalIdRm, numeroSpoRm || null, voucherBoleto || null, chavePix || null, pixTipoChave || null, formaPag || null, fornecedorRm || null, regrasFormaPagFinal, tipoExec || null]);
+        `, [finalIdRm, numeroSpoRm || null, voucherBoleto || null, chavePix || null, pixTipoChave || null, formaPag || null, fornecedorRm || null, regrasFormaPagFinal, tipoExec || 'A_DEFINIR']);
 
         console.log('Inserted into t_dados_rm successfully');
         result = { success: true };
@@ -9109,6 +9110,8 @@ Deno.serve(async (req) => {
           // Support "REMESSA" as a combined filter for both REMESSA_10H and REMESSA_15H
           if (filterTipoExecucao === 'REMESSA') {
             conditions.push("v.tipo_execucao_pagamento IN ('REMESSA_10H', 'REMESSA_15H')");
+          } else if (filterTipoExecucao === 'A_DEFINIR') {
+            conditions.push("(v.tipo_execucao_pagamento IS NULL OR v.tipo_execucao_pagamento = '' OR v.tipo_execucao_pagamento = 'A_DEFINIR')");
           } else {
             conditions.push("v.tipo_execucao_pagamento = ?");
             params.push(filterTipoExecucao);
@@ -9176,6 +9179,7 @@ Deno.serve(async (req) => {
           FROM dados_dachser.t_vouchers v
            LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
           ${whereClause}
+          GROUP BY v.id
           ORDER BY v.vencimento ASC, v.created_at DESC
           LIMIT ? OFFSET ?`,
           [...params, perPage, offset]
@@ -9245,7 +9249,7 @@ Deno.serve(async (req) => {
           'MANUAL': 'MANUAL',
           'REMESSA_10H': 'REMESSA',
           'REMESSA_15H': 'REMESSA',
-          'A_DEFINIR': 'MANUAL',
+          'A_DEFINIR': 'A_DEFINIR',
         };
         const dbTipoExec = tipoExecMap[tipo_execucao_pagamento] || 'MANUAL';
 
