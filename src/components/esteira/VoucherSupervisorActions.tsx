@@ -115,9 +115,9 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
         body: {
           action: "update_voucher_esteira",
           voucher_id: voucher.id,
-          etapa_atual: "OPERACAO",
+          etapa_atual: "AJUSTE_OPERACAO",
           status_financeiro: "REJEITADO",
-          ajuste_operacao: `REJEITADO PELO SUPERVISOR: ${comentarios}`,
+          ajuste_operacao: buildAjusteWithRequester("SUPERVISOR", `REJEITADO PELO SUPERVISOR: ${comentarios}`),
           responsavel_supervisor_user_id: userData.id?.toString(),
         },
       });
