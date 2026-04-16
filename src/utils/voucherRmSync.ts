@@ -20,7 +20,7 @@ export const insertDadosRmOnFinanceiro = async (voucher: Voucher): Promise<void>
         forma_pag: voucher.formaPagamento,
         fornecedor: voucher.fornecedor,
         cnpj_fornecedor: voucher.cnpjFornecedor || null,
-        tipo_exec: voucher.tipoExecucaoPagamento || null,
+        tipo_exec: voucher.tipoExecucaoPagamento || "A_DEFINIR",
       },
     });
 

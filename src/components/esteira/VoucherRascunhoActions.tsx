@@ -188,6 +188,20 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
       setLoading(true);
       const userData = getUserData();
 
+      // Validação de campos obrigatórios
+      const camposFaltantes: string[] = [];
+      if (!voucher.tipoDocumento) camposFaltantes.push("Tipo de Documento");
+      if (!voucher.formaPagamento) camposFaltantes.push("Forma de Pagamento");
+      if (!voucher.vencimento) camposFaltantes.push("Vencimento");
+      if (camposFaltantes.length > 0) {
+        toast({
+          title: "Campos obrigatórios não preenchidos",
+          description: `Preencha: ${camposFaltantes.join(", ")}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Se vencimento foi alterado, atualizar antes de mudar etapa
       const originalVenc = initialVencimento?.getTime();
       const newVenc = vencimentoEnvio?.getTime();

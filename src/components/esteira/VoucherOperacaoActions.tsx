@@ -249,6 +249,20 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         return;
       }
 
+      // Validação de campos obrigatórios
+      const camposFaltantes: string[] = [];
+      if (!voucher.tipoDocumento) camposFaltantes.push("Tipo de Documento");
+      if (!voucher.formaPagamento) camposFaltantes.push("Forma de Pagamento");
+      if (!voucher.vencimento) camposFaltantes.push("Vencimento");
+      if (camposFaltantes.length > 0) {
+        toast({
+          title: "Campos obrigatórios não preenchidos",
+          description: `Preencha: ${camposFaltantes.join(", ")}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Verificar anexos obrigatórios (não se aplica a masters)
       if (!isMaster) {
         const hasFatura = voucher.anexos.some(a => a.tipo === "FATURA_DEMONSTRATIVO" || a.tipo === "FATURA");

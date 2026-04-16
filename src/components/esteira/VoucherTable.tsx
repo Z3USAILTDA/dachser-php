@@ -531,6 +531,17 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                                 </TooltipContent>
                               </Tooltip>
                             )}
+                            {/* Badge Urgente */}
+                            {voucher.urgenciaTipo === "URGENTE_REAL" && (
+                              <Badge className="bg-red-500/15 text-red-400 border-red-500/30 text-[10px] gap-1">
+                                ⚡ Urgente
+                              </Badge>
+                            )}
+                            {voucher.urgenciaTipo === "URGENTE_AUTOMATICO" && (
+                              <Badge className="bg-orange-500/15 text-orange-400 border-orange-500/30 text-[10px] gap-1">
+                                ⚡ Auto
+                              </Badge>
+                            )}
                           </div>
                           {(voucher.isMaster || voucher.origemCriacao === "MASTER") && (() => {
                             const children = masterChildrenMap.get(voucher.id);
@@ -927,6 +938,8 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       fileName={anexo.file_name} 
                       fileType={anexo.tipo || "Documento"}
                       onDownload={() => window.open(anexo.file_url, "_blank")}
+                      allFiles={docPreviewAnexos.map((a: any) => ({ fileName: a.file_name, fileUrl: a.file_url, fileType: a.tipo || "Documento" }))}
+                      initialIndex={docPreviewAnexos.findIndex((a: any) => a.id === anexo.id)}
                     />
                   )}
                 </div>

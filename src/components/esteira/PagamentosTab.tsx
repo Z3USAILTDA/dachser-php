@@ -985,6 +985,11 @@ export const PagamentosTab = () => {
                           ⚡ Urgente
                         </Badge>
                       )}
+                      {pag.urgencia_tipo === "URGENTE_AUTOMATICO" && (
+                        <Badge className="ml-2 text-[9px] px-1.5 bg-orange-500/15 text-orange-400 border border-orange-500/30">
+                          ⚡ Auto
+                        </Badge>
+                      )}
                       {isBoleto(pag.forma_pagamento as any) && !pag.linha_digitavel && !pag.has_boleto_anexo && (
                         <Badge variant="warning" className="ml-2 text-[9px]">
                           Boleto não anexado
@@ -1207,6 +1212,8 @@ export const PagamentosTab = () => {
                                     link.click();
                                     document.body.removeChild(link);
                                   }}
+                                  allFiles={anexosDialog.filter((a: any) => a.file_url).map((a: any) => ({ fileName: a.file_name || "arquivo", fileUrl: a.file_url, fileType: a.tipo || "OUTROS" }))}
+                                  initialIndex={anexosDialog.filter((a: any) => a.file_url).findIndex((a: any) => a.id === anexo.id)}
                                 />
                               )}
                             </div>

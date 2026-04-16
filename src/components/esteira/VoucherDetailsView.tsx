@@ -459,6 +459,8 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
                       fileUrl={anexo.fileUrl}
                       fileType={anexo.tipo}
                       onDownload={() => handleDownload(anexo.fileUrl, anexo.fileName)}
+                      allFiles={voucher.anexos.map(a => ({ fileName: a.fileName, fileUrl: a.fileUrl, fileType: a.tipo }))}
+                      initialIndex={voucher.anexos.findIndex(a => a.id === anexo.id)}
                     />
                     {canEditAttachments && ['OPERACAO', 'RASCUNHO', 'AJUSTE_OPERACAO'].includes(voucher.etapaAtual) && (
                       <Button
