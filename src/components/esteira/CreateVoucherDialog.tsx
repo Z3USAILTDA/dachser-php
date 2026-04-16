@@ -1105,36 +1105,6 @@ export const CreateVoucherDialog = ({
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="tipoDocumento"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-1.5 text-sm">
-                          Tipo de Documento <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <Select 
-                          onValueChange={field.onChange} 
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="bg-background/50 border-border">
-                              <SelectValue placeholder="Selecione o tipo..." />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="VOUCHER">Voucher</SelectItem>
-                            <SelectItem value="SPO">SPO</SelectItem>
-                            <SelectItem value="ICMS">ICMS</SelectItem>
-                            <SelectItem value="ARMAZENAGEM">Armazenagem</SelectItem>
-                            <SelectItem value="ADF">ADF</SelectItem>
-                            <SelectItem value="OUTROS">Outros</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
                 </div>
 
                 {/* Row 3: Data Vencimento, Data Emissão */}
@@ -1159,7 +1129,37 @@ export const CreateVoucherDialog = ({
             <div className="space-y-4">
               <Label className="text-sm text-muted-foreground">Campos Adicionais (não do RM)</Label>
               
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
+                <FormField
+                  control={form.control}
+                  name="tipoDocumento"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1.5 text-sm">
+                        Tipo de Documento <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <Select 
+                        onValueChange={field.onChange} 
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="bg-background/50 border-border">
+                            <SelectValue placeholder="Selecione o tipo..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="VOUCHER">Voucher</SelectItem>
+                          <SelectItem value="SPO">SPO</SelectItem>
+                          <SelectItem value="ICMS">ICMS</SelectItem>
+                          <SelectItem value="ARMAZENAGEM">Armazenagem</SelectItem>
+                          <SelectItem value="ADF">ADF</SelectItem>
+                          <SelectItem value="OUTROS">Outros</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="filial"
