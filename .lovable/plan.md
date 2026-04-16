@@ -1,42 +1,40 @@
 
 
-## Plano: Reduzir pressão de conexões MariaDB — fail-fast + retry frontend
+## Plano: Validação matemática de código de barras + retry + aumento de tokens
 
-### Realidade técnica
-
-Edge Functions são **serverless** — cada invocação cria uma conexão, usa, e fecha. Não existe conexão "aberta há 10 minutos" que possa ser encerrada. O problema real é que **muitas invocações simultâneas** (crons + operador) abrem conexões ao mesmo tempo e estouram o limite de 30.
-
-A solução efetiva é:
-
-1. **Fail-fast no proxy** — quando o erro é `max_user_connections`, NÃO fazer retry de conexão (que só piora a saturação)
-2. **Retry automático no frontend** — o operador não precisa clicar de novo; o sistema espera 2-3s e tenta sozinho
+### Problema
+O Claude extrai linhas digitáveis com dígitos trocados, duplicados ou faltando. A função aceita qualquer sequência de 47-48 dígitos sem validação matemática.
 
 ### Alterações
 
-**1. `supabase/functions/mariadb-proxy/index.ts` — Fail-fast para saturação**
-- No loop de retry de conexão (L437-457), detectar `max_user_connections` no erro e sair imediatamente sem retry
-- Isso libera a invocação mais rápido, reduzindo pressão no pool
+**Arquivo: `supabase/functions/extract-boleto-barcode/index.ts`**
 
-```
-// Dentro do catch do loop de conexão:
-if (lastError.message.includes('max_user_connections')) {
-  break; // Não fazer retry, sair imediatamente
-}
-```
+1. **Aumentar `max_tokens`** de 2000 para 4000 (margem para a resposta do retry)
 
-**2. `src/components/esteira/CreateVoucherDialog.tsx` — Retry automático no submit**
-- No `handleSubmitVoucher`, ao receber resposta com `retryable: true`, esperar 2.5s e tentar novamente (máximo 2 retries)
-- Mostrar toast "Conexão ocupada, tentando novamente..." durante retry
-- Só mostrar erro final se todos os retries falharem
+2. **Adicionar funções de validação**:
+   - `calcModulo10(digits)` — valida dígitos verificadores dos campos 1, 2 e 3 da linha digitável
+   - `calcModulo11(barcode47)` — valida o dígito verificador geral (posição 33) convertendo linha digitável para código de barras de 44 dígitos
+   - `validateLinhaDigitavel(barcode)` — retorna quais campos passaram/falharam
 
-### Arquivos alterados
-| Arquivo | Mudança |
-|---|---|
-| `supabase/functions/mariadb-proxy/index.ts` | Break imediato no retry quando `max_user_connections` |
-| `src/components/esteira/CreateVoucherDialog.tsx` | Retry automático (2x) com toast informativo |
+3. **Melhorar o prompt** — pedir ao Claude que transcreva tanto a versão **formatada** (com pontos e espaços) quanto a versão limpa, para cross-check entre as duas
+
+4. **Implementar retry com feedback** (máximo 1 retry):
+   - Após extração, validar com módulo 10/11
+   - Se falhar, fazer segunda chamada informando quais campos falharam e pedindo re-leitura cuidadosa
+   - Se ambas falharem, retornar o melhor resultado com flag `validation_warning: true`
+
+5. **Retorno atualizado**:
+   - Adicionar campo `validated: true/false` na resposta
+   - Adicionar `validation_details` com status de cada campo
+
+### Lógica de validação (módulo 10)
+Para cada campo (posições 1-9, 11-20, 22-31): multiplicar dígitos alternadamente por 2 e 1 da direita para esquerda, somar algarismos dos resultados, dígito verificador = (10 - soma%10) % 10.
+
+### Lógica módulo 11 (dígito geral)
+Converter linha digitável de 47 para código de barras de 44 dígitos, multiplicar por pesos 2-9 cíclicos, dígito = 11 - (soma % 11). Se resultado for 0, 1, 10 ou 11, dígito = 1.
 
 ### Resultado
-- Proxy não agrava saturação fazendo retries desnecessários
-- Operador não vê erro na maioria dos casos — sistema retenta sozinho em 2-3s
-- Sem mudança na infraestrutura do MariaDB
+- Erros de OCR são detectados matematicamente
+- Retry automático com contexto aumenta chance de acerto
+- Operador recebe aviso claro quando extração não é confiável
 
