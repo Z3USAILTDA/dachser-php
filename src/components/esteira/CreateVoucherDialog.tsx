@@ -95,7 +95,7 @@ const formSchema = z.object({
   moeda: z.string().default("BRL"),
   vencimento: z.date().optional(),
   dataEmissaoDocumento: z.date().optional(),
-  cobrancaEmNomeDe: z.enum(["DACHSER", "CLIENTE"]),
+  cobrancaEmNomeDe: z.string().min(1, { message: "Cobrança em nome de é obrigatória" }),
   formaPagamento: z.string().min(1, { message: "Forma de pagamento é obrigatória" }),
   tipoDocumento: z.string().min(1, { message: "Tipo de documento é obrigatório" }),
   filial: z.string().optional(),
@@ -175,7 +175,7 @@ export const CreateVoucherDialog = ({
       cnpjFornecedor: "",
       valor: "",
       moeda: "BRL",
-      cobrancaEmNomeDe: "DACHSER",
+      cobrancaEmNomeDe: "",
       formaPagamento: "",
       tipoDocumento: "",
       filial: "",
@@ -237,7 +237,7 @@ export const CreateVoucherDialog = ({
       
       // Fill form with RM data from t_dados_financeiro_voucher
       form.setValue("fornecedor", rmData.fornecedor || "");
-      form.setValue("filial", rmData.filial || "");
+      // filial é campo manual - não preencher do RM
       // tipoDocumento e formaPagamento são campos adicionais manuais - não preencher do RM
       form.setValue("moeda", rmData.moeda || "BRL");
       form.setValue("processoId", rmData.numeroProcesso || "");
@@ -266,10 +266,7 @@ export const CreateVoucherDialog = ({
         form.setValue("dataEmissaoDocumento", new Date(rmData.dataEmissao));
       }
 
-      // Modal → origemProcesso (AIR/SEA/CHB)
-      if (rmData.modal && ["AIR", "SEA", "CHB", "ROD"].includes(rmData.modal)) {
-        setOrigemProcesso(rmData.modal as OrigemProcesso);
-      }
+      // origemProcesso é campo manual - não preencher do RM
 
       // Guardar idRM para usar ao salvar em t_vouchers
       setIdRM(rmData.idRM);
@@ -1198,10 +1195,10 @@ export const CreateVoucherDialog = ({
                       <FormLabel className="text-sm">
                         Cobrança em nome de <span className="text-destructive">*</span>
                       </FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value || undefined}>
                         <FormControl>
                           <SelectTrigger className="bg-background/50 border-border">
-                            <SelectValue />
+                            <SelectValue placeholder="Selecione..." />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
