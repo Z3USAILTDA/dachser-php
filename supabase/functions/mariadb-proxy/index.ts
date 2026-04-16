@@ -16173,13 +16173,16 @@ Deno.serve(async (req) => {
     // Detect transient connection errors and return 503 so frontend can retry
     const isTransient = isTransientMariaDbErrorMessage(errorMessage);
     
-    const statusCode = isTransient ? 503 : 500;
-    const userMessage = isTransient 
+    const isConnectionSaturated = errorMessage.toLowerCase().includes('max_user_connections');
+    const statusCode = isTransient ? 200 : 500;
+    const userMessage = isConnectionSaturated
+      ? 'Servidor temporariamente indisponível. Tente novamente em alguns segundos.'
+      : isTransient
       ? 'Servidor temporariamente indisponível. Tente novamente em alguns segundos.'
       : 'Erro interno do servidor';
     
     return new Response(
-      JSON.stringify({ error: userMessage, details: errorMessage, retryable: isTransient }),
+      JSON.stringify({ success: false, error: userMessage, details: errorMessage, retryable: isTransient, transient: isTransient }),
       { status: statusCode, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } finally {

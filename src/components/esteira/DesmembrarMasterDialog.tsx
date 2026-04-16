@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { VoucherFilho } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -34,10 +34,15 @@ export const DesmembrarMasterDialog = ({
   const [selectAll, setSelectAll] = useState(false);
   const [vouchersFilhos, setVouchersFilhos] = useState<VoucherFilho[]>([]);
   const [loadingFilhos, setLoadingFilhos] = useState(false);
+  const loadedMasterIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (open && masterId) {
+      if (loadedMasterIdRef.current === masterId) return;
+      loadedMasterIdRef.current = masterId;
       loadFilhos();
+    } else if (!open) {
+      loadedMasterIdRef.current = null;
     }
   }, [open, masterId]);
 

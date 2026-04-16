@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
 import { Voucher, VoucherFilho } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
   const [isUpdatingNumero, setIsUpdatingNumero] = useState(false);
   const [vouchersFilhos, setVouchersFilhos] = useState<VoucherFilho[]>([]);
   const [filhosExpanded, setFilhosExpanded] = useState(false);
+  const loadedMasterIdRef = useRef<string | null>(null);
   const { toast } = useToast();
 
   const isMaster = voucher.isMaster || voucher.origemCriacao === "MASTER" || voucher.numeroSPO?.startsWith("MASTER-");
@@ -33,7 +34,12 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
   // Fetch child vouchers if this is a master
   useEffect(() => {
     if (isMaster) {
+      if (loadedMasterIdRef.current === voucher.id) return;
+      loadedMasterIdRef.current = voucher.id;
       loadVouchersFilhos();
+    } else {
+      loadedMasterIdRef.current = null;
+      setVouchersFilhos([]);
     }
   }, [voucher.id, isMaster]);
 
