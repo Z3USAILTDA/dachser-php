@@ -266,6 +266,8 @@ export function ComprovantesTab() {
                   fileUrl={doc.file_url}
                   fileType={doc.tipo_anexo || "OUTROS"}
                   onDownload={() => handleDownload(doc.file_url, doc.file_name)}
+                  allFiles={selectedGroup?.docs.map(d => ({ fileName: d.file_name, fileUrl: d.file_url, fileType: d.tipo_anexo || "OUTROS" })) || []}
+                  initialIndex={selectedGroup?.docs.findIndex(d => d.id === doc.id) || 0}
                 />
               </div>
             ))}
