@@ -352,7 +352,7 @@ export const CreateVoucherDialog = ({
     }
   };
 
-  const handleSubmitVoucher = async (values: FormValues, isDraft: boolean = false) => {
+  const handleSubmitVoucher = async (values: FormValues, isDraft: boolean = false, retryAttempt: number = 0) => {
     // Skip validations for draft
     if (!isDraft) {
       // Validation
