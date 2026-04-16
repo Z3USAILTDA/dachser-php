@@ -11307,9 +11307,11 @@ Deno.serve(async (req) => {
         }
 
         const filhos = await client.query(`
-          SELECT id, numero_spo, fornecedor, valor, moeda, vencimento, etapa_atual
+          SELECT MIN(id) as id, numero_spo, fornecedor, valor, moeda, vencimento, etapa_atual,
+                 COUNT(*) as qtd_duplicados
           FROM dados_dachser.t_vouchers 
           WHERE voucher_master_id = ?
+          GROUP BY numero_spo, fornecedor, valor, moeda, vencimento, etapa_atual
           ORDER BY numero_spo ASC
         `, [master_id]);
 
@@ -14083,9 +14085,11 @@ Deno.serve(async (req) => {
         
         const placeholdersBatch = master_ids.map(() => '?').join(',');
         const filhosBatch = await client.query(`
-          SELECT voucher_master_id, id, numero_spo, fornecedor, valor, moeda, vencimento, etapa_atual
+          SELECT voucher_master_id, MIN(id) as id, numero_spo, fornecedor, valor, moeda, vencimento, etapa_atual,
+                 COUNT(*) as qtd_duplicados
           FROM dados_dachser.t_vouchers 
           WHERE voucher_master_id IN (${placeholdersBatch})
+          GROUP BY voucher_master_id, numero_spo, fornecedor, valor, moeda, vencimento, etapa_atual
           ORDER BY numero_spo ASC
         `, master_ids);
         
