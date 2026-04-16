@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { ArrowLeft, Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, Bot, FileSpreadsheet, Filter, Building2, Users, LayoutDashboard, CheckCircle2, FileWarning, HelpCircle, Receipt, ShieldX, Settings, Search, CreditCard, Layers, FileSearch } from "lucide-react";
@@ -1230,32 +1230,41 @@ const EsteiraIndex = () => {
     // Users without any role: show all (view-only access)
     return vouchers;
   }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro, filters.etapa, filters.search]);
-  // Map de masterId → SPOs dos filhos para busca expandida (carregado via API)
+  // Map de masterId → SPOs dos filhos para busca expandida (lazy, via backend search)
   const [masterChildSPOsMap, setMasterChildSPOsMap] = useState<Map<string, string[]>>(new Map());
+  const searchDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Lazy search: only fetch matching master IDs when user types a search term
   useEffect(() => {
-    const masters = vouchers.filter(v => v.isMaster || v.origemCriacao === "MASTER");
-    if (masters.length === 0) {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    
+    const searchTerm = filters.search?.trim();
+    if (!searchTerm || searchTerm.length < 2) {
       setMasterChildSPOsMap(new Map());
       return;
     }
-    const loadChildSPOs = async () => {
-      const map = new Map<string, string[]>();
-      await Promise.all(masters.map(async (m) => {
-        try {
-          const { data } = await supabase.functions.invoke("mariadb-proxy", {
-            body: { action: "get_voucher_filhos", master_id: m.id },
-          });
-          const childSPOs: string[] = (data?.data || []).map((f: any) => String(f.numero_spo || f.numeroSPO || ""));
-          // Deduplicate
-          map.set(m.id, [...new Set(childSPOs)]);
-        } catch {
-          map.set(m.id, []);
+    
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const { data } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "search_masters_by_child_spo", spo_prefix: searchTerm },
+        });
+        if (data?.data) {
+          const map = new Map<string, string[]>();
+          for (const item of data.data) {
+            const mid = item.voucher_master_id;
+            if (!map.has(mid)) map.set(mid, []);
+            map.get(mid)!.push(item.numero_spo);
+          }
+          setMasterChildSPOsMap(map);
         }
-      }));
-      setMasterChildSPOsMap(map);
-    };
-    loadChildSPOs();
-  }, [vouchers]);
+      } catch {
+        setMasterChildSPOsMap(new Map());
+      }
+    }, 400);
+    
+    return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
+  }, [filters.search]);
 
   const filterVouchers = (vouchersList: Voucher[]) => {
     const now = new Date();

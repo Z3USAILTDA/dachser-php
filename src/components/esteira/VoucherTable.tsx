@@ -152,7 +152,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   const masterChildrenCache = useRef<Map<string, string[]>>(new Map());
   const [masterChildrenMap, setMasterChildrenMap] = useState<Map<string, string[]>>(new Map());
 
-  // Load children SPOs for master vouchers visible on current page
+  // Load children SPOs for master vouchers visible on current page (batch)
   useEffect(() => {
     const loadMasterChildren = async () => {
       const startIdx = (currentPage - 1) * PAGE_SIZE;
@@ -162,14 +162,19 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
       
       if (uncachedMasters.length === 0) return;
       
-      for (const master of uncachedMasters) {
-        try {
-          const { data } = await supabase.functions.invoke("mariadb-proxy", {
-            body: { action: "get_voucher_filhos", master_id: master.id },
-          });
-          const childSPOs = (data?.data || []).map((f: any) => f.numero_spo || f.numeroSPO || "");
+      try {
+        const masterIds = uncachedMasters.map(m => m.id);
+        const { data } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "get_voucher_filhos_batch", master_ids: masterIds },
+        });
+        const grouped = data?.data || {};
+        for (const master of uncachedMasters) {
+          const children = grouped[master.id] || [];
+          const childSPOs = children.map((f: any) => f.numero_spo || f.numeroSPO || "");
           masterChildrenCache.current.set(master.id, childSPOs);
-        } catch {
+        }
+      } catch {
+        for (const master of uncachedMasters) {
           masterChildrenCache.current.set(master.id, []);
         }
       }
