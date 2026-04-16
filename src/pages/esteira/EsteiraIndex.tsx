@@ -921,8 +921,7 @@ const EsteiraIndex = () => {
       // LEGACY MODE: Full sync (used for manual refresh)
       await syncFromRM();
 
-      // Load from MariaDB t_vouchers AND ALL pending RM vouchers in parallel (no limits)
-      // Sequential calls to reduce concurrent DB connections (max_user_connections = 30)
+      // Load from MariaDB t_vouchers and pending RM vouchers sequentially to keep only 1 connection in flight
       const esteiraResult = await supabase.functions.invoke("mariadb-proxy", {
         body: { action: "get_vouchers_esteira" }
       });

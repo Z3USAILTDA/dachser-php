@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Voucher, ETAPA_LABELS, calcularTempoNaEtapa, formatarTempoNaEtapa, SLA_POR_ETAPA } from "@/types/voucher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,12 +38,15 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [vouchersFilhos, setVouchersFilhos] = useState<any[]>([]);
   const [loadingFilhos, setLoadingFilhos] = useState(false);
+  const loadedMasterIdRef = useRef<string | null>(null);
   const tempoNaEtapa = calcularTempoNaEtapa(voucher);
   const slaLimit = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA] || 24;
   const slaExcedido = tempoNaEtapa >= slaLimit;
 
   useEffect(() => {
     if (voucher.isMaster) {
+      if (loadedMasterIdRef.current === voucher.id) return;
+      loadedMasterIdRef.current = voucher.id;
       setLoadingFilhos(true);
       supabase.functions.invoke("mariadb-proxy", {
         body: { action: "get_voucher_filhos", master_id: voucher.id },
@@ -52,6 +55,9 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
       }).catch(() => {
         setVouchersFilhos([]);
       }).finally(() => setLoadingFilhos(false));
+    } else {
+      loadedMasterIdRef.current = null;
+      setVouchersFilhos([]);
     }
   }, [voucher.id, voucher.isMaster]);
 
