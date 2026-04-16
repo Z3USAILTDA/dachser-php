@@ -150,11 +150,14 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   const [docPreviewAnexos, setDocPreviewAnexos] = useState<any[]>([]);
   const [docPreviewLoading, setDocPreviewLoading] = useState(false);
   const masterChildrenCache = useRef<Map<string, string[]>>(new Map());
+  const isFetchingChildrenRef = useRef(false);
   const [masterChildrenMap, setMasterChildrenMap] = useState<Map<string, string[]>>(new Map());
 
   // Load children SPOs for master vouchers visible on current page (batch)
   useEffect(() => {
     const loadMasterChildren = async () => {
+      if (isFetchingChildrenRef.current) return;
+      
       const startIdx = (currentPage - 1) * PAGE_SIZE;
       const visibleVouchers = vouchers.slice(startIdx, startIdx + PAGE_SIZE);
       const masters = visibleVouchers.filter(v => v.isMaster || v.origemCriacao === "MASTER");
@@ -162,6 +165,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
       
       if (uncachedMasters.length === 0) return;
       
+      isFetchingChildrenRef.current = true;
       try {
         const masterIds = uncachedMasters.map(m => m.id);
         const { data } = await supabase.functions.invoke("mariadb-proxy", {
@@ -177,6 +181,8 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
         for (const master of uncachedMasters) {
           masterChildrenCache.current.set(master.id, []);
         }
+      } finally {
+        isFetchingChildrenRef.current = false;
       }
       setMasterChildrenMap(new Map(masterChildrenCache.current));
     };
