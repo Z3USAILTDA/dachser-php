@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
+import { parseRequesterFromAjuste } from "@/utils/voucherAjusteRouting";
 import { Voucher, TipoAnexo } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -292,7 +293,14 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         etapaAtual: voucher.etapaAtual,
       });
 
-      if (isMaster) {
+      // Roteamento direto à etapa solicitante do ajuste, se houver marcador
+      const requester = isAjusteOperacao ? parseRequesterFromAjuste(voucher.ajusteOperacao) : null;
+
+      if (requester === "FINANCEIRO") {
+        proximaEtapa = "FINANCEIRO";
+      } else if (requester === "SUPERVISOR") {
+        proximaEtapa = "SUPERVISOR";
+      } else if (isMaster) {
         proximaEtapa = "FISCAL";
       } else if (voucher.urgenciaTipo === "URGENTE_REAL") {
         proximaEtapa = "SUPERVISOR";
@@ -432,7 +440,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
           <AlertTriangle className="h-4 w-4 text-destructive" />
           <AlertTitle className="text-destructive">Ajuste solicitado pelo Fiscal</AlertTitle>
           <AlertDescription className="mt-2 text-foreground">
-            {voucher.ajusteFiscal}
+            {stripRequesterMarker(voucher.ajusteFiscal)}
           </AlertDescription>
         </Alert>
       )}

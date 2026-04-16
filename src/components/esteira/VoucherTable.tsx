@@ -799,9 +799,9 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                                       body: {
                                         action: "update_voucher_esteira",
                                         voucher_id: voucher.id,
-                                        etapa_atual: "OPERACAO",
+                                        etapa_atual: "AJUSTE_OPERACAO",
                                         status_financeiro: "REJEITADO",
-                                        ajuste_operacao: `REJEITADO PELO SUPERVISOR: ${motivo}`,
+                                        ajuste_operacao: buildAjusteWithRequester("SUPERVISOR", `REJEITADO PELO SUPERVISOR: ${motivo}`),
                                         responsavel_supervisor_user_id: userData.id?.toString(),
                                       },
                                     });

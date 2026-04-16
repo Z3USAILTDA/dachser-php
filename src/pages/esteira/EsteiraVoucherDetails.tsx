@@ -397,14 +397,14 @@ const EsteiraVoucherDetails = () => {
             {voucher.ajusteOperacao && voucher.etapaAtual === "AJUSTE_OPERACAO" && (
               <Card className="p-4 bg-orange-500/10 border-orange-500/30">
                 <h4 className="font-semibold text-orange-500 mb-2">Ajuste Solicitado</h4>
-                <p className="text-foreground">{voucher.ajusteOperacao}</p>
+                <p className="text-foreground">{stripRequesterMarker(voucher.ajusteOperacao)}</p>
               </Card>
             )}
 
             {voucher.ajusteFiscal && voucher.etapaAtual === "AJUSTE_FISCAL" && (
               <Card className="p-4 bg-red-500/10 border-red-500/30">
                 <h4 className="font-semibold text-red-500 mb-2">Ajuste Fiscal Solicitado</h4>
-                <p className="text-foreground">{voucher.ajusteFiscal}</p>
+                <p className="text-foreground">{stripRequesterMarker(voucher.ajusteFiscal)}</p>
               </Card>
             )}
           </TabsContent>
