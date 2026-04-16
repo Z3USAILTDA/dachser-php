@@ -1212,6 +1212,8 @@ export const PagamentosTab = () => {
                                     link.click();
                                     document.body.removeChild(link);
                                   }}
+                                  allFiles={anexosDialog.filter((a: any) => a.file_url).map((a: any) => ({ fileName: a.file_name || "arquivo", fileUrl: a.file_url, fileType: a.tipo || "OUTROS" }))}
+                                  initialIndex={anexosDialog.filter((a: any) => a.file_url).findIndex((a: any) => a.id === anexo.id)}
                                 />
                               )}
                             </div>
