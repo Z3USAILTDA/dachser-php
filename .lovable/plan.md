@@ -1,40 +1,29 @@
 
 
-## Plano: Validação matemática de código de barras + retry + aumento de tokens
+## Plano: Campos Adicionais sempre nulos + validação obrigatória
 
 ### Problema
-O Claude extrai linhas digitáveis com dígitos trocados, duplicados ou faltando. A função aceita qualquer sequência de 47-48 dígitos sem validação matemática.
+1. **cobrancaEmNomeDe** tem default `"DACHSER"` — já vem preenchido sem o operador escolher
+2. **origemProcesso** é preenchido automaticamente do RM (linha 270-272) — deve ser escolha manual
+3. **filial** é preenchido do RM (linha 240) — deve ser manual
+4. Campos obrigatórios devem bloquear envio se vazios
 
-### Alterações
+### Alterações em `src/components/esteira/CreateVoucherDialog.tsx`
 
-**Arquivo: `supabase/functions/extract-boleto-barcode/index.ts`**
+**1. Schema (L98)** — Mudar `cobrancaEmNomeDe` de `z.enum(["DACHSER", "CLIENTE"])` para `z.string().min(1, { message: "Cobrança em nome de é obrigatória" })` para permitir valor vazio inicial e validar
 
-1. **Aumentar `max_tokens`** de 2000 para 4000 (margem para a resposta do retry)
+**2. Default values (L178)** — Mudar `cobrancaEmNomeDe: "DACHSER"` para `cobrancaEmNomeDe: ""`
 
-2. **Adicionar funções de validação**:
-   - `calcModulo10(digits)` — valida dígitos verificadores dos campos 1, 2 e 3 da linha digitável
-   - `calcModulo11(barcode47)` — valida o dígito verificador geral (posição 33) convertendo linha digitável para código de barras de 44 dígitos
-   - `validateLinhaDigitavel(barcode)` — retorna quais campos passaram/falharam
+**3. RM auto-fill (L240)** — Remover `form.setValue("filial", rmData.filial || "")` — filial deve ser manual
 
-3. **Melhorar o prompt** — pedir ao Claude que transcreva tanto a versão **formatada** (com pontos e espaços) quanto a versão limpa, para cross-check entre as duas
+**4. RM auto-fill (L270-272)** — Remover o bloco que seta `origemProcesso` do modal RM — operador deve escolher manualmente
 
-4. **Implementar retry com feedback** (máximo 1 retry):
-   - Após extração, validar com módulo 10/11
-   - Se falhar, fazer segunda chamada informando quais campos falharam e pedindo re-leitura cuidadosa
-   - Se ambas falharem, retornar o melhor resultado com flag `validation_warning: true`
+**5. Select de Cobrança em nome de (L1201)** — Trocar `defaultValue={field.value}` por `value={field.value || undefined}` e adicionar placeholder "Selecione..."
 
-5. **Retorno atualizado**:
-   - Adicionar campo `validated: true/false` na resposta
-   - Adicionar `validation_details` com status de cada campo
-
-### Lógica de validação (módulo 10)
-Para cada campo (posições 1-9, 11-20, 22-31): multiplicar dígitos alternadamente por 2 e 1 da direita para esquerda, somar algarismos dos resultados, dígito verificador = (10 - soma%10) % 10.
-
-### Lógica módulo 11 (dígito geral)
-Converter linha digitável de 47 para código de barras de 44 dígitos, multiplicar por pesos 2-9 cíclicos, dígito = 11 - (soma % 11). Se resultado for 0, 1, 10 ou 11, dígito = 1.
+**6. Validação de origemProcesso** — Já existe (L398-406), mantém como está
 
 ### Resultado
-- Erros de OCR são detectados matematicamente
-- Retry automático com contexto aumenta chance de acerto
-- Operador recebe aviso claro quando extração não é confiável
+- Todos os campos adicionais (Tipo de Documento, Filial, Cobrança em nome de, Forma de Pagamento) começam vazios
+- Origem do Processo não é preenchida automaticamente do RM
+- Validação bloqueia envio se campos obrigatórios estiverem vazios
 
