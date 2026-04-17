@@ -81,6 +81,13 @@ function getEmailContent(data: NotificationRequest) {
       btnColor: "#fff",
       subject: "Urgência Rejeitada",
     },
+    URGENCIA_APROVADA: {
+      title: "Urgência Aprovada pelo Supervisor",
+      titleColor: "#22C55E",
+      btnBg: "#22C55E",
+      btnColor: "#fff",
+      subject: "Urgência Aprovada",
+    },
     VOUCHER_CONCLUIDO: {
       title: "Voucher Concluído com Sucesso",
       titleColor: "#22C55E",
