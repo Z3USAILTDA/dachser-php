@@ -22,6 +22,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 type EsteiraRole = "OPERACAO" | "FISCAL" | "SUPERVISOR" | "FINANCEIRO" | "ADMIN";
@@ -33,6 +40,7 @@ interface MariaDBUser {
   is_admin: number;
   esteira_role: string | null; // Can be comma-separated: "SUPERVISOR,FINANCEIRO"
   esteira_active: number;
+  supervisor_id: number | null;
 }
 
 const AVAILABLE_ROLES: EsteiraRole[] = ["OPERACAO", "FISCAL", "SUPERVISOR", "FINANCEIRO", "ADMIN"];
