@@ -22,6 +22,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 type EsteiraRole = "OPERACAO" | "FISCAL" | "SUPERVISOR" | "FINANCEIRO" | "ADMIN";
@@ -33,6 +40,7 @@ interface MariaDBUser {
   is_admin: number;
   esteira_role: string | null; // Can be comma-separated: "SUPERVISOR,FINANCEIRO"
   esteira_active: number;
+  supervisor_id: number | null;
 }
 
 const AVAILABLE_ROLES: EsteiraRole[] = ["OPERACAO", "FISCAL", "SUPERVISOR", "FINANCEIRO", "ADMIN"];
@@ -168,10 +176,37 @@ const UserManagement = () => {
     }
   };
 
+  const handleSupervisorChange = async (userId: number, supervisorIdRaw: string) => {
+    const supervisor_id = supervisorIdRaw === "none" ? null : Number(supervisorIdRaw);
+    try {
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_user_supervisor",
+          userId,
+          supervisor_id,
+        },
+      });
+
+      if (error) throw error;
+
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, supervisor_id } : u))
+      );
+      toast.success("Supervisor atualizado");
+    } catch (err: any) {
+      console.error("Error updating supervisor:", err);
+      toast.error("Erro ao atualizar supervisor");
+    }
+  };
+
   const filteredUsers = users.filter(
     (user) =>
       user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const supervisorOptions = users.filter((u) =>
+    parseUserRoles(u.esteira_role).includes("SUPERVISOR") && u.esteira_active === 1
   );
 
   const statsTotal = users.length;
@@ -272,6 +307,7 @@ const UserManagement = () => {
                   <TableHead className="text-muted-foreground">Email</TableHead>
                   <TableHead className="text-muted-foreground">Admin Sistema</TableHead>
                   <TableHead className="text-muted-foreground">Funções Esteira</TableHead>
+                  <TableHead className="text-muted-foreground">Supervisor</TableHead>
                   <TableHead className="text-muted-foreground">Status Esteira</TableHead>
                 </TableRow>
               </TableHeader>
@@ -348,6 +384,26 @@ const UserManagement = () => {
                         </Popover>
                       </TableCell>
                       <TableCell>
+                        <Select
+                          value={user.supervisor_id ? String(user.supervisor_id) : "none"}
+                          onValueChange={(v) => handleSupervisorChange(user.id, v)}
+                        >
+                          <SelectTrigger className="w-[200px] bg-background/50 border-border/50">
+                            <SelectValue placeholder="Sem supervisor" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-[300px]">
+                            <SelectItem value="none">Sem supervisor</SelectItem>
+                            {supervisorOptions
+                              .filter((s) => s.id !== user.id)
+                              .map((s) => (
+                                <SelectItem key={s.id} value={String(s.id)}>
+                                  @{s.username}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -376,7 +432,7 @@ const UserManagement = () => {
                 })}
                 {filteredUsers.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                       Nenhum usuário encontrado
                     </TableCell>
                   </TableRow>

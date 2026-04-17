@@ -563,7 +563,8 @@ Deno.serve(async (req) => {
           await client.query(`
             ALTER TABLE ai_agente.t_users_dachser 
             ADD COLUMN IF NOT EXISTS esteira_role VARCHAR(50) NULL,
-            ADD COLUMN IF NOT EXISTS esteira_active TINYINT(1) DEFAULT 1
+            ADD COLUMN IF NOT EXISTS esteira_active TINYINT(1) DEFAULT 1,
+            ADD COLUMN IF NOT EXISTS supervisor_id INT NULL
           `);
         } catch (alterErr) {
           // Columns might already exist or different MySQL version
@@ -573,7 +574,8 @@ Deno.serve(async (req) => {
         const users = await client.query(
           `SELECT id, username, email, is_admin, 
                   COALESCE(esteira_role, NULL) as esteira_role, 
-                  COALESCE(esteira_active, 1) as esteira_active 
+                  COALESCE(esteira_active, 1) as esteira_active,
+                  supervisor_id
            FROM ai_agente.t_users_dachser 
            ORDER BY username ASC`
         );
@@ -616,6 +618,32 @@ Deno.serve(async (req) => {
         );
         
         console.log(`Updated esteira_active for user ${userId} to ${esteira_active}`);
+        result = { success: true };
+        break;
+      }
+
+      case 'update_user_supervisor': {
+        const { userId, supervisor_id } = body as { userId?: number; supervisor_id?: number | null };
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'User ID é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          await client.query(`
+            ALTER TABLE ai_agente.t_users_dachser 
+            ADD COLUMN IF NOT EXISTS supervisor_id INT NULL
+          `);
+        } catch (_e) { /* ignore */ }
+
+        await client.query(
+          `UPDATE ai_agente.t_users_dachser SET supervisor_id = ? WHERE id = ?`,
+          [supervisor_id ?? null, userId]
+        );
+
+        console.log(`Updated supervisor_id for user ${userId} to ${supervisor_id}`);
         result = { success: true };
         break;
       }
