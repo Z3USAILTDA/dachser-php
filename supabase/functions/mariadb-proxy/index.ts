@@ -14095,9 +14095,13 @@ Deno.serve(async (req) => {
           WHERE sync_status = "ATIVO"
             AND (voucher_master_id IS NULL OR voucher_master_id = "")
             AND (etapa_atual != "CONCLUIDO" OR (etapa_atual = "CONCLUIDO" AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)))
+            ${ativosMonthClause}
           ORDER BY v.created_at DESC
-        `);
+        `, ativosParams);
         
+        const pendentesMonthClause = hasMonthFilter ? `AND dfv.data_emissao >= ? AND dfv.data_emissao < ?` : '';
+        const pendentesParams = hasMonthFilter ? [dataEmissaoInicio, dataEmissaoFim] : [];
+
         const combinedPendentes = await client.query(`
           SELECT 
             dfv.id_rm, dfv.nd, dfv.documento, dfv.nome_beneficiario, dfv.nome_cobranca,
@@ -14111,8 +14115,9 @@ Deno.serve(async (req) => {
             AND b.IdLancamentoRM IS NULL
             AND (dfv.nome_beneficiario IS NULL OR LOWER(dfv.nome_beneficiario) NOT LIKE '%dachser%')
             AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')
+            ${pendentesMonthClause}
           ORDER BY dfv.data_vencimento ASC
-        `);
+        `, pendentesParams);
         
         console.log(`[get_vouchers_combined] Found ${combinedAtivos?.length || 0} active + ${combinedPendentes?.length || 0} pending RM`);
         result = { 
