@@ -53,10 +53,6 @@ export const ExtraAnexoUpload = ({
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const { toast } = useToast();
 
-  if (allowedRoles && currentUserRole && !allowedRoles.includes(currentUserRole)) {
-    return null;
-  }
-
   const openPicker = () => {
     if (!uploading) inputRef.current?.click();
   };
@@ -90,6 +86,7 @@ export const ExtraAnexoUpload = ({
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       addFiles(e.dataTransfer.files);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -98,6 +95,10 @@ export const ExtraAnexoUpload = ({
     if (e.type === "dragenter" || e.type === "dragover") setDragActive(true);
     else if (e.type === "dragleave") setDragActive(false);
   }, []);
+
+  if (allowedRoles && currentUserRole && !allowedRoles.includes(currentUserRole)) {
+    return null;
+  }
 
   const removePending = (idx: number) => {
     setPendingFiles((prev) => prev.filter((_, i) => i !== idx));
