@@ -2123,6 +2123,10 @@ const EsteiraIndex = () => {
                   {(quickFilterFornecedor !== "all" || quickFilterCobranca !== "all" || filters.formaPagamento !== "all" || filters.origemCriacao !== "all" || filters.vencimentoFim !== "" || filters.isMaster !== "all" || filters.search !== "" || filters.etapa !== "all" || filters.processo !== "" || filters.fornecedor !== "" || filters.faixaValor !== "all" || filters.slaStatus !== "all" || filters.vencimentoInicio !== "" || filters.urgente !== "all" || filters.statusComprovante !== "all") && <button onClick={() => {
                 setQuickFilterFornecedor("all");
                 setQuickFilterCobranca("all");
+                {
+                  const d = new Date();
+                  setQuickFilterMesEmissao(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+                }
                 setFilters({
                   search: "",
                   etapa: "all",
