@@ -307,6 +307,7 @@ const UserManagement = () => {
                   <TableHead className="text-muted-foreground">Email</TableHead>
                   <TableHead className="text-muted-foreground">Admin Sistema</TableHead>
                   <TableHead className="text-muted-foreground">Funções Esteira</TableHead>
+                  <TableHead className="text-muted-foreground">Supervisor</TableHead>
                   <TableHead className="text-muted-foreground">Status Esteira</TableHead>
                 </TableRow>
               </TableHeader>
