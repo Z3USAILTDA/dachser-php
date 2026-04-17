@@ -886,8 +886,18 @@ const EsteiraIndex = () => {
         // runIncrementalSync();
         
         // Load active vouchers + pending RM in a SINGLE call (saves 1 MariaDB connection)
+        // Month filter is applied at the database level (not in the frontend)
+        const [yEm, mEm] = quickFilterMesEmissao.split('-').map(Number);
+        const inicio = `${yEm}-${String(mEm).padStart(2, '0')}-01`;
+        const fimExclusivo = mEm === 12
+          ? `${yEm + 1}-01-01`
+          : `${yEm}-${String(mEm + 1).padStart(2, '0')}-01`;
         const combinedResult = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "get_vouchers_combined" }
+          body: {
+            action: "get_vouchers_combined",
+            data_emissao_inicio: inicio,
+            data_emissao_fim: fimExclusivo,
+          }
         });
         
         if (combinedResult.error) throw combinedResult.error;
