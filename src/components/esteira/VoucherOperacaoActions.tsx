@@ -576,15 +576,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
           className={`gap-2 ${isMaster ? 'bg-purple-600 hover:bg-purple-700' : 'bg-primary hover:bg-primary/90'}`}
         >
           <Send className="h-4 w-4" />
-          {isMaster
-            ? "Aprovar e Enviar para Fiscal"
-            : isAjusteOperacao 
-              ? "Reenviar para Fiscal" 
-              : voucher.tipoDocumento === "ADF"
-                ? "Enviar para Financeiro"
-                : voucher.cobrancaEmNomeDe === "DACHSER" 
-                  ? "Enviar para Fiscal" 
-                  : "Enviar para Financeiro"}
+          {"Aprovar e Enviar para a Próxima Etapa"}
         </Button>
 
       </div>
