@@ -1,50 +1,84 @@
 
-O usuário está pedindo apenas uma explicação de como ficou a lógica de enriquecimento implementada na última alteração. Não há mudança de código a planejar — é uma pergunta de "explicar o que foi feito".
+## Filtro de mês na Esteira de Vouchers (filtragem no banco)
 
-Vou responder de forma direta, sem plano de implementação.
+### Objetivo
+Adicionar um filtro rápido de **Mês/Ano** baseado em `data_emissao`, aplicado **antes** da consulta retornar dados (no SQL do edge function). Ao abrir a tela, o filtro vem preenchido com o mês atual e a primeira busca já traz só esse mês.
 
----
+### Onde a filtragem acontece (banco, não frontend)
+Edge function `supabase/functions/mariadb-proxy/index.ts`, action `get_vouchers_combined` (a única usada no fastMode pela tela). Vamos aceitar dois novos parâmetros opcionais:
 
-## Como ficou a lógica de enriquecimento de vouchers manuais
+- `data_emissao_inicio` (YYYY-MM-DD)
+- `data_emissao_fim` (YYYY-MM-DD, exclusivo)
 
-A lógica roda dentro da action `sync_vouchers_incremental` do edge function `mariadb-proxy`, logo após o passo de sincronização padrão (passo 4.1 — "Enrichment").
+Aplicação no SQL:
 
-### Quando dispara
-A cada ciclo de sincronização incremental de vouchers (cron de 1 minuto), depois que os dados novos da `t_dados_financeiro_voucher` (DFV) já foram processados.
-
-### O que faz
-Faz um `UPDATE` em `t_vouchers` com `JOIN` na DFV usando o número do voucher como chave:
-
+**Bloco `combinedAtivos`** (vouchers em `t_vouchers` com JOIN em DFV):
 ```sql
-v.numero_spo COLLATE utf8mb4_unicode_ci = dfv.nd COLLATE utf8mb4_unicode_ci
+AND (
+  (dfv.data_emissao >= ? AND dfv.data_emissao < ?)
+  OR
+  (dfv.data_emissao IS NULL
+   AND v.data_emissao_documento >= ? AND v.data_emissao_documento < ?)
+)
+```
+Isso cobre vouchers vindos do RM (têm `dfv.data_emissao`) e manuais (que têm `v.data_emissao_documento` antes do enriquecimento).
+
+**Bloco `combinedPendentes`** (DFV ainda não importados):
+```sql
+AND dfv.data_emissao >= ? AND dfv.data_emissao < ?
 ```
 
-### Quais vouchers são alvo
-Apenas vouchers **manuais ativos**:
-- `id_rm IS NULL OR id_rm = ''` → criado manualmente, ainda sem ID do RM
-- `criado_por_user_id <> 'SISTEMA_SYNC'` → não foi gerado pela sync automática
-- (filtro implícito) ainda não está em `CONCLUIDO` nem `CANCELADO`
+Funciona corretamente para `DATE`, `DATETIME` e `TIMESTAMP`, pois usa intervalo `>= start AND < endExclusive`.
 
-### Quais campos são preenchidos
-Usando `COALESCE` + `NULLIF` para preservar qualquer valor já digitado pelo usuário:
+### Frontend (`src/pages/esteira/EsteiraIndex.tsx`)
 
-| Campo no voucher | Origem na DFV | Regra |
-|---|---|---|
-| `id_rm` | `dfv.id_rm` | só preenche se estiver nulo |
-| `fornecedor` | `dfv.nome_beneficiario` → `dfv.razao_social` | só preenche se estiver vazio/null |
-| `cnpj_fornecedor` | `dfv.cnpj` | só preenche se estiver vazio |
-| `valor` | `dfv.valor_nf` | só preenche se for `0` ou null |
-| `processo_id` | `dfv.numero_processo` | só preenche se estiver vazio |
-| `updated_at` | `NOW()` | sempre atualizado quando há enriquecimento |
+1. Novo state:
+```ts
+const [quickFilterMesEmissao, setQuickFilterMesEmissao] = useState<string>(() => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+});
+```
+Default = mês atual → garante que a primeira busca já abre filtrada.
+
+2. Helper para converter `YYYY-MM` em `{ inicio, fimExclusivo }`:
+```ts
+const monthRange = (ym: string) => {
+  const [y, m] = ym.split('-').map(Number);
+  const inicio = `${y}-${String(m).padStart(2,'0')}-01`;
+  const next = m === 12 ? `${y+1}-01-01` : `${y}-${String(m+1).padStart(2,'0')}-01`;
+  return { inicio, fimExclusivo: next };
+};
+```
+
+3. `loadVouchers` passa o range no body da invoke:
+```ts
+const { inicio, fimExclusivo } = monthRange(quickFilterMesEmissao);
+supabase.functions.invoke("mariadb-proxy", {
+  body: {
+    action: "get_vouchers_combined",
+    data_emissao_inicio: inicio,
+    data_emissao_fim: fimExclusivo,
+  }
+});
+```
+
+4. `useEffect` que dispara `loadVouchers()` quando `quickFilterMesEmissao` muda (re-consulta o banco a cada troca).
+
+5. **UI**: novo seletor na linha de "Filtros Rápidos" (logo após Cobrança), no mesmo padrão visual dos outros (`rounded-full`, ícone `Calendar`):
+   - `<input type="month" value={quickFilterMesEmissao} onChange={...}>` estilizado igual aos demais selects.
+   - Lista também ano/mês anteriores se preferirem `Select` — mas `input type="month"` é o mais simples, estável e nativo.
+
+6. Incluir `quickFilterMesEmissao` no botão "Limpar Filtros" para resetar ao **mês atual** (não vazio — a regra obriga sempre ter um mês selecionado).
 
 ### Garantias
-1. **Manual override tem prioridade absoluta** — qualquer campo já preenchido pelo usuário nunca é sobrescrito (graças ao `COALESCE` + `NULLIF`).
-2. **Idempotente** — rodar várias vezes não causa efeito colateral; vouchers já completos não sofrem alteração.
-3. **Collation explícito** — evita erro de mismatch de collation no JOIN entre as duas tabelas.
-4. **Escopo restrito** — vouchers vindos do RM (`criado_por_user_id = 'SISTEMA_SYNC'`) não são tocados, pois já chegam completos.
+- A primeira renderização já dispara `loadVouchers` com o mês atual (o estado já nasce preenchido).
+- Trocar de mês refaz a query no banco — não há pós-filtro frontend para essa lógica.
+- Paginação, ordenação, demais filtros, layout, detalhes do voucher e tabs permanecem intactos.
+- Vouchers manuais sem DFV ainda aparecem via fallback em `v.data_emissao_documento`.
 
-### Fluxo prático
-1. Usuário cria voucher manual informando só ND + vencimento (campos opcionais em branco).
-2. Quando o financeiro insere essa ND na DFV (RM), o próximo ciclo de sync detecta o match por `numero_spo = nd`.
-3. Os campos faltantes (`fornecedor`, `cnpj`, `valor`, `processo_id`, `id_rm`) são preenchidos automaticamente a partir da DFV.
-4. O `updated_at` é tocado, então a UI reflete o enriquecimento na próxima query.
+### Arquivos alterados
+1. `supabase/functions/mariadb-proxy/index.ts` — action `get_vouchers_combined` recebe e aplica os params de range em ambos os SELECTs.
+2. `src/pages/esteira/EsteiraIndex.tsx` — novo state, helper, UI do filtro, dependência no `useEffect` de carregamento e reset.
+
+Nada além disso será tocado.
