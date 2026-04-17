@@ -50,6 +50,17 @@ interface NotificationRequest {
   anexos?: Array<{ tipo: string; file_name: string; file_url: string }>;
 }
 
+function formatVencimentoBR(value: string | Date | undefined | null): string {
+  if (!value) return "";
+  try {
+    const d = value instanceof Date ? value : new Date(value);
+    if (isNaN(d.getTime())) return String(value);
+    return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  } catch {
+    return String(value);
+  }
+}
+
 function getEmailContent(data: NotificationRequest) {
   const baseUrl = "https://dachser.z3us.app";
   const voucherLink = `${baseUrl}`;
