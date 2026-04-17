@@ -1104,7 +1104,7 @@ const EsteiraIndex = () => {
       });
 
       // Eventos 24h
-      const recentVouchers = allVouchers.filter(v => v.updatedAt >= yesterday);
+      const recentVouchers = allVouchers.filter(v => v.fonteDados !== "RM_PENDENTE" && v.updatedAt >= yesterday);
       setMetrics({
         ativos: ativos.length,
         slaAtencao: slaAtencao.length,
