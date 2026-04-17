@@ -253,6 +253,32 @@ async function getRecipientEmails(roles: string[]): Promise<string[]> {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
+async function getVoucherResponsaveis(voucherId: string): Promise<{
+  creator_email: string | null;
+  creator_username: string | null;
+  fiscal_email: string | null;
+  supervisor_resp_email: string | null;
+  financeiro_email: string | null;
+  creator_supervisor_email: string | null;
+} | null> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ action: "get_voucher_responsaveis_emails", voucher_id: voucherId }),
+    });
+    const data = await res.json();
+    if (data.success) return data;
+  } catch (e) {
+    console.error("Error fetching voucher responsaveis:", e);
+  }
+  return null;
+}
+
 async function generateSupervisorTokens(
   voucherId: string,
 ): Promise<{ approveToken: string; rejectToken: string } | null> {
