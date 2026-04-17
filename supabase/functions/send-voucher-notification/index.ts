@@ -134,6 +134,11 @@ function getEmailContent(data: NotificationRequest) {
           <p style="margin:0;font-size:14px;line-height:1.5">${data.reason || "Não especificado"}</p>
         </div>`;
       break;
+    case "URGENCIA_APROVADA":
+      contentBlock = `
+        <p style="margin:0 0 8px;font-size:14px;line-height:1.6;color:#666">A solicitação de urgência para o voucher <b>${data.voucherNumber}</b> foi <span style="color:#22C55E;font-weight:700">aprovada</span> pelo Supervisor e enviada ao Financeiro.</p>
+        ${data.senderName ? `<p style="margin:0 0 8px;font-size:13px;color:#666">Aprovado por: <b>${data.senderName}</b></p>` : ""}`;
+      break;
     case "VOUCHER_CONCLUIDO":
       contentBlock = `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">O voucher <b>${data.voucherNumber}</b> foi processado e concluído com sucesso.</p>`;
       break;
