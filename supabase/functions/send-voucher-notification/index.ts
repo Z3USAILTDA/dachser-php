@@ -154,7 +154,7 @@ function getEmailContent(data: NotificationRequest) {
       contentBlock = `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">O voucher <b>${data.voucherNumber}</b> foi processado e concluído com sucesso.</p>`;
       break;
     case "VENCIMENTO_PROXIMO":
-      contentBlock = `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">O voucher <b>${data.voucherNumber}</b> está próximo do vencimento${data.vencimento ? ` (<b>${data.vencimento}</b>)` : ""}. Por favor, verifique e tome as ações necessárias.</p>`;
+      contentBlock = `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">O voucher <b>${data.voucherNumber}</b> está próximo do vencimento${data.vencimento ? ` (<b>${formatVencimentoBR(data.vencimento)}</b>)` : ""}. Por favor, verifique e tome as ações necessárias.</p>`;
       break;
   }
 
