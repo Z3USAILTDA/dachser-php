@@ -14048,12 +14048,14 @@ Deno.serve(async (req) => {
         const hasMonthFilter = !!(dataEmissaoInicio && dataEmissaoFim);
         console.log(`[get_vouchers_combined] Fetching active + pending RM vouchers. monthFilter=${hasMonthFilter ? `${dataEmissaoInicio}..${dataEmissaoFim}` : 'none'}`);
 
+        // Etapas ativas SEMPRE aparecem, independente do mês.
+        // Filtro de mês só restringe vouchers fora dessas etapas (ex.: CONCLUIDO, CANCELADO, ROBO, RASCUNHO, AJUSTE_*).
         const ativosMonthClause = hasMonthFilter
           ? `AND (
-              (dfv.data_emissao >= ? AND dfv.data_emissao < ?)
-              OR
-              (dfv.data_emissao IS NULL
-               AND v.data_emissao_documento >= ? AND v.data_emissao_documento < ?)
+              v.etapa_atual IN ('OPERACAO','FISCAL','SUPERVISOR','FINANCEIRO')
+              OR (dfv.data_emissao >= ? AND dfv.data_emissao < ?)
+              OR (dfv.data_emissao IS NULL
+                  AND v.data_emissao_documento >= ? AND v.data_emissao_documento < ?)
             )`
           : '';
         const ativosParams = hasMonthFilter
