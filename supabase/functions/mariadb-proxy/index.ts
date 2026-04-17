@@ -14088,7 +14088,7 @@ Deno.serve(async (req) => {
              ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
           FROM dados_dachser.t_vouchers v
           LEFT JOIN (
-            SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by
+            SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MAX(data_emissao) as data_emissao
             FROM dados_dachser.t_dados_financeiro_voucher
             GROUP BY nd
           ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
