@@ -600,7 +600,12 @@ const EsteiraIndex = () => {
   // Quick filters
   const [quickFilterFornecedor, setQuickFilterFornecedor] = useState<string>("all");
   const [quickFilterCobranca, setQuickFilterCobranca] = useState<string>("all");
-  const [drillDownFilter, setDrillDownFilter] = useState<DrillDownFilter>("all");
+  const [quickFilterMesEmissao, setQuickFilterMesEmissao] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const drillDownFilterInit: DrillDownFilter = "all";
+  const [drillDownFilter, setDrillDownFilter] = useState<DrillDownFilter>(drillDownFilterInit);
   const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
   const [finDbStats, setFinDbStats] = useState<FinDbStats | null>(null);
   const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
@@ -881,8 +886,18 @@ const EsteiraIndex = () => {
         // runIncrementalSync();
         
         // Load active vouchers + pending RM in a SINGLE call (saves 1 MariaDB connection)
+        // Month filter is applied at the database level (not in the frontend)
+        const [yEm, mEm] = quickFilterMesEmissao.split('-').map(Number);
+        const inicio = `${yEm}-${String(mEm).padStart(2, '0')}-01`;
+        const fimExclusivo = mEm === 12
+          ? `${yEm + 1}-01-01`
+          : `${yEm}-${String(mEm + 1).padStart(2, '0')}-01`;
         const combinedResult = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "get_vouchers_combined" }
+          body: {
+            action: "get_vouchers_combined",
+            data_emissao_inicio: inicio,
+            data_emissao_fim: fimExclusivo,
+          }
         });
         
         if (combinedResult.error) throw combinedResult.error;
@@ -1154,7 +1169,7 @@ const EsteiraIndex = () => {
     if (user) {
       loadVouchers();
     }
-  }, [hasEsteiraAccess]);
+  }, [hasEsteiraAccess, quickFilterMesEmissao]);
 
   // Fetch DB stats only when dashboard tab is active (deferred to reduce initial load)
   useEffect(() => {
@@ -2012,6 +2027,21 @@ const EsteiraIndex = () => {
                     </Select>
                   </div>
 
+                  {/* Mês de Emissão (filtragem aplicada no banco) */}
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-[#888888]" />
+                    <input
+                      type="month"
+                      value={quickFilterMesEmissao}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v) setQuickFilterMesEmissao(v);
+                      }}
+                      className="h-9 w-[160px] px-3 rounded-full bg-[#0a0b10] border border-white/10 text-[#e5e5e5] text-[0.78rem] focus:outline-none focus:border-[#ffc800]"
+                      title="Mês de Emissão"
+                    />
+                  </div>
+
                   <div className="flex items-center gap-2">
                     <Users className="h-4 w-4 text-[#888888]" />
                     <Select value={quickFilterCobranca} onValueChange={setQuickFilterCobranca}>
@@ -2093,6 +2123,10 @@ const EsteiraIndex = () => {
                   {(quickFilterFornecedor !== "all" || quickFilterCobranca !== "all" || filters.formaPagamento !== "all" || filters.origemCriacao !== "all" || filters.vencimentoFim !== "" || filters.isMaster !== "all" || filters.search !== "" || filters.etapa !== "all" || filters.processo !== "" || filters.fornecedor !== "" || filters.faixaValor !== "all" || filters.slaStatus !== "all" || filters.vencimentoInicio !== "" || filters.urgente !== "all" || filters.statusComprovante !== "all") && <button onClick={() => {
                 setQuickFilterFornecedor("all");
                 setQuickFilterCobranca("all");
+                {
+                  const d = new Date();
+                  setQuickFilterMesEmissao(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+                }
                 setFilters({
                   search: "",
                   etapa: "all",

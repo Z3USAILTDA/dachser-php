@@ -14043,8 +14043,23 @@ Deno.serve(async (req) => {
       case 'get_vouchers_combined': {
         // Single call that returns both active vouchers and pending RM vouchers
         // Saves 1 MariaDB connection vs calling get_vouchers_ativos + get_vouchers_pendentes_rm separately
-        console.log('[get_vouchers_combined] Fetching active + pending RM vouchers in single connection');
-        
+        const dataEmissaoInicio = body?.data_emissao_inicio || null;
+        const dataEmissaoFim = body?.data_emissao_fim || null;
+        const hasMonthFilter = !!(dataEmissaoInicio && dataEmissaoFim);
+        console.log(`[get_vouchers_combined] Fetching active + pending RM vouchers. monthFilter=${hasMonthFilter ? `${dataEmissaoInicio}..${dataEmissaoFim}` : 'none'}`);
+
+        const ativosMonthClause = hasMonthFilter
+          ? `AND (
+              (dfv.data_emissao >= ? AND dfv.data_emissao < ?)
+              OR
+              (dfv.data_emissao IS NULL
+               AND v.data_emissao_documento >= ? AND v.data_emissao_documento < ?)
+            )`
+          : '';
+        const ativosParams = hasMonthFilter
+          ? [dataEmissaoInicio, dataEmissaoFim, dataEmissaoInicio, dataEmissaoFim]
+          : [];
+
         const combinedAtivos = await client.query(`
            SELECT v.*, dfv.id_rm as dfv_id_rm, 
             CASE 
@@ -14080,9 +14095,13 @@ Deno.serve(async (req) => {
           WHERE sync_status = "ATIVO"
             AND (voucher_master_id IS NULL OR voucher_master_id = "")
             AND (etapa_atual != "CONCLUIDO" OR (etapa_atual = "CONCLUIDO" AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)))
+            ${ativosMonthClause}
           ORDER BY v.created_at DESC
-        `);
+        `, ativosParams);
         
+        const pendentesMonthClause = hasMonthFilter ? `AND dfv.data_emissao >= ? AND dfv.data_emissao < ?` : '';
+        const pendentesParams = hasMonthFilter ? [dataEmissaoInicio, dataEmissaoFim] : [];
+
         const combinedPendentes = await client.query(`
           SELECT 
             dfv.id_rm, dfv.nd, dfv.documento, dfv.nome_beneficiario, dfv.nome_cobranca,
@@ -14096,8 +14115,9 @@ Deno.serve(async (req) => {
             AND b.IdLancamentoRM IS NULL
             AND (dfv.nome_beneficiario IS NULL OR LOWER(dfv.nome_beneficiario) NOT LIKE '%dachser%')
             AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')
+            ${pendentesMonthClause}
           ORDER BY dfv.data_vencimento ASC
-        `);
+        `, pendentesParams);
         
         console.log(`[get_vouchers_combined] Found ${combinedAtivos?.length || 0} active + ${combinedPendentes?.length || 0} pending RM`);
         result = { 
