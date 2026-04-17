@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
 import { parseRequesterFromAjuste, stripRequesterMarker } from "@/utils/voucherAjusteRouting";
+import { sendVoucherReturnNotification } from "@/utils/voucherReturnNotification";
 import { Voucher, VoucherFilho } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -227,7 +228,14 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
         },
       });
 
-      // OPERACAO não recebe e-mail (quem inicia o processo)
+      // Notificar criador (responsável anterior)
+      await sendVoucherReturnNotification({
+        voucher,
+        fromStage: "FISCAL",
+        toStage: "AJUSTE_OPERACAO",
+        reason: motivoAjuste,
+        senderName: userData.username,
+      });
 
       toast({
         title: "Voucher/SPO devolvido",

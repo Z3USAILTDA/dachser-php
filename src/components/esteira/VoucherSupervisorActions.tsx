@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { buildAjusteWithRequester } from "@/utils/voucherAjusteRouting";
 import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
+import { sendVoucherReturnNotification } from "@/utils/voucherReturnNotification";
 import { Voucher } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -137,7 +138,14 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
         },
       });
 
-      // OPERACAO não recebe e-mail (quem inicia o processo)
+      // Notificar criador (responsável anterior) sobre a rejeição
+      await sendVoucherReturnNotification({
+        voucher,
+        fromStage: "SUPERVISOR",
+        toStage: "AJUSTE_OPERACAO",
+        reason: comentarios,
+        senderName: userData.username,
+      });
 
       toast({
         title: "Voucher/SPO rejeitado",
