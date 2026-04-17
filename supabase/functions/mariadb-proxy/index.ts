@@ -14043,8 +14043,23 @@ Deno.serve(async (req) => {
       case 'get_vouchers_combined': {
         // Single call that returns both active vouchers and pending RM vouchers
         // Saves 1 MariaDB connection vs calling get_vouchers_ativos + get_vouchers_pendentes_rm separately
-        console.log('[get_vouchers_combined] Fetching active + pending RM vouchers in single connection');
-        
+        const dataEmissaoInicio = body?.data_emissao_inicio || null;
+        const dataEmissaoFim = body?.data_emissao_fim || null;
+        const hasMonthFilter = !!(dataEmissaoInicio && dataEmissaoFim);
+        console.log(`[get_vouchers_combined] Fetching active + pending RM vouchers. monthFilter=${hasMonthFilter ? `${dataEmissaoInicio}..${dataEmissaoFim}` : 'none'}`);
+
+        const ativosMonthClause = hasMonthFilter
+          ? `AND (
+              (dfv.data_emissao >= ? AND dfv.data_emissao < ?)
+              OR
+              (dfv.data_emissao IS NULL
+               AND v.data_emissao_documento >= ? AND v.data_emissao_documento < ?)
+            )`
+          : '';
+        const ativosParams = hasMonthFilter
+          ? [dataEmissaoInicio, dataEmissaoFim, dataEmissaoInicio, dataEmissaoFim]
+          : [];
+
         const combinedAtivos = await client.query(`
            SELECT v.*, dfv.id_rm as dfv_id_rm, 
             CASE 
