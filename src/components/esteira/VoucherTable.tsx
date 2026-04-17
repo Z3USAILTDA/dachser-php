@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Voucher, ETAPA_LABELS, calcularTempoNaEtapa, formatarTempoNaEtapa, SLA_POR_ETAPA } from "@/types/voucher";
 import { buildAjusteWithRequester } from "@/utils/voucherAjusteRouting";
+import { sendVoucherReturnNotification } from "@/utils/voucherReturnNotification";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -815,6 +816,13 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                                         acao: "REJEITADO_SUPERVISOR",
                                         detalhe: `Voucher/SPO rejeitado (via tabela): ${motivo}`,
                                       },
+                                    });
+                                    await sendVoucherReturnNotification({
+                                      voucher,
+                                      fromStage: "SUPERVISOR",
+                                      toStage: "AJUSTE_OPERACAO",
+                                      reason: motivo,
+                                      senderName: userData.username,
                                     });
                                     toast.success("Voucher rejeitado e devolvido para Operação");
                                     window.location.reload();

@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, XCircle, AlertTriangle, Loader2, FileWarning } from "lucide-react";
 import { ProntidaoChecklist } from "./ProntidaoChecklist";
 import { buildAjusteWithRequester } from "@/utils/voucherAjusteRouting";
+import { sendVoucherReturnNotification } from "@/utils/voucherReturnNotification";
 
 interface VoucherFinanceiroActionsProps {
   voucher: Voucher;
@@ -183,7 +184,14 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
         },
       });
 
-      // OPERACAO não recebe e-mail (quem inicia o processo)
+      // Notificar criador (responsável anterior)
+      await sendVoucherReturnNotification({
+        voucher,
+        fromStage: "FINANCEIRO",
+        toStage: "AJUSTE_OPERACAO",
+        reason: motivoAjusteOperacao,
+        senderName: userData.username,
+      });
 
       toast({
         title: "Voucher/SPO devolvido",
@@ -248,7 +256,14 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
         },
       });
 
-      // Email notifications removed — monthly report only
+      // Notificar fiscal responsável (etapa anterior)
+      await sendVoucherReturnNotification({
+        voucher,
+        fromStage: "FINANCEIRO",
+        toStage: "AJUSTE_FISCAL",
+        reason: motivoAjusteFiscal,
+        senderName: userData.username,
+      });
 
       toast({
         title: "Voucher/SPO devolvido",

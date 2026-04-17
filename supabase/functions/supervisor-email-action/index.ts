@@ -137,6 +137,28 @@ const handler = async (req: Request): Promise<Response> => {
         console.log("Email notification to FINANCEIRO skipped:", e);
       }
 
+      // Confirmation email to creator + supervisor (cc) — urgência aprovada
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/send-voucher-notification`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+            "apikey": SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            type: "URGENCIA_APROVADA",
+            voucherId: voucher_id,
+            voucherNumber: voucher_id,
+            toStage: "FINANCEIRO",
+            fromStage: "SUPERVISOR",
+            senderName: "Supervisor (via e-mail)",
+          }),
+        });
+      } catch (e) {
+        console.log("Confirmation email URGENCIA_APROVADA skipped:", e);
+      }
+
       await callProxy("mark_supervisor_token_used", { token });
       return jsonResponse({ status: "approved", message: "O voucher foi aprovado com sucesso e enviado para o Financeiro." });
     } else {
@@ -163,6 +185,30 @@ const handler = async (req: Request): Promise<Response> => {
       });
 
       await callProxy("mark_supervisor_token_used", { token });
+
+      // Confirmation email — urgência rejeitada (creator + supervisor cc)
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/send-voucher-notification`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+            "apikey": SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            type: "URGENCIA_REJEITADA",
+            voucherId: voucher_id,
+            voucherNumber: voucher_id,
+            toStage: "AJUSTE_OPERACAO",
+            fromStage: "SUPERVISOR",
+            senderName: "Supervisor (via e-mail)",
+            reason: rejectReason,
+          }),
+        });
+      } catch (e) {
+        console.log("Confirmation email URGENCIA_REJEITADA skipped:", e);
+      }
+
       return jsonResponse({ status: "rejected", message: "O voucher foi rejeitado e devolvido para a Operação." });
     }
   } catch (error: any) {

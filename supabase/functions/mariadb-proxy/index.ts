@@ -6542,6 +6542,55 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'get_voucher_responsaveis_emails': {
+        const { voucher_id } = body as any;
+        if (!voucher_id) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Ensure supervisor_id column exists (idempotent)
+        try {
+          await client.query(`
+            ALTER TABLE ai_agente.t_users_dachser 
+            ADD COLUMN IF NOT EXISTS supervisor_id INT NULL
+          `);
+        } catch (_e) { /* ignore */ }
+
+        const rows = await client.query(`
+          SELECT
+            v.criado_por_user_id,
+            v.responsavel_fiscal_user_id,
+            v.responsavel_supervisor_user_id,
+            v.responsavel_financeiro_user_id,
+            (SELECT email FROM ai_agente.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1) AS creator_email,
+            (SELECT username FROM ai_agente.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1) AS creator_username,
+            (SELECT email FROM ai_agente.t_users_dachser WHERE id = v.responsavel_fiscal_user_id LIMIT 1) AS fiscal_email,
+            (SELECT email FROM ai_agente.t_users_dachser WHERE id = v.responsavel_supervisor_user_id LIMIT 1) AS supervisor_resp_email,
+            (SELECT email FROM ai_agente.t_users_dachser WHERE id = v.responsavel_financeiro_user_id LIMIT 1) AS financeiro_email,
+            (SELECT email FROM ai_agente.t_users_dachser
+              WHERE id = (SELECT supervisor_id FROM ai_agente.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1)
+              LIMIT 1) AS creator_supervisor_email
+          FROM dados_dachser.t_vouchers v
+          WHERE v.id = ?
+          LIMIT 1
+        `, [voucher_id]);
+
+        const r = rows?.[0] || {};
+        result = {
+          success: true,
+          creator_email: r.creator_email || null,
+          creator_username: r.creator_username || null,
+          fiscal_email: r.fiscal_email || null,
+          supervisor_resp_email: r.supervisor_resp_email || null,
+          financeiro_email: r.financeiro_email || null,
+          creator_supervisor_email: r.creator_supervisor_email || null,
+        };
+        break;
+      }
+
       case 'save_voucher_log': {
         const { voucher_id, user_id, user_name, acao, detalhe } = body as any;
         console.log('Saving voucher log:', voucher_id, acao);

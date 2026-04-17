@@ -31,7 +31,7 @@ const OPERACAO_FIXED_EMAILS = [
 ];
 
 interface NotificationRequest {
-  type: "AJUSTE_SOLICITADO" | "URGENCIA_REJEITADA" | "VOUCHER_ENVIADO" | "VOUCHER_CONCLUIDO" | "VENCIMENTO_PROXIMO";
+  type: "AJUSTE_SOLICITADO" | "URGENCIA_REJEITADA" | "URGENCIA_APROVADA" | "VOUCHER_ENVIADO" | "VOUCHER_CONCLUIDO" | "VENCIMENTO_PROXIMO";
   voucherId: string;
   voucherNumber: string;
   toStage: string;
@@ -81,6 +81,13 @@ function getEmailContent(data: NotificationRequest) {
       btnColor: "#fff",
       subject: "Urgência Rejeitada",
     },
+    URGENCIA_APROVADA: {
+      title: "Urgência Aprovada pelo Supervisor",
+      titleColor: "#22C55E",
+      btnBg: "#22C55E",
+      btnColor: "#fff",
+      subject: "Urgência Aprovada",
+    },
     VOUCHER_CONCLUIDO: {
       title: "Voucher Concluído com Sucesso",
       titleColor: "#22C55E",
@@ -126,6 +133,11 @@ function getEmailContent(data: NotificationRequest) {
         <div style="background:rgba(220,38,38,.06);border-left:4px solid #DC2626;padding:12px 16px;border-radius:0 8px 8px 0;margin:0 0 16px">
           <p style="margin:0;font-size:14px;line-height:1.5">${data.reason || "Não especificado"}</p>
         </div>`;
+      break;
+    case "URGENCIA_APROVADA":
+      contentBlock = `
+        <p style="margin:0 0 8px;font-size:14px;line-height:1.6;color:#666">A solicitação de urgência para o voucher <b>${data.voucherNumber}</b> foi <span style="color:#22C55E;font-weight:700">aprovada</span> pelo Supervisor e enviada ao Financeiro.</p>
+        ${data.senderName ? `<p style="margin:0 0 8px;font-size:13px;color:#666">Aprovado por: <b>${data.senderName}</b></p>` : ""}`;
       break;
     case "VOUCHER_CONCLUIDO":
       contentBlock = `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">O voucher <b>${data.voucherNumber}</b> foi processado e concluído com sucesso.</p>`;
@@ -241,6 +253,32 @@ async function getRecipientEmails(roles: string[]): Promise<string[]> {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
+async function getVoucherResponsaveis(voucherId: string): Promise<{
+  creator_email: string | null;
+  creator_username: string | null;
+  fiscal_email: string | null;
+  supervisor_resp_email: string | null;
+  financeiro_email: string | null;
+  creator_supervisor_email: string | null;
+} | null> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ action: "get_voucher_responsaveis_emails", voucher_id: voucherId }),
+    });
+    const data = await res.json();
+    if (data.success) return data;
+  } catch (e) {
+    console.error("Error fetching voucher responsaveis:", e);
+  }
+  return null;
+}
+
 async function generateSupervisorTokens(
   voucherId: string,
 ): Promise<{ approveToken: string; rejectToken: string } | null> {
@@ -351,10 +389,71 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // OVERRIDE: Enviar todos os emails para larissa@z3us.ai independente do cargo/stage
-    const emails = ["larissa@z3us.ai"];
+    // Resolve recipients dynamically based on type/stage.
+    // Default fallback: roles mapped to the destination stage (existing behavior).
+    let toEmails: string[] = [];
+    let ccEmails: string[] = [];
 
-    console.log(`Sending to ${emails.length} recipients: ${emails.join(", ")}`);
+    const responsaveis = data.voucherId ? await getVoucherResponsaveis(data.voucherId) : null;
+
+    if (data.toStage === "SUPERVISOR" && data.type === "VOUCHER_ENVIADO") {
+      // Urgent voucher arriving at SUPERVISOR
+      if (responsaveis?.creator_supervisor_email) {
+        toEmails = [responsaveis.creator_supervisor_email];
+      } else {
+        toEmails = await getRecipientEmails(STAGE_TO_ROLES["SUPERVISOR"] || []);
+      }
+      if (responsaveis?.creator_email) ccEmails = [responsaveis.creator_email];
+    } else if (data.type === "URGENCIA_APROVADA" || data.type === "URGENCIA_REJEITADA") {
+      // Notify creator (to) + supervisor (cc)
+      if (responsaveis?.creator_email) toEmails = [responsaveis.creator_email];
+      if (responsaveis?.creator_supervisor_email) ccEmails = [responsaveis.creator_supervisor_email];
+      if (toEmails.length === 0 && ccEmails.length > 0) {
+        toEmails = ccEmails;
+        ccEmails = [];
+      }
+    } else if (data.type === "AJUSTE_SOLICITADO") {
+      // Notify the user responsible for the previous stage
+      if (data.toStage === "AJUSTE_OPERACAO") {
+        if (responsaveis?.creator_email) {
+          toEmails = [responsaveis.creator_email];
+        } else {
+          toEmails = OPERACAO_FIXED_EMAILS;
+        }
+      } else if (data.toStage === "AJUSTE_FISCAL") {
+        if (responsaveis?.fiscal_email) {
+          toEmails = [responsaveis.fiscal_email];
+        } else {
+          toEmails = await getRecipientEmails(STAGE_TO_ROLES["AJUSTE_FISCAL"] || []);
+        }
+      } else {
+        toEmails = await getRecipientEmails(STAGE_TO_ROLES[data.toStage] || []);
+      }
+    } else {
+      // Generic stage routing
+      const roles = STAGE_TO_ROLES[data.toStage] || [];
+      if (roles.includes("__OPERACAO_FIXED__")) {
+        toEmails = OPERACAO_FIXED_EMAILS;
+      } else {
+        toEmails = await getRecipientEmails(roles);
+      }
+    }
+
+    // Deduplicate and remove cc entries already present in to
+    toEmails = [...new Set(toEmails.filter(Boolean))];
+    ccEmails = [...new Set(ccEmails.filter((e) => e && !toEmails.includes(e)))];
+
+    if (toEmails.length === 0) {
+      console.log("No recipients resolved — skipping send");
+      return new Response(
+        JSON.stringify({ success: true, message: "No recipients", sent: 0 }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const emails = toEmails;
+
+    console.log(`Sending to ${toEmails.length} recipients (cc=${ccEmails.length}): to=${toEmails.join(", ")} cc=${ccEmails.join(", ")}`);
 
     let { subject, html } = getEmailContent(data);
 
@@ -405,6 +504,9 @@ const handler = async (req: Request): Promise<Response> => {
       subject,
       html,
     };
+    if (ccEmails.length > 0) {
+      emailPayload.cc = ccEmails;
+    }
     if (attachments.length > 0) {
       emailPayload.attachments = attachments;
     }
