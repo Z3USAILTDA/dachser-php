@@ -1169,7 +1169,7 @@ const EsteiraIndex = () => {
     if (user) {
       loadVouchers();
     }
-  }, [hasEsteiraAccess]);
+  }, [hasEsteiraAccess, quickFilterMesEmissao]);
 
   // Fetch DB stats only when dashboard tab is active (deferred to reduce initial load)
   useEffect(() => {
