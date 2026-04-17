@@ -376,6 +376,12 @@ CNPJ: ${dados.cnpj}`;
                     <span className="text-muted-foreground">Razão Social:</span>{" "}
                     <span className="text-foreground font-medium">{dadosBancarios.razao_social}</span>
                   </div>
+                  {dadosBancarios.cnpj && (
+                    <div>
+                      <span className="text-muted-foreground">CNPJ:</span>{" "}
+                      <span className="text-foreground font-medium">{dadosBancarios.cnpj}</span>
+                    </div>
+                  )}
                 </div>
                 
                 <Button
