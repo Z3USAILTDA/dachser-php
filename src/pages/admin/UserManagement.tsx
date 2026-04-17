@@ -176,10 +176,37 @@ const UserManagement = () => {
     }
   };
 
+  const handleSupervisorChange = async (userId: number, supervisorIdRaw: string) => {
+    const supervisor_id = supervisorIdRaw === "none" ? null : Number(supervisorIdRaw);
+    try {
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_user_supervisor",
+          userId,
+          supervisor_id,
+        },
+      });
+
+      if (error) throw error;
+
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, supervisor_id } : u))
+      );
+      toast.success("Supervisor atualizado");
+    } catch (err: any) {
+      console.error("Error updating supervisor:", err);
+      toast.error("Erro ao atualizar supervisor");
+    }
+  };
+
   const filteredUsers = users.filter(
     (user) =>
       user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const supervisorOptions = users.filter((u) =>
+    parseUserRoles(u.esteira_role).includes("SUPERVISOR") && u.esteira_active === 1
   );
 
   const statsTotal = users.length;
