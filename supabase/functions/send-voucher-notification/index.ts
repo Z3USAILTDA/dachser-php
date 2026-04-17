@@ -389,10 +389,71 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // OVERRIDE: Enviar todos os emails para larissa@z3us.ai independente do cargo/stage
-    const emails = ["larissa@z3us.ai"];
+    // Resolve recipients dynamically based on type/stage.
+    // Default fallback: roles mapped to the destination stage (existing behavior).
+    let toEmails: string[] = [];
+    let ccEmails: string[] = [];
 
-    console.log(`Sending to ${emails.length} recipients: ${emails.join(", ")}`);
+    const responsaveis = data.voucherId ? await getVoucherResponsaveis(data.voucherId) : null;
+
+    if (data.toStage === "SUPERVISOR" && data.type === "VOUCHER_ENVIADO") {
+      // Urgent voucher arriving at SUPERVISOR
+      if (responsaveis?.creator_supervisor_email) {
+        toEmails = [responsaveis.creator_supervisor_email];
+      } else {
+        toEmails = await getRecipientEmails(STAGE_TO_ROLES["SUPERVISOR"] || []);
+      }
+      if (responsaveis?.creator_email) ccEmails = [responsaveis.creator_email];
+    } else if (data.type === "URGENCIA_APROVADA" || data.type === "URGENCIA_REJEITADA") {
+      // Notify creator (to) + supervisor (cc)
+      if (responsaveis?.creator_email) toEmails = [responsaveis.creator_email];
+      if (responsaveis?.creator_supervisor_email) ccEmails = [responsaveis.creator_supervisor_email];
+      if (toEmails.length === 0 && ccEmails.length > 0) {
+        toEmails = ccEmails;
+        ccEmails = [];
+      }
+    } else if (data.type === "AJUSTE_SOLICITADO") {
+      // Notify the user responsible for the previous stage
+      if (data.toStage === "AJUSTE_OPERACAO") {
+        if (responsaveis?.creator_email) {
+          toEmails = [responsaveis.creator_email];
+        } else {
+          toEmails = OPERACAO_FIXED_EMAILS;
+        }
+      } else if (data.toStage === "AJUSTE_FISCAL") {
+        if (responsaveis?.fiscal_email) {
+          toEmails = [responsaveis.fiscal_email];
+        } else {
+          toEmails = await getRecipientEmails(STAGE_TO_ROLES["AJUSTE_FISCAL"] || []);
+        }
+      } else {
+        toEmails = await getRecipientEmails(STAGE_TO_ROLES[data.toStage] || []);
+      }
+    } else {
+      // Generic stage routing
+      const roles = STAGE_TO_ROLES[data.toStage] || [];
+      if (roles.includes("__OPERACAO_FIXED__")) {
+        toEmails = OPERACAO_FIXED_EMAILS;
+      } else {
+        toEmails = await getRecipientEmails(roles);
+      }
+    }
+
+    // Deduplicate and remove cc entries already present in to
+    toEmails = [...new Set(toEmails.filter(Boolean))];
+    ccEmails = [...new Set(ccEmails.filter((e) => e && !toEmails.includes(e)))];
+
+    if (toEmails.length === 0) {
+      console.log("No recipients resolved — skipping send");
+      return new Response(
+        JSON.stringify({ success: true, message: "No recipients", sent: 0 }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const emails = toEmails;
+
+    console.log(`Sending to ${toEmails.length} recipients (cc=${ccEmails.length}): to=${toEmails.join(", ")} cc=${ccEmails.join(", ")}`);
 
     let { subject, html } = getEmailContent(data);
 
@@ -443,6 +504,9 @@ const handler = async (req: Request): Promise<Response> => {
       subject,
       html,
     };
+    if (ccEmails.length > 0) {
+      emailPayload.cc = ccEmails;
+    }
     if (attachments.length > 0) {
       emailPayload.attachments = attachments;
     }
