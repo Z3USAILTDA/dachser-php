@@ -59,6 +59,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { parseDBDate, formatDateOnlyBR } from "@/utils/timezone";
 import { buildAjusteWithRequester } from "@/utils/voucherAjusteRouting";
+import { sendVoucherReturnNotification } from "@/utils/voucherReturnNotification";
 
 interface PagamentoItem {
   id: string;
@@ -512,6 +513,21 @@ export const PagamentosTab = () => {
           acao: logAcao,
           detalhe: `Voucher retornado para ${logLabel} (solicitado por FINANCEIRO via tela de Pagamentos). Justificativa: ${voltarOperacionalJustificativa.trim()}`
         }
+      });
+
+      // Notificar responsável da etapa anterior
+      await sendVoucherReturnNotification({
+        voucher: {
+          id: voltarOperacionalVoucher.id,
+          numeroSPO: voltarOperacionalVoucher.numero_spo,
+          fornecedor: voltarOperacionalVoucher.fornecedor,
+          valor: voltarOperacionalVoucher.valor,
+          moeda: voltarOperacionalVoucher.moeda,
+          vencimento: voltarOperacionalVoucher.vencimento,
+        } as any,
+        fromStage: "FINANCEIRO",
+        toStage: novaEtapa as "AJUSTE_OPERACAO" | "AJUSTE_FISCAL",
+        reason: voltarOperacionalJustificativa.trim(),
       });
 
       toast({ title: `Voucher retornado para ${logLabel} com sucesso` });
