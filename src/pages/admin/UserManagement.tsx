@@ -384,6 +384,26 @@ const UserManagement = () => {
                         </Popover>
                       </TableCell>
                       <TableCell>
+                        <Select
+                          value={user.supervisor_id ? String(user.supervisor_id) : "none"}
+                          onValueChange={(v) => handleSupervisorChange(user.id, v)}
+                        >
+                          <SelectTrigger className="w-[200px] bg-background/50 border-border/50">
+                            <SelectValue placeholder="Sem supervisor" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-[300px]">
+                            <SelectItem value="none">Sem supervisor</SelectItem>
+                            {supervisorOptions
+                              .filter((s) => s.id !== user.id)
+                              .map((s) => (
+                                <SelectItem key={s.id} value={String(s.id)}>
+                                  @{s.username}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
                         <Button
                           variant="ghost"
                           size="sm"
