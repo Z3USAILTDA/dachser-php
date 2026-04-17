@@ -600,7 +600,12 @@ const EsteiraIndex = () => {
   // Quick filters
   const [quickFilterFornecedor, setQuickFilterFornecedor] = useState<string>("all");
   const [quickFilterCobranca, setQuickFilterCobranca] = useState<string>("all");
-  const [drillDownFilter, setDrillDownFilter] = useState<DrillDownFilter>("all");
+  const [quickFilterMesEmissao, setQuickFilterMesEmissao] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const drillDownFilterInit: DrillDownFilter = "all";
+  const [drillDownFilter, setDrillDownFilter] = useState<DrillDownFilter>(drillDownFilterInit);
   const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
   const [finDbStats, setFinDbStats] = useState<FinDbStats | null>(null);
   const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
