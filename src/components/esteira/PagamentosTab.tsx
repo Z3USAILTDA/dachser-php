@@ -58,6 +58,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { parseDBDate, formatDateOnlyBR } from "@/utils/timezone";
+import { buildAjusteWithRequester } from "@/utils/voucherAjusteRouting";
 
 interface PagamentoItem {
   id: string;
@@ -479,25 +480,37 @@ export const PagamentosTab = () => {
     if (!voltarOperacionalVoucher || voltarOperacionalJustificativa.trim().length < 10) return;
     setVoltarOperacionalLoading(true);
     try {
-      // 1. Update etapa_atual to selected destination
+      // 1. Update etapa_atual to AJUSTE stage and persist requester marker in ajuste field
+      const isFiscal = voltarDestinoEtapa === "FISCAL";
+      const novaEtapa = isFiscal ? "AJUSTE_FISCAL" : "AJUSTE_OPERACAO";
+      const justificativaComMarcador = buildAjusteWithRequester(
+        "FINANCEIRO",
+        voltarOperacionalJustificativa.trim()
+      );
+      const updatePayload: Record<string, unknown> = {
+        action: "update_voucher_esteira",
+        voucher_id: voltarOperacionalVoucher.id,
+        etapa_atual: novaEtapa,
+      };
+      if (isFiscal) {
+        updatePayload.ajuste_fiscal = justificativaComMarcador;
+      } else {
+        updatePayload.ajuste_operacao = justificativaComMarcador;
+      }
       const { error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "update_voucher_esteira",
-          voucher_id: voltarOperacionalVoucher.id,
-          etapa_atual: voltarDestinoEtapa,
-        }
+        body: updatePayload,
       });
       if (error) throw error;
 
       // 2. Log the action
-      const logAcao = voltarDestinoEtapa === "FISCAL" ? "RETORNO_FISCAL" : "RETORNO_OPERACIONAL";
-      const logLabel = voltarDestinoEtapa === "FISCAL" ? "Fiscal" : "Operacional";
+      const logAcao = isFiscal ? "RETORNO_AJUSTE_FISCAL" : "RETORNO_AJUSTE_OPERACIONAL";
+      const logLabel = isFiscal ? "Ajuste Fiscal" : "Ajuste Operacional";
       await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "save_voucher_log",
           voucher_id: voltarOperacionalVoucher.id,
           acao: logAcao,
-          detalhe: `Voucher retornado para ${logLabel} a partir da tela de Pagamentos. Justificativa: ${voltarOperacionalJustificativa.trim()}`
+          detalhe: `Voucher retornado para ${logLabel} (solicitado por FINANCEIRO via tela de Pagamentos). Justificativa: ${voltarOperacionalJustificativa.trim()}`
         }
       });
 
@@ -1290,7 +1303,7 @@ export const PagamentosTab = () => {
 
             <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
               <p className="text-sm text-orange-700 dark:text-orange-300">
-                Ao retornar, o voucher sairá da etapa Financeiro e voltará para revisão da equipe de {voltarDestinoEtapa === "FISCAL" ? "Fiscal" : "Operações"}.
+                Ao retornar, o voucher entrará em <strong>{voltarDestinoEtapa === "FISCAL" ? "Ajuste Fiscal" : "Ajuste Operacional"}</strong> com a justificativa registrada. Após a correção, ele retornará automaticamente para o Financeiro.
               </p>
             </div>
 
