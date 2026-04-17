@@ -860,7 +860,7 @@ const EsteiraIndex = () => {
       const emExcecao = v.urgenciaTipo === "URGENTE_REAL";
       return aguardandoComprovante || emExcecao;
     });
-    const recentVouchers = allVouchers.filter(v => v.updatedAt >= yesterday);
+    const recentVouchers = allVouchers.filter(v => v.fonteDados !== "RM_PENDENTE" && v.updatedAt >= yesterday);
 
     setMetrics({
       ativos: ativos.length,
