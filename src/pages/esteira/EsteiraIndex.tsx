@@ -1500,7 +1500,7 @@ const EsteiraIndex = () => {
         if (!aguardandoComprovante && !emExcecao) return false;
       }
       if (drillDownFilter === "atividade") {
-        if (voucher.updatedAt < yesterday) return false;
+        if (voucher.fonteDados === "RM_PENDENTE" || voucher.updatedAt < yesterday) return false;
       }
 
       return true;
