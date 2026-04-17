@@ -860,7 +860,7 @@ const EsteiraIndex = () => {
       const emExcecao = v.urgenciaTipo === "URGENTE_REAL";
       return aguardandoComprovante || emExcecao;
     });
-    const recentVouchers = allVouchers.filter(v => v.updatedAt >= yesterday);
+    const recentVouchers = allVouchers.filter(v => v.fonteDados !== "RM_PENDENTE" && v.updatedAt >= yesterday);
 
     setMetrics({
       ativos: ativos.length,
@@ -1104,7 +1104,7 @@ const EsteiraIndex = () => {
       });
 
       // Eventos 24h
-      const recentVouchers = allVouchers.filter(v => v.updatedAt >= yesterday);
+      const recentVouchers = allVouchers.filter(v => v.fonteDados !== "RM_PENDENTE" && v.updatedAt >= yesterday);
       setMetrics({
         ativos: ativos.length,
         slaAtencao: slaAtencao.length,
@@ -1500,7 +1500,7 @@ const EsteiraIndex = () => {
         if (!aguardandoComprovante && !emExcecao) return false;
       }
       if (drillDownFilter === "atividade") {
-        if (voucher.updatedAt < yesterday) return false;
+        if (voucher.fonteDados === "RM_PENDENTE" || voucher.updatedAt < yesterday) return false;
       }
 
       return true;
