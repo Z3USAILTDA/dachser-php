@@ -2027,6 +2027,21 @@ const EsteiraIndex = () => {
                     </Select>
                   </div>
 
+                  {/* Mês de Emissão (filtragem aplicada no banco) */}
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-[#888888]" />
+                    <input
+                      type="month"
+                      value={quickFilterMesEmissao}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v) setQuickFilterMesEmissao(v);
+                      }}
+                      className="h-9 w-[160px] px-3 rounded-full bg-[#0a0b10] border border-white/10 text-[#e5e5e5] text-[0.78rem] focus:outline-none focus:border-[#ffc800]"
+                      title="Mês de Emissão"
+                    />
+                  </div>
+
                   <div className="flex items-center gap-2">
                     <Users className="h-4 w-4 text-[#888888]" />
                     <Select value={quickFilterCobranca} onValueChange={setQuickFilterCobranca}>
