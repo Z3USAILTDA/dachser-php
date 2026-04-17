@@ -2030,16 +2030,43 @@ const EsteiraIndex = () => {
                   {/* Mês de Emissão (filtragem aplicada no banco) */}
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-[#888888]" />
-                    <input
-                      type="month"
-                      value={quickFilterMesEmissao}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v) setQuickFilterMesEmissao(v);
+                    <Select
+                      value={quickFilterMesEmissao.split('-')[1]}
+                      onValueChange={(mes) => {
+                        const ano = quickFilterMesEmissao.split('-')[0];
+                        setQuickFilterMesEmissao(`${ano}-${mes}`);
                       }}
-                      className="h-9 w-[160px] px-3 rounded-full bg-[#0a0b10] border border-white/10 text-[#e5e5e5] text-[0.78rem] focus:outline-none focus:border-[#ffc800]"
-                      title="Mês de Emissão"
-                    />
+                    >
+                      <SelectTrigger className="w-[140px] bg-[#0a0b10] border-white/10 rounded-full">
+                        <SelectValue placeholder="Mês" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[
+                          { v: '01', l: 'Janeiro' }, { v: '02', l: 'Fevereiro' }, { v: '03', l: 'Março' },
+                          { v: '04', l: 'Abril' }, { v: '05', l: 'Maio' }, { v: '06', l: 'Junho' },
+                          { v: '07', l: 'Julho' }, { v: '08', l: 'Agosto' }, { v: '09', l: 'Setembro' },
+                          { v: '10', l: 'Outubro' }, { v: '11', l: 'Novembro' }, { v: '12', l: 'Dezembro' },
+                        ].map(m => (
+                          <SelectItem key={m.v} value={m.v}>{m.l}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={quickFilterMesEmissao.split('-')[0]}
+                      onValueChange={(ano) => {
+                        const mes = quickFilterMesEmissao.split('-')[1];
+                        setQuickFilterMesEmissao(`${ano}-${mes}`);
+                      }}
+                    >
+                      <SelectTrigger className="w-[100px] bg-[#0a0b10] border-white/10 rounded-full">
+                        <SelectValue placeholder="Ano" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                          <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="flex items-center gap-2">
