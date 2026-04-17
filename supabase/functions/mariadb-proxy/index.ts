@@ -13921,6 +13921,38 @@ Deno.serve(async (req) => {
             WHERE sync_type = 'voucher_rm'
           `, [lastDataInsert, lastIdRm, inserted]);
         }
+
+        // 4.1 ENRICH MANUAL VOUCHERS FROM DFV
+        // Para vouchers criados manualmente (id_rm IS NULL), quando o RM finalmente gera
+        // o registro em t_dados_financeiro_voucher (nd = numero_spo), preencher os campos
+        // que ficaram vazios no envio manual usando COALESCE (não sobrescreve dados existentes).
+        let enrichedManual = 0;
+        try {
+          const enrichResult = await client.execute(`
+            UPDATE dados_dachser.t_vouchers v
+            JOIN dados_dachser.t_dados_financeiro_voucher dfv 
+              ON v.numero_spo COLLATE utf8mb4_unicode_ci = dfv.nd COLLATE utf8mb4_unicode_ci
+            SET 
+              v.id_rm              = COALESCE(v.id_rm, dfv.id_rm),
+              v.fornecedor         = COALESCE(NULLIF(TRIM(v.fornecedor), ''), dfv.nome_beneficiario, dfv.razao_social),
+              v.cnpj_fornecedor    = COALESCE(NULLIF(TRIM(v.cnpj_fornecedor), ''), dfv.cnpj),
+              v.valor              = COALESCE(NULLIF(v.valor, 0), dfv.valor_nf),
+              v.moeda              = COALESCE(NULLIF(TRIM(v.moeda), ''), dfv.moeda),
+              v.data_emissao_documento = COALESCE(v.data_emissao_documento, dfv.data_emissao),
+              v.processo_id        = COALESCE(NULLIF(TRIM(v.processo_id), ''), dfv.numero_processo),
+              v.data_insert_rm     = COALESCE(v.data_insert_rm, dfv.data_insert),
+              v.updated_at         = NOW()
+            WHERE (v.id_rm IS NULL OR v.id_rm = '')
+              AND v.criado_por_user_id <> 'SISTEMA_SYNC'
+              AND v.etapa_atual NOT IN ('CONCLUIDO', 'CANCELADO')
+          `);
+          enrichedManual = enrichResult?.affectedRows || 0;
+          if (enrichedManual > 0) {
+            console.log(`[sync_incremental] Enriched ${enrichedManual} manual vouchers with DFV data`);
+          }
+        } catch (enrichErr) {
+          console.warn('[sync_incremental] Error enriching manual vouchers:', enrichErr);
+        }
         
         // Update total count
         const totalResult = await client.query(`SELECT COUNT(*) as cnt FROM dados_dachser.t_vouchers`);
@@ -13928,10 +13960,11 @@ Deno.serve(async (req) => {
           UPDATE dados_dachser.t_sync_control SET total_records = ? WHERE sync_type = 'voucher_rm'
         `, [totalResult?.[0]?.cnt || 0]);
         
-        console.log(`[sync_incremental] Synced ${inserted} new vouchers`);
+        console.log(`[sync_incremental] Synced ${inserted} new vouchers, enriched ${enrichedManual} manual vouchers`);
         result = { 
           success: true, 
           synced: inserted, 
+          enrichedManual,
           found: newVouchers?.length || 0,
           lastSyncDatetime: lastDataInsert,
           hasMore: (newVouchers?.length || 0) >= 500
