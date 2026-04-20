@@ -403,6 +403,49 @@ serve(async (req) => {
       return eventMap[code.trim().toUpperCase()]?.descricao_en || "";
     }
 
+    // IATA hierarchy weights (higher = more advanced step in the journey).
+    // Used by pickTopByIATA to elect the most recent of the top 4 SQL slots.
+    const IATA_WEIGHT: Record<string, number> = {
+      POD: 44, DLV: 43, NFD: 42, RCF: 41, AWD: 40, ARR: 39,
+      TRM: 38, TFD: 37, DEP: 36, MAN: 35, BKD: 34, FOH: 33, RCS: 32,
+      AWR: 40, CCD: 40, FWB: 4, RCT: 11, DOC: 12, PRE: 20, TRA: 32,
+      DIS: 30, OFLD: 28,
+    };
+
+    // Resolve code from a single slot (status_code native → regex → keyword/lookup).
+    function resolveCodeFromSlot(nativeCode: string | null, desc: string | null): string | null {
+      const native = (nativeCode || "").trim().toUpperCase();
+      if (native && /^[A-Z]{2,5}$/.test(native)) return native;
+      if (!desc || desc === "null") return null;
+      // IBS pattern: "| Code RCF |"
+      const ibs = desc.match(/\|\s*Code\s+([A-Z]{2,5})\s*\|/i);
+      if (ibs) return ibs[1].toUpperCase();
+      // Lufthansa parentheses: "(NFD)"
+      const paren = desc.match(/\(([A-Z]{2,5})\)/);
+      if (paren) return paren[1].toUpperCase();
+      return resolveCode(desc);
+    }
+
+    // Sole post-SQL processing: among the up to 4 slots returned by the query,
+    // elect the one with highest IATA weight as "most recent". Tiebreak by
+    // original slot index (lower wins → preserves SQL order).
+    function pickTopByIATA(row: any): { code: string | null; desc: string | null; loc: string | null; date: string | null; idx: number } {
+      const slots = [
+        { code: resolveCodeFromSlot(row.code0_native, row.desc0), desc: row.desc0, loc: row.loc0, date: row.date0, idx: 0 },
+        { code: resolveCodeFromSlot(row.code1_native, row.desc1), desc: row.desc1, loc: row.loc1, date: row.date1, idx: 1 },
+        { code: resolveCodeFromSlot(row.code2_native, row.desc2), desc: row.desc2, loc: row.loc2, date: row.date2, idx: 2 },
+        { code: resolveCodeFromSlot(row.code3_native, row.desc3), desc: row.desc3, loc: row.loc3, date: row.date3, idx: 3 },
+      ].filter(s => s.desc || s.code);
+      if (slots.length === 0) return { code: null, desc: null, loc: null, date: null, idx: -1 };
+      let winner = slots[0];
+      let winnerW = IATA_WEIGHT[(winner.code || "").toUpperCase()] || 0;
+      for (let i = 1; i < slots.length; i++) {
+        const w = IATA_WEIGHT[(slots[i].code || "").toUpperCase()] || 0;
+        if (w > winnerW) { winner = slots[i]; winnerW = w; }
+      }
+      return winner;
+    }
+
     const data: any[] = [];
     const failed: any[] = [];
 
@@ -415,29 +458,36 @@ serve(async (req) => {
       } catch (_) {}
 
       const lastStatusCode = row.last_status_code || "";
-      // Always prefer the most recent timeline event (desc0) — it reflects the latest scrape.
-      // Fall back to last_status_code only when timeline parsing fails.
-      const codeFromTimeline = resolveCode(row.desc0);
-      const code0 = codeFromTimeline || lastStatusCode;
-      const code1 = resolveCode(row.desc1);
-      const code2 = resolveCode(row.desc2);
-      const code3 = resolveCode(row.desc3);
 
-      // Determine ultimo_status_correto using chronological order (most recent first)
+      // Sole post-SQL processing: elect the top slot by IATA hierarchy
+      // among the up to 4 returned by the SQL query.
+      const top = pickTopByIATA(row);
+      const codeFromTimeline = top.code;
+
+      // Determine final code
       let finalCode: string | null = null;
-      const codes = [code0, code1, code2, code3];
+      const allCodes = [
+        top.code,
+        resolveCodeFromSlot(row.code1_native, row.desc1),
+        resolveCodeFromSlot(row.code2_native, row.desc2),
+        resolveCodeFromSlot(row.code3_native, row.desc3),
+      ];
 
       // DLV always takes priority (delivered is final)
-      if (codes.some(c => c === "DLV") || lastStatusCode === "DLV") {
+      if (allCodes.some(c => c === "DLV") || lastStatusCode === "DLV") {
         finalCode = "DLV";
       } else {
-        // Prefer timeline's most recent event (desc0); fallback to last_status_code
+        // Prefer elected timeline slot; fallback to last_status_code
         finalCode = codeFromTimeline || lastStatusCode || null;
       }
 
+      // Use elected slot's loc/date/desc as the "current" event surface
+      const electedLoc = top.loc || row.loc0 || "";
+      const electedDate = top.date || row.date0 || "";
+
       // Enrich ARR with destination context
       if (finalCode === "ARR") {
-        const loc = extractIATA(row.loc0 || "");
+        const loc = extractIATA(electedLoc);
         const dest = extractIATA(row.DESTINO || "");
         if (dest && loc && loc === dest) {
           finalCode = "ARR - DESTINO";
