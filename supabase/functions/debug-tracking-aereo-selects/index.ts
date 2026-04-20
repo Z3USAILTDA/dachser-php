@@ -69,29 +69,29 @@ serve(async (req) => {
     const q4 = await client.query(`SELECT hawb, cliente FROM dados_dachser.t_master_dados WHERE hawb IS NOT NULL AND cliente IS NOT NULL AND cliente != '' LIMIT 5`);
     out.queries.push({ name: "4_t_master_dados_sample", row_count: q4.length, sample: q4 });
 
-    // Q5 — visibility (introspect schema first, then sample)
-    const q5cols = await client.query(`SHOW COLUMNS FROM dados_dachser.t_air_process_visibility`);
-    out.queries.push({ name: "5a_t_air_process_visibility_columns", rows: q5cols });
-    const q5 = await client.query(`SELECT * FROM dados_dachser.t_air_process_visibility LIMIT 50`);
-    out.queries.push({ name: "5_t_air_process_visibility", row_count: q5.length, sample: q5 });
+    const safe = async (name: string, sql: string, params: any[] = []) => {
+      try {
+        const r = await client!.query(sql, params);
+        out.queries.push({ name, sql, row_count: Array.isArray(r) ? r.length : 0, rows: r });
+      } catch (e: any) {
+        out.queries.push({ name, sql, error: e?.message || String(e) });
+      }
+    };
 
-    // Q6 — discrepancy filtered to target
-    const q6 = await client.query(
-      `SELECT awb, hawb, JSON_LENGTH(timeline_json) AS timeline_len, timeline_json
+    await safe("5a_visibility_columns", `SHOW COLUMNS FROM dados_dachser.t_air_process_visibility`);
+    await safe("5_visibility_sample", `SELECT * FROM dados_dachser.t_air_process_visibility LIMIT 20`);
+
+    await safe(
+      `6_t_fato_aereo_raw_${targetAwb}`,
+      `SELECT awb, last_status_code, JSON_LENGTH(timeline_json) AS timeline_len, timeline_json
        FROM dados_dachser.t_fato_aereo WHERE awb = ?`,
       [targetAwb],
     );
-    out.queries.push({ name: `6_t_fato_aereo_raw_${targetAwb}`, row_count: q6.length, rows: q6 });
 
-    // Q7 — Expand timeline of target AWB via JSON_TABLE with timestamp parsing
-    const q7 = await client.query(
-      `SELECT
-         jt.ordem,
-         jt.description,
-         jt.location,
-         jt.date,
-         jt.time,
-         STR_TO_DATE(CONCAT(NULLIF(jt.date,''), ' ', IFNULL(NULLIF(jt.time,''),'00:00')), '%d %b %Y %H:%i') AS parsed_ts
+    await safe(
+      `7_timeline_by_position_${targetAwb}`,
+      `SELECT jt.ordem, jt.description, jt.location, jt.date, jt.time,
+              STR_TO_DATE(CONCAT(NULLIF(jt.date,''), ' ', IFNULL(NULLIF(jt.time,''),'00:00')), '%d %b %Y %H:%i') AS parsed_ts
        FROM dados_dachser.t_fato_aereo tdaf
        JOIN JSON_TABLE(tdaf.timeline_json, '$[*]' COLUMNS (
          ordem FOR ORDINALITY,
@@ -104,17 +104,11 @@ serve(async (req) => {
        ORDER BY jt.ordem`,
       [targetAwb],
     );
-    out.queries.push({ name: `7_timeline_expanded_${targetAwb}_by_position`, row_count: q7.length, rows: q7 });
 
-    // Q7b — Same but ordered by parsed timestamp DESC
-    const q7b = await client.query(
-      `SELECT
-         jt.ordem AS posicao_original,
-         jt.description,
-         jt.location,
-         jt.date,
-         jt.time,
-         STR_TO_DATE(CONCAT(NULLIF(jt.date,''), ' ', IFNULL(NULLIF(jt.time,''),'00:00')), '%d %b %Y %H:%i') AS parsed_ts
+    await safe(
+      `7b_timeline_by_timestamp_DESC_${targetAwb}`,
+      `SELECT jt.ordem AS posicao_original, jt.description, jt.location, jt.date, jt.time,
+              STR_TO_DATE(CONCAT(NULLIF(jt.date,''), ' ', IFNULL(NULLIF(jt.time,''),'00:00')), '%d %b %Y %H:%i') AS parsed_ts
        FROM dados_dachser.t_fato_aereo tdaf
        JOIN JSON_TABLE(tdaf.timeline_json, '$[*]' COLUMNS (
          ordem FOR ORDINALITY,
@@ -127,7 +121,6 @@ serve(async (req) => {
        ORDER BY parsed_ts DESC`,
       [targetAwb],
     );
-    out.queries.push({ name: `7b_timeline_expanded_${targetAwb}_ordered_by_timestamp_DESC`, row_count: q7b.length, rows: q7b });
 
     await client.close();
     client = null;
