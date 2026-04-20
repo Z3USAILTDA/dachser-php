@@ -201,6 +201,17 @@ serve(async (req) => {
 
   let client: Client | null = null;
 
+  // Optional override: { testEmail: "x@y.com" } redirects ALL recipients (full + segmented) to this address
+  let testEmail: string | null = null;
+  try {
+    if (req.method === "POST") {
+      const body = await req.json().catch(() => null);
+      if (body && typeof body.testEmail === "string" && body.testEmail.includes("@")) {
+        testEmail = body.testEmail.trim();
+      }
+    }
+  } catch (_) { /* ignore */ }
+
   try {
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     if (!RESEND_API_KEY) throw new Error("Missing RESEND_API_KEY");
