@@ -266,9 +266,10 @@ const getStatusCode = (lastEvent: string | null): string => {
     return upperEvent;
   }
 
-  // Se tem o formato "XXX - Description" (mas não ARR), retorna a sigla
+  // Se tem o formato "XXX - Description" (mas não ARR), retorna a sigla apenas se for válida
   if (lastEvent.includes(" - ")) {
-    return lastEvent.split(" - ")[0];
+    const prefix = lastEvent.split(" - ")[0].toUpperCase().trim();
+    if (knownStatusCodes.includes(prefix)) return prefix;
   }
 
   // Tenta mapear a descrição para uma sigla conhecida
@@ -279,8 +280,8 @@ const getStatusCode = (lastEvent: string | null): string => {
     return mappedCode;
   }
 
-  // Se não encontrar mapeamento, retorna os primeiros 3 caracteres em maiúsculo
-  return lastEvent.substring(0, 3).toUpperCase();
+  // Sem fallback de substring — evita inventar código a partir de localização (FRA, FCO, GRU)
+  return "UNK";
 };
 
 // Função para calcular a posição do avião na timeline (0-100%)

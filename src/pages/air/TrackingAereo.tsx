@@ -49,8 +49,11 @@ const getStatusCode = (lastEvent: string | null): string => {
   const upperEvent = lastEvent.toUpperCase().trim();
   if (upperEvent.startsWith("ARR - ")) return upperEvent;
   if (knownStatusCodes.includes(upperEvent)) return upperEvent;
-  if (lastEvent.includes(" - ")) return lastEvent.split(" - ")[0];
-  return lastEvent.substring(0, 3).toUpperCase();
+  if (lastEvent.includes(" - ")) {
+    const prefix = lastEvent.split(" - ")[0].toUpperCase().trim();
+    if (knownStatusCodes.includes(prefix)) return prefix;
+  }
+  return "UNK";
 };
 
 const getTimelineProgress = (lastEvent: string | null): number => {

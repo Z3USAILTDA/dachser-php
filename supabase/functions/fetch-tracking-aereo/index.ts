@@ -420,6 +420,11 @@ serve(async (req) => {
       // IBS pattern: "| Code RCF |"
       const ibs = desc.match(/\|\s*Code\s+([A-Z]{2,5})\s*\|/i);
       if (ibs) return ibs[1].toUpperCase();
+      // Description starts with the code itself: "RCF Received from Flight ..."
+      const startCode = desc.trim().match(/^([A-Z]{2,5})\b/);
+      if (startCode && IATA_WEIGHT[startCode[1].toUpperCase()] !== undefined) {
+        return startCode[1].toUpperCase();
+      }
       // Lufthansa parentheses: "(NFD)"
       const paren = desc.match(/\(([A-Z]{2,5})\)/);
       if (paren) return paren[1].toUpperCase();
@@ -473,12 +478,20 @@ serve(async (req) => {
         resolveCodeFromSlot(row.code3_native, row.desc3),
       ];
 
+      // Whitelist of valid IATA codes for raw last_status_code fallback
+      const VALID_IATA = new Set([
+        ...Object.keys(IATA_WEIGHT),
+        'OFLD','NIL','NIF','DIS','TFD','RCT','TRM','POD','UNK',
+      ]);
+      const sanitizedLastStatus = (lastStatusCode || '').toString().toUpperCase().trim();
+      const safeLastStatus = VALID_IATA.has(sanitizedLastStatus) ? sanitizedLastStatus : null;
+
       // DLV always takes priority (delivered is final)
-      if (allCodes.some(c => c === "DLV") || lastStatusCode === "DLV") {
+      if (allCodes.some(c => c === "DLV") || sanitizedLastStatus === "DLV") {
         finalCode = "DLV";
       } else {
-        // Prefer elected timeline slot; fallback to last_status_code
-        finalCode = codeFromTimeline || lastStatusCode || null;
+        // Prefer elected timeline slot; fallback only to whitelisted last_status_code
+        finalCode = codeFromTimeline || safeLastStatus || null;
       }
 
       // Use elected slot's loc/date/desc as the "current" event surface
