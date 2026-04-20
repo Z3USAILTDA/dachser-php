@@ -320,16 +320,18 @@ serve(async (req) => {
         console.warn(`Failed to fetch users for segment ${segment}:`, e);
       }
 
-      const recipients = [...new Set([...userEmails, ...(SEGMENT_EXTRA_EMAILS[segment] || [])])];
+      const baseRecipients = [...new Set([...userEmails, ...(SEGMENT_EXTRA_EMAILS[segment] || [])])];
+      const recipients = testEmail ? [testEmail] : baseRecipients;
       if (recipients.length === 0) {
         sentSummary[segment] = { skipped: true, reason: "no recipients" };
         continue;
       }
 
       const segHtml = buildHtml(monthLabel, concluidosSeg, emAndamentoSeg, segment);
-      const segSubject = `Relatório Mensal — ${segment} — ${monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}`;
+      const segSubjectBase = `Relatório Mensal — ${segment} — ${monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}`;
+      const segSubject = testEmail ? `[TESTE] ${segSubjectBase}` : segSubjectBase;
       sentSummary[segment] = await sendEmail(RESEND_API_KEY, recipients, segSubject, segHtml);
-      console.log(`Sent ${segment} report to ${recipients.length} recipients`);
+      console.log(`Sent ${segment} report to ${recipients.length} recipients${testEmail ? " (TEST MODE)" : ""}`);
     }
 
     await client.close();
