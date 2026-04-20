@@ -1,0 +1,2 @@
+[functions.debug-tracking-aereo-selects]
+verify_jwt = false
