@@ -1,58 +1,89 @@
 
 
-## Ajuste: processo 020-65056110 mostrando RCS mas timeline é RCF
+## Por que a ordenação ainda fica incorreta mesmo a Q3 já trazendo os 3 últimos eventos
 
-### Diagnóstico
+### Causa raiz
 
-No monitoramento aéreo (`/air/tracking`), o "Último Status" da tabela é resolvido em `fetch-status-aereo` pela lógica:
+A Q3 faz `JSON_EXTRACT(timeline_json, '$[0]')`, `'$[1]'`, `'$[2]'`, `'$[3]'` — ou seja, ela pega os eventos pela **posição física no array JSON**, não pela data.
 
-1. **Tenta** pegar o código do evento mais recente da `timeline_json` via `getEventStatusCode()`.
-2. **Se falhar**, cai no fallback e usa `ws.last_status_code` do `t_aereo_ws_firecrawl` (valor bruto gravado pelo crawler).
+Isso só funciona quando o array já está fisicamente ordenado por data desc no MariaDB. Para o AWB `020-07276290` o dump confirmou que está. Mas para AWBs como `020-65056110` (caso original do problema) e outros, o crawler grava os eventos em ordens variadas — às vezes ordem de chegada da página da cia aérea, às vezes ordem cronológica asc, às vezes mistura quando o array é atualizado incrementalmente. Resultado: `$[0]` não é necessariamente o evento mais recente.
 
-Para o AWB `020-65056110` a timeline já contém `RCF` como evento mais recente, mas a tela continua exibindo `RCS`. Existem duas causas possíveis — precisamos confirmar qual delas com uma consulta ao MariaDB:
+Além disso, mesmo com array ordenado, há um segundo problema: `last_status_code` (coluna crua de `t_fato_aereo`) é o que a `fetch-status-aereo` usa como fallback e está desatualizado em vários AWBs — não acompanha a timeline.
 
-**Causa A (mais provável)**: O evento RCF na timeline não tem código direto preenchido (`Status`/`code` vazios) e a descrição não casa com os regex de extração (ex: descrição tipo `"Received from Flight"` sem `(RCF)` no final nem prefixo `RCF -`). `getEventStatusCode()` retorna string vazia → cai no fallback → usa `ws.last_status_code = 'RCS'` antigo.
+### Correção (no próprio SELECT, sem pós-processamento JS)
 
-**Causa B**: O evento RCS tem timestamp **mais recente ou igual** ao RCF na ordenação, então o "evento mais recente" escolhido é o RCS mesmo. Improvável se visualmente RCF aparece acima de RCS na timeline, mas possível quando timestamps empatam.
+Trocar o bloco que faz `JSON_EXTRACT($[0..3])` por uma CTE com `JSON_TABLE` que ordena por timestamp real e numera as posições:
 
-### Mudança proposta (cirúrgica)
+```sql
+WITH eventos_ordenados AS (
+  SELECT 
+    f.awb,
+    jt.descricao,
+    jt.local,
+    jt.data_str,
+    STR_TO_DATE(jt.data_str, '%d %b %Y %H:%i') AS data_real,
+    ROW_NUMBER() OVER (
+      PARTITION BY f.awb 
+      ORDER BY STR_TO_DATE(jt.data_str, '%d %b %Y %H:%i') DESC
+    ) AS pos
+  FROM t_fato_aereo f
+  CROSS JOIN JSON_TABLE(
+    f.timeline_json, '$[*]' COLUMNS (
+      descricao VARCHAR(500) PATH '$.Description',
+      local     VARCHAR(20)  PATH '$.Location',
+      data_str  VARCHAR(50)  PATH '$.Date'
+    )
+  ) jt
+)
+SELECT 
+  MAX(CASE WHEN pos=1 THEN descricao END) AS desc0,
+  MAX(CASE WHEN pos=1 THEN local     END) AS loc0,
+  MAX(CASE WHEN pos=1 THEN data_real END) AS date0,
+  MAX(CASE WHEN pos=2 THEN descricao END) AS desc1,
+  ...
+FROM eventos_ordenados
+GROUP BY awb
+```
 
-**1. Investigação rápida (1 query SQL)**
-Olhar o `timeline_json` real de `020-65056110` em `t_aereo_ws_firecrawl` para confirmar qual das duas causas é a correta e ver o shape exato do evento RCF.
+E aplicar o mesmo `JSON_TABLE + ORDER BY` na query de timeline (`get_awb_tracking_events` em `mariadb-proxy`) — dessa forma o front recebe a timeline já ordenada do banco, sem precisar do `sort` JS atual em `AwbTimelineModal`.
 
-**2. Correção em `supabase/functions/fetch-status-aereo/index.ts`, função `getEventStatusCode()` (linhas 32-47)**
+### Resolução de status — derivar do `desc0` ordenado
 
-Adicionar reconhecimento dos padrões IATA mais comuns em descrições em inglês/português, sem depender de código entre parênteses:
+Com `desc0` agora garantidamente o mais recente, a `fetch-status-aereo` deve resolver o código direto da descrição via `t_eventos_awb` + `t_description_eventos` (Q1+Q2) e **só** cair em `last_status_code` quando a timeline for vazia. Hoje `last_status_code` ganha em ramos onde o regex falha — adicionar reconhecimento das frases padrão IATA em inglês:
 
 ```
-Received from Flight      → RCF
-Received from Shipper     → RCS
-Manifested                → MAN
-Departed                  → DEP
-Arrived                   → ARR
-Notified for Delivery     → NFD
-Awaiting Delivery         → AWD
-Delivered                 → DLV
+"Received from flight"  → RCF
+"Received from shipper" → RCS
+"Manifested"            → MAN
+"Departed"              → DEP
+"Arrived"               → ARR
+"Notified for Delivery" → NFD
+"Awaiting Delivery"     → AWD
+"Delivered"             → DLV
+"Booked"                → BKD
+"Freight on Hand"       → FOH
 ```
 
-É o mesmo mapeamento que já existe em outros trechos do código (ex: `track-awb/index.ts` linhas 342-352, 1233-1237) — estamos apenas aplicando ao ponto central de extração que alimenta TODAS as resoluções de status do tracking aéreo.
+### Desempate de timestamps iguais
 
-**3. Se a causa for a B (ordenação)**: adicionar desempate IATA na ordenação principal (como já existe em `sortEventsDesc`, mas hoje NÃO é usada em `fetch-status-aereo` linhas 1189-1193, que ordena só por data). Ou seja, quando RCS e RCF têm o mesmo timestamp, RCF (mais avançado na hierarquia) vence.
+Quando dois eventos têm o mesmo `STR_TO_DATE`, adicionar tiebreaker no `ORDER BY` por hierarquia IATA (RCF > ARR > DEP > MAN > RCS …) via `FIELD()` ou `CASE` — assim RCS e RCF empatados nunca mais escolhem RCS.
+
+### Limpeza
+
+Remover Edge Function temporária `debug-tracking-aereo-selects` (config.toml + index.ts) — diagnóstico concluído.
+
+Remover do `AwbTimelineModal.tsx` o bloco JS de `IATA_WEIGHT` e `deduped.sort(...)` — passa a confiar na ordenação do SQL.
 
 ### Não muda
 
-- Lógica de override manual (processos com `MANUAL_OVERRIDES` continuam intocados).
-- Esquema das tabelas, RLS, cron jobs.
-- Timeline exibida — continua mirror dos dados brutos do MariaDB (regra `Air Data Mirroring Intent v2`).
-- Demais funções (CCT, marítimo, etc.).
-
-### Escopo
-
-Correção vale para **qualquer** AWB que caia no mesmo problema (não é fix específico de um processo). Não entrará em `MANUAL_OVERRIDES` — o objetivo é corrigir a resolução automática.
+- Schema de retorno para o front.
+- CTE de discrepância (Q6).
+- Cron, SLA, visibility, `MANUAL_OVERRIDES`.
+- Demais módulos.
 
 ### Validação
 
-1. Rodar a query de diagnóstico e confirmar Causa A vs B.
-2. Após deploy, revalidar `020-65056110` em `/air/tracking` — status deve exibir `RCF`.
-3. Conferir que outros AWBs não regrediram (ex: processos em `RCS` legítimo continuam como `RCS`).
+1. `020-65056110` → exibe `RCF` (era `RCS`).
+2. `020-07276290` → continua `RCF` correto.
+3. 3-5 amostras em `RCS`/`DEP`/`ARR`/`DLV` legítimos não regridem.
 
