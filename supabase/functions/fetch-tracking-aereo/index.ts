@@ -108,19 +108,43 @@ serve(async (req) => {
       password,
     });
 
+    // Normalization for description-based lookup matching
+    const normalizeDesc = (s: string): string =>
+      (s || "").toUpperCase().trim().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+
     // Step 1: Load event codes lookup table (small, ~50 rows)
+    // t_eventos_awb has 'descricao_en' (English description per IATA code)
     const eventsRows = await queryWithRetry(client, `SELECT id, code, descricao_en FROM dados_dachser.t_eventos_awb`);
     const eventMap: Record<string, { id: number; descricao_en: string }> = {};
+    const EXACT_MAP: Map<string, string> = new Map();
+    const KEYWORD_INDEX: Array<{ needle: string; code: string }> = [];
     for (const e of eventsRows || []) {
-      if (e.code) eventMap[e.code.trim().toUpperCase()] = { id: Number(e.id), descricao_en: e.descricao_en || "" };
+      const code = (e.code || "").toString().trim().toUpperCase();
+      if (!code) continue;
+      eventMap[code] = { id: Number(e.id), descricao_en: e.descricao_en || "" };
+      const desc = normalizeDesc(e.descricao_en || "");
+      if (desc) {
+        if (!EXACT_MAP.has(desc)) EXACT_MAP.set(desc, code);
+        KEYWORD_INDEX.push({ needle: desc, code });
+      }
     }
 
-    // Step 2: Load description_eventos lookup (small)
-    const descRows = await queryWithRetry(client, `SELECT code, description FROM dados_dachser.t_description_eventos ORDER BY CHAR_LENGTH(description) DESC`);
+    // Step 2: Load description_eventos lookup — authoritative description→code mapping
+    const descRows = await queryWithRetry(client, `SELECT code, description FROM dados_dachser.t_description_eventos`);
     const descLookup: Array<{ code: string; description: string }> = (descRows || []).map((d: any) => ({
       code: d.code || "",
       description: (d.description || "").toUpperCase(),
     }));
+    for (const d of descRows || []) {
+      const code = (d.code || "").toString().trim().toUpperCase();
+      const desc = normalizeDesc(d.description || "");
+      if (!code || !desc) continue;
+      if (!EXACT_MAP.has(desc)) EXACT_MAP.set(desc, code);
+      KEYWORD_INDEX.push({ needle: desc, code });
+    }
+    // Sort needles by length DESC — longer/more specific needle wins
+    KEYWORD_INDEX.sort((a, b) => b.needle.length - a.needle.length);
+    console.log(`Loaded ${EXACT_MAP.size} exact descriptions, ${KEYWORD_INDEX.length} keyword needles`);
 
     // Step 3: Main query with SLA calculation via CTE
     // Returns the top 4 timeline events by physical array position ($[0..3]).
