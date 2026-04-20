@@ -123,11 +123,11 @@ serve(async (req) => {
     }));
 
     // Step 3: Main query with SLA calculation via CTE
-    // CRITICAL: timeline_json is NOT guaranteed to be physically ordered by date.
-    // We use JSON_TABLE + ROW_NUMBER ORDER BY actual timestamp (with IATA hierarchy
-    // tiebreaker for same-timestamp events) to pick the truly most recent event.
+    // Returns the top 4 timeline events by physical array position ($[0..3]).
+    // The JS post-processing (pickTopByIATA) elects the most recent among them
+    // using the IATA hierarchy as tiebreaker — sole post-SQL processing.
     const sql = `
-      with raw_base as (
+      with base as (
         select
             tda.awb_number as AWB,
             tda.hawb_number as HAWB,
@@ -136,7 +136,24 @@ serve(async (req) => {
             tdaf.destination as DESTINO,
             tda.clerk as ANALISTA,
             tdaf.last_status_code,
-            tdaf.timeline_json as TIMELINE
+            tdaf.timeline_json as TIMELINE,
+            json_unquote(json_extract(tdaf.timeline_json, '$[0].description')) as desc0,
+            json_unquote(json_extract(tdaf.timeline_json, '$[1].description')) as desc1,
+            json_unquote(json_extract(tdaf.timeline_json, '$[2].description')) as desc2,
+            json_unquote(json_extract(tdaf.timeline_json, '$[3].description')) as desc3,
+            json_unquote(json_extract(tdaf.timeline_json, '$[0].location'))    as loc0,
+            json_unquote(json_extract(tdaf.timeline_json, '$[1].location'))    as loc1,
+            json_unquote(json_extract(tdaf.timeline_json, '$[2].location'))    as loc2,
+            json_unquote(json_extract(tdaf.timeline_json, '$[3].location'))    as loc3,
+            json_unquote(json_extract(tdaf.timeline_json, '$[0].date'))        as date0,
+            json_unquote(json_extract(tdaf.timeline_json, '$[1].date'))        as date1,
+            json_unquote(json_extract(tdaf.timeline_json, '$[2].date'))        as date2,
+            json_unquote(json_extract(tdaf.timeline_json, '$[3].date'))        as date3,
+            json_unquote(json_extract(tdaf.timeline_json, '$[0].time'))        as time0,
+            json_unquote(json_extract(tdaf.timeline_json, '$[0].status_code')) as code0_native,
+            json_unquote(json_extract(tdaf.timeline_json, '$[1].status_code')) as code1_native,
+            json_unquote(json_extract(tdaf.timeline_json, '$[2].status_code')) as code2_native,
+            json_unquote(json_extract(tdaf.timeline_json, '$[3].status_code')) as code3_native
         from dados_dachser.t_dados_aereo tda
         left join dados_dachser.t_fato_aereo tdaf
             on tdaf.awb collate utf8mb4_unicode_ci = tda.awb_number collate utf8mb4_unicode_ci
@@ -144,98 +161,6 @@ serve(async (req) => {
            and json_contains(tdaf.hawbs_json, json_array(tda.hawb_number))
         where
             (tda.master_insert >= '2026-03-20' or tda.created_at >= '2026-03-20')
-      ),
-      eventos_ordenados as (
-        select
-            rb.AWB,
-            rb.HAWB,
-            convert(jt.description using utf8mb4) collate utf8mb4_unicode_ci as descricao,
-            convert(jt.location    using utf8mb4) collate utf8mb4_unicode_ci as localizacao,
-            convert(jt.data_str    using utf8mb4) collate utf8mb4_unicode_ci as data_str,
-            convert(jt.time_str    using utf8mb4) collate utf8mb4_unicode_ci as time_str,
-            str_to_date(
-              concat(
-                nullif(jt.data_str, ''),
-                case when nullif(jt.time_str, '') is not null then concat(' ', jt.time_str) else ' 00:00' end
-              ),
-              '%d %b %Y %H:%i'
-            ) as data_real,
-            -- IATA hierarchy weight (higher = more advanced = wins same-timestamp tie)
-            case upper(coalesce(
-              regexp_substr(jt.description, '\\\\(([A-Z]{2,5})\\\\)'),
-              substring_index(jt.description, ' ', 1)
-            ))
-              when 'DLV' then 46 when 'POD' then 47
-              when 'NFD' then 42 when 'AWD' then 43 when 'AWR' then 44 when 'CCD' then 45
-              when 'RCF' then 41 when 'ARR' then 40
-              when 'DEP' then 23 when 'MAN' then 21 when 'PRE' then 20
-              when 'TFD' then 30 when 'TRM' then 31 when 'TRA' then 32
-              when 'FOH' then 16 when 'RCS' then 10 when 'RCT' then 11 when 'DOC' then 12
-              when 'BKD' then 1  when 'FWB' then 4
-              when 'DIS' then 55 when 'OFLD' then 53
-              else 0
-            end as iata_weight,
-            row_number() over (
-              partition by rb.AWB, rb.HAWB
-              order by
-                str_to_date(
-                  concat(
-                    nullif(jt.data_str, ''),
-                    case when nullif(jt.time_str, '') is not null then concat(' ', jt.time_str) else ' 00:00' end
-                  ),
-                  '%d %b %Y %H:%i'
-                ) desc,
-                case upper(coalesce(
-                  regexp_substr(jt.description, '\\\\(([A-Z]{2,5})\\\\)'),
-                  substring_index(jt.description, ' ', 1)
-                ))
-                  when 'DLV' then 46 when 'POD' then 47
-                  when 'NFD' then 42 when 'AWD' then 43 when 'AWR' then 44 when 'CCD' then 45
-                  when 'RCF' then 41 when 'ARR' then 40
-                  when 'DEP' then 23 when 'MAN' then 21 when 'PRE' then 20
-                  when 'TFD' then 30 when 'TRM' then 31 when 'TRA' then 32
-                  when 'FOH' then 16 when 'RCS' then 10 when 'RCT' then 11 when 'DOC' then 12
-                  when 'BKD' then 1  when 'FWB' then 4
-                  when 'DIS' then 55 when 'OFLD' then 53
-                  else 0
-                end desc
-            ) as pos
-        from raw_base rb
-        cross join json_table(
-          coalesce(rb.TIMELINE, json_array()),
-          '$[*]' columns (
-            description varchar(1000) path '$.description',
-            location    varchar(50)   path '$.location',
-            data_str    varchar(50)   path '$.date',
-            time_str    varchar(20)   path '$.time'
-          )
-        ) jt
-        where rb.TIMELINE is not null and json_valid(rb.TIMELINE)
-      ),
-      ordered_pivot as (
-        select
-          AWB, HAWB,
-          max(case when pos = 1 then descricao   end) as desc0,
-          max(case when pos = 2 then descricao   end) as desc1,
-          max(case when pos = 3 then descricao   end) as desc2,
-          max(case when pos = 4 then descricao   end) as desc3,
-          max(case when pos = 1 then localizacao end) as loc0,
-          max(case when pos = 2 then localizacao end) as loc1,
-          max(case when pos = 1 then data_str    end) as date0,
-          max(case when pos = 1 then time_str    end) as time0
-        from eventos_ordenados
-        group by AWB, HAWB
-      ),
-      base as (
-        select
-          rb.AWB, rb.HAWB, rb.CLIENTE, rb.ORIGEM, rb.DESTINO, rb.ANALISTA,
-          rb.last_status_code, rb.TIMELINE,
-          op.desc0, op.desc1, op.desc2, op.desc3,
-          op.loc0, op.loc1, op.date0, op.time0
-        from raw_base rb
-        left join ordered_pivot op
-          on op.AWB collate utf8mb4_unicode_ci = rb.AWB collate utf8mb4_unicode_ci
-         and op.HAWB collate utf8mb4_unicode_ci = rb.HAWB collate utf8mb4_unicode_ci
       ),
       event_time as (
         select
