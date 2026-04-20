@@ -1,32 +1,45 @@
 
-## Ajuste: formatação de data de vencimento nos e-mails
 
-### Problema
-Nos e-mails de notificação (ex.: AJUSTE_SOLICITADO), o campo **Vencimento** aparece como:
-`Thu Apr 23 2026 00:00:00 GMT-0300 (Horário Padrão de Brasília)`
+## Correção: vouchers cancelados não aparecem ao filtrar por "Cancelado"
 
-Isso ocorre porque a data está sendo renderizada no template HTML usando o valor bruto vindo do payload (`data.vencimento`), que em vários call-sites é um `Date.toString()` (ou um ISO/datetime longo do MariaDB).
+### Causa-raiz
+A query `get_vouchers_combined` em `supabase/functions/mariadb-proxy/index.ts` (linha 14176) filtra vouchers ativos com:
+
+```sql
+WHERE sync_status = "ATIVO"
+  AND (voucher_master_id IS NULL OR voucher_master_id = "")
+  AND (etapa_atual != "CONCLUIDO" OR (etapa_atual = "CONCLUIDO" AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)))
+```
+
+Vouchers em `CANCELADO` passam pelo `sync_status = "ATIVO"`, mas:
+- **Sem filtro de mês:** são incluídos (estão no resultado).
+- **Com filtro de mês (caso atual: abril/2026):** o `ativosMonthClause` exige que `etapa_atual IN ('OPERACAO','FISCAL','SUPERVISOR','FINANCEIRO')` **OU** que `data_emissao` esteja no mês. Como `CANCELADO` não está na lista de etapas ativas e `data_emissao` muitas vezes é nula/fora do mês para vouchers cancelados, eles somem.
+
+Além disso, vouchers cancelados deveriam ter retenção idêntica a `CONCLUIDO` (ficar visíveis por algum período após o cancelamento), o que hoje não existe.
 
 ### Solução (cirúrgica)
-Em `supabase/functions/send-voucher-notification/index.ts`, adicionar um helper `formatVencimentoBR(value)` que:
-- Aceita `string | Date | undefined`.
-- Tenta `new Date(value)`; se válido, retorna `dd/MM/yyyy` em pt-BR (`toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })`).
-- Se inválido (ex.: já vem `"23/04/2026"`), retorna o valor original como string.
-- Se vazio, retorna `""`.
 
-Aplicar o helper nos 2 únicos pontos onde `data.vencimento` é renderizado:
-1. Linha 146 — bloco `VENCIMENTO_PROXIMO`.
-2. Linha 179 — linha da tabela "Vencimento" (usada por todos os tipos de e-mail).
+**Arquivo:** `supabase/functions/mariadb-proxy/index.ts` — bloco `get_vouchers_combined`.
 
-### Arquivo afetado
-| Arquivo | Mudança |
-|---|---|
-| `supabase/functions/send-voucher-notification/index.ts` | Adicionar `formatVencimentoBR` e substituir `${data.vencimento}` por `${formatVencimentoBR(data.vencimento)}` nas 2 ocorrências |
+1. **Tratar `CANCELADO` como etapa ativa para fins de visibilidade no mês corrente**, adicionando-o ao `IN(...)` do `ativosMonthClause`:
+   ```sql
+   v.etapa_atual IN ('OPERACAO','FISCAL','SUPERVISOR','FINANCEIRO','AJUSTE_OPERACAO','AJUSTE_FISCAL','CANCELADO')
+   ```
+   *(Inclui também `AJUSTE_*` que tinham o mesmo problema latente.)*
+
+2. **Adicionar exceção de retenção para `CANCELADO` na cláusula de exclusão**, espelhando o comportamento de `CONCLUIDO`:
+   ```sql
+   AND (etapa_atual NOT IN ('CONCLUIDO','CANCELADO') 
+        OR (etapa_atual IN ('CONCLUIDO','CANCELADO') AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)))
+   ```
+   Assim, vouchers cancelados continuam visíveis nas últimas 24h (igual a `CONCLUIDO`) — útil para conferência imediata após o cancelamento.
 
 ### Não muda
-- Frontend (call-sites continuam mandando o valor como vinha — a normalização passa a ser responsabilidade do template do e-mail, ponto único).
-- Outros campos (valor, moeda etc.).
-- Edge functions de relatório (esse caso é específico do `send-voucher-notification`).
+- Frontend (`VoucherTable.tsx`, `EsteiraIndex.tsx`): o `SelectItem value="CANCELADO"` já existe e funciona — só precisava receber os dados.
+- Lógica de cancelamento (`cancelar_voucher`): já está correta, o voucher é marcado como `etapa_atual = 'CANCELADO'`.
+- Demais queries (`get_vouchers_ativos`, etc.) — escopo restrito ao endpoint usado pela tela.
 
 ### Resultado esperado
-`Vencimento: 23/04/2026`
+- Após cancelar um voucher, ele continua aparecendo na lista por até 24h e pode ser filtrado por "Cancelado" no dropdown de Etapa.
+- Vouchers cancelados em meses anteriores aparecem ao trocar o filtro de mês para o mês do cancelamento.
+
