@@ -279,7 +279,7 @@ function buildXlsxBuffer(
   XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
 
   // ---- ABA 2: Concluídos ----
-  const concHeader = ["Nº SPO", "Fornecedor", "Valor", "Moeda", "Vencimento", "Etapa Final", "Status Baixa", "Resp. Financeiro", "Concluído em"];
+  const concHeader = ["Nº SPO", "Fornecedor", "Valor", "Moeda", "Vencimento", "Etapa Final", "Status Baixa", "Concluído em"];
   const concData = concluidos.map((v) => [
     v.numero_spo || "-",
     v.fornecedor || "-",
@@ -288,7 +288,6 @@ function buildXlsxBuffer(
     formatDateBR(v.vencimento),
     etapaLabel[v.etapa_atual] || v.etapa_atual,
     v.status_baixa || "PENDENTE",
-    v.responsavel_financeiro_user_name || "-",
     formatDateBR(v.updated_at),
   ]);
   const wsConc = XLSX.utils.aoa_to_sheet([concHeader, ...concData]);
@@ -298,20 +297,13 @@ function buildXlsxBuffer(
     const valAddr = XLSX.utils.encode_cell({ r: i + 1, c: 2 });
     if (wsConc[valAddr]) { wsConc[valAddr].t = "n"; wsConc[valAddr].z = '#,##0.00'; }
   }
-  wsConc["!cols"] = [{ wch: 14 }, { wch: 32 }, { wch: 14 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 24 }, { wch: 14 }];
+  wsConc["!cols"] = [{ wch: 14 }, { wch: 32 }, { wch: 14 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
   wsConc["!freeze"] = { xSplit: 0, ySplit: 1 } as any;
   wsConc["!rows"] = [{ hpt: 24 }];
   XLSX.utils.book_append_sheet(wb, wsConc, "Concluídos");
 
   // ---- ABA 3: Em Andamento ----
-  const andHeader = ["Nº SPO", "Fornecedor", "Valor", "Moeda", "Vencimento", "Etapa Atual", "Responsável Atual", "Dias na Etapa", "Urgente"];
-  const respFor = (v: any) => {
-    const e = v.etapa_atual;
-    if (e === "OPERACAO" || e === "AJUSTE_OPERACAO") return v.responsavel_operacao_user_name;
-    if (e === "FISCAL" || e === "AJUSTE_FISCAL") return v.responsavel_fiscal_user_name;
-    if (e === "FINANCEIRO" || e === "ROBO") return v.responsavel_financeiro_user_name;
-    return v.responsavel_atual_user_name || "-";
-  };
+  const andHeader = ["Nº SPO", "Fornecedor", "Valor", "Moeda", "Vencimento", "Etapa Atual", "Dias na Etapa", "Urgente"];
   const andData = emAndamento.map((v) => [
     v.numero_spo || "-",
     v.fornecedor || "-",
@@ -319,7 +311,6 @@ function buildXlsxBuffer(
     v.moeda || "BRL",
     formatDateBR(v.vencimento),
     etapaLabel[v.etapa_atual] || v.etapa_atual,
-    respFor(v) || "-",
     daysBetween(v.updated_at),
     v.urgente ? "Sim" : "Não",
   ]);
@@ -330,7 +321,7 @@ function buildXlsxBuffer(
     const valAddr = XLSX.utils.encode_cell({ r: i + 1, c: 2 });
     if (wsAnd[valAddr]) { wsAnd[valAddr].t = "n"; wsAnd[valAddr].z = '#,##0.00'; }
   }
-  wsAnd["!cols"] = [{ wch: 14 }, { wch: 32 }, { wch: 14 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 24 }, { wch: 14 }, { wch: 10 }];
+  wsAnd["!cols"] = [{ wch: 14 }, { wch: 32 }, { wch: 14 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 10 }];
   wsAnd["!freeze"] = { xSplit: 0, ySplit: 1 } as any;
   wsAnd["!rows"] = [{ hpt: 24 }];
   XLSX.utils.book_append_sheet(wb, wsAnd, "Em Andamento");
