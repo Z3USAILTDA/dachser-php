@@ -201,6 +201,17 @@ serve(async (req) => {
 
   let client: Client | null = null;
 
+  // Optional override: { testEmail: "x@y.com" } redirects ALL recipients (full + segmented) to this address
+  let testEmail: string | null = null;
+  try {
+    if (req.method === "POST") {
+      const body = await req.json().catch(() => null);
+      if (body && typeof body.testEmail === "string" && body.testEmail.includes("@")) {
+        testEmail = body.testEmail.trim();
+      }
+    }
+  } catch (_) { /* ignore */ }
+
   try {
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     if (!RESEND_API_KEY) throw new Error("Missing RESEND_API_KEY");
@@ -249,8 +260,10 @@ serve(async (req) => {
 
     // 1) FULL REPORT
     const fullHtml = buildHtml(monthLabel, concluidosFull, emAndamentoFull, null);
-    const fullSubject = `Relatório Mensal de Vouchers — ${monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}`;
-    sentSummary.full = await sendEmail(RESEND_API_KEY, FULL_REPORT_EMAILS, fullSubject, fullHtml);
+    const fullSubjectBase = `Relatório Mensal de Vouchers — ${monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}`;
+    const fullSubject = testEmail ? `[TESTE] ${fullSubjectBase}` : fullSubjectBase;
+    const fullRecipients = testEmail ? [testEmail] : FULL_REPORT_EMAILS;
+    sentSummary.full = await sendEmail(RESEND_API_KEY, fullRecipients, fullSubject, fullHtml);
 
     // 2) SEGMENTED REPORTS — fetch IDs that touched each stage in the month from logs
     for (const segment of Object.keys(SEGMENT_ROLES)) {
@@ -307,16 +320,18 @@ serve(async (req) => {
         console.warn(`Failed to fetch users for segment ${segment}:`, e);
       }
 
-      const recipients = [...new Set([...userEmails, ...(SEGMENT_EXTRA_EMAILS[segment] || [])])];
+      const baseRecipients = [...new Set([...userEmails, ...(SEGMENT_EXTRA_EMAILS[segment] || [])])];
+      const recipients = testEmail ? [testEmail] : baseRecipients;
       if (recipients.length === 0) {
         sentSummary[segment] = { skipped: true, reason: "no recipients" };
         continue;
       }
 
       const segHtml = buildHtml(monthLabel, concluidosSeg, emAndamentoSeg, segment);
-      const segSubject = `Relatório Mensal — ${segment} — ${monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}`;
+      const segSubjectBase = `Relatório Mensal — ${segment} — ${monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}`;
+      const segSubject = testEmail ? `[TESTE] ${segSubjectBase}` : segSubjectBase;
       sentSummary[segment] = await sendEmail(RESEND_API_KEY, recipients, segSubject, segHtml);
-      console.log(`Sent ${segment} report to ${recipients.length} recipients`);
+      console.log(`Sent ${segment} report to ${recipients.length} recipients${testEmail ? " (TEST MODE)" : ""}`);
     }
 
     await client.close();
