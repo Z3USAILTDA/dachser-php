@@ -42,6 +42,25 @@ function getEventStatusCode(ev: any): string {
     // Check prefix: "RCS - ...", "FOH - ..."
     const prefixMatch = desc.match(/^([A-Z]{2,5})\s*[-,\s]/);
     if (prefixMatch) return prefixMatch[1].toUpperCase();
+    // Keyword-based IATA mapping for descriptions without explicit code
+    // (e.g., "Received from Flight", "Freight on Hand at ...")
+    const upper = desc.toUpperCase();
+    // Order matters: more specific patterns first
+    if (/\bRECEIVED\s+FROM\s+FLIGHT\b/.test(upper)) return 'RCF';
+    if (/\bRECEIVED\s+FROM\s+SHIPPER\b/.test(upper) || /\bREADY\s+FOR\s+CARRIAGE\b/.test(upper)) return 'RCS';
+    if (/\bREADY\s+FOR\s+PICK[-\s]?UP\b/.test(upper) || /\bAGENT\s+NOTIFIED\b/.test(upper) || /\bNOTIFIED\s+FOR\s+DELIVERY\b/.test(upper)) return 'NFD';
+    if (/\bAWAITING\s+DELIVERY\b/.test(upper) || /\bDOCUMENTS?\s+DELIVERED\b/.test(upper)) return 'AWD';
+    if (/\bCUSTOMS\s+CLEARED\b/.test(upper)) return 'CCD';
+    if (/\bDELIVERED\b/.test(upper)) return 'DLV';
+    if (/\bPROOF\s+OF\s+DELIVERY\b/.test(upper)) return 'POD';
+    if (/\bARRIVED\b/.test(upper)) return 'ARR';
+    if (/\bDEPARTED\b/.test(upper)) return 'DEP';
+    if (/\bMANIFESTED\b/.test(upper)) return 'MAN';
+    if (/\bFREIGHT\s+ON\s+HAND\b/.test(upper)) return 'FOH';
+    if (/\bOFFLOADED\b/.test(upper) || /\bOFLD\b/.test(upper)) return 'OFLD';
+    if (/\bBOOKED\b/.test(upper)) return 'BKD';
+    if (/\bPRE[-\s]?LOADED?\b/.test(upper)) return 'PRE';
+    if (/\bDISCREPANC/.test(upper)) return 'DIS';
   }
   return '';
 }
