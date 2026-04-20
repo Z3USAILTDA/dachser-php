@@ -1,57 +1,84 @@
 
 
-## Pós-processamento mínimo: reordenar `desc0/desc1/desc2/desc3` por hierarquia IATA
+## Por que a coluna "Último Evento" está mostrando localização (FRA, FCO, GRU) em vez de código IATA
 
-### Ideia
+### Causa raiz — confirmada no código
 
-A Q3 já devolve os 3-4 últimos eventos (`desc0..desc3` com seus `loc` e `date` correspondentes). Em vez de tentar resolver tudo no SQL com `JSON_TABLE`/`STR_TO_DATE` multi-formato (que falha quando o crawler grava data em formato exótico), aceitamos a ordem que o SQL devolveu e fazemos **um único passo JS**: entre os 3-4 slots retornados, escolher como "mais recente" aquele com maior peso IATA. Os demais ficam como estão.
+A `pickTopByIATA` em `fetch-tracking-aereo/index.ts` (linhas 432-447) **descarta o `code` resolvido** quando devolve o vencedor — ela retorna o objeto `{code, desc, loc, date, idx}`, mas a inicialização do `winner` na linha 440 (`let winner = slots[0]`) e o resultado final mantêm a estrutura. Olhando em detalhe o fluxo posterior (linhas 462-482):
 
-### Regra exata do pós-processamento
+1. `top = pickTopByIATA(row)` → retorna o slot eleito com seu `code` resolvido.
+2. `codeFromTimeline = top.code` → ok, pega o código.
+3. `finalCode = codeFromTimeline || lastStatusCode || null` → ok.
+4. `awb.last_event = finalCode` (linha 540) → grava o código.
 
-Para cada linha retornada pela Q3:
+Isso parece correto. Mas o problema real está em **`getStatusCode` no front** (`src/pages/air/TrackingAereo.tsx` linhas 41-54):
 
-1. Montar array `slots = [{desc, loc, date, code, weight}]` para os índices 0..3 que vierem preenchidos.
-2. Resolver `code` de cada slot via: `status_code` nativo (se existir) → regex `\| *Code +([A-Z]{2,5})` (IBS) → regex `\(([A-Z]{2,5})\)` (Lufthansa) → lookup em `t_eventos_awb`/`t_description_eventos` (já carregado em memória pela Q1+Q2).
-3. Atribuir `weight` pela hierarquia IATA já existente:  
-   `POD=44 > DLV=43 > NFD=42 > RCF=41 > AWD=40 > ARR=39 > TRM=38 > TFD=37 > DEP=36 > MAN=35 > BKD=34 > FOH=33 > RCS=32 > …`
-4. **Eleger** como `desc0/loc0/date0/code0` (e portanto `last_status_code`) o slot de **maior peso**. Critério de desempate: índice original menor (mantém a ordem do SQL).
-5. Os outros slots permanecem nos índices 1, 2, 3 na ordem original do SQL — não mexer. A timeline completa exibida no modal continua vindo do `mariadb-proxy` separadamente.
+```ts
+if (knownStatusCodes.includes(upperEvent)) return upperEvent;
+if (lastEvent.includes(" - ")) return lastEvent.split(" - ")[0];
+return lastEvent.substring(0, 3).toUpperCase();   // ← FALLBACK PERIGOSO
+```
 
-Sem reordenar o array inteiro, sem reparsear data, sem `JSON_TABLE` adicional. Apenas uma eleição de "qual dos 3-4 é o topo".
+Quando `last_event` chega **vazio ou com a descrição completa** (não o código IATA), o fallback final pega os **3 primeiros caracteres** da string. Aconteceu o seguinte com o novo `pickTopByIATA`:
 
-### Onde aplicar
+- Para AWBs onde **nenhum slot tem código IATA reconhecível** (regex falha + `resolveCode` falha), `top.code` vem `null`.
+- Cai no `lastStatusCode` cru de `t_fato_aereo`.
+- Em vários AWBs IBS/American esse campo está com **a string de localização** ou **descrição livre** começando por `"FRA"`, `"FCO"`, `"GRU"`.
+- O front faz `substring(0,3).toUpperCase()` → exibe `FRA`, `FCO`, `GRU`.
 
-**`supabase/functions/fetch-tracking-aereo/index.ts`** — após o `executeQuery` da Q3, no mesmo loop onde já se monta cada linha de retorno, inserir a função `pickTopByIATA(row)` e sobrescrever:
+Confirma-se com a screenshot: AWB `020-07276242` (CARL ZEISS, GRU→FRA) mostra `FCO` em "Último Evento" — `FCO` é Roma Fiumicino, **localização**, não código de evento. Provavelmente `last_status_code` está com `"FCO Arrived"` ou similar, e o fallback de substring captura `"FCO"`.
 
-- `last_status_code` ← code do slot eleito
-- `last_event_description` ← desc do eleito
-- `last_event_location` ← loc do eleito
-- `last_event_date` ← date do eleito
-- `desc0/loc0/date0` (se o front consome esses campos diretos) ← idem
+### Por que regrediu agora
 
-### Reverter complexidade introduzida
+Antes do `pickTopByIATA`, o front recebia `last_event` de `desc0` (descrição completa do `$[0]` do JSON), e a `getStatusCode` tentava casar com `knownStatusCodes` ou caía no substring. Agora `last_event` vem de `finalCode` (que já deveria ser código IATA puro), mas quando `pickTopByIATA` falha em resolver código (slots sem `status_code` nativo, sem regex `| Code XXX |`, sem regex `(XXX)`), o `finalCode` cai no `lastStatusCode` cru — e ali está vindo localização porque o crawler dessas AWBs grava o aeroporto no campo de status.
 
-- Voltar a Q3 e a `get_awb_tracking_events` (mariadb-proxy) ao SELECT simples por `JSON_EXTRACT($[0..3])` + `ORDER BY id DESC` — sem `JSON_TABLE`, sem `COALESCE(STR_TO_DATE…)` multi-formato, sem `ROW_NUMBER`.
-- No `mariadb-proxy.get_awb_tracking_events`, aplicar o **mesmo** `pickTopByIATA` apenas para garantir que o primeiro item da timeline retornada ao modal bata com o card. Demais itens preservam ordem do SQL.
+### Correção
 
-### Caso de validação
+**1. Sanitizar `finalCode` em `fetch-tracking-aereo`** (linhas 467-482): só aceitar `lastStatusCode` como fallback se ele bater com a lista de códigos IATA válidos (mesma lista do `IATA_WEIGHT` + alguns extras: `OFLD`, `NIL`, `NIF`, `DIS`, `TFD`, `RCT`, etc.). Se não bater, devolver `null` → o front mostra "Aguardando consulta" / "Falha do Rastreio" em vez de inventar código a partir de localização.
 
-- `020-01256754` (RCF + NFD juntos): `pickTopByIATA` elege NFD (peso 42 > 41) → card mostra NFD, modal mostra NFD no topo. ✅
-- `020-65056110` (RCS vs RCF): elege RCF (41 > 32). ✅
-- `020-07276290`: continua RCF. ✅
-- AWB com só DEP → continua DEP (único slot).
-- AWB com timeline vazia → cai em `last_status_code` cru de `t_fato_aereo` (fallback atual preservado).
+```ts
+const VALID_IATA = new Set([...Object.keys(IATA_WEIGHT), 'OFLD','NIL','NIF','DIS','TFD','RCT','TRM','POD']);
+const sanitized = (lastStatusCode || '').toUpperCase().trim();
+finalCode = codeFromTimeline 
+  || (VALID_IATA.has(sanitized) ? sanitized : null);
+```
 
-### Limites assumidos
+**2. Endurecer `getStatusCode` no front** (`src/pages/air/TrackingAereo.tsx`): remover o fallback `substring(0,3)` que inventa código. Se `lastEvent` não bater com `knownStatusCodes`, retornar `"UNK"` (já está na lista) — nunca devolver pedaço de string que pode ser localização.
 
-- Se o slot "verdadeiramente mais recente" estiver na posição 4+ do JSON cru (fora dos 3-4 slots devolvidos pela Q3), ele não entra na eleição. Isso é aceitável: a Q3 já recorta os 3-4 mais relevantes.
-- Não tenta resolver o caso de mesmo código com timestamps diferentes — irrelevante, pois pesos iguais usam ordem original do SQL como tiebreaker.
+```ts
+if (knownStatusCodes.includes(upperEvent)) return upperEvent;
+if (upperEvent.startsWith("ARR - ")) return upperEvent;
+return "UNK";   // sem inventar código a partir de substring
+```
+
+Aplicar a mesma mudança no `getStatusCode` espelhado em `src/pages/Index.tsx` (mesma assinatura, usado pela rota `/`).
+
+**3. Melhorar `resolveCodeFromSlot` em `fetch-tracking-aereo`** para AWBs onde `desc` começa direto com o código IATA (formato muito comum no Lufthansa/IBS):
+
+```ts
+// Início da descrição é o próprio código: "RCF Received from Flight ..."
+const startCode = desc.trim().match(/^([A-Z]{2,5})\b/);
+if (startCode && IATA_WEIGHT[startCode[1].toUpperCase()] !== undefined) {
+  return startCode[1].toUpperCase();
+}
+```
+
+Inserir esse check **entre** o regex IBS `| Code XXX |` e o regex Lufthansa `(XXX)`.
+
+### Validação
+
+1. AWBs `020-07276242` (várias linhas da screenshot) → coluna passa de `FCO` (errado, é localização) para o código IATA real do último evento ou `UNK`/badge "Falha do Rastreio".
+2. AWB `020-07276290` → continua `RCF`.
+3. AWB `020-01256754` → continua `NFD`.
+4. AWB `083-60697394` → coluna passa de `GRU` (errado) para código IATA real.
+5. Nenhum AWB exibe sigla de aeroporto na coluna "Último Evento".
 
 ### Não muda
 
-- Schema de retorno, CTE de discrepância (Q6), SLA, visibility, `MANUAL_OVERRIDES` (continua tendo prioridade absoluta), cron, demais módulos.
+- SQL Q3 (continua simples com `JSON_EXTRACT($[0..3])`).
+- Schema de retorno, hierarquia IATA, `MANUAL_OVERRIDES`, SLA, CTE de discrepância, `mariadb-proxy.get_awb_tracking_events`, modal de timeline.
 
 ### Memória a atualizar
 
-`mem://air/tracking/data-mirroring-intent-v2`: registrar que o "último evento" é eleito por hierarquia IATA entre os 3-4 slots devolvidos pelo SQL, sem reparsear data nem reordenar a timeline.
+`mem://air/tracking/data-mirroring-intent-v2`: registrar que `last_status_code` cru só é usado como fallback quando bate com lista branca de códigos IATA válidos, e o front nunca infere código a partir de substring da descrição.
 
