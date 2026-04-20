@@ -436,23 +436,75 @@ serve(async (req) => {
       DIS: 30, OFLD: 28,
     };
 
-    // Resolve code from a single slot (status_code native → regex → keyword/lookup).
+    // Whitelist of valid IATA codes accepted as resolution result.
+    // Defined here so resolveCodeFromSlot can validate every candidate.
+    const VALID_IATA = new Set([
+      ...Object.keys(IATA_WEIGHT),
+      'OFLD','NIL','NIF','DIS','TFD','RCT','TRM','POD','UNK',
+    ]);
+    const validate = (c: string | null | undefined): string | null => {
+      if (!c) return null;
+      const u = c.toString().trim().toUpperCase();
+      return VALID_IATA.has(u) ? u : null;
+    };
+
+    // Resolve code from a single slot. Order:
+    // 1) native status_code from JSON (structured data from crawler)
+    // 2) EXACT_MAP — t_eventos_awb / t_description_eventos exact match (authoritative)
+    // 3) KEYWORD_INDEX — substring match against same tables (longest needle wins)
+    // 4) IBS regex "| Code XXX |"
+    // 5) Code at start of description "RCF Received from Flight..."
+    // 6) Lufthansa parentheses "(NFD)"
     function resolveCodeFromSlot(nativeCode: string | null, desc: string | null): string | null {
       const native = (nativeCode || "").trim().toUpperCase();
-      if (native && /^[A-Z]{2,5}$/.test(native)) return native;
-      if (!desc || desc === "null") return null;
-      // IBS pattern: "| Code RCF |"
-      const ibs = desc.match(/\|\s*Code\s+([A-Z]{2,5})\s*\|/i);
-      if (ibs) return ibs[1].toUpperCase();
-      // Description starts with the code itself: "RCF Received from Flight ..."
-      const startCode = desc.trim().match(/^([A-Z]{2,5})\b/);
-      if (startCode && IATA_WEIGHT[startCode[1].toUpperCase()] !== undefined) {
-        return startCode[1].toUpperCase();
+      if (native && /^[A-Z]{2,5}$/.test(native)) {
+        const v = validate(native);
+        if (v) return v;
       }
-      // Lufthansa parentheses: "(NFD)"
+      if (!desc || desc === "null") return null;
+
+      const normDesc = normalizeDesc(desc);
+
+      // 2) Exact match against authoritative lookup tables
+      if (normDesc) {
+        const exact = EXACT_MAP.get(normDesc);
+        const v = validate(exact);
+        if (v) return v;
+      }
+
+      // 3) Keyword/substring match (longest needle first)
+      if (normDesc) {
+        for (const { needle, code } of KEYWORD_INDEX) {
+          if (needle && normDesc.includes(needle)) {
+            const v = validate(code);
+            if (v) return v;
+          }
+        }
+      }
+
+      // 4) IBS pattern: "| Code RCF |"
+      const ibs = desc.match(/\|\s*Code\s+([A-Z]{2,5})\s*\|/i);
+      if (ibs) {
+        const v = validate(ibs[1]);
+        if (v) return v;
+      }
+
+      // 5) Description starts with the code itself: "RCF Received from Flight ..."
+      const startCode = desc.trim().match(/^([A-Z]{2,5})\b/);
+      if (startCode) {
+        const v = validate(startCode[1]);
+        if (v) return v;
+      }
+
+      // 6) Lufthansa parentheses: "(NFD)"
       const paren = desc.match(/\(([A-Z]{2,5})\)/);
-      if (paren) return paren[1].toUpperCase();
-      return resolveCode(desc);
+      if (paren) {
+        const v = validate(paren[1]);
+        if (v) return v;
+      }
+
+      // Last resort: legacy keyword resolver (still validated)
+      return validate(resolveCode(desc));
     }
 
     // Sole post-SQL processing: among the up to 4 slots returned by the query,
