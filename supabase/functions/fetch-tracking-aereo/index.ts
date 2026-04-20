@@ -496,20 +496,16 @@ serve(async (req) => {
         }
       }
 
-      // Find the first non-empty date in the timeline
-      let dateStr: string | null = null;
-      if (timeline && timeline.length > 0) {
-        for (const evt of timeline) {
-          const d = (evt.date || "").trim();
-          if (d) {
-            dateStr = d;
-            break;
-          }
-        }
-      }
-      // Fallback to SQL-extracted date0/time0
+      // Date for the elected slot — prefer SQL slot date, then time-augmented row.date0/time0
+      let dateStr: string | null = electedDate || null;
       if (!dateStr) {
         dateStr = ((row.date0 || "") + " " + (row.time0 || "")).trim() || null;
+      }
+      if (!dateStr && timeline && timeline.length > 0) {
+        for (const evt of timeline) {
+          const d = (evt.date || "").trim();
+          if (d) { dateStr = d; break; }
+        }
       }
 
       // Scan timeline for ARR at destination (regardless of finalCode)
