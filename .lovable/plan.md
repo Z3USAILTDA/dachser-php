@@ -1,41 +1,58 @@
 
 
-## Garantir gravação de DLV / ARR-destino-5d em `t_air_process_visibility`
+## Ajuste: processo 020-65056110 mostrando RCS mas timeline é RCF
 
 ### Diagnóstico
-- A função `air-scan-finalized` existe e implementa corretamente as duas regras (DLV + ARR no destino > 5 dias), mas **não tem cron agendado** (verificado em `cron.job`).
-- Por isso a tabela só é populada quando alguém invoca a função manualmente — novos processos DLV/ARR ficam de fora e continuam aparecendo na tela.
-- A `fetch-tracking-aereo` já lê `t_air_process_visibility` (logs mostram "Loaded 248 visibility records"), então basta manter a tabela atualizada para os processos sumirem da visualização.
 
-### Mudança proposta (mínima, cirúrgica)
+No monitoramento aéreo (`/air/tracking`), o "Último Status" da tabela é resolvido em `fetch-status-aereo` pela lógica:
 
-**1. Agendar cron horário** para `air-scan-finalized` (escolhido pelo usuário — mais leve no MariaDB que já vive estourando `max_user_connections`):
+1. **Tenta** pegar o código do evento mais recente da `timeline_json` via `getEventStatusCode()`.
+2. **Se falhar**, cai no fallback e usa `ws.last_status_code` do `t_aereo_ws_firecrawl` (valor bruto gravado pelo crawler).
 
-```sql
-SELECT cron.schedule(
-  'air-scan-finalized-hourly',
-  '0 * * * *',  -- todo minuto 0 de cada hora (UTC)
-  $$
-  SELECT net.http_post(
-    url := 'https://finktakbjcfmurqeiubz.supabase.co/functions/v1/air-scan-finalized',
-    headers := '{"Content-Type":"application/json","Authorization":"Bearer <ANON_KEY>"}'::jsonb,
-    body := '{}'::jsonb
-  );
-  $$
-);
+Para o AWB `020-65056110` a timeline já contém `RCF` como evento mais recente, mas a tela continua exibindo `RCS`. Existem duas causas possíveis — precisamos confirmar qual delas com uma consulta ao MariaDB:
+
+**Causa A (mais provável)**: O evento RCF na timeline não tem código direto preenchido (`Status`/`code` vazios) e a descrição não casa com os regex de extração (ex: descrição tipo `"Received from Flight"` sem `(RCF)` no final nem prefixo `RCF -`). `getEventStatusCode()` retorna string vazia → cai no fallback → usa `ws.last_status_code = 'RCS'` antigo.
+
+**Causa B**: O evento RCS tem timestamp **mais recente ou igual** ao RCF na ordenação, então o "evento mais recente" escolhido é o RCS mesmo. Improvável se visualmente RCF aparece acima de RCS na timeline, mas possível quando timestamps empatam.
+
+### Mudança proposta (cirúrgica)
+
+**1. Investigação rápida (1 query SQL)**
+Olhar o `timeline_json` real de `020-65056110` em `t_aereo_ws_firecrawl` para confirmar qual das duas causas é a correta e ver o shape exato do evento RCF.
+
+**2. Correção em `supabase/functions/fetch-status-aereo/index.ts`, função `getEventStatusCode()` (linhas 32-47)**
+
+Adicionar reconhecimento dos padrões IATA mais comuns em descrições em inglês/português, sem depender de código entre parênteses:
+
+```
+Received from Flight      → RCF
+Received from Shipper     → RCS
+Manifested                → MAN
+Departed                  → DEP
+Arrived                   → ARR
+Notified for Delivery     → NFD
+Awaiting Delivery         → AWD
+Delivered                 → DLV
 ```
 
-**2. Disparar uma execução imediata** logo após o agendamento, para popular agora os processos DLV/ARR-destino-5d que estão pendentes (sem esperar a próxima hora cheia).
+É o mesmo mapeamento que já existe em outros trechos do código (ex: `track-awb/index.ts` linhas 342-352, 1233-1237) — estamos apenas aplicando ao ponto central de extração que alimenta TODAS as resoluções de status do tracking aéreo.
+
+**3. Se a causa for a B (ordenação)**: adicionar desempate IATA na ordenação principal (como já existe em `sortEventsDesc`, mas hoje NÃO é usada em `fetch-status-aereo` linhas 1189-1193, que ordena só por data). Ou seja, quando RCS e RCF têm o mesmo timestamp, RCF (mais avançado na hierarquia) vence.
 
 ### Não muda
-- Lógica da função `air-scan-finalized` (regras DLV e ARR-destino-5d permanecem como estão).
-- Estrutura da tabela `t_air_process_visibility`.
-- Filtragem no `fetch-tracking-aereo`.
-- Demais funções aéreas, CCT, marítimo.
+
+- Lógica de override manual (processos com `MANUAL_OVERRIDES` continuam intocados).
+- Esquema das tabelas, RLS, cron jobs.
+- Timeline exibida — continua mirror dos dados brutos do MariaDB (regra `Air Data Mirroring Intent v2`).
+- Demais funções (CCT, marítimo, etc.).
+
+### Escopo
+
+Correção vale para **qualquer** AWB que caia no mesmo problema (não é fix específico de um processo). Não entrará em `MANUAL_OVERRIDES` — o objetivo é corrigir a resolução automática.
 
 ### Validação
-1. Confirmar em `cron.job` que `air-scan-finalized-hourly` está ativo.
-2. Logs da execução manual mostrarão `Found N processes to persist` e `Scan complete: N records inserted/updated`.
-3. Recarregar `/air/tracking` e verificar que os processos DLV / ARR-destino-5d sumiram da visualização.
-4. Próxima execução automática: minuto 0 da hora seguinte.
+
+1. Rodar a query de diagnóstico e confirmar Causa A vs B.
+2. Após deploy, revalidar `020-65056110` em `/air/tracking` — status deve exibir `RCF`.
+3. Conferir que outros AWBs não regrediram (ex: processos em `RCS` legítimo continuam como `RCS`).
 
