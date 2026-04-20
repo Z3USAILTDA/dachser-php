@@ -108,19 +108,43 @@ serve(async (req) => {
       password,
     });
 
+    // Normalization for description-based lookup matching
+    const normalizeDesc = (s: string): string =>
+      (s || "").toUpperCase().trim().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+
     // Step 1: Load event codes lookup table (small, ~50 rows)
+    // t_eventos_awb has 'descricao_en' (English description per IATA code)
     const eventsRows = await queryWithRetry(client, `SELECT id, code, descricao_en FROM dados_dachser.t_eventos_awb`);
     const eventMap: Record<string, { id: number; descricao_en: string }> = {};
+    const EXACT_MAP: Map<string, string> = new Map();
+    const KEYWORD_INDEX: Array<{ needle: string; code: string }> = [];
     for (const e of eventsRows || []) {
-      if (e.code) eventMap[e.code.trim().toUpperCase()] = { id: Number(e.id), descricao_en: e.descricao_en || "" };
+      const code = (e.code || "").toString().trim().toUpperCase();
+      if (!code) continue;
+      eventMap[code] = { id: Number(e.id), descricao_en: e.descricao_en || "" };
+      const desc = normalizeDesc(e.descricao_en || "");
+      if (desc) {
+        if (!EXACT_MAP.has(desc)) EXACT_MAP.set(desc, code);
+        KEYWORD_INDEX.push({ needle: desc, code });
+      }
     }
 
-    // Step 2: Load description_eventos lookup (small)
-    const descRows = await queryWithRetry(client, `SELECT code, description FROM dados_dachser.t_description_eventos ORDER BY CHAR_LENGTH(description) DESC`);
+    // Step 2: Load description_eventos lookup — authoritative description→code mapping
+    const descRows = await queryWithRetry(client, `SELECT code, description FROM dados_dachser.t_description_eventos`);
     const descLookup: Array<{ code: string; description: string }> = (descRows || []).map((d: any) => ({
       code: d.code || "",
       description: (d.description || "").toUpperCase(),
     }));
+    for (const d of descRows || []) {
+      const code = (d.code || "").toString().trim().toUpperCase();
+      const desc = normalizeDesc(d.description || "");
+      if (!code || !desc) continue;
+      if (!EXACT_MAP.has(desc)) EXACT_MAP.set(desc, code);
+      KEYWORD_INDEX.push({ needle: desc, code });
+    }
+    // Sort needles by length DESC — longer/more specific needle wins
+    KEYWORD_INDEX.sort((a, b) => b.needle.length - a.needle.length);
+    console.log(`Loaded ${EXACT_MAP.size} exact descriptions, ${KEYWORD_INDEX.length} keyword needles`);
 
     // Step 3: Main query with SLA calculation via CTE
     // Returns the top 4 timeline events by physical array position ($[0..3]).
@@ -412,23 +436,75 @@ serve(async (req) => {
       DIS: 30, OFLD: 28,
     };
 
-    // Resolve code from a single slot (status_code native → regex → keyword/lookup).
+    // Whitelist of valid IATA codes accepted as resolution result.
+    // Defined here so resolveCodeFromSlot can validate every candidate.
+    const VALID_IATA = new Set([
+      ...Object.keys(IATA_WEIGHT),
+      'OFLD','NIL','NIF','DIS','TFD','RCT','TRM','POD','UNK',
+    ]);
+    const validate = (c: string | null | undefined): string | null => {
+      if (!c) return null;
+      const u = c.toString().trim().toUpperCase();
+      return VALID_IATA.has(u) ? u : null;
+    };
+
+    // Resolve code from a single slot. Order:
+    // 1) native status_code from JSON (structured data from crawler)
+    // 2) EXACT_MAP — t_eventos_awb / t_description_eventos exact match (authoritative)
+    // 3) KEYWORD_INDEX — substring match against same tables (longest needle wins)
+    // 4) IBS regex "| Code XXX |"
+    // 5) Code at start of description "RCF Received from Flight..."
+    // 6) Lufthansa parentheses "(NFD)"
     function resolveCodeFromSlot(nativeCode: string | null, desc: string | null): string | null {
       const native = (nativeCode || "").trim().toUpperCase();
-      if (native && /^[A-Z]{2,5}$/.test(native)) return native;
-      if (!desc || desc === "null") return null;
-      // IBS pattern: "| Code RCF |"
-      const ibs = desc.match(/\|\s*Code\s+([A-Z]{2,5})\s*\|/i);
-      if (ibs) return ibs[1].toUpperCase();
-      // Description starts with the code itself: "RCF Received from Flight ..."
-      const startCode = desc.trim().match(/^([A-Z]{2,5})\b/);
-      if (startCode && IATA_WEIGHT[startCode[1].toUpperCase()] !== undefined) {
-        return startCode[1].toUpperCase();
+      if (native && /^[A-Z]{2,5}$/.test(native)) {
+        const v = validate(native);
+        if (v) return v;
       }
-      // Lufthansa parentheses: "(NFD)"
+      if (!desc || desc === "null") return null;
+
+      const normDesc = normalizeDesc(desc);
+
+      // 2) Exact match against authoritative lookup tables
+      if (normDesc) {
+        const exact = EXACT_MAP.get(normDesc);
+        const v = validate(exact);
+        if (v) return v;
+      }
+
+      // 3) Keyword/substring match (longest needle first)
+      if (normDesc) {
+        for (const { needle, code } of KEYWORD_INDEX) {
+          if (needle && normDesc.includes(needle)) {
+            const v = validate(code);
+            if (v) return v;
+          }
+        }
+      }
+
+      // 4) IBS pattern: "| Code RCF |"
+      const ibs = desc.match(/\|\s*Code\s+([A-Z]{2,5})\s*\|/i);
+      if (ibs) {
+        const v = validate(ibs[1]);
+        if (v) return v;
+      }
+
+      // 5) Description starts with the code itself: "RCF Received from Flight ..."
+      const startCode = desc.trim().match(/^([A-Z]{2,5})\b/);
+      if (startCode) {
+        const v = validate(startCode[1]);
+        if (v) return v;
+      }
+
+      // 6) Lufthansa parentheses: "(NFD)"
       const paren = desc.match(/\(([A-Z]{2,5})\)/);
-      if (paren) return paren[1].toUpperCase();
-      return resolveCode(desc);
+      if (paren) {
+        const v = validate(paren[1]);
+        if (v) return v;
+      }
+
+      // Last resort: legacy keyword resolver (still validated)
+      return validate(resolveCode(desc));
     }
 
     // Sole post-SQL processing: among the up to 4 slots returned by the query,
@@ -478,11 +554,7 @@ serve(async (req) => {
         resolveCodeFromSlot(row.code3_native, row.desc3),
       ];
 
-      // Whitelist of valid IATA codes for raw last_status_code fallback
-      const VALID_IATA = new Set([
-        ...Object.keys(IATA_WEIGHT),
-        'OFLD','NIL','NIF','DIS','TFD','RCT','TRM','POD','UNK',
-      ]);
+      // VALID_IATA whitelist already defined above (used by resolveCodeFromSlot)
       const sanitizedLastStatus = (lastStatusCode || '').toString().toUpperCase().trim();
       const safeLastStatus = VALID_IATA.has(sanitizedLastStatus) ? sanitizedLastStatus : null;
 
