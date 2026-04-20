@@ -8084,10 +8084,19 @@ Deno.serve(async (req) => {
             !isErrorEvent(e.descricao_evento) && 
             VALID_IATA_CODES.has((e.codigo_evento || '').toUpperCase())
           );
+          // IATA hierarchy tiebreaker for same-timestamp events (RCF > RCS, ARR > DEP, etc.)
+          const IATA_WEIGHT: Record<string, number> = {
+            BKD: 1, FWB: 4, RCS: 10, RCT: 11, DOC: 12, FOH: 16,
+            PRE: 20, MAN: 21, DEP: 23, TFD: 30, TRM: 31, TRA: 32,
+            ARR: 40, RCF: 41, NFD: 42, AWD: 43, AWR: 44, CCD: 45, DLV: 46, POD: 47,
+            DIS: 55, OFLD: 53,
+          };
           validEvents.sort((a: any, b: any) => {
             const dateA = a.data_hora_evento ? new Date(a.data_hora_evento).getTime() : 0;
             const dateB = b.data_hora_evento ? new Date(b.data_hora_evento).getTime() : 0;
-            return dateB - dateA;
+            if (dateB !== dateA) return dateB - dateA;
+            return (IATA_WEIGHT[(b.codigo_evento || '').toUpperCase()] || 0)
+                 - (IATA_WEIGHT[(a.codigo_evento || '').toUpperCase()] || 0);
           });
 
           // ---- ETD filter: buscar ETD de t_master_dados e filtrar eventos anteriores ao cutoff ----
