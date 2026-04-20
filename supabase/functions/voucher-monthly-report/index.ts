@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
-import * as XLSX from "https://esm.sh/xlsx-js-style@1.2.0";
+import XLSX from "https://esm.sh/xlsx-js-style@1.2.0?target=deno&no-check";
 import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
@@ -414,8 +414,7 @@ serve(async (req) => {
 
     const concluidosFull = await client.query(
       `SELECT id, numero_spo, fornecedor, valor, moeda, etapa_atual, vencimento, updated_at,
-              status_baixa, urgente,
-              responsavel_operacao_user_name, responsavel_fiscal_user_name, responsavel_financeiro_user_name
+              status_baixa, urgente
        FROM t_vouchers
        WHERE etapa_atual = 'CONCLUIDO' AND updated_at >= ? AND updated_at < ?
        ORDER BY updated_at DESC`,
@@ -423,8 +422,7 @@ serve(async (req) => {
     );
     const emAndamentoFull = await client.query(
       `SELECT id, numero_spo, fornecedor, valor, moeda, etapa_atual, vencimento, updated_at,
-              status_baixa, urgente,
-              responsavel_operacao_user_name, responsavel_fiscal_user_name, responsavel_financeiro_user_name
+              status_baixa, urgente
        FROM t_vouchers
        WHERE etapa_atual NOT IN ('CONCLUIDO', 'A_PROCESSAR', 'CANCELADO')
        ORDER BY etapa_atual, updated_at DESC`,
