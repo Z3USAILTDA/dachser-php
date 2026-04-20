@@ -76,6 +76,17 @@ const handler = async (req: Request): Promise<Response> => {
       return jsonResponse({ status: "error", code: "ACTION_MISMATCH", message: "O tipo de ação não corresponde ao token." }, 400);
     }
 
+    // Fetch numero_spo to display in notification emails (instead of internal UUID)
+    let voucherNumber = voucher_id;
+    try {
+      const voucherInfo = await callProxy("get_voucher_for_rm", { voucher_id });
+      if (voucherInfo?.success && voucherInfo?.data?.numero_spo) {
+        voucherNumber = voucherInfo.data.numero_spo;
+      }
+    } catch (e) {
+      console.log("Could not fetch numero_spo, falling back to voucher_id:", e);
+    }
+
     if (action === "approve") {
       await callProxy("update_voucher_esteira", {
         voucher_id,
