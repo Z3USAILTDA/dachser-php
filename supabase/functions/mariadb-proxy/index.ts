@@ -8084,20 +8084,29 @@ Deno.serve(async (req) => {
             !isErrorEvent(e.descricao_evento) && 
             VALID_IATA_CODES.has((e.codigo_evento || '').toUpperCase())
           );
-          // IATA hierarchy tiebreaker for same-timestamp events (RCF > RCS, ARR > DEP, etc.)
+          // pickTopByIATA: among the first 4 events (most recent slots from SQL),
+          // elect the one with highest IATA hierarchy weight as "top". Other events
+          // preserve the original SQL order. This guarantees the modal's first item
+          // matches the card's last_status_code without reordering the full timeline.
           const IATA_WEIGHT: Record<string, number> = {
-            BKD: 1, FWB: 4, RCS: 10, RCT: 11, DOC: 12, FOH: 16,
-            PRE: 20, MAN: 21, DEP: 23, TFD: 30, TRM: 31, TRA: 32,
-            ARR: 40, RCF: 41, NFD: 42, AWD: 43, AWR: 44, CCD: 45, DLV: 46, POD: 47,
-            DIS: 55, OFLD: 53,
+            POD: 44, DLV: 43, NFD: 42, RCF: 41, AWD: 40, ARR: 39,
+            TRM: 38, TFD: 37, DEP: 36, MAN: 35, BKD: 34, FOH: 33, RCS: 32,
+            AWR: 40, CCD: 40, FWB: 4, RCT: 11, DOC: 12, PRE: 20, TRA: 32,
+            DIS: 30, OFLD: 28,
           };
-          validEvents.sort((a: any, b: any) => {
-            const dateA = a.data_hora_evento ? new Date(a.data_hora_evento).getTime() : 0;
-            const dateB = b.data_hora_evento ? new Date(b.data_hora_evento).getTime() : 0;
-            if (dateB !== dateA) return dateB - dateA;
-            return (IATA_WEIGHT[(b.codigo_evento || '').toUpperCase()] || 0)
-                 - (IATA_WEIGHT[(a.codigo_evento || '').toUpperCase()] || 0);
-          });
+          if (validEvents.length >= 2) {
+            const topN = Math.min(4, validEvents.length);
+            let bestIdx = 0;
+            let bestW = IATA_WEIGHT[(validEvents[0].codigo_evento || '').toUpperCase()] || 0;
+            for (let i = 1; i < topN; i++) {
+              const w = IATA_WEIGHT[(validEvents[i].codigo_evento || '').toUpperCase()] || 0;
+              if (w > bestW) { bestW = w; bestIdx = i; }
+            }
+            if (bestIdx > 0) {
+              const [winner] = validEvents.splice(bestIdx, 1);
+              validEvents.unshift(winner);
+            }
+          }
 
           // ---- ETD filter: buscar ETD de t_master_dados e filtrar eventos anteriores ao cutoff ----
           let etdCutoff: Date | null = null;
