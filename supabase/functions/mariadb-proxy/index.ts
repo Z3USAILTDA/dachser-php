@@ -14129,7 +14129,7 @@ Deno.serve(async (req) => {
         // Filtro de mês só restringe vouchers fora dessas etapas (ex.: CONCLUIDO, CANCELADO, ROBO, RASCUNHO, AJUSTE_*).
         const ativosMonthClause = hasMonthFilter
           ? `AND (
-              v.etapa_atual IN ('OPERACAO','FISCAL','SUPERVISOR','FINANCEIRO')
+              v.etapa_atual IN ('OPERACAO','FISCAL','SUPERVISOR','FINANCEIRO','AJUSTE_OPERACAO','AJUSTE_FISCAL','CANCELADO')
               OR (dfv.data_emissao >= ? AND dfv.data_emissao < ?)
               OR (dfv.data_emissao IS NULL
                   AND v.data_emissao_documento >= ? AND v.data_emissao_documento < ?)
@@ -14173,7 +14173,7 @@ Deno.serve(async (req) => {
           ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
           WHERE sync_status = "ATIVO"
             AND (voucher_master_id IS NULL OR voucher_master_id = "")
-            AND (etapa_atual != "CONCLUIDO" OR (etapa_atual = "CONCLUIDO" AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)))
+            AND (etapa_atual NOT IN ("CONCLUIDO","CANCELADO") OR (etapa_atual IN ("CONCLUIDO","CANCELADO") AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)))
             ${ativosMonthClause}
           ORDER BY v.created_at DESC
         `, ativosParams);
