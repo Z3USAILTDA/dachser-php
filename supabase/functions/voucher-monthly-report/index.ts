@@ -260,8 +260,10 @@ serve(async (req) => {
 
     // 1) FULL REPORT
     const fullHtml = buildHtml(monthLabel, concluidosFull, emAndamentoFull, null);
-    const fullSubject = `Relatório Mensal de Vouchers — ${monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}`;
-    sentSummary.full = await sendEmail(RESEND_API_KEY, FULL_REPORT_EMAILS, fullSubject, fullHtml);
+    const fullSubjectBase = `Relatório Mensal de Vouchers — ${monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}`;
+    const fullSubject = testEmail ? `[TESTE] ${fullSubjectBase}` : fullSubjectBase;
+    const fullRecipients = testEmail ? [testEmail] : FULL_REPORT_EMAILS;
+    sentSummary.full = await sendEmail(RESEND_API_KEY, fullRecipients, fullSubject, fullHtml);
 
     // 2) SEGMENTED REPORTS — fetch IDs that touched each stage in the month from logs
     for (const segment of Object.keys(SEGMENT_ROLES)) {
