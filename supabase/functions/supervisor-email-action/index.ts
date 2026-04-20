@@ -138,7 +138,7 @@ const handler = async (req: Request): Promise<Response> => {
           body: JSON.stringify({
             type: "VOUCHER_ENVIADO",
             voucherId: voucher_id,
-            voucherNumber: voucher_id,
+            voucherNumber: voucherNumber,
             toStage: "FINANCEIRO",
             fromStage: "SUPERVISOR",
             senderName: "Supervisor (via e-mail)",
@@ -160,7 +160,7 @@ const handler = async (req: Request): Promise<Response> => {
           body: JSON.stringify({
             type: "URGENCIA_APROVADA",
             voucherId: voucher_id,
-            voucherNumber: voucher_id,
+            voucherNumber: voucherNumber,
             toStage: "FINANCEIRO",
             fromStage: "SUPERVISOR",
             senderName: "Supervisor (via e-mail)",
@@ -209,7 +209,7 @@ const handler = async (req: Request): Promise<Response> => {
           body: JSON.stringify({
             type: "URGENCIA_REJEITADA",
             voucherId: voucher_id,
-            voucherNumber: voucher_id,
+            voucherNumber: voucherNumber,
             toStage: "AJUSTE_OPERACAO",
             fromStage: "SUPERVISOR",
             senderName: "Supervisor (via e-mail)",
