@@ -1,89 +1,57 @@
 
 
-## Por que a ordenação ainda fica incorreta mesmo a Q3 já trazendo os 3 últimos eventos
+## Pós-processamento mínimo: reordenar `desc0/desc1/desc2/desc3` por hierarquia IATA
 
-### Causa raiz
+### Ideia
 
-A Q3 faz `JSON_EXTRACT(timeline_json, '$[0]')`, `'$[1]'`, `'$[2]'`, `'$[3]'` — ou seja, ela pega os eventos pela **posição física no array JSON**, não pela data.
+A Q3 já devolve os 3-4 últimos eventos (`desc0..desc3` com seus `loc` e `date` correspondentes). Em vez de tentar resolver tudo no SQL com `JSON_TABLE`/`STR_TO_DATE` multi-formato (que falha quando o crawler grava data em formato exótico), aceitamos a ordem que o SQL devolveu e fazemos **um único passo JS**: entre os 3-4 slots retornados, escolher como "mais recente" aquele com maior peso IATA. Os demais ficam como estão.
 
-Isso só funciona quando o array já está fisicamente ordenado por data desc no MariaDB. Para o AWB `020-07276290` o dump confirmou que está. Mas para AWBs como `020-65056110` (caso original do problema) e outros, o crawler grava os eventos em ordens variadas — às vezes ordem de chegada da página da cia aérea, às vezes ordem cronológica asc, às vezes mistura quando o array é atualizado incrementalmente. Resultado: `$[0]` não é necessariamente o evento mais recente.
+### Regra exata do pós-processamento
 
-Além disso, mesmo com array ordenado, há um segundo problema: `last_status_code` (coluna crua de `t_fato_aereo`) é o que a `fetch-status-aereo` usa como fallback e está desatualizado em vários AWBs — não acompanha a timeline.
+Para cada linha retornada pela Q3:
 
-### Correção (no próprio SELECT, sem pós-processamento JS)
+1. Montar array `slots = [{desc, loc, date, code, weight}]` para os índices 0..3 que vierem preenchidos.
+2. Resolver `code` de cada slot via: `status_code` nativo (se existir) → regex `\| *Code +([A-Z]{2,5})` (IBS) → regex `\(([A-Z]{2,5})\)` (Lufthansa) → lookup em `t_eventos_awb`/`t_description_eventos` (já carregado em memória pela Q1+Q2).
+3. Atribuir `weight` pela hierarquia IATA já existente:  
+   `POD=44 > DLV=43 > NFD=42 > RCF=41 > AWD=40 > ARR=39 > TRM=38 > TFD=37 > DEP=36 > MAN=35 > BKD=34 > FOH=33 > RCS=32 > …`
+4. **Eleger** como `desc0/loc0/date0/code0` (e portanto `last_status_code`) o slot de **maior peso**. Critério de desempate: índice original menor (mantém a ordem do SQL).
+5. Os outros slots permanecem nos índices 1, 2, 3 na ordem original do SQL — não mexer. A timeline completa exibida no modal continua vindo do `mariadb-proxy` separadamente.
 
-Trocar o bloco que faz `JSON_EXTRACT($[0..3])` por uma CTE com `JSON_TABLE` que ordena por timestamp real e numera as posições:
+Sem reordenar o array inteiro, sem reparsear data, sem `JSON_TABLE` adicional. Apenas uma eleição de "qual dos 3-4 é o topo".
 
-```sql
-WITH eventos_ordenados AS (
-  SELECT 
-    f.awb,
-    jt.descricao,
-    jt.local,
-    jt.data_str,
-    STR_TO_DATE(jt.data_str, '%d %b %Y %H:%i') AS data_real,
-    ROW_NUMBER() OVER (
-      PARTITION BY f.awb 
-      ORDER BY STR_TO_DATE(jt.data_str, '%d %b %Y %H:%i') DESC
-    ) AS pos
-  FROM t_fato_aereo f
-  CROSS JOIN JSON_TABLE(
-    f.timeline_json, '$[*]' COLUMNS (
-      descricao VARCHAR(500) PATH '$.Description',
-      local     VARCHAR(20)  PATH '$.Location',
-      data_str  VARCHAR(50)  PATH '$.Date'
-    )
-  ) jt
-)
-SELECT 
-  MAX(CASE WHEN pos=1 THEN descricao END) AS desc0,
-  MAX(CASE WHEN pos=1 THEN local     END) AS loc0,
-  MAX(CASE WHEN pos=1 THEN data_real END) AS date0,
-  MAX(CASE WHEN pos=2 THEN descricao END) AS desc1,
-  ...
-FROM eventos_ordenados
-GROUP BY awb
-```
+### Onde aplicar
 
-E aplicar o mesmo `JSON_TABLE + ORDER BY` na query de timeline (`get_awb_tracking_events` em `mariadb-proxy`) — dessa forma o front recebe a timeline já ordenada do banco, sem precisar do `sort` JS atual em `AwbTimelineModal`.
+**`supabase/functions/fetch-tracking-aereo/index.ts`** — após o `executeQuery` da Q3, no mesmo loop onde já se monta cada linha de retorno, inserir a função `pickTopByIATA(row)` e sobrescrever:
 
-### Resolução de status — derivar do `desc0` ordenado
+- `last_status_code` ← code do slot eleito
+- `last_event_description` ← desc do eleito
+- `last_event_location` ← loc do eleito
+- `last_event_date` ← date do eleito
+- `desc0/loc0/date0` (se o front consome esses campos diretos) ← idem
 
-Com `desc0` agora garantidamente o mais recente, a `fetch-status-aereo` deve resolver o código direto da descrição via `t_eventos_awb` + `t_description_eventos` (Q1+Q2) e **só** cair em `last_status_code` quando a timeline for vazia. Hoje `last_status_code` ganha em ramos onde o regex falha — adicionar reconhecimento das frases padrão IATA em inglês:
+### Reverter complexidade introduzida
 
-```
-"Received from flight"  → RCF
-"Received from shipper" → RCS
-"Manifested"            → MAN
-"Departed"              → DEP
-"Arrived"               → ARR
-"Notified for Delivery" → NFD
-"Awaiting Delivery"     → AWD
-"Delivered"             → DLV
-"Booked"                → BKD
-"Freight on Hand"       → FOH
-```
+- Voltar a Q3 e a `get_awb_tracking_events` (mariadb-proxy) ao SELECT simples por `JSON_EXTRACT($[0..3])` + `ORDER BY id DESC` — sem `JSON_TABLE`, sem `COALESCE(STR_TO_DATE…)` multi-formato, sem `ROW_NUMBER`.
+- No `mariadb-proxy.get_awb_tracking_events`, aplicar o **mesmo** `pickTopByIATA` apenas para garantir que o primeiro item da timeline retornada ao modal bata com o card. Demais itens preservam ordem do SQL.
 
-### Desempate de timestamps iguais
+### Caso de validação
 
-Quando dois eventos têm o mesmo `STR_TO_DATE`, adicionar tiebreaker no `ORDER BY` por hierarquia IATA (RCF > ARR > DEP > MAN > RCS …) via `FIELD()` ou `CASE` — assim RCS e RCF empatados nunca mais escolhem RCS.
+- `020-01256754` (RCF + NFD juntos): `pickTopByIATA` elege NFD (peso 42 > 41) → card mostra NFD, modal mostra NFD no topo. ✅
+- `020-65056110` (RCS vs RCF): elege RCF (41 > 32). ✅
+- `020-07276290`: continua RCF. ✅
+- AWB com só DEP → continua DEP (único slot).
+- AWB com timeline vazia → cai em `last_status_code` cru de `t_fato_aereo` (fallback atual preservado).
 
-### Limpeza
+### Limites assumidos
 
-Remover Edge Function temporária `debug-tracking-aereo-selects` (config.toml + index.ts) — diagnóstico concluído.
-
-Remover do `AwbTimelineModal.tsx` o bloco JS de `IATA_WEIGHT` e `deduped.sort(...)` — passa a confiar na ordenação do SQL.
+- Se o slot "verdadeiramente mais recente" estiver na posição 4+ do JSON cru (fora dos 3-4 slots devolvidos pela Q3), ele não entra na eleição. Isso é aceitável: a Q3 já recorta os 3-4 mais relevantes.
+- Não tenta resolver o caso de mesmo código com timestamps diferentes — irrelevante, pois pesos iguais usam ordem original do SQL como tiebreaker.
 
 ### Não muda
 
-- Schema de retorno para o front.
-- CTE de discrepância (Q6).
-- Cron, SLA, visibility, `MANUAL_OVERRIDES`.
-- Demais módulos.
+- Schema de retorno, CTE de discrepância (Q6), SLA, visibility, `MANUAL_OVERRIDES` (continua tendo prioridade absoluta), cron, demais módulos.
 
-### Validação
+### Memória a atualizar
 
-1. `020-65056110` → exibe `RCF` (era `RCS`).
-2. `020-07276290` → continua `RCF` correto.
-3. 3-5 amostras em `RCS`/`DEP`/`ARR`/`DLV` legítimos não regridem.
+`mem://air/tracking/data-mirroring-intent-v2`: registrar que o "último evento" é eleito por hierarquia IATA entre os 3-4 slots devolvidos pelo SQL, sem reparsear data nem reordenar a timeline.
 
