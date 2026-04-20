@@ -69,8 +69,10 @@ serve(async (req) => {
     const q4 = await client.query(`SELECT hawb, cliente FROM dados_dachser.t_master_dados WHERE hawb IS NOT NULL AND cliente IS NOT NULL AND cliente != '' LIMIT 5`);
     out.queries.push({ name: "4_t_master_dados_sample", row_count: q4.length, sample: q4 });
 
-    // Q5 — visibility
-    const q5 = await client.query(`SELECT awb, hawb, hide_reason FROM dados_dachser.t_air_process_visibility LIMIT 50`);
+    // Q5 — visibility (introspect schema first, then sample)
+    const q5cols = await client.query(`SHOW COLUMNS FROM dados_dachser.t_air_process_visibility`);
+    out.queries.push({ name: "5a_t_air_process_visibility_columns", rows: q5cols });
+    const q5 = await client.query(`SELECT * FROM dados_dachser.t_air_process_visibility LIMIT 50`);
     out.queries.push({ name: "5_t_air_process_visibility", row_count: q5.length, sample: q5 });
 
     // Q6 — discrepancy filtered to target
