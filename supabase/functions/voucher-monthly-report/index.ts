@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
-import * as XLSX from "https://esm.sh/xlsx-js-style@1.2.0";
+import XLSX from "https://esm.sh/xlsx-js-style@1.2.0?target=deno&no-check";
 import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
