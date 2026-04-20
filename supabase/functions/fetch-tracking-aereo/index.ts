@@ -403,7 +403,10 @@ serve(async (req) => {
       } catch (_) {}
 
       const lastStatusCode = row.last_status_code || "";
-      const code0 = lastStatusCode ? lastStatusCode : resolveCode(row.desc0);
+      // Always prefer the most recent timeline event (desc0) — it reflects the latest scrape.
+      // Fall back to last_status_code only when timeline parsing fails.
+      const codeFromTimeline = resolveCode(row.desc0);
+      const code0 = codeFromTimeline || lastStatusCode;
       const code1 = resolveCode(row.desc1);
       const code2 = resolveCode(row.desc2);
       const code3 = resolveCode(row.desc3);
@@ -416,8 +419,8 @@ serve(async (req) => {
       if (codes.some(c => c === "DLV") || lastStatusCode === "DLV") {
         finalCode = "DLV";
       } else {
-        // Use last_status_code (most recent from scraper) or first timeline event
-        finalCode = lastStatusCode || code0 || null;
+        // Prefer timeline's most recent event (desc0); fallback to last_status_code
+        finalCode = codeFromTimeline || lastStatusCode || null;
       }
 
       // Enrich ARR with destination context
