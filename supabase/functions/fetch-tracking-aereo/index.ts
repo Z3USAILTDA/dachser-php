@@ -541,7 +541,7 @@ serve(async (req) => {
         last_event_description: getEventDesc(finalCode),
         last_status_code: finalCode || "",
         last_event_date: dateStr,
-        last_event_location: row.loc0 || "",
+        last_event_location: electedLoc,
         penultimate_location: row.loc1 || "",
         arr_destino_date: arrDestinoDate,
         hide_reason: hideReason,
