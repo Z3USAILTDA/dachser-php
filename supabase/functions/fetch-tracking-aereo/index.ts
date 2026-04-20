@@ -123,11 +123,11 @@ serve(async (req) => {
     }));
 
     // Step 3: Main query with SLA calculation via CTE
-    // CRITICAL: timeline_json is NOT guaranteed to be physically ordered by date.
-    // We use JSON_TABLE + ROW_NUMBER ORDER BY actual timestamp (with IATA hierarchy
-    // tiebreaker for same-timestamp events) to pick the truly most recent event.
+    // Returns the top 4 timeline events by physical array position ($[0..3]).
+    // The JS post-processing (pickTopByIATA) elects the most recent among them
+    // using the IATA hierarchy as tiebreaker — sole post-SQL processing.
     const sql = `
-      with raw_base as (
+      with base as (
         select
             tda.awb_number as AWB,
             tda.hawb_number as HAWB,
@@ -136,7 +136,24 @@ serve(async (req) => {
             tdaf.destination as DESTINO,
             tda.clerk as ANALISTA,
             tdaf.last_status_code,
-            tdaf.timeline_json as TIMELINE
+            tdaf.timeline_json as TIMELINE,
+            json_unquote(json_extract(tdaf.timeline_json, '$[0].description')) as desc0,
+            json_unquote(json_extract(tdaf.timeline_json, '$[1].description')) as desc1,
+            json_unquote(json_extract(tdaf.timeline_json, '$[2].description')) as desc2,
+            json_unquote(json_extract(tdaf.timeline_json, '$[3].description')) as desc3,
+            json_unquote(json_extract(tdaf.timeline_json, '$[0].location'))    as loc0,
+            json_unquote(json_extract(tdaf.timeline_json, '$[1].location'))    as loc1,
+            json_unquote(json_extract(tdaf.timeline_json, '$[2].location'))    as loc2,
+            json_unquote(json_extract(tdaf.timeline_json, '$[3].location'))    as loc3,
+            json_unquote(json_extract(tdaf.timeline_json, '$[0].date'))        as date0,
+            json_unquote(json_extract(tdaf.timeline_json, '$[1].date'))        as date1,
+            json_unquote(json_extract(tdaf.timeline_json, '$[2].date'))        as date2,
+            json_unquote(json_extract(tdaf.timeline_json, '$[3].date'))        as date3,
+            json_unquote(json_extract(tdaf.timeline_json, '$[0].time'))        as time0,
+            json_unquote(json_extract(tdaf.timeline_json, '$[0].status_code')) as code0_native,
+            json_unquote(json_extract(tdaf.timeline_json, '$[1].status_code')) as code1_native,
+            json_unquote(json_extract(tdaf.timeline_json, '$[2].status_code')) as code2_native,
+            json_unquote(json_extract(tdaf.timeline_json, '$[3].status_code')) as code3_native
         from dados_dachser.t_dados_aereo tda
         left join dados_dachser.t_fato_aereo tdaf
             on tdaf.awb collate utf8mb4_unicode_ci = tda.awb_number collate utf8mb4_unicode_ci
@@ -144,98 +161,6 @@ serve(async (req) => {
            and json_contains(tdaf.hawbs_json, json_array(tda.hawb_number))
         where
             (tda.master_insert >= '2026-03-20' or tda.created_at >= '2026-03-20')
-      ),
-      eventos_ordenados as (
-        select
-            rb.AWB,
-            rb.HAWB,
-            convert(jt.description using utf8mb4) collate utf8mb4_unicode_ci as descricao,
-            convert(jt.location    using utf8mb4) collate utf8mb4_unicode_ci as localizacao,
-            convert(jt.data_str    using utf8mb4) collate utf8mb4_unicode_ci as data_str,
-            convert(jt.time_str    using utf8mb4) collate utf8mb4_unicode_ci as time_str,
-            str_to_date(
-              concat(
-                nullif(jt.data_str, ''),
-                case when nullif(jt.time_str, '') is not null then concat(' ', jt.time_str) else ' 00:00' end
-              ),
-              '%d %b %Y %H:%i'
-            ) as data_real,
-            -- IATA hierarchy weight (higher = more advanced = wins same-timestamp tie)
-            case upper(coalesce(
-              regexp_substr(jt.description, '\\\\(([A-Z]{2,5})\\\\)'),
-              substring_index(jt.description, ' ', 1)
-            ))
-              when 'DLV' then 46 when 'POD' then 47
-              when 'NFD' then 42 when 'AWD' then 43 when 'AWR' then 44 when 'CCD' then 45
-              when 'RCF' then 41 when 'ARR' then 40
-              when 'DEP' then 23 when 'MAN' then 21 when 'PRE' then 20
-              when 'TFD' then 30 when 'TRM' then 31 when 'TRA' then 32
-              when 'FOH' then 16 when 'RCS' then 10 when 'RCT' then 11 when 'DOC' then 12
-              when 'BKD' then 1  when 'FWB' then 4
-              when 'DIS' then 55 when 'OFLD' then 53
-              else 0
-            end as iata_weight,
-            row_number() over (
-              partition by rb.AWB, rb.HAWB
-              order by
-                str_to_date(
-                  concat(
-                    nullif(jt.data_str, ''),
-                    case when nullif(jt.time_str, '') is not null then concat(' ', jt.time_str) else ' 00:00' end
-                  ),
-                  '%d %b %Y %H:%i'
-                ) desc,
-                case upper(coalesce(
-                  regexp_substr(jt.description, '\\\\(([A-Z]{2,5})\\\\)'),
-                  substring_index(jt.description, ' ', 1)
-                ))
-                  when 'DLV' then 46 when 'POD' then 47
-                  when 'NFD' then 42 when 'AWD' then 43 when 'AWR' then 44 when 'CCD' then 45
-                  when 'RCF' then 41 when 'ARR' then 40
-                  when 'DEP' then 23 when 'MAN' then 21 when 'PRE' then 20
-                  when 'TFD' then 30 when 'TRM' then 31 when 'TRA' then 32
-                  when 'FOH' then 16 when 'RCS' then 10 when 'RCT' then 11 when 'DOC' then 12
-                  when 'BKD' then 1  when 'FWB' then 4
-                  when 'DIS' then 55 when 'OFLD' then 53
-                  else 0
-                end desc
-            ) as pos
-        from raw_base rb
-        cross join json_table(
-          coalesce(rb.TIMELINE, json_array()),
-          '$[*]' columns (
-            description varchar(1000) path '$.description',
-            location    varchar(50)   path '$.location',
-            data_str    varchar(50)   path '$.date',
-            time_str    varchar(20)   path '$.time'
-          )
-        ) jt
-        where rb.TIMELINE is not null and json_valid(rb.TIMELINE)
-      ),
-      ordered_pivot as (
-        select
-          AWB, HAWB,
-          max(case when pos = 1 then descricao   end) as desc0,
-          max(case when pos = 2 then descricao   end) as desc1,
-          max(case when pos = 3 then descricao   end) as desc2,
-          max(case when pos = 4 then descricao   end) as desc3,
-          max(case when pos = 1 then localizacao end) as loc0,
-          max(case when pos = 2 then localizacao end) as loc1,
-          max(case when pos = 1 then data_str    end) as date0,
-          max(case when pos = 1 then time_str    end) as time0
-        from eventos_ordenados
-        group by AWB, HAWB
-      ),
-      base as (
-        select
-          rb.AWB, rb.HAWB, rb.CLIENTE, rb.ORIGEM, rb.DESTINO, rb.ANALISTA,
-          rb.last_status_code, rb.TIMELINE,
-          op.desc0, op.desc1, op.desc2, op.desc3,
-          op.loc0, op.loc1, op.date0, op.time0
-        from raw_base rb
-        left join ordered_pivot op
-          on op.AWB collate utf8mb4_unicode_ci = rb.AWB collate utf8mb4_unicode_ci
-         and op.HAWB collate utf8mb4_unicode_ci = rb.HAWB collate utf8mb4_unicode_ci
       ),
       event_time as (
         select
@@ -478,6 +403,49 @@ serve(async (req) => {
       return eventMap[code.trim().toUpperCase()]?.descricao_en || "";
     }
 
+    // IATA hierarchy weights (higher = more advanced step in the journey).
+    // Used by pickTopByIATA to elect the most recent of the top 4 SQL slots.
+    const IATA_WEIGHT: Record<string, number> = {
+      POD: 44, DLV: 43, NFD: 42, RCF: 41, AWD: 40, ARR: 39,
+      TRM: 38, TFD: 37, DEP: 36, MAN: 35, BKD: 34, FOH: 33, RCS: 32,
+      AWR: 40, CCD: 40, FWB: 4, RCT: 11, DOC: 12, PRE: 20, TRA: 32,
+      DIS: 30, OFLD: 28,
+    };
+
+    // Resolve code from a single slot (status_code native → regex → keyword/lookup).
+    function resolveCodeFromSlot(nativeCode: string | null, desc: string | null): string | null {
+      const native = (nativeCode || "").trim().toUpperCase();
+      if (native && /^[A-Z]{2,5}$/.test(native)) return native;
+      if (!desc || desc === "null") return null;
+      // IBS pattern: "| Code RCF |"
+      const ibs = desc.match(/\|\s*Code\s+([A-Z]{2,5})\s*\|/i);
+      if (ibs) return ibs[1].toUpperCase();
+      // Lufthansa parentheses: "(NFD)"
+      const paren = desc.match(/\(([A-Z]{2,5})\)/);
+      if (paren) return paren[1].toUpperCase();
+      return resolveCode(desc);
+    }
+
+    // Sole post-SQL processing: among the up to 4 slots returned by the query,
+    // elect the one with highest IATA weight as "most recent". Tiebreak by
+    // original slot index (lower wins → preserves SQL order).
+    function pickTopByIATA(row: any): { code: string | null; desc: string | null; loc: string | null; date: string | null; idx: number } {
+      const slots = [
+        { code: resolveCodeFromSlot(row.code0_native, row.desc0), desc: row.desc0, loc: row.loc0, date: row.date0, idx: 0 },
+        { code: resolveCodeFromSlot(row.code1_native, row.desc1), desc: row.desc1, loc: row.loc1, date: row.date1, idx: 1 },
+        { code: resolveCodeFromSlot(row.code2_native, row.desc2), desc: row.desc2, loc: row.loc2, date: row.date2, idx: 2 },
+        { code: resolveCodeFromSlot(row.code3_native, row.desc3), desc: row.desc3, loc: row.loc3, date: row.date3, idx: 3 },
+      ].filter(s => s.desc || s.code);
+      if (slots.length === 0) return { code: null, desc: null, loc: null, date: null, idx: -1 };
+      let winner = slots[0];
+      let winnerW = IATA_WEIGHT[(winner.code || "").toUpperCase()] || 0;
+      for (let i = 1; i < slots.length; i++) {
+        const w = IATA_WEIGHT[(slots[i].code || "").toUpperCase()] || 0;
+        if (w > winnerW) { winner = slots[i]; winnerW = w; }
+      }
+      return winner;
+    }
+
     const data: any[] = [];
     const failed: any[] = [];
 
@@ -490,29 +458,36 @@ serve(async (req) => {
       } catch (_) {}
 
       const lastStatusCode = row.last_status_code || "";
-      // Always prefer the most recent timeline event (desc0) — it reflects the latest scrape.
-      // Fall back to last_status_code only when timeline parsing fails.
-      const codeFromTimeline = resolveCode(row.desc0);
-      const code0 = codeFromTimeline || lastStatusCode;
-      const code1 = resolveCode(row.desc1);
-      const code2 = resolveCode(row.desc2);
-      const code3 = resolveCode(row.desc3);
 
-      // Determine ultimo_status_correto using chronological order (most recent first)
+      // Sole post-SQL processing: elect the top slot by IATA hierarchy
+      // among the up to 4 returned by the SQL query.
+      const top = pickTopByIATA(row);
+      const codeFromTimeline = top.code;
+
+      // Determine final code
       let finalCode: string | null = null;
-      const codes = [code0, code1, code2, code3];
+      const allCodes = [
+        top.code,
+        resolveCodeFromSlot(row.code1_native, row.desc1),
+        resolveCodeFromSlot(row.code2_native, row.desc2),
+        resolveCodeFromSlot(row.code3_native, row.desc3),
+      ];
 
       // DLV always takes priority (delivered is final)
-      if (codes.some(c => c === "DLV") || lastStatusCode === "DLV") {
+      if (allCodes.some(c => c === "DLV") || lastStatusCode === "DLV") {
         finalCode = "DLV";
       } else {
-        // Prefer timeline's most recent event (desc0); fallback to last_status_code
+        // Prefer elected timeline slot; fallback to last_status_code
         finalCode = codeFromTimeline || lastStatusCode || null;
       }
 
+      // Use elected slot's loc/date/desc as the "current" event surface
+      const electedLoc = top.loc || row.loc0 || "";
+      const electedDate = top.date || row.date0 || "";
+
       // Enrich ARR with destination context
       if (finalCode === "ARR") {
-        const loc = extractIATA(row.loc0 || "");
+        const loc = extractIATA(electedLoc);
         const dest = extractIATA(row.DESTINO || "");
         if (dest && loc && loc === dest) {
           finalCode = "ARR - DESTINO";
@@ -521,20 +496,16 @@ serve(async (req) => {
         }
       }
 
-      // Find the first non-empty date in the timeline
-      let dateStr: string | null = null;
-      if (timeline && timeline.length > 0) {
-        for (const evt of timeline) {
-          const d = (evt.date || "").trim();
-          if (d) {
-            dateStr = d;
-            break;
-          }
-        }
-      }
-      // Fallback to SQL-extracted date0/time0
+      // Date for the elected slot — prefer SQL slot date, then time-augmented row.date0/time0
+      let dateStr: string | null = electedDate || null;
       if (!dateStr) {
         dateStr = ((row.date0 || "") + " " + (row.time0 || "")).trim() || null;
+      }
+      if (!dateStr && timeline && timeline.length > 0) {
+        for (const evt of timeline) {
+          const d = (evt.date || "").trim();
+          if (d) { dateStr = d; break; }
+        }
       }
 
       // Scan timeline for ARR at destination (regardless of finalCode)
@@ -570,7 +541,7 @@ serve(async (req) => {
         last_event_description: getEventDesc(finalCode),
         last_status_code: finalCode || "",
         last_event_date: dateStr,
-        last_event_location: row.loc0 || "",
+        last_event_location: electedLoc,
         penultimate_location: row.loc1 || "",
         arr_destino_date: arrDestinoDate,
         hide_reason: hideReason,
