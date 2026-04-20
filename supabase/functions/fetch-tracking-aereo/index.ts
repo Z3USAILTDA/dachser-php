@@ -554,11 +554,7 @@ serve(async (req) => {
         resolveCodeFromSlot(row.code3_native, row.desc3),
       ];
 
-      // Whitelist of valid IATA codes for raw last_status_code fallback
-      const VALID_IATA = new Set([
-        ...Object.keys(IATA_WEIGHT),
-        'OFLD','NIL','NIF','DIS','TFD','RCT','TRM','POD','UNK',
-      ]);
+      // VALID_IATA whitelist already defined above (used by resolveCodeFromSlot)
       const sanitizedLastStatus = (lastStatusCode || '').toString().toUpperCase().trim();
       const safeLastStatus = VALID_IATA.has(sanitizedLastStatus) ? sanitizedLastStatus : null;
 
