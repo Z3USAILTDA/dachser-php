@@ -31,7 +31,7 @@ const OPERACAO_FIXED_EMAILS = [
 ];
 
 interface NotificationRequest {
-  type: "AJUSTE_SOLICITADO" | "URGENCIA_REJEITADA" | "URGENCIA_APROVADA" | "VOUCHER_ENVIADO" | "VOUCHER_CONCLUIDO" | "VENCIMENTO_PROXIMO";
+  type: "AJUSTE_SOLICITADO" | "URGENCIA_SOLICITADA" | "URGENCIA_APROVADA" | "URGENCIA_REJEITADA";
   voucherId: string;
   voucherNumber: string;
   toStage: string;
@@ -71,12 +71,12 @@ function getEmailContent(data: NotificationRequest) {
     string,
     { title: string; titleColor: string; btnBg: string; btnColor: string; subject: string }
   > = {
-    VOUCHER_ENVIADO: {
-      title: "Novo Voucher para Análise",
+    URGENCIA_SOLICITADA: {
+      title: "Solicitação de Urgência",
       titleColor: "#F5B843",
       btnBg: "#F5B843",
       btnColor: "#111",
-      subject: "Voucher Recebido",
+      subject: "Solicitação de Urgência",
     },
     AJUSTE_SOLICITADO: {
       title: "Ajuste Solicitado",
@@ -99,34 +99,16 @@ function getEmailContent(data: NotificationRequest) {
       btnColor: "#fff",
       subject: "Urgência Aprovada",
     },
-    VOUCHER_CONCLUIDO: {
-      title: "Voucher Concluído com Sucesso",
-      titleColor: "#22C55E",
-      btnBg: "#22C55E",
-      btnColor: "#fff",
-      subject: "Voucher Concluído",
-    },
-    VENCIMENTO_PROXIMO: {
-      title: "⚠️ Atenção: Vencimento Próximo",
-      titleColor: "#F59E0B",
-      btnBg: "#F59E0B",
-      btnColor: "#111",
-      subject: "Vencimento Próximo",
-    },
   };
 
-  const cfg = cfgMap[data.type] || cfgMap.VOUCHER_ENVIADO;
-  const ctaLabel =
-    data.type === "VOUCHER_CONCLUIDO"
-      ? "Ver Detalhes"
-      : data.type === "VOUCHER_ENVIADO"
-        ? "Analisar Voucher"
-        : "Ver Voucher";
+  const cfg = cfgMap[data.type] || cfgMap.URGENCIA_SOLICITADA;
+  const ctaLabel = data.type === "URGENCIA_SOLICITADA" ? "Analisar Voucher" : "Ver Voucher";
 
   let contentBlock = "";
   switch (data.type) {
-    case "VOUCHER_ENVIADO":
-      contentBlock = `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">Você recebeu um novo voucher para análise na etapa <b>${data.toStage}</b>.</p>`;
+    case "URGENCIA_SOLICITADA":
+      contentBlock = `
+        <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">Foi solicitada <b>urgência manual</b> para o voucher <b>${data.voucherNumber}</b>${data.senderName ? ` por <b>${data.senderName}</b>` : ""}. Por favor, avalie e aprove ou rejeite usando os botões abaixo.</p>`;
       break;
     case "AJUSTE_SOLICITADO":
       contentBlock = `
@@ -149,12 +131,6 @@ function getEmailContent(data: NotificationRequest) {
       contentBlock = `
         <p style="margin:0 0 8px;font-size:14px;line-height:1.6;color:#666">A solicitação de urgência para o voucher <b>${data.voucherNumber}</b> foi <span style="color:#22C55E;font-weight:700">aprovada</span> pelo Supervisor e enviada ao Financeiro.</p>
         ${data.senderName ? `<p style="margin:0 0 8px;font-size:13px;color:#666">Aprovado por: <b>${data.senderName}</b></p>` : ""}`;
-      break;
-    case "VOUCHER_CONCLUIDO":
-      contentBlock = `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">O voucher <b>${data.voucherNumber}</b> foi processado e concluído com sucesso.</p>`;
-      break;
-    case "VENCIMENTO_PROXIMO":
-      contentBlock = `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">O voucher <b>${data.voucherNumber}</b> está próximo do vencimento${data.vencimento ? ` (<b>${formatVencimentoBR(data.vencimento)}</b>)` : ""}. Por favor, verifique e tome as ações necessárias.</p>`;
       break;
   }
 
@@ -353,8 +329,8 @@ const handler = async (req: Request): Promise<Response> => {
       JSON.stringify({ type: data.type, toStage: data.toStage, voucherNumber: data.voucherNumber }),
     );
 
-    // If sending to SUPERVISOR, enrich with voucher details (anexos, CNPJ, etc.)
-    if (data.toStage === "SUPERVISOR" && data.voucherId) {
+    // If sending URGENCIA_SOLICITADA, enrich with voucher details (anexos, CNPJ, etc.)
+    if (data.type === "URGENCIA_SOLICITADA" && data.voucherId) {
       try {
         const voucherRes = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
           method: "POST",
@@ -380,7 +356,6 @@ const handler = async (req: Request): Promise<Response> => {
             moeda: data.moeda || v.moeda,
             vencimento: data.vencimento || v.data_vencimento,
           };
-          // Fetch anexos - check multiple possible locations
           const rawAnexos = v.anexos || voucherData.anexos || voucherData.data?.anexos;
           if (rawAnexos && Array.isArray(rawAnexos)) {
             data.anexos = rawAnexos
@@ -391,9 +366,6 @@ const handler = async (req: Request): Promise<Response> => {
               }))
               .filter((a: any) => a.file_url);
           }
-          console.log(
-            `Enriched voucher data: ${data.anexos?.length || 0} anexos found, raw keys: ${JSON.stringify(Object.keys(voucherData))}`,
-          );
         }
       } catch (e) {
         console.error("Error fetching voucher details:", e);
@@ -401,22 +373,22 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Resolve recipients dynamically based on type/stage.
-    // Default fallback: roles mapped to the destination stage (existing behavior).
     let toEmails: string[] = [];
     let ccEmails: string[] = [];
 
     const responsaveis = data.voucherId ? await getVoucherResponsaveis(data.voucherId) : null;
 
-    if (data.toStage === "SUPERVISOR" && data.type === "VOUCHER_ENVIADO") {
-      // Urgent voucher arriving at SUPERVISOR
+    if (data.type === "URGENCIA_SOLICITADA") {
+      // TO: supervisor direto do solicitante. CC: o próprio solicitante.
       if (responsaveis?.creator_supervisor_email) {
         toEmails = [responsaveis.creator_supervisor_email];
       } else {
+        // Fallback: todos os SUPERVISOR / GESTOR_SUPERVISOR ativos
         toEmails = await getRecipientEmails(STAGE_TO_ROLES["SUPERVISOR"] || []);
       }
       if (responsaveis?.creator_email) ccEmails = [responsaveis.creator_email];
     } else if (data.type === "URGENCIA_APROVADA" || data.type === "URGENCIA_REJEITADA") {
-      // Notify creator (to) + supervisor (cc)
+      // Resposta automática ao solicitante (TO) com supervisor em CC
       if (responsaveis?.creator_email) toEmails = [responsaveis.creator_email];
       if (responsaveis?.creator_supervisor_email) ccEmails = [responsaveis.creator_supervisor_email];
       if (toEmails.length === 0 && ccEmails.length > 0) {
@@ -424,7 +396,6 @@ const handler = async (req: Request): Promise<Response> => {
         ccEmails = [];
       }
     } else if (data.type === "AJUSTE_SOLICITADO") {
-      // Notify the user responsible for the previous stage
       if (data.toStage === "AJUSTE_OPERACAO") {
         if (responsaveis?.creator_email) {
           toEmails = [responsaveis.creator_email];
@@ -437,16 +408,6 @@ const handler = async (req: Request): Promise<Response> => {
         } else {
           toEmails = await getRecipientEmails(STAGE_TO_ROLES["AJUSTE_FISCAL"] || []);
         }
-      } else {
-        toEmails = await getRecipientEmails(STAGE_TO_ROLES[data.toStage] || []);
-      }
-    } else {
-      // Generic stage routing
-      const roles = STAGE_TO_ROLES[data.toStage] || [];
-      if (roles.includes("__OPERACAO_FIXED__")) {
-        toEmails = OPERACAO_FIXED_EMAILS;
-      } else {
-        toEmails = await getRecipientEmails(roles);
       }
     }
 
@@ -468,8 +429,8 @@ const handler = async (req: Request): Promise<Response> => {
 
     let { subject, html } = getEmailContent(data);
 
-    // If sending to SUPERVISOR, generate tokens and inject approve/reject buttons
-    if (data.toStage === "SUPERVISOR" && data.type === "VOUCHER_ENVIADO") {
+    // For URGENCIA_SOLICITADA, generate tokens and inject approve/reject buttons for the supervisor
+    if (data.type === "URGENCIA_SOLICITADA") {
       const tokens = await generateSupervisorTokens(data.voucherId);
       if (tokens) {
         html = injectSupervisorButtons(html, tokens.approveToken, tokens.rejectToken);
@@ -517,6 +478,10 @@ const handler = async (req: Request): Promise<Response> => {
     };
     if (ccEmails.length > 0) {
       emailPayload.cc = ccEmails;
+    }
+    // Reply-To: solicitante on URGENCIA_SOLICITADA so supervisor can reply directly
+    if (data.type === "URGENCIA_SOLICITADA" && responsaveis?.creator_email) {
+      emailPayload.reply_to = responsaveis.creator_email;
     }
     if (attachments.length > 0) {
       emailPayload.attachments = attachments;

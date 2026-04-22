@@ -363,7 +363,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         try {
           await supabase.functions.invoke("send-voucher-notification", {
             body: {
-              type: "VOUCHER_ENVIADO",
+              type: "URGENCIA_SOLICITADA",
               voucherId: voucher.id,
               voucherNumber: voucher.numeroSPO,
               toStage: "SUPERVISOR",

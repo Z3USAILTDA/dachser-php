@@ -683,7 +683,7 @@ export const CreateVoucherDialog = ({
         try {
           await supabase.functions.invoke("send-voucher-notification", {
             body: {
-              type: "VOUCHER_ENVIADO",
+              type: "URGENCIA_SOLICITADA",
               voucherId: voucherId,
               voucherNumber: voucherData.numero_spo,
               toStage: "SUPERVISOR",
