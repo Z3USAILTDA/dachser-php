@@ -1,79 +1,98 @@
 
 
-## Usar `t_eventos_awb` e `t_description_eventos` como fonte canônica de resolução de sigla
+## Plano final — 3 alertas da Esteira
 
-### Por que ainda não usamos
+### Alerta 1 — Voucher devolvido para ajuste (com motivo)
 
-Hoje a `resolveCodeFromSlot` em `fetch-tracking-aereo` tenta resolver o código nesta ordem:
+**Quando:** ação manual em `VoucherFiscalActions`, `VoucherSupervisorActions` ou `VoucherFinanceiroActions` que move o voucher para `AJUSTE_OPERACAO` ou `AJUSTE_FISCAL`, com motivo preenchido.
 
-1. `status_code` nativo do JSON
-2. Regex `| Code XXX |` (IBS)
-3. Regex `^([A-Z]{2,5})\b` no início da descrição
-4. Regex `(XXX)` (Lufthansa)
-5. **Lookup em `t_eventos_awb` / `t_description_eventos`** — existe mas é o último recurso e usa apenas keyword/igualdade simples
+**Para quem (1 destinatário):**
+- `AJUSTE_OPERACAO` → criador do voucher (`t_vouchers.criado_por_user_id` → email em `t_users_dachser`).
+- `AJUSTE_FISCAL` → último fiscal que tocou o voucher (resolvido via `t_voucher_logs` da etapa FISCAL mais recente).
 
-O problema: descrições reais raramente caem em (1)-(4). Exemplos típicos do crawler:
-- `"Received from Flight at FRA"` → não tem `status_code`, não tem `| Code |`, não começa com sigla, não tem `(XXX)` → cai no lookup, mas o lookup atual não casa por substring nem normaliza, então falha → vai pro fallback `lastStatusCode` cru → vira "FRA".
+**Conteúdo:** número do voucher, etapa de origem, etapa destino, motivo, link.
 
-As duas tabelas no MariaDB já mantêm o mapeamento autoritativo de descrição → sigla IATA, mantido pela operação. Elas devem ser a fonte primária, não o último recurso.
+**Implementação:** mantém `voucherReturnNotification.ts` + branch `AJUSTE_SOLICITADO` em `send-voucher-notification`.
 
-### Mudança proposta
+---
 
-**1. Carregar as tabelas uma vez por execução em `fetch-tracking-aereo`**
+### Alerta 2 — Urgência manual solicitada → Supervisor direto
 
-Adicionar Q0 logo após a conexão:
+**Quando:** voucher criado/editado com `urgencia_tipo === 'URGENTE_REAL'` (checkbox "Pagamento Urgente"). Não dispara para `URGENTE_AUTOMATICO`.
+
+**Destinatários:**
+- **TO:** supervisor direto do solicitante, via `t_users_dachser.supervisor_id` (já configurado em `/admin/users`).
+- **CC:** o próprio solicitante (`criado_por_user_id` → email em `t_users_dachser`), para acompanhamento.
 
 ```sql
-SELECT codigo, descricao FROM t_eventos_awb WHERE codigo IS NOT NULL AND descricao IS NOT NULL;
-SELECT codigo, descricao FROM t_description_eventos WHERE codigo IS NOT NULL AND descricao IS NOT NULL;
+SELECT s.email AS supervisor_email, s.username AS supervisor_username,
+       u.email AS solicitante_email, u.username AS solicitante_username
+FROM ai_agente.t_users_dachser u
+LEFT JOIN ai_agente.t_users_dachser s
+       ON s.id = u.supervisor_id AND s.esteira_active = 1 AND s.email <> ''
+WHERE u.id = ?;
 ```
 
-Montar dois mapas em memória:
-- `EXACT_MAP: Map<descricao_normalizada, codigo>` — match exato
-- `KEYWORD_INDEX: Array<{needle, codigo, weight}>` — match por substring, ordenado por tamanho da needle DESC (needle maior vence)
+**Fallback** (sem supervisor cadastrado / inativo): TO = todos `SUPERVISOR` ativos, com aviso "solicitante sem supervisor direto: @{username}". CC continua sendo o solicitante.
 
-Normalização: `upper().trim().replace(/\s+/g, ' ').replace(/[^\w\s]/g, '')`.
+**Conteúdo do e-mail (corpo):**
+- Solicitante, número do voucher, tipo de documento, valor, motivo da urgência.
+- Dois botões: **Aprovar** e **Rejeitar** (mesmo fluxo `supervisor-email-action` já em produção, com `Reply-To` apontando para o solicitante).
 
-**2. Reordenar `resolveCodeFromSlot` para priorizar as tabelas**
+**Resposta automática ao solicitante (mantém comportamento já testado):**
+Após o supervisor clicar Aprovar/Rejeitar pelo link:
+- `supervisor-email-action` continua disparando os e-mails de confirmação `URGENCIA_APROVADA` / `URGENCIA_REJEITADA` para o solicitante (com motivo no caso de rejeição).
+- Esses dois branches **permanecem** em `send-voucher-notification` (não serão removidos como no plano anterior). Destinatário: criador do voucher; CC: supervisor que aprovou/rejeitou.
 
-Nova ordem:
+**Tipo novo:** `URGENCIA_SOLICITADA` em `send-voucher-notification` substitui o disparo atual de `VOUCHER_ENVIADO` quando há urgência manual. Disparado de `CreateVoucherDialog.tsx` e `VoucherOperacaoActions.tsx`.
 
-1. `status_code` nativo do JSON (continua em primeiro — é dado estruturado do crawler)
-2. **`EXACT_MAP[normalize(desc)]`** — match exato com `t_eventos_awb` / `t_description_eventos`
-3. **`KEYWORD_INDEX`** — primeira needle (maior) que estiver contida em `normalize(desc)`
-4. Regex `| Code XXX |` (IBS)
-5. Regex `^([A-Z]{2,5})\b` validado contra whitelist
-6. Regex `(XXX)` (Lufthansa)
+---
 
-O resultado precisa estar na whitelist `VALID_IATA` para ser aceito; caso contrário continua tentando os próximos passos.
+### Alerta 3 — Relatório mensal de processados
 
-**3. Manter o restante intacto**
+**Quando:** cron `pg_cron`, último dia do mês 18h (BRT).
 
-- `pickTopByIATA` continua igual (recebe `code` resolvido melhor agora).
-- `VALID_IATA` whitelist continua barrando localizações.
-- Frontend `getStatusCode` continua devolvendo `UNK` quando código não é reconhecido.
-- `mariadb-proxy.get_awb_tracking_events` recebe a mesma reordenação para o modal bater com o card.
+**Para quem:** todos `SUPERVISOR`, `GESTOR_SUPERVISOR`, `FINANCEIRO`, `GESTOR_FINANCEIRO`, `ADMIN` ativos em `t_users_dachser`.
 
-### Performance
+**Conteúdo:** vouchers `CONCLUIDO` no mês, total por filial, total geral, link.
 
-- 2 SELECTs adicionais por execução do cron (~milhares de linhas, mas é tabela pequena de mapeamento).
-- Cache em memória dentro da invocação — zero impacto por AWB processado.
-- Sem JOIN no SQL principal (mantém Q3 simples).
+**Implementação:** mantém `voucher-monthly-report`, troca destinatários e remove overrides hardcoded (ex.: `larissa@z3us.ai`).
 
-### Validação
+---
 
-1. AWB com `"Received from Flight at FRA"` → resolve `RCF` via lookup, não vira `FRA`.
-2. AWB com `"Arrived at FCO"` → resolve `ARR`, não vira `FCO`.
-3. AWB com `"Notified Consignee"` → resolve `NFD`.
-4. AWBs já corretos (`020-01256754`, `020-07276290`, `020-65056110`) não regridem.
-5. AWB com descrição desconhecida (não está em nenhuma tabela) → `UNK`, sem inventar sigla a partir de localização.
+### Remoções
+
+| Item | Ação |
+|---|---|
+| Edge function `voucher-check-sla-alerts` | apagar + remover cron |
+| Edge function `voucher-send-daily-report` | apagar + remover cron |
+| Edge function `voucher-notify-rm-pending` | apagar + remover cron |
+| Branches `VOUCHER_ENVIADO`, `VOUCHER_CONCLUIDO`, `VENCIMENTO_PROXIMO` em `send-voucher-notification` | apagar |
+| **Manter** branches `URGENCIA_APROVADA` e `URGENCIA_REJEITADA` (resposta ao solicitante) | manter |
+| Chamadas `send-voucher-notification` em `CreateVoucherDialog.tsx` e `VoucherOperacaoActions.tsx` para avanço normal de etapa | apagar |
+| `supervisor-email-action/index.ts`: remover apenas o fetch `VOUCHER_ENVIADO`, manter os 2 fetches `URGENCIA_APROVADA`/`URGENCIA_REJEITADA` | ajustar |
+| `src/utils/esteiraNotifications.ts` | remover se nenhum consumidor restar |
+
+---
+
+### Validação pós-deploy
+
+1. OPERAÇÃO → FISCAL normal: nenhum e-mail.
+2. FISCAL devolve para AJUSTE_OPERACAO com motivo: criador recebe 1 e-mail com motivo.
+3. Criar voucher tipo "FRETE" + "Pagamento Urgente": supervisor direto recebe e-mail (TO), criador em CC.
+4. Criar voucher urgente sem supervisor cadastrado: todos supervisores em TO + criador em CC, com aviso de fallback.
+5. Criar voucher tipo "ICMS" sem urgência manual: nenhum e-mail.
+6. Supervisor clica "Aprovar" no link: criador recebe `URGENCIA_APROVADA`, supervisor em CC.
+7. Supervisor clica "Rejeitar" e informa motivo: criador recebe `URGENCIA_REJEITADA` com motivo.
+8. Invocar manualmente `voucher-monthly-report`: supervisores + financeiro + admin recebem.
+
+---
 
 ### Não muda
 
-- SQL Q3 (`JSON_EXTRACT($[0..3])` + `ORDER BY id DESC`).
-- Hierarquia IATA, `pickTopByIATA`, `MANUAL_OVERRIDES`, SLA, CTE de discrepância, schema de retorno, cron, demais módulos.
+Schema de vouchers, fluxo de etapas, regras `URGENTE_REAL` vs `URGENTE_AUTOMATICO`, `MANUAL_OVERRIDES`, fluxo externo de aprovação por e-mail (`supervisor-email-action` + páginas hospedadas), `t_users_dachser.supervisor_id`.
 
 ### Memória a atualizar
 
-`mem://air/tracking/data-mirroring-intent-v2`: registrar que `t_eventos_awb` e `t_description_eventos` são fonte primária de resolução de sigla (passos 2-3), à frente dos regex específicos por airline.
+`mem://vouchers/reporting-and-notification-strategy-v2`: 3 alertas — (1) devolução com motivo, (2) urgência manual: TO supervisor direto + CC solicitante, com resposta automática (`URGENCIA_APROVADA`/`URGENCIA_REJEITADA`) ao solicitante após ação no link, (3) relatório mensal. SLA diário, daily report e RM-pending descontinuados.
 
