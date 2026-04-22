@@ -16,7 +16,13 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Shim Node's `stream` for browser so xlsx-js-style doesn't break
+      // (it tries to require('stream') which doesn't exist in the browser).
+      stream: "stream-browserify",
     },
     dedupe: ["react", "react-dom", "react/jsx-runtime"],
+  },
+  optimizeDeps: {
+    include: ["stream-browserify"],
   },
 }));
