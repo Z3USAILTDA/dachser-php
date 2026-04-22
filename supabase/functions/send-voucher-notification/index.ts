@@ -479,6 +479,10 @@ const handler = async (req: Request): Promise<Response> => {
     if (ccEmails.length > 0) {
       emailPayload.cc = ccEmails;
     }
+    // Reply-To: solicitante on URGENCIA_SOLICITADA so supervisor can reply directly
+    if (data.type === "URGENCIA_SOLICITADA" && responsaveis?.creator_email) {
+      emailPayload.reply_to = responsaveis.creator_email;
+    }
     if (attachments.length > 0) {
       emailPayload.attachments = attachments;
     }
