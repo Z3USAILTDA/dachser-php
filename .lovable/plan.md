@@ -1,80 +1,93 @@
 
 
 ## Diagnóstico
-Na tela `/fin/esteira` aba **Pagamentos**, o dropdown "Tipo Exec." aparece em branco (placeholder "Pendente") em linhas onde o usuário definiu **Remessa 10h** ou **Remessa 15h**, mesmo após o toast "Tipo de execução atualizado" confirmar o salvamento. Linhas com "MANUAL" e "Pendente" funcionam normalmente.
+Na tela `/air/tracking-aereo` **não existe** detecção nem visualização de transporte terrestre. A lógica de detecção `is_ground_transport` (sufixo `-T`, `digit+X`, `digit+D` em códigos de voo, varredura de `last_flight` e `timeline_json`) existe **apenas** no `fetch-status-aereo` (dashboard `/air/tracking`), e o ícone de avião na coluna Rastreio é fixo — nunca vira caminhão.
 
-## Causa raiz
-`supabase/functions/mariadb-proxy/index.ts` linhas 9376–9387 (action `set_tipo_execucao_pagamento`) faz um **mapeamento destrutivo** ao salvar:
+Confirmações:
+- `fetch-tracking-aereo/index.ts` não menciona `terrestre`/`ground`/`truck`/`-T`.
+- `TrackingAereo.tsx` (linhas 797–897) renderiza sempre `<Plane />` na progress bar e badges fixos (Conexão/Destino/UNK), sem ramo terrestre.
+- O endpoint `fetch-status-aereo` (linhas 1273–1325) já tem `isGroundFlight()` testado e em produção — fonte canônica para reaproveitar.
 
-```ts
-const tipoExecMap = {
-  'MANUAL': 'MANUAL',
-  'REMESSA_10H': 'REMESSA',  // ← perde o "10H"
-  'REMESSA_15H': 'REMESSA',  // ← perde o "15H"
-  'A_DEFINIR': 'A_DEFINIR',
-};
-```
+## Proposta (cirúrgica)
 
-O usuário escolhe `REMESSA_10H` no `<Select>`, mas o banco grava apenas `'REMESSA'`. No próximo `loadPagamentos`, o `<Select value="REMESSA">` (linha 1061) **não encontra** nenhum `<SelectItem>` com esse valor (as opções são `A_DEFINIR | MANUAL | REMESSA_10H | REMESSA_15H`) → Radix renderiza o placeholder vazio.
-
-A coluna `tipo_execucao_pagamento` em `t_vouchers` já é `VARCHAR(50)` (alterada na linha 9179 de `list_pagamentos`), portanto **aceita `REMESSA_10H`/`REMESSA_15H` direto** — o mapeamento legado vem de quando a coluna era ENUM antigo (`'MANUAL','REMESSA','TED','PIX'`) e ficou para trás.
-
-Confirmações cruzadas:
-- Filtro do header (`list_pagamentos`, linhas 9237–9247) e cards de stats (linhas 9327, 9333) já consultam `IN ('REMESSA_10H','REMESSA_15H')`, ou seja, o resto do sistema **espera** os subtipos preservados — só o setter está corrompendo.
-- `batch_set_tipo_execucao` (linhas 9479–9502) **não aplica o map** — salva o valor cru, então a versão em lote já funciona corretamente. A inconsistência entre os dois setters reforça o bug no individual.
-- `voucherRmSync.ts` envia `tipo_exec: voucher.tipoExecucaoPagamento || "A_DEFINIR"` para `t_dados_rm` (RM externo) — esse fluxo continua funcionando porque `'REMESSA_10H'`/`'REMESSA_15H'` é uma string aceita lá.
-
-## Correção (cirúrgica)
-
-### 1. `supabase/functions/mariadb-proxy/index.ts` — action `set_tipo_execucao_pagamento` (linhas 9362–9392)
-Remover o `tipoExecMap` destrutivo. Salvar o valor cru recebido do frontend (igual ao `batch_set_tipo_execucao`), validando contra a lista permitida:
+### 1. Backend — `supabase/functions/fetch-tracking-aereo/index.ts`
+Antes do `const normalized = {...}` (no mesmo bloco onde foi adicionada a extração de `conexao`), adicionar:
 
 ```ts
-const ALLOWED = new Set(['A_DEFINIR', 'MANUAL', 'REMESSA_10H', 'REMESSA_15H']);
-if (!ALLOWED.has(tipo_execucao_pagamento)) {
-  return new Response(
-    JSON.stringify({ error: `tipo_execucao_pagamento inválido: ${tipo_execucao_pagamento}` }),
-    { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
+// Detect ground transport from flight codes (mirrors fetch-status-aereo)
+function isGroundFlight(val: string): boolean {
+  const clean = (val || "").trim().replace(/,\s*$/, '');
+  if (!clean) return false;
+  // Patterns: "LA 5491-T", "AF0677D", "M3 8516X"
+  if (/[-\s]T$/i.test(clean)) return true;
+  if (/\d[XD]$/i.test(clean)) return true;
+  return false;
 }
 
-await client.execute(
-  `UPDATE dados_dachser.t_vouchers 
-   SET tipo_execucao_pagamento = ?, updated_at = NOW() 
-   WHERE id = ?`,
-  [tipo_execucao_pagamento, voucherId]
-);
+let isGroundTransport = false;
+const lastFlightRaw = String(row.LAST_FLIGHT || row.last_flight || "");
+if (isGroundFlight(lastFlightRaw)) isGroundTransport = true;
+if (!isGroundTransport && timeline?.length) {
+  for (const ev of timeline) {
+    const candidates = [
+      ev.flight, ev.flight_number, ev.last_flight,
+      ev.description, ev.event_description, ev.location
+    ].filter(Boolean);
+    for (const c of candidates) {
+      // extract tokens that look like flight codes and test
+      const tokens = String(c).match(/\b[A-Z0-9]{2,4}\s?\d{2,5}[A-Z\-T]*\b/g) || [];
+      if (tokens.some(isGroundFlight)) { isGroundTransport = true; break; }
+    }
+    if (isGroundTransport) break;
+  }
+}
 ```
 
-### 2. Migração one-shot dos vouchers já corrompidos
-Executar no MariaDB via action existente para corrigir registros que foram salvos como `'REMESSA'` puro (sem subtipo). Como não temos histórico de qual era o original, usar `REMESSA_15H` como default (regra padrão de remessa do dia útil — alinhar com usuário antes de rodar):
+Adicionar `is_ground_transport: isGroundTransport,` no objeto `normalized`.
 
-```sql
-UPDATE dados_dachser.t_vouchers
-SET tipo_execucao_pagamento = 'REMESSA_15H'
-WHERE tipo_execucao_pagamento = 'REMESSA';
+### 2. Frontend — `src/pages/air/TrackingAereo.tsx`
+
+**a. Tipo**: Adicionar `is_ground_transport?: boolean` na interface do AWB (~linha 320).
+
+**b. Ícone na progress bar (linha 876)**: Trocar `Plane` por `Truck` quando `awb.is_ground_transport === true`. Manter mesma cor/sombra/posicionamento. Importar `Truck` do `lucide-react`.
+
+```tsx
+{awb.is_ground_transport ? (
+  <Truck className="w-4 h-4" style={{ color: planeColor, fill: planeColor, filter: `drop-shadow(0 0 4px ${shadowColor})` }} />
+) : (
+  <Plane className="w-4 h-4" style={{ transform: "rotate(90deg)", color: planeColor, ... }} />
+)}
 ```
 
-Posso fazer isso via uma action ad-hoc temporária ou um script `code--exec` chamando a edge function. Confirmar com usuário qual subtipo usar como fallback.
+**c. Badge na coluna Rota (linhas 847–859)**: Após o destino, adicionar pílula discreta quando terrestre:
+```tsx
+{awb.is_ground_transport && (
+  <span className="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.6rem] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+    <Truck className="w-2.5 h-2.5" /> RFS
+  </span>
+)}
+```
+
+**d. Tooltip do ícone (linhas 879–882)**: incluir "Transporte Terrestre" quando aplicável.
 
 ### 3. Memória persistente
-Atualizar `mem://vouchers/integration-rm-mapping-rules-v4`:
-> "A coluna `tipo_execucao_pagamento` em `t_vouchers` armazena o subtipo exato (`REMESSA_10H` ou `REMESSA_15H`). A tradução para a string genérica `'REMESSA'` ocorre **apenas** no consumo (filtros de relatório, downstream `t_dados_rm`), nunca no setter — caso contrário o `<Select>` da UI perde o casamento de valor."
+Atualizar `mem://air/tracking/aereo-monitoring-spec` adicionando:
+> "Detecção de transporte terrestre: `fetch-tracking-aereo` espelha a função `isGroundFlight` de `fetch-status-aereo` (sufixos `-T`, `dígitoX`, `dígitoD` em códigos de voo). Resultado vai no campo `is_ground_transport` do payload. UI substitui o ícone `<Plane>` por `<Truck>` na coluna Rastreio e exibe pílula 'RFS' (âmbar) ao lado do destino na coluna Rota."
 
 ## Arquivos alterados
-- `supabase/functions/mariadb-proxy/index.ts` — substituir bloco de map por validação simples (~10 linhas).
-- Memória `mem://vouchers/integration-rm-mapping-rules-v4` — atualização.
-- Migração one-shot de dados (após confirmação do fallback `REMESSA_10H` vs `REMESSA_15H`).
+- `supabase/functions/fetch-tracking-aereo/index.ts` — ~25 linhas (função + detecção + 1 campo no `normalized`).
+- `src/pages/air/TrackingAereo.tsx` — import `Truck`, 1 campo no tipo, ~10 linhas no JSX (ícone condicional + badge RFS + tooltip).
+- `mem://air/tracking/aereo-monitoring-spec` — atualização.
 
 ## Validação pós-deploy
-1. Recarregar `/fin/esteira` → aba **Pagamentos**.
-2. Selecionar "Remessa 10h" em qualquer linha → toast aparece → recarregar a página → o select deve **continuar mostrando "Remessa 10h"**.
-3. Repetir com "Remessa 15h" e "Manual".
-4. Conferir os cards do topo: "Em Remessa" e "Prontos Remessa" devem manter contagens corretas (usam `IN ('REMESSA_10H','REMESSA_15H')` — já compatível).
-5. Filtro de header "Todos Tipo..." → "Remessa 10h" deve listar apenas as linhas correspondentes.
+1. Recarregar `/air/tracking-aereo`.
+2. Localizar AWBs cuja timeline contém códigos como `LA 5491-T`, `AF0677D`, `M3 8516X` → ícone caminhão na barra + pílula "RFS" na coluna Rota.
+3. AWBs sem voo terrestre devem manter ícone avião (sem regressão).
+4. Conferir tooltip do ícone exibindo "Transporte Terrestre" quando aplicável.
 
 ## Riscos e mitigações
-- **Linhas históricas com `'REMESSA'` puro**: tratadas pela migração one-shot do passo 2.
-- **Downstream RM (`voucherRmSync`)**: já envia o valor cru — `'REMESSA_10H'` é string aceita; sem regressão.
-- **Sem alteração no schema**: a coluna já é `VARCHAR(50)`, suporta os novos valores nativamente.
+- **Falso positivo**: regex `\b[A-Z0-9]{2,4}\s?\d{2,5}[A-Z\-T]*\b` extrai tokens tipo voo antes de testar; `isGroundFlight` exige sufixo específico — não dispara em códigos comuns como `LH8284` ou `AF447`.
+- **Sem alteração de schema**: campo é derivado em runtime, não vai pro banco.
+- **Performance**: O(n) sobre timeline já carregada, sem queries extras.
+- **Reaproveitamento**: a função-fonte (`fetch-status-aereo`) já está validada em produção há semanas — comportamento consistente entre as duas telas.
 
