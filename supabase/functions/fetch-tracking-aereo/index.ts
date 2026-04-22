@@ -387,27 +387,26 @@ serve(async (req) => {
       console.warn("Could not load discrepancy data:", err);
     }
 
-    // Step 3d-bis: Discrepancy detection for prefix 996 (Air Europa via uxtracking/firecrawl)
-    // Reads t_aereo_ws_firecrawl (Description/Location/Pieces format) and parses in JS.
+    // Step 3d-bis: Discrepancy detection for prefix 996 (Air Europa via uxtracking)
+    // Reads t_fato_aereo.timeline_json (same source as Step 3d) but parses in JS to
+    // recognize uxtracking-specific patterns: "10/2757 KGS" and DIS keywords like
+    // DISCREPANCY/IRREGULAR/MISSING/SHORT SHIPPED/OVERAGE.
     try {
       const sql996 = `
-        SELECT tda.awb_number AS awb, tda.hawb_number AS hawb, w.timeline_json
+        SELECT tda.awb_number AS awb, tda.hawb_number AS hawb, tdaf.timeline_json
         FROM dados_dachser.t_dados_aereo tda
-        INNER JOIN (
-          SELECT awb, MAX(id) AS max_id
-          FROM dados_dachser.t_aereo_ws_firecrawl
-          WHERE awb LIKE '996-%'
-          GROUP BY awb
-        ) latest ON latest.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
-        INNER JOIN dados_dachser.t_aereo_ws_firecrawl w ON w.id = latest.max_id
+        INNER JOIN dados_dachser.t_fato_aereo tdaf
+          ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
+         AND JSON_VALID(tdaf.hawbs_json)
+         AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
         WHERE tda.awb_number LIKE '996-%'
           AND (tda.master_insert >= '2026-03-20' OR tda.created_at >= '2026-03-20')
-          AND w.timeline_json IS NOT NULL
-          AND JSON_VALID(w.timeline_json)
+          AND tdaf.timeline_json IS NOT NULL
+          AND JSON_VALID(tdaf.timeline_json)
       `;
-      console.log("[996-DISC] Executing 996 discrepancy query...");
+      console.log("[996-DISC] Executing 996 discrepancy query (t_fato_aereo)...");
       const rows996 = await queryWithRetry(client, sql996);
-      console.log(`[996-DISC] Loaded ${rows996?.length || 0} candidate AWBs from t_aereo_ws_firecrawl`);
+      console.log(`[996-DISC] Loaded ${rows996?.length || 0} candidate AWBs from t_fato_aereo`);
 
       // Helper: extract pieces from a single description (uxtracking format)
       const extractPieces996 = (text: string): number | null => {
@@ -467,7 +466,8 @@ serve(async (req) => {
         const piecesValues: number[] = [];
         let hasDis = false;
         for (const ev of timeline) {
-          const desc = String(ev?.Description || ev?.description || ev?.status || "");
+          // Accept both uxtracking format (Description/Status capitalized) and standard (description)
+          const desc = String(ev?.Description || ev?.description || ev?.Status || ev?.status || "");
           // Native Pieces field
           const nativePieces = ev?.Pieces ?? ev?.pieces ?? ev?.Quantity ?? ev?.quantity;
           if (nativePieces != null && !isNaN(Number(nativePieces)) && Number(nativePieces) > 0) {
@@ -480,24 +480,40 @@ serve(async (req) => {
         }
 
         if (piecesValues.length === 0 && !hasDis) continue;
-        const minP = piecesValues.length > 0 ? Math.min(...piecesValues) : null;
-        const maxP = piecesValues.length > 0 ? Math.max(...piecesValues) : null;
+        const uniquePieces = [...new Set(piecesValues)];
+        const minP = uniquePieces.length > 0 ? Math.min(...uniquePieces) : null;
+        const maxP = uniquePieces.length > 0 ? Math.max(...uniquePieces) : null;
         const piecesDisc = minP != null && maxP != null && minP !== maxP;
 
         if (!piecesDisc && !hasDis) continue;
 
         const key = `${awb}|${hawb}`;
-        // Don't override existing entry from main SQL block
-        if (!discrepancyMap[key]) {
+        const existing = discrepancyMap[key];
+        if (!existing) {
           discrepancyMap[key] = {
             pieces_discrepancy: piecesDisc,
             baseline_pieces: piecesDisc ? minP : null,
             has_dis_event: hasDis,
           };
           added996++;
+        } else {
+          // Merge: enrich existing entry with 996-specific findings (don't downgrade)
+          const merged = {
+            pieces_discrepancy: existing.pieces_discrepancy || piecesDisc,
+            baseline_pieces: existing.baseline_pieces ?? (piecesDisc ? minP : null),
+            has_dis_event: existing.has_dis_event || hasDis,
+          };
+          if (
+            merged.pieces_discrepancy !== existing.pieces_discrepancy ||
+            merged.has_dis_event !== existing.has_dis_event ||
+            merged.baseline_pieces !== existing.baseline_pieces
+          ) {
+            discrepancyMap[key] = merged;
+            added996++;
+          }
         }
       }
-      console.log(`[996-DISC] Added ${added996} discrepancy records for prefix 996`);
+      console.log(`[996-DISC] Added/enriched ${added996} discrepancy records for prefix 996`);
     } catch (err) {
       console.warn("[996-DISC] Could not load 996 discrepancy data:", err);
     }
