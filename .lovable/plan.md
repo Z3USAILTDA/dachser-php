@@ -1,59 +1,64 @@
 
 
 ## Diagnóstico
-Hoje, ao disparar `URGENCIA_SOLICITADA`:
-- **TO:** supervisor direto
-- **CC:** solicitante ← **risco de segurança**: o solicitante recebe os botões "Aprovar/Rejeitar" e pode auto-aprovar a própria urgência clicando no link do próprio e-mail.
 
-O usuário quer fechar essa brecha: **somente o supervisor deve ter acesso aos botões de ação**, e o solicitante recebe um e-mail informativo separado, sem botões.
+O processo `014-24308292` tem RCS como evento mais recente na timeline, mas o card mostra FOH. A causa está na função `pickTopByIATA` (`fetch-tracking-aereo/index.ts`, linhas 567–574):
 
-## Mudanças propostas
+```ts
+const IATA_WEIGHT = {
+  ...
+  FOH: 33, RCS: 32,   // ← RCS pesa MENOS que FOH
+};
+```
 
-### 1. Novo tipo: `URGENCIA_SOLICITADA_CONFIRMACAO`
-Em `supabase/functions/send-voucher-notification/index.ts`:
-- Adicionar ao union `type`: `URGENCIA_SOLICITADA_CONFIRMACAO`.
-- Nova entrada em `cfgMap` (título "Solicitação de Urgência Enviada", cor info/verde).
-- Novo bloco em `getEmailContent` com texto:
-  > "Sua solicitação de urgência para o voucher **{numero}** foi enviada ao supervisor. Você será notificado assim que houver aprovação ou rejeição."
-- **Sem botões** Aprovar/Rejeitar, sem anexos.
+Quando os 4 slots SQL contêm tanto FOH quanto RCS, FOH vence pela hierarquia, mesmo que RCS seja cronologicamente posterior.
 
-### 2. Roteamento de destinatários
-No bloco existente `URGENCIA_SOLICITADA` (linhas ~381–389):
-- **Remover** `ccEmails = [responsaveis.creator_email]`.
-- Manter TO = supervisor direto (com fallback atual para roles SUPERVISOR/GESTOR_SUPERVISOR).
-- Manter Reply-To = solicitante (supervisor ainda responde direto a quem pediu).
+## Causa raiz
 
-No novo bloco `URGENCIA_SOLICITADA_CONFIRMACAO`:
-- TO = `responsaveis.creator_email` apenas.
-- Sem CC, sem Reply-To especial.
+A hierarquia IATA está com FOH e RCS na ordem **invertida**. No fluxo IATA outbound real:
 
-### 3. Disparo paralelo no frontend
-Em `CreateVoucherDialog.tsx` (~linha 684) e `VoucherOperacaoActions.tsx` (~linha 364), logo após o `invoke` de `URGENCIA_SOLICITADA`, adicionar segundo `invoke` independente com `type: 'URGENCIA_SOLICITADA_CONFIRMACAO'`, reaproveitando `voucherId`, `voucherNumber`, `senderName`. Cada envio em try/catch isolado — falha em um não impede o outro.
+```
+FWB → FOH → RCS → BKD → DEP → RCF → ARR → NFD → AWD → DLV → POD
+```
 
-### 4. Memória
-Atualizar `mem://vouchers/reporting-and-notification-strategy-v2` na seção **Alerta 2**:
-- Trocar "CC: solicitante" por "Solicitante recebe e-mail informativo separado (`URGENCIA_SOLICITADA_CONFIRMACAO`), sem botões — garante que apenas o supervisor possa aprovar/rejeitar".
-- Manter Reply-To = solicitante no e-mail do supervisor.
+- **FOH** (Freight on Hand): mercadoria recebida no terminal / armazém do agente
+- **RCS** (Received from Shipper): aceitação formal pela companhia aérea, depois do FOH
 
-## Benefício de segurança
-Os links de Aprovar/Rejeitar usam tokens 48h validados em `supervisor-email-action`, mas a posse do link é o controle de acesso. Removendo o solicitante do CC, **só o supervisor recebe os tokens** — eliminando auto-aprovação por encaminhamento ou acesso direto à caixa de entrada do solicitante.
+Portanto **RCS deve ter peso maior que FOH**. O memory `mem://air/tracking/data-mirroring-intent-v2` documenta a hierarquia atual com `FOH=33 > RCS=32`, o que está incorreto na origem.
+
+## Correção (cirúrgica)
+
+### 1. Inverter pesos FOH/RCS em `IATA_WEIGHT`
+Em `supabase/functions/fetch-tracking-aereo/index.ts` (linha 571):
+
+```ts
+// antes
+TRM: 38, TFD: 37, DEP: 36, MAN: 35, BKD: 34, FOH: 33, RCS: 32,
+
+// depois
+TRM: 38, TFD: 37, DEP: 36, MAN: 35, BKD: 34, RCS: 33, FOH: 32,
+```
+
+### 2. Espelhar a mesma correção em `mariadb-proxy/index.ts`
+A função `get_awb_tracking_events` (linhas 7259+) também aplica `pickTopByIATA` para mover o slot eleito para a posição 0 do modal. Buscar o bloco `IATA_WEIGHT` correspondente e aplicar a mesma inversão para garantir consistência card ↔ modal.
+
+### 3. Atualizar memória
+`mem://air/tracking/data-mirroring-intent-v2`: atualizar a hierarquia documentada para refletir `RCS=33 > FOH=32`, e adicionar nota: "ordem corrigida conforme fluxo IATA outbound real (RCS = aceitação pela cia aérea, ocorre após FOH)".
 
 ## Arquivos alterados
-- `supabase/functions/send-voucher-notification/index.ts` — novo tipo, novo template, remoção do CC do bloco URGENCIA_SOLICITADA.
-- `src/components/esteira/CreateVoucherDialog.tsx` — segundo invoke.
-- `src/components/esteira/VoucherOperacaoActions.tsx` — segundo invoke.
-- `mem://vouchers/reporting-and-notification-strategy-v2` — atualizar regra com justificativa de segurança.
+- `supabase/functions/fetch-tracking-aereo/index.ts` — linha 571
+- `supabase/functions/mariadb-proxy/index.ts` — bloco `IATA_WEIGHT` em `get_awb_tracking_events`
+- `mem://air/tracking/data-mirroring-intent-v2` — hierarquia corrigida
 
 ## Validação
-1. Criar voucher novo marcado como **URGENTE_REAL**.
-2. Confirmar:
-   - Caixa do supervisor: e-mail com botões Aprovar/Rejeitar; **solicitante NÃO está no CC**.
-   - Caixa do solicitante: e-mail informativo "Sua solicitação foi enviada ao supervisor", sem botões.
-3. Repetir editando voucher existente para urgente em `VoucherOperacaoActions`.
-4. Confirmar que aprovação/rejeição posterior continuam disparando `URGENCIA_APROVADA`/`URGENCIA_REJEITADA` para o solicitante (fluxo inalterado).
+1. Recarregar `/air/tracking-aereo`.
+2. Localizar `014-24308292`: card deve mostrar **RCS** (não mais FOH).
+3. Abrir o modal de timeline: o slot RCS deve estar na posição 0.
+4. Spot-check em processos onde apenas FOH existe (sem RCS) — deve continuar exibindo FOH normalmente.
+5. Verificar que processos mais avançados (BKD, DEP, RCF…) seguem inalterados — só a relação FOH↔RCS muda.
 
 ## Riscos
-- **Sem alteração de schema** — apenas roteamento de e-mail.
-- **Volume**: dobra para urgências (1 supervisor + 1 solicitante), efeito desejado.
-- **Reply-To preservado**: supervisor ainda pode responder ao solicitante diretamente fora do fluxo de botões.
+- **Sem alteração de schema** — apenas dois números trocados de posição.
+- **Sem regressão**: os outros 11 códigos da hierarquia mantêm pesos relativos. A inversão só afeta processos com FOH e RCS simultaneamente nos top-4 slots.
+- **Manual overrides** continuam com prioridade absoluta (regra inalterada).
 
