@@ -31,7 +31,7 @@ const OPERACAO_FIXED_EMAILS = [
 ];
 
 interface NotificationRequest {
-  type: "AJUSTE_SOLICITADO" | "URGENCIA_SOLICITADA" | "URGENCIA_APROVADA" | "URGENCIA_REJEITADA";
+  type: "AJUSTE_SOLICITADO" | "URGENCIA_SOLICITADA" | "URGENCIA_SOLICITADA_CONFIRMACAO" | "URGENCIA_APROVADA" | "URGENCIA_REJEITADA";
   voucherId: string;
   voucherNumber: string;
   toStage: string;
