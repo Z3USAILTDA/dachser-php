@@ -9353,6 +9353,36 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'migrate_tipo_exec_column_to_varchar': {
+        // One-shot migration: convert legacy ENUM column to VARCHAR(20)
+        // Preserves all existing values (ENUM->VARCHAR is non-destructive)
+        try {
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_vouchers
+            MODIFY COLUMN tipo_execucao_pagamento VARCHAR(20)
+            CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+            NULL DEFAULT NULL
+          `);
+          const check = await client.query(`
+            SELECT COLUMN_TYPE, DATA_TYPE
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dados_dachser'
+              AND TABLE_NAME = 't_vouchers'
+              AND COLUMN_NAME = 'tipo_execucao_pagamento'
+          `);
+          console.log('[migrate_tipo_exec_column_to_varchar] result:', JSON.stringify(check));
+          result = { success: true, column: check?.[0] ?? null };
+        } catch (migErr) {
+          const msg = migErr instanceof Error ? migErr.message : String(migErr);
+          console.error('[migrate_tipo_exec_column_to_varchar] FAILED:', msg);
+          return new Response(
+            JSON.stringify({ error: 'Migration failed', details: msg }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        break;
+      }
+
       case 'set_tipo_execucao_pagamento': {
         const { id: voucherId, tipo_execucao_pagamento } = body as {
           id: string;
@@ -9380,10 +9410,27 @@ Deno.serve(async (req) => {
           [tipo_execucao_pagamento, voucherId]
         );
 
+        // Post-update verification: detect schema mismatch (e.g. legacy ENUM truncating value)
+        const verify = await client.query(
+          `SELECT tipo_execucao_pagamento FROM dados_dachser.t_vouchers WHERE id = ?`,
+          [voucherId]
+        );
+        const persisted = verify?.[0]?.tipo_execucao_pagamento ?? null;
+        if (persisted !== tipo_execucao_pagamento) {
+          console.error(`[set_tipo_execucao_pagamento] Persistence mismatch: sent=${tipo_execucao_pagamento} persisted=${persisted}`);
+          return new Response(
+            JSON.stringify({
+              error: `Coluna não aceita o valor "${tipo_execucao_pagamento}" — schema desatualizado (persistido: "${persisted}"). Execute a action migrate_tipo_exec_column_to_varchar.`
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         console.log(`Updated tipo_execucao_pagamento for voucher ${voucherId} to ${tipo_execucao_pagamento}`);
         result = { success: true };
         break;
       }
+
 
       case 'set_ready_for_robo': {
         const { id: voucherId, is_pronto } = body as {
