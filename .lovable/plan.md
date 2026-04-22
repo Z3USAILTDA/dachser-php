@@ -1,93 +1,111 @@
 
-
 ## Diagnóstico
-Na tela `/air/tracking-aereo` **não existe** detecção nem visualização de transporte terrestre. A lógica de detecção `is_ground_transport` (sufixo `-T`, `digit+X`, `digit+D` em códigos de voo, varredura de `last_flight` e `timeline_json`) existe **apenas** no `fetch-status-aereo` (dashboard `/air/tracking`), e o ícone de avião na coluna Rastreio é fixo — nunca vira caminhão.
+Sim: deve ser possível voltar o tipo de execução para **Pendente**. O bloqueio atual não está na UI, está no schema legado do MariaDB.
 
-Confirmações:
-- `fetch-tracking-aereo/index.ts` não menciona `terrestre`/`ground`/`truck`/`-T`.
-- `TrackingAereo.tsx` (linhas 797–897) renderiza sempre `<Plane />` na progress bar e badges fixos (Conexão/Destino/UNK), sem ramo terrestre.
-- O endpoint `fetch-status-aereo` (linhas 1273–1325) já tem `isGroundFlight()` testado e em produção — fonte canônica para reaproveitar.
+Confirmações no código:
+- `src/components/esteira/PagamentosTab.tsx` já envia `A_DEFINIR` ao selecionar “Pendente”.
+- O select da linha renderiza `A_DEFINIR` normalmente.
+- `supabase/functions/mariadb-proxy/index.ts` já aceita `A_DEFINIR` em `set_tipo_execucao_pagamento`.
+- Os logs do `mariadb-proxy` mostram o erro real:
+  `Data truncated for column 'tipo_execucao_pagamento' at row 1`
 
-## Proposta (cirúrgica)
+## Causa raiz
+A coluna `dados_dachser.t_vouchers.tipo_execucao_pagamento` **ainda está como ENUM legado** na base antiga.
 
-### 1. Backend — `supabase/functions/fetch-tracking-aereo/index.ts`
-Antes do `const normalized = {...}` (no mesmo bloco onde foi adicionada a extração de `conexao`), adicionar:
+Há duas pistas claras:
+1. `supabase/functions/voucher-pagamentos-setup/index.ts` criou essa coluna originalmente como:
+```sql
+ENUM('MANUAL', 'REMESSA', 'TED', 'PIX')
+```
+2. Em `list_pagamentos`, existe um `ADD COLUMN IF NOT EXISTS tipo_execucao_pagamento VARCHAR(50)`, mas isso **não altera** uma coluna já existente. Ou seja: se ela já nasceu como ENUM, continua ENUM.
 
+Resultado:
+- `MANUAL` funciona
+- `REMESSA_10H` / `REMESSA_15H` podem até funcionar se a base tiver sido alterada parcialmente em algum momento
+- `A_DEFINIR` falha porque o ENUM não aceita esse valor
+
+## Correção proposta
+
+### 1. Corrigir o schema de forma definitiva
+Alterar a coluna para `VARCHAR`, preservando os valores existentes:
+
+```sql
+ALTER TABLE dados_dachser.t_vouchers
+MODIFY COLUMN tipo_execucao_pagamento VARCHAR(20)
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci
+NULL DEFAULT NULL;
+```
+
+Isso resolve de vez:
+- `A_DEFINIR`
+- `MANUAL`
+- `REMESSA_10H`
+- `REMESSA_15H`
+- futuros subtipos sem novo lock estrutural
+
+### 2. Remover a falsa “garantia” dentro de `list_pagamentos`
+Hoje o código tenta fazer:
 ```ts
-// Detect ground transport from flight codes (mirrors fetch-status-aereo)
-function isGroundFlight(val: string): boolean {
-  const clean = (val || "").trim().replace(/,\s*$/, '');
-  if (!clean) return false;
-  // Patterns: "LA 5491-T", "AF0677D", "M3 8516X"
-  if (/[-\s]T$/i.test(clean)) return true;
-  if (/\d[XD]$/i.test(clean)) return true;
-  return false;
-}
+ALTER TABLE ... ADD COLUMN IF NOT EXISTS tipo_execucao_pagamento VARCHAR(50)
+```
+dentro do fluxo de listagem.
 
-let isGroundTransport = false;
-const lastFlightRaw = String(row.LAST_FLIGHT || row.last_flight || "");
-if (isGroundFlight(lastFlightRaw)) isGroundTransport = true;
-if (!isGroundTransport && timeline?.length) {
-  for (const ev of timeline) {
-    const candidates = [
-      ev.flight, ev.flight_number, ev.last_flight,
-      ev.description, ev.event_description, ev.location
-    ].filter(Boolean);
-    for (const c of candidates) {
-      // extract tokens that look like flight codes and test
-      const tokens = String(c).match(/\b[A-Z0-9]{2,4}\s?\d{2,5}[A-Z\-T]*\b/g) || [];
-      if (tokens.some(isGroundFlight)) { isGroundTransport = true; break; }
-    }
-    if (isGroundTransport) break;
-  }
+Esse trecho deve ser removido porque:
+- não corrige o problema real
+- roda no caminho quente
+- mascara a percepção de que a coluna ainda está errada
+
+### 3. Endurecer o setter individual
+Em `set_tipo_execucao_pagamento`:
+- manter a validação de allowed values
+- após o `UPDATE`, fazer um `SELECT` de verificação
+- se o valor persistido divergir do valor enviado, retornar erro explícito de schema incompatível
+
+Exemplo de verificação:
+```ts
+const rows = await client.query(
+  `SELECT tipo_execucao_pagamento FROM dados_dachser.t_vouchers WHERE id = ?`,
+  [voucherId]
+);
+
+if (rows?.[0]?.tipo_execucao_pagamento !== tipo_execucao_pagamento) {
+  throw new Error(`Falha ao persistir tipo_execucao_pagamento=${tipo_execucao_pagamento}`);
 }
 ```
 
-Adicionar `is_ground_transport: isGroundTransport,` no objeto `normalized`.
+### 4. Endurecer o setter em lote
+`batch_set_tipo_execucao` hoje atualiza direto, sem validar allowed values e sem verificação pós-update.
+Aplicar a mesma regra do setter individual para manter consistência e evitar regressões.
 
-### 2. Frontend — `src/pages/air/TrackingAereo.tsx`
+### 5. Atualizar a memória do projeto
+Registrar que:
+- `tipo_execucao_pagamento` deve ser `VARCHAR`
+- os valores válidos são `A_DEFINIR | MANUAL | REMESSA_10H | REMESSA_15H`
+- nunca usar ENUM nessa coluna
 
-**a. Tipo**: Adicionar `is_ground_transport?: boolean` na interface do AWB (~linha 320).
+## Arquivos a alterar
+- `supabase/functions/mariadb-proxy/index.ts`
+  - remover `ALTER TABLE ... ADD COLUMN IF NOT EXISTS tipo_execucao_pagamento`
+  - reforçar `set_tipo_execucao_pagamento`
+  - reforçar `batch_set_tipo_execucao`
+- `mem://vouchers/integration-rm-mapping-rules-v4`
+  - atualizar regra persistente
+- operação de schema no banco/Lovable Cloud
+  - converter a coluna para `VARCHAR(20)`
 
-**b. Ícone na progress bar (linha 876)**: Trocar `Plane` por `Truck` quando `awb.is_ground_transport === true`. Manter mesma cor/sombra/posicionamento. Importar `Truck` do `lucide-react`.
+## Validação pós-correção
+1. Abrir `/fin/esteira` → aba **Pagamentos**.
+2. Escolher uma linha com “Manual” ou “Remessa”.
+3. Alterar para **Pendente**.
+4. Confirmar:
+   - sem erro no toast
+   - valor permanece “Pendente” após reload
+   - filtro “Tipo Exec. → Pendente” encontra a linha
+5. Repetir com atualização em lote para garantir paridade.
+6. Conferir logs: não deve mais existir `Data truncated for column 'tipo_execucao_pagamento'`.
 
-```tsx
-{awb.is_ground_transport ? (
-  <Truck className="w-4 h-4" style={{ color: planeColor, fill: planeColor, filter: `drop-shadow(0 0 4px ${shadowColor})` }} />
-) : (
-  <Plane className="w-4 h-4" style={{ transform: "rotate(90deg)", color: planeColor, ... }} />
-)}
-```
-
-**c. Badge na coluna Rota (linhas 847–859)**: Após o destino, adicionar pílula discreta quando terrestre:
-```tsx
-{awb.is_ground_transport && (
-  <span className="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.6rem] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
-    <Truck className="w-2.5 h-2.5" /> RFS
-  </span>
-)}
-```
-
-**d. Tooltip do ícone (linhas 879–882)**: incluir "Transporte Terrestre" quando aplicável.
-
-### 3. Memória persistente
-Atualizar `mem://air/tracking/aereo-monitoring-spec` adicionando:
-> "Detecção de transporte terrestre: `fetch-tracking-aereo` espelha a função `isGroundFlight` de `fetch-status-aereo` (sufixos `-T`, `dígitoX`, `dígitoD` em códigos de voo). Resultado vai no campo `is_ground_transport` do payload. UI substitui o ícone `<Plane>` por `<Truck>` na coluna Rastreio e exibe pílula 'RFS' (âmbar) ao lado do destino na coluna Rota."
-
-## Arquivos alterados
-- `supabase/functions/fetch-tracking-aereo/index.ts` — ~25 linhas (função + detecção + 1 campo no `normalized`).
-- `src/pages/air/TrackingAereo.tsx` — import `Truck`, 1 campo no tipo, ~10 linhas no JSX (ícone condicional + badge RFS + tooltip).
-- `mem://air/tracking/aereo-monitoring-spec` — atualização.
-
-## Validação pós-deploy
-1. Recarregar `/air/tracking-aereo`.
-2. Localizar AWBs cuja timeline contém códigos como `LA 5491-T`, `AF0677D`, `M3 8516X` → ícone caminhão na barra + pílula "RFS" na coluna Rota.
-3. AWBs sem voo terrestre devem manter ícone avião (sem regressão).
-4. Conferir tooltip do ícone exibindo "Transporte Terrestre" quando aplicável.
-
-## Riscos e mitigações
-- **Falso positivo**: regex `\b[A-Z0-9]{2,4}\s?\d{2,5}[A-Z\-T]*\b` extrai tokens tipo voo antes de testar; `isGroundFlight` exige sufixo específico — não dispara em códigos comuns como `LH8284` ou `AF447`.
-- **Sem alteração de schema**: campo é derivado em runtime, não vai pro banco.
-- **Performance**: O(n) sobre timeline já carregada, sem queries extras.
-- **Reaproveitamento**: a função-fonte (`fetch-status-aereo`) já está validada em produção há semanas — comportamento consistente entre as duas telas.
-
+## Riscos e mitigação
+- **Lock curto na tabela** durante `ALTER TABLE`: aceitável, operação simples.
+- **Sem perda de dados**: ENUM → VARCHAR preserva os textos existentes.
+- **Sem regressão visual**: a UI já suporta `A_DEFINIR`; o problema atual é apenas persistência.
