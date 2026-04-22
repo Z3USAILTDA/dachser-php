@@ -9530,6 +9530,15 @@ Deno.serve(async (req) => {
           );
         }
 
+        // Validate against allowed values (parity with set_tipo_execucao_pagamento)
+        const ALLOWED_TIPO_EXEC_BATCH = new Set(['A_DEFINIR', 'MANUAL', 'REMESSA_10H', 'REMESSA_15H']);
+        if (!ALLOWED_TIPO_EXEC_BATCH.has(tipo_execucao_pagamento)) {
+          return new Response(
+            JSON.stringify({ error: `tipo_execucao_pagamento inválido: ${tipo_execucao_pagamento}` }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         const placeholders = voucher_ids.map(() => '?').join(',');
         await client.execute(
           `UPDATE dados_dachser.t_vouchers 
@@ -9537,6 +9546,24 @@ Deno.serve(async (req) => {
            WHERE id IN (${placeholders})`,
           [tipo_execucao_pagamento, ...voucher_ids]
         );
+
+        // Post-update verification: detect schema mismatch on first row
+        const verifyBatch = await client.query(
+          `SELECT id, tipo_execucao_pagamento FROM dados_dachser.t_vouchers WHERE id IN (${placeholders})`,
+          voucher_ids
+        );
+        const mismatched = (verifyBatch as Array<{ id: string; tipo_execucao_pagamento: string | null }>)
+          .filter((r) => r.tipo_execucao_pagamento !== tipo_execucao_pagamento);
+        if (mismatched.length > 0) {
+          console.error(`[batch_set_tipo_execucao] Persistence mismatch on ${mismatched.length}/${voucher_ids.length} rows. Sent=${tipo_execucao_pagamento}`);
+          return new Response(
+            JSON.stringify({
+              error: `Coluna não aceita o valor "${tipo_execucao_pagamento}" — schema desatualizado em ${mismatched.length} registros. Execute a action migrate_tipo_exec_column_to_varchar.`,
+              mismatched_count: mismatched.length,
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
 
         console.log(`Batch updated tipo_execucao_pagamento for ${voucher_ids.length} vouchers to ${tipo_execucao_pagamento}`);
         result = { success: true, updated: voucher_ids.length };
