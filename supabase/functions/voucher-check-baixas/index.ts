@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import postgres from "https://deno.land/x/postgresjs@v3.4.5/mod.js";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,8 +12,27 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let sql: ReturnType<typeof postgres> | null = null;
+  let advisoryLockAcquired = false;
+
   try {
     console.log('[voucher-check-baixas] Starting full status sync...');
+
+    const dbUrl = Deno.env.get('SUPABASE_DB_URL');
+    if (!dbUrl) {
+      throw new Error('SUPABASE_DB_URL not configured');
+    }
+
+    sql = postgres(dbUrl, { max: 1 });
+    const lockRows = await sql`SELECT pg_try_advisory_lock(847201, 44019) AS acquired`;
+    advisoryLockAcquired = Boolean(lockRows[0]?.acquired);
+
+    if (!advisoryLockAcquired) {
+      console.log('[voucher-check-baixas] Skipped: another run is already in progress');
+      return new Response(JSON.stringify({ success: true, skipped: true, reason: 'already_running' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -42,5 +62,21 @@ serve(async (req) => {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
+  } finally {
+    if (sql) {
+      try {
+        if (advisoryLockAcquired) {
+          await sql`SELECT pg_advisory_unlock(847201, 44019)`;
+        }
+      } catch (unlockError) {
+        console.warn('[voucher-check-baixas] Failed to release advisory lock:', unlockError);
+      }
+
+      try {
+        await sql.end();
+      } catch (endError) {
+        console.warn('[voucher-check-baixas] Failed to close postgres connection:', endError);
+      }
+    }
   }
 });
