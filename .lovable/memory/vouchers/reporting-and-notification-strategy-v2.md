@@ -1,6 +1,6 @@
 ---
 name: vouchers-reporting-and-notification-strategy-v2
-description: Estratégia consolidada de notificações da Esteira de Vouchers — apenas 3 alertas ativos (devolução com motivo, urgência manual ao supervisor direto com resposta automática ao solicitante, relatório mensal).
+description: Estratégia consolidada de notificações da Esteira de Vouchers — apenas 3 alertas ativos (devolução com motivo, urgência manual ao supervisor direto + confirmação separada ao solicitante, relatório mensal).
 type: feature
 ---
 
@@ -15,17 +15,24 @@ A Esteira de Vouchers opera com APENAS 3 alertas por e-mail. Todos os demais (SL
   - `AJUSTE_FISCAL` → último fiscal (`fiscal_email`). Fallback: roles FISCAL/GESTOR_FISCAL.
 - **Conteúdo:** número, etapa origem→destino, motivo, link.
 
-## Alerta 2 — Urgência manual solicitada → Supervisor direto
+## Alerta 2 — Urgência manual solicitada → Supervisor direto (+ confirmação ao solicitante)
 
 - **Quando:** voucher criado/editado com `urgencia_tipo === 'URGENTE_REAL'` (checkbox "Pagamento Urgente"). NÃO dispara para `URGENTE_AUTOMATICO`.
-- **Disparo:** `CreateVoucherDialog.tsx` e `VoucherOperacaoActions.tsx` → `send-voucher-notification` com `type: "URGENCIA_SOLICITADA"`.
-- **Destinatários:**
-  - **TO:** supervisor direto do solicitante (`creator_supervisor_email`, resolvido via `t_users_dachser.supervisor_id` configurado em `/admin/users`). Fallback: todos `SUPERVISOR` + `GESTOR_SUPERVISOR` ativos.
-  - **CC:** o próprio solicitante (`creator_email`).
-  - **Reply-To:** solicitante — supervisor responde direto a quem pediu.
-- **Conteúdo:** dados do voucher, motivo da urgência, anexos, e dois botões (Aprovar / Rejeitar) que apontam para `supervisor-approve.html` / `supervisor-reject.html` (tokens 48h, uso único, validados em `supervisor-email-action`).
+- **Disparo:** `CreateVoucherDialog.tsx` e `VoucherOperacaoActions.tsx` enviam DOIS e-mails independentes (try/catch isolados):
+  1. `type: "URGENCIA_SOLICITADA"` → supervisor (com botões Aprovar/Rejeitar).
+  2. `type: "URGENCIA_SOLICITADA_CONFIRMACAO"` → solicitante (informativo, sem botões).
 
-### Resposta automática ao solicitante (mantida — fluxo já testado)
+### E-mail ao Supervisor (`URGENCIA_SOLICITADA`)
+- **TO:** supervisor direto do solicitante (`creator_supervisor_email`, resolvido via `t_users_dachser.supervisor_id` configurado em `/admin/users`). Fallback: todos `SUPERVISOR` + `GESTOR_SUPERVISOR` ativos.
+- **CC:** vazio. **Solicitante NÃO recebe cópia** — controle de segurança: a posse do link com tokens 48h é o controle de acesso, então só o supervisor deve receber os botões. Isso elimina auto-aprovação por encaminhamento ou acesso direto à caixa do solicitante.
+- **Reply-To:** solicitante — supervisor responde direto a quem pediu, fora do fluxo dos botões.
+- **Conteúdo:** dados do voucher, motivo, anexos, botões Aprovar/Rejeitar (`supervisor-approve.html` / `supervisor-reject.html`, tokens 48h, uso único, validados em `supervisor-email-action`).
+
+### E-mail informativo ao Solicitante (`URGENCIA_SOLICITADA_CONFIRMACAO`)
+- **TO:** apenas `creator_email`. Sem CC, sem Reply-To especial.
+- **Conteúdo:** mensagem curta confirmando que a solicitação foi enviada ao supervisor responsável e que ele será notificado quando houver aprovação/rejeição. **Sem botões de ação, sem anexos.**
+
+### Resposta automática ao solicitante após decisão (mantida — fluxo já testado)
 
 Após o supervisor clicar Aprovar/Rejeitar pelo link:
 - `supervisor-email-action` dispara `URGENCIA_APROVADA` ou `URGENCIA_REJEITADA` (com motivo) em `send-voucher-notification`.
@@ -44,3 +51,4 @@ Após o supervisor clicar Aprovar/Rejeitar pelo link:
 - Branches `VOUCHER_ENVIADO`, `VOUCHER_CONCLUIDO`, `VENCIMENTO_PROXIMO` em `send-voucher-notification` (apagados).
 - Disparo `VOUCHER_ENVIADO` ao Financeiro em `supervisor-email-action` após aprovação (apagado — supervisor recebe confirmação só via UI).
 - `STAGE_TO_ROLES` em `src/utils/esteiraNotifications.ts` permanece apenas como utilitário do mapeamento (não usado em transições normais).
+- CC do solicitante em `URGENCIA_SOLICITADA` (removido em 2026-04-22 — substituído pelo e-mail dedicado `URGENCIA_SOLICITADA_CONFIRMACAO` por motivo de segurança: evita que o solicitante receba os tokens de aprovação).
