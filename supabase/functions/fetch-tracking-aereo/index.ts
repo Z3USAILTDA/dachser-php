@@ -416,6 +416,12 @@ serve(async (req) => {
         if (/(OFLD|OFFLOAD|OFFLOADED)/i.test(upper) && /(^|[^0-9])0\s+PIECES?([^A-Z]|$)/i.test(upper)) {
           return null;
         }
+        // Pattern: "Pcs/Wt: 10/27,3" (uxtracking real format, no unit suffix) — priority
+        const pcsWtMatch = upper.match(/PCS\s*\/\s*WT\s*[:=]?\s*(\d+)\s*\/\s*[\d.,]+/);
+        if (pcsWtMatch) {
+          const v = parseInt(pcsWtMatch[1], 10);
+          if (v > 0) return v;
+        }
         // Pattern: "10/2757 KGS" or "10 / 2757K"
         const slashMatch = upper.match(/(\d+)\s*\/\s*[\d.,]+\s*(KGS?|LBS?|K)\b/);
         if (slashMatch) {
