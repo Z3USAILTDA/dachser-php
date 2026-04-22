@@ -751,6 +751,43 @@ serve(async (req) => {
       const discKey = `${row.AWB || ""}|${row.HAWB || ""}`;
       const disc = discrepancyMap[discKey] || { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
 
+      // Extract intermediate airports (conexões) from timeline
+      const originIATAforConn = extractIATA(row.ORIGEM || "");
+      const destinIATAforConn = extractIATA(row.DESTINO || "");
+      const stopWordsConn = new Set([
+        'NIL','NIF','DIS','OFD','OFL','BUP','RDP','LAT','TKG','SCR','ECC',
+        'TFD','TRM','RFC','DMG','RET','AWB','PRE','DEP','ARR','RCF','RCS',
+        'MAN','NFD','DLV','POD','BKD','FOH','AWD','CCD','ASN','MOV','OFLD',
+      ]);
+      const seenAirports: string[] = [];
+      const seenSet = new Set<string>();
+      if (timeline && timeline.length > 0) {
+        const chronological = [...timeline].reverse();
+        for (const evt of chronological) {
+          const candidates: string[] = [];
+          const loc = extractIATA(evt.location || "");
+          if (loc) candidates.push(loc);
+          const desc = (evt.description || "").toUpperCase();
+          const evtPrefix = desc.match(/^\s*(?:DEP|ARR|RCF|RCS|MAN|NFD|DLV|TRM|TFD|FOH|AWD)\s+([A-Z]{3})\b/);
+          if (evtPrefix) candidates.push(evtPrefix[1]);
+          const prepMatch = desc.match(/\b(?:FROM|TO|IN|AT|DEPARTED|ARRIVED)\s+([A-Z]{3})\b/);
+          if (prepMatch) candidates.push(prepMatch[1]);
+          const routeMatches = desc.matchAll(/\b([A-Z]{3})\s*(?:->|-|→|\/)\s*([A-Z]{3})\b/g);
+          for (const m of routeMatches) { candidates.push(m[1]); candidates.push(m[2]); }
+          const parenMatch = desc.match(/\(([A-Z]{3})\)/);
+          if (parenMatch) candidates.push(parenMatch[1]);
+          for (const apt of candidates) {
+            if (!apt || apt.length !== 3) continue;
+            if (stopWordsConn.has(apt)) continue;
+            if (apt === originIATAforConn || apt === destinIATAforConn) continue;
+            if (seenSet.has(apt)) continue;
+            seenSet.add(apt);
+            seenAirports.push(apt);
+          }
+        }
+      }
+      const conexao = seenAirports.length > 0 ? seenAirports.join(',') : null;
+
       const normalized = {
         awb_number: row.AWB || "",
         hawb_number: row.HAWB || "",
@@ -758,6 +795,7 @@ serve(async (req) => {
         clerk: row.ANALISTA || "",
         origin: row.ORIGEM || "",
         destination: row.DESTINO || "",
+        conexao,
         timeline_json: timeline,
         last_event: finalCode || "",
         last_event_description: getEventDesc(finalCode),
