@@ -139,6 +139,11 @@ function getEmailContent(data: NotificationRequest) {
         <p style="margin:0 0 8px;font-size:14px;line-height:1.6;color:#666">A solicitação de urgência para o voucher <b>${data.voucherNumber}</b> foi <span style="color:#22C55E;font-weight:700">aprovada</span> pelo Supervisor e enviada ao Financeiro.</p>
         ${data.senderName ? `<p style="margin:0 0 8px;font-size:13px;color:#666">Aprovado por: <b>${data.senderName}</b></p>` : ""}`;
       break;
+    case "URGENCIA_SOLICITADA_CONFIRMACAO":
+      contentBlock = `
+        <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">Sua solicitação de urgência para o voucher <b>${data.voucherNumber}</b> foi enviada ao supervisor responsável.</p>
+        <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">Você será notificado por e-mail assim que houver aprovação ou rejeição. Não é necessária nenhuma ação adicional de sua parte.</p>`;
+      break;
   }
 
   const subject = `${cfg.subject} — ${data.voucherNumber}`;
