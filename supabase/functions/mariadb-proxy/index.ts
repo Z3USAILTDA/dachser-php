@@ -16208,46 +16208,38 @@ Deno.serve(async (req) => {
           if (rule3Count > 0) console.log(`[sync_voucher_statuses] Rule 3: ${rule3Count} vouchers → status_baixa BAIXA_SOLICITADA`);
 
           // --- Rule 4: BAIXA_SOLICITADA → REALIZADA (via tbaixas) ---
-          const pendingVouchers = await client.query(`
-            SELECT v.id, v.numero_spo
+          const pendingCountRows = await client.query(`
+            SELECT COUNT(*) AS total
             FROM dados_dachser.t_vouchers v
             WHERE v.status_baixa = 'BAIXA_SOLICITADA'
               AND v.etapa_atual NOT IN ('A_PROCESSAR')
           `);
+          checkedBaixas = Number(pendingCountRows?.[0]?.total || 0);
 
-          if (pendingVouchers && pendingVouchers.length > 0) {
-            console.log(`[sync_voucher_statuses] Rule 4: Checking ${pendingVouchers.length} vouchers against tbaixas`);
-            checkedBaixas = pendingVouchers.length;
+          if (checkedBaixas > 0) {
+            console.log(`[sync_voucher_statuses] Rule 4: Checking ${checkedBaixas} vouchers against tbaixas`);
 
-            for (const voucher of pendingVouchers) {
-              const dfvRecords = await client.query(`
-                SELECT DISTINCT dfv.id_rm
+            const rule4Result = await client.execute(`
+              UPDATE dados_dachser.t_vouchers v
+              INNER JOIN (
+                SELECT DISTINCT TRIM(dfv.nd) AS numero_spo
                 FROM dados_dachser.t_dados_financeiro_voucher dfv
-                WHERE TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(?) COLLATE utf8mb4_general_ci
-                  AND dfv.id_rm IS NOT NULL
-              `, [voucher.numero_spo]);
+                INNER JOIN dados_dachser.tbaixas b
+                  ON b.IdLancamentoRM = dfv.id_rm
+                 AND b.StatusLan IN (1, 2, 3)
+                WHERE dfv.id_rm IS NOT NULL
+              ) baixados
+                ON TRIM(v.numero_spo) COLLATE utf8mb4_general_ci = baixados.numero_spo COLLATE utf8mb4_general_ci
+              SET v.status_baixa = 'REALIZADA',
+                  v.updated_at = NOW()
+              WHERE v.status_baixa = 'BAIXA_SOLICITADA'
+                AND v.etapa_atual NOT IN ('A_PROCESSAR')
+            `);
 
-              if (!dfvRecords || dfvRecords.length === 0) continue;
-
-              const idRmList = dfvRecords.map((r: any) => r.id_rm);
-              const placeholders = idRmList.map(() => '?').join(',');
-
-              const baixaExists = await client.query(`
-                SELECT 1 FROM dados_dachser.tbaixas b
-                WHERE b.IdLancamentoRM IN (${placeholders})
-                  AND b.StatusLan IN (1, 2, 3)
-                LIMIT 1
-              `, idRmList);
-
-              if (baixaExists && baixaExists.length > 0) {
-                await client.execute(`
-                  UPDATE dados_dachser.t_vouchers
-                  SET status_baixa = 'REALIZADA', updated_at = NOW()
-                  WHERE id = ?
-                `, [voucher.id]);
-                updatedBaixa++;
-                console.log(`[sync_voucher_statuses] Rule 4: Voucher ${voucher.numero_spo} → REALIZADA`);
-              }
+            const rule4Count = rule4Result?.affectedRows || 0;
+            updatedBaixa += rule4Count;
+            if (rule4Count > 0) {
+              console.log(`[sync_voucher_statuses] Rule 4: ${rule4Count} vouchers → REALIZADA`);
             }
           }
 
