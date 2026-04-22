@@ -426,7 +426,23 @@ serve(async (req) => {
     const fullAttachment = { filename: xlsxFilename(monthLabel, null), content: encodeBase64(fullXlsx) };
     const fullSubjectBase = `Relatório Mensal de Vouchers — ${monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}`;
     const fullSubject = testEmail ? `[TESTE] ${fullSubjectBase}` : fullSubjectBase;
-    const fullRecipients = testEmail ? [testEmail] : FULL_REPORT_EMAILS;
+    // Resolve destinatários do relatório completo dinamicamente em t_users_dachser
+    let fullRecipients: string[] = [];
+    if (testEmail) {
+      fullRecipients = [testEmail];
+    } else {
+      try {
+        const roleConditions = REPORT_ROLES.map(() => `FIND_IN_SET(?, REPLACE(esteira_role, ' ', ''))`).join(" OR ");
+        const rows = await client.query(
+          `SELECT DISTINCT email FROM ai_agente.t_users_dachser
+           WHERE esteira_active = 1 AND email IS NOT NULL AND email != '' AND (${roleConditions})`,
+          REPORT_ROLES,
+        );
+        fullRecipients = (rows || []).map((r: any) => r.email).filter(Boolean);
+      } catch (e) {
+        console.warn("Failed to resolve report recipients:", e);
+      }
+    }
     sentSummary.full = await sendEmail(RESEND_API_KEY, fullRecipients, fullSubject, fullHtml, fullAttachment);
 
     // 2) SEGMENTED REPORTS
