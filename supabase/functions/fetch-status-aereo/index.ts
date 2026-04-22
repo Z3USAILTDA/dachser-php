@@ -189,16 +189,18 @@ function classifyArrival(lastStatusCode: string | null, timelineJson: string | n
         }
       }
       // Description fields
-      const descFields = ['Description', 'description', 'title', 'details', 'Details'];
+      const descFields = ['Description', 'description', 'descricao_evento', 'title', 'details', 'Details'];
       for (const f of descFields) {
         if (ev[f]) {
           const desc = String(ev[f]);
-          // "Arrived at GRU" / "Arrive in VCP"
-          const arrMatch = desc.match(/(?:arrived?\s+(?:at|in)\s+)([A-Z]{3})/i);
-          if (arrMatch) return arrMatch[1].toUpperCase();
-          // "ARR - GRU" or "ARR/GRU"
+          const evtPrefix = desc.match(/^\s*(?:DEP|ARR|RCF|RCS|MAN|NFD|DLV|TRM|TFD|FOH|AWD)\s+([A-Z]{3})\b/i);
+          if (evtPrefix) return evtPrefix[1].toUpperCase();
+          const prepMatch = desc.match(/\b(?:from|to|in|at|departed|arrived)\s+([A-Z]{3})\b/i);
+          if (prepMatch) return prepMatch[1].toUpperCase();
           const dashMatch = desc.match(/ARR\s*[-\/]\s*([A-Z]{3})/i);
           if (dashMatch) return dashMatch[1].toUpperCase();
+          const parenMatch = desc.match(/\(([A-Z]{3})\)|\b([A-Z]{3})\s*$/);
+          if (parenMatch) return (parenMatch[1] || parenMatch[2]).toUpperCase();
         }
       }
       return null;
@@ -1378,31 +1380,32 @@ serve(async (req) => {
             const dest = destForClassify.trim().toUpperCase();
             // Helper to extract airport code from event
             function extractAirportFromEvt(ev: any): string | null {
-              const fields = ['station', 'Station', 'airport', 'Airport', 'location', 'Location', 'port', 'Port'];
+              const fields = ['station', 'Station', 'airport', 'Airport', 'location', 'Location', 'port', 'Port', 'city', 'City'];
               for (const f of fields) {
                 if (ev[f]) {
-                  const val = String(ev[f]).trim().toUpperCase();
-                  if (val.length === 3 && /^[A-Z]{3}$/.test(val)) return val;
+                  const raw = String(ev[f]).trim().toUpperCase();
+                  if (raw.length === 3 && /^[A-Z]{3}$/.test(raw)) return raw;
+                  const m = raw.match(/\(([A-Z]{3})\)|\b([A-Z]{3})\s*$/);
+                  if (m) return (m[1] || m[2]).toUpperCase();
                 }
               }
-              // Check description for airport codes after ARR
               const desc = String(ev.Description || ev.description || ev.descricao_evento || ev.title || '');
+              const evtPrefix = desc.match(/^\s*(?:DEP|ARR|RCF|RCS|MAN|NFD|DLV|TRM|TFD|FOH|AWD)\s+([A-Z]{3})\b/i);
+              if (evtPrefix) return evtPrefix[1].toUpperCase();
               const arrMatch = desc.match(/(?:ARR|arrived?)\s*[-–\/\s]+\s*([A-Z]{3})/i);
               if (arrMatch) return arrMatch[1].toUpperCase();
-              // "at GRU" pattern
-              const atMatch = desc.match(/\bat\s+([A-Z]{3})\b/i);
-              if (atMatch) return atMatch[1].toUpperCase();
+              const prepMatch = desc.match(/\b(?:from|to|in|at|departed|arrived)\s+([A-Z]{3})\b/i);
+              if (prepMatch) return prepMatch[1].toUpperCase();
+              const parenMatch = desc.match(/\(([A-Z]{3})\)|\b([A-Z]{3})\s*$/);
+              if (parenMatch) return (parenMatch[1] || parenMatch[2]).toUpperCase();
               return null;
             }
-            // Find connection airports (ARR events where airport != destination)
+            // Find route airports across ALL events (chronological order: oldest first)
             const originUpper = (origForClassify || '').trim().toUpperCase();
             const connectionAirports: string[] = [];
-            for (const ev of events) {
-              const evStatus = (ev.status || ev.Status || ev.codigo_evento || '').toUpperCase();
-              const evDesc = (ev.Description || ev.description || ev.descricao_evento || ev.title || '').toUpperCase();
-              if (evStatus !== 'ARR' && !evDesc.includes('ARR')) continue;
+            for (const ev of [...events].reverse()) {
               const airport = extractAirportFromEvt(ev);
-              if (airport && airport !== dest && !connectionAirports.includes(airport)) {
+              if (airport && airport !== dest && airport !== originUpper && !connectionAirports.includes(airport)) {
                 connectionAirports.push(airport);
               }
             }
@@ -1430,7 +1433,7 @@ serve(async (req) => {
               }
             }
             // Merge: start with route segments (chronological order), add ARR airports not yet included
-            const stopWords = new Set(['THE','AND','FOR','NOT','KGS','PCS','QTY','AWB','AWR','BKD','DEP','ARR','MAN','RCS','RCF','NFD','DLV','PRE','DIS','DOC','RFC','ECC','SCR','TFD','TRM','TRA','CCD','POD','DMG','RET','BUP','RDP','AWD','LAT','TKG']);
+            const stopWords = new Set(['THE','AND','FOR','NOT','KGS','LBS','PCS','QTY','AWB','AWR','BKD','DEP','ARR','MAN','RCS','RCF','NFD','DLV','PRE','DIS','DOC','RFC','ECC','SCR','TFD','TRM','TRA','CCD','POD','DMG','RET','BUP','RDP','AWD','LAT','TKG','OFD','OFL','NIL','NIF','FOH','UNK','NEW']);
             const mergedAirports = [...routeAirportsOrdered];
             for (const ap of connectionAirports) {
               if (!mergedAirports.includes(ap)) mergedAirports.push(ap);
