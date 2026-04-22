@@ -839,6 +839,31 @@ serve(async (req) => {
         }
       }
 
+      // Fallback: scan SQL-aggregated description fields (desc0..desc3)
+      if (!isGroundTransport) {
+        for (const f of ['desc0','desc1','desc2','desc3']) {
+          const txt = String((row as any)[f] || '');
+          if (!txt) continue;
+          const flights = extractFlightsFromText(txt);
+          if (flights.some(isGroundFlight) || /\b[A-Z0-9]{2,4}\s?\d{2,5}-T\b/i.test(txt)) {
+            isGroundTransport = true;
+            break;
+          }
+        }
+      }
+
+      // Fallback final: varredura total da timeline serializada (qualquer chave)
+      if (!isGroundTransport && timeline?.length) {
+        try {
+          const haystack = JSON.stringify(timeline);
+          const flights = extractFlightsFromText(haystack);
+          if (flights.some(isGroundFlight)) isGroundTransport = true;
+          if (!isGroundTransport && /\b[A-Z0-9]{2,4}\s?\d{2,5}-T\b/i.test(haystack)) {
+            isGroundTransport = true;
+          }
+        } catch (_) {}
+      }
+
       const normalized = {
         awb_number: row.AWB || "",
         hawb_number: row.HAWB || "",
