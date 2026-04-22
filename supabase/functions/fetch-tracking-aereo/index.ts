@@ -788,23 +788,34 @@ serve(async (req) => {
       }
       const conexao = seenAirports.length > 0 ? seenAirports.join(',') : null;
 
-      // Detect ground transport (RFS) — sufixo -T, X ou D em códigos de voo (sem âncora $)
-      const isGroundFlight = (val: string): boolean => {
-        const clean = (val || "").trim().replace(/[,;]\s*$/, '');
+      // Detect ground transport (RFS) — sufixo -T, X/D literal e códigos legados com X ou D após dígitos
+      const normalizeGroundCandidate = (val: string): string => (
+        (val || "")
+          .toUpperCase()
+          .replace(/\\\//g, '/')
+          .trim()
+          .replace(/[,;]\s*$/, '')
+          .replace(/\s+/g, ' ')
+      );
+      const hasGroundFlightPattern = (val: string): boolean => {
+        const clean = normalizeGroundCandidate(val);
         if (!clean) return false;
-        // Sufixo -T (com hífen) ou X/D imediatamente após dígitos, em qualquer posição da string
         if (/\b[A-Z0-9]{2,4}\s?\d{2,5}-T\b/i.test(clean)) return true;
-        if (/\b[A-Z0-9]{2,4}\s?\d{2,5}[XD]\b/.test(clean)) return true;
+        if (/\b[A-Z0-9]{2,4}\s?\d{2,5}\s*X\s*\/\s*D\b/i.test(clean)) return true;
+        if (/\b[A-Z0-9]{2,4}\s?\d{2,5}[XD]\b/i.test(clean)) return true;
         return false;
       };
+      const isGroundFlight = (val: string): boolean => hasGroundFlightPattern(val);
       const extractFlightsFromText = (text: string): string[] => {
         if (!text) return [];
         const flights: string[] = [];
         let m: RegExpExecArray | null;
-        const flightPattern = /Flight\s+([A-Z0-9]{2}[\s-]?\d{3,5}[A-Za-z]?(?:-T)?)/gi;
+        const flightPattern = /Flight\s+([A-Z0-9]{2,4}[\s-]?\d{2,5}(?:-T|\s*X\s*\/\s*D|[A-Za-z])?)/gi;
         while ((m = flightPattern.exec(text)) !== null) flights.push(m[1]);
         const dashTPattern = /\b([A-Z0-9]{2,4}\s?\d{2,5}-T)\b/gi;
         while ((m = dashTPattern.exec(text)) !== null) flights.push(m[1]);
+        const slashXDPattern = /\b([A-Z0-9]{2,4}[\s-]?\d{2,5}\s*X\s*\/\s*D)\b/gi;
+        while ((m = slashXDPattern.exec(text)) !== null) flights.push(m[1]);
         const suffixDXPattern = /\b([A-Z0-9]{2,4}[\s-]?\d{2,5}[DXdx])\b/g;
         while ((m = suffixDXPattern.exec(text)) !== null) flights.push(m[1]);
         return flights;
@@ -845,11 +856,16 @@ serve(async (req) => {
           const txt = String((row as any)[f] || '');
           if (!txt) continue;
           const flights = extractFlightsFromText(txt);
-          if (flights.some(isGroundFlight) || /\b[A-Z0-9]{2,4}\s?\d{2,5}-T\b/i.test(txt)) {
+          if (flights.some(isGroundFlight) || hasGroundFlightPattern(txt)) {
             isGroundTransport = true;
             break;
           }
         }
+      }
+
+      const timelineRaw = String((row as any).TIMELINE_JSON || (row as any).timeline_json || '');
+      if (!isGroundTransport && timelineRaw && hasGroundFlightPattern(timelineRaw)) {
+        isGroundTransport = true;
       }
 
       // Fallback final: varredura total da timeline serializada (qualquer chave)
@@ -858,7 +874,7 @@ serve(async (req) => {
           const haystack = JSON.stringify(timeline);
           const flights = extractFlightsFromText(haystack);
           if (flights.some(isGroundFlight)) isGroundTransport = true;
-          if (!isGroundTransport && /\b[A-Z0-9]{2,4}\s?\d{2,5}-T\b/i.test(haystack)) {
+          if (!isGroundTransport && hasGroundFlightPattern(haystack)) {
             isGroundTransport = true;
           }
         } catch (_) {}
