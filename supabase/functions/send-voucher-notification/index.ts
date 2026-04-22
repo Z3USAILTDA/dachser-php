@@ -329,8 +329,8 @@ const handler = async (req: Request): Promise<Response> => {
       JSON.stringify({ type: data.type, toStage: data.toStage, voucherNumber: data.voucherNumber }),
     );
 
-    // If sending to SUPERVISOR, enrich with voucher details (anexos, CNPJ, etc.)
-    if (data.toStage === "SUPERVISOR" && data.voucherId) {
+    // If sending URGENCIA_SOLICITADA, enrich with voucher details (anexos, CNPJ, etc.)
+    if (data.type === "URGENCIA_SOLICITADA" && data.voucherId) {
       try {
         const voucherRes = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
           method: "POST",
@@ -356,7 +356,6 @@ const handler = async (req: Request): Promise<Response> => {
             moeda: data.moeda || v.moeda,
             vencimento: data.vencimento || v.data_vencimento,
           };
-          // Fetch anexos - check multiple possible locations
           const rawAnexos = v.anexos || voucherData.anexos || voucherData.data?.anexos;
           if (rawAnexos && Array.isArray(rawAnexos)) {
             data.anexos = rawAnexos
@@ -367,9 +366,6 @@ const handler = async (req: Request): Promise<Response> => {
               }))
               .filter((a: any) => a.file_url);
           }
-          console.log(
-            `Enriched voucher data: ${data.anexos?.length || 0} anexos found, raw keys: ${JSON.stringify(Object.keys(voucherData))}`,
-          );
         }
       } catch (e) {
         console.error("Error fetching voucher details:", e);
@@ -377,22 +373,22 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Resolve recipients dynamically based on type/stage.
-    // Default fallback: roles mapped to the destination stage (existing behavior).
     let toEmails: string[] = [];
     let ccEmails: string[] = [];
 
     const responsaveis = data.voucherId ? await getVoucherResponsaveis(data.voucherId) : null;
 
-    if (data.toStage === "SUPERVISOR" && data.type === "VOUCHER_ENVIADO") {
-      // Urgent voucher arriving at SUPERVISOR
+    if (data.type === "URGENCIA_SOLICITADA") {
+      // TO: supervisor direto do solicitante. CC: o próprio solicitante.
       if (responsaveis?.creator_supervisor_email) {
         toEmails = [responsaveis.creator_supervisor_email];
       } else {
+        // Fallback: todos os SUPERVISOR / GESTOR_SUPERVISOR ativos
         toEmails = await getRecipientEmails(STAGE_TO_ROLES["SUPERVISOR"] || []);
       }
       if (responsaveis?.creator_email) ccEmails = [responsaveis.creator_email];
     } else if (data.type === "URGENCIA_APROVADA" || data.type === "URGENCIA_REJEITADA") {
-      // Notify creator (to) + supervisor (cc)
+      // Resposta automática ao solicitante (TO) com supervisor em CC
       if (responsaveis?.creator_email) toEmails = [responsaveis.creator_email];
       if (responsaveis?.creator_supervisor_email) ccEmails = [responsaveis.creator_supervisor_email];
       if (toEmails.length === 0 && ccEmails.length > 0) {
@@ -400,7 +396,6 @@ const handler = async (req: Request): Promise<Response> => {
         ccEmails = [];
       }
     } else if (data.type === "AJUSTE_SOLICITADO") {
-      // Notify the user responsible for the previous stage
       if (data.toStage === "AJUSTE_OPERACAO") {
         if (responsaveis?.creator_email) {
           toEmails = [responsaveis.creator_email];
@@ -413,16 +408,6 @@ const handler = async (req: Request): Promise<Response> => {
         } else {
           toEmails = await getRecipientEmails(STAGE_TO_ROLES["AJUSTE_FISCAL"] || []);
         }
-      } else {
-        toEmails = await getRecipientEmails(STAGE_TO_ROLES[data.toStage] || []);
-      }
-    } else {
-      // Generic stage routing
-      const roles = STAGE_TO_ROLES[data.toStage] || [];
-      if (roles.includes("__OPERACAO_FIXED__")) {
-        toEmails = OPERACAO_FIXED_EMAILS;
-      } else {
-        toEmails = await getRecipientEmails(roles);
       }
     }
 
