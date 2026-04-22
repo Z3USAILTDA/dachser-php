@@ -681,20 +681,28 @@ export const CreateVoucherDialog = ({
       // Email notification for SUPERVISOR urgency only
       if (!isDraft && etapaAtual === "SUPERVISOR") {
         try {
+          const urgencyBody = {
+            voucherId: voucherId,
+            voucherNumber: voucherData.numero_spo,
+            toStage: "SUPERVISOR",
+            fromStage: "OPERACAO",
+            senderName: userData.username || "Sistema",
+            fornecedor: values.fornecedor || "",
+            valor: voucherData.valor?.toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
+            moeda: values.moeda,
+            vencimento: values.vencimento?.toISOString(),
+          };
           await supabase.functions.invoke("send-voucher-notification", {
-            body: {
-              type: "URGENCIA_SOLICITADA",
-              voucherId: voucherId,
-              voucherNumber: voucherData.numero_spo,
-              toStage: "SUPERVISOR",
-              fromStage: "OPERACAO",
-              senderName: userData.username || "Sistema",
-              fornecedor: values.fornecedor || "",
-              valor: voucherData.valor?.toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
-              moeda: values.moeda,
-              vencimento: values.vencimento?.toISOString(),
-            },
+            body: { type: "URGENCIA_SOLICITADA", ...urgencyBody },
           });
+          // Confirmação informativa ao solicitante (sem botões de ação)
+          try {
+            await supabase.functions.invoke("send-voucher-notification", {
+              body: { type: "URGENCIA_SOLICITADA_CONFIRMACAO", ...urgencyBody },
+            });
+          } catch (confirmErr) {
+            console.log("Urgency confirmation email skipped:", confirmErr);
+          }
         } catch (emailErr) {
           console.log("Email notification skipped:", emailErr);
         }
