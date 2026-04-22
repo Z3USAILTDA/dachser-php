@@ -31,7 +31,7 @@ const OPERACAO_FIXED_EMAILS = [
 ];
 
 interface NotificationRequest {
-  type: "AJUSTE_SOLICITADO" | "URGENCIA_SOLICITADA" | "URGENCIA_APROVADA" | "URGENCIA_REJEITADA";
+  type: "AJUSTE_SOLICITADO" | "URGENCIA_SOLICITADA" | "URGENCIA_SOLICITADA_CONFIRMACAO" | "URGENCIA_APROVADA" | "URGENCIA_REJEITADA";
   voucherId: string;
   voucherNumber: string;
   toStage: string;
@@ -99,6 +99,13 @@ function getEmailContent(data: NotificationRequest) {
       btnColor: "#fff",
       subject: "Urgência Aprovada",
     },
+    URGENCIA_SOLICITADA_CONFIRMACAO: {
+      title: "Solicitação de Urgência Enviada",
+      titleColor: "#22C55E",
+      btnBg: "#22C55E",
+      btnColor: "#fff",
+      subject: "Solicitação de Urgência Enviada",
+    },
   };
 
   const cfg = cfgMap[data.type] || cfgMap.URGENCIA_SOLICITADA;
@@ -131,6 +138,11 @@ function getEmailContent(data: NotificationRequest) {
       contentBlock = `
         <p style="margin:0 0 8px;font-size:14px;line-height:1.6;color:#666">A solicitação de urgência para o voucher <b>${data.voucherNumber}</b> foi <span style="color:#22C55E;font-weight:700">aprovada</span> pelo Supervisor e enviada ao Financeiro.</p>
         ${data.senderName ? `<p style="margin:0 0 8px;font-size:13px;color:#666">Aprovado por: <b>${data.senderName}</b></p>` : ""}`;
+      break;
+    case "URGENCIA_SOLICITADA_CONFIRMACAO":
+      contentBlock = `
+        <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">Sua solicitação de urgência para o voucher <b>${data.voucherNumber}</b> foi enviada ao supervisor responsável.</p>
+        <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">Você será notificado por e-mail assim que houver aprovação ou rejeição. Não é necessária nenhuma ação adicional de sua parte.</p>`;
       break;
   }
 
@@ -379,14 +391,18 @@ const handler = async (req: Request): Promise<Response> => {
     const responsaveis = data.voucherId ? await getVoucherResponsaveis(data.voucherId) : null;
 
     if (data.type === "URGENCIA_SOLICITADA") {
-      // TO: supervisor direto do solicitante. CC: o próprio solicitante.
+      // TO: supervisor direto do solicitante. Solicitante NÃO entra em CC
+      // (recebe e-mail informativo separado via URGENCIA_SOLICITADA_CONFIRMACAO),
+      // garantindo que apenas o supervisor possua os tokens de Aprovar/Rejeitar.
       if (responsaveis?.creator_supervisor_email) {
         toEmails = [responsaveis.creator_supervisor_email];
       } else {
         // Fallback: todos os SUPERVISOR / GESTOR_SUPERVISOR ativos
         toEmails = await getRecipientEmails(STAGE_TO_ROLES["SUPERVISOR"] || []);
       }
-      if (responsaveis?.creator_email) ccEmails = [responsaveis.creator_email];
+    } else if (data.type === "URGENCIA_SOLICITADA_CONFIRMACAO") {
+      // E-mail informativo para o solicitante. Sem CC, sem botões.
+      if (responsaveis?.creator_email) toEmails = [responsaveis.creator_email];
     } else if (data.type === "URGENCIA_APROVADA" || data.type === "URGENCIA_REJEITADA") {
       // Resposta automática ao solicitante (TO) com supervisor em CC
       if (responsaveis?.creator_email) toEmails = [responsaveis.creator_email];
