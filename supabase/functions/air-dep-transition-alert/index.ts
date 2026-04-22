@@ -1,5 +1,5 @@
 import mysql from "npm:mysql2@3.11.3/promise";
-import { Resend } from "https://esm.sh/resend@2.0.0";
+import { Resend } from "npm:resend@4.0.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
