@@ -149,28 +149,6 @@ const handler = async (req: Request): Promise<Response> => {
         console.log("Confirmation email URGENCIA_APROVADA skipped:", e);
       }
 
-      // Confirmation email to creator + supervisor (cc) — urgência aprovada
-      try {
-        await fetch(`${SUPABASE_URL}/functions/v1/send-voucher-notification`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-            "apikey": SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({
-            type: "URGENCIA_APROVADA",
-            voucherId: voucher_id,
-            voucherNumber: voucherNumber,
-            toStage: "FINANCEIRO",
-            fromStage: "SUPERVISOR",
-            senderName: "Supervisor (via e-mail)",
-          }),
-        });
-      } catch (e) {
-        console.log("Confirmation email URGENCIA_APROVADA skipped:", e);
-      }
-
       await callProxy("mark_supervisor_token_used", { token });
       return jsonResponse({ status: "approved", message: "O voucher foi aprovado com sucesso e enviado para o Financeiro." });
     } else {
