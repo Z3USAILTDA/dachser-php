@@ -31,7 +31,7 @@ const OPERACAO_FIXED_EMAILS = [
 ];
 
 interface NotificationRequest {
-  type: "AJUSTE_SOLICITADO" | "URGENCIA_REJEITADA" | "URGENCIA_APROVADA" | "VOUCHER_ENVIADO" | "VOUCHER_CONCLUIDO" | "VENCIMENTO_PROXIMO";
+  type: "AJUSTE_SOLICITADO" | "URGENCIA_SOLICITADA" | "URGENCIA_APROVADA" | "URGENCIA_REJEITADA";
   voucherId: string;
   voucherNumber: string;
   toStage: string;
@@ -71,12 +71,12 @@ function getEmailContent(data: NotificationRequest) {
     string,
     { title: string; titleColor: string; btnBg: string; btnColor: string; subject: string }
   > = {
-    VOUCHER_ENVIADO: {
-      title: "Novo Voucher para Análise",
+    URGENCIA_SOLICITADA: {
+      title: "Solicitação de Urgência",
       titleColor: "#F5B843",
       btnBg: "#F5B843",
       btnColor: "#111",
-      subject: "Voucher Recebido",
+      subject: "Solicitação de Urgência",
     },
     AJUSTE_SOLICITADO: {
       title: "Ajuste Solicitado",
@@ -99,34 +99,16 @@ function getEmailContent(data: NotificationRequest) {
       btnColor: "#fff",
       subject: "Urgência Aprovada",
     },
-    VOUCHER_CONCLUIDO: {
-      title: "Voucher Concluído com Sucesso",
-      titleColor: "#22C55E",
-      btnBg: "#22C55E",
-      btnColor: "#fff",
-      subject: "Voucher Concluído",
-    },
-    VENCIMENTO_PROXIMO: {
-      title: "⚠️ Atenção: Vencimento Próximo",
-      titleColor: "#F59E0B",
-      btnBg: "#F59E0B",
-      btnColor: "#111",
-      subject: "Vencimento Próximo",
-    },
   };
 
-  const cfg = cfgMap[data.type] || cfgMap.VOUCHER_ENVIADO;
-  const ctaLabel =
-    data.type === "VOUCHER_CONCLUIDO"
-      ? "Ver Detalhes"
-      : data.type === "VOUCHER_ENVIADO"
-        ? "Analisar Voucher"
-        : "Ver Voucher";
+  const cfg = cfgMap[data.type] || cfgMap.URGENCIA_SOLICITADA;
+  const ctaLabel = data.type === "URGENCIA_SOLICITADA" ? "Analisar Voucher" : "Ver Voucher";
 
   let contentBlock = "";
   switch (data.type) {
-    case "VOUCHER_ENVIADO":
-      contentBlock = `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">Você recebeu um novo voucher para análise na etapa <b>${data.toStage}</b>.</p>`;
+    case "URGENCIA_SOLICITADA":
+      contentBlock = `
+        <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">Foi solicitada <b>urgência manual</b> para o voucher <b>${data.voucherNumber}</b>${data.senderName ? ` por <b>${data.senderName}</b>` : ""}. Por favor, avalie e aprove ou rejeite usando os botões abaixo.</p>`;
       break;
     case "AJUSTE_SOLICITADO":
       contentBlock = `
@@ -149,12 +131,6 @@ function getEmailContent(data: NotificationRequest) {
       contentBlock = `
         <p style="margin:0 0 8px;font-size:14px;line-height:1.6;color:#666">A solicitação de urgência para o voucher <b>${data.voucherNumber}</b> foi <span style="color:#22C55E;font-weight:700">aprovada</span> pelo Supervisor e enviada ao Financeiro.</p>
         ${data.senderName ? `<p style="margin:0 0 8px;font-size:13px;color:#666">Aprovado por: <b>${data.senderName}</b></p>` : ""}`;
-      break;
-    case "VOUCHER_CONCLUIDO":
-      contentBlock = `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">O voucher <b>${data.voucherNumber}</b> foi processado e concluído com sucesso.</p>`;
-      break;
-    case "VENCIMENTO_PROXIMO":
-      contentBlock = `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#666">O voucher <b>${data.voucherNumber}</b> está próximo do vencimento${data.vencimento ? ` (<b>${formatVencimentoBR(data.vencimento)}</b>)` : ""}. Por favor, verifique e tome as ações necessárias.</p>`;
       break;
   }
 
