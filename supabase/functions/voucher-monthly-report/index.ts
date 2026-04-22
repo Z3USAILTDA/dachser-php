@@ -8,11 +8,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const FULL_REPORT_EMAILS = [
-  "bia.souza@dachser.com",
-  "fernanda.ribeiro@dachser.com",
-  "larissa@z3us.ai",
-];
+// Roles que recebem o relatório mensal consolidado.
+// Destinatários resolvidos dinamicamente em t_users_dachser (esteira_active=1).
+const REPORT_ROLES = ["SUPERVISOR", "GESTOR_SUPERVISOR", "FINANCEIRO", "GESTOR_FINANCEIRO", "ADMIN"];
 
 const SEGMENT_EXTRA_EMAILS: Record<string, string[]> = {
   FISCAL: ["marta.silva@dachser.com"],
