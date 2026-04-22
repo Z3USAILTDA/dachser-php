@@ -391,14 +391,18 @@ const handler = async (req: Request): Promise<Response> => {
     const responsaveis = data.voucherId ? await getVoucherResponsaveis(data.voucherId) : null;
 
     if (data.type === "URGENCIA_SOLICITADA") {
-      // TO: supervisor direto do solicitante. CC: o próprio solicitante.
+      // TO: supervisor direto do solicitante. Solicitante NÃO entra em CC
+      // (recebe e-mail informativo separado via URGENCIA_SOLICITADA_CONFIRMACAO),
+      // garantindo que apenas o supervisor possua os tokens de Aprovar/Rejeitar.
       if (responsaveis?.creator_supervisor_email) {
         toEmails = [responsaveis.creator_supervisor_email];
       } else {
         // Fallback: todos os SUPERVISOR / GESTOR_SUPERVISOR ativos
         toEmails = await getRecipientEmails(STAGE_TO_ROLES["SUPERVISOR"] || []);
       }
-      if (responsaveis?.creator_email) ccEmails = [responsaveis.creator_email];
+    } else if (data.type === "URGENCIA_SOLICITADA_CONFIRMACAO") {
+      // E-mail informativo para o solicitante. Sem CC, sem botões.
+      if (responsaveis?.creator_email) toEmails = [responsaveis.creator_email];
     } else if (data.type === "URGENCIA_APROVADA" || data.type === "URGENCIA_REJEITADA") {
       // Resposta automática ao solicitante (TO) com supervisor em CC
       if (responsaveis?.creator_email) toEmails = [responsaveis.creator_email];
