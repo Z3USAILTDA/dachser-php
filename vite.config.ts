@@ -16,13 +16,14 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      // Shim Node's `stream` for browser so xlsx-js-style doesn't break
-      // (it tries to require('stream') which doesn't exist in the browser).
+      // Shim Node built-ins for the browser so xlsx-js-style (which does
+      // `require('stream')` at import time) doesn't break Excel import/export.
       stream: "stream-browserify",
+      events: "events",
     },
     dedupe: ["react", "react-dom", "react/jsx-runtime"],
   },
   optimizeDeps: {
-    include: ["stream-browserify"],
+    include: ["stream-browserify", "events"],
   },
 }));
