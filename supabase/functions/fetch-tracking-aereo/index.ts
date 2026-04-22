@@ -806,7 +806,8 @@ serve(async (req) => {
             ev.description, (ev as any).event_description, ev.location,
           ].filter(Boolean);
           for (const c of candidates) {
-            const tokens = String(c).match(/\b[A-Z0-9]{2,4}\s?\d{2,5}[A-Z\-T]*\b/g) || [];
+            // Capture flight tokens including -T / -X / -D suffixes (hyphen breaks \b, so no trailing word boundary)
+            const tokens = String(c).match(/[A-Z0-9]{2,4}\s?\d{2,5}(?:[-\s]?[TXD])?/gi) || [];
             if (tokens.some(isGroundFlight)) { isGroundTransport = true; break; }
           }
           if (isGroundTransport) break;
