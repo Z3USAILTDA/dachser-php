@@ -1271,25 +1271,34 @@ serve(async (req) => {
         'última atualização': scrapedAt,
         last_flight: ws.last_flight || null,
         is_ground_transport: (() => {
-          // Detect ground transport: flight code ends with "-T", digit+X, or digit+D
-          function isGroundFlight(val: string): boolean {
-            const clean = val.trim().replace(/,\s*$/, '');
-            if (!clean) return false;
-            return /[-]T$/i.test(clean) || /\d[Xx]$/.test(clean) || /\d[Dd]$/.test(clean);
+          function normalizeGroundCandidate(val: string): string {
+            return (val || '')
+              .toUpperCase()
+              .replace(/\\\//g, '/')
+              .trim()
+              .replace(/,\s*$/, '')
+              .replace(/\s+/g, ' ');
           }
-          // Extract flight codes from text: "Flight LX-9950X", "Flight M3-8485", "LA 5252-T"
+          // Detect ground transport: flight code contains "-T", literal "X/D", or legacy suffix X/D after digits
+          function isGroundFlight(val: string): boolean {
+            const clean = normalizeGroundCandidate(val);
+            if (!clean) return false;
+            return /\b[A-Z0-9]{2,4}\s?\d{2,5}-T\b/i.test(clean)
+              || /\b[A-Z0-9]{2,4}\s?\d{2,5}\s*X\s*\/\s*D\b/i.test(clean)
+              || /\b[A-Z0-9]{2,4}\s?\d{2,5}[XD]\b/i.test(clean);
+          }
+          // Extract flight codes from text: "Flight LX-9950X", "Flight XX 1234 X/D", "LA 5252-T"
           function extractFlightsFromText(text: string): string[] {
             if (!text) return [];
             const flights: string[] = [];
             let m;
-            // Pattern 1: "Flight XX-1234X" or "Flight XX 1234X"
-            const flightPattern = /Flight\s+([A-Z0-9]{2}[\s-]?\d{3,5}[A-Za-z]?)/gi;
+            const flightPattern = /Flight\s+([A-Z0-9]{2,4}[\s-]?\d{2,5}(?:-T|\s*X\s*\/\s*D|[A-Za-z])?)/gi;
             while ((m = flightPattern.exec(text)) !== null) flights.push(m[1]);
-            // Pattern 2: standalone codes ending in -T, e.g. "LA 5491-T", "LA5463-T"
-            const dashTPattern = /\b([A-Z]{2}\s?\d{3,5}-T)\b/gi;
+            const dashTPattern = /\b([A-Z0-9]{2,4}\s?\d{2,5}-T)\b/gi;
             while ((m = dashTPattern.exec(text)) !== null) flights.push(m[1]);
-            // Pattern 3: standalone codes ending in D or X after digit, e.g. "AF0677D", "LX9950X"
-            const suffixDXPattern = /\b([A-Z0-9]{2}[\s-]?\d{3,5}[DXdx])\b/g;
+            const slashXDPattern = /\b([A-Z0-9]{2,4}[\s-]?\d{2,5}\s*X\s*\/\s*D)\b/gi;
+            while ((m = slashXDPattern.exec(text)) !== null) flights.push(m[1]);
+            const suffixDXPattern = /\b([A-Z0-9]{2,4}[\s-]?\d{2,5}[DXdx])\b/g;
             while ((m = suffixDXPattern.exec(text)) !== null) flights.push(m[1]);
             return flights;
           }
@@ -1312,7 +1321,7 @@ serve(async (req) => {
                     }
                   }
                   // Extract flight codes from ALL text fields (status, Description, details, title)
-                  for (const textField of ['status', 'Status', 'Description', 'description', 'details', 'title']) {
+                  for (const textField of ['status', 'Status', 'Description', 'description', 'details', 'title', 'event_description', 'location', 'evento', 'descricao', 'remarks']) {
                     const text = ev[textField];
                     if (!text) continue;
                     const flights = extractFlightsFromText(String(text));
@@ -1324,6 +1333,10 @@ serve(async (req) => {
                     }
                   }
                 }
+              }
+              if (isGroundFlight(timelineStr)) {
+                console.log(`[ground] ${awb}: DETECTED via raw timeline JSON`);
+                return true;
               }
             }
           } catch (_) {}
