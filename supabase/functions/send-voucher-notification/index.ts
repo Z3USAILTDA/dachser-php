@@ -429,8 +429,8 @@ const handler = async (req: Request): Promise<Response> => {
 
     let { subject, html } = getEmailContent(data);
 
-    // If sending to SUPERVISOR, generate tokens and inject approve/reject buttons
-    if (data.toStage === "SUPERVISOR" && data.type === "VOUCHER_ENVIADO") {
+    // For URGENCIA_SOLICITADA, generate tokens and inject approve/reject buttons for the supervisor
+    if (data.type === "URGENCIA_SOLICITADA") {
       const tokens = await generateSupervisorTokens(data.voucherId);
       if (tokens) {
         html = injectSupervisorButtons(html, tokens.approveToken, tokens.rejectToken);
