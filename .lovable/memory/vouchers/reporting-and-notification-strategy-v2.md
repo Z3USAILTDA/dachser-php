@@ -34,8 +34,9 @@ Após o supervisor clicar Aprovar/Rejeitar pelo link:
 ## Alerta 3 — Relatório mensal de processados
 
 - **Quando:** cron `pg_cron` disparado mensalmente — `voucher-monthly-report`.
-- **Destinatários:** resolvidos dinamicamente em `t_users_dachser` (esteira_active=1) com `esteira_role` ∈ `{SUPERVISOR, GESTOR_SUPERVISOR, FINANCEIRO, GESTOR_FINANCEIRO, ADMIN}`. Constante `REPORT_ROLES` na função. Override hardcoded (`larissa@z3us.ai` etc.) foi REMOVIDO.
-- **Conteúdo:** vouchers `CONCLUIDO` no mês + em andamento, KPIs, anexo XLSX. Mantém também os relatórios segmentados (Fiscal/Operação/Supervisor/Financeiro) por role.
+- **Destinatários (relatório completo):** resolvidos dinamicamente em `t_users_dachser` (esteira_active=1) com `esteira_role` ∈ `{SUPERVISOR, GESTOR_SUPERVISOR, FINANCEIRO, GESTOR_FINANCEIRO, ADMIN}`. Constante `REPORT_ROLES` na função. Override de teste (`larissa@z3us.ai`) foi REMOVIDO de TODOS os 3 alertas — confirmado por inspeção em 2026-04-22.
+- **Destinatários (relatórios segmentados Fiscal/Operação/Supervisor/Financeiro):** roles correspondentes em `t_users_dachser` **+** `SEGMENT_EXTRA_EMAILS` hardcoded — INTENCIONAL: `marta.silva@dachser.com` (FISCAL), `cleiciane.faconi@dachser.com` e `luciana.vulcano@dachser.com` (OPERACAO) não têm login na Esteira mas precisam receber. NÃO remover sem antes cadastrá-las em `/admin/users` com a role correspondente.
+- **Conteúdo:** vouchers `CONCLUIDO` no mês + em andamento, KPIs, anexo XLSX.
 
 ## Itens removidos
 
