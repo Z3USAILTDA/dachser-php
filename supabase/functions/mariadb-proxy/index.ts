@@ -9372,18 +9372,18 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Map app values to MariaDB ENUM values
-        const tipoExecMap: Record<string, string> = {
-          'MANUAL': 'MANUAL',
-          'REMESSA_10H': 'REMESSA',
-          'REMESSA_15H': 'REMESSA',
-          'A_DEFINIR': 'A_DEFINIR',
-        };
-        const dbTipoExec = tipoExecMap[tipo_execucao_pagamento] || 'MANUAL';
+        // Validate against allowed values; persist raw subtype (no destructive map)
+        const ALLOWED_TIPO_EXEC = new Set(['A_DEFINIR', 'MANUAL', 'REMESSA_10H', 'REMESSA_15H']);
+        if (!ALLOWED_TIPO_EXEC.has(tipo_execucao_pagamento)) {
+          return new Response(
+            JSON.stringify({ error: `tipo_execucao_pagamento inválido: ${tipo_execucao_pagamento}` }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
 
         await client.execute(
           `UPDATE dados_dachser.t_vouchers SET tipo_execucao_pagamento = ?, updated_at = NOW() WHERE id = ?`,
-          [dbTipoExec, voucherId]
+          [tipo_execucao_pagamento, voucherId]
         );
 
         console.log(`Updated tipo_execucao_pagamento for voucher ${voucherId} to ${tipo_execucao_pagamento}`);
