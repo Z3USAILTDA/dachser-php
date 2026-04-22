@@ -99,6 +99,13 @@ function getEmailContent(data: NotificationRequest) {
       btnColor: "#fff",
       subject: "Urgência Aprovada",
     },
+    URGENCIA_SOLICITADA_CONFIRMACAO: {
+      title: "Solicitação de Urgência Enviada",
+      titleColor: "#22C55E",
+      btnBg: "#22C55E",
+      btnColor: "#fff",
+      subject: "Solicitação de Urgência Enviada",
+    },
   };
 
   const cfg = cfgMap[data.type] || cfgMap.URGENCIA_SOLICITADA;
