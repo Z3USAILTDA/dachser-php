@@ -788,37 +788,48 @@ serve(async (req) => {
       }
       const conexao = seenAirports.length > 0 ? seenAirports.join(',') : null;
 
-      // Detect ground transport (RFS) — mirror fetch-status-aereo logic exactly
+      // Detect ground transport (RFS) — sufixo -T, X ou D em códigos de voo (sem âncora $)
       const isGroundFlight = (val: string): boolean => {
-        const clean = (val || "").trim().replace(/,\s*$/, '');
+        const clean = (val || "").trim().replace(/[,;]\s*$/, '');
         if (!clean) return false;
-        return /[-]T$/i.test(clean) || /\d[Xx]$/.test(clean) || /\d[Dd]$/.test(clean);
+        // Sufixo -T (com hífen) ou X/D imediatamente após dígitos, em qualquer posição da string
+        if (/\b[A-Z0-9]{2,4}\s?\d{2,5}-T\b/i.test(clean)) return true;
+        if (/\b[A-Z0-9]{2,4}\s?\d{2,5}[XD]\b/.test(clean)) return true;
+        return false;
       };
       const extractFlightsFromText = (text: string): string[] => {
         if (!text) return [];
         const flights: string[] = [];
         let m: RegExpExecArray | null;
-        const flightPattern = /Flight\s+([A-Z0-9]{2}[\s-]?\d{3,5}[A-Za-z]?)/gi;
+        const flightPattern = /Flight\s+([A-Z0-9]{2}[\s-]?\d{3,5}[A-Za-z]?(?:-T)?)/gi;
         while ((m = flightPattern.exec(text)) !== null) flights.push(m[1]);
-        const dashTPattern = /\b([A-Z]{2}\s?\d{3,5}-T)\b/gi;
+        const dashTPattern = /\b([A-Z0-9]{2,4}\s?\d{2,5}-T)\b/gi;
         while ((m = dashTPattern.exec(text)) !== null) flights.push(m[1]);
-        const suffixDXPattern = /\b([A-Z0-9]{2}[\s-]?\d{3,5}[DXdx])\b/g;
+        const suffixDXPattern = /\b([A-Z0-9]{2,4}[\s-]?\d{2,5}[DXdx])\b/g;
         while ((m = suffixDXPattern.exec(text)) !== null) flights.push(m[1]);
         return flights;
       };
       let isGroundTransport = false;
       const lastFlightRaw = String((row as any).LAST_FLIGHT || (row as any).last_flight || "");
+      // Testa o valor bruto E também aplica extractFlightsFromText (caso venha com texto extra)
       if (isGroundFlight(lastFlightRaw)) isGroundTransport = true;
+      if (!isGroundTransport && lastFlightRaw) {
+        const extracted = extractFlightsFromText(lastFlightRaw);
+        if (extracted.some(isGroundFlight)) isGroundTransport = true;
+      }
       if (!isGroundTransport && timeline?.length) {
-        const flightFields = ['Flight', 'flight', 'voo', 'Voo', 'flight_number', 'flightNumber', 'numero_voo', 'last_flight'];
+        const flightFields = ['Flight', 'flight', 'voo', 'Voo', 'flight_number', 'flightNumber', 'numero_voo', 'last_flight', 'LAST_FLIGHT'];
         for (const ev of timeline) {
           for (const field of flightFields) {
-            if ((ev as any)[field] && isGroundFlight(String((ev as any)[field]))) {
-              isGroundTransport = true; break;
-            }
+            const v = (ev as any)[field];
+            if (!v) continue;
+            const s = String(v);
+            if (isGroundFlight(s)) { isGroundTransport = true; break; }
+            const extracted = extractFlightsFromText(s);
+            if (extracted.some(isGroundFlight)) { isGroundTransport = true; break; }
           }
           if (isGroundTransport) break;
-          for (const textField of ['status', 'Status', 'Description', 'description', 'details', 'title', 'event_description', 'location']) {
+          for (const textField of ['status', 'Status', 'Description', 'description', 'details', 'title', 'event_description', 'location', 'evento', 'descricao', 'remarks']) {
             const text = (ev as any)[textField];
             if (!text) continue;
             const flights = extractFlightsFromText(String(text));
