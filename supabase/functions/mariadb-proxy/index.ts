@@ -16150,6 +16150,18 @@ Deno.serve(async (req) => {
       // ==================== SYNC VOUCHER STATUSES ====================
       case 'sync_voucher_statuses': {
         try {
+          const lockName = 'voucher_sync_statuses_lock';
+          const lockRows = await client.query(`SELECT GET_LOCK(?, 0) AS acquired`, [lockName]);
+          const acquiredValue = lockRows?.[0]?.acquired;
+          const lockAcquired = Number(acquiredValue) === 1;
+
+          if (!lockAcquired) {
+            console.log('[sync_voucher_statuses] Skipped: another sync is already running');
+            result = { success: true, skipped: true, reason: 'already_running' };
+            break;
+          }
+
+          try {
           console.log('[sync_voucher_statuses] Starting full status sync...');
           let updatedFinanceiro = 0;
           let updatedBaixa = 0;
@@ -16241,6 +16253,13 @@ Deno.serve(async (req) => {
 
           console.log(`[sync_voucher_statuses] Done. Financeiro updated: ${updatedFinanceiro}, Baixa updated: ${updatedBaixa}, Baixas checked: ${checkedBaixas}`);
           result = { success: true, updatedFinanceiro, updatedBaixa, checkedBaixas };
+          } finally {
+            try {
+              await client.query(`SELECT RELEASE_LOCK(?) AS released`, [lockName]);
+            } catch (releaseError) {
+              console.warn('[sync_voucher_statuses] Failed to release lock:', releaseError);
+            }
+          }
         } catch (e: any) {
           console.error('[sync_voucher_statuses] Error:', e);
           result = { success: false, error: e.message };
