@@ -127,6 +127,7 @@ const handler = async (req: Request): Promise<Response> => {
         console.log("Insert t_dados_rm from email action skipped:", e);
       }
 
+      // Confirmation email to creator + supervisor (cc) — urgência aprovada
       try {
         await fetch(`${SUPABASE_URL}/functions/v1/send-voucher-notification`, {
           method: "POST",
@@ -136,7 +137,7 @@ const handler = async (req: Request): Promise<Response> => {
             "apikey": SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({
-            type: "VOUCHER_ENVIADO",
+            type: "URGENCIA_APROVADA",
             voucherId: voucher_id,
             voucherNumber: voucherNumber,
             toStage: "FINANCEIRO",
@@ -145,7 +146,7 @@ const handler = async (req: Request): Promise<Response> => {
           }),
         });
       } catch (e) {
-        console.log("Email notification to FINANCEIRO skipped:", e);
+        console.log("Confirmation email URGENCIA_APROVADA skipped:", e);
       }
 
       // Confirmation email to creator + supervisor (cc) — urgência aprovada
