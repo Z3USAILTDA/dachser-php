@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Search,
   Plane,
+  Truck,
   RefreshCw,
   ArrowLeft,
   HelpCircle,
@@ -251,6 +252,7 @@ interface AWBData {
   is_critical?: boolean;
   is_invalid?: boolean;
   tracking_failed?: boolean;
+  is_ground_transport?: boolean;
 }
 
 // ─── Airlines list (same as Index.tsx) ───
@@ -855,6 +857,11 @@ const TrackingAereo = () => {
                               ))}
                               <span className="text-muted-foreground">→</span>
                               <span className={highlightDestino ? activeClass : inactiveClass}>{awb.destino || "N/A"}</span>
+                              {awb.is_ground_transport && (
+                                <span className="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.6rem] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                                  <Truck className="w-2.5 h-2.5" /> RFS
+                                </span>
+                              )}
                             </div>
                           </td>
                           {/* Rastreio (progress bar) */}
@@ -873,11 +880,15 @@ const TrackingAereo = () => {
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-all duration-700 ease-out z-20 cursor-pointer" style={{ left: `${getTimelineProgress(awb.last_event)}%` }}>
-                                      <Plane className="w-4 h-4" style={{ transform: "rotate(90deg)", color: planeColor, fill: planeColor, filter: `drop-shadow(0 0 4px ${shadowColor}) drop-shadow(0 2px 6px rgba(0,0,0,0.6))` }} />
+                                      {awb.is_ground_transport ? (
+                                        <Truck className="w-4 h-4" style={{ color: planeColor, fill: planeColor, filter: `drop-shadow(0 0 4px ${shadowColor}) drop-shadow(0 2px 6px rgba(0,0,0,0.6))` }} />
+                                      ) : (
+                                        <Plane className="w-4 h-4" style={{ transform: "rotate(90deg)", color: planeColor, fill: planeColor, filter: `drop-shadow(0 0 4px ${shadowColor}) drop-shadow(0 2px 6px rgba(0,0,0,0.6))` }} />
+                                      )}
                                     </div>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p className="text-xs font-medium">{getStatusCode(awb.last_event)}</p>
+                                    <p className="text-xs font-medium">{getStatusCode(awb.last_event)}{awb.is_ground_transport ? " · Transporte Terrestre" : ""}</p>
                                     <p className="text-xs text-muted-foreground">{getStatusFromEvent(awb.last_event)}</p>
                                   </TooltipContent>
                                 </Tooltip>

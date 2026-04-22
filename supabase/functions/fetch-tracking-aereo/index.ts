@@ -788,6 +788,31 @@ serve(async (req) => {
       }
       const conexao = seenAirports.length > 0 ? seenAirports.join(',') : null;
 
+      // Detect ground transport (RFS) from flight codes (mirrors fetch-status-aereo)
+      const isGroundFlight = (val: string): boolean => {
+        const clean = (val || "").trim().replace(/,\s*$/, '');
+        if (!clean) return false;
+        if (/[-\s]T$/i.test(clean)) return true;
+        if (/\d[XD]$/i.test(clean)) return true;
+        return false;
+      };
+      let isGroundTransport = false;
+      const lastFlightRaw = String((row as any).LAST_FLIGHT || (row as any).last_flight || "");
+      if (isGroundFlight(lastFlightRaw)) isGroundTransport = true;
+      if (!isGroundTransport && timeline?.length) {
+        for (const ev of timeline) {
+          const candidates = [
+            (ev as any).flight, (ev as any).flight_number, (ev as any).last_flight,
+            ev.description, (ev as any).event_description, ev.location,
+          ].filter(Boolean);
+          for (const c of candidates) {
+            const tokens = String(c).match(/\b[A-Z0-9]{2,4}\s?\d{2,5}[A-Z\-T]*\b/g) || [];
+            if (tokens.some(isGroundFlight)) { isGroundTransport = true; break; }
+          }
+          if (isGroundTransport) break;
+        }
+      }
+
       const normalized = {
         awb_number: row.AWB || "",
         hawb_number: row.HAWB || "",
@@ -814,6 +839,7 @@ serve(async (req) => {
         sla_cor: row.sla_cor || null,
         sla_tempo_formatado: row.sla_tempo_formatado || null,
         sla_tooltip: row.sla_tooltip || null,
+        is_ground_transport: isGroundTransport,
       };
 
       if (!finalCode) {
