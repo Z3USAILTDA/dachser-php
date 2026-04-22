@@ -9174,12 +9174,6 @@ Deno.serve(async (req) => {
           console.log('status_integracao_rm column may already exist');
         }
         
-        // Ensure tipo_execucao_pagamento column exists
-        try {
-          await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS tipo_execucao_pagamento VARCHAR(50) DEFAULT NULL`);
-        } catch (alterErr) {
-          console.log('tipo_execucao_pagamento column may already exist');
-        }
         
         const { 
           page = 1, 
