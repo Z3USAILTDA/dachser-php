@@ -8106,7 +8106,7 @@ Deno.serve(async (req) => {
           // matches the card's last_status_code without reordering the full timeline.
           const IATA_WEIGHT: Record<string, number> = {
             POD: 44, DLV: 43, NFD: 42, RCF: 41, AWD: 40, ARR: 39,
-            TRM: 38, TFD: 37, DEP: 36, MAN: 35, BKD: 34, RCS: 33, FOH: 32,
+            TRM: 38, TFD: 37, DEP: 36, MAN: 35, RCS: 34, FOH: 33, BKD: 32,
             AWR: 40, CCD: 40, FWB: 4, RCT: 11, DOC: 12, PRE: 20, TRA: 32,
             DIS: 30, OFLD: 28,
           };
