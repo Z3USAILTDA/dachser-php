@@ -788,27 +788,41 @@ serve(async (req) => {
       }
       const conexao = seenAirports.length > 0 ? seenAirports.join(',') : null;
 
-      // Detect ground transport (RFS) from flight codes (mirrors fetch-status-aereo)
+      // Detect ground transport (RFS) — mirror fetch-status-aereo logic exactly
       const isGroundFlight = (val: string): boolean => {
         const clean = (val || "").trim().replace(/,\s*$/, '');
         if (!clean) return false;
-        if (/[-\s]T$/i.test(clean)) return true;
-        if (/\d[XD]$/i.test(clean)) return true;
-        return false;
+        return /[-]T$/i.test(clean) || /\d[Xx]$/.test(clean) || /\d[Dd]$/.test(clean);
+      };
+      const extractFlightsFromText = (text: string): string[] => {
+        if (!text) return [];
+        const flights: string[] = [];
+        let m: RegExpExecArray | null;
+        const flightPattern = /Flight\s+([A-Z0-9]{2}[\s-]?\d{3,5}[A-Za-z]?)/gi;
+        while ((m = flightPattern.exec(text)) !== null) flights.push(m[1]);
+        const dashTPattern = /\b([A-Z]{2}\s?\d{3,5}-T)\b/gi;
+        while ((m = dashTPattern.exec(text)) !== null) flights.push(m[1]);
+        const suffixDXPattern = /\b([A-Z0-9]{2}[\s-]?\d{3,5}[DXdx])\b/g;
+        while ((m = suffixDXPattern.exec(text)) !== null) flights.push(m[1]);
+        return flights;
       };
       let isGroundTransport = false;
       const lastFlightRaw = String((row as any).LAST_FLIGHT || (row as any).last_flight || "");
       if (isGroundFlight(lastFlightRaw)) isGroundTransport = true;
       if (!isGroundTransport && timeline?.length) {
+        const flightFields = ['Flight', 'flight', 'voo', 'Voo', 'flight_number', 'flightNumber', 'numero_voo', 'last_flight'];
         for (const ev of timeline) {
-          const candidates = [
-            (ev as any).flight, (ev as any).flight_number, (ev as any).last_flight,
-            ev.description, (ev as any).event_description, ev.location,
-          ].filter(Boolean);
-          for (const c of candidates) {
-            // Capture flight tokens including -T / -X / -D suffixes (hyphen breaks \b, so no trailing word boundary)
-            const tokens = String(c).match(/[A-Z0-9]{2,4}\s?\d{2,5}(?:[-\s]?[TXD])?/gi) || [];
-            if (tokens.some(isGroundFlight)) { isGroundTransport = true; break; }
+          for (const field of flightFields) {
+            if ((ev as any)[field] && isGroundFlight(String((ev as any)[field]))) {
+              isGroundTransport = true; break;
+            }
+          }
+          if (isGroundTransport) break;
+          for (const textField of ['status', 'Status', 'Description', 'description', 'details', 'title', 'event_description', 'location']) {
+            const text = (ev as any)[textField];
+            if (!text) continue;
+            const flights = extractFlightsFromText(String(text));
+            if (flights.some(isGroundFlight)) { isGroundTransport = true; break; }
           }
           if (isGroundTransport) break;
         }
