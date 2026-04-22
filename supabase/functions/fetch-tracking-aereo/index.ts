@@ -387,6 +387,121 @@ serve(async (req) => {
       console.warn("Could not load discrepancy data:", err);
     }
 
+    // Step 3d-bis: Discrepancy detection for prefix 996 (Air Europa via uxtracking/firecrawl)
+    // Reads t_aereo_ws_firecrawl (Description/Location/Pieces format) and parses in JS.
+    try {
+      const sql996 = `
+        SELECT tda.awb_number AS awb, tda.hawb_number AS hawb, w.timeline_json
+        FROM dados_dachser.t_dados_aereo tda
+        INNER JOIN (
+          SELECT awb, MAX(id) AS max_id
+          FROM dados_dachser.t_aereo_ws_firecrawl
+          WHERE awb LIKE '996-%'
+          GROUP BY awb
+        ) latest ON latest.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
+        INNER JOIN dados_dachser.t_aereo_ws_firecrawl w ON w.id = latest.max_id
+        WHERE tda.awb_number LIKE '996-%'
+          AND (tda.master_insert >= '2026-03-20' OR tda.created_at >= '2026-03-20')
+          AND w.timeline_json IS NOT NULL
+          AND JSON_VALID(w.timeline_json)
+      `;
+      console.log("[996-DISC] Executing 996 discrepancy query...");
+      const rows996 = await queryWithRetry(client, sql996);
+      console.log(`[996-DISC] Loaded ${rows996?.length || 0} candidate AWBs from t_aereo_ws_firecrawl`);
+
+      // Helper: extract pieces from a single description (uxtracking format)
+      const extractPieces996 = (text: string): number | null => {
+        if (!text) return null;
+        const upper = text.toUpperCase();
+        // Suppress when explicit zero pieces in offload
+        if (/(OFLD|OFFLOAD|OFFLOADED)/i.test(upper) && /(^|[^0-9])0\s+PIECES?([^A-Z]|$)/i.test(upper)) {
+          return null;
+        }
+        // Pattern: "10/2757 KGS" or "10 / 2757K"
+        const slashMatch = upper.match(/(\d+)\s*\/\s*[\d.,]+\s*(KGS?|LBS?|K)\b/);
+        if (slashMatch) {
+          const v = parseInt(slashMatch[1], 10);
+          if (v > 0) return v;
+        }
+        // Pattern: "Pieces: 10" / "PIECES=10"
+        const piecesKv = upper.match(/PIECES?\s*[:=]\s*(\d+)/);
+        if (piecesKv) {
+          const v = parseInt(piecesKv[1], 10);
+          if (v > 0) return v;
+        }
+        // Pattern: "Qty: 10"
+        const qty = upper.match(/QTY\s*[:=]\s*(\d+)/);
+        if (qty) {
+          const v = parseInt(qty[1], 10);
+          if (v > 0) return v;
+        }
+        // Pattern: "10 PIECE(S)" / "10 PIECES"
+        const piecesSuffix = upper.match(/(\d+)\s+PIECE(?:S|\(S\))?\b/);
+        if (piecesSuffix) {
+          const v = parseInt(piecesSuffix[1], 10);
+          if (v > 0) return v;
+        }
+        return null;
+      };
+
+      const isDisEvent996 = (text: string): boolean => {
+        if (!text) return false;
+        if (/(^|[^A-Z])(DISCREP|DIS)([^A-Z]|$)/i.test(text)) return true;
+        if (/\b(DISCREPANCY|IRREGULAR|MISSING|SHORT\s+SHIPPED|OVERAGE)\b/i.test(text)) return true;
+        return false;
+      };
+
+      let added996 = 0;
+      for (const r of rows996 || []) {
+        const awb = r.awb || "";
+        const hawb = r.hawb || "";
+        if (!awb) continue;
+        let timeline: any[] = [];
+        try {
+          timeline = typeof r.timeline_json === "string" ? JSON.parse(r.timeline_json) : (r.timeline_json || []);
+        } catch {
+          continue;
+        }
+        if (!Array.isArray(timeline) || timeline.length === 0) continue;
+
+        const piecesValues: number[] = [];
+        let hasDis = false;
+        for (const ev of timeline) {
+          const desc = String(ev?.Description || ev?.description || ev?.status || "");
+          // Native Pieces field
+          const nativePieces = ev?.Pieces ?? ev?.pieces ?? ev?.Quantity ?? ev?.quantity;
+          if (nativePieces != null && !isNaN(Number(nativePieces)) && Number(nativePieces) > 0) {
+            piecesValues.push(Number(nativePieces));
+          } else {
+            const p = extractPieces996(desc);
+            if (p != null) piecesValues.push(p);
+          }
+          if (isDisEvent996(desc)) hasDis = true;
+        }
+
+        if (piecesValues.length === 0 && !hasDis) continue;
+        const minP = piecesValues.length > 0 ? Math.min(...piecesValues) : null;
+        const maxP = piecesValues.length > 0 ? Math.max(...piecesValues) : null;
+        const piecesDisc = minP != null && maxP != null && minP !== maxP;
+
+        if (!piecesDisc && !hasDis) continue;
+
+        const key = `${awb}|${hawb}`;
+        // Don't override existing entry from main SQL block
+        if (!discrepancyMap[key]) {
+          discrepancyMap[key] = {
+            pieces_discrepancy: piecesDisc,
+            baseline_pieces: piecesDisc ? minP : null,
+            has_dis_event: hasDis,
+          };
+          added996++;
+        }
+      }
+      console.log(`[996-DISC] Added ${added996} discrepancy records for prefix 996`);
+    } catch (err) {
+      console.warn("[996-DISC] Could not load 996 discrepancy data:", err);
+    }
+
     await client.close();
     client = null;
 

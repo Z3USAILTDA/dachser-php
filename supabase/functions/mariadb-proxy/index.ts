@@ -7946,15 +7946,28 @@ Deno.serve(async (req) => {
           // Helper: extract pieces count from event description text
           const extractPiecesFromDesc = (text: string): number | null => {
             if (!text) return null;
+            // Suppress explicit zero pieces in offload (e.g. "OFLD 0 PIECES")
+            if (/(OFLD|OFFLOAD|OFFLOADED)/i.test(text) && /(^|[^0-9])0\s+PIECES?([^A-Z]|$)/i.test(text)) {
+              return null;
+            }
             const longMatch = text.match(/Pieces:\s*(\d+)/i);
             if (longMatch) return parseInt(longMatch[1], 10);
-            const shortMatch = text.match(/(\d+)\s*\/\s*[\d.]+\s*KGS/i);
+            // Generalized "10 / 2757 KGS|KG|LBS|LB|K" (covers uxtracking 996 format)
+            const shortMatch = text.match(/(\d+)\s*\/\s*[\d.,]+\s*(KGS?|LBS?|K)\b/i);
             if (shortMatch) return parseInt(shortMatch[1], 10);
             const qtyMatch = text.match(/qty:\s*(\d+)/i);
             if (qtyMatch) return parseInt(qtyMatch[1], 10);
             const piecesMatch = text.match(/(\d+)\s*piece(?:s|\(s\))?/i);
             if (piecesMatch) return parseInt(piecesMatch[1], 10);
             return null;
+          };
+
+          // Helper: detect DIS / discrepancy markers in description (uxtracking and IATA forms)
+          const isDiscrepancyDesc = (text: string): boolean => {
+            if (!text) return false;
+            if (/(^|[^A-Z])(DISCREP|DIS)([^A-Z]|$)/i.test(text)) return true;
+            if (/\b(DISCREPANCY|IRREGULAR|MISSING|SHORT\s+SHIPPED|OVERAGE)\b/i.test(text)) return true;
+            return false;
           };
 
           // Helper: extract weight from event description text
@@ -8235,13 +8248,25 @@ Deno.serve(async (req) => {
           const allPieces = filteredEvents
             .map((e: any) => e.pecas)
             .filter((v: any) => v != null && v > 0);
-          let discrepancy = null;
+          let discrepancy: any = null;
           if (allPieces.length >= 2) {
             const minP = Math.min(...allPieces);
             const maxP = Math.max(...allPieces);
             if (minP !== maxP) {
               discrepancy = { field: 'pecas', values: [...new Set(allPieces)], min: minP, max: maxP };
               console.log(`[DISCREPANCY] Pieces discrepancy detected for AWB ${queryAwb}: min=${minP}, max=${maxP}`);
+            }
+          }
+
+          // Detect DIS event in any timeline entry (uxtracking + IATA)
+          if (!discrepancy) {
+            const hasDis = filteredEvents.some((e: any) => {
+              const txt = String(e?.descricao_evento || e?.description || e?.Description || '');
+              return isDiscrepancyDesc(txt);
+            });
+            if (hasDis) {
+              discrepancy = { field: 'dis', values: [], min: null, max: null };
+              console.log(`[DISCREPANCY] DIS event detected for AWB ${queryAwb}`);
             }
           }
 
