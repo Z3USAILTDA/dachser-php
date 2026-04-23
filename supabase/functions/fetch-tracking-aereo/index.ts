@@ -810,14 +810,12 @@ serve(async (req) => {
         if (!text) return [];
         const flights: string[] = [];
         let m: RegExpExecArray | null;
-        const flightPattern = /Flight\s+([A-Z0-9]{2,4}[\s-]?\d{2,5}(?:-T|\s*X\s*\/\s*D|[A-Za-z])?)/gi;
+        const flightPattern = /Flight\s+([A-Z]{2,3}[\s-]?\d{2,5}(?:-T|\s*X\s*\/\s*D)?)/g;
         while ((m = flightPattern.exec(text)) !== null) flights.push(m[1]);
-        const dashTPattern = /\b([A-Z0-9]{2,4}\s?\d{2,5}-T)\b/gi;
+        const dashTPattern = /\b([A-Z]{2,3}\s?\d{2,5}-T)\b/g;
         while ((m = dashTPattern.exec(text)) !== null) flights.push(m[1]);
-        const slashXDPattern = /\b([A-Z0-9]{2,4}[\s-]?\d{2,5}\s*X\s*\/\s*D)\b/gi;
+        const slashXDPattern = /\b([A-Z]{2,3}[\s-]?\d{2,5}\s*X\s*\/\s*D)\b/g;
         while ((m = slashXDPattern.exec(text)) !== null) flights.push(m[1]);
-        const suffixDXPattern = /\b([A-Z0-9]{2,4}[\s-]?\d{2,5}[DXdx])\b/g;
-        while ((m = suffixDXPattern.exec(text)) !== null) flights.push(m[1]);
         return flights;
       };
       let isGroundTransport = false;
