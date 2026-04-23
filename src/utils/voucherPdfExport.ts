@@ -62,6 +62,7 @@ export const exportVouchersToPDF = (data: Voucher[]) => {
         "Fornecedor",
         "Valor",
         "Vencimento",
+        "Nec. Fiscal",
         "Tipo Exec.",
         "Urgente",
         "Etapa",
