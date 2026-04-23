@@ -800,9 +800,9 @@ serve(async (req) => {
       const hasGroundFlightPattern = (val: string): boolean => {
         const clean = normalizeGroundCandidate(val);
         if (!clean) return false;
-        if (/\b[A-Z0-9]{2,4}\s?\d{2,5}-T\b/i.test(clean)) return true;
-        if (/\b[A-Z0-9]{2,4}\s?\d{2,5}\s*X\s*\/\s*D\b/i.test(clean)) return true;
-        if (/\b[A-Z0-9]{2,4}\s?\d{2,5}[XD]\b/i.test(clean)) return true;
+        // Apenas sinais inequívocos de RFS: sufixo -T explícito ou notação literal X/D
+        if (/\b[A-Z]{2,3}\s?\d{2,5}-T\b/.test(clean)) return true;
+        if (/\b[A-Z]{2,3}\s?\d{2,5}\s*X\s*\/\s*D\b/.test(clean)) return true;
         return false;
       };
       const isGroundFlight = (val: string): boolean => hasGroundFlightPattern(val);
@@ -810,14 +810,12 @@ serve(async (req) => {
         if (!text) return [];
         const flights: string[] = [];
         let m: RegExpExecArray | null;
-        const flightPattern = /Flight\s+([A-Z0-9]{2,4}[\s-]?\d{2,5}(?:-T|\s*X\s*\/\s*D|[A-Za-z])?)/gi;
+        const flightPattern = /Flight\s+([A-Z]{2,3}[\s-]?\d{2,5}(?:-T|\s*X\s*\/\s*D)?)/g;
         while ((m = flightPattern.exec(text)) !== null) flights.push(m[1]);
-        const dashTPattern = /\b([A-Z0-9]{2,4}\s?\d{2,5}-T)\b/gi;
+        const dashTPattern = /\b([A-Z]{2,3}\s?\d{2,5}-T)\b/g;
         while ((m = dashTPattern.exec(text)) !== null) flights.push(m[1]);
-        const slashXDPattern = /\b([A-Z0-9]{2,4}[\s-]?\d{2,5}\s*X\s*\/\s*D)\b/gi;
+        const slashXDPattern = /\b([A-Z]{2,3}[\s-]?\d{2,5}\s*X\s*\/\s*D)\b/g;
         while ((m = slashXDPattern.exec(text)) !== null) flights.push(m[1]);
-        const suffixDXPattern = /\b([A-Z0-9]{2,4}[\s-]?\d{2,5}[DXdx])\b/g;
-        while ((m = suffixDXPattern.exec(text)) !== null) flights.push(m[1]);
         return flights;
       };
       let isGroundTransport = false;
@@ -863,22 +861,9 @@ serve(async (req) => {
         }
       }
 
-      const timelineRaw = String((row as any).TIMELINE_JSON || (row as any).timeline_json || '');
-      if (!isGroundTransport && timelineRaw && hasGroundFlightPattern(timelineRaw)) {
-        isGroundTransport = true;
-      }
+      // Detecção restrita a campos estruturados de voo — sem scan cego do JSON serializado
+      // (evita falsos positivos em descrições, status codes e nomes de cidades).
 
-      // Fallback final: varredura total da timeline serializada (qualquer chave)
-      if (!isGroundTransport && timeline?.length) {
-        try {
-          const haystack = JSON.stringify(timeline);
-          const flights = extractFlightsFromText(haystack);
-          if (flights.some(isGroundFlight)) isGroundTransport = true;
-          if (!isGroundTransport && hasGroundFlightPattern(haystack)) {
-            isGroundTransport = true;
-          }
-        } catch (_) {}
-      }
 
       const normalized = {
         awb_number: row.AWB || "",
