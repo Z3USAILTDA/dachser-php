@@ -33,7 +33,7 @@ export const exportVouchersToExcel = (data: Voucher[]) => {
     "Valor": formatCurrency(v.valor, v.moeda),
     "Moeda": v.moeda || "BRL",
     "Vencimento": format(new Date(v.vencimento), "dd/MM/yyyy", { locale: ptBR }),
-    
+    "Necessita Fiscal": v.cobrancaEmNomeDe === "DACHSER" ? "Sim" : "Não",
     "Forma Pagamento": v.formaPagamento,
     "Tipo Execução": v.tipoExecucaoPagamento || "-",
     "Filial": v.filial || "-",
@@ -120,7 +120,7 @@ export const exportVouchersToExcel = (data: Voucher[]) => {
     { wch: 15 }, // Valor
     { wch: 8 },  // Moeda
     { wch: 12 }, // Vencimento
-    { wch: 12 }, // Cobrança
+    { wch: 16 }, // Necessita Fiscal
     { wch: 20 }, // Forma Pagamento
     { wch: 15 }, // Tipo Execução
     { wch: 10 }, // Filial
