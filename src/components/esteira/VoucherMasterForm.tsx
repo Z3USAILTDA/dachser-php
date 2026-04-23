@@ -16,6 +16,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { FornecedoresSemFiscalDialog } from "./FornecedoresSemFiscalDialog";
 
 interface VoucherSearchResult {
   processo: string;
@@ -523,7 +524,10 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                 name="cobrancaEmNomeDe"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Cobrança em nome de</FormLabel>
+                    <div className="flex items-center justify-between gap-2">
+                      <FormLabel>É necessário contabilização com o fiscal?</FormLabel>
+                      <FornecedoresSemFiscalDialog />
+                    </div>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger className="bg-background/50 border-border">
@@ -531,8 +535,8 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="DACHSER">Dachser</SelectItem>
-                        <SelectItem value="CLIENTE">Cliente</SelectItem>
+                        <SelectItem value="DACHSER">Sim — enviar para o Fiscal</SelectItem>
+                        <SelectItem value="CLIENTE">Não — enviar diretamente para o Financeiro</SelectItem>
                       </SelectContent>
                     </Select>
                   </FormItem>

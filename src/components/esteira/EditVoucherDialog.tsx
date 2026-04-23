@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Voucher } from "@/types/voucher";
 import { Loader2, AlertCircle } from "lucide-react";
+import { FornecedoresSemFiscalDialog } from "./FornecedoresSemFiscalDialog";
 
 interface EditVoucherDialogProps {
   open: boolean;
@@ -317,7 +318,12 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-cobranca">Cobrança em nome de *</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="edit-cobranca">
+                  É necessário contabilização com o fiscal? *
+                </Label>
+                <FornecedoresSemFiscalDialog />
+              </div>
               <Select
                 value={formData.cobrancaEmNomeDe}
                 onValueChange={(value) => setFormData({ ...formData, cobrancaEmNomeDe: value as "DACHSER" | "CLIENTE" })}
@@ -326,8 +332,8 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="DACHSER">Dachser</SelectItem>
-                  <SelectItem value="CLIENTE">Cliente</SelectItem>
+                  <SelectItem value="DACHSER">Sim — enviar para o Fiscal</SelectItem>
+                  <SelectItem value="CLIENTE">Não — enviar diretamente para o Financeiro</SelectItem>
                 </SelectContent>
               </Select>
             </div>
