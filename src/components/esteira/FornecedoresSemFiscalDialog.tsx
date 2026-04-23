@@ -50,7 +50,7 @@ export const FornecedoresSemFiscalDialog = ({ trigger }: FornecedoresSemFiscalDi
             className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
           >
             <Info className="h-3.5 w-3.5" />
-            Ver fornecedores que não precisam de fiscal
+            Ver fornecedores que não precisam da etapa Fiscal
           </Button>
         )}
       </DialogTrigger>
