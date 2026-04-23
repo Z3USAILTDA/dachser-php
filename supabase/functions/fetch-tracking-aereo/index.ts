@@ -861,22 +861,9 @@ serve(async (req) => {
         }
       }
 
-      const timelineRaw = String((row as any).TIMELINE_JSON || (row as any).timeline_json || '');
-      if (!isGroundTransport && timelineRaw && hasGroundFlightPattern(timelineRaw)) {
-        isGroundTransport = true;
-      }
+      // Detecção restrita a campos estruturados de voo — sem scan cego do JSON serializado
+      // (evita falsos positivos em descrições, status codes e nomes de cidades).
 
-      // Fallback final: varredura total da timeline serializada (qualquer chave)
-      if (!isGroundTransport && timeline?.length) {
-        try {
-          const haystack = JSON.stringify(timeline);
-          const flights = extractFlightsFromText(haystack);
-          if (flights.some(isGroundFlight)) isGroundTransport = true;
-          if (!isGroundTransport && hasGroundFlightPattern(haystack)) {
-            isGroundTransport = true;
-          }
-        } catch (_) {}
-      }
 
       const normalized = {
         awb_number: row.AWB || "",
