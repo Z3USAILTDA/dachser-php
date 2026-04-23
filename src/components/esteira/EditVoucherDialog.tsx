@@ -328,7 +328,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
                 value={formData.cobrancaEmNomeDe}
                 onValueChange={(value) => setFormData({ ...formData, cobrancaEmNomeDe: value as "DACHSER" | "CLIENTE" })}
               >
-                <SelectTrigger id="edit-cobranca">
+                <SelectTrigger id="edit-necessita-fiscal">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
