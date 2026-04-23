@@ -92,20 +92,6 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
         </div>
 
         <div>
-          <Label>Cobrança em nome de</Label>
-          <Select value={filters.cobrancaEmNomeDe} onValueChange={(v) => handleFilterChange("cobrancaEmNomeDe", v)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="DACHSER">Dachser</SelectItem>
-              <SelectItem value="CLIENTE">Cliente</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div>
           <Label>Forma de Pagamento</Label>
           <Select value={filters.formaPagamento} onValueChange={(v) => handleFilterChange("formaPagamento", v)}>
             <SelectTrigger>
