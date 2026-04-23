@@ -661,9 +661,9 @@ serve(async (req) => {
     }
 
     // Sole post-SQL processing: among the up to 4 slots returned by the query,
-    // group by airport (loc). The airport whose most-recent event (date) is greater
-    // wins. Inside the winning airport, IATA hierarchy elects the slot. This handles
-    // re-manifestations on a new leg in another airport correctly. Tiebreak: lower idx.
+    // the chronologically newest event always wins. IATA hierarchy is used ONLY
+    // when multiple slots share the exact same parsed timestamp. If dates cannot
+    // be parsed, preserve SQL order (lower idx).
     function pickTopByIATA(row: any): { code: string | null; desc: string | null; loc: string | null; date: string | null; idx: number } {
       const slots = [
         { code: resolveCodeFromSlot(row.code0_native, row.desc0), desc: row.desc0, loc: row.loc0, date: row.date0, idx: 0 },
@@ -673,41 +673,24 @@ serve(async (req) => {
       ].filter(s => s.desc || s.code);
       if (slots.length === 0) return { code: null, desc: null, loc: null, date: null, idx: -1 };
 
-      // Group by airport (loc, normalized). Empty/missing loc → its own bucket per slot.
-      const groups = new Map<string, typeof slots>();
-      for (const s of slots) {
-        const key = (s.loc || `__noloc_${s.idx}`).toString().trim().toUpperCase();
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key)!.push(s);
+      const slotsWithDate = slots.map((slot) => ({ ...slot, dateMs: parseSlotDateMs(slot.date) }));
+      const latestDateMs = Math.max(...slotsWithDate.map((slot) => slot.dateMs));
+
+      if (latestDateMs <= 0) {
+        return slots.reduce((best, slot) => (slot.idx < best.idx ? slot : best), slots[0]);
       }
 
-      // Pick the airport group whose latest event date is greatest.
-      let bestGroup: typeof slots = slots;
-      if (groups.size > 1) {
-        let bestMaxDate = -1;
-        let bestMinIdx = Infinity;
-        for (const [, grp] of groups) {
-          let maxDate = 0;
-          let minIdx = Infinity;
-          for (const s of grp) {
-            const d = parseSlotDateMs(s.date);
-            if (d > maxDate) maxDate = d;
-            if (s.idx < minIdx) minIdx = s.idx;
-          }
-          if (maxDate > bestMaxDate || (maxDate === bestMaxDate && minIdx < bestMinIdx)) {
-            bestMaxDate = maxDate;
-            bestMinIdx = minIdx;
-            bestGroup = grp;
-          }
-        }
-      }
+      const bestGroup = slotsWithDate.filter((slot) => slot.dateMs === latestDateMs);
 
-      // Inside the winning airport: IATA hierarchy decides; tiebreak lower idx.
+      // Same timestamp only: IATA hierarchy decides; final tiebreak lower idx.
       let winner = bestGroup[0];
       let winnerW = IATA_WEIGHT[(winner.code || "").toUpperCase()] || 0;
       for (let i = 1; i < bestGroup.length; i++) {
         const w = IATA_WEIGHT[(bestGroup[i].code || "").toUpperCase()] || 0;
-        if (w > winnerW) { winner = bestGroup[i]; winnerW = w; }
+        if (w > winnerW || (w === winnerW && bestGroup[i].idx < winner.idx)) {
+          winner = bestGroup[i];
+          winnerW = w;
+        }
       }
       return winner;
     }

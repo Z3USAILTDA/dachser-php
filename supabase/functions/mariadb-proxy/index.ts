@@ -8131,9 +8131,9 @@ Deno.serve(async (req) => {
             VALID_IATA_CODES.has((e.codigo_evento || '').toUpperCase())
           );
           // pickTopByIATA: among the first 4 events (most recent slots from SQL),
-          // elect the one with highest IATA hierarchy weight as "top". Other events
-          // preserve the original SQL order. This guarantees the modal's first item
-          // matches the card's last_status_code without reordering the full timeline.
+          // the chronologically newest event always wins. IATA hierarchy is used
+          // only when two or more events share the exact same timestamp. Other
+          // events preserve the original SQL order so the modal stays aligned.
           const IATA_WEIGHT: Record<string, number> = {
             POD: 44, DLV: 43, NFD: 42, RCF: 41, AWD: 40, ARR: 39,
             TRM: 38, TFD: 37, DEP: 36, MAN: 35, RCS: 34, FOH: 33, BKD: 32,
@@ -8143,42 +8143,27 @@ Deno.serve(async (req) => {
           if (validEvents.length >= 2) {
             const topN = Math.min(4, validEvents.length);
             const top = validEvents.slice(0, topN);
-            // Group by airport. The airport with the most-recent event date wins.
-            // Inside the winning airport, IATA hierarchy decides.
-            const groups = new Map<string, Array<{ ev: any; idx: number }>>();
-            top.forEach((ev: any, i: number) => {
-              const key = (ev.aeroporto || `__noloc_${i}`).toString().trim().toUpperCase();
-              if (!groups.has(key)) groups.set(key, []);
-              groups.get(key)!.push({ ev, idx: i });
-            });
-            let bestGroup = top.map((ev: any, i: number) => ({ ev, idx: i }));
-            if (groups.size > 1) {
-              let bestMaxDate = -1;
-              let bestMinIdx = Infinity;
-              for (const [, grp] of groups) {
-                let maxDate = 0;
-                let minIdx = Infinity;
-                for (const { ev, idx } of grp) {
-                  const d = ev.data_hora_evento ? new Date(ev.data_hora_evento).getTime() : 0;
-                  if (!isNaN(d) && d > maxDate) maxDate = d;
-                  if (idx < minIdx) minIdx = idx;
-                }
-                if (maxDate > bestMaxDate || (maxDate === bestMaxDate && minIdx < bestMinIdx)) {
-                  bestMaxDate = maxDate;
-                  bestMinIdx = minIdx;
-                  bestGroup = grp;
+            const topWithDate = top.map((ev: any, idx: number) => ({
+              ev,
+              idx,
+              dateMs: ev.data_hora_evento ? new Date(ev.data_hora_evento).getTime() : 0,
+            }));
+            const latestDateMs = Math.max(...topWithDate.map(({ dateMs }) => (isNaN(dateMs) ? 0 : dateMs)));
+            if (latestDateMs > 0) {
+              const bestGroup = topWithDate.filter(({ dateMs }) => !isNaN(dateMs) && dateMs === latestDateMs);
+              let bestIdx = bestGroup[0].idx;
+              let bestW = IATA_WEIGHT[(bestGroup[0].ev.codigo_evento || '').toUpperCase()] || 0;
+              for (let i = 1; i < bestGroup.length; i++) {
+                const w = IATA_WEIGHT[(bestGroup[i].ev.codigo_evento || '').toUpperCase()] || 0;
+                if (w > bestW || (w === bestW && bestGroup[i].idx < bestIdx)) {
+                  bestW = w;
+                  bestIdx = bestGroup[i].idx;
                 }
               }
-            }
-            let bestIdx = bestGroup[0].idx;
-            let bestW = IATA_WEIGHT[(bestGroup[0].ev.codigo_evento || '').toUpperCase()] || 0;
-            for (let i = 1; i < bestGroup.length; i++) {
-              const w = IATA_WEIGHT[(bestGroup[i].ev.codigo_evento || '').toUpperCase()] || 0;
-              if (w > bestW) { bestW = w; bestIdx = bestGroup[i].idx; }
-            }
-            if (bestIdx > 0) {
-              const [winner] = validEvents.splice(bestIdx, 1);
-              validEvents.unshift(winner);
+              if (bestIdx > 0) {
+                const [winner] = validEvents.splice(bestIdx, 1);
+                validEvents.unshift(winner);
+              }
             }
           }
 
