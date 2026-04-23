@@ -1,82 +1,128 @@
+## Mudança de lógica e visual: "Necessita Fiscal?" no lugar de "Cobrança em nome de"
+
+### Resumo
+
+- Trocar o conceito **"Cobrança em nome de Dachser/Cliente"** por **"É necessário contabilização com o fiscal?"** (Sim/Não), que é o que de fato decide o roteamento `RASCUNHO → FISCAL` ou `RASCUNHO → FINANCEIRO`.
+- Remover toda exibição visível de "Cobrança em nome de" (formulários, coluna, filtros, badges).
+- Adicionar, em todos os formulários de voucher, um modal **"Lista de fornecedores que não necessitam de ação fiscal"** (botão ao lado do novo campo).
+- Manter compatibilidade total com a estrutura existente do MariaDB usando a coluna atual `cobranca_em_nome_de` como armazenamento interno (`DACHSER` = precisa fiscal, `CLIENTE` = não precisa). **Sem mudança de schema.**
+
+### 1. Mapeamento da regra (sem mudar DB)
+
+A coluna `t_vouchers.cobranca_em_nome_de` continua existindo, porém deixa de ser exposta como "cobrança". Passa a ser tratada na UI como flag `necessitaFiscal`:
 
 
-## Diagnóstico
+| UI nova                      | Valor armazenado em `cobranca_em_nome_de` |
+| ---------------------------- | ----------------------------------------- |
+| Sim → enviar para Fiscal     | `DACHSER`                                 |
+| Não → enviar para Financeiro | `CLIENTE`                                 |
 
-O e-mail de `AJUSTE_SOLICITADO` para `AJUSTE_FISCAL` foi para **todos** os usuários com role `FISCAL` / `GESTOR_FISCAL` (fernanda, dayane, thays, marta, etc.) em vez de ir apenas para o fiscal que processou o voucher e o enviou ao Financeiro.
 
-### Causa raiz
-
-Em `supabase/functions/send-voucher-notification/index.ts` (linhas 421-426):
+Toda a lógica de roteamento já existente em `VoucherRascunhoActions.tsx` e `VoucherOperacaoActions.tsx` continua funcionando sem alteração:
 
 ```ts
-} else if (data.toStage === "AJUSTE_FISCAL") {
-  if (responsaveis?.fiscal_email) {
-    toEmails = [responsaveis.fiscal_email];
-  } else {
-    toEmails = await getRecipientEmails(STAGE_TO_ROLES["AJUSTE_FISCAL"] || []);
-    // ↑ broadcast pra TODOS os FISCAL/GESTOR_FISCAL ativos
-  }
+} else if (voucher.cobrancaEmNomeDe === "DACHSER") {
+  proximaEtapa = "FISCAL";
+} else {
+  proximaEtapa = "FINANCEIRO";
 }
 ```
 
-`responsaveis.fiscal_email` é resolvido em `mariadb-proxy → get_voucher_responsaveis_emails` a partir de `t_vouchers.responsavel_fiscal_user_id`. Para o voucher `503d2d3d-…/20261566868`, esse campo está **nulo** (legado, escrita falha, ou voucher anterior à lógica em `VoucherFiscalActions.tsx:142`), então a função caiu no fallback — broadcast.
+### 2. Tipos (`src/types/voucher.ts`)
 
-O mesmo padrão existe para `AJUSTE_OPERACAO`, mas lá o fallback é uma lista fixa pequena, então é menos visível. A regra está incorreta: ajuste é uma devolução **direcionada** ao indivíduo que tocou a etapa, não um anúncio pra área inteira.
+- Adicionar getter de conveniência: `necessitaFiscal: boolean` derivado de `cobrancaEmNomeDe === "DACHSER"` (ou expor helper `getNecessitaFiscal(v)`).
+- Manter `CobrancaEmNomeDe` como tipo interno (não removido para não quebrar persistência).
 
-## Correção (cirúrgica)
+### 3. Formulários — substituir o select e adicionar o modal
 
-### 1. Backend — adicionar fallback baseado em log antes de fazer broadcast
+Arquivos:
 
-Em `mariadb-proxy/index.ts`, no handler `get_voucher_responsaveis_emails`, quando `fiscal_email` resolver `NULL`, buscar o `user_id` do **último log de aprovação fiscal** desse voucher e resolver o e-mail dele. Mesmo tratamento simétrico para `creator_email` (já existe via `criado_por_user_id`, sem mudança) e para futuras necessidades.
+- `src/components/esteira/CreateVoucherDialog.tsx`
+- `src/components/esteira/EditVoucherDialog.tsx`
+- `src/components/esteira/VoucherMasterForm.tsx`
 
-Pseudocódigo do enriquecimento (apenas para `fiscal_email`, sem alterar nada que já funciona):
+Mudanças em cada um:
 
-```sql
--- Se r.fiscal_email IS NULL, fallback:
-SELECT u.email, u.username
-FROM dados_dachser.t_voucher_logs l
-JOIN ai_agente.t_users_dachser u
-  ON u.id = l.user_id
-WHERE l.voucher_id = ?
-  AND l.acao IN ('APROVADO_FISCAL', 'REENVIO_APOS_AJUSTE')
-  AND l.user_id IS NOT NULL
-  AND l.user_id <> '0'
-ORDER BY l.data_hora DESC
-LIMIT 1
-```
+- Renomear o campo do form para `necessitaFiscal: "SIM" | "NAO"`.
+- Label: **"É necessário contabilização com o fiscal?"** com asterisco obrigatório.
+- Opções:
+  - `Sim — enviar para o Fiscal` → grava `cobranca_em_nome_de = "DACHSER"`
+  - `Não — enviar diretamente para o Financeiro` → grava `cobranca_em_nome_de = "CLIENTE"`
+- Ao lado do campo: botão `ⓘ Ver fornecedores que não precisam de ação fiscal` que abre um modal com a lista (componente novo abaixo).
+- No `submit`, manter a gravação em `cobranca_em_nome_de` (mapear `SIM→DACHSER`, `NAO→CLIENTE`).
+- Pré-preenchimento: ao editar, mapear `DACHSER→SIM`, `CLIENTE→NAO`.
 
-Retornar esse e-mail como `fiscal_email` quando o caminho primário for nulo. Sem mudança de schema.
+### 4. Novo componente: `FornecedoresSemFiscalDialog.tsx`
 
-### 2. Edge `send-voucher-notification` — remover o broadcast cego
+Local: `src/components/esteira/FornecedoresSemFiscalDialog.tsx`.
 
-No ramo `AJUSTE_SOLICITADO` / `toStage === "AJUSTE_FISCAL"`:
-- Se `responsaveis.fiscal_email` existir → enviar **somente** para ele (comportamento atual).
-- Se ainda assim vier nulo (caso raro: voucher legado sem nenhum log) → **não** disparar broadcast. Em vez disso:
-  - Logar warning explícito.
-  - Retornar `{ success: true, sent: 0, reason: "no_specific_fiscal_recipient" }`.
-- Resultado: nunca mais um ajuste vira "memo geral" pra área fiscal.
+- Modal (`Dialog`) com:
+  - Título: "Fornecedores que não necessitam de ação fiscal"
+  - Descrição curta
+  - Campo de busca por CNPJ ou nome
+  - Tabela: CNPJ | Razão Social
+  - Lista hardcoded em `src/data/fornecedoresSemFiscal.ts` (array de `{ cnpj, nome }`) com os ~37 itens fornecidos pelo usuário (deduplicando o LECHMAN duplicado).
+- Reutilizado pelos 3 formulários acima.
 
-Aplicar a mesma regra de "sem broadcast" para `AJUSTE_OPERACAO`: se `responsaveis.creator_email` for nulo, não cair em `OPERACAO_FIXED_EMAILS`. Hoje a lista fixa é considerada destinatário válido — mas conceitualmente também é um broadcast e deve ser usada apenas como último recurso explícito (mantenho-a pois a área de Operação opera em pool; se o usuário quiser remover também, ajusto).
+### 5. Tela principal e filtros — remover "Cobrança"
 
-### 3. Garantir que o caminho primário se popule sempre
+- `**src/components/voucher/VoucherTable.tsx**`:
+  - Remover `Select` de filtro `cobrancaEmNomeDe` (linhas 107-117).
+  - Remover `<TableHead>Cobrança</TableHead>` e a `<TableCell><Badge>{voucher.cobrancaEmNomeDe}` (linhas 142, 181-183). Coluna deixa de existir.
+  - Remover `cobrancaEmNomeDe` do tipo `FilterValues` exportado.
+- `**src/components/esteira/VoucherFilters.tsx**`:
+  - Remover bloco "Cobrança em nome de" (linhas 90-103) e o campo `cobrancaEmNomeDe` de `FilterValues` e dos defaults.
+- `**src/pages/esteira/EsteiraIndex.tsx**`:
+  - Remover do estado `filters` o campo `cobrancaEmNomeDe` (l. 569) e o quick filter `quickFilterCobranca` (l. 602, 1483-1486, 2072-2086).
+  - Remover o filtro condicional (l. 1331-1334).
+  - Manter intactos os mapeamentos de leitura (`cobrancaEmNomeDe: v.cobranca_em_nome_de || "DACHSER"`) — são necessários para o roteamento e a lógica de retorno (l. 1680-1681).
 
-Conferir se `VoucherFiscalActions.tsx` (linha 142 e 213) está realmente persistindo `responsavel_fiscal_user_id` no `update_voucher_esteira`. Se o handler do mariadb-proxy estiver ignorando o campo no UPDATE, o problema se repete pra todos os vouchers novos. Vou validar e, se necessário, adicionar o campo na lista de campos updatable do handler `update_voucher_esteira`.
+### 6. Outras telas que ainda exibem "Cobrança"
 
-## Arquivos alterados
+Esconder/remover apenas a **exibição visual** (mantendo dados):
 
-- `supabase/functions/mariadb-proxy/index.ts` — fallback por log no `get_voucher_responsaveis_emails`; verificar `update_voucher_esteira`.
-- `supabase/functions/send-voucher-notification/index.ts` — remover broadcast no ramo `AJUSTE_FISCAL`.
-- `mem://vouchers/reporting-and-notification-strategy-v2` — registrar regra: ajuste é **1:1** ao responsável da etapa anterior; nunca broadcast.
+- `src/components/voucher/VoucherDetailsView.tsx` e `src/components/esteira/VoucherDetailsView.tsx`: remover o campo "Cobrança em nome de"
+- `src/utils/voucherPdfExport.ts`: remover a coluna "Cobrança" do PDF (l. 46).
+- `src/pages/esteira/EsteiraManual.tsx`: atualizar texto do FAQ (l. 71).
+- `src/components/tabs/ReportsTab.tsx`: remover qualquer coluna de cobrança da exibição (mantendo o mapeamento interno).
 
-## Validação
+### 7. Backend — sem alteração
 
-1. Solicitar novo ajuste do Financeiro → Fiscal no voucher `503d2d3d-…`: deve ir **somente** para o fiscal que aprovou anteriormente (resolvido via fallback de log).
-2. Voucher novo: o caminho primário (`responsavel_fiscal_user_id`) já preenchido deve continuar entregando 1 destinatário.
-3. Voucher sem nenhum histórico fiscal (caso patológico): nenhum e-mail é disparado, log mostra `no_specific_fiscal_recipient`.
-4. Demais notificações (URGENCIA_*, AJUSTE_OPERACAO) não devem ser afetadas.
+- `mariadb-proxy`, `voucher-integrate-rm`, `voucher-mariadb-setup`, `voucher-mariadb-migrate`: **não tocar**. A coluna `cobranca_em_nome_de` continua existindo e sendo populada exatamente como hoje (`DACHSER`/`CLIENTE`). Isso preserva integração RM e logs históricos.
 
-## Riscos
+### 8. Memória
 
-- Sem alteração de schema.
-- Voucher muito antigo sem log nem `responsavel_fiscal_user_id` deixará de notificar. Aceitável: esse é justamente o cenário onde o broadcast hoje gera ruído.
+Atualizar `mem://vouchers/workflow-logic-and-stages-v6` adicionando:
 
+> A decisão `RASCUNHO → FISCAL` vs `RASCUNHO → FINANCEIRO` é exposta na UI como **"É necessário contabilização com o fiscal?"** (Sim/Não). Internamente persistida em `t_vouchers.cobranca_em_nome_de` como `DACHSER` (Sim) / `CLIENTE` (Não). O termo "Cobrança em nome de" foi removido da UI.
+
+### Arquivos alterados
+
+- `src/types/voucher.ts` (helper)
+- `src/data/fornecedoresSemFiscal.ts` (novo)
+- `src/components/esteira/FornecedoresSemFiscalDialog.tsx` (novo)
+- `src/components/esteira/CreateVoucherDialog.tsx`
+- `src/components/esteira/EditVoucherDialog.tsx`
+- `src/components/esteira/VoucherMasterForm.tsx`
+- `src/components/voucher/VoucherTable.tsx`
+- `src/components/esteira/VoucherFilters.tsx`
+- `src/pages/esteira/EsteiraIndex.tsx`
+- `src/components/voucher/VoucherDetailsView.tsx`
+- `src/components/esteira/VoucherDetailsView.tsx`
+- `src/utils/voucherPdfExport.ts`
+- `src/pages/esteira/EsteiraManual.tsx`
+- `src/components/tabs/ReportsTab.tsx`
+- `.lovable/memory/vouchers/workflow-logic-and-stages-v6.md`
+
+### Validação
+
+1. Criar voucher novo escolhendo "Sim" → vai para Fiscal. Escolhendo "Não" → vai direto para Financeiro.
+2. Editar voucher existente: o estado vem corretamente pré-selecionado (DACHSER→Sim, CLIENTE→Não).
+3. Tela principal `/fin/esteira`: nenhuma coluna ou filtro de "Cobrança" visível. Quick filter removido.
+4. Modal "Fornecedores que não necessitam de ação fiscal" abre nos 3 formulários, busca funciona.
+5. Voucher legado continua roteando corretamente; integração RM e relatórios seguem funcionando.
+
+### Riscos
+
+- Sem mudança de schema. Sem mudança de backend.
+- Possível confusão temporária com vouchers antigos cuja decisão foi tomada por critério diferente — mitigação: o significado funcional (`DACHSER ↔ vai pro fiscal`) já era o que acontecia na prática.
