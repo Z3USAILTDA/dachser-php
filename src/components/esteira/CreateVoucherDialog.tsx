@@ -505,7 +505,7 @@ export const CreateVoucherDialog = ({
           urgencia_tipo: urgenciaTipo,
           etapa_atual: voucherData.etapa_atual,
           status_baixa: voucherData.status_baixa,
-          status_envio_cliente: "NAO_APLICA",
+          status_envio_cliente: values.cobrancaEmNomeDe === "CLIENTE" ? "AGUARDANDO_CLIENTE" : "NAO_APLICA",
           status_financeiro: voucherData.status_financeiro,
           tipo_documento: values.tipoDocumento,
           valor: voucherData.valor,
