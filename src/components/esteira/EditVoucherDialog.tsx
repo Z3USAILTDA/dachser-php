@@ -276,7 +276,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="edit-tipoDocumento">Tipo de Documento *</Label>
               <Select
@@ -314,29 +314,6 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
                 placeholder="Ex: SP01"
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="edit-necessita-fiscal">
-                  É necessário contabilização com o fiscal? *
-                </Label>
-                <FornecedoresSemFiscalDialog />
-              </div>
-              <Select
-                value={formData.cobrancaEmNomeDe}
-                onValueChange={(value) => setFormData({ ...formData, cobrancaEmNomeDe: value as "DACHSER" | "CLIENTE" })}
-              >
-                <SelectTrigger id="edit-necessita-fiscal">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="DACHSER">Sim — enviar para o Fiscal</SelectItem>
-                  <SelectItem value="CLIENTE">Não — enviar diretamente para o Financeiro</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
 
             <div className="space-y-2">
               <Label htmlFor="edit-forma">Forma de Pagamento *</Label>
@@ -361,6 +338,27 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Label htmlFor="edit-necessita-fiscal">
+                É necessário contabilização com o fiscal? *
+              </Label>
+              <FornecedoresSemFiscalDialog />
+            </div>
+            <Select
+              value={formData.cobrancaEmNomeDe}
+              onValueChange={(value) => setFormData({ ...formData, cobrancaEmNomeDe: value as "DACHSER" | "CLIENTE" })}
+            >
+              <SelectTrigger id="edit-necessita-fiscal" className="max-w-md">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="DACHSER">Sim — enviar para o Fiscal</SelectItem>
+                <SelectItem value="CLIENTE">Não — enviar diretamente para o Financeiro</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Campo Chave PIX - aparece quando forma de pagamento é PIX */}

@@ -1167,7 +1167,7 @@ export const CreateVoucherDialog = ({
             <div className="space-y-4">
               <Label className="text-sm text-muted-foreground">Campos Adicionais (não do RM)</Label>
               
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <FormField
                   control={form.control}
                   name="tipoDocumento"
@@ -1217,32 +1217,6 @@ export const CreateVoucherDialog = ({
                 />
                 <FormField
                   control={form.control}
-                  name="cobrancaEmNomeDe"
-                  render={({ field }) => (
-                    <FormItem>
-                      <div className="flex items-center justify-between gap-2">
-                        <FormLabel className="text-sm">
-                          É necessário contabilização com o fiscal? <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FornecedoresSemFiscalDialog />
-                      </div>
-                      <Select onValueChange={field.onChange} value={field.value || undefined}>
-                        <FormControl>
-                          <SelectTrigger className="bg-background/50 border-border">
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="DACHSER">Sim — enviar para o Fiscal</SelectItem>
-                          <SelectItem value="CLIENTE">Não — enviar diretamente para o Financeiro</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
                   name="formaPagamento"
                   render={({ field }) => (
                     <FormItem>
@@ -1270,6 +1244,34 @@ export const CreateVoucherDialog = ({
                   )}
                 />
               </div>
+
+              <FormField
+                control={form.control}
+                name="cobrancaEmNomeDe"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <FormLabel className="text-sm">
+                        É necessário contabilização com o fiscal? <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FornecedoresSemFiscalDialog />
+                    </div>
+                    <Select onValueChange={field.onChange} value={field.value || undefined}>
+                      <FormControl>
+                        <SelectTrigger className="bg-background/50 border-border max-w-md">
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="DACHSER">Sim — enviar para o Fiscal</SelectItem>
+                        <SelectItem value="CLIENTE">Não — enviar diretamente para o Financeiro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               
               {/* Campo Chave PIX - aparece quando forma de pagamento é PIX */}
               {form.watch("formaPagamento") === "PIX" && (
