@@ -8,6 +8,8 @@ Tracking aéreo (/air/tracking-aereo): deduplicação, sub-classificação ARR, 
 
 ## Detecção de Transporte Rodoviário (RFS)
 
+### Padrões aceitos
+
 Detecção restrita a sinais inequívocos em campos estruturados de voo:
 
 1. **Sufixo `-T` explícito**: `\b[A-Z]{2,3}\s?\d{2,5}-T\b` (ex.: `LA 5462-T`)
@@ -15,9 +17,11 @@ Detecção restrita a sinais inequívocos em campos estruturados de voo:
 
 **Descontinuado**: o sufixo solo `X` ou `D` no fim do número de voo (`\d{2,5}[XD]`) foi removido — gerava falsos positivos quando descrições de timeline continham palavras como `DEP`, `DLV`, `DFW`, `MAO`, `Departed`.
 
-**Sem fallback de `JSON.stringify(timeline)`**: o scan cego sobre o JSON serializado da timeline foi removido. Detecção apenas em campos estruturados:
-- `LAST_FLIGHT` / `last_flight`
-- Campos `flight`/`Flight`/`voo`/`flight_number` por evento
-- Campos texto `status`/`description`/`details` por evento (via `extractFlightsFromText` que extrai apenas padrões inequívocos)
+### Escopo da detecção (regra crítica)
 
-Aplicado em `supabase/functions/fetch-tracking-aereo/index.ts` e `supabase/functions/fetch-status-aereo/index.ts`.
+A classificação RFS avalia **somente o evento eleito como "último evento" do card** — nunca o histórico completo. Sufixo `-T` ou `X/D` em eventos antigos da timeline **não** classifica o processo como rodoviário. Campos `LAST_FLIGHT` / `ws.last_flight` e `desc0..desc3` **não** são usados como fallback (podem estar desatualizados ou refletir legs históricas).
+
+- **`fetch-tracking-aereo`**: escopo = slot vencedor de `pickTopByIATA` (`top.idx`). Testa `top.desc` e, se a timeline contiver o evento correspondente (match por `date` ou `description`), seus campos `flight`/`Flight`/`voo`/`flight_number` e textos `status`/`description`/`details`/`title`/`details`.
+- **`fetch-status-aereo`**: escopo = `sorted[0]` da timeline ordenada por data DESC (mesmo evento usado para resolver `finalStatus`). Mesmos campos estruturados acima.
+
+Em ambos: detecção via `hasGroundFlightPattern` (regex direto) e `extractFlightsFromText` (extração de padrões inequívocos). Sem `JSON.stringify(timeline)`, sem varredura global, sem fallback em campos SQL agregados.

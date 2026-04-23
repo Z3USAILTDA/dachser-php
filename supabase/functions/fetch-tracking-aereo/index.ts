@@ -818,51 +818,59 @@ serve(async (req) => {
         while ((m = slashXDPattern.exec(text)) !== null) flights.push(m[1]);
         return flights;
       };
+      // RFS detection scoped EXCLUSIVELY to the elected slot (top.idx via pickTopByIATA).
+      // Sufixo -T ou X/D em eventos antigos da timeline NÃO classifica o processo como
+      // rodoviário. Campos LAST_FLIGHT e desc0..desc3 não são usados como fallback.
       let isGroundTransport = false;
-      const lastFlightRaw = String((row as any).LAST_FLIGHT || (row as any).last_flight || "");
-      // Testa o valor bruto E também aplica extractFlightsFromText (caso venha com texto extra)
-      if (isGroundFlight(lastFlightRaw)) isGroundTransport = true;
-      if (!isGroundTransport && lastFlightRaw) {
-        const extracted = extractFlightsFromText(lastFlightRaw);
-        if (extracted.some(isGroundFlight)) isGroundTransport = true;
+      const electedDesc = String(top.desc || (row as any)[`desc${top.idx}`] || "");
+      if (electedDesc) {
+        if (hasGroundFlightPattern(electedDesc)) {
+          isGroundTransport = true;
+        } else {
+          const flights = extractFlightsFromText(electedDesc);
+          if (flights.some(isGroundFlight)) isGroundTransport = true;
+        }
       }
+      // Também avalia campos estruturados do evento eleito na timeline (quando existir).
       if (!isGroundTransport && timeline?.length) {
-        const flightFields = ['Flight', 'flight', 'voo', 'Voo', 'flight_number', 'flightNumber', 'numero_voo', 'last_flight', 'LAST_FLIGHT'];
-        for (const ev of timeline) {
+        const electedEvt = (() => {
+          // Match the timeline event whose date/desc corresponds to the elected slot.
+          if (top.date) {
+            const found = timeline.find((ev: any) =>
+              String(ev?.date || "").trim() === String(top.date).trim()
+            );
+            if (found) return found;
+          }
+          if (top.desc) {
+            const needle = String(top.desc).trim();
+            const found = timeline.find((ev: any) =>
+              String(ev?.description || "").trim() === needle
+            );
+            if (found) return found;
+          }
+          return null;
+        })();
+        if (electedEvt) {
+          const flightFields = ['Flight', 'flight', 'voo', 'Voo', 'flight_number', 'flightNumber', 'numero_voo'];
           for (const field of flightFields) {
-            const v = (ev as any)[field];
+            const v = (electedEvt as any)[field];
             if (!v) continue;
             const s = String(v);
             if (isGroundFlight(s)) { isGroundTransport = true; break; }
             const extracted = extractFlightsFromText(s);
             if (extracted.some(isGroundFlight)) { isGroundTransport = true; break; }
           }
-          if (isGroundTransport) break;
-          for (const textField of ['status', 'Status', 'Description', 'description', 'details', 'title', 'event_description', 'location', 'evento', 'descricao', 'remarks']) {
-            const text = (ev as any)[textField];
-            if (!text) continue;
-            const flights = extractFlightsFromText(String(text));
-            if (flights.some(isGroundFlight)) { isGroundTransport = true; break; }
-          }
-          if (isGroundTransport) break;
-        }
-      }
-
-      // Fallback: scan SQL-aggregated description fields (desc0..desc3)
-      if (!isGroundTransport) {
-        for (const f of ['desc0','desc1','desc2','desc3']) {
-          const txt = String((row as any)[f] || '');
-          if (!txt) continue;
-          const flights = extractFlightsFromText(txt);
-          if (flights.some(isGroundFlight) || hasGroundFlightPattern(txt)) {
-            isGroundTransport = true;
-            break;
+          if (!isGroundTransport) {
+            for (const textField of ['status', 'Status', 'Description', 'description', 'details', 'title', 'event_description', 'evento', 'descricao', 'remarks']) {
+              const text = (electedEvt as any)[textField];
+              if (!text) continue;
+              if (hasGroundFlightPattern(String(text))) { isGroundTransport = true; break; }
+              const flights = extractFlightsFromText(String(text));
+              if (flights.some(isGroundFlight)) { isGroundTransport = true; break; }
+            }
           }
         }
       }
-
-      // Detecção restrita a campos estruturados de voo — sem scan cego do JSON serializado
-      // (evita falsos positivos em descrições, status codes e nomes de cidades).
 
 
       const normalized = {
