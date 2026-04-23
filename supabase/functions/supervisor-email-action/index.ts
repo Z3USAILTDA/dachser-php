@@ -88,9 +88,24 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     if (action === "approve") {
+      // Buscar voucher para decidir destino conforme "Necessita Fiscal?"
+      let cobrancaEmNomeDe: string | null = null;
+      let voucherDataCache: any = null;
+      try {
+        const voucherData = await callProxy("get_voucher_for_rm", { voucher_id });
+        if (voucherData?.success && voucherData?.data) {
+          voucherDataCache = voucherData.data;
+          cobrancaEmNomeDe = voucherData.data.cobranca_em_nome_de || null;
+        }
+      } catch (e) {
+        console.log("Could not fetch voucher to decide destination:", e);
+      }
+
+      const proximaEtapa = cobrancaEmNomeDe === "DACHSER" ? "FISCAL" : "FINANCEIRO";
+
       await callProxy("update_voucher_esteira", {
         voucher_id,
-        etapa_atual: "FINANCEIRO",
+        etapa_atual: proximaEtapa,
         status_financeiro: "APROVADO",
         aprovado_por_user_id: "0",
         responsavel_supervisor_user_id: "0",
@@ -101,30 +116,31 @@ const handler = async (req: Request): Promise<Response> => {
         user_id: "0",
         user_name: "Supervisor (via e-mail)",
         acao: "APROVADO_SUPERVISOR",
-        detalhe: "Voucher/SPO urgente aprovado via link do e-mail",
+        detalhe: `Voucher/SPO urgente aprovado via link do e-mail — encaminhado para ${proximaEtapa}`,
       });
 
-      // Inserir na t_dados_rm ao entrar no FINANCEIRO
-      try {
-        const voucherData = await callProxy("get_voucher_for_rm", { voucher_id });
-        if (voucherData?.success && voucherData?.data) {
-          const v = voucherData.data;
-          await callProxy("insert_dados_rm", {
-            id_rm: v.id_rm || null,
-            numero_spo: v.numero_spo,
-            voucher_boleto: ["BOLETO", "DARF", "GPS"].includes(v.forma_pagamento || "")
-              ? (v.linha_digitavel || v.codigo_barras || null)
-              : null,
-            chave_pix: v.chave_pix || null,
-            pix_tipo_chave: null,
-            forma_pag: v.forma_pagamento,
-            fornecedor: v.fornecedor,
-            cnpj_fornecedor: v.cnpj_fornecedor || null,
-            tipo_exec: v.tipo_execucao_pagamento || null,
-          });
+      // Inserir na t_dados_rm somente se for direto para FINANCEIRO
+      if (proximaEtapa === "FINANCEIRO") {
+        try {
+          const v = voucherDataCache;
+          if (v) {
+            await callProxy("insert_dados_rm", {
+              id_rm: v.id_rm || null,
+              numero_spo: v.numero_spo,
+              voucher_boleto: ["BOLETO", "DARF", "GPS"].includes(v.forma_pagamento || "")
+                ? (v.linha_digitavel || v.codigo_barras || null)
+                : null,
+              chave_pix: v.chave_pix || null,
+              pix_tipo_chave: null,
+              forma_pag: v.forma_pagamento,
+              fornecedor: v.fornecedor,
+              cnpj_fornecedor: v.cnpj_fornecedor || null,
+              tipo_exec: v.tipo_execucao_pagamento || null,
+            });
+          }
+        } catch (e) {
+          console.log("Insert t_dados_rm from email action skipped:", e);
         }
-      } catch (e) {
-        console.log("Insert t_dados_rm from email action skipped:", e);
       }
 
       // Confirmation email to creator + supervisor (cc) — urgência aprovada
@@ -140,7 +156,7 @@ const handler = async (req: Request): Promise<Response> => {
             type: "URGENCIA_APROVADA",
             voucherId: voucher_id,
             voucherNumber: voucherNumber,
-            toStage: "FINANCEIRO",
+            toStage: proximaEtapa,
             fromStage: "SUPERVISOR",
             senderName: "Supervisor (via e-mail)",
           }),
@@ -150,7 +166,8 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
       await callProxy("mark_supervisor_token_used", { token });
-      return jsonResponse({ status: "approved", message: "O voucher foi aprovado com sucesso e enviado para o Financeiro." });
+      const destinoLabel = proximaEtapa === "FISCAL" ? "Fiscal" : "Financeiro";
+      return jsonResponse({ status: "approved", message: `O voucher foi aprovado com sucesso e enviado para o ${destinoLabel}.` });
     } else {
       // For GET on reject, just validate the token
       if (req.method === "GET") {
