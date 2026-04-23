@@ -428,6 +428,7 @@ const TrackingAereo = () => {
             is_critical: !!item.pieces_discrepancy || !!item.has_dis_event || 
               ["NIL","NIF","OFLD"].includes(getStatusCode(lastEvent).toUpperCase()),
             is_invalid: false,
+            is_ground_transport: !!item.is_ground_transport,
           } as AWBData;
         });
 
