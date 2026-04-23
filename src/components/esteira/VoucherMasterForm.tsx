@@ -495,54 +495,53 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="formaPagamento"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Forma de Pagamento</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="bg-background/50 border-border">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="BOLETO">Boleto</SelectItem>
-                        <SelectItem value="PIX">PIX</SelectItem>
-                        <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
-                        <SelectItem value="DARF">DARF</SelectItem>
-                        <SelectItem value="GPS">GPS</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="cobrancaEmNomeDe"
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="flex items-center justify-between gap-2">
-                      <FormLabel>É necessário contabilização com o fiscal?</FormLabel>
-                      <FornecedoresSemFiscalDialog />
-                    </div>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="bg-background/50 border-border">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="DACHSER">Sim — enviar para o Fiscal</SelectItem>
-                        <SelectItem value="CLIENTE">Não — enviar diretamente para o Financeiro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )}
-              />
-            </div>
+            <FormField
+              control={form.control}
+              name="formaPagamento"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Forma de Pagamento</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger className="bg-background/50 border-border max-w-md">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="BOLETO">Boleto</SelectItem>
+                      <SelectItem value="PIX">PIX</SelectItem>
+                      <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
+                      <SelectItem value="DARF">DARF</SelectItem>
+                      <SelectItem value="GPS">GPS</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="cobrancaEmNomeDe"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <FormLabel>É necessário contabilização com o fiscal?</FormLabel>
+                    <FornecedoresSemFiscalDialog />
+                  </div>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger className="bg-background/50 border-border max-w-md">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="DACHSER">Sim — enviar para o Fiscal</SelectItem>
+                      <SelectItem value="CLIENTE">Não — enviar diretamente para o Financeiro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
