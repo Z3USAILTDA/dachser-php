@@ -682,7 +682,27 @@ export const CreateVoucherDialog = ({
         },
       });
 
-      // Email notification for SUPERVISOR urgency only
+      // Se o voucher entra direto no FINANCEIRO, inserir em t_dados_rm
+      if (!isDraft && etapaAtual === "FINANCEIRO") {
+        try {
+          const { insertDadosRmOnFinanceiro } = await import("@/utils/voucherRmSync");
+          const { isBoleto } = await import("@/types/voucher");
+          await insertDadosRmOnFinanceiro({
+            id: voucherId,
+            idRm: idRM || undefined,
+            numeroSPO: voucherData.numero_spo,
+            formaPagamento: values.formaPagamento as any,
+            linhaDigitavel: undefined,
+            codigoBarras: undefined,
+            chavePix: values.formaPagamento === "PIX" ? (values.chavePix || undefined) : undefined,
+            fornecedor: values.fornecedor || "",
+            cnpjFornecedor: values.cnpjFornecedor || undefined,
+            tipoExecucaoPagamento: "A_DEFINIR",
+          } as any);
+        } catch (rmErr) {
+          console.error("[CreateVoucherDialog] Erro ao inserir em t_dados_rm:", rmErr);
+        }
+      }
       if (!isDraft && etapaAtual === "SUPERVISOR") {
         try {
           const urgencyBody = {
