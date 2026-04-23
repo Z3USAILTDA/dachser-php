@@ -103,7 +103,6 @@ export const VoucherTable = ({
           </SelectContent>
         </Select>
 
-        </Select>
 
         <Select value={filters.urgente} onValueChange={(v) => onFilterChange({ ...filters, urgente: v })}>
           <SelectTrigger className="w-[140px] bg-background/50">
