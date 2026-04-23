@@ -800,9 +800,9 @@ serve(async (req) => {
       const hasGroundFlightPattern = (val: string): boolean => {
         const clean = normalizeGroundCandidate(val);
         if (!clean) return false;
-        if (/\b[A-Z0-9]{2,4}\s?\d{2,5}-T\b/i.test(clean)) return true;
-        if (/\b[A-Z0-9]{2,4}\s?\d{2,5}\s*X\s*\/\s*D\b/i.test(clean)) return true;
-        if (/\b[A-Z0-9]{2,4}\s?\d{2,5}[XD]\b/i.test(clean)) return true;
+        // Apenas sinais inequívocos de RFS: sufixo -T explícito ou notação literal X/D
+        if (/\b[A-Z]{2,3}\s?\d{2,5}-T\b/.test(clean)) return true;
+        if (/\b[A-Z]{2,3}\s?\d{2,5}\s*X\s*\/\s*D\b/.test(clean)) return true;
         return false;
       };
       const isGroundFlight = (val: string): boolean => hasGroundFlightPattern(val);
