@@ -447,12 +447,15 @@ export const CreateVoucherDialog = ({
           ? "URGENTE_AUTOMATICO" 
           : "NORMAL";
 
-      // Determine etapa_atual based on isDraft and urgency
+      // Determine etapa_atual based on isDraft, urgency e contabilização fiscal
+      // Regra: DACHSER (Sim) → FISCAL | CLIENTE (Não) → FINANCEIRO | URGENTE_REAL → SUPERVISOR
       let etapaAtual: string;
       if (isDraft) {
         etapaAtual = "RASCUNHO";
       } else if (urgenciaTipo === "URGENTE_REAL") {
         etapaAtual = "SUPERVISOR";
+      } else if (values.cobrancaEmNomeDe === "CLIENTE") {
+        etapaAtual = "FINANCEIRO";
       } else {
         etapaAtual = "FISCAL";
       }
@@ -502,7 +505,7 @@ export const CreateVoucherDialog = ({
           urgencia_tipo: urgenciaTipo,
           etapa_atual: voucherData.etapa_atual,
           status_baixa: voucherData.status_baixa,
-          status_envio_cliente: "NAO_APLICA",
+          status_envio_cliente: values.cobrancaEmNomeDe === "CLIENTE" ? "AGUARDANDO_CLIENTE" : "NAO_APLICA",
           status_financeiro: voucherData.status_financeiro,
           tipo_documento: values.tipoDocumento,
           valor: voucherData.valor,
@@ -678,6 +681,28 @@ export const CreateVoucherDialog = ({
           detalhe: `Voucher criado via ${entryMode === "rm" ? "RM" : "entrada manual"}${idRM ? ` (id_rm: ${idRM})` : ""}`,
         },
       });
+
+      // Se o voucher entra direto no FINANCEIRO, inserir em t_dados_rm
+      if (!isDraft && etapaAtual === "FINANCEIRO") {
+        try {
+          const { insertDadosRmOnFinanceiro } = await import("@/utils/voucherRmSync");
+          const { isBoleto } = await import("@/types/voucher");
+          await insertDadosRmOnFinanceiro({
+            id: voucherId,
+            idRm: idRM || undefined,
+            numeroSPO: voucherData.numero_spo,
+            formaPagamento: values.formaPagamento as any,
+            linhaDigitavel: undefined,
+            codigoBarras: undefined,
+            chavePix: values.formaPagamento === "PIX" ? (values.chavePix || undefined) : undefined,
+            fornecedor: values.fornecedor || "",
+            cnpjFornecedor: values.cnpjFornecedor || undefined,
+            tipoExecucaoPagamento: "A_DEFINIR",
+          } as any);
+        } catch (rmErr) {
+          console.error("[CreateVoucherDialog] Erro ao inserir em t_dados_rm:", rmErr);
+        }
+      }
 
       // Email notification for SUPERVISOR urgency only
       if (!isDraft && etapaAtual === "SUPERVISOR") {
