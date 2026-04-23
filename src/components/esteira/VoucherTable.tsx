@@ -26,7 +26,6 @@ const PAGE_SIZE = 10;
 export interface FilterValues {
   search: string;
   etapa: string;
-  cobrancaEmNomeDe: string;
   formaPagamento: string;
   urgente: string;
   statusBaixa: string;
