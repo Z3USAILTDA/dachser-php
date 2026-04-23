@@ -319,7 +319,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="edit-cobranca">
+                <Label htmlFor="edit-necessita-fiscal">
                   É necessário contabilização com o fiscal? *
                 </Label>
                 <FornecedoresSemFiscalDialog />
@@ -328,7 +328,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
                 value={formData.cobrancaEmNomeDe}
                 onValueChange={(value) => setFormData({ ...formData, cobrancaEmNomeDe: value as "DACHSER" | "CLIENTE" })}
               >
-                <SelectTrigger id="edit-cobranca">
+                <SelectTrigger id="edit-necessita-fiscal">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
