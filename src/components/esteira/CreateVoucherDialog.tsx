@@ -703,6 +703,8 @@ export const CreateVoucherDialog = ({
           console.error("[CreateVoucherDialog] Erro ao inserir em t_dados_rm:", rmErr);
         }
       }
+
+      // Email notification for SUPERVISOR urgency only
       if (!isDraft && etapaAtual === "SUPERVISOR") {
         try {
           const urgencyBody = {
