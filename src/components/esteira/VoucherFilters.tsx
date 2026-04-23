@@ -12,7 +12,6 @@ interface VoucherFiltersProps {
 export interface FilterValues {
   search: string;
   etapa: string;
-  cobrancaEmNomeDe: string;
   formaPagamento: string;
   urgente: string;
   vencimentoInicio: string;
@@ -24,7 +23,6 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
   const [filters, setFilters] = React.useState<FilterValues>({
     search: "",
     etapa: "all",
-    cobrancaEmNomeDe: "all",
     formaPagamento: "all",
     urgente: "all",
     vencimentoInicio: "",
@@ -42,7 +40,6 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
     const clearedFilters: FilterValues = {
       search: "",
       etapa: "all",
-      cobrancaEmNomeDe: "all",
       formaPagamento: "all",
       urgente: "all",
       vencimentoInicio: "",

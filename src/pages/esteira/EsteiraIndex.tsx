@@ -566,7 +566,6 @@ const EsteiraIndex = () => {
   const [filters, setFilters] = useState<FilterValues>({
     search: "",
     etapa: "all",
-    cobrancaEmNomeDe: "all",
     formaPagamento: "all",
     urgente: "all",
     statusBaixa: "all",
@@ -599,7 +598,6 @@ const EsteiraIndex = () => {
 
   // Quick filters
   const [quickFilterFornecedor, setQuickFilterFornecedor] = useState<string>("all");
-  const [quickFilterCobranca, setQuickFilterCobranca] = useState<string>("all");
   const [quickFilterMesEmissao, setQuickFilterMesEmissao] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -1328,10 +1326,6 @@ const EsteiraIndex = () => {
         }
       }
 
-      // Filtro de cobrança
-      if (filters.cobrancaEmNomeDe !== "all" && voucher.cobrancaEmNomeDe !== filters.cobrancaEmNomeDe) {
-        return false;
-      }
 
       // Filtro de forma de pagamento
       if (filters.formaPagamento !== "all" && voucher.formaPagamento !== filters.formaPagamento) {
@@ -1480,10 +1474,7 @@ const EsteiraIndex = () => {
         return false;
       }
 
-      // Quick filter: Cobrança
-      if (quickFilterCobranca !== "all" && voucher.cobrancaEmNomeDe !== quickFilterCobranca) {
-        return false;
-      }
+
 
       // Drill-down filter from metric cards
       if (drillDownFilter === "ativos") {
