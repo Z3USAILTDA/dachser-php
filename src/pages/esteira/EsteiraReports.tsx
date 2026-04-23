@@ -261,22 +261,6 @@ export default function EsteiraReports() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label>Cobrança em Nome de</Label>
-                <Select
-                  value={filters.cobrancaEmNomeDe}
-                  onValueChange={(value) => setFilters({ ...filters, cobrancaEmNomeDe: value })}
-                >
-                  <SelectTrigger className="bg-input/50 border-border/50">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-card border-border/50">
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="DACHSER">Dachser</SelectItem>
-                    <SelectItem value="CLIENTE">Cliente</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
 
               <div className="space-y-2">
                 <Label>Status Integração RM</Label>
