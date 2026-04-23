@@ -570,31 +570,6 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       <TableCell className="font-mono text-xs">
                         {voucher.processoId || "-"}
                       </TableCell>
-                      <TableCell>
-                        <Tooltip>
-                          <TooltipTrigger onClick={(e) => e.stopPropagation()}>
-                            <Badge 
-                              variant="outline" 
-                              className={cn(
-                                "gap-1",
-                                voucher.cobrancaEmNomeDe === "DACHSER" 
-                                  ? "bg-primary/10 text-primary border-primary/30" 
-                                  : "bg-blue-500/10 text-blue-500 border-blue-500/30"
-                              )}
-                            >
-                              {voucher.cobrancaEmNomeDe === "DACHSER" ? (
-                                <Building2 className="h-3 w-3" />
-                              ) : (
-                                <User className="h-3 w-3" />
-                              )}
-                              {voucher.cobrancaEmNomeDe}
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            Cobrança em nome de: {voucher.cobrancaEmNomeDe === "DACHSER" ? "Dachser" : "Cliente"}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TableCell>
                       <TableCell className="text-sm max-w-[150px] truncate">{voucher.fornecedor || "-"}</TableCell>
                       <TableCell className="text-sm font-medium">
                         {voucher.valor ? `${voucher.moeda} ${voucher.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : "-"}
