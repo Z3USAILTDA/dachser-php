@@ -43,6 +43,7 @@ export const exportVouchersToPDF = (data: Voucher[]) => {
     v.fornecedor || "-",
     formatCurrency(v.valor, v.moeda),
     format(new Date(v.vencimento), "dd/MM/yyyy", { locale: ptBR }),
+    v.cobrancaEmNomeDe === "DACHSER" ? "Sim" : "Não",
     v.tipoExecucaoPagamento || "-",
     v.urgente ? "Sim" : "Não",
     ETAPA_LABELS[v.etapaAtual as keyof typeof ETAPA_LABELS] || v.etapaAtual,
