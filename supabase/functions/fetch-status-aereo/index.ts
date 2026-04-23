@@ -1299,40 +1299,41 @@ serve(async (req) => {
             while ((m = slashXDPattern.exec(text)) !== null) flights.push(m[1]);
             return flights;
           }
+          // RFS detection scoped EXCLUSIVELY to the elected event (most recent by date),
+          // mirroring the rule in fetch-tracking-aereo. Sufixo em legs antigos NÃO conta.
+          // ws.last_flight não é usado como fallback (pode estar desatualizado vs. timeline).
           try {
-            // Check ws.last_flight first
-            if (ws.last_flight && isGroundFlight(String(ws.last_flight))) {
-              console.log(`[ground] ${awb}: DETECTED via ws.last_flight="${ws.last_flight}"`);
-              return true;
+            if (!timelineStr) return false;
+            const tlEvents = JSON.parse(timelineStr);
+            if (!Array.isArray(tlEvents) || tlEvents.length === 0) return false;
+            const sortedEvts = [...tlEvents].sort((a, b) => {
+              const tsA = parseEventTimestamp(getEventDateStr(a));
+              const tsB = parseEventTimestamp(getEventDateStr(b));
+              return tsB - tsA;
+            });
+            const electedEvt = sortedEvts[0];
+            if (!electedEvt) return false;
+            const flightFields = ['Flight', 'flight', 'voo', 'Voo', 'flight_number', 'flightNumber', 'numero_voo'];
+            for (const field of flightFields) {
+              if (electedEvt[field] && isGroundFlight(String(electedEvt[field]))) {
+                console.log(`[ground] ${awb}: DETECTED via elected event field "${field}"="${electedEvt[field]}"`);
+                return true;
+              }
             }
-            if (timelineStr) {
-              const tlEvents = JSON.parse(timelineStr);
-              if (Array.isArray(tlEvents)) {
-                const flightFields = ['Flight', 'flight', 'voo', 'Voo', 'flight_number', 'flightNumber', 'numero_voo'];
-                for (const ev of tlEvents) {
-                  // Check dedicated flight fields
-                  for (const field of flightFields) {
-                    if (ev[field] && isGroundFlight(String(ev[field]))) {
-                      console.log(`[ground] ${awb}: DETECTED via field "${field}"="${ev[field]}"`);
-                      return true;
-                    }
-                  }
-                  // Extract flight codes from ALL text fields (status, Description, details, title)
-                  for (const textField of ['status', 'Status', 'Description', 'description', 'details', 'title', 'event_description', 'location', 'evento', 'descricao', 'remarks']) {
-                    const text = ev[textField];
-                    if (!text) continue;
-                    const flights = extractFlightsFromText(String(text));
-                    for (const f of flights) {
-                      if (isGroundFlight(f)) {
-                        console.log(`[ground] ${awb}: DETECTED flight "${f}" in "${textField}": "${String(text).substring(0, 100)}"`);
-                        return true;
-                      }
-                    }
-                  }
+            for (const textField of ['status', 'Status', 'Description', 'description', 'details', 'title', 'event_description', 'evento', 'descricao', 'remarks']) {
+              const text = electedEvt[textField];
+              if (!text) continue;
+              if (isGroundFlight(String(text))) {
+                console.log(`[ground] ${awb}: DETECTED in elected event "${textField}": "${String(text).substring(0, 100)}"`);
+                return true;
+              }
+              const flights = extractFlightsFromText(String(text));
+              for (const f of flights) {
+                if (isGroundFlight(f)) {
+                  console.log(`[ground] ${awb}: DETECTED flight "${f}" in elected event "${textField}": "${String(text).substring(0, 100)}"`);
+                  return true;
                 }
               }
-              // Sem fallback de scan cego no JSON serializado — gera falsos positivos.
-
             }
           } catch (_) {}
           return false;
