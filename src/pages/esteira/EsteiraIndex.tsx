@@ -566,7 +566,6 @@ const EsteiraIndex = () => {
   const [filters, setFilters] = useState<FilterValues>({
     search: "",
     etapa: "all",
-    cobrancaEmNomeDe: "all",
     formaPagamento: "all",
     urgente: "all",
     statusBaixa: "all",
@@ -599,7 +598,6 @@ const EsteiraIndex = () => {
 
   // Quick filters
   const [quickFilterFornecedor, setQuickFilterFornecedor] = useState<string>("all");
-  const [quickFilterCobranca, setQuickFilterCobranca] = useState<string>("all");
   const [quickFilterMesEmissao, setQuickFilterMesEmissao] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -1328,10 +1326,6 @@ const EsteiraIndex = () => {
         }
       }
 
-      // Filtro de cobrança
-      if (filters.cobrancaEmNomeDe !== "all" && voucher.cobrancaEmNomeDe !== filters.cobrancaEmNomeDe) {
-        return false;
-      }
 
       // Filtro de forma de pagamento
       if (filters.formaPagamento !== "all" && voucher.formaPagamento !== filters.formaPagamento) {
@@ -1480,10 +1474,7 @@ const EsteiraIndex = () => {
         return false;
       }
 
-      // Quick filter: Cobrança
-      if (quickFilterCobranca !== "all" && voucher.cobrancaEmNomeDe !== quickFilterCobranca) {
-        return false;
-      }
+
 
       // Drill-down filter from metric cards
       if (drillDownFilter === "ativos") {
@@ -2069,19 +2060,7 @@ const EsteiraIndex = () => {
                     </Select>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-[#888888]" />
-                    <Select value={quickFilterCobranca} onValueChange={setQuickFilterCobranca}>
-                      <SelectTrigger className="w-[160px] bg-[#0a0b10] border-white/10 rounded-full">
-                        <SelectValue placeholder="Cobrança" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todas Cobranças</SelectItem>
-                        <SelectItem value="DACHSER">DACHSER</SelectItem>
-                        <SelectItem value="CLIENTE">CLIENTE</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+
 
                   {/* Forma de Pagamento */}
                   <div className="flex items-center gap-2">
@@ -2147,9 +2126,8 @@ const EsteiraIndex = () => {
                   </div>
 
                   {/* Clear All Filters */}
-                  {(quickFilterFornecedor !== "all" || quickFilterCobranca !== "all" || filters.formaPagamento !== "all" || filters.origemCriacao !== "all" || filters.vencimentoFim !== "" || filters.isMaster !== "all" || filters.search !== "" || filters.etapa !== "all" || filters.processo !== "" || filters.fornecedor !== "" || filters.faixaValor !== "all" || filters.slaStatus !== "all" || filters.vencimentoInicio !== "" || filters.urgente !== "all" || filters.statusComprovante !== "all") && <button onClick={() => {
+                  {(quickFilterFornecedor !== "all" || filters.formaPagamento !== "all" || filters.origemCriacao !== "all" || filters.vencimentoFim !== "" || filters.isMaster !== "all" || filters.search !== "" || filters.etapa !== "all" || filters.processo !== "" || filters.fornecedor !== "" || filters.faixaValor !== "all" || filters.slaStatus !== "all" || filters.vencimentoInicio !== "" || filters.urgente !== "all" || filters.statusComprovante !== "all") && <button onClick={() => {
                 setQuickFilterFornecedor("all");
-                setQuickFilterCobranca("all");
                 {
                   const d = new Date();
                   setQuickFilterMesEmissao(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
@@ -2157,7 +2135,6 @@ const EsteiraIndex = () => {
                 setFilters({
                   search: "",
                   etapa: "all",
-                  cobrancaEmNomeDe: "all",
                   formaPagamento: "all",
                   urgente: "all",
                   statusBaixa: "all",

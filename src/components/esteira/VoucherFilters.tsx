@@ -12,7 +12,6 @@ interface VoucherFiltersProps {
 export interface FilterValues {
   search: string;
   etapa: string;
-  cobrancaEmNomeDe: string;
   formaPagamento: string;
   urgente: string;
   vencimentoInicio: string;
@@ -24,7 +23,6 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
   const [filters, setFilters] = React.useState<FilterValues>({
     search: "",
     etapa: "all",
-    cobrancaEmNomeDe: "all",
     formaPagamento: "all",
     urgente: "all",
     vencimentoInicio: "",
@@ -42,7 +40,6 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
     const clearedFilters: FilterValues = {
       search: "",
       etapa: "all",
-      cobrancaEmNomeDe: "all",
       formaPagamento: "all",
       urgente: "all",
       vencimentoInicio: "",
@@ -87,20 +84,6 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
               <SelectItem value="CONCLUIDO">Concluído</SelectItem>
               <SelectItem value="AJUSTE_OPERACAO">Ajuste Voucher/SPO</SelectItem>
               <SelectItem value="AJUSTE_FISCAL">Ajuste Fiscal</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div>
-          <Label>Cobrança em nome de</Label>
-          <Select value={filters.cobrancaEmNomeDe} onValueChange={(v) => handleFilterChange("cobrancaEmNomeDe", v)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="DACHSER">Dachser</SelectItem>
-              <SelectItem value="CLIENTE">Cliente</SelectItem>
             </SelectContent>
           </Select>
         </div>

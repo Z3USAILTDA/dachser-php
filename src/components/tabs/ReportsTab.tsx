@@ -19,7 +19,6 @@ import { exportVouchersToPDF } from "@/utils/voucherPdfExport";
 interface ReportFilters {
   etapa: string;
   statusBaixa: string;
-  cobrancaEmNomeDe: string;
   statusIntegracaoRm: string;
   tipoExecucaoPagamento: string;
   dataInicio?: Date;
@@ -33,7 +32,6 @@ export function ReportsTab() {
   const [filters, setFilters] = useState<ReportFilters>({
     etapa: "all",
     statusBaixa: "all",
-    cobrancaEmNomeDe: "all",
     statusIntegracaoRm: "all",
     tipoExecucaoPagamento: "all",
   });
@@ -48,7 +46,6 @@ export function ReportsTab() {
           action: 'export_vouchers_report',
           etapa: filters.etapa,
           statusBaixa: filters.statusBaixa,
-          cobrancaEmNomeDe: filters.cobrancaEmNomeDe,
           statusIntegracaoRm: filters.statusIntegracaoRm,
           tipoExecucaoPagamento: filters.tipoExecucaoPagamento,
           dataInicio: filters.dataInicio ? format(filters.dataInicio, 'yyyy-MM-dd') : undefined,
@@ -253,22 +250,7 @@ export function ReportsTab() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>Cobrança em Nome de</Label>
-              <Select
-                value={filters.cobrancaEmNomeDe}
-                onValueChange={(value) => setFilters({ ...filters, cobrancaEmNomeDe: value })}
-              >
-                <SelectTrigger className="bg-input/50 border-border/50">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-card border-border/50">
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="DACHSER">Dachser</SelectItem>
-                  <SelectItem value="CLIENTE">Cliente</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+
 
             <div className="space-y-2">
               <Label>Status Integração RM</Label>
@@ -390,7 +372,6 @@ export function ReportsTab() {
               onClick={() => setFilters({
                 etapa: "all",
                 statusBaixa: "all",
-                cobrancaEmNomeDe: "all",
                 statusIntegracaoRm: "all",
                 tipoExecucaoPagamento: "all",
                 dataInicio: undefined,

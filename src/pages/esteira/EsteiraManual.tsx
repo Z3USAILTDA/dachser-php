@@ -68,7 +68,7 @@ const faqItems = [
   },
   { 
     q: 'Quais campos são obrigatórios?', 
-    a: 'Número SPO, fornecedor, valor, vencimento, cobrança em nome de e forma de pagamento. Além disso, é obrigatório anexar a Nota Fiscal (e Boleto se forma de pagamento for Boleto).' 
+    a: 'Número SPO, fornecedor, valor, vencimento, definição se necessita contabilização com o fiscal e forma de pagamento. Além disso, é obrigatório anexar a Nota Fiscal (e Boleto se forma de pagamento for Boleto).' 
   },
   { 
     q: 'Como funcionam os alertas de SLA?', 

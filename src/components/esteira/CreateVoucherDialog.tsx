@@ -49,6 +49,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { DateInputField } from "./DateInputField";
 import { VoucherMasterForm } from "./VoucherMasterForm";
+import { FornecedoresSemFiscalDialog } from "./FornecedoresSemFiscalDialog";
 
 // CNPJ formatting and validation utilities
 const formatCNPJ = (value: string): string => {
@@ -95,7 +96,7 @@ const formSchema = z.object({
   moeda: z.string().default("BRL"),
   vencimento: z.date().optional(),
   dataEmissaoDocumento: z.date().optional(),
-  cobrancaEmNomeDe: z.string().min(1, { message: "Cobrança em nome de é obrigatória" }),
+  cobrancaEmNomeDe: z.string().min(1, { message: "Selecione se é necessário contabilização com o fiscal" }),
   formaPagamento: z.string().min(1, { message: "Forma de pagamento é obrigatória" }),
   tipoDocumento: z.string().min(1, { message: "Tipo de documento é obrigatório" }),
   filial: z.string().optional(),
@@ -1219,9 +1220,12 @@ export const CreateVoucherDialog = ({
                   name="cobrancaEmNomeDe"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm">
-                        Cobrança em nome de <span className="text-destructive">*</span>
-                      </FormLabel>
+                      <div className="flex items-center justify-between gap-2">
+                        <FormLabel className="text-sm">
+                          É necessário contabilização com o fiscal? <span className="text-destructive">*</span>
+                        </FormLabel>
+                        <FornecedoresSemFiscalDialog />
+                      </div>
                       <Select onValueChange={field.onChange} value={field.value || undefined}>
                         <FormControl>
                           <SelectTrigger className="bg-background/50 border-border">
@@ -1229,8 +1233,8 @@ export const CreateVoucherDialog = ({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="DACHSER">Dachser</SelectItem>
-                          <SelectItem value="CLIENTE">Cliente</SelectItem>
+                          <SelectItem value="DACHSER">Sim — enviar para o Fiscal</SelectItem>
+                          <SelectItem value="CLIENTE">Não — enviar diretamente para o Financeiro</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />

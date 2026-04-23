@@ -12,7 +12,6 @@ import { ptBR } from "date-fns/locale";
 export interface FilterValues {
   search: string;
   etapa: string;
-  cobrancaEmNomeDe: string;
   formaPagamento: string;
   urgente: string;
 }
@@ -104,16 +103,6 @@ export const VoucherTable = ({
           </SelectContent>
         </Select>
 
-        <Select value={filters.cobrancaEmNomeDe} onValueChange={(v) => onFilterChange({ ...filters, cobrancaEmNomeDe: v })}>
-          <SelectTrigger className="w-[140px] bg-background/50">
-            <SelectValue placeholder="Cobrança" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas</SelectItem>
-            <SelectItem value="DACHSER">DACHSER</SelectItem>
-            <SelectItem value="CLIENTE">CLIENTE</SelectItem>
-          </SelectContent>
-        </Select>
 
         <Select value={filters.urgente} onValueChange={(v) => onFilterChange({ ...filters, urgente: v })}>
           <SelectTrigger className="w-[140px] bg-background/50">
@@ -139,14 +128,13 @@ export const VoucherTable = ({
               <TableHead className="font-semibold">Vencimento</TableHead>
               <TableHead className="font-semibold">Etapa</TableHead>
               <TableHead className="font-semibold">Urgência</TableHead>
-              <TableHead className="font-semibold">Cobrança</TableHead>
               <TableHead className="text-right font-semibold">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {paginatedVouchers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   Nenhum voucher encontrado
                 </TableCell>
               </TableRow>
@@ -177,9 +165,6 @@ export const VoucherTable = ({
                   </TableCell>
                   <TableCell>
                     {getUrgenciaBadge(voucher.urgenciaTipo)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{voucher.cobrancaEmNomeDe}</Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">

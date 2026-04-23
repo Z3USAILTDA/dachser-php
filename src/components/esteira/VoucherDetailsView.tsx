@@ -146,33 +146,13 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
 
       {/* Badges movidos para EsteiraVoucherDetails - removidos daqui */}
 
-      {/* Header - Cobrança em nome de + Etapa + SLA */}
+      {/* Header - Etapa + SLA */}
       <div 
         className="rounded-xl px-6 py-4 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px]"
         style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
       >
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-6">
-            {/* Cobrança em nome de - DESTAQUE */}
-            <div className={cn(
-              "flex items-center gap-3 px-4 py-3 rounded-lg border-2",
-              voucher.cobrancaEmNomeDe === "DACHSER" 
-                ? "bg-[#ffc800]/10 border-[#ffc800]/40 text-[#ffc800]" 
-                : "bg-blue-500/10 border-blue-500/40 text-blue-400"
-            )}>
-              {voucher.cobrancaEmNomeDe === "DACHSER" ? (
-                <Building2 className="h-5 w-5" />
-              ) : (
-                <User className="h-5 w-5" />
-              )}
-              <div>
-                <p className="text-xs font-medium opacity-80">Cobrança em nome de</p>
-                <p className="font-bold text-lg">
-                  {voucher.cobrancaEmNomeDe === "DACHSER" ? "DACHSER" : "CLIENTE"}
-                </p>
-              </div>
-            </div>
-
             {/* Etapa Atual */}
             <div className="flex flex-col gap-1">
               <p className="text-xs text-[#aaaaaa]">Etapa Atual</p>
