@@ -1,128 +1,49 @@
-## Mudança de lógica e visual: "Necessita Fiscal?" no lugar de "Cobrança em nome de"
 
-### Resumo
+## Reanálise
 
-- Trocar o conceito **"Cobrança em nome de Dachser/Cliente"** por **"É necessário contabilização com o fiscal?"** (Sim/Não), que é o que de fato decide o roteamento `RASCUNHO → FISCAL` ou `RASCUNHO → FINANCEIRO`.
-- Remover toda exibição visível de "Cobrança em nome de" (formulários, coluna, filtros, badges).
-- Adicionar, em todos os formulários de voucher, um modal **"Lista de fornecedores que não necessitam de ação fiscal"** (botão ao lado do novo campo).
-- Manter compatibilidade total com a estrutura existente do MariaDB usando a coluna atual `cobranca_em_nome_de` como armazenamento interno (`DACHSER` = precisa fiscal, `CLIENTE` = não precisa). **Sem mudança de schema.**
+Você selecionou **"Não"** ao criar o voucher 20261652603, mas ele foi para o Fiscal. Isso significa que o problema **não é o default** — é um bug na lógica de roteamento ou na persistência do campo.
 
-### 1. Mapeamento da regra (sem mudar DB)
+Preciso confirmar a causa raiz antes de aplicar o fix. As hipóteses são:
 
-A coluna `t_vouchers.cobranca_em_nome_de` continua existindo, porém deixa de ser exposta como "cobrança". Passa a ser tratada na UI como flag `necessitaFiscal`:
+1. **O valor "Não" não está sendo persistido** no banco (envia `DACHSER` mesmo quando o usuário escolhe `CLIENTE`).
+2. **O voucher foi criado via outro fluxo** (ex.: criação automática via robô / master) que ignora a escolha do form.
+3. **A lógica de roteamento em `VoucherRascunhoActions.handleEnviar`** está lendo o campo errado ou com fallback para `DACHSER`.
 
+## Plano
 
-| UI nova                      | Valor armazenado em `cobranca_em_nome_de` |
-| ---------------------------- | ----------------------------------------- |
-| Sim → enviar para Fiscal     | `DACHSER`                                 |
-| Não → enviar para Financeiro | `CLIENTE`                                 |
+### 1. Diagnosticar (consulta direta no MariaDB via mariadb-proxy)
 
+Verificar no voucher 20261652603:
+- Valor real de `cobranca_em_nome_de` na `t_voucher_esteira`
+- Logs em `t_voucher_esteira_logs` (quem criou, quando foi enviado, transições de etapa)
+- Se foi criado como master/child ou voucher simples
 
-Toda a lógica de roteamento já existente em `VoucherRascunhoActions.tsx` e `VoucherOperacaoActions.tsx` continua funcionando sem alteração:
+### 2. Corrigir o voucher 20261652603
 
-```ts
-} else if (voucher.cobrancaEmNomeDe === "DACHSER") {
-  proximaEtapa = "FISCAL";
-} else {
-  proximaEtapa = "FINANCEIRO";
-}
-```
+- `UPDATE t_voucher_esteira SET cobranca_em_nome_de='CLIENTE', etapa_atual='FINANCEIRO', status_envio_cliente='AGUARDANDO_CLIENTE' WHERE numero_spo='20261652603'`
+- Inserir log `ETAPA_CORRIGIDA` (Fiscal → Financeiro, motivo: bug de roteamento)
+- Disparar `insertDadosRmOnFinanceiro` para garantir entrada na `t_dados_rm`
 
-### 2. Tipos (`src/types/voucher.ts`)
+### 3. Corrigir o bug raiz (depende do diagnóstico)
 
-- Adicionar getter de conveniência: `necessitaFiscal: boolean` derivado de `cobrancaEmNomeDe === "DACHSER"` (ou expor helper `getNecessitaFiscal(v)`).
-- Manter `CobrancaEmNomeDe` como tipo interno (não removido para não quebrar persistência).
+Possíveis fixes em ordem de probabilidade:
 
-### 3. Formulários — substituir o select e adicionar o modal
+**a) Persistência incorreta no `CreateVoucherDialog.tsx`**
+Verificar se o payload enviado ao `mariadb-proxy` (action `create_voucher_esteira`) inclui corretamente `cobranca_em_nome_de: formData.cobrancaEmNomeDe` e não está sendo sobrescrito.
 
-Arquivos:
+**b) Fallback indevido no edge function `mariadb-proxy`**
+Inspecionar a action `create_voucher_esteira` para garantir que não há `|| 'DACHSER'` no insert.
 
-- `src/components/esteira/CreateVoucherDialog.tsx`
-- `src/components/esteira/EditVoucherDialog.tsx`
-- `src/components/esteira/VoucherMasterForm.tsx`
+**c) Lógica de roteamento em `VoucherRascunhoActions.tsx` (linhas 235-242)**
+Já está correta (`CLIENTE → FINANCEIRO`), mas pode haver um caso onde o campo é lido de forma stale (do prop `voucher` em vez de re-fetch após o update).
 
-Mudanças em cada um:
+### 4. Manter o default "Sim" no form
 
-- Renomear o campo do form para `necessitaFiscal: "SIM" | "NAO"`.
-- Label: **"É necessário contabilização com o fiscal?"** com asterisco obrigatório.
-- Opções:
-  - `Sim — enviar para o Fiscal` → grava `cobranca_em_nome_de = "DACHSER"`
-  - `Não — enviar diretamente para o Financeiro` → grava `cobranca_em_nome_de = "CLIENTE"`
-- Ao lado do campo: botão `ⓘ Ver fornecedores que não precisam de ação fiscal` que abre um modal com a lista (componente novo abaixo).
-- No `submit`, manter a gravação em `cobranca_em_nome_de` (mapear `SIM→DACHSER`, `NAO→CLIENTE`).
-- Pré-preenchimento: ao editar, mapear `DACHSER→SIM`, `CLIENTE→NAO`.
+Já que o problema **não é** o default, vou **manter** a pré-seleção "Sim" como você pediu antes. Apenas corrijo o bug que ignora a escolha do usuário.
 
-### 4. Novo componente: `FornecedoresSemFiscalDialog.tsx`
+## Detalhes técnicos
 
-Local: `src/components/esteira/FornecedoresSemFiscalDialog.tsx`.
-
-- Modal (`Dialog`) com:
-  - Título: "Fornecedores que não necessitam de ação fiscal"
-  - Descrição curta
-  - Campo de busca por CNPJ ou nome
-  - Tabela: CNPJ | Razão Social
-  - Lista hardcoded em `src/data/fornecedoresSemFiscal.ts` (array de `{ cnpj, nome }`) com os ~37 itens fornecidos pelo usuário (deduplicando o LECHMAN duplicado).
-- Reutilizado pelos 3 formulários acima.
-
-### 5. Tela principal e filtros — remover "Cobrança"
-
-- `**src/components/voucher/VoucherTable.tsx**`:
-  - Remover `Select` de filtro `cobrancaEmNomeDe` (linhas 107-117).
-  - Remover `<TableHead>Cobrança</TableHead>` e a `<TableCell><Badge>{voucher.cobrancaEmNomeDe}` (linhas 142, 181-183). Coluna deixa de existir.
-  - Remover `cobrancaEmNomeDe` do tipo `FilterValues` exportado.
-- `**src/components/esteira/VoucherFilters.tsx**`:
-  - Remover bloco "Cobrança em nome de" (linhas 90-103) e o campo `cobrancaEmNomeDe` de `FilterValues` e dos defaults.
-- `**src/pages/esteira/EsteiraIndex.tsx**`:
-  - Remover do estado `filters` o campo `cobrancaEmNomeDe` (l. 569) e o quick filter `quickFilterCobranca` (l. 602, 1483-1486, 2072-2086).
-  - Remover o filtro condicional (l. 1331-1334).
-  - Manter intactos os mapeamentos de leitura (`cobrancaEmNomeDe: v.cobranca_em_nome_de || "DACHSER"`) — são necessários para o roteamento e a lógica de retorno (l. 1680-1681).
-
-### 6. Outras telas que ainda exibem "Cobrança"
-
-Esconder/remover apenas a **exibição visual** (mantendo dados):
-
-- `src/components/voucher/VoucherDetailsView.tsx` e `src/components/esteira/VoucherDetailsView.tsx`: remover o campo "Cobrança em nome de"
-- `src/utils/voucherPdfExport.ts`: remover a coluna "Cobrança" do PDF (l. 46).
-- `src/pages/esteira/EsteiraManual.tsx`: atualizar texto do FAQ (l. 71).
-- `src/components/tabs/ReportsTab.tsx`: remover qualquer coluna de cobrança da exibição (mantendo o mapeamento interno).
-
-### 7. Backend — sem alteração
-
-- `mariadb-proxy`, `voucher-integrate-rm`, `voucher-mariadb-setup`, `voucher-mariadb-migrate`: **não tocar**. A coluna `cobranca_em_nome_de` continua existindo e sendo populada exatamente como hoje (`DACHSER`/`CLIENTE`). Isso preserva integração RM e logs históricos.
-
-### 8. Memória
-
-Atualizar `mem://vouchers/workflow-logic-and-stages-v6` adicionando:
-
-> A decisão `RASCUNHO → FISCAL` vs `RASCUNHO → FINANCEIRO` é exposta na UI como **"É necessário contabilização com o fiscal?"** (Sim/Não). Internamente persistida em `t_vouchers.cobranca_em_nome_de` como `DACHSER` (Sim) / `CLIENTE` (Não). O termo "Cobrança em nome de" foi removido da UI.
-
-### Arquivos alterados
-
-- `src/types/voucher.ts` (helper)
-- `src/data/fornecedoresSemFiscal.ts` (novo)
-- `src/components/esteira/FornecedoresSemFiscalDialog.tsx` (novo)
-- `src/components/esteira/CreateVoucherDialog.tsx`
-- `src/components/esteira/EditVoucherDialog.tsx`
-- `src/components/esteira/VoucherMasterForm.tsx`
-- `src/components/voucher/VoucherTable.tsx`
-- `src/components/esteira/VoucherFilters.tsx`
-- `src/pages/esteira/EsteiraIndex.tsx`
-- `src/components/voucher/VoucherDetailsView.tsx`
-- `src/components/esteira/VoucherDetailsView.tsx`
-- `src/utils/voucherPdfExport.ts`
-- `src/pages/esteira/EsteiraManual.tsx`
-- `src/components/tabs/ReportsTab.tsx`
-- `.lovable/memory/vouchers/workflow-logic-and-stages-v6.md`
-
-### Validação
-
-1. Criar voucher novo escolhendo "Sim" → vai para Fiscal. Escolhendo "Não" → vai direto para Financeiro.
-2. Editar voucher existente: o estado vem corretamente pré-selecionado (DACHSER→Sim, CLIENTE→Não).
-3. Tela principal `/fin/esteira`: nenhuma coluna ou filtro de "Cobrança" visível. Quick filter removido.
-4. Modal "Fornecedores que não necessitam de ação fiscal" abre nos 3 formulários, busca funciona.
-5. Voucher legado continua roteando corretamente; integração RM e relatórios seguem funcionando.
-
-### Riscos
-
-- Sem mudança de schema. Sem mudança de backend.
-- Possível confusão temporária com vouchers antigos cuja decisão foi tomada por critério diferente — mitigação: o significado funcional (`DACHSER ↔ vai pro fiscal`) já era o que acontecia na prática.
+- O diagnóstico exige modo default (chamada à edge function `mariadb-proxy` para `read_query`).
+- Se o bug estiver na persistência, o fix será 1-2 linhas em `CreateVoucherDialog.tsx` ou na edge function.
+- Se estiver no roteamento, o fix será em `VoucherRascunhoActions.tsx` (re-fetch antes de decidir etapa).
+- Nenhuma mudança em UI, badges, exports ou schema.
