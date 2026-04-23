@@ -863,6 +863,20 @@ serve(async (req) => {
         }
       }
 
+      // DEBUG: target AWB tracing
+      if (row.AWB === '045-21167904') {
+        console.log('[DBG 045-21167904]', JSON.stringify({
+          last_flight_raw: lastFlightRaw,
+          timeline_len: timeline?.length || 0,
+          timeline_type: typeof row.TIMELINE,
+          desc0: String((row as any).desc0 || '').substring(0, 200),
+          desc1: String((row as any).desc1 || '').substring(0, 200),
+          desc2: String((row as any).desc2 || '').substring(0, 200),
+          desc3: String((row as any).desc3 || '').substring(0, 200),
+          isGroundTransport_after_fallback: isGroundTransport,
+        }));
+      }
+
       const timelineRaw = String((row as any).TIMELINE_JSON || (row as any).timeline_json || '');
       if (!isGroundTransport && timelineRaw && hasGroundFlightPattern(timelineRaw)) {
         isGroundTransport = true;
