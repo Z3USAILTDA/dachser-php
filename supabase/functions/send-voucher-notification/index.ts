@@ -422,7 +422,17 @@ const handler = async (req: Request): Promise<Response> => {
         if (responsaveis?.fiscal_email) {
           toEmails = [responsaveis.fiscal_email];
         } else {
-          toEmails = await getRecipientEmails(STAGE_TO_ROLES["AJUSTE_FISCAL"] || []);
+          // NUNCA fazer broadcast pra toda a área Fiscal. Ajuste é direcionado ao
+          // indivíduo que processou o voucher. Se nem o caminho primário
+          // (responsavel_fiscal_user_id) nem o fallback de log (em mariadb-proxy)
+          // resolveram um destinatário, abortar silenciosamente.
+          console.warn(
+            `[AJUSTE_SOLICITADO/AJUSTE_FISCAL] Nenhum destinatário fiscal específico para voucher ${data.voucherId}. Abortando envio (sem broadcast).`
+          );
+          return new Response(
+            JSON.stringify({ success: true, sent: 0, reason: "no_specific_fiscal_recipient" }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
         }
       }
     }

@@ -10,9 +10,13 @@ A Esteira de Vouchers opera com APENAS 3 alertas por e-mail. Todos os demais (SL
 
 - **Quando:** ação manual em `VoucherFiscalActions`, `VoucherSupervisorActions` ou `VoucherFinanceiroActions` que move o voucher para `AJUSTE_OPERACAO` ou `AJUSTE_FISCAL`, com motivo preenchido.
 - **Disparo:** `voucherReturnNotification.ts` → `send-voucher-notification` com `type: "AJUSTE_SOLICITADO"`.
+- **Regra inviolável — 1:1, NUNCA broadcast:** ajuste é uma devolução direcionada ao indivíduo que tocou a etapa anterior. NÃO disparar para a área inteira sob nenhuma hipótese.
 - **Destinatário (1):**
-  - `AJUSTE_OPERACAO` → criador (`creator_email` via `get_voucher_responsaveis_emails`). Fallback: `OPERACAO_FIXED_EMAILS`.
-  - `AJUSTE_FISCAL` → último fiscal (`fiscal_email`). Fallback: roles FISCAL/GESTOR_FISCAL.
+  - `AJUSTE_OPERACAO` → criador (`creator_email` via `get_voucher_responsaveis_emails`). Fallback: `OPERACAO_FIXED_EMAILS` (lista curta — Operação opera em pool, mantida intencionalmente).
+  - `AJUSTE_FISCAL` → último fiscal (`fiscal_email`). Resolução em duas camadas em `mariadb-proxy → get_voucher_responsaveis_emails`:
+    1. Primário: `t_vouchers.responsavel_fiscal_user_id` (persistido em `update_voucher_esteira` quando o fiscal aprova/devolve).
+    2. Fallback: último `user_id` do log com ação `APROVADO_FISCAL` ou `REENVIO_APOS_AJUSTE` em `t_voucher_logs`, resolvendo `email` em `t_users_dachser`.
+  - Se ambas as camadas falharem (voucher legado sem nenhum log fiscal), `send-voucher-notification` aborta com `{ sent: 0, reason: "no_specific_fiscal_recipient" }`. **Nunca** cai em `getRecipientEmails(["FISCAL","GESTOR_FISCAL"])` — esse broadcast foi removido.
 - **Conteúdo:** número, etapa origem→destino, motivo, link.
 
 ## Alerta 2 — Urgência manual solicitada → Supervisor direto (+ confirmação ao solicitante)
@@ -52,3 +56,4 @@ Após o supervisor clicar Aprovar/Rejeitar pelo link:
 - Disparo `VOUCHER_ENVIADO` ao Financeiro em `supervisor-email-action` após aprovação (apagado — supervisor recebe confirmação só via UI).
 - `STAGE_TO_ROLES` em `src/utils/esteiraNotifications.ts` permanece apenas como utilitário do mapeamento (não usado em transições normais).
 - CC do solicitante em `URGENCIA_SOLICITADA` (removido em 2026-04-22 — substituído pelo e-mail dedicado `URGENCIA_SOLICITADA_CONFIRMACAO` por motivo de segurança: evita que o solicitante receba os tokens de aprovação).
+- Broadcast para `["FISCAL","GESTOR_FISCAL"]` no ramo `AJUSTE_SOLICITADO/AJUSTE_FISCAL` (removido em 2026-04-23 — substituído por fallback de log em `get_voucher_responsaveis_emails` + abort silencioso quando nenhum destinatário específico é resolvido).
