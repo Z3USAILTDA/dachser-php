@@ -379,7 +379,6 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                   />
                 </TableHead>
                 <TableHead className="py-2"></TableHead>
-                <TableHead className="py-2"></TableHead>
                 <TableHead className="py-2">
                   <Select value={filters.faixaValor || "all"} onValueChange={(value) => handleFilterChange("faixaValor", value)}>
                     <SelectTrigger className="h-8 text-xs bg-card w-28">
