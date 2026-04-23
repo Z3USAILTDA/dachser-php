@@ -447,12 +447,15 @@ export const CreateVoucherDialog = ({
           ? "URGENTE_AUTOMATICO" 
           : "NORMAL";
 
-      // Determine etapa_atual based on isDraft and urgency
+      // Determine etapa_atual based on isDraft, urgency e contabilização fiscal
+      // Regra: DACHSER (Sim) → FISCAL | CLIENTE (Não) → FINANCEIRO | URGENTE_REAL → SUPERVISOR
       let etapaAtual: string;
       if (isDraft) {
         etapaAtual = "RASCUNHO";
       } else if (urgenciaTipo === "URGENTE_REAL") {
         etapaAtual = "SUPERVISOR";
+      } else if (values.cobrancaEmNomeDe === "CLIENTE") {
+        etapaAtual = "FINANCEIRO";
       } else {
         etapaAtual = "FISCAL";
       }
