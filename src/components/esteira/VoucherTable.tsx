@@ -727,11 +727,13 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                                   try {
                                     const userDataStr = localStorage.getItem("user") || localStorage.getItem("dachser_user");
                                     const userData = userDataStr ? JSON.parse(userDataStr) : { id: 0, username: "sistema" };
+                                    const proximaEtapa = voucher.cobrancaEmNomeDe === "DACHSER" ? "FISCAL" : "FINANCEIRO";
+
                                     await supabase.functions.invoke("mariadb-proxy", {
                                       body: {
                                         action: "update_voucher_esteira",
                                         voucher_id: voucher.id,
-                                        etapa_atual: "FINANCEIRO",
+                                        etapa_atual: proximaEtapa,
                                         status_financeiro: "APROVADO",
                                         aprovado_por_user_id: userData.id?.toString(),
                                         responsavel_supervisor_user_id: userData.id?.toString(),
@@ -744,13 +746,13 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                                         user_id: userData.id?.toString(),
                                         user_name: userData.username,
                                         acao: "APROVADO_SUPERVISOR",
-                                        detalhe: "Voucher/SPO urgente aprovado pelo Supervisor (via tabela)",
+                                        detalhe: `Voucher/SPO urgente aprovado pelo Supervisor (via tabela) — encaminhado para ${proximaEtapa}`,
                                       },
                                     });
-                                    // Inserir na t_dados_rm ao entrar no FINANCEIRO
-                                    insertDadosRmOnFinanceiro(voucher);
-                                    // Email notifications removed — monthly report only
-                                    toast.success("Voucher aprovado e enviado ao Financeiro");
+                                    if (proximaEtapa === "FINANCEIRO") {
+                                      insertDadosRmOnFinanceiro(voucher);
+                                    }
+                                    toast.success(`Voucher aprovado e enviado para ${proximaEtapa === "FISCAL" ? "Fiscal" : "Financeiro"}`);
                                     window.location.reload();
                                   } catch (err: any) {
                                     toast.error("Erro ao aprovar voucher", { description: err.message });
