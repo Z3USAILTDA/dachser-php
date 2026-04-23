@@ -2,63 +2,65 @@
 
 ## Diagnóstico
 
-O processo `014-24308292` tem RCS como evento mais recente na timeline, mas o card mostra FOH. A causa está na função `pickTopByIATA` (`fetch-tracking-aereo/index.ts`, linhas 567–574):
+O processo `045-13002511` aparece como rodoviário no card, mas seu último evento é `BKD` com voo `M3-8485` (sem sufixo `-T`, sem `X/D`, sem `X` ou `D` final). Ou seja, é claramente aéreo.
+
+A causa está em `supabase/functions/fetch-tracking-aereo/index.ts`, função `hasGroundFlightPattern`:
 
 ```ts
-const IATA_WEIGHT = {
-  ...
-  FOH: 33, RCS: 32,   // ← RCS pesa MENOS que FOH
-};
+return /\b[A-Z0-9]{2,4}\s?\d{2,5}-T\b/i.test(clean) || 
+       /\b[A-Z0-9]{2,4}\s?\d{2,5}\s*X\s*\/\s*D\b/i.test(clean) || 
+       /\b[A-Z0-9]{2,4}\s?\d{2,5}[XD]\b/i.test(clean);  // ← culpado
 ```
 
-Quando os 4 slots SQL contêm tanto FOH quanto RCS, FOH vence pela hierarquia, mesmo que RCS seja cronologicamente posterior.
+O terceiro regex `\d{2,5}[XD]\b` casa qualquer voo cujo número termine com dígito seguido das letras X **ou D** em qualquer parte da descrição/timeline. Combinado com o **fallback agressivo** que faz `JSON.stringify(timelineRaw)` e roda o regex no payload inteiro, qualquer ocorrência de "...X" ou "...D" em palavras vizinhas (códigos IATA, nomes de cidades, status como "**D**FW", "MA**O**", **"D"**eparted, descrições com "Code DLV") gera falso positivo.
+
+Para `M3-8485` especificamente, a timeline contém substrings tipo `M3 8485` seguidas em algum ponto por palavras com `D` (DEP, DLV, DFW, etc.), e o regex `\d{2,5}[XD]` casa.
 
 ## Causa raiz
 
-A hierarquia IATA está com FOH e RCS na ordem **invertida**. No fluxo IATA outbound real:
-
-```
-FWB → FOH → RCS → BKD → DEP → RCF → ARR → NFD → AWD → DLV → POD
-```
-
-- **FOH** (Freight on Hand): mercadoria recebida no terminal / armazém do agente
-- **RCS** (Received from Shipper): aceitação formal pela companhia aérea, depois do FOH
-
-Portanto **RCS deve ter peso maior que FOH**. O memory `mem://air/tracking/data-mirroring-intent-v2` documenta a hierarquia atual com `FOH=33 > RCS=32`, o que está incorreto na origem.
+1. O sufixo legado `[XD]` no fim do número é **ambíguo demais** — qualquer voo terminado em dígito seguido de qualquer letra X/D em outro contexto pode disparar.
+2. O fallback `JSON.stringify(timelineRaw)` amplifica o problema rodando o regex sobre o JSON inteiro (descrições, status codes, cidades), não sobre o campo de voo isolado.
 
 ## Correção (cirúrgica)
 
-### 1. Inverter pesos FOH/RCS em `IATA_WEIGHT`
-Em `supabase/functions/fetch-tracking-aereo/index.ts` (linha 571):
+### 1. Restringir `hasGroundFlightPattern` em `fetch-tracking-aereo/index.ts`
+Manter **apenas** os dois sinais inequívocos de RFS:
 
 ```ts
-// antes
-TRM: 38, TFD: 37, DEP: 36, MAN: 35, BKD: 34, FOH: 33, RCS: 32,
-
-// depois
-TRM: 38, TFD: 37, DEP: 36, MAN: 35, BKD: 34, RCS: 33, FOH: 32,
+const hasGroundFlightPattern = (val: string): boolean => {
+  const clean = normalizeGroundCandidate(val);
+  if (!clean) return false;
+  // Só sufixo -T explícito ou notação literal X/D
+  if (/\b[A-Z]{2,3}\s?\d{2,5}-T\b/.test(clean)) return true;
+  if (/\b[A-Z]{2,3}\s?\d{2,5}\s*X\s*\/\s*D\b/.test(clean)) return true;
+  return false;
+};
 ```
 
-### 2. Espelhar a mesma correção em `mariadb-proxy/index.ts`
-A função `get_awb_tracking_events` (linhas 7259+) também aplica `pickTopByIATA` para mover o slot eleito para a posição 0 do modal. Buscar o bloco `IATA_WEIGHT` correspondente e aplicar a mesma inversão para garantir consistência card ↔ modal.
+Mudanças:
+- Remove o regex `\d{2,5}[XD]\b` (fonte do falso positivo).
+- Estreita prefixo de companhia para `[A-Z]{2,3}` (não `[A-Z0-9]{2,4}`), evitando casar lixo numérico.
 
-### 3. Atualizar memória
-`mem://air/tracking/data-mirroring-intent-v2`: atualizar a hierarquia documentada para refletir `RCS=33 > FOH=32`, e adicionar nota: "ordem corrigida conforme fluxo IATA outbound real (RCS = aceitação pela cia aérea, ocorre após FOH)".
+### 2. Remover o fallback `JSON.stringify(timelineRaw)` 
+Esse scan cego sobre o JSON inteiro deve ser eliminado. Manter detecção apenas em campos estruturados de voo (`LAST_FLIGHT`, `flight` por evento).
+
+### 3. Espelhar a mesma correção em `fetch-status-aereo/index.ts`
+Mesma função `hasGroundFlightPattern` e mesmo fallback existem lá — aplicar idênticas mudanças.
+
+### 4. Atualizar memória
+`mem://air/tracking/aereo-monitoring-spec`: documentar que detecção RFS agora exige **`-T` explícito** ou **`X/D` literal** em campo de voo isolado. Sufixo legado `X`/`D` solo foi descontinuado por gerar falsos positivos.
 
 ## Arquivos alterados
-- `supabase/functions/fetch-tracking-aereo/index.ts` — linha 571
-- `supabase/functions/mariadb-proxy/index.ts` — bloco `IATA_WEIGHT` em `get_awb_tracking_events`
-- `mem://air/tracking/data-mirroring-intent-v2` — hierarquia corrigida
+- `supabase/functions/fetch-tracking-aereo/index.ts`
+- `supabase/functions/fetch-status-aereo/index.ts`
+- `mem://air/tracking/aereo-monitoring-spec`
 
 ## Validação
-1. Recarregar `/air/tracking-aereo`.
-2. Localizar `014-24308292`: card deve mostrar **RCS** (não mais FOH).
-3. Abrir o modal de timeline: o slot RCS deve estar na posição 0.
-4. Spot-check em processos onde apenas FOH existe (sem RCS) — deve continuar exibindo FOH normalmente.
-5. Verificar que processos mais avançados (BKD, DEP, RCF…) seguem inalterados — só a relação FOH↔RCS muda.
+1. `045-13002511` (BKD M3-8485): deve mostrar **avião** (não caminhão).
+2. `045-21167764` e `045-21167904` (RFS reais com `-T`): devem continuar mostrando **caminhão**.
+3. Spot-check em processos com voos terminados em dígito + descrições contendo "DEP"/"DLV"/cidades com D ou X: nenhum deve virar RFS por engano.
 
 ## Riscos
-- **Sem alteração de schema** — apenas dois números trocados de posição.
-- **Sem regressão**: os outros 11 códigos da hierarquia mantêm pesos relativos. A inversão só afeta processos com FOH e RCS simultaneamente nos top-4 slots.
-- **Manual overrides** continuam com prioridade absoluta (regra inalterada).
+- **Sem alteração de schema**.
+- **Cobertura**: se existir alguma cia que use o sufixo solo `X` ou `D` sem `-T`, ela deixará de ser detectada. Mitigação: a notação moderna padronizada é `-T` ou `X/D`; o sufixo solo é raro e gera mais ruído que sinal.
 
