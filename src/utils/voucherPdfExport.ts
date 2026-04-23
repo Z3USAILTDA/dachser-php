@@ -43,7 +43,6 @@ export const exportVouchersToPDF = (data: Voucher[]) => {
     v.fornecedor || "-",
     formatCurrency(v.valor, v.moeda),
     format(new Date(v.vencimento), "dd/MM/yyyy", { locale: ptBR }),
-    v.cobrancaEmNomeDe === "DACHSER" ? "Dachser" : "Cliente",
     v.tipoExecucaoPagamento || "-",
     v.urgente ? "Sim" : "Não",
     ETAPA_LABELS[v.etapaAtual as keyof typeof ETAPA_LABELS] || v.etapaAtual,
@@ -62,7 +61,6 @@ export const exportVouchersToPDF = (data: Voucher[]) => {
         "Fornecedor",
         "Valor",
         "Vencimento",
-        "Cobrança",
         "Tipo Exec.",
         "Urgente",
         "Etapa",
@@ -89,18 +87,17 @@ export const exportVouchersToPDF = (data: Voucher[]) => {
       fillColor: [245, 245, 245],
     },
     columnStyles: {
-      0: { cellWidth: 20, halign: "center" }, // Nº SPO
-      1: { cellWidth: 30 }, // Fornecedor
-      2: { cellWidth: 22, halign: "right" }, // Valor
-      3: { cellWidth: 20, halign: "center" }, // Vencimento
-      4: { cellWidth: 16, halign: "center" }, // Cobrança
-      5: { cellWidth: 18, halign: "center" }, // Tipo Exec.
-      6: { cellWidth: 14, halign: "center" }, // Urgente
-      7: { cellWidth: 22 }, // Etapa
-      8: { cellWidth: 22 }, // Status
-      9: { cellWidth: 22 }, // Status RM
-      10: { cellWidth: 28 }, // Criado Por
-      11: { cellWidth: 20, halign: "center" }, // Data Criação
+      0: { cellWidth: 22, halign: "center" }, // Nº SPO
+      1: { cellWidth: 34 }, // Fornecedor
+      2: { cellWidth: 24, halign: "right" }, // Valor
+      3: { cellWidth: 22, halign: "center" }, // Vencimento
+      4: { cellWidth: 20, halign: "center" }, // Tipo Exec.
+      5: { cellWidth: 16, halign: "center" }, // Urgente
+      6: { cellWidth: 24 }, // Etapa
+      7: { cellWidth: 24 }, // Status
+      8: { cellWidth: 24 }, // Status RM
+      9: { cellWidth: 30 }, // Criado Por
+      10: { cellWidth: 22, halign: "center" }, // Data Criação
     },
     didParseCell: (cellData) => {
       // Destacar linhas urgentes

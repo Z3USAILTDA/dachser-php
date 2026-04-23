@@ -62,8 +62,7 @@ export const VoucherDetailsView = ({ voucher, canEditAttachments = false }: Vouc
       <Card className="bg-muted/20 border-border/30">
         <CardContent className="pt-6">
           <h4 className="text-sm font-semibold mb-4 text-muted-foreground uppercase tracking-wider">Informações de Pagamento</h4>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <InfoItem label="Cobrança em Nome De" value={voucher.cobrancaEmNomeDe} />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <InfoItem label="Forma de Pagamento" value={voucher.formaPagamento} />
             <InfoItem label="Tipo de Documento" value={voucher.tipoDocumento} />
             <InfoItem label="Remessa" value={voucher.remessa} />
