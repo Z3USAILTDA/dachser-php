@@ -2060,19 +2060,7 @@ const EsteiraIndex = () => {
                     </Select>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-[#888888]" />
-                    <Select value={quickFilterCobranca} onValueChange={setQuickFilterCobranca}>
-                      <SelectTrigger className="w-[160px] bg-[#0a0b10] border-white/10 rounded-full">
-                        <SelectValue placeholder="Cobrança" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todas Cobranças</SelectItem>
-                        <SelectItem value="DACHSER">DACHSER</SelectItem>
-                        <SelectItem value="CLIENTE">CLIENTE</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+
 
                   {/* Forma de Pagamento */}
                   <div className="flex items-center gap-2">
@@ -2138,9 +2126,8 @@ const EsteiraIndex = () => {
                   </div>
 
                   {/* Clear All Filters */}
-                  {(quickFilterFornecedor !== "all" || quickFilterCobranca !== "all" || filters.formaPagamento !== "all" || filters.origemCriacao !== "all" || filters.vencimentoFim !== "" || filters.isMaster !== "all" || filters.search !== "" || filters.etapa !== "all" || filters.processo !== "" || filters.fornecedor !== "" || filters.faixaValor !== "all" || filters.slaStatus !== "all" || filters.vencimentoInicio !== "" || filters.urgente !== "all" || filters.statusComprovante !== "all") && <button onClick={() => {
+                  {(quickFilterFornecedor !== "all" || filters.formaPagamento !== "all" || filters.origemCriacao !== "all" || filters.vencimentoFim !== "" || filters.isMaster !== "all" || filters.search !== "" || filters.etapa !== "all" || filters.processo !== "" || filters.fornecedor !== "" || filters.faixaValor !== "all" || filters.slaStatus !== "all" || filters.vencimentoInicio !== "" || filters.urgente !== "all" || filters.statusComprovante !== "all") && <button onClick={() => {
                 setQuickFilterFornecedor("all");
-                setQuickFilterCobranca("all");
                 {
                   const d = new Date();
                   setQuickFilterMesEmissao(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
@@ -2148,7 +2135,6 @@ const EsteiraIndex = () => {
                 setFilters({
                   search: "",
                   etapa: "all",
-                  cobrancaEmNomeDe: "all",
                   formaPagamento: "all",
                   urgente: "all",
                   statusBaixa: "all",
