@@ -8142,11 +8142,39 @@ Deno.serve(async (req) => {
           };
           if (validEvents.length >= 2) {
             const topN = Math.min(4, validEvents.length);
-            let bestIdx = 0;
-            let bestW = IATA_WEIGHT[(validEvents[0].codigo_evento || '').toUpperCase()] || 0;
-            for (let i = 1; i < topN; i++) {
-              const w = IATA_WEIGHT[(validEvents[i].codigo_evento || '').toUpperCase()] || 0;
-              if (w > bestW) { bestW = w; bestIdx = i; }
+            const top = validEvents.slice(0, topN);
+            // Group by airport. The airport with the most-recent event date wins.
+            // Inside the winning airport, IATA hierarchy decides.
+            const groups = new Map<string, Array<{ ev: any; idx: number }>>();
+            top.forEach((ev: any, i: number) => {
+              const key = (ev.aeroporto || `__noloc_${i}`).toString().trim().toUpperCase();
+              if (!groups.has(key)) groups.set(key, []);
+              groups.get(key)!.push({ ev, idx: i });
+            });
+            let bestGroup = top.map((ev: any, i: number) => ({ ev, idx: i }));
+            if (groups.size > 1) {
+              let bestMaxDate = -1;
+              let bestMinIdx = Infinity;
+              for (const [, grp] of groups) {
+                let maxDate = 0;
+                let minIdx = Infinity;
+                for (const { ev, idx } of grp) {
+                  const d = ev.data_hora_evento ? new Date(ev.data_hora_evento).getTime() : 0;
+                  if (!isNaN(d) && d > maxDate) maxDate = d;
+                  if (idx < minIdx) minIdx = idx;
+                }
+                if (maxDate > bestMaxDate || (maxDate === bestMaxDate && minIdx < bestMinIdx)) {
+                  bestMaxDate = maxDate;
+                  bestMinIdx = minIdx;
+                  bestGroup = grp;
+                }
+              }
+            }
+            let bestIdx = bestGroup[0].idx;
+            let bestW = IATA_WEIGHT[(bestGroup[0].ev.codigo_evento || '').toUpperCase()] || 0;
+            for (let i = 1; i < bestGroup.length; i++) {
+              const w = IATA_WEIGHT[(bestGroup[i].ev.codigo_evento || '').toUpperCase()] || 0;
+              if (w > bestW) { bestW = w; bestIdx = bestGroup[i].idx; }
             }
             if (bestIdx > 0) {
               const [winner] = validEvents.splice(bestIdx, 1);
