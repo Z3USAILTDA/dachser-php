@@ -1279,27 +1279,24 @@ serve(async (req) => {
               .replace(/,\s*$/, '')
               .replace(/\s+/g, ' ');
           }
-          // Detect ground transport: flight code contains "-T", literal "X/D", or legacy suffix X/D after digits
+          // Detect ground transport: only explicit "-T" suffix or literal "X/D" notation
           function isGroundFlight(val: string): boolean {
             const clean = normalizeGroundCandidate(val);
             if (!clean) return false;
-            return /\b[A-Z0-9]{2,4}\s?\d{2,5}-T\b/i.test(clean)
-              || /\b[A-Z0-9]{2,4}\s?\d{2,5}\s*X\s*\/\s*D\b/i.test(clean)
-              || /\b[A-Z0-9]{2,4}\s?\d{2,5}[XD]\b/i.test(clean);
+            return /\b[A-Z]{2,3}\s?\d{2,5}-T\b/.test(clean)
+              || /\b[A-Z]{2,3}\s?\d{2,5}\s*X\s*\/\s*D\b/.test(clean);
           }
-          // Extract flight codes from text: "Flight LX-9950X", "Flight XX 1234 X/D", "LA 5252-T"
+          // Extract flight codes from text: "Flight XX 1234 X/D", "LA 5252-T"
           function extractFlightsFromText(text: string): string[] {
             if (!text) return [];
             const flights: string[] = [];
             let m;
-            const flightPattern = /Flight\s+([A-Z0-9]{2,4}[\s-]?\d{2,5}(?:-T|\s*X\s*\/\s*D|[A-Za-z])?)/gi;
+            const flightPattern = /Flight\s+([A-Z]{2,3}[\s-]?\d{2,5}(?:-T|\s*X\s*\/\s*D)?)/g;
             while ((m = flightPattern.exec(text)) !== null) flights.push(m[1]);
-            const dashTPattern = /\b([A-Z0-9]{2,4}\s?\d{2,5}-T)\b/gi;
+            const dashTPattern = /\b([A-Z]{2,3}\s?\d{2,5}-T)\b/g;
             while ((m = dashTPattern.exec(text)) !== null) flights.push(m[1]);
-            const slashXDPattern = /\b([A-Z0-9]{2,4}[\s-]?\d{2,5}\s*X\s*\/\s*D)\b/gi;
+            const slashXDPattern = /\b([A-Z]{2,3}[\s-]?\d{2,5}\s*X\s*\/\s*D)\b/g;
             while ((m = slashXDPattern.exec(text)) !== null) flights.push(m[1]);
-            const suffixDXPattern = /\b([A-Z0-9]{2,4}[\s-]?\d{2,5}[DXdx])\b/g;
-            while ((m = suffixDXPattern.exec(text)) !== null) flights.push(m[1]);
             return flights;
           }
           try {
