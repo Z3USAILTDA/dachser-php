@@ -43,12 +43,15 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
       setLoading(true);
       const userData = getUserData();
 
+      // Respeita "Necessita Fiscal?": DACHSER (Sim) → FISCAL, CLIENTE (Não) → FINANCEIRO
+      const proximaEtapa = voucher.cobrancaEmNomeDe === "DACHSER" ? "FISCAL" : "FINANCEIRO";
+
       // Update voucher in MariaDB
       const { error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "update_voucher_esteira",
           voucher_id: voucher.id,
-          etapa_atual: "FINANCEIRO",
+          etapa_atual: proximaEtapa,
           status_financeiro: "APROVADO",
           aprovado_por_user_id: userData.id?.toString(),
           responsavel_supervisor_user_id: userData.id?.toString(),
@@ -65,18 +68,20 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
           user_id: userData.id?.toString(),
           user_name: userData.username,
           acao: "APROVADO_SUPERVISOR",
-          detalhe: "Voucher/SPO urgente aprovado pelo Supervisor",
+          detalhe: `Voucher/SPO urgente aprovado pelo Supervisor — encaminhado para ${proximaEtapa}`,
         },
       });
 
-      // Inserir na t_dados_rm ao entrar no FINANCEIRO
-      insertDadosRmOnFinanceiro(voucher);
+      // Inserir na t_dados_rm apenas se for direto para FINANCEIRO
+      if (proximaEtapa === "FINANCEIRO") {
+        insertDadosRmOnFinanceiro(voucher);
+      }
 
       // Email notifications removed — monthly report only
 
       toast({
         title: "Voucher/SPO aprovado",
-        description: "Voucher/SPO urgente aprovado e enviado para Financeiro",
+        description: `Voucher/SPO urgente aprovado e enviado para ${proximaEtapa === "FISCAL" ? "Fiscal" : "Financeiro"}`,
       });
 
       onUpdate();
