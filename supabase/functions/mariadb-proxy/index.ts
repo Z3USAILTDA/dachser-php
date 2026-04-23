@@ -8973,7 +8973,8 @@ Deno.serve(async (req) => {
 
         const voucherRm = await client.query(`
           SELECT id, numero_spo, forma_pagamento, fornecedor, cnpj_fornecedor,
-                 linha_digitavel, codigo_barras, chave_pix, id_rm, tipo_execucao_pagamento
+                 linha_digitavel, codigo_barras, chave_pix, id_rm, tipo_execucao_pagamento,
+                 cobranca_em_nome_de, urgencia_tipo
           FROM dados_dachser.t_vouchers
           WHERE id = ?
           LIMIT 1
