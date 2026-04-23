@@ -120,7 +120,7 @@ export const exportVouchersToExcel = (data: Voucher[]) => {
     { wch: 15 }, // Valor
     { wch: 8 },  // Moeda
     { wch: 12 }, // Vencimento
-    { wch: 12 }, // Cobrança
+    { wch: 16 }, // Necessita Fiscal
     { wch: 20 }, // Forma Pagamento
     { wch: 15 }, // Tipo Execução
     { wch: 10 }, // Filial
