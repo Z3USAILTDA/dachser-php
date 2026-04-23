@@ -2,65 +2,75 @@
 
 ## Diagnóstico
 
-O processo `045-13002511` aparece como rodoviário no card, mas seu último evento é `BKD` com voo `M3-8485` (sem sufixo `-T`, sem `X/D`, sem `X` ou `D` final). Ou seja, é claramente aéreo.
+A regra atual ainda permite que **qualquer evento da timeline** ou os campos `desc0..desc3` disparem o flag de RFS. Isso contamina processos cujo **último evento exibido** é aéreo, mas que tiveram um trecho rodoviário em algum momento da história.
 
-A causa está em `supabase/functions/fetch-tracking-aereo/index.ts`, função `hasGroundFlightPattern`:
+A regra correta, conforme o usuário: **somente o último evento (o eleito por `pickTopByIATA`) pode determinar se o processo é rodoviário**. Sufixo `-T` ou `X/D` em qualquer outro evento deve ser ignorado para fins de classificação RFS.
 
-```ts
-return /\b[A-Z0-9]{2,4}\s?\d{2,5}-T\b/i.test(clean) || 
-       /\b[A-Z0-9]{2,4}\s?\d{2,5}\s*X\s*\/\s*D\b/i.test(clean) || 
-       /\b[A-Z0-9]{2,4}\s?\d{2,5}[XD]\b/i.test(clean);  // ← culpado
-```
+## Correção
 
-O terceiro regex `\d{2,5}[XD]\b` casa qualquer voo cujo número termine com dígito seguido das letras X **ou D** em qualquer parte da descrição/timeline. Combinado com o **fallback agressivo** que faz `JSON.stringify(timelineRaw)` e roda o regex no payload inteiro, qualquer ocorrência de "...X" ou "...D" em palavras vizinhas (códigos IATA, nomes de cidades, status como "**D**FW", "MA**O**", **"D"**eparted, descrições com "Code DLV") gera falso positivo.
-
-Para `M3-8485` especificamente, a timeline contém substrings tipo `M3 8485` seguidas em algum ponto por palavras com `D` (DEP, DLV, DFW, etc.), e o regex `\d{2,5}[XD]` casa.
-
-## Causa raiz
-
-1. O sufixo legado `[XD]` no fim do número é **ambíguo demais** — qualquer voo terminado em dígito seguido de qualquer letra X/D em outro contexto pode disparar.
-2. O fallback `JSON.stringify(timelineRaw)` amplifica o problema rodando o regex sobre o JSON inteiro (descrições, status codes, cidades), não sobre o campo de voo isolado.
-
-## Correção (cirúrgica)
-
-### 1. Restringir `hasGroundFlightPattern` em `fetch-tracking-aereo/index.ts`
-Manter **apenas** os dois sinais inequívocos de RFS:
+### 1. `supabase/functions/fetch-tracking-aereo/index.ts`
+Substituir a detecção atual de `is_ground_transport` por uma checagem **escopada exclusivamente ao slot vencedor (`top.idx`)**:
 
 ```ts
-const hasGroundFlightPattern = (val: string): boolean => {
-  const clean = normalizeGroundCandidate(val);
-  if (!clean) return false;
-  // Só sufixo -T explícito ou notação literal X/D
-  if (/\b[A-Z]{2,3}\s?\d{2,5}-T\b/.test(clean)) return true;
-  if (/\b[A-Z]{2,3}\s?\d{2,5}\s*X\s*\/\s*D\b/.test(clean)) return true;
-  return false;
-};
+// Após pickTopByIATA eleger top.idx
+const electedEvent = timeline[top.idx] || {};
+
+const electedFlightFields = [
+  electedEvent.flight,
+  electedEvent.Flight,
+  electedEvent.voo,
+  electedEvent.flight_number,
+].filter(Boolean);
+
+const electedTextFields = [
+  electedEvent.description,
+  electedEvent.details,
+  electedEvent.status,
+].filter(Boolean);
+
+let isGround = electedFlightFields.some(hasGroundFlightPattern);
+
+if (!isGround) {
+  for (const txt of electedTextFields) {
+    const flights = extractFlightsFromText(String(txt));
+    if (flights.some(hasGroundFlightPattern)) { isGround = true; break; }
+  }
+}
+
+const is_ground_transport = isGround;
 ```
 
-Mudanças:
-- Remove o regex `\d{2,5}[XD]\b` (fonte do falso positivo).
-- Estreita prefixo de companhia para `[A-Z]{2,3}` (não `[A-Z0-9]{2,4}`), evitando casar lixo numérico.
+Remover:
+- Loop sobre **todos** os eventos da timeline.
+- Fallback em `LAST_FLIGHT` quando não corresponde ao evento eleito.
+- Fallback em `desc0..desc3` (são histórico SQL, não evento atual).
 
-### 2. Remover o fallback `JSON.stringify(timelineRaw)` 
-Esse scan cego sobre o JSON inteiro deve ser eliminado. Manter detecção apenas em campos estruturados de voo (`LAST_FLIGHT`, `flight` por evento).
+### 2. `supabase/functions/fetch-status-aereo/index.ts`
+Espelhar exatamente a mesma lógica: detecção RFS apenas no evento eleito (mesmo `pickTopByIATA`/slot vencedor usado lá).
 
-### 3. Espelhar a mesma correção em `fetch-status-aereo/index.ts`
-Mesma função `hasGroundFlightPattern` e mesmo fallback existem lá — aplicar idênticas mudanças.
+### 3. Manter intactos
+- Regexes restritivos atuais (`-T` e `X/D` apenas).
+- `MANUAL_OVERRIDES` com prioridade absoluta.
+- Eleição via `pickTopByIATA` (sem mudança de hierarquia).
 
 ### 4. Atualizar memória
-`mem://air/tracking/aereo-monitoring-spec`: documentar que detecção RFS agora exige **`-T` explícito** ou **`X/D` literal** em campo de voo isolado. Sufixo legado `X`/`D` solo foi descontinuado por gerar falsos positivos.
+`mem://air/tracking/aereo-monitoring-spec`: adicionar regra explícita —
+
+> **Escopo da detecção RFS**: apenas o evento eleito por `pickTopByIATA` (último evento exibido no card) é avaliado. Sufixo `-T` ou `X/D` em eventos antigos da timeline **não** classifica o processo como rodoviário. Campos `LAST_FLIGHT` e `desc0..desc3` não são mais usados como fallback.
 
 ## Arquivos alterados
 - `supabase/functions/fetch-tracking-aereo/index.ts`
 - `supabase/functions/fetch-status-aereo/index.ts`
-- `mem://air/tracking/aereo-monitoring-spec`
+- `.lovable/memory/air/tracking/aereo-monitoring-spec.md`
 
 ## Validação
-1. `045-13002511` (BKD M3-8485): deve mostrar **avião** (não caminhão).
-2. `045-21167764` e `045-21167904` (RFS reais com `-T`): devem continuar mostrando **caminhão**.
-3. Spot-check em processos com voos terminados em dígito + descrições contendo "DEP"/"DLV"/cidades com D ou X: nenhum deve virar RFS por engano.
+1. `045-13002511`, `045-22108925`, `045-21167985` (último evento sem sufixo): devem mostrar **avião**.
+2. `045-21167904` (último evento com `LA 5462-T`): deve continuar mostrando **caminhão**.
+3. Processo com último evento aéreo mas leg histórica `-T`: deve mostrar **avião** (mudança esperada de comportamento).
+4. Processo cujo último evento real é rodoviário: deve mostrar **caminhão**.
 
 ## Riscos
-- **Sem alteração de schema**.
-- **Cobertura**: se existir alguma cia que use o sufixo solo `X` ou `D` sem `-T`, ela deixará de ser detectada. Mitigação: a notação moderna padronizada é `-T` ou `X/D`; o sufixo solo é raro e gera mais ruído que sinal.
+- Sem alteração de schema.
+- Processos atualmente marcados como rodoviários por herança histórica passarão a aéreos — comportamento desejado pelo usuário.
+- Cobertura: se a fonte do voo rodoviário estiver fora dos campos do evento eleito (ex.: só em `LAST_FLIGHT` desatualizado), não será detectada — alinhado à regra "só o último evento conta".
 
