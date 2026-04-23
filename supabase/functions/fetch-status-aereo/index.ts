@@ -1331,10 +1331,8 @@ serve(async (req) => {
                   }
                 }
               }
-              if (isGroundFlight(timelineStr)) {
-                console.log(`[ground] ${awb}: DETECTED via raw timeline JSON`);
-                return true;
-              }
+              // Sem fallback de scan cego no JSON serializado — gera falsos positivos.
+
             }
           } catch (_) {}
           return false;
