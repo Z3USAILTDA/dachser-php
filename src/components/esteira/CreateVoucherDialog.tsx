@@ -176,7 +176,7 @@ export const CreateVoucherDialog = ({
       cnpjFornecedor: "",
       valor: "",
       moeda: "BRL",
-      cobrancaEmNomeDe: "",
+      cobrancaEmNomeDe: "DACHSER",
       formaPagamento: "",
       tipoDocumento: "",
       filial: "",
