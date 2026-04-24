@@ -977,7 +977,29 @@ serve(async (req) => {
       sendFailureEmail(failed).catch((e) => console.error("sendFailureEmail error:", e));
     }
 
-    return new Response(JSON.stringify({ success: true, data, failed_count: failed.length }), {
+    // Filter out hidden AWBs (air_hidden_awbs table in Supabase)
+    let filteredData = data;
+    try {
+      const supaUrl = Deno.env.get("SUPABASE_URL");
+      const supaKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY");
+      if (supaUrl && supaKey) {
+        const resp = await fetch(`${supaUrl}/rest/v1/air_hidden_awbs?select=awb`, {
+          headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` },
+        });
+        if (resp.ok) {
+          const hidden = await resp.json();
+          const hiddenSet = new Set<string>((hidden || []).map((h: any) => String(h.awb).trim()));
+          if (hiddenSet.size > 0) {
+            filteredData = data.filter((d: any) => !hiddenSet.has(String(d.awb_number).trim()));
+            console.log(`Hidden AWBs filtered: ${data.length - filteredData.length} of ${data.length}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error fetching hidden AWBs:", e);
+    }
+
+    return new Response(JSON.stringify({ success: true, data: filteredData, failed_count: failed.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
