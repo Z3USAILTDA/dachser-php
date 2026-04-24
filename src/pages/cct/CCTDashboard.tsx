@@ -4,7 +4,7 @@ import { ArrowLeft, LayoutDashboard, BarChart3, AlertTriangle, Bell, Settings, H
 import { toast } from "sonner";
 import { exportCCTWithoutDepDateToExcel } from "@/utils/cctExcelExport";
 import dachserBg from "@/assets/dachser-background.jpg";
-import { useUsageLog } from "@/hooks/useUsageLog";
+import { useUsageLog, trackEvent } from "@/hooks/useUsageLog";
 import { isZ3usAdmin } from "@/utils/adminAccess";
 
 // Components
