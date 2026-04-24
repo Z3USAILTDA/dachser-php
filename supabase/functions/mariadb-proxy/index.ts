@@ -841,6 +841,111 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'get_metrics_by_module': {
+        const { dateFrom: mDateFrom, dateTo: mDateTo, username: mUsername, requesterUsername: mRequester } = body;
+        const dFrom = mDateFrom || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const dTo = mDateTo || new Date().toISOString().split('T')[0];
+
+        const DACHSER_ADMIN_USERS_M = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
+        const HIDDEN_LOG_USERS_M = ["admin", "teste.test3"];
+        const isDachserUserM = mRequester && DACHSER_ADMIN_USERS_M.includes(mRequester);
+
+        const moduleEndpointPatterns: Record<string, string[]> = {
+          'air': ['/air/', '/check-awb', '/awb', '/status-aereo'],
+          'chb': ['/chb/', '/conferencia'],
+          'maritimo': ['/sea/', '/maritime/', '/draft/', '/container', '/demurrage'],
+          'fin': ['/fin/', '/esteira/', '/voucher', '/regua'],
+          'olimpo': ['/olimpo/'],
+          'admin': ['/admin/', '/database', '/metrics', '/user-management'],
+        };
+
+        const moduleLabels: Record<string, string> = {
+          'air': 'AIR', 'chb': 'CHB', 'maritimo': 'SEA',
+          'fin': 'FIN', 'olimpo': 'OLIMPO', 'admin': 'ADMIN',
+        };
+
+        const baseConds: string[] = ["event_time BETWEEN ? AND ?", "username != 'unknown'"];
+        const baseParams: (string | number)[] = [`${dFrom} 00:00:00`, `${dTo} 23:59:59`];
+        if (isDachserUserM) {
+          baseConds.push(`username NOT IN (${HIDDEN_LOG_USERS_M.map(() => '?').join(', ')})`);
+          baseParams.push(...HIDDEN_LOG_USERS_M);
+        }
+        if (mUsername) {
+          baseConds.push("username LIKE ?");
+          baseParams.push(`%${mUsername}%`);
+        }
+
+        const modules: Array<{
+          module: string;
+          label: string;
+          totalAccesses: number;
+          uniqueUsers: number;
+          avgTimeOnScreenSec: number;
+          topEndpoint: string | null;
+        }> = [];
+
+        for (const key of Object.keys(moduleEndpointPatterns)) {
+          const patterns = moduleEndpointPatterns[key];
+          const patternConds = patterns.map(() => "LOWER(endpoint) LIKE ?").join(' OR ');
+          const conds = [...baseConds, `(${patternConds})`];
+          const params = [...baseParams, ...patterns.map(p => `%${p.toLowerCase()}%`)];
+          const whereSql = `WHERE ${conds.join(' AND ')}`;
+
+          const aggRes = await client.query(
+            `SELECT COUNT(*) AS total, COUNT(DISTINCT username) AS users
+             FROM ai_agente.t_dachser_usage_logs ${whereSql}`,
+            params
+          );
+          const total = Number(aggRes[0]?.total || 0);
+          const users = Number(aggRes[0]?.users || 0);
+
+          let avgTimeSec = 0;
+          let topEndpoint: string | null = null;
+
+          if (total > 0) {
+            // Tempo médio: diferença entre eventos consecutivos do mesmo usuário no módulo,
+            // limitada a 30 min (1800s) para evitar inflar com sessões abandonadas.
+            const gapRes = await client.query(
+              `SELECT AVG(gap) AS avg_gap FROM (
+                 SELECT LEAST(
+                   TIMESTAMPDIFF(SECOND, prev_time, event_time), 1800
+                 ) AS gap
+                 FROM (
+                   SELECT username, event_time,
+                     LAG(event_time) OVER (PARTITION BY username ORDER BY event_time) AS prev_time
+                   FROM ai_agente.t_dachser_usage_logs
+                   ${whereSql}
+                 ) t
+                 WHERE prev_time IS NOT NULL
+                   AND TIMESTAMPDIFF(SECOND, prev_time, event_time) BETWEEN 1 AND 1800
+               ) g`,
+              params
+            );
+            avgTimeSec = Math.round(Number(gapRes[0]?.avg_gap || 0));
+
+            const topRes = await client.query(
+              `SELECT endpoint, COUNT(*) AS c FROM ai_agente.t_dachser_usage_logs
+               ${whereSql} GROUP BY endpoint ORDER BY c DESC LIMIT 1`,
+              params
+            );
+            topEndpoint = topRes[0]?.endpoint || null;
+          }
+
+          modules.push({
+            module: key,
+            label: moduleLabels[key],
+            totalAccesses: total,
+            uniqueUsers: users,
+            avgTimeOnScreenSec: avgTimeSec,
+            topEndpoint,
+          });
+        }
+
+        modules.sort((a, b) => b.totalAccesses - a.totalAccesses);
+        result = { success: true, modules };
+        break;
+      }
+
       case 'get_metric_users': {
         const { requesterUsername: metricRequester } = body;
         const DACHSER_ADMIN_USERS_MU = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
