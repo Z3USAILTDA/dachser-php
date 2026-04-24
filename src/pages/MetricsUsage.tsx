@@ -611,8 +611,7 @@ const MetricsUsage = () => {
                     return (
                       <div className="mt-2 pt-2 border-t border-white/10">
                         <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">Top endpoint</div>
-                        <div className="text-[11px] truncate text-foreground/80 flex items-center gap-1" title={m.topEndpoint}>
-                          <span>{pretty.icon}</span>
+                        <div className="text-[11px] truncate text-foreground/80" title={m.topEndpoint}>
                           <span className="truncate">{pretty.label}</span>
                         </div>
                       </div>
