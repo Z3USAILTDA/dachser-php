@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
+import { trackEvent } from "@/hooks/useUsageLog";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, XCircle, Edit3, Layers, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -123,6 +124,7 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
 
   const handleAprovar = async () => {
     try {
+      trackEvent("vouchers.fiscal.approve");
       setLoading(true);
       const userData = getUserData();
 

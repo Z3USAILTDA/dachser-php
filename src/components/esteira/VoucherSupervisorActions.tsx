@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import { trackEvent } from "@/hooks/useUsageLog";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, XCircle } from "lucide-react";
 import {
@@ -40,6 +41,7 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
 
   const handleAprovar = async () => {
     try {
+      trackEvent("vouchers.supervisor.approve");
       setLoading(true);
       const userData = getUserData();
 
