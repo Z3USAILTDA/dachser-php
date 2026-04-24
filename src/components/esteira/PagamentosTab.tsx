@@ -190,6 +190,8 @@ export const PagamentosTab = () => {
   const [selectedPagamento, setSelectedPagamento] = useState<PagamentoItem | null>(null);
   const [anexosDialog, setAnexosDialog] = useState<any[]>([]);
   const [loadingAnexos, setLoadingAnexos] = useState(false);
+  // Token para descartar respostas de anexos fora de ordem (race entre cliques no olho)
+  const anexosReqIdRef = useRef(0);
   
   // Voltar dialog state
   const [voltarOperacionalDialogOpen, setVoltarOperacionalDialogOpen] = useState(false);
