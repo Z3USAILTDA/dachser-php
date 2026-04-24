@@ -275,7 +275,7 @@ export default function LocalCharges() {
             <Badge variant="outline" className="text-[0.72rem] border-border/50 bg-white/5 px-3 py-1">
               Total: <span className="font-bold ml-1">{allData.length}</span> registros
             </Badge>
-            {Object.entries(statsByArmador).map(([armador, count]) => count > 0 && <Badge key={armador} variant="outline" className={`text-[0.68rem] cursor-pointer transition-all ${armadorFilter === armador ? armadorColors[armador] + ' ring-1 ring-offset-1 ring-offset-background' : 'border-border/50 bg-white/5 hover:bg-white/10'}`} onClick={() => setArmadorFilter(armadorFilter === armador ? 'all' : armador)}>
+            {Object.entries(statsByArmador).map(([armador, count]) => count > 0 && <Badge key={armador} variant="outline" className={`text-[0.68rem] cursor-pointer transition-all ${armadorFilter === armador ? armadorColors[armador] + ' ring-1 ring-offset-1 ring-offset-background' : 'border-border/50 bg-white/5 hover:bg-white/10'}`} onClick={() => { const next = armadorFilter === armador ? 'all' : armador; setArmadorFilter(next); trackEvent(`sea.local_charges.filter.${next}`); }}>
                   {armador}: {count}
                 </Badge>)}
           </div>
