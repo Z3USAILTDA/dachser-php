@@ -806,7 +806,13 @@ serve(async (req) => {
 
       // Discrepancy lookup
       const discKey = `${row.AWB || ""}|${row.HAWB || ""}`;
-      const disc = discrepancyMap[discKey] || { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
+      let disc = discrepancyMap[discKey] || { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
+
+      // Suppress false-positive discrepancies for whitelisted AWBs
+      const SUPPRESSED_DISCREPANCY_AWBS = new Set<string>(['047-32916380']);
+      if (SUPPRESSED_DISCREPANCY_AWBS.has(String(row.AWB || '').trim())) {
+        disc = { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
+      }
 
       // Extract intermediate airports (conexões) from timeline
       const originIATAforConn = extractIATA(row.ORIGEM || "");
