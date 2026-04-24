@@ -147,9 +147,11 @@ serve(async (req) => {
     console.log(`Loaded ${EXACT_MAP.size} exact descriptions, ${KEYWORD_INDEX.length} keyword needles`);
 
     // Step 3: Main query with SLA calculation via CTE
-    // Returns the top 4 timeline events by physical array position ($[0..3]).
-    // The JS post-processing (pickTopByIATA) elects the most recent among them
-    // using the IATA hierarchy as tiebreaker — sole post-SQL processing.
+    // Returns the top 6 timeline events by physical array position ($[0..5]).
+    // 6 slots ensure operational events are captured even when preceded by
+    // multiple BKD entries (BKDs occur at start for every planned airport).
+    // The JS post-processing (pickTopByIATA) elects the most recent operational
+    // event, filtering BKDs when other events exist.
     const sql = `
       with base as (
         select
@@ -165,19 +167,27 @@ serve(async (req) => {
             json_unquote(json_extract(tdaf.timeline_json, '$[1].description')) as desc1,
             json_unquote(json_extract(tdaf.timeline_json, '$[2].description')) as desc2,
             json_unquote(json_extract(tdaf.timeline_json, '$[3].description')) as desc3,
+            json_unquote(json_extract(tdaf.timeline_json, '$[4].description')) as desc4,
+            json_unquote(json_extract(tdaf.timeline_json, '$[5].description')) as desc5,
             json_unquote(json_extract(tdaf.timeline_json, '$[0].location'))    as loc0,
             json_unquote(json_extract(tdaf.timeline_json, '$[1].location'))    as loc1,
             json_unquote(json_extract(tdaf.timeline_json, '$[2].location'))    as loc2,
             json_unquote(json_extract(tdaf.timeline_json, '$[3].location'))    as loc3,
+            json_unquote(json_extract(tdaf.timeline_json, '$[4].location'))    as loc4,
+            json_unquote(json_extract(tdaf.timeline_json, '$[5].location'))    as loc5,
             json_unquote(json_extract(tdaf.timeline_json, '$[0].date'))        as date0,
             json_unquote(json_extract(tdaf.timeline_json, '$[1].date'))        as date1,
             json_unquote(json_extract(tdaf.timeline_json, '$[2].date'))        as date2,
             json_unquote(json_extract(tdaf.timeline_json, '$[3].date'))        as date3,
+            json_unquote(json_extract(tdaf.timeline_json, '$[4].date'))        as date4,
+            json_unquote(json_extract(tdaf.timeline_json, '$[5].date'))        as date5,
             json_unquote(json_extract(tdaf.timeline_json, '$[0].time'))        as time0,
             json_unquote(json_extract(tdaf.timeline_json, '$[0].status_code')) as code0_native,
             json_unquote(json_extract(tdaf.timeline_json, '$[1].status_code')) as code1_native,
             json_unquote(json_extract(tdaf.timeline_json, '$[2].status_code')) as code2_native,
-            json_unquote(json_extract(tdaf.timeline_json, '$[3].status_code')) as code3_native
+            json_unquote(json_extract(tdaf.timeline_json, '$[3].status_code')) as code3_native,
+            json_unquote(json_extract(tdaf.timeline_json, '$[4].status_code')) as code4_native,
+            json_unquote(json_extract(tdaf.timeline_json, '$[5].status_code')) as code5_native
         from dados_dachser.t_dados_aereo tda
         left join dados_dachser.t_fato_aereo tdaf
             on tdaf.awb collate utf8mb4_unicode_ci = tda.awb_number collate utf8mb4_unicode_ci
@@ -660,18 +670,34 @@ serve(async (req) => {
       return 0;
     }
 
-    // Sole post-SQL processing: among the up to 4 slots returned by the query,
+    // Sole post-SQL processing: among the up to 6 slots returned by the query,
     // the chronologically newest event always wins. IATA hierarchy is used ONLY
-    // when multiple slots share the exact same parsed timestamp. If dates cannot
-    // be parsed, preserve SQL order (lower idx).
+    // when multiple slots share the exact same parsed timestamp.
+    //
+    // BKD filtering: BKD (Booked) events represent planned/future bookings made
+    // in advance for every airport in the planned route, often with future ETD
+    // timestamps that look "newest". When at least one non-BKD operational event
+    // exists in the slots, BKDs are filtered out so the real operational status
+    // wins (e.g., FOH, RCS, MAN). If all slots are BKD, the original logic
+    // applies (latest BKD wins).
     function pickTopByIATA(row: any): { code: string | null; desc: string | null; loc: string | null; date: string | null; idx: number } {
-      const slots = [
+      const allSlots = [
         { code: resolveCodeFromSlot(row.code0_native, row.desc0), desc: row.desc0, loc: row.loc0, date: row.date0, idx: 0 },
         { code: resolveCodeFromSlot(row.code1_native, row.desc1), desc: row.desc1, loc: row.loc1, date: row.date1, idx: 1 },
         { code: resolveCodeFromSlot(row.code2_native, row.desc2), desc: row.desc2, loc: row.loc2, date: row.date2, idx: 2 },
         { code: resolveCodeFromSlot(row.code3_native, row.desc3), desc: row.desc3, loc: row.loc3, date: row.date3, idx: 3 },
+        { code: resolveCodeFromSlot(row.code4_native, row.desc4), desc: row.desc4, loc: row.loc4, date: row.date4, idx: 4 },
+        { code: resolveCodeFromSlot(row.code5_native, row.desc5), desc: row.desc5, loc: row.loc5, date: row.date5, idx: 5 },
       ].filter(s => s.desc || s.code);
-      if (slots.length === 0) return { code: null, desc: null, loc: null, date: null, idx: -1 };
+      if (allSlots.length === 0) return { code: null, desc: null, loc: null, date: null, idx: -1 };
+
+      // Filter out BKD/booking variants when operational events exist.
+      const isBkd = (c: string | null) => {
+        const u = (c || "").toString().trim().toUpperCase();
+        return u === "BKD" || u === "BKG" || u === "BOOKED";
+      };
+      const nonBkd = allSlots.filter(s => !isBkd(s.code));
+      const slots = nonBkd.length > 0 ? nonBkd : allSlots;
 
       const slotsWithDate = slots.map((slot) => ({ ...slot, dateMs: parseSlotDateMs(slot.date) }));
       const latestDateMs = Math.max(...slotsWithDate.map((slot) => slot.dateMs));
