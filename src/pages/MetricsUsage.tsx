@@ -886,7 +886,6 @@ const MetricsUsage = () => {
                       </td>
                       <td className="py-2.5 px-3">
                         <div className="flex items-center gap-2">
-                          <span className="text-base leading-none">{pretty.icon}</span>
                           <div className="min-w-0">
                             <div className="text-foreground/90 truncate">{pretty.label}</div>
                             <div className="text-[10px] text-muted-foreground font-mono truncate">{cleanedRaw}</div>
