@@ -670,18 +670,34 @@ serve(async (req) => {
       return 0;
     }
 
-    // Sole post-SQL processing: among the up to 4 slots returned by the query,
+    // Sole post-SQL processing: among the up to 6 slots returned by the query,
     // the chronologically newest event always wins. IATA hierarchy is used ONLY
-    // when multiple slots share the exact same parsed timestamp. If dates cannot
-    // be parsed, preserve SQL order (lower idx).
+    // when multiple slots share the exact same parsed timestamp.
+    //
+    // BKD filtering: BKD (Booked) events represent planned/future bookings made
+    // in advance for every airport in the planned route, often with future ETD
+    // timestamps that look "newest". When at least one non-BKD operational event
+    // exists in the slots, BKDs are filtered out so the real operational status
+    // wins (e.g., FOH, RCS, MAN). If all slots are BKD, the original logic
+    // applies (latest BKD wins).
     function pickTopByIATA(row: any): { code: string | null; desc: string | null; loc: string | null; date: string | null; idx: number } {
-      const slots = [
+      const allSlots = [
         { code: resolveCodeFromSlot(row.code0_native, row.desc0), desc: row.desc0, loc: row.loc0, date: row.date0, idx: 0 },
         { code: resolveCodeFromSlot(row.code1_native, row.desc1), desc: row.desc1, loc: row.loc1, date: row.date1, idx: 1 },
         { code: resolveCodeFromSlot(row.code2_native, row.desc2), desc: row.desc2, loc: row.loc2, date: row.date2, idx: 2 },
         { code: resolveCodeFromSlot(row.code3_native, row.desc3), desc: row.desc3, loc: row.loc3, date: row.date3, idx: 3 },
+        { code: resolveCodeFromSlot(row.code4_native, row.desc4), desc: row.desc4, loc: row.loc4, date: row.date4, idx: 4 },
+        { code: resolveCodeFromSlot(row.code5_native, row.desc5), desc: row.desc5, loc: row.loc5, date: row.date5, idx: 5 },
       ].filter(s => s.desc || s.code);
-      if (slots.length === 0) return { code: null, desc: null, loc: null, date: null, idx: -1 };
+      if (allSlots.length === 0) return { code: null, desc: null, loc: null, date: null, idx: -1 };
+
+      // Filter out BKD/booking variants when operational events exist.
+      const isBkd = (c: string | null) => {
+        const u = (c || "").toString().trim().toUpperCase();
+        return u === "BKD" || u === "BKG" || u === "BOOKED";
+      };
+      const nonBkd = allSlots.filter(s => !isBkd(s.code));
+      const slots = nonBkd.length > 0 ? nonBkd : allSlots;
 
       const slotsWithDate = slots.map((slot) => ({ ...slot, dateMs: parseSlotDateMs(slot.date) }));
       const latestDateMs = Math.max(...slotsWithDate.map((slot) => slot.dateMs));
