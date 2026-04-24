@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { maritimoApi } from "@/services/maritimoApi";
 import { ThemeToggleButton } from "@/components/ThemeToggleButton";
+import { trackEvent } from "@/hooks/useUsageLog";
 interface BaseInfo {
   itemId: string;
   arquivo: string;
