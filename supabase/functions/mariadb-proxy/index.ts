@@ -8553,6 +8553,12 @@ Deno.serve(async (req) => {
             }
           }
 
+          // Suppress automatic discrepancy for whitelisted AWBs (false-positive overrides)
+          if (discrepancy && SUPPRESSED_DISCREPANCIES.has(cleanAwbForForce)) {
+            console.log(`[SUPPRESSED_DISCREPANCY] Discrepancy suppressed for AWB ${cleanAwbForForce}`);
+            discrepancy = null;
+          }
+
           // Apply forced discrepancy as fallback if automatic detection didn't find one
           const forcedDisc = FORCED_DISCREPANCIES[cleanAwbForForce];
           if (!discrepancy && forcedDisc) {
