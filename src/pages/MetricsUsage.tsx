@@ -573,7 +573,7 @@ const MetricsUsage = () => {
               Sem atividade no período.
             </div>
           ) : (
-            moduleStats.map((m) => {
+            moduleStats.filter((m) => m.module?.toLowerCase() !== "admin").map((m) => {
               const mins = Math.floor(m.avgTimeOnScreenSec / 60);
               const secs = m.avgTimeOnScreenSec % 60;
               const timeLabel = m.avgTimeOnScreenSec > 0
