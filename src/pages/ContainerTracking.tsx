@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, Fragment, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useUsageLog } from "@/hooks/useUsageLog";
+import { useUsageLog, trackEvent } from "@/hooks/useUsageLog";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
