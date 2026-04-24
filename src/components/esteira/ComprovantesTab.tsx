@@ -261,7 +261,7 @@ export function ComprovantesTab() {
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{doc.file_name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {doc.tipo_anexo?.replace(/_/g, " ")} • {doc.created_at ? format(new Date(doc.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR }) : ""}
+                      {doc.tipo_anexo?.replace(/_/g, " ")} • {fmtDate(doc.created_at)}
                     </p>
                   </div>
                 </div>
