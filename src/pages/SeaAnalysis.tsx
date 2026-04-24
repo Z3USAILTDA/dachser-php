@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { RefreshCw, Trash2, Play, FileText, ArrowRightLeft, Download, FolderOpen, Ship, HelpCircle, FileSpreadsheet, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
-import { useUsageLog } from "@/hooks/useUsageLog";
+import { useUsageLog, trackEvent } from "@/hooks/useUsageLog";
 import { NavTabs } from "@/components/maritimo/NavTabs";
 import { BadgeStatus } from "@/components/maritimo/BadgeStatus";
 import { HistoryModal } from "@/components/maritimo/HistoryModal";
@@ -124,28 +124,36 @@ export default function SeaAnalysis() {
       case 'hbl': setActiveTab('hbl_mbl'); break;
       case 'invoices': setActiveTab('invoices_hbl'); break;
     }
+    trackEvent(`sea.analysis.tab.${value}`);
   };
 
-  const handleNovoProcesso = () => navigate('/maritimo/invoices-draft-hbl');
+  const handleNovoProcesso = () => {
+    trackEvent("sea.analysis.new_process");
+    navigate('/maritimo/invoices-draft-hbl');
+  };
 
   const handleCadastro = () => {
+    trackEvent(`sea.analysis.cadastro.${activeTab}`);
     if (activeTab === 'manifest_hbl') navigate("/maritimo/cadastro-manifest");
     else if (activeTab === 'hbl_mbl') navigate("/maritimo/cadastro-hbl");
   };
 
   const handleSubmit = (id: string) => {
+    trackEvent(`sea.analysis.submit.${activeTab}`);
     if (activeTab === 'manifest_hbl') navigate(`/maritimo/submeter-manifest-hbl?itemId=${id}`);
     else if (activeTab === 'hbl_mbl') navigate(`/maritimo/submeter-hbl-mbl?itemId=${id}`);
     else if (activeTab === 'invoices_hbl') navigate(`/maritimo/invoices-draft-hbl?itemId=${id}`);
   };
 
   const handleHistory = async (id: string) => {
+    trackEvent("sea.analysis.history.open");
     setSelectedItemId(id);
     await fetchHistory(id);
     setHistoryModalOpen(true);
   };
 
   const handleDeleteClick = (id: string, name: string) => {
+    trackEvent("sea.analysis.delete.open");
     setItemToDelete({ id, name });
     setDeleteDialogOpen(true);
   };
@@ -153,6 +161,7 @@ export default function SeaAnalysis() {
   const confirmDelete = async () => {
     if (!itemToDelete) return;
     try {
+      trackEvent("sea.analysis.delete.confirm");
       await deleteItem(itemToDelete.id);
       toast.success("Item excluído com sucesso");
     } catch (error) {
@@ -164,6 +173,7 @@ export default function SeaAnalysis() {
   };
 
   const handleReextractMetadata = async () => {
+    trackEvent("sea.analysis.reextract_metadata");
     setIsReextracting(true);
     try {
       const result = await maritimoApi.reextractMetadata({ forceAll: true });
@@ -178,6 +188,7 @@ export default function SeaAnalysis() {
   };
 
   const handleExportReport = async () => {
+    trackEvent("sea.analysis.export_excel");
     setIsExporting(true);
     try {
       const result = await maritimoApi.exportReport({

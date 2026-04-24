@@ -23,6 +23,7 @@ import {
   Plus,
   FileText
 } from "lucide-react";
+import { trackEvent } from "@/hooks/useUsageLog";
 import { toast } from "sonner";
 import { useDemurrageData, useDemurrageStats, useSyncDemurrage, useRecalcDemurrage, type DemurrageContainer, type DemurrageFilters } from "@/hooks/useDemurrageData";
 import { exportDemurrageToExcel } from "@/utils/demurrageExcelExport";
@@ -149,7 +150,7 @@ export default function DemurrageMonitor() {
       toast.error("Não há dados para exportar");
       return;
     }
-    
+    trackEvent("sea.demurrage.monitor.export_excel");
     setIsExporting(true);
     try {
       const fileName = exportDemurrageToExcel(filteredContainers);
@@ -167,6 +168,7 @@ export default function DemurrageMonitor() {
       toast.error("Não há dados para exportar");
       return;
     }
+    trackEvent("sea.demurrage.monitor.export_pdf");
     try {
       const fileName = exportDemurrageReportPDF(filteredContainers);
       toast.success(`PDF exportado: ${fileName}`);
@@ -252,7 +254,7 @@ export default function DemurrageMonitor() {
       </Button>
       <Button 
         className="bg-[#ffc800] text-black hover:bg-[#e6b400]"
-        onClick={() => setImportDialogOpen(true)}
+        onClick={() => { trackEvent("sea.demurrage.monitor.import_mbl_open"); setImportDialogOpen(true); }}
       >
         <Plus className="h-4 w-4 mr-2" />
         Importar MBL

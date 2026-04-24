@@ -13,6 +13,7 @@ import { XlsxDebugPanel } from "@/components/maritimo/XlsxDebugPanel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
+import { trackEvent } from "@/hooks/useUsageLog";
 import { maritimoApi } from "@/services/maritimoApi";
 import { ThemeToggleButton } from "@/components/ThemeToggleButton";
 type AnalysisDiagnostics = {
@@ -191,6 +192,7 @@ export default function SubmeterManifestHbl() {
       showInlineStatus(`Tamanho total dos arquivos (${(totalSize / 1024 / 1024).toFixed(1)}MB) excede o limite de 100MB`, 'error');
       return;
     }
+    trackEvent("sea.submeter_manifest_hbl.analise");
     setIsAnalyzing(true);
     setAnalysisProgress(5);
     setAnalysisStep("Enviando arquivos...");

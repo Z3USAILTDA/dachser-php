@@ -717,9 +717,9 @@ Deno.serve(async (req) => {
         let storedMethod = logMethod || 'GET';
         let storedEndpoint = logEndpoint;
         if (logEventType === 'view_start') {
-          storedMethod = 'VIEW_START';
+          storedMethod = 'V_IN';
         } else if (logEventType === 'view_end') {
-          storedMethod = 'VIEW_END';
+          storedMethod = 'V_OUT';
           if (typeof logDurationMs === 'number' && logDurationMs >= 0) {
             storedEndpoint = `${logEndpoint}#dur=${Math.round(logDurationMs)}`;
           }

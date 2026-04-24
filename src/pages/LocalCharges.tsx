@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Search, RefreshCw, TrendingUp, Receipt, Filter } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useUsageLog } from "@/hooks/useUsageLog";
+import { useUsageLog, trackEvent } from "@/hooks/useUsageLog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -257,7 +257,7 @@ export default function LocalCharges() {
     fetchLocalCharges();
   }, []);
   const rightContent = <div className="flex items-center gap-2">
-      <Button onClick={() => navigate('/sea/alteracoes-fee')} className="h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(255,200,0,0.4)]">
+      <Button onClick={() => { trackEvent("sea.local_charges.open_alteracoes_fee"); navigate('/sea/alteracoes-fee'); }} className="h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(255,200,0,0.4)]">
         <TrendingUp className="h-4 w-4 mr-2" />
         Alterações de Fee
       </Button>
@@ -275,7 +275,7 @@ export default function LocalCharges() {
             <Badge variant="outline" className="text-[0.72rem] border-border/50 bg-white/5 px-3 py-1">
               Total: <span className="font-bold ml-1">{allData.length}</span> registros
             </Badge>
-            {Object.entries(statsByArmador).map(([armador, count]) => count > 0 && <Badge key={armador} variant="outline" className={`text-[0.68rem] cursor-pointer transition-all ${armadorFilter === armador ? armadorColors[armador] + ' ring-1 ring-offset-1 ring-offset-background' : 'border-border/50 bg-white/5 hover:bg-white/10'}`} onClick={() => setArmadorFilter(armadorFilter === armador ? 'all' : armador)}>
+            {Object.entries(statsByArmador).map(([armador, count]) => count > 0 && <Badge key={armador} variant="outline" className={`text-[0.68rem] cursor-pointer transition-all ${armadorFilter === armador ? armadorColors[armador] + ' ring-1 ring-offset-1 ring-offset-background' : 'border-border/50 bg-white/5 hover:bg-white/10'}`} onClick={() => { const next = armadorFilter === armador ? 'all' : armador; setArmadorFilter(next); trackEvent(`sea.local_charges.filter.${next}`); }}>
                   {armador}: {count}
                 </Badge>)}
           </div>

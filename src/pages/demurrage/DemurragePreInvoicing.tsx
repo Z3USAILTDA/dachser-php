@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { TablePagination } from "@/components/layout/TablePagination";
+import { trackEvent } from "@/hooks/useUsageLog";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -321,7 +322,7 @@ export default function DemurragePreInvoicing() {
       )}
       <Button 
         variant="outline" 
-        onClick={() => refetch()}
+        onClick={() => { trackEvent("sea.demurrage.pre_invoicing.refresh"); refetch(); }}
         className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]"
       >
         <RefreshCw className="h-4 w-4" />

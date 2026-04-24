@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import { PageLayout } from "@/components/layout/PageLayout";
+import { trackEvent } from "@/hooks/useUsageLog";
 
 interface ConsigneeSuggestion {
   nome_cliente: string;
@@ -253,6 +254,7 @@ const CadastroBl = () => {
     }
     setValidationErrors(new Set());
 
+    trackEvent("sea.cadastro_bl.save");
     setIsSaving(true);
     try {
       const now = new Date();

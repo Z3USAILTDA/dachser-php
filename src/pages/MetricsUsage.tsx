@@ -681,9 +681,9 @@ const MetricsUsage = () => {
                         <tr key={`${s.sessionId}-timeline`} className="bg-[#0a0b10]">
                           <td colSpan={7} className="px-4 py-3">
                             {(() => {
-                              // Soma das durações reais (VIEW_END com #dur=ms)
+                              // Soma das durações reais (V_OUT com #dur=ms)
                               const totalViewMs = s.events.reduce((acc, ev) => {
-                                if (ev.method === "VIEW_END") {
+                                if (ev.method === "V_OUT" || ev.method === "VIEW_END") {
                                   const m = ev.endpoint.match(/#dur=(\d+)$/);
                                   if (m) return acc + Number(m[1]);
                                 }
@@ -711,8 +711,8 @@ const MetricsUsage = () => {
                                       )
                                     )
                                   : 0;
-                                // Extrai duração explícita do view_end (formato endpoint#dur=ms)
-                                const durMatch = ev.method === "VIEW_END" ? ev.endpoint.match(/#dur=(\d+)$/) : null;
+                                const isViewEnd = ev.method === "V_OUT" || ev.method === "VIEW_END";
+                                const durMatch = isViewEnd ? ev.endpoint.match(/#dur=(\d+)$/) : null;
                                 const explicitDurSec = durMatch ? Math.round(Number(durMatch[1]) / 1000) : null;
                                 const cleanEndpoint = durMatch ? ev.endpoint.replace(/#dur=\d+$/, "") : ev.endpoint;
                                 return (

@@ -26,6 +26,7 @@ import {
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useRecalcDemurrage } from "@/hooks/useDemurrageData";
+import { trackEvent } from "@/hooks/useUsageLog";
 
 type QuickFilter = "all" | "contrato" | "processo" | "active" | "expired";
 const PAGE_SIZE = 15;
@@ -109,13 +110,16 @@ export default function DemurrageFreeTimes() {
 
   const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
+    trackEvent(`sea.demurrage.free_time.filter.${filter}`);
   };
 
   const handleEdit = (ft: ClientFreeTime) => {
+    trackEvent("sea.demurrage.free_time.edit_open");
     setEditingFreeTime(ft);
   };
 
   const handleDelete = (ft: ClientFreeTime) => {
+    trackEvent("sea.demurrage.free_time.delete_open");
     setDeletingFreeTime(ft);
   };
 
@@ -459,6 +463,7 @@ function EditFreeTimeDialog({ freeTime, open, onOpenChange, onSuccess }: EditFre
         notas: formData.notas || undefined,
       },
     });
+    trackEvent("sea.demurrage.free_time.save");
 
     onSuccess();
   };
