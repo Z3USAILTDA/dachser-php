@@ -6906,19 +6906,37 @@ Deno.serve(async (req) => {
           );
         }
         
-        let anexos: any[] = [];
-        try {
-          anexos = await client.query(`
-            SELECT id, voucher_id, tipo, file_name, file_url, file_size, created_at
-            FROM dados_dachser.t_voucher_anexos
-            WHERE voucher_id = ?
-            ORDER BY created_at DESC
-          `, [voucher_id]);
-        } catch (anexosErr) {
-          console.log('Error fetching anexos:', anexosErr);
+        // Retry uma vez em caso de falha transitória do MariaDB (timeout/conexão)
+        let anexos: any[] | null = null;
+        let lastErr: any = null;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            anexos = await client.query(`
+              SELECT id, voucher_id, tipo, file_name, file_url, file_size, created_at
+              FROM dados_dachser.t_voucher_anexos
+              WHERE voucher_id = ?
+              ORDER BY created_at DESC
+            `, [voucher_id]);
+            lastErr = null;
+            break;
+          } catch (anexosErr) {
+            lastErr = anexosErr;
+            console.log(`Error fetching anexos (attempt ${attempt}):`, anexosErr);
+            if (attempt < 2) await new Promise((r) => setTimeout(r, 250));
+          }
         }
         
-        result = { success: true, data: anexos || [] };
+        if (lastErr) {
+          // NÃO mascarar como lista vazia — frontend precisa diferenciar "sem anexos" de "falha"
+          result = {
+            success: false,
+            error: 'Falha ao consultar anexos no banco',
+            details: String(lastErr?.message || lastErr),
+            data: [],
+          };
+        } else {
+          result = { success: true, data: anexos || [] };
+        }
         break;
       }
 
