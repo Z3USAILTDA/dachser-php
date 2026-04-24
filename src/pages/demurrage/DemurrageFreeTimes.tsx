@@ -110,13 +110,16 @@ export default function DemurrageFreeTimes() {
 
   const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
+    trackEvent(`sea.demurrage.free_time.filter.${filter}`);
   };
 
   const handleEdit = (ft: ClientFreeTime) => {
+    trackEvent("sea.demurrage.free_time.edit_open");
     setEditingFreeTime(ft);
   };
 
   const handleDelete = (ft: ClientFreeTime) => {
+    trackEvent("sea.demurrage.free_time.delete_open");
     setDeletingFreeTime(ft);
   };
 
