@@ -147,9 +147,11 @@ serve(async (req) => {
     console.log(`Loaded ${EXACT_MAP.size} exact descriptions, ${KEYWORD_INDEX.length} keyword needles`);
 
     // Step 3: Main query with SLA calculation via CTE
-    // Returns the top 4 timeline events by physical array position ($[0..3]).
-    // The JS post-processing (pickTopByIATA) elects the most recent among them
-    // using the IATA hierarchy as tiebreaker — sole post-SQL processing.
+    // Returns the top 6 timeline events by physical array position ($[0..5]).
+    // 6 slots ensure operational events are captured even when preceded by
+    // multiple BKD entries (BKDs occur at start for every planned airport).
+    // The JS post-processing (pickTopByIATA) elects the most recent operational
+    // event, filtering BKDs when other events exist.
     const sql = `
       with base as (
         select
@@ -165,19 +167,27 @@ serve(async (req) => {
             json_unquote(json_extract(tdaf.timeline_json, '$[1].description')) as desc1,
             json_unquote(json_extract(tdaf.timeline_json, '$[2].description')) as desc2,
             json_unquote(json_extract(tdaf.timeline_json, '$[3].description')) as desc3,
+            json_unquote(json_extract(tdaf.timeline_json, '$[4].description')) as desc4,
+            json_unquote(json_extract(tdaf.timeline_json, '$[5].description')) as desc5,
             json_unquote(json_extract(tdaf.timeline_json, '$[0].location'))    as loc0,
             json_unquote(json_extract(tdaf.timeline_json, '$[1].location'))    as loc1,
             json_unquote(json_extract(tdaf.timeline_json, '$[2].location'))    as loc2,
             json_unquote(json_extract(tdaf.timeline_json, '$[3].location'))    as loc3,
+            json_unquote(json_extract(tdaf.timeline_json, '$[4].location'))    as loc4,
+            json_unquote(json_extract(tdaf.timeline_json, '$[5].location'))    as loc5,
             json_unquote(json_extract(tdaf.timeline_json, '$[0].date'))        as date0,
             json_unquote(json_extract(tdaf.timeline_json, '$[1].date'))        as date1,
             json_unquote(json_extract(tdaf.timeline_json, '$[2].date'))        as date2,
             json_unquote(json_extract(tdaf.timeline_json, '$[3].date'))        as date3,
+            json_unquote(json_extract(tdaf.timeline_json, '$[4].date'))        as date4,
+            json_unquote(json_extract(tdaf.timeline_json, '$[5].date'))        as date5,
             json_unquote(json_extract(tdaf.timeline_json, '$[0].time'))        as time0,
             json_unquote(json_extract(tdaf.timeline_json, '$[0].status_code')) as code0_native,
             json_unquote(json_extract(tdaf.timeline_json, '$[1].status_code')) as code1_native,
             json_unquote(json_extract(tdaf.timeline_json, '$[2].status_code')) as code2_native,
-            json_unquote(json_extract(tdaf.timeline_json, '$[3].status_code')) as code3_native
+            json_unquote(json_extract(tdaf.timeline_json, '$[3].status_code')) as code3_native,
+            json_unquote(json_extract(tdaf.timeline_json, '$[4].status_code')) as code4_native,
+            json_unquote(json_extract(tdaf.timeline_json, '$[5].status_code')) as code5_native
         from dados_dachser.t_dados_aereo tda
         left join dados_dachser.t_fato_aereo tdaf
             on tdaf.awb collate utf8mb4_unicode_ci = tda.awb_number collate utf8mb4_unicode_ci
