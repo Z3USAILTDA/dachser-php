@@ -689,7 +689,14 @@ Deno.serve(async (req) => {
 
       // ==================== METRICS ====================
       case 'log_usage': {
-        const { username: logUsername, endpoint: logEndpoint, method: logMethod, sessionId: logSessionId } = body;
+        const {
+          username: logUsername,
+          endpoint: logEndpoint,
+          method: logMethod,
+          sessionId: logSessionId,
+          eventType: logEventType,
+          durationMs: logDurationMs,
+        } = body;
         if (!logUsername || !logEndpoint) {
           return new Response(
             JSON.stringify({ error: 'Username e endpoint são obrigatórios' }),
@@ -704,13 +711,27 @@ Deno.serve(async (req) => {
           break;
         }
 
+        // Map view lifecycle events into the existing `method` column to avoid schema changes.
+        // VIEW_START / VIEW_END are written as method, with the duration_ms appended into the endpoint
+        // label (e.g. "/sea/tracking#dur=12345") only on VIEW_END so we can recover it client-side.
+        let storedMethod = logMethod || 'GET';
+        let storedEndpoint = logEndpoint;
+        if (logEventType === 'view_start') {
+          storedMethod = 'VIEW_START';
+        } else if (logEventType === 'view_end') {
+          storedMethod = 'VIEW_END';
+          if (typeof logDurationMs === 'number' && logDurationMs >= 0) {
+            storedEndpoint = `${logEndpoint}#dur=${Math.round(logDurationMs)}`;
+          }
+        }
+
         await client.query(
           `INSERT INTO ai_agente.t_dachser_usage_logs (username, endpoint, method, session_id, event_time)
            VALUES (?, ?, ?, ?, NOW())`,
-          [logUsername, logEndpoint, logMethod || 'GET', logSessionId || null]
+          [logUsername, storedEndpoint, storedMethod, logSessionId || null]
         );
 
-        console.log(`Usage logged: ${logUsername} -> ${logMethod || 'GET'} ${logEndpoint} (sid=${logSessionId || '-'})`);
+        console.log(`Usage logged: ${logUsername} -> ${storedMethod} ${storedEndpoint} (sid=${logSessionId || '-'})`);
         result = { success: true };
         break;
       }

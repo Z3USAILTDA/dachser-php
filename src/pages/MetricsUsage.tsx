@@ -680,9 +680,26 @@ const MetricsUsage = () => {
                       {isOpen && (
                         <tr key={`${s.sessionId}-timeline`} className="bg-[#0a0b10]">
                           <td colSpan={7} className="px-4 py-3">
-                            <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground mb-2">
-                              Timeline da sessão · ID: <span className="font-mono">{s.sessionId.slice(0, 8)}…</span>
-                            </div>
+                            {(() => {
+                              // Soma das durações reais (VIEW_END com #dur=ms)
+                              const totalViewMs = s.events.reduce((acc, ev) => {
+                                if (ev.method === "VIEW_END") {
+                                  const m = ev.endpoint.match(/#dur=(\d+)$/);
+                                  if (m) return acc + Number(m[1]);
+                                }
+                                return acc;
+                              }, 0);
+                              return (
+                                <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground mb-2 flex items-center gap-3">
+                                  <span>Timeline da sessão · ID: <span className="font-mono">{s.sessionId.slice(0, 8)}…</span></span>
+                                  {totalViewMs > 0 && (
+                                    <span className="text-primary normal-case tracking-normal">
+                                      Tempo total em telas: <span className="font-semibold">{formatDuration(Math.round(totalViewMs / 1000))}</span>
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                             <ol className="relative border-l border-white/15 ml-2 space-y-2">
                               {s.events.map((ev, idx) => {
                                 const next = s.events[idx + 1];
@@ -694,6 +711,10 @@ const MetricsUsage = () => {
                                       )
                                     )
                                   : 0;
+                                // Extrai duração explícita do view_end (formato endpoint#dur=ms)
+                                const durMatch = ev.method === "VIEW_END" ? ev.endpoint.match(/#dur=(\d+)$/) : null;
+                                const explicitDurSec = durMatch ? Math.round(Number(durMatch[1]) / 1000) : null;
+                                const cleanEndpoint = durMatch ? ev.endpoint.replace(/#dur=\d+$/, "") : ev.endpoint;
                                 return (
                                   <li key={`${ev.event_time}-${idx}`} className="ml-3 pl-2">
                                     <div className="absolute -left-1.5 mt-1 w-3 h-3 rounded-full bg-primary border border-black" />
@@ -702,10 +723,15 @@ const MetricsUsage = () => {
                                       <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] border ${getMethodClass(ev.method)}`}>
                                         {ev.method}
                                       </span>
-                                      <span className="text-foreground/90 truncate">{ev.endpoint}</span>
-                                      {gap > 0 && (
+                                      <span className="text-foreground/90 truncate">{cleanEndpoint}</span>
+                                      {explicitDurSec !== null && explicitDurSec > 0 && (
+                                        <span className="text-[10px] text-primary">
+                                          · permaneceu {formatDuration(explicitDurSec)}
+                                        </span>
+                                      )}
+                                      {explicitDurSec === null && gap > 0 && (
                                         <span className="text-[10px] text-muted-foreground">
-                                          · permaneceu {formatDuration(gap)}
+                                          · gap {formatDuration(gap)}
                                         </span>
                                       )}
                                     </div>
