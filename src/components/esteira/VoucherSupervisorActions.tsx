@@ -106,6 +106,7 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
   };
 
   const handleRejeitar = async () => {
+    trackEvent("vouchers.supervisor.reject");
     if (!comentarios.trim()) {
       toast({
         title: "Comentário obrigatório",
