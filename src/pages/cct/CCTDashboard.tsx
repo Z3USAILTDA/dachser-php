@@ -113,6 +113,7 @@ export default function CCTDashboard() {
   }, []);
   
   const handleMetricClick = (filter: MetricFilterType) => {
+    trackEvent(`cct.kpi.click:${filter}`);
     setMetricFilter(prev => prev === filter ? null : filter);
   };
 
@@ -347,7 +348,7 @@ export default function CCTDashboard() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => { trackEvent(`cct.tab.change:${tab.id}`); setActiveTab(tab.id); }}
                   className={`
                     flex items-center gap-2 px-4 py-2 rounded-full text-[0.8rem] font-medium transition-all duration-200
                     ${isActive 
