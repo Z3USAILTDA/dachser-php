@@ -215,7 +215,7 @@ export default function CCTDashboard() {
         {/* Right - Actions and user */}
         <div className="flex items-center gap-2.5 text-[0.85rem]">
           <button 
-            onClick={() => refetch()} 
+            onClick={() => { trackEvent("cct.refresh"); refetch(); }} 
             disabled={isRefetching} 
             className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50 text-[0.8rem]"
           >
@@ -226,7 +226,7 @@ export default function CCTDashboard() {
           {isAdmin && (
             <>
               <button 
-                onClick={() => navigate('/air/cct/leadcomex-logs')}
+                onClick={() => { trackEvent("cct.leadcomex_logs.open"); navigate('/air/cct/leadcomex-logs'); }}
                 className="flex items-center gap-2 px-4 py-2 rounded-full border border-amber-500/40 bg-[rgba(255,200,0,0.1)] text-amber-400 hover:bg-[rgba(255,200,0,0.2)] transition text-[0.8rem]"
               >
                 <FlaskConical className="h-4 w-4" />
@@ -234,6 +234,7 @@ export default function CCTDashboard() {
               </button>
               <button 
                 onClick={() => {
+                  trackEvent("cct.export.without_dep");
                   const count = exportCCTWithoutDepDateToExcel(processos);
                   if (count > 0) {
                     toast.success(`${count} AWBs sem data de decolagem exportadas`);
