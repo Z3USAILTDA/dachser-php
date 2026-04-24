@@ -2146,7 +2146,7 @@ const ContainerTracking = () => {
               ADM
             </button>}
           
-          <button onClick={() => setCadastroMaritimoOpen(true)} className="px-3 py-1.5 rounded-full border border-[#ffc800]/50 flex items-center gap-1.5 bg-[#ffc800]/20 text-[#ffc800] hover:bg-[#ffc800]/30 transition font-medium text-xs uppercase tracking-wide" title="Novo Processo Marítimo">
+          <button onClick={() => { trackEvent("sea.process.new_open"); setCadastroMaritimoOpen(true); }} className="px-3 py-1.5 rounded-full border border-[#ffc800]/50 flex items-center gap-1.5 bg-[#ffc800]/20 text-[#ffc800] hover:bg-[#ffc800]/30 transition font-medium text-xs uppercase tracking-wide" title="Novo Processo Marítimo">
               <FilePlus className="w-3.5 h-3.5" />
               Novo Processo
             </button>
