@@ -32,39 +32,69 @@ function getOrCreateSessionId(): string {
  * Hook para registrar uso de páginas no sistema de métricas.
  * Registra automaticamente quando a página é acessada.
  */
+async function sendLog(payload: Record<string, unknown>) {
+  try {
+    const storedUser = localStorage.getItem("user");
+    if (!storedUser) return;
+    const user = JSON.parse(storedUser);
+    const username = user?.username || user?.email?.split("@")[0];
+    if (!username || username === "unknown") return;
+
+    await supabase.functions.invoke("mariadb-proxy", {
+      body: {
+        action: "log_usage",
+        username,
+        sessionId: getOrCreateSessionId(),
+        ...payload,
+      },
+    });
+  } catch (error) {
+    console.warn("Failed to log usage:", error);
+  }
+}
+
 export function useUsageLog({ endpoint, method = "GET" }: UseUsageLogOptions) {
   const hasLogged = useRef(false);
+  const enteredAtRef = useRef<number>(0);
 
   useEffect(() => {
-    // Evita log duplicado em strict mode / re-renders
     if (hasLogged.current) return;
     hasLogged.current = true;
 
-    const logUsage = async () => {
-      try {
-        const storedUser = localStorage.getItem("user");
-        if (!storedUser) return;
+    enteredAtRef.current = Date.now();
+    const enteredAtIso = new Date(enteredAtRef.current).toISOString();
 
-        const user = JSON.parse(storedUser);
-        const username = user?.username || user?.email?.split("@")[0];
-        if (!username || username === "unknown") return;
+    // view_start
+    sendLog({
+      endpoint,
+      method,
+      eventType: "view_start",
+      enteredAt: enteredAtIso,
+    });
 
-        await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "log_usage",
-            username,
-            endpoint,
-            method,
-            sessionId: getOrCreateSessionId(),
-          },
-        });
-      } catch (error) {
-        // Silently fail - logging should not break the app
-        console.warn("Failed to log usage:", error);
-      }
+    const sendViewEnd = (reason: "unmount" | "pagehide") => {
+      const leftAt = Date.now();
+      const durationMs = leftAt - enteredAtRef.current;
+      // Use sendBeacon-like best-effort; supabase.functions.invoke may not flush on unload,
+      // so we also fire on unmount which covers SPA navigation.
+      sendLog({
+        endpoint,
+        method,
+        eventType: "view_end",
+        enteredAt: enteredAtIso,
+        leftAt: new Date(leftAt).toISOString(),
+        durationMs,
+        reason,
+      });
     };
 
-    logUsage();
+    const handlePageHide = () => sendViewEnd("pagehide");
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      sendViewEnd("unmount");
+    };
   }, [endpoint, method]);
 }
 
