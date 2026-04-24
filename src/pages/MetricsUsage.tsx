@@ -8,6 +8,7 @@ import { TablePagination } from "@/components/layout/TablePagination";
 import { supabase } from "@/integrations/supabase/client";
 import { trackEvent } from "@/hooks/useUsageLog";
 import { parseDBDate, formatDateTimeBR } from "@/utils/timezone";
+import { prettifyEndpoint, prettifyMethod } from "@/utils/endpointLabels";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
