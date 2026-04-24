@@ -874,18 +874,31 @@ const MetricsUsage = () => {
               ) : logs.length === 0 ? (
                 <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">Sem registros no período.</td></tr>
               ) : (
-                logs.map((log) => (
-                  <tr key={log.id} className="border-b border-white/10 hover:bg-white/5 transition-colors">
-                    <td className="py-2.5 px-3">{formatDate(log.event_time)}</td>
-                    <td className="py-2.5 px-3">{log.username}</td>
-                    <td className="py-2.5 px-3">
-                      <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[11px] border ${getMethodClass(log.method)}`}>
-                        {log.method}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-muted-foreground">{log.endpoint}</td>
-                  </tr>
-                ))
+                logs.map((log) => {
+                  const pretty = prettifyEndpoint(log.endpoint);
+                  const method = prettifyMethod(log.method);
+                  const cleanedRaw = log.endpoint.replace(/#dur=\d+$/, "");
+                  return (
+                    <tr key={log.id} className="border-b border-white/10 hover:bg-white/5 transition-colors">
+                      <td className="py-2.5 px-3">{formatDate(log.event_time)}</td>
+                      <td className="py-2.5 px-3">{log.username}</td>
+                      <td className="py-2.5 px-3">
+                        <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[11px] border ${getMethodClass(log.method)}`}>
+                          {method.label}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base leading-none">{pretty.icon}</span>
+                          <div className="min-w-0">
+                            <div className="text-foreground/90 truncate">{pretty.label}</div>
+                            <div className="text-[10px] text-muted-foreground font-mono truncate">{cleanedRaw}</div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
