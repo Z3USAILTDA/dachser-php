@@ -1234,12 +1234,23 @@ export const PagamentosTab = () => {
                     etapaAtual={selectedPagamento.etapa_atual || "FINANCEIRO"}
                     compact
                     onUploaded={async () => {
+                      const myReq = ++anexosReqIdRef.current;
                       try {
                         const { data } = await supabase.functions.invoke("mariadb-proxy", {
                           body: { action: "get_voucher_anexos", voucher_id: selectedPagamento.id },
                         });
-                        setAnexosDialog(data?.data || []);
+                        if (myReq !== anexosReqIdRef.current) return;
+                        if (data?.success === false) {
+                          toast({
+                            title: "Falha ao recarregar anexos",
+                            description: data?.error || "Tente reabrir o detalhe.",
+                            variant: "destructive",
+                          });
+                        } else {
+                          setAnexosDialog(data?.data || []);
+                        }
                       } catch (e) {
+                        if (myReq !== anexosReqIdRef.current) return;
                         console.error("Erro ao recarregar anexos:", e);
                       }
                     }}
