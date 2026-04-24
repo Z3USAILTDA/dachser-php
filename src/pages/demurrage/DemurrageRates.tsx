@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ImportRatesDialog } from "@/components/demurrage/ImportRatesDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { TablePagination } from "@/components/layout/TablePagination";
+import { trackEvent } from "@/hooks/useUsageLog";
 
 const CONTAINER_TYPES = [
   { value: "20DV", label: "20' Dry Van" },
