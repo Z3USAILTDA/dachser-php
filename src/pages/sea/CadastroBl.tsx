@@ -254,6 +254,7 @@ const CadastroBl = () => {
     }
     setValidationErrors(new Set());
 
+    trackEvent("sea.cadastro_bl.save");
     setIsSaving(true);
     try {
       const now = new Date();
