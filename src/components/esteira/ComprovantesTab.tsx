@@ -12,6 +12,12 @@ import { FileText, Search, RefreshCw, Calendar, Loader2, Eye, Files } from "luci
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FilePreview } from "./FilePreview";
+import { parseDBDate } from "@/utils/timezone";
+
+const fmtDate = (d: string | null | undefined) => {
+  const parsed = d ? parseDBDate(d) : null;
+  return parsed ? format(parsed, "dd/MM/yyyy HH:mm", { locale: ptBR }) : "-";
+};
 
 interface ComprovanteItem {
   id: number;
@@ -207,9 +213,7 @@ export function ComprovantesTab() {
                       <TableCell>
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
                           <Calendar className="h-3 w-3" />
-                          {group.lastUpload
-                            ? format(new Date(group.lastUpload), "dd/MM/yyyy HH:mm", { locale: ptBR })
-                            : "-"}
+                          {fmtDate(group.lastUpload)}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -257,7 +261,7 @@ export function ComprovantesTab() {
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{doc.file_name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {doc.tipo_anexo?.replace(/_/g, " ")} • {doc.created_at ? format(new Date(doc.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR }) : ""}
+                      {doc.tipo_anexo?.replace(/_/g, " ")} • {fmtDate(doc.created_at)}
                     </p>
                   </div>
                 </div>
