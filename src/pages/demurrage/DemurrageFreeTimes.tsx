@@ -26,6 +26,7 @@ import {
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useRecalcDemurrage } from "@/hooks/useDemurrageData";
+import { trackEvent } from "@/hooks/useUsageLog";
 
 type QuickFilter = "all" | "contrato" | "processo" | "active" | "expired";
 const PAGE_SIZE = 15;
