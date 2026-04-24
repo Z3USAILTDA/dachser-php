@@ -1153,7 +1153,15 @@ export const PagamentosTab = () => {
       )}
 
       {/* Details Dialog */}
-      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+      <Dialog open={detailsDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          // Invalida requests pendentes ao fechar para evitar respostas tardias sobrescreverem
+          anexosReqIdRef.current++;
+          setAnexosDialog([]);
+          setLoadingAnexos(false);
+        }
+        setDetailsDialogOpen(open);
+      }}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
