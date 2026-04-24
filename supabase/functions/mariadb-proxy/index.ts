@@ -856,7 +856,7 @@ Deno.serve(async (req) => {
         const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
         const HIDDEN_LOG_USERS = ["admin", "teste.test3"];
 
-        let whereConditions = ["event_time BETWEEN ? AND ?"];
+        let whereConditions = ["event_time BETWEEN ? AND ?", "username != 'unknown'", "username IS NOT NULL", "username != ''"];
         let params: (string | number)[] = [`${dateFrom} 00:00:00`, `${dateTo} 23:59:59`];
 
         // Filtrar logs de usuários de teste para usuários DACHSER
