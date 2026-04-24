@@ -752,15 +752,15 @@ const TrackingAereo = () => {
               </div>
 
               <div className="flex items-center gap-2">
-                <button onClick={() => setShowMonitoredModal(true)} className="h-8 px-4 rounded-full bg-emerald-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-emerald-500/80 transition border border-emerald-500/50">
+                <button onClick={() => { trackEvent("air.monitored_airlines.open"); setShowMonitoredModal(true); }} className="h-8 px-4 rounded-full bg-emerald-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-emerald-500/80 transition border border-emerald-500/50">
                   <Plane className="w-3.5 h-3.5" />
                   CIAs Monitoradas ({monitoredAirlinesData.totalAirlines})
                 </button>
-                <button onClick={() => setCadastroNovaOpen(true)} className="h-8 px-4 rounded-full bg-emerald-500/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-emerald-400/80 transition border border-emerald-400/50 shadow-[0_0_15px_rgba(16,185,129,.2)]">
+                <button onClick={() => { trackEvent("air.process.new_open"); setCadastroNovaOpen(true); }} className="h-8 px-4 rounded-full bg-emerald-500/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-emerald-400/80 transition border border-emerald-400/50 shadow-[0_0_15px_rgba(16,185,129,.2)]">
                   <FilePlus className="w-3.5 h-3.5" />
                   Novo Processo
                 </button>
-                <button onClick={fetchData} className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)]">
+                <button onClick={() => { trackEvent("air.refresh"); fetchData(); }} className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)]">
                   <RefreshCw className="w-3.5 h-3.5" />
                   Atualizar
                 </button>
@@ -982,7 +982,7 @@ const TrackingAereo = () => {
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="sm" onClick={() => setTimelineModal({ open: true, awb: awb.awb, consigneeName: awb.consignee_name, timelineJson: awb.timeline_json || [], lastEvent: awb.last_event })} className="text-[#ffc800] hover:text-[#ffc800] hover:bg-[#ffc800]/10 h-8 w-8 p-0">
+                                    <Button variant="ghost" size="sm" onClick={() => { trackEvent("air.timeline.open"); setTimelineModal({ open: true, awb: awb.awb, consigneeName: awb.consignee_name, timelineJson: awb.timeline_json || [], lastEvent: awb.last_event }); }} className="text-[#ffc800] hover:text-[#ffc800] hover:bg-[#ffc800]/10 h-8 w-8 p-0">
                                       <Clock className="w-4 h-4" />
                                     </Button>
                                   </TooltipTrigger>
@@ -993,7 +993,7 @@ const TrackingAereo = () => {
                                 const trackingUrl = getTrackingUrl(awb.airline_code, awb.awb);
                                 return trackingUrl ? (
                                   <TooltipProvider><Tooltip><TooltipTrigger asChild>
-                                    <Button variant="ghost" size="sm" onClick={() => window.open(trackingUrl, "_blank", "noopener,noreferrer")} className="text-foreground hover:text-primary h-8 w-8 p-0">
+                                    <Button variant="ghost" size="sm" onClick={() => { trackEvent(`air.airline_link.open:${awb.airline_code || "unknown"}`); window.open(trackingUrl, "_blank", "noopener,noreferrer"); }} className="text-foreground hover:text-primary h-8 w-8 p-0">
                                       <ExternalLink className="w-4 h-4" />
                                     </Button>
                                   </TooltipTrigger><TooltipContent><p className="text-xs">Abrir Rastreio Externo</p></TooltipContent></Tooltip></TooltipProvider>
