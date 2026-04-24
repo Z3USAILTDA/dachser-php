@@ -786,11 +786,10 @@ const MetricsUsage = () => {
                                           isEvent ? "bg-emerald-400" : "bg-primary"
                                         }`}
                                       />
-                                      <div className="flex items-center gap-2 text-xs flex-wrap">
+                      <div className="flex items-center gap-2 text-xs flex-wrap">
                                         <span className="text-muted-foreground tabular-nums">
-                                          {isEvent ? "⚡" : "⏱"} {time}
+                                          {time}
                                         </span>
-                                        <span className="text-base leading-none">{pretty.icon}</span>
                                         <span className="text-foreground/90 truncate">{pretty.label}</span>
                                         {!isEvent && (
                                           <span className="text-[10px] text-muted-foreground">
