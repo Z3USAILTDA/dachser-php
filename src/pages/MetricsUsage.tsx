@@ -157,6 +157,12 @@ const MetricsUsage = () => {
     }
   }, [user, dateFrom, dateTo, usernameFilter, moduleFilter, perPage, currentPage]);
 
+  useEffect(() => {
+    if (user?.is_admin === 1 || user?.metrics_only === 1) {
+      fetchSessions();
+    }
+  }, [user, dateFrom, dateTo, usernameFilter, sessionsPage]);
+
   const fetchModuleStats = async () => {
     setLoadingModules(true);
     try {
@@ -176,6 +182,42 @@ const MetricsUsage = () => {
       setLoadingModules(false);
     }
   };
+
+  const fetchSessions = async () => {
+    setLoadingSessions(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "get_metrics_sessions",
+          dateFrom,
+          dateTo,
+          username: usernameFilter,
+          requesterUsername: user?.username,
+          perPage: 25,
+          page: sessionsPage,
+        },
+      });
+      if (!error && data?.sessions) {
+        setSessions(data.sessions);
+        setSessionsTotalPages(data.totalPages || 1);
+      }
+    } catch (err) {
+      console.error("Error fetching sessions:", err);
+    } finally {
+      setLoadingSessions(false);
+    }
+  };
+
+  const formatDuration = (sec: number) => {
+    if (!sec || sec <= 0) return "—";
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
+
 
   const fetchMetrics = async () => {
     setLoading(true);
