@@ -136,8 +136,36 @@ const MetricsUsage = () => {
   useEffect(() => {
     if (user?.is_admin === 1 || user?.metrics_only === 1) {
       fetchMetrics();
+      fetchModuleStats();
     }
   }, [user, dateFrom, dateTo, usernameFilter, moduleFilter, perPage, currentPage]);
+
+  const fetchModuleStats = async () => {
+    setLoadingModules(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "get_metrics_by_module",
+          dateFrom,
+          dateTo,
+          username: usernameFilter,
+          requesterUsername: user?.username,
+        },
+      });
+      if (!error && data?.modules) setModuleStats(data.modules);
+    } catch (err) {
+      console.error("Error fetching module stats:", err);
+    } finally {
+      setLoadingModules(false);
+    }
+  };
+
+  const fetchMetrics = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "get_metrics",
 
   const fetchMetrics = async () => {
     setLoading(true);
