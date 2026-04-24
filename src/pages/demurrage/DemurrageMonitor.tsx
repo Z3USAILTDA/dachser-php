@@ -254,7 +254,7 @@ export default function DemurrageMonitor() {
       </Button>
       <Button 
         className="bg-[#ffc800] text-black hover:bg-[#e6b400]"
-        onClick={() => setImportDialogOpen(true)}
+        onClick={() => { trackEvent("sea.demurrage.monitor.import_mbl_open"); setImportDialogOpen(true); }}
       >
         <Plus className="h-4 w-4 mr-2" />
         Importar MBL
