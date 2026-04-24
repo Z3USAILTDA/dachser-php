@@ -125,6 +125,8 @@ export function useUsageLog({ endpoint, method = "GET" }: UseUsageLogOptions) {
  */
 export async function logAction(endpoint: string, method: "POST" | "DELETE" | "PUT" = "POST") {
   try {
+    if (isAdminScoped(endpoint)) return;
+
     const storedUser = localStorage.getItem("user");
     if (!storedUser) return;
 
