@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { RefreshCw, Trash2, Play, FileText, ArrowRightLeft, Download, FolderOpen, Ship, HelpCircle, FileSpreadsheet, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
-import { useUsageLog } from "@/hooks/useUsageLog";
+import { useUsageLog, trackEvent } from "@/hooks/useUsageLog";
 import { NavTabs } from "@/components/maritimo/NavTabs";
 import { BadgeStatus } from "@/components/maritimo/BadgeStatus";
 import { HistoryModal } from "@/components/maritimo/HistoryModal";
