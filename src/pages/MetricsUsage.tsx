@@ -78,6 +78,23 @@ const MetricsUsage = () => {
   }>>([]);
   const [loadingModules, setLoadingModules] = useState(false);
 
+  interface SessionEvent { endpoint: string; method: string; event_time: string; }
+  interface SessionRow {
+    sessionId: string;
+    username: string;
+    startedAt: string;
+    endedAt: string;
+    eventCount: number;
+    uniqueEndpoints: number;
+    durationSec: number;
+    events: SessionEvent[];
+  }
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [sessionsPage, setSessionsPage] = useState(1);
+  const [sessionsTotalPages, setSessionsTotalPages] = useState(1);
+  const [expandedSession, setExpandedSession] = useState<string | null>(null);
+
   // Função auxiliar para obter data no formato YYYY-MM-DD em fuso local (São Paulo)
   const getLocalDateString = (date: Date): string => {
     const year = date.getFullYear();
@@ -140,6 +157,12 @@ const MetricsUsage = () => {
     }
   }, [user, dateFrom, dateTo, usernameFilter, moduleFilter, perPage, currentPage]);
 
+  useEffect(() => {
+    if (user?.is_admin === 1 || user?.metrics_only === 1) {
+      fetchSessions();
+    }
+  }, [user, dateFrom, dateTo, usernameFilter, sessionsPage]);
+
   const fetchModuleStats = async () => {
     setLoadingModules(true);
     try {
@@ -159,6 +182,42 @@ const MetricsUsage = () => {
       setLoadingModules(false);
     }
   };
+
+  const fetchSessions = async () => {
+    setLoadingSessions(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "get_metrics_sessions",
+          dateFrom,
+          dateTo,
+          username: usernameFilter,
+          requesterUsername: user?.username,
+          perPage: 25,
+          page: sessionsPage,
+        },
+      });
+      if (!error && data?.sessions) {
+        setSessions(data.sessions);
+        setSessionsTotalPages(data.totalPages || 1);
+      }
+    } catch (err) {
+      console.error("Error fetching sessions:", err);
+    } finally {
+      setLoadingSessions(false);
+    }
+  };
+
+  const formatDuration = (sec: number) => {
+    if (!sec || sec <= 0) return "—";
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
+
 
   const fetchMetrics = async () => {
     setLoading(true);
@@ -556,6 +615,117 @@ const MetricsUsage = () => {
             })
           )}
         </div>
+      </PageCard>
+
+      {/* Sessões */}
+      <PageCard>
+        <div className="flex justify-between items-end gap-3 mb-3">
+          <div>
+            <div className="text-sm uppercase tracking-[0.18em] font-semibold">Sessões</div>
+            <p className="text-xs text-muted-foreground">
+              Cada linha é uma sessão (1 aba do navegador). Clique para ver a timeline cronológica de telas visitadas.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/12 text-xs">
+            <span className="w-2 h-2 rounded-full bg-primary" />
+            {loadingSessions ? "Carregando..." : `${sessions.length} sessão(ões)`}
+          </div>
+        </div>
+
+        <div className="max-h-[60vh] overflow-auto rounded-xl border border-white/12">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-[#14151c] sticky top-0 z-10">
+                <th className="py-2.5 px-3 w-8" />
+                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Usuário</th>
+                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Início</th>
+                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Fim</th>
+                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Duração</th>
+                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Telas</th>
+                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Únicas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingSessions ? (
+                <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">Carregando...</td></tr>
+              ) : sessions.length === 0 ? (
+                <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">
+                  Nenhuma sessão registrada no período. Sessões só aparecem após o próximo acesso (precisa do session_id gravado).
+                </td></tr>
+              ) : (
+                sessions.map((s) => {
+                  const isOpen = expandedSession === s.sessionId;
+                  return (
+                    <>
+                      <tr
+                        key={s.sessionId}
+                        className="border-b border-white/10 hover:bg-white/5 transition-colors cursor-pointer"
+                        onClick={() => setExpandedSession(isOpen ? null : s.sessionId)}
+                      >
+                        <td className="py-2.5 px-3 text-muted-foreground">{isOpen ? "▾" : "▸"}</td>
+                        <td className="py-2.5 px-3 font-medium">{s.username}</td>
+                        <td className="py-2.5 px-3 text-muted-foreground">{formatDate(s.startedAt)}</td>
+                        <td className="py-2.5 px-3 text-muted-foreground">{formatDate(s.endedAt)}</td>
+                        <td className="py-2.5 px-3">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border border-primary/40 bg-primary/10 text-primary">
+                            {formatDuration(s.durationSec)}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3">{s.eventCount}</td>
+                        <td className="py-2.5 px-3 text-muted-foreground">{s.uniqueEndpoints}</td>
+                      </tr>
+                      {isOpen && (
+                        <tr key={`${s.sessionId}-timeline`} className="bg-[#0a0b10]">
+                          <td colSpan={7} className="px-4 py-3">
+                            <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground mb-2">
+                              Timeline da sessão · ID: <span className="font-mono">{s.sessionId.slice(0, 8)}…</span>
+                            </div>
+                            <ol className="relative border-l border-white/15 ml-2 space-y-2">
+                              {s.events.map((ev, idx) => {
+                                const next = s.events[idx + 1];
+                                const gap = next
+                                  ? Math.max(
+                                      0,
+                                      Math.round(
+                                        (new Date(next.event_time).getTime() - new Date(ev.event_time).getTime()) / 1000
+                                      )
+                                    )
+                                  : 0;
+                                return (
+                                  <li key={`${ev.event_time}-${idx}`} className="ml-3 pl-2">
+                                    <div className="absolute -left-1.5 mt-1 w-3 h-3 rounded-full bg-primary border border-black" />
+                                    <div className="flex items-center gap-2 text-xs">
+                                      <span className="text-muted-foreground tabular-nums">{formatDate(ev.event_time)}</span>
+                                      <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] border ${getMethodClass(ev.method)}`}>
+                                        {ev.method}
+                                      </span>
+                                      <span className="text-foreground/90 truncate">{ev.endpoint}</span>
+                                      {gap > 0 && (
+                                        <span className="text-[10px] text-muted-foreground">
+                                          · permaneceu {formatDuration(gap)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </li>
+                                );
+                              })}
+                            </ol>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <TablePagination
+          currentPage={sessionsPage}
+          totalPages={sessionsTotalPages}
+          onPageChange={setSessionsPage}
+        />
       </PageCard>
 
       {/* Table Section */}
