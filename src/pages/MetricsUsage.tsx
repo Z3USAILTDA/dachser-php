@@ -611,8 +611,7 @@ const MetricsUsage = () => {
                     return (
                       <div className="mt-2 pt-2 border-t border-white/10">
                         <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">Top endpoint</div>
-                        <div className="text-[11px] truncate text-foreground/80 flex items-center gap-1" title={m.topEndpoint}>
-                          <span>{pretty.icon}</span>
+                        <div className="text-[11px] truncate text-foreground/80" title={m.topEndpoint}>
                           <span className="truncate">{pretty.label}</span>
                         </div>
                       </div>
@@ -740,7 +739,6 @@ const MetricsUsage = () => {
                                 <div className="divide-y divide-white/5">
                                   {summaryRows.map((row) => (
                                     <div key={row.endpoint} className="flex items-center gap-3 px-3 py-2 text-xs">
-                                      <span className="text-base leading-none">{row.pretty.icon}</span>
                                       <div className="flex-1 min-w-0">
                                         <div className="text-foreground/90 truncate">{row.pretty.label}</div>
                                         <div className="text-[10px] text-muted-foreground truncate">{row.pretty.module}</div>
@@ -786,11 +784,10 @@ const MetricsUsage = () => {
                                           isEvent ? "bg-emerald-400" : "bg-primary"
                                         }`}
                                       />
-                                      <div className="flex items-center gap-2 text-xs flex-wrap">
+                      <div className="flex items-center gap-2 text-xs flex-wrap">
                                         <span className="text-muted-foreground tabular-nums">
-                                          {isEvent ? "⚡" : "⏱"} {time}
+                                          {time}
                                         </span>
-                                        <span className="text-base leading-none">{pretty.icon}</span>
                                         <span className="text-foreground/90 truncate">{pretty.label}</span>
                                         {!isEvent && (
                                           <span className="text-[10px] text-muted-foreground">
@@ -889,7 +886,6 @@ const MetricsUsage = () => {
                       </td>
                       <td className="py-2.5 px-3">
                         <div className="flex items-center gap-2">
-                          <span className="text-base leading-none">{pretty.icon}</span>
                           <div className="min-w-0">
                             <div className="text-foreground/90 truncate">{pretty.label}</div>
                             <div className="text-[10px] text-muted-foreground font-mono truncate">{cleanedRaw}</div>
