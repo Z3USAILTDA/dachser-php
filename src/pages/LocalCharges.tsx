@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Search, RefreshCw, TrendingUp, Receipt, Filter } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useUsageLog } from "@/hooks/useUsageLog";
+import { useUsageLog, trackEvent } from "@/hooks/useUsageLog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
