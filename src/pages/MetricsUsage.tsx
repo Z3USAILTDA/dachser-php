@@ -711,7 +711,7 @@ const MetricsUsage = () => {
                                       )
                                     )
                                   : 0;
-                                const isViewEnd = ev.method === "V_OUT" || ev.method === "VIEW_END";
+                                const isViewEnd = ev.method === "VO" || ev.method === "V_OUT" || ev.method === "VIEW_END";
                                 const durMatch = isViewEnd ? ev.endpoint.match(/#dur=(\d+)$/) : null;
                                 const explicitDurSec = durMatch ? Math.round(Number(durMatch[1]) / 1000) : null;
                                 const cleanEndpoint = durMatch ? ev.endpoint.replace(/#dur=\d+$/, "") : ev.endpoint;
