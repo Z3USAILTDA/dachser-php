@@ -7559,6 +7559,11 @@ Deno.serve(async (req) => {
           '996-14370731': { field: 'pecas', values: [26, 15, 11, 6, 5], min: 5, max: 26 },
         };
 
+        // Suppressed discrepancies: AWBs where automatic discrepancy detection should be ignored
+        const SUPPRESSED_DISCREPANCIES = new Set<string>([
+          '047-32916380',
+        ]);
+
         const FORCED_TIMELINES: Record<string, { events: any[]; tracking_failed: boolean }> = {
           '047-32916273': {
             tracking_failed: false,
@@ -8546,6 +8551,12 @@ Deno.serve(async (req) => {
               discrepancy = { field: 'dis', values: [], min: null, max: null };
               console.log(`[DISCREPANCY] DIS event detected for AWB ${queryAwb}`);
             }
+          }
+
+          // Suppress automatic discrepancy for whitelisted AWBs (false-positive overrides)
+          if (discrepancy && SUPPRESSED_DISCREPANCIES.has(cleanAwbForForce)) {
+            console.log(`[SUPPRESSED_DISCREPANCY] Discrepancy suppressed for AWB ${cleanAwbForForce}`);
+            discrepancy = null;
           }
 
           // Apply forced discrepancy as fallback if automatic detection didn't find one
