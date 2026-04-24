@@ -8,6 +8,7 @@ import { SeaDbStatsPanel, SeaDbStats } from "@/components/draft/SeaDbStatsPanel"
 import { supabase } from "@/integrations/supabase/client";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { useTheme } from "@/hooks/useTheme";
+import { trackEvent } from "@/hooks/useUsageLog";
 type TabType = "grid" | "tracker";
 interface NavTab {
   id: TabType;
