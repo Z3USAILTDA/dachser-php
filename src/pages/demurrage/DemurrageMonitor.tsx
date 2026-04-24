@@ -23,6 +23,7 @@ import {
   Plus,
   FileText
 } from "lucide-react";
+import { trackEvent } from "@/hooks/useUsageLog";
 import { toast } from "sonner";
 import { useDemurrageData, useDemurrageStats, useSyncDemurrage, useRecalcDemurrage, type DemurrageContainer, type DemurrageFilters } from "@/hooks/useDemurrageData";
 import { exportDemurrageToExcel } from "@/utils/demurrageExcelExport";
