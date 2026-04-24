@@ -112,6 +112,7 @@ export default function SubmeterHblMbl() {
       showInlineStatus(`Arquivo muito grande (${(mblFile.size / 1024 / 1024).toFixed(1)}MB). Limite: 50MB`, 'error');
       return;
     }
+    trackEvent("sea.submeter_hbl_mbl.analise");
     setIsAnalyzing(true);
     setAnalysisProgress(5);
     setAnalysisStep("Enviando arquivos...");
