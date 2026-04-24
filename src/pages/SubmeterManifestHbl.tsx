@@ -13,6 +13,7 @@ import { XlsxDebugPanel } from "@/components/maritimo/XlsxDebugPanel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
+import { trackEvent } from "@/hooks/useUsageLog";
 import { maritimoApi } from "@/services/maritimoApi";
 import { ThemeToggleButton } from "@/components/ThemeToggleButton";
 type AnalysisDiagnostics = {
