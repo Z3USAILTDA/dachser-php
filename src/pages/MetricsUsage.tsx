@@ -490,6 +490,74 @@ const MetricsUsage = () => {
         </PageCard>
       </div>
 
+      {/* Uso por Módulo */}
+      <PageCard>
+        <div className="flex justify-between items-end gap-3 mb-3">
+          <div>
+            <div className="text-sm uppercase tracking-[0.18em] font-semibold">Uso por Módulo</div>
+            <p className="text-xs text-muted-foreground">
+              Acessos, usuários únicos e tempo médio estimado na tela por módulo (gap entre eventos consecutivos, capado em 30 min).
+            </p>
+          </div>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-[0.12em]">
+            {loadingModules ? "Carregando..." : `${moduleStats.length} módulos`}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          {moduleStats.length === 0 && !loadingModules ? (
+            <div className="col-span-full text-center text-muted-foreground text-sm py-6">
+              Sem atividade no período.
+            </div>
+          ) : (
+            moduleStats.map((m) => {
+              const mins = Math.floor(m.avgTimeOnScreenSec / 60);
+              const secs = m.avgTimeOnScreenSec % 60;
+              const timeLabel = m.avgTimeOnScreenSec > 0
+                ? (mins > 0 ? `${mins}m ${secs}s` : `${secs}s`)
+                : "—";
+              const isActive = moduleFilter === m.module;
+              return (
+                <button
+                  key={m.module}
+                  onClick={() => { setModuleFilter(isActive ? "" : m.module); setCurrentPage(1); }}
+                  className={`text-left rounded-xl p-3 border transition-all hover:bg-white/5 ${
+                    isActive
+                      ? "border-primary/60 bg-primary/5 shadow-[0_0_0_1px_rgba(255,200,0,0.4)]"
+                      : "border-white/10 bg-[#0a0b10]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] uppercase tracking-[0.16em] font-semibold text-primary">
+                      {m.label}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">{m.totalAccesses} acessos</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div>
+                      <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">Usuários</div>
+                      <div className="text-base font-bold">{m.uniqueUsers}</div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">Tempo médio</div>
+                      <div className="text-base font-bold">{timeLabel}</div>
+                    </div>
+                  </div>
+                  {m.topEndpoint && (
+                    <div className="mt-2 pt-2 border-t border-white/10">
+                      <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">Top endpoint</div>
+                      <div className="text-[11px] truncate text-foreground/80" title={m.topEndpoint}>
+                        {m.topEndpoint}
+                      </div>
+                    </div>
+                  )}
+                </button>
+              );
+            })
+          )}
+        </div>
+      </PageCard>
+
       {/* Table Section */}
       <PageCard>
         <div className="flex justify-between items-end gap-3 mb-3">
