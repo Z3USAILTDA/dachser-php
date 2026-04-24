@@ -6,6 +6,28 @@ interface UseUsageLogOptions {
   method?: "GET" | "POST" | "DELETE" | "PUT";
 }
 
+const SESSION_STORAGE_KEY = "dachser_session_id";
+
+/**
+ * Retorna (ou cria) um session_id único por aba do navegador.
+ * sessionStorage é isolado por aba e persiste em reloads da mesma aba.
+ */
+function getOrCreateSessionId(): string {
+  try {
+    let sid = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!sid) {
+      sid =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `s_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      sessionStorage.setItem(SESSION_STORAGE_KEY, sid);
+    }
+    return sid;
+  } catch {
+    return `s_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
 /**
  * Hook para registrar uso de páginas no sistema de métricas.
  * Registra automaticamente quando a página é acessada.
@@ -22,7 +44,7 @@ export function useUsageLog({ endpoint, method = "GET" }: UseUsageLogOptions) {
       try {
         const storedUser = localStorage.getItem("user");
         if (!storedUser) return;
-        
+
         const user = JSON.parse(storedUser);
         const username = user?.username || user?.email?.split("@")[0];
         if (!username || username === "unknown") return;
@@ -33,6 +55,7 @@ export function useUsageLog({ endpoint, method = "GET" }: UseUsageLogOptions) {
             username,
             endpoint,
             method,
+            sessionId: getOrCreateSessionId(),
           },
         });
       } catch (error) {
@@ -52,7 +75,7 @@ export async function logAction(endpoint: string, method: "POST" | "DELETE" | "P
   try {
     const storedUser = localStorage.getItem("user");
     if (!storedUser) return;
-    
+
     const user = JSON.parse(storedUser);
     const username = user?.username || user?.email?.split("@")[0];
     if (!username || username === "unknown") return;
@@ -63,6 +86,7 @@ export async function logAction(endpoint: string, method: "POST" | "DELETE" | "P
         username,
         endpoint,
         method,
+        sessionId: getOrCreateSessionId(),
       },
     });
   } catch (error) {
