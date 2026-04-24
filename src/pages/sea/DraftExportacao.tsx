@@ -149,14 +149,14 @@ const DraftExportacao = () => {
         <div className="flex items-center gap-2.5 text-[0.85rem]">
           <SeaDbStatsPanel stats={seaDbStats} isLoading={isLoadingDbStats} onRefresh={fetchSeaDbStats} />
           
-          <button onClick={() => refetch()} disabled={isLoading} className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50 text-[0.8rem]">
+          <button onClick={() => { trackEvent("sea.draft_exp.refresh"); refetch(); }} disabled={isLoading} className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50 text-[0.8rem]">
             <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             Atualizar
           </button>
           
           
           
-          <button onClick={() => navigate("/sea/manual-drafts")} className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition" title="Ajuda">
+          <button onClick={() => { trackEvent("sea.draft_exp.help_open"); navigate("/sea/manual-drafts"); }} className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition" title="Ajuda">
             <HelpCircle size={16} />
           </button>
 
@@ -178,7 +178,7 @@ const DraftExportacao = () => {
           {navTabs.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
-            return <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`
+            return <button key={tab.id} onClick={() => { setActiveTab(tab.id); trackEvent(`sea.draft_exp.tab.${tab.id}`); }} className={`
                     flex items-center gap-2 px-4 py-2 rounded-full text-[0.8rem] font-medium transition-all duration-200
                     ${isActive ? 'bg-[rgba(255,200,0,0.15)] text-[#ffc800] border border-[#ffc800]/40 shadow-[0_0_12px_rgba(255,200,0,0.3)]' : 'text-[#aaaaaa] hover:text-white hover:bg-white/5'}
                   `}>
