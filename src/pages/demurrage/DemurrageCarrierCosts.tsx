@@ -239,6 +239,7 @@ export default function DemurrageCarrierCosts() {
   };
 
   const handleExportDiscrepancies = () => {
+    trackEvent("sea.demurrage.carrier_costs.export_discrepancies");
     try {
       const fileName = exportDiscrepancyReport(containers);
       toast.success(`Relatório exportado: ${fileName}`);
