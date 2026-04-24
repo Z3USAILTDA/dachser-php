@@ -463,6 +463,7 @@ function EditFreeTimeDialog({ freeTime, open, onOpenChange, onSuccess }: EditFre
         notas: formData.notas || undefined,
       },
     });
+    trackEvent("sea.demurrage.free_time.save");
 
     onSuccess();
   };
