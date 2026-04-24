@@ -6691,17 +6691,24 @@ Deno.serve(async (req) => {
           break;
         }
         
-        // Fetch anexos
+        // Fetch anexos com retry leve para evitar mascarar falhas transitórias
         let anexos: any[] = [];
-        try {
-          anexos = await client.query(`
-            SELECT id, voucher_id, tipo, file_name, file_url, file_size, created_at
-            FROM dados_dachser.t_voucher_anexos
-            WHERE voucher_id = ?
-            ORDER BY created_at DESC
-          `, [voucher_id]);
-        } catch (anexosErr) {
-          console.log('Error fetching anexos (table may not exist):', anexosErr);
+        let anexosError: string | null = null;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            anexos = await client.query(`
+              SELECT id, voucher_id, tipo, file_name, file_url, file_size, created_at
+              FROM dados_dachser.t_voucher_anexos
+              WHERE voucher_id = ?
+              ORDER BY created_at DESC
+            `, [voucher_id]);
+            anexosError = null;
+            break;
+          } catch (anexosErr) {
+            anexosError = String((anexosErr as any)?.message || anexosErr);
+            console.log(`Error fetching anexos (attempt ${attempt}):`, anexosErr);
+            if (attempt < 2) await new Promise((r) => setTimeout(r, 250));
+          }
         }
         
         // Ensure t_voucher_logs table exists
