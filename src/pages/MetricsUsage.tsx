@@ -606,14 +606,18 @@ const MetricsUsage = () => {
                       <div className="text-base font-bold">{timeLabel}</div>
                     </div>
                   </div>
-                  {m.topEndpoint && (
-                    <div className="mt-2 pt-2 border-t border-white/10">
-                      <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">Top endpoint</div>
-                      <div className="text-[11px] truncate text-foreground/80" title={m.topEndpoint}>
-                        {m.topEndpoint}
+                  {m.topEndpoint && (() => {
+                    const pretty = prettifyEndpoint(m.topEndpoint);
+                    return (
+                      <div className="mt-2 pt-2 border-t border-white/10">
+                        <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">Top endpoint</div>
+                        <div className="text-[11px] truncate text-foreground/80 flex items-center gap-1" title={m.topEndpoint}>
+                          <span>{pretty.icon}</span>
+                          <span className="truncate">{pretty.label}</span>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </button>
               );
             })
