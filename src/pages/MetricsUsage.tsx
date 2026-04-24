@@ -166,13 +166,6 @@ const MetricsUsage = () => {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "get_metrics",
-
-  const fetchMetrics = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "get_metrics",
           dateFrom,
           dateTo,
           username: usernameFilter,
