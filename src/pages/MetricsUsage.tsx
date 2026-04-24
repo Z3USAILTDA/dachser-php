@@ -683,7 +683,7 @@ const MetricsUsage = () => {
                             {(() => {
                               // Soma das durações reais (V_OUT com #dur=ms)
                               const totalViewMs = s.events.reduce((acc, ev) => {
-                                if (ev.method === "V_OUT" || ev.method === "VIEW_END") {
+                                if (ev.method === "VO" || ev.method === "V_OUT" || ev.method === "VIEW_END") {
                                   const m = ev.endpoint.match(/#dur=(\d+)$/);
                                   if (m) return acc + Number(m[1]);
                                 }
