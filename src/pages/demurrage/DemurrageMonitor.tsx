@@ -150,7 +150,7 @@ export default function DemurrageMonitor() {
       toast.error("Não há dados para exportar");
       return;
     }
-    
+    trackEvent("sea.demurrage.monitor.export_excel");
     setIsExporting(true);
     try {
       const fileName = exportDemurrageToExcel(filteredContainers);
@@ -168,6 +168,7 @@ export default function DemurrageMonitor() {
       toast.error("Não há dados para exportar");
       return;
     }
+    trackEvent("sea.demurrage.monitor.export_pdf");
     try {
       const fileName = exportDemurrageReportPDF(filteredContainers);
       toast.success(`PDF exportado: ${fileName}`);
