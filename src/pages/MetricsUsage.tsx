@@ -8,6 +8,7 @@ import { TablePagination } from "@/components/layout/TablePagination";
 import { supabase } from "@/integrations/supabase/client";
 import { trackEvent } from "@/hooks/useUsageLog";
 import { parseDBDate, formatDateTimeBR } from "@/utils/timezone";
+import { prettifyEndpoint, prettifyMethod } from "@/utils/endpointLabels";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -605,14 +606,18 @@ const MetricsUsage = () => {
                       <div className="text-base font-bold">{timeLabel}</div>
                     </div>
                   </div>
-                  {m.topEndpoint && (
-                    <div className="mt-2 pt-2 border-t border-white/10">
-                      <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">Top endpoint</div>
-                      <div className="text-[11px] truncate text-foreground/80" title={m.topEndpoint}>
-                        {m.topEndpoint}
+                  {m.topEndpoint && (() => {
+                    const pretty = prettifyEndpoint(m.topEndpoint);
+                    return (
+                      <div className="mt-2 pt-2 border-t border-white/10">
+                        <div className="text-[9px] uppercase tracking-[0.1em] text-muted-foreground">Top endpoint</div>
+                        <div className="text-[11px] truncate text-foreground/80 flex items-center gap-1" title={m.topEndpoint}>
+                          <span>{pretty.icon}</span>
+                          <span className="truncate">{pretty.label}</span>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </button>
               );
             })
@@ -643,9 +648,9 @@ const MetricsUsage = () => {
                 <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Usuário</th>
                 <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Início</th>
                 <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Fim</th>
-                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Duração</th>
-                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Telas</th>
-                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Únicas</th>
+                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Tempo ativo</th>
+                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Eventos</th>
+                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Telas únicas</th>
               </tr>
             </thead>
             <tbody>
@@ -658,6 +663,43 @@ const MetricsUsage = () => {
               ) : (
                 sessions.map((s) => {
                   const isOpen = expandedSession === s.sessionId;
+
+                  // ===== Tempo ativo real (soma dos #dur=ms dos eventos VO) =====
+                  const activeMsTotal = s.events.reduce((acc, ev) => {
+                    if (ev.method === "VO" || ev.method === "V_OUT" || ev.method === "VIEW_END") {
+                      const m = ev.endpoint.match(/#dur=(\d+)$/);
+                      if (m) return acc + Number(m[1]);
+                    }
+                    return acc;
+                  }, 0);
+                  const activeSecTotal = Math.round(activeMsTotal / 1000);
+
+                  // ===== Telas únicas (ignora event:* e desduplica por endpoint limpo) =====
+                  const uniqueScreens = new Set<string>();
+                  s.events.forEach((ev) => {
+                    const cleaned = ev.endpoint.replace(/#dur=\d+$/, "");
+                    if (cleaned.startsWith("event:")) return;
+                    uniqueScreens.add(cleaned);
+                  });
+
+                  // ===== Resumo por tela (apenas eventos VO contam como tempo) =====
+                  const screenSummary = new Map<string, { visits: number; ms: number }>();
+                  s.events.forEach((ev) => {
+                    const isOut =
+                      ev.method === "VO" || ev.method === "V_OUT" || ev.method === "VIEW_END";
+                    if (!isOut) return;
+                    const m = ev.endpoint.match(/#dur=(\d+)$/);
+                    const cleaned = ev.endpoint.replace(/#dur=\d+$/, "");
+                    if (cleaned.startsWith("event:")) return;
+                    const cur = screenSummary.get(cleaned) || { visits: 0, ms: 0 };
+                    cur.visits += 1;
+                    cur.ms += m ? Number(m[1]) : 0;
+                    screenSummary.set(cleaned, cur);
+                  });
+                  const summaryRows = Array.from(screenSummary.entries())
+                    .map(([endpoint, agg]) => ({ endpoint, ...agg, pretty: prettifyEndpoint(endpoint) }))
+                    .sort((a, b) => b.ms - a.ms);
+
                   return (
                     <>
                       <tr
@@ -671,73 +713,99 @@ const MetricsUsage = () => {
                         <td className="py-2.5 px-3 text-muted-foreground">{formatDate(s.endedAt)}</td>
                         <td className="py-2.5 px-3">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border border-primary/40 bg-primary/10 text-primary">
-                            {formatDuration(s.durationSec)}
+                            {formatDuration(activeSecTotal)}
                           </span>
                         </td>
                         <td className="py-2.5 px-3">{s.eventCount}</td>
-                        <td className="py-2.5 px-3 text-muted-foreground">{s.uniqueEndpoints}</td>
+                        <td className="py-2.5 px-3 text-muted-foreground">{uniqueScreens.size}</td>
                       </tr>
                       {isOpen && (
                         <tr key={`${s.sessionId}-timeline`} className="bg-[#0a0b10]">
                           <td colSpan={7} className="px-4 py-3">
-                            {(() => {
-                              // Soma das durações reais (V_OUT com #dur=ms)
-                              const totalViewMs = s.events.reduce((acc, ev) => {
-                                if (ev.method === "VO" || ev.method === "V_OUT" || ev.method === "VIEW_END") {
-                                  const m = ev.endpoint.match(/#dur=(\d+)$/);
-                                  if (m) return acc + Number(m[1]);
-                                }
-                                return acc;
-                              }, 0);
-                              return (
-                                <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground mb-2 flex items-center gap-3">
-                                  <span>Timeline da sessão · ID: <span className="font-mono">{s.sessionId.slice(0, 8)}…</span></span>
-                                  {totalViewMs > 0 && (
-                                    <span className="text-primary normal-case tracking-normal">
-                                      Tempo total em telas: <span className="font-semibold">{formatDuration(Math.round(totalViewMs / 1000))}</span>
-                                    </span>
-                                  )}
+                            <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground mb-3 flex items-center gap-3 flex-wrap">
+                              <span>Sessão · ID: <span className="font-mono">{s.sessionId.slice(0, 8)}…</span></span>
+                              {activeSecTotal > 0 && (
+                                <span className="text-primary normal-case tracking-normal">
+                                  Tempo ativo total: <span className="font-semibold">{formatDuration(activeSecTotal)}</span>
+                                </span>
+                              )}
+                            </div>
+
+                            {/* ===== Bloco A: Resumo por tela ===== */}
+                            {summaryRows.length > 0 && (
+                              <div className="mb-4 rounded-xl border border-white/10 bg-[#05060c] overflow-hidden">
+                                <div className="px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground border-b border-white/10 bg-white/[0.02]">
+                                  Resumo por tela
                                 </div>
-                              );
-                            })()}
-                            <ol className="relative border-l border-white/15 ml-2 space-y-2">
-                              {s.events.map((ev, idx) => {
-                                const next = s.events[idx + 1];
-                                const gap = next
-                                  ? Math.max(
-                                      0,
-                                      Math.round(
-                                        (new Date(next.event_time).getTime() - new Date(ev.event_time).getTime()) / 1000
-                                      )
-                                    )
-                                  : 0;
-                                const isViewEnd = ev.method === "VO" || ev.method === "V_OUT" || ev.method === "VIEW_END";
-                                const durMatch = isViewEnd ? ev.endpoint.match(/#dur=(\d+)$/) : null;
-                                const explicitDurSec = durMatch ? Math.round(Number(durMatch[1]) / 1000) : null;
-                                const cleanEndpoint = durMatch ? ev.endpoint.replace(/#dur=\d+$/, "") : ev.endpoint;
-                                return (
-                                  <li key={`${ev.event_time}-${idx}`} className="ml-3 pl-2">
-                                    <div className="absolute -left-1.5 mt-1 w-3 h-3 rounded-full bg-primary border border-black" />
-                                    <div className="flex items-center gap-2 text-xs">
-                                      <span className="text-muted-foreground tabular-nums">{formatDate(ev.event_time)}</span>
-                                      <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] border ${getMethodClass(ev.method)}`}>
-                                        {ev.method}
-                                      </span>
-                                      <span className="text-foreground/90 truncate">{cleanEndpoint}</span>
-                                      {explicitDurSec !== null && explicitDurSec > 0 && (
-                                        <span className="text-[10px] text-primary">
-                                          · permaneceu {formatDuration(explicitDurSec)}
-                                        </span>
-                                      )}
-                                      {explicitDurSec === null && gap > 0 && (
-                                        <span className="text-[10px] text-muted-foreground">
-                                          · gap {formatDuration(gap)}
-                                        </span>
-                                      )}
+                                <div className="divide-y divide-white/5">
+                                  {summaryRows.map((row) => (
+                                    <div key={row.endpoint} className="flex items-center gap-3 px-3 py-2 text-xs">
+                                      <span className="text-base leading-none">{row.pretty.icon}</span>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-foreground/90 truncate">{row.pretty.label}</div>
+                                        <div className="text-[10px] text-muted-foreground truncate">{row.pretty.module}</div>
+                                      </div>
+                                      <div className="text-right shrink-0">
+                                        <div className="text-primary font-semibold tabular-nums">
+                                          {formatDuration(Math.round(row.ms / 1000))}
+                                        </div>
+                                        <div className="text-[10px] text-muted-foreground">
+                                          {row.visits} visita{row.visits > 1 ? "s" : ""}
+                                        </div>
+                                      </div>
                                     </div>
-                                  </li>
-                                );
-                              })}
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* ===== Bloco B: Cronológico limpo ===== */}
+                            <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground mb-2">
+                              Cronológico
+                            </div>
+                            <ol className="relative border-l border-white/15 ml-2 space-y-2">
+                              {s.events
+                                .filter((ev) => {
+                                  // Esconde V_IN (entradas) — redundantes com V_OUT
+                                  if (ev.method === "VI" || ev.method === "V_IN") return false;
+                                  return true;
+                                })
+                                .map((ev, idx) => {
+                                  const isOut =
+                                    ev.method === "VO" || ev.method === "V_OUT" || ev.method === "VIEW_END";
+                                  const durMatch = isOut ? ev.endpoint.match(/#dur=(\d+)$/) : null;
+                                  const explicitDurSec = durMatch ? Math.round(Number(durMatch[1]) / 1000) : null;
+                                  const cleaned = ev.endpoint.replace(/#dur=\d+$/, "");
+                                  const pretty = prettifyEndpoint(cleaned);
+                                  const isEvent = cleaned.startsWith("event:") || pretty.isAction;
+                                  const time = formatDate(ev.event_time).split(" ")[1] || formatDate(ev.event_time);
+                                  return (
+                                    <li key={`${ev.event_time}-${idx}`} className="ml-3 pl-2">
+                                      <div
+                                        className={`absolute -left-1.5 mt-1 w-3 h-3 rounded-full border border-black ${
+                                          isEvent ? "bg-emerald-400" : "bg-primary"
+                                        }`}
+                                      />
+                                      <div className="flex items-center gap-2 text-xs flex-wrap">
+                                        <span className="text-muted-foreground tabular-nums">
+                                          {isEvent ? "⚡" : "⏱"} {time}
+                                        </span>
+                                        <span className="text-base leading-none">{pretty.icon}</span>
+                                        <span className="text-foreground/90 truncate">{pretty.label}</span>
+                                        {!isEvent && (
+                                          <span className="text-[10px] text-muted-foreground">
+                                            · {pretty.module}
+                                          </span>
+                                        )}
+                                        {explicitDurSec !== null && explicitDurSec > 0 && (
+                                          <span className="text-[10px] text-primary">
+                                            · permaneceu {formatDuration(explicitDurSec)}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </li>
+                                  );
+                                })}
                             </ol>
                           </td>
                         </tr>
@@ -806,18 +874,31 @@ const MetricsUsage = () => {
               ) : logs.length === 0 ? (
                 <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">Sem registros no período.</td></tr>
               ) : (
-                logs.map((log) => (
-                  <tr key={log.id} className="border-b border-white/10 hover:bg-white/5 transition-colors">
-                    <td className="py-2.5 px-3">{formatDate(log.event_time)}</td>
-                    <td className="py-2.5 px-3">{log.username}</td>
-                    <td className="py-2.5 px-3">
-                      <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[11px] border ${getMethodClass(log.method)}`}>
-                        {log.method}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-muted-foreground">{log.endpoint}</td>
-                  </tr>
-                ))
+                logs.map((log) => {
+                  const pretty = prettifyEndpoint(log.endpoint);
+                  const method = prettifyMethod(log.method);
+                  const cleanedRaw = log.endpoint.replace(/#dur=\d+$/, "");
+                  return (
+                    <tr key={log.id} className="border-b border-white/10 hover:bg-white/5 transition-colors">
+                      <td className="py-2.5 px-3">{formatDate(log.event_time)}</td>
+                      <td className="py-2.5 px-3">{log.username}</td>
+                      <td className="py-2.5 px-3">
+                        <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[11px] border ${getMethodClass(log.method)}`}>
+                          {method.label}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base leading-none">{pretty.icon}</span>
+                          <div className="min-w-0">
+                            <div className="text-foreground/90 truncate">{pretty.label}</div>
+                            <div className="text-[10px] text-muted-foreground font-mono truncate">{cleanedRaw}</div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
