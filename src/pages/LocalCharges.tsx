@@ -257,7 +257,7 @@ export default function LocalCharges() {
     fetchLocalCharges();
   }, []);
   const rightContent = <div className="flex items-center gap-2">
-      <Button onClick={() => navigate('/sea/alteracoes-fee')} className="h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(255,200,0,0.4)]">
+      <Button onClick={() => { trackEvent("sea.local_charges.open_alteracoes_fee"); navigate('/sea/alteracoes-fee'); }} className="h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(255,200,0,0.4)]">
         <TrendingUp className="h-4 w-4 mr-2" />
         Alterações de Fee
       </Button>
