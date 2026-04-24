@@ -17,6 +17,7 @@ const airlineNames: Record<string, string> = {
   "105": "Air India Cargo",
   "112": "Copa Airlines Cargo",
   "117": "Emirates SkyCargo",
+  "118": "Angola Airlines (TAAG)",
   "125": "British Airways Cargo",
   "131": "Japan Airlines Cargo",
   "139": "China Eastern Cargo",
