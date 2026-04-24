@@ -13,6 +13,7 @@ import { TablePagination } from "@/components/layout/TablePagination";
 import { useDemurrageData, useUpdateDemurrageContainer, useDemurrageArmadores, useCreateAuditEvent } from "@/hooks/useDemurrageData";
 import { AuditCostDialog, AuditData } from "@/components/demurrage/AuditCostDialog";
 import { BulkAuditDialog } from "@/components/demurrage/BulkAuditDialog";
+import { trackEvent } from "@/hooks/useUsageLog";
 import { NewInvoiceDialog } from "@/components/demurrage/NewInvoiceDialog";
 import { UploadInvoiceDialog } from "@/components/demurrage/UploadInvoiceDialog";
 import { toast } from "sonner";
