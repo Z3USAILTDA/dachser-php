@@ -1087,15 +1087,32 @@ export const PagamentosTab = () => {
                             setDetailsDialogOpen(true);
                             setAnexosDialog([]);
                             setLoadingAnexos(true);
+                            const myReq = ++anexosReqIdRef.current;
                             try {
                               const { data } = await supabase.functions.invoke("mariadb-proxy", {
                                 body: { action: "get_voucher_anexos", voucher_id: pag.id }
                               });
-                              setAnexosDialog(data?.data || []);
+                              if (myReq !== anexosReqIdRef.current) return; // descarta resposta antiga
+                              if (data?.success === false) {
+                                toast({
+                                  title: "Falha ao carregar anexos",
+                                  description: data?.error || "Tente novamente em instantes.",
+                                  variant: "destructive",
+                                });
+                                // NÃO sobrescreve com lista vazia em caso de falha
+                              } else {
+                                setAnexosDialog(data?.data || []);
+                              }
                             } catch (e) {
+                              if (myReq !== anexosReqIdRef.current) return;
                               console.error("Erro ao carregar anexos:", e);
+                              toast({
+                                title: "Erro ao carregar anexos",
+                                description: e instanceof Error ? e.message : "Erro desconhecido",
+                                variant: "destructive",
+                              });
                             } finally {
-                              setLoadingAnexos(false);
+                              if (myReq === anexosReqIdRef.current) setLoadingAnexos(false);
                             }
                           }}
                         >
