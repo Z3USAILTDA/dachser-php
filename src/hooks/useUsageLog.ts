@@ -93,3 +93,16 @@ export async function logAction(endpoint: string, method: "POST" | "DELETE" | "P
     console.warn("Failed to log action:", error);
   }
 }
+
+/**
+ * Registra um evento de interação semântico (ex: "air.timeline.open", "vouchers.approve").
+ * Usa o método "EVENT" para distinguir de page views (GET) e mutações HTTP reais (POST/PUT/DELETE)
+ * sem exigir alteração no schema do log.
+ */
+export function trackEvent(action: string) {
+  if (!action) return;
+  // Reusa o mesmo pipeline de log; o "endpoint" passa a ser o nome da ação.
+  // Cast intencional: estamos estendendo o vocabulário de método só para eventos UI.
+  return logAction(`event:${action}`, "POST" as const);
+}
+

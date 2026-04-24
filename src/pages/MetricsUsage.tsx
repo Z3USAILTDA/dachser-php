@@ -6,6 +6,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { supabase } from "@/integrations/supabase/client";
+import { trackEvent } from "@/hooks/useUsageLog";
 import { parseDBDate, formatDateTimeBR } from "@/utils/timezone";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
@@ -299,6 +300,7 @@ const MetricsUsage = () => {
       toast({ title: "Aviso", description: "Nenhum dado para exportar", variant: "destructive" });
       return;
     }
+    trackEvent("metrics.export.excel");
 
     const exportData = logs.map(log => ({
       "Data/Hora": formatDate(log.event_time),
@@ -328,6 +330,7 @@ const MetricsUsage = () => {
       toast({ title: "Aviso", description: "Nenhum dado para exportar", variant: "destructive" });
       return;
     }
+    trackEvent("metrics.export.pdf");
 
     const doc = new jsPDF();
     

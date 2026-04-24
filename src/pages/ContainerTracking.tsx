@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, Fragment, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useUsageLog } from "@/hooks/useUsageLog";
+import { useUsageLog, trackEvent } from "@/hooks/useUsageLog";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -966,11 +966,13 @@ const ContainerTracking = () => {
   // Toggle MBL expansion
   const handleToggleExpand = async (mbl_id: string) => {
     if (expandedMbl === mbl_id) {
+      trackEvent("sea.mbl.collapse");
       setExpandedMbl(null);
       setMblContainers([]);
       setVesselImo(null);
       setVesselName(null);
     } else {
+      trackEvent("sea.mbl.expand");
       setExpandedMbl(mbl_id);
       await fetchMblContainers(mbl_id);
     }
@@ -978,6 +980,7 @@ const ContainerTracking = () => {
 
   // Simplified refresh - only reloads data from UI
   const handleRefresh = async () => {
+    trackEvent("sea.refresh");
     setIsRefreshing(true);
     toast({
       title: "Atualizando",
@@ -1818,6 +1821,7 @@ const ContainerTracking = () => {
   // Export maritime MBLs from last 2 months to Excel (admin only)
   const handleExportExcel = async () => {
     if (!isAdmin) return;
+    trackEvent("sea.export.excel");
     setIsExportingExcel(true);
     toast({
       title: "Exportando Excel...",
@@ -2142,7 +2146,7 @@ const ContainerTracking = () => {
               ADM
             </button>}
           
-          <button onClick={() => setCadastroMaritimoOpen(true)} className="px-3 py-1.5 rounded-full border border-[#ffc800]/50 flex items-center gap-1.5 bg-[#ffc800]/20 text-[#ffc800] hover:bg-[#ffc800]/30 transition font-medium text-xs uppercase tracking-wide" title="Novo Processo Marítimo">
+          <button onClick={() => { trackEvent("sea.process.new_open"); setCadastroMaritimoOpen(true); }} className="px-3 py-1.5 rounded-full border border-[#ffc800]/50 flex items-center gap-1.5 bg-[#ffc800]/20 text-[#ffc800] hover:bg-[#ffc800]/30 transition font-medium text-xs uppercase tracking-wide" title="Novo Processo Marítimo">
               <FilePlus className="w-3.5 h-3.5" />
               Novo Processo
             </button>
