@@ -228,9 +228,11 @@ export default function DemurrageRates() {
 
       if (editingRate) {
         await updateRate.mutateAsync({ id: editingRate.id, ...payload });
+        trackEvent("sea.demurrage.rates.update");
         toast.success("Tarifa atualizada com sucesso!");
       } else {
         await createRate.mutateAsync(payload);
+        trackEvent("sea.demurrage.rates.create");
         toast.success("Tarifa criada com sucesso!");
       }
       setShowAddDialog(false);
@@ -244,6 +246,7 @@ export default function DemurrageRates() {
     if (!deletingRate) return;
     try {
       await deleteRate.mutateAsync(deletingRate.id);
+      trackEvent("sea.demurrage.rates.delete");
       toast.success("Tarifa excluída com sucesso!");
       setDeletingRate(null);
     } catch (err) {
@@ -253,6 +256,7 @@ export default function DemurrageRates() {
 
   const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
+    trackEvent(`sea.demurrage.rates.filter.${filter}`);
   };
 
   const toggleSelect = (id: number) => {
@@ -274,6 +278,7 @@ export default function DemurrageRates() {
   const handleBulkDelete = async () => {
     try {
       await bulkDelete.mutateAsync(Array.from(selectedIds));
+      trackEvent("sea.demurrage.rates.bulk_delete");
       toast.success(`${selectedIds.size} tarifa(s) excluída(s) com sucesso!`);
       setSelectedIds(new Set());
       setShowBulkDeleteDialog(false);
@@ -287,12 +292,12 @@ export default function DemurrageRates() {
       <Button 
         variant="outline"
         className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]"
-        onClick={() => setShowImportDialog(true)}
+        onClick={() => { trackEvent("sea.demurrage.rates.import_open"); setShowImportDialog(true); }}
       >
         <FileSpreadsheet className="h-4 w-4 mr-2" />
         Importar Excel
       </Button>
-      <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]" onClick={openAddDialog}>
+      <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]" onClick={() => { trackEvent("sea.demurrage.rates.new_open"); openAddDialog(); }}>
         <Plus className="h-4 w-4 mr-2" />
         Nova Tarifa
       </Button>
