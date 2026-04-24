@@ -190,6 +190,8 @@ export const PagamentosTab = () => {
   const [selectedPagamento, setSelectedPagamento] = useState<PagamentoItem | null>(null);
   const [anexosDialog, setAnexosDialog] = useState<any[]>([]);
   const [loadingAnexos, setLoadingAnexos] = useState(false);
+  // Token para descartar respostas de anexos fora de ordem (race entre cliques no olho)
+  const anexosReqIdRef = useRef(0);
   
   // Voltar dialog state
   const [voltarOperacionalDialogOpen, setVoltarOperacionalDialogOpen] = useState(false);
@@ -1085,15 +1087,32 @@ export const PagamentosTab = () => {
                             setDetailsDialogOpen(true);
                             setAnexosDialog([]);
                             setLoadingAnexos(true);
+                            const myReq = ++anexosReqIdRef.current;
                             try {
                               const { data } = await supabase.functions.invoke("mariadb-proxy", {
                                 body: { action: "get_voucher_anexos", voucher_id: pag.id }
                               });
-                              setAnexosDialog(data?.data || []);
+                              if (myReq !== anexosReqIdRef.current) return; // descarta resposta antiga
+                              if (data?.success === false) {
+                                toast({
+                                  title: "Falha ao carregar anexos",
+                                  description: data?.error || "Tente novamente em instantes.",
+                                  variant: "destructive",
+                                });
+                                // NÃO sobrescreve com lista vazia em caso de falha
+                              } else {
+                                setAnexosDialog(data?.data || []);
+                              }
                             } catch (e) {
+                              if (myReq !== anexosReqIdRef.current) return;
                               console.error("Erro ao carregar anexos:", e);
+                              toast({
+                                title: "Erro ao carregar anexos",
+                                description: e instanceof Error ? e.message : "Erro desconhecido",
+                                variant: "destructive",
+                              });
                             } finally {
-                              setLoadingAnexos(false);
+                              if (myReq === anexosReqIdRef.current) setLoadingAnexos(false);
                             }
                           }}
                         >
@@ -1134,7 +1153,15 @@ export const PagamentosTab = () => {
       )}
 
       {/* Details Dialog */}
-      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+      <Dialog open={detailsDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          // Invalida requests pendentes ao fechar para evitar respostas tardias sobrescreverem
+          anexosReqIdRef.current++;
+          setAnexosDialog([]);
+          setLoadingAnexos(false);
+        }
+        setDetailsDialogOpen(open);
+      }}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
@@ -1207,12 +1234,23 @@ export const PagamentosTab = () => {
                     etapaAtual={selectedPagamento.etapa_atual || "FINANCEIRO"}
                     compact
                     onUploaded={async () => {
+                      const myReq = ++anexosReqIdRef.current;
                       try {
                         const { data } = await supabase.functions.invoke("mariadb-proxy", {
                           body: { action: "get_voucher_anexos", voucher_id: selectedPagamento.id },
                         });
-                        setAnexosDialog(data?.data || []);
+                        if (myReq !== anexosReqIdRef.current) return;
+                        if (data?.success === false) {
+                          toast({
+                            title: "Falha ao recarregar anexos",
+                            description: data?.error || "Tente reabrir o detalhe.",
+                            variant: "destructive",
+                          });
+                        } else {
+                          setAnexosDialog(data?.data || []);
+                        }
                       } catch (e) {
+                        if (myReq !== anexosReqIdRef.current) return;
                         console.error("Erro ao recarregar anexos:", e);
                       }
                     }}
