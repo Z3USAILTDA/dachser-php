@@ -689,7 +689,7 @@ Deno.serve(async (req) => {
 
       // ==================== METRICS ====================
       case 'log_usage': {
-        const { username: logUsername, endpoint: logEndpoint, method: logMethod } = body;
+        const { username: logUsername, endpoint: logEndpoint, method: logMethod, sessionId: logSessionId } = body;
         if (!logUsername || !logEndpoint) {
           return new Response(
             JSON.stringify({ error: 'Username e endpoint são obrigatórios' }),
@@ -703,17 +703,121 @@ Deno.serve(async (req) => {
           result = { success: true };
           break;
         }
-        
+
         await client.query(
-          `INSERT INTO ai_agente.t_dachser_usage_logs (username, endpoint, method, event_time)
-           VALUES (?, ?, ?, NOW())`,
-          [logUsername, logEndpoint, logMethod || 'GET']
+          `INSERT INTO ai_agente.t_dachser_usage_logs (username, endpoint, method, session_id, event_time)
+           VALUES (?, ?, ?, ?, NOW())`,
+          [logUsername, logEndpoint, logMethod || 'GET', logSessionId || null]
         );
-        
-        console.log(`Usage logged: ${logUsername} -> ${logMethod || 'GET'} ${logEndpoint}`);
+
+        console.log(`Usage logged: ${logUsername} -> ${logMethod || 'GET'} ${logEndpoint} (sid=${logSessionId || '-'})`);
         result = { success: true };
         break;
       }
+
+      case 'get_metrics_sessions': {
+        const {
+          dateFrom: sDateFrom,
+          dateTo: sDateTo,
+          username: sUsername,
+          requesterUsername: sRequester,
+          perPage: sPerPage,
+          page: sPage,
+        } = body;
+        const dFrom = sDateFrom || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const dTo = sDateTo || new Date().toISOString().split('T')[0];
+        const limit = Math.min(Math.max(sPerPage || 25, 5), 100);
+        const page = Math.max(sPage || 1, 1);
+        const offset = (page - 1) * limit;
+
+        const DACHSER_ADMIN_USERS_S = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
+        const HIDDEN_LOG_USERS_S = ["admin", "teste.test3"];
+        const isDachserUserS = sRequester && DACHSER_ADMIN_USERS_S.includes(sRequester);
+
+        const conds: string[] = [
+          "event_time BETWEEN ? AND ?",
+          "username != 'unknown'",
+          "session_id IS NOT NULL",
+        ];
+        const params: (string | number)[] = [`${dFrom} 00:00:00`, `${dTo} 23:59:59`];
+        if (isDachserUserS) {
+          conds.push(`username NOT IN (${HIDDEN_LOG_USERS_S.map(() => '?').join(', ')})`);
+          params.push(...HIDDEN_LOG_USERS_S);
+        }
+        if (sUsername) {
+          conds.push("username LIKE ?");
+          params.push(`%${sUsername}%`);
+        }
+        const whereSql = `WHERE ${conds.join(' AND ')}`;
+
+        // Total de sessões distintas no período
+        const countRes = await client.query(
+          `SELECT COUNT(*) AS total FROM (
+             SELECT session_id FROM ai_agente.t_dachser_usage_logs
+             ${whereSql}
+             GROUP BY session_id
+           ) s`,
+          params
+        );
+        const totalSessions = Number(countRes[0]?.total || 0);
+        const totalPages = Math.max(1, Math.ceil(totalSessions / limit));
+
+        // Lista de sessões (paginada) ordenadas por última atividade desc
+        const sessionsRes = await client.query(
+          `SELECT
+             session_id,
+             MIN(username) AS username,
+             MIN(event_time) AS started_at,
+             MAX(event_time) AS ended_at,
+             COUNT(*) AS event_count,
+             COUNT(DISTINCT endpoint) AS unique_endpoints,
+             TIMESTAMPDIFF(SECOND, MIN(event_time), MAX(event_time)) AS duration_sec
+           FROM ai_agente.t_dachser_usage_logs
+           ${whereSql}
+           GROUP BY session_id
+           ORDER BY ended_at DESC
+           LIMIT ? OFFSET ?`,
+          [...params, limit, offset]
+        );
+
+        const sessionIds: string[] = sessionsRes.map((r: { session_id: string }) => r.session_id);
+
+        // Busca eventos das sessões da página atual
+        let eventsBySession: Record<string, Array<{ endpoint: string; method: string; event_time: string }>> = {};
+        if (sessionIds.length > 0) {
+          const placeholders = sessionIds.map(() => '?').join(', ');
+          const eventsRes = await client.query(
+            `SELECT session_id, endpoint, method, event_time
+             FROM ai_agente.t_dachser_usage_logs
+             WHERE session_id IN (${placeholders})
+             ORDER BY event_time ASC`,
+            sessionIds
+          );
+          eventsBySession = eventsRes.reduce(
+            (acc: Record<string, Array<{ endpoint: string; method: string; event_time: string }>>, r: { session_id: string; endpoint: string; method: string; event_time: string }) => {
+              if (!acc[r.session_id]) acc[r.session_id] = [];
+              acc[r.session_id].push({ endpoint: r.endpoint, method: r.method, event_time: r.event_time });
+              return acc;
+            },
+            {}
+          );
+        }
+
+        const sessions = sessionsRes.map((r: { session_id: string; username: string; started_at: string; ended_at: string; event_count: number; unique_endpoints: number; duration_sec: number }) => ({
+          sessionId: r.session_id,
+          username: r.username,
+          startedAt: r.started_at,
+          endedAt: r.ended_at,
+          eventCount: Number(r.event_count),
+          uniqueEndpoints: Number(r.unique_endpoints),
+          durationSec: Number(r.duration_sec || 0),
+          events: eventsBySession[r.session_id] || [],
+        }));
+
+        result = { success: true, sessions, totalSessions, totalPages, currentPage: page };
+        break;
+      }
+
 
       case 'get_metrics': {
         const { username, dateFrom: reqDateFrom, dateTo: reqDateTo, module: reqModule, perPage: reqPerPage, page: reqPage, requesterUsername } = body;
