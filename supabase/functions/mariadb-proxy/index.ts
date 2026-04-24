@@ -725,10 +725,12 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Defensive truncation: column `method` may be VARCHAR(4) in legacy schema.
+        const safeMethod = String(storedMethod).slice(0, 4);
         await client.query(
           `INSERT INTO ai_agente.t_dachser_usage_logs (username, endpoint, method, session_id, event_time)
            VALUES (?, ?, ?, ?, NOW())`,
-          [logUsername, storedEndpoint, storedMethod, logSessionId || null]
+          [logUsername, storedEndpoint, safeMethod, logSessionId || null]
         );
 
         console.log(`Usage logged: ${logUsername} -> ${storedMethod} ${storedEndpoint} (sid=${logSessionId || '-'})`);
