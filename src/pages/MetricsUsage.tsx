@@ -68,6 +68,15 @@ const MetricsUsage = () => {
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [endpointData, setEndpointData] = useState<EndpointData[]>([]);
   const [availableUsers, setAvailableUsers] = useState<string[]>([]);
+  const [moduleStats, setModuleStats] = useState<Array<{
+    module: string;
+    label: string;
+    totalAccesses: number;
+    uniqueUsers: number;
+    avgTimeOnScreenSec: number;
+    topEndpoint: string | null;
+  }>>([]);
+  const [loadingModules, setLoadingModules] = useState(false);
 
   // Função auxiliar para obter data no formato YYYY-MM-DD em fuso local (São Paulo)
   const getLocalDateString = (date: Date): string => {
