@@ -187,7 +187,7 @@ export const REGISTERED_AIRLINE_CODES = [
   '057', // Air Canada
   '074', // KLM Cargo
   '075', // Iberia
-  '118', // Korean Air Cargo
+  '118', // Angola Airlines (TAAG)
   '125', // British Airways
   '139', // Aeromexico Cargo
   '157', // Qatar Airways
