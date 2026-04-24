@@ -78,6 +78,23 @@ const MetricsUsage = () => {
   }>>([]);
   const [loadingModules, setLoadingModules] = useState(false);
 
+  interface SessionEvent { endpoint: string; method: string; event_time: string; }
+  interface SessionRow {
+    sessionId: string;
+    username: string;
+    startedAt: string;
+    endedAt: string;
+    eventCount: number;
+    uniqueEndpoints: number;
+    durationSec: number;
+    events: SessionEvent[];
+  }
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [sessionsPage, setSessionsPage] = useState(1);
+  const [sessionsTotalPages, setSessionsTotalPages] = useState(1);
+  const [expandedSession, setExpandedSession] = useState<string | null>(null);
+
   // Função auxiliar para obter data no formato YYYY-MM-DD em fuso local (São Paulo)
   const getLocalDateString = (date: Date): string => {
     const year = date.getFullYear();
