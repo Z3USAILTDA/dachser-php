@@ -966,11 +966,13 @@ const ContainerTracking = () => {
   // Toggle MBL expansion
   const handleToggleExpand = async (mbl_id: string) => {
     if (expandedMbl === mbl_id) {
+      trackEvent("sea.mbl.collapse");
       setExpandedMbl(null);
       setMblContainers([]);
       setVesselImo(null);
       setVesselName(null);
     } else {
+      trackEvent("sea.mbl.expand");
       setExpandedMbl(mbl_id);
       await fetchMblContainers(mbl_id);
     }
@@ -978,6 +980,7 @@ const ContainerTracking = () => {
 
   // Simplified refresh - only reloads data from UI
   const handleRefresh = async () => {
+    trackEvent("sea.refresh");
     setIsRefreshing(true);
     toast({
       title: "Atualizando",
@@ -1818,6 +1821,7 @@ const ContainerTracking = () => {
   // Export maritime MBLs from last 2 months to Excel (admin only)
   const handleExportExcel = async () => {
     if (!isAdmin) return;
+    trackEvent("sea.export.excel");
     setIsExportingExcel(true);
     toast({
       title: "Exportando Excel...",
