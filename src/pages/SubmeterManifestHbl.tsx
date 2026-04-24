@@ -192,6 +192,7 @@ export default function SubmeterManifestHbl() {
       showInlineStatus(`Tamanho total dos arquivos (${(totalSize / 1024 / 1024).toFixed(1)}MB) excede o limite de 100MB`, 'error');
       return;
     }
+    trackEvent("sea.submeter_manifest_hbl.analise");
     setIsAnalyzing(true);
     setAnalysisProgress(5);
     setAnalysisStep("Enviando arquivos...");
