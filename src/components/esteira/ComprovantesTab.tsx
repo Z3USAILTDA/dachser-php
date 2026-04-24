@@ -213,9 +213,7 @@ export function ComprovantesTab() {
                       <TableCell>
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
                           <Calendar className="h-3 w-3" />
-                          {group.lastUpload
-                            ? format(new Date(group.lastUpload), "dd/MM/yyyy HH:mm", { locale: ptBR })
-                            : "-"}
+                          {fmtDate(group.lastUpload)}
                         </div>
                       </TableCell>
                       <TableCell>
