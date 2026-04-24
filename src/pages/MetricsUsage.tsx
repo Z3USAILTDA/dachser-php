@@ -739,7 +739,6 @@ const MetricsUsage = () => {
                                 <div className="divide-y divide-white/5">
                                   {summaryRows.map((row) => (
                                     <div key={row.endpoint} className="flex items-center gap-3 px-3 py-2 text-xs">
-                                      <span className="text-base leading-none">{row.pretty.icon}</span>
                                       <div className="flex-1 min-w-0">
                                         <div className="text-foreground/90 truncate">{row.pretty.label}</div>
                                         <div className="text-[10px] text-muted-foreground truncate">{row.pretty.module}</div>
