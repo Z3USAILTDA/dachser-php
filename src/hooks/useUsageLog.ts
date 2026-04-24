@@ -29,11 +29,33 @@ function getOrCreateSessionId(): string {
 }
 
 /**
+ * Telas/ações do módulo admin não devem gerar logs de uso.
+ * Detecta tanto endpoints de página (/admin/...) quanto eventos semânticos (event:admin.*).
+ */
+function isAdminScoped(endpoint: unknown): boolean {
+  if (typeof endpoint !== "string") return false;
+  const ep = endpoint.toLowerCase();
+  if (ep.startsWith("/admin")) return true;
+  if (ep.startsWith("event:admin.")) return true;
+  // Também considera a rota atual (ex.: trackEvent disparado dentro de uma tela /admin/*)
+  try {
+    if (typeof window !== "undefined" && window.location?.pathname?.toLowerCase().startsWith("/admin")) {
+      return true;
+    }
+  } catch {
+    /* noop */
+  }
+  return false;
+}
+
+/**
  * Hook para registrar uso de páginas no sistema de métricas.
  * Registra automaticamente quando a página é acessada.
  */
 async function sendLog(payload: Record<string, unknown>) {
   try {
+    if (isAdminScoped((payload as { endpoint?: unknown }).endpoint)) return;
+
     const storedUser = localStorage.getItem("user");
     if (!storedUser) return;
     const user = JSON.parse(storedUser);
@@ -103,6 +125,8 @@ export function useUsageLog({ endpoint, method = "GET" }: UseUsageLogOptions) {
  */
 export async function logAction(endpoint: string, method: "POST" | "DELETE" | "PUT" = "POST") {
   try {
+    if (isAdminScoped(endpoint)) return;
+
     const storedUser = localStorage.getItem("user");
     if (!storedUser) return;
 
