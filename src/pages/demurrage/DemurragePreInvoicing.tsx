@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { TablePagination } from "@/components/layout/TablePagination";
+import { trackEvent } from "@/hooks/useUsageLog";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
