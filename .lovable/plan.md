@@ -1,74 +1,62 @@
+## Problema
 
-## Diagnóstico
+AWB **045-21167952** está exibindo **BKD** como evento mais recente, quando deveria ser **RCT** (Received From Carrier — 26/04/2026 17:28). A timeline real é:
 
-O bug ocorre em vouchers **simples** (não master). A raiz é uma combinação de dois fatores na aba Pagamentos (`src/components/esteira/PagamentosTab.tsx`):
-
-### 1. Race condition no `setAnexosDialog`
-Quando o usuário clica no olho (`Eye`), o fluxo é:
-1. `setSelectedPagamento(pag)` + `setDetailsDialogOpen(true)` + `setAnexosDialog([])` + `setLoadingAnexos(true)`
-2. `await invoke("get_voucher_anexos", { voucher_id: pag.id })`
-3. `setAnexosDialog(data?.data || [])`
-
-Não há **request token / abort** entre cliques. Se o usuário fecha o dialog e abre outro voucher antes da primeira request retornar (ou se o dialog é re-renderizado), a primeira resposta pode chegar **depois** e sobrescrever a lista do voucher correto com a do anterior — ou pior: a primeira response com `[]` (porque o backend silenciou um erro) sobrescreve uma resposta posterior já populada. Idem para o `onUploaded` do `ExtraAnexoUpload`, que dispara um segundo `get_voucher_anexos` em paralelo sem proteção.
-
-### 2. Erro silenciado no edge function vira "lista vazia"
-No handler `get_voucher_anexos` (linhas 6909–6921 de `supabase/functions/mariadb-proxy/index.ts`):
-
-```ts
-let anexos: any[] = [];
-try {
-  anexos = await client.query(`SELECT ... FROM dados_dachser.t_voucher_anexos WHERE voucher_id = ? ...`, [voucher_id]);
-} catch (anexosErr) {
-  console.log('Error fetching anexos:', anexosErr);
-}
-result = { success: true, data: anexos || [] };
+```text
+$[0] 28/04 02:10  BKD  Booked FOR -> GRU
+$[1] 27/04 19:20  BKD  Booked LIS -> FOR
+$[2] 26/04 17:28  RECE Received From Carrier   <-- deveria vencer
+$[3] 26/04 14:48  RCF  Received from Flight
 ```
 
-Qualquer falha transitória do MariaDB (timeout, conexão derrubada, lock) é engolida e o cliente recebe `{ success: true, data: [] }`. O frontend interpreta como "voucher sem anexos" e mostra "Nenhum documento anexado", **mesmo existindo registros em `t_voucher_anexos`**. Como em `get_voucher_by_id` o mesmo `try/catch silencioso` existe, se o usuário abrir o detalhe pela rota `/voucher/:id` no momento errado, vai ver o mesmo problema — confirmando que não é diferença de query e sim falha transitória mascarada.
+## Causa raiz
 
-### Por que parece intermitente
-O usuário disse "em alguns casos aparecem, em outros não, mesmo existindo documentos". Isso bate com (a) flap de conexão MariaDB ou (b) race entre cliques sucessivos no olho. Não é problema de filhos/master, nem de id incorreto — `pag.id` é exatamente `t_vouchers.id`, e o handler usa o mesmo critério do `get_voucher_by_id` que sabidamente funciona.
+Há duas falhas combinadas no resolvedor de códigos (`fetch-tracking-aereo` e `fetch-status-aereo`):
 
----
+1. **A descrição "Received From Carrier" não tem mapeamento.** As funções resolvem apenas:
+   - `RECEIVED FROM FLIGHT` → RCF
+   - `RECEIVED FROM SHIPPER` → RCS
+   
+   Não existe regra para `RECEIVED FROM CARRIER` → **RCT**. Resultado: o slot $[2] resolve para `code = null`.
 
-## Mudanças propostas
+2. **Cascata do bug:** com `code = null`, o slot escapa do filtro `isBkd()` (que só remove "BKD"/"BKG"/"BOOKED") e permanece no pool. Como sua data 26/04 17:28 é a mais recente entre os não-BKD, ele "vence" no `pickTopByIATA` — mas com `code = null`. O fallback então usa `last_status_code` da linha SQL, que é `BKD`, exibindo BKD no card.
 
-### A. `supabase/functions/mariadb-proxy/index.ts` — handler `get_voucher_anexos`
-- **Parar de mascarar erros**. Em vez de retornar `{ success: true, data: [] }` quando a query falha, retornar `{ success: false, error: <mensagem>, data: [] }` (mantendo HTTP 200 para não derrubar o invoke). O frontend então saberá distinguir "voucher sem anexos" de "falha técnica".
-- Adicionar 1 retry simples (uma re-tentativa após pequeno delay) antes de desistir, já que erros do MariaDB nesse projeto costumam ser transitórios (alinhado com a memory `mariadb-connection-details`).
-- Preservar todas as outras queries; mudança cirúrgica só nesse case.
+3. **Peso IATA invertido:** `IATA_WEIGHT.RCT = 11` está abaixo de `BKD = 32` em `fetch-tracking-aereo`. RCT (handover ao carrier) é operacionalmente mais avançado que BKD (reserva), então o peso precisa ser maior. Em `fetch-status-aereo` o IATA_HIERARCHY já tem RCT(11) > BKD(1), correto.
 
-### B. `src/components/esteira/PagamentosTab.tsx` — handler do olho
-- Introduzir um **request token** (ref incremental) para descartar respostas que chegam fora de ordem. Pseudocódigo:
+## Correção (cirúrgica)
+
+### `supabase/functions/fetch-tracking-aereo/index.ts`
+
+- Em `resolveCode` (linha ~553), adicionar antes da linha de "RECEIVED FROM SHIPPER":
   ```ts
-  const reqIdRef = useRef(0);
-  ...
-  const myReq = ++reqIdRef.current;
-  const { data } = await invoke(...);
-  if (myReq !== reqIdRef.current) return; // descarta resposta tardia
-  if (data?.success === false) {
-    toast({ title: "Falha ao carregar anexos", description: data.error, variant: "destructive" });
-  }
-  setAnexosDialog(data?.data || []);
+  if (upper.includes("RECEIVED FROM CARRIER")) return "RCT";
   ```
-- Aplicar o mesmo padrão no `onUploaded` do `ExtraAnexoUpload` (linha ~1209) para que ele também respeite o token.
-- Quando o dialog fecha (`onOpenChange` para false), incrementar o token e limpar `anexosDialog` para evitar que uma resposta antiga "renasça".
-- Quando `data.success === false`, exibir um toast informando o usuário e **não** sobrescrever a lista atual (deixar tentar de novo via reabrir o olho). Isso evita o "sumiço" de anexos que existiam.
+- Em `IATA_WEIGHT` (linha ~582), reposicionar **RCT** acima de BKD:
+  - `RCT: 34` (acima de BKD=32, no nível de RCS=34, refletindo handover de origem). 
 
-### C. (Opcional, baixo custo) `VoucherDetailsView.tsx` na rota `/fin/esteira/voucher/:id`
-- Mesma blindagem: se `get_voucher_by_id` voltar com `anexos: []` mas o backend tiver registrado erro de query, o usuário precisa saber. Posso aplicar o mesmo `success:false` para o sub-fetch de anexos no `get_voucher_by_id`. Surgical, mesmo padrão da seção A.
+### `supabase/functions/fetch-status-aereo/index.ts`
 
----
+- Em `getEventStatusCode` (linha ~49), adicionar antes da regra de SHIPPER:
+  ```ts
+  if (/\bRECEIVED\s+FROM\s+CARRIER\b/.test(upper)) return 'RCT';
+  ```
+- Em `statusMap` (linha ~292), adicionar:
+  ```ts
+  'RECEIVED FROM CARRIER': 'RCT',
+  ```
+- Em `descPatterns` (linha ~344), adicionar antes do shipper:
+  ```ts
+  [/\breceived?\s+from\s+carrier\b/i, 'RCT'],
+  ```
 
-## Memory a atualizar
-Criar `mem://vouchers/anexos-fetch-resilience` registrando:
-> Handlers que carregam anexos (`get_voucher_anexos`, `get_voucher_by_id`) não devem mascarar falhas de MariaDB como `data: []`. Frontend deve usar request token para evitar race condition entre múltiplos cliques no olho da Pagamentos.
+## Resultado esperado
 
----
+Após o próximo refetch:
+- AWB **045-21167952** passa a exibir **RCT — Received From Carrier (26/04 17:28)** como evento mais recente.
+- O modal de timeline marcará "MAIS RECENTE" no evento RECE, não no BKD.
+- Qualquer outro processo com "Received From Carrier" na timeline (LATAM/GOL/etc.) também passa a refletir RCT corretamente em vez de cair em BKD por fallback.
 
-## Não faz parte do escopo
-- Não vou tocar na lógica de master/filhos (irrelevante para vouchers simples).
-- Não vou alterar a query SQL — ela já é correta.
-- Não vou refatorar os handlers; é cirúrgico, alinhado com a sua preferência.
+## Arquivos alterados
 
-Posso prosseguir com A + B + C?
+- `supabase/functions/fetch-tracking-aereo/index.ts` (2 pontos: `resolveCode` + `IATA_WEIGHT`)
+- `supabase/functions/fetch-status-aereo/index.ts` (3 pontos: `getEventStatusCode` + `statusMap` + `descPatterns`)

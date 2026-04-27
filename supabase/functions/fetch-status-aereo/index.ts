@@ -47,6 +47,7 @@ function getEventStatusCode(ev: any): string {
     const upper = desc.toUpperCase();
     // Order matters: more specific patterns first
     if (/\bRECEIVED\s+FROM\s+FLIGHT\b/.test(upper)) return 'RCF';
+    if (/\bRECEIVED\s+FROM\s+CARRIER\b/.test(upper)) return 'RCT';
     if (/\bRECEIVED\s+FROM\s+SHIPPER\b/.test(upper) || /\bREADY\s+FOR\s+CARRIAGE\b/.test(upper)) return 'RCS';
     if (/\bREADY\s+FOR\s+PICK[-\s]?UP\b/.test(upper) || /\bAGENT\s+NOTIFIED\b/.test(upper) || /\bNOTIFIED\s+FOR\s+DELIVERY\b/.test(upper)) return 'NFD';
     if (/\bAWAITING\s+DELIVERY\b/.test(upper) || /\bDOCUMENTS?\s+DELIVERED\b/.test(upper)) return 'AWD';
@@ -290,6 +291,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     'ARR': 'ARR', 'ARRIVED': 'ARR',
     'RCF': 'RCF', 'RECEIVED FROM FLIGHT': 'RCF',
     'RCS': 'RCS', 'RECEIVED FROM SHIPPER': 'RCS',
+    'RECEIVED FROM CARRIER': 'RCT',
     'MAN': 'MAN', 'MANIFESTED': 'MAN',
     'NFD': 'NFD', 'NOTIFIED FOR DELIVERY': 'NFD',
     // AWD e variantes (incluindo AWA = Air China "Documents Available")
@@ -341,6 +343,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     [/\bdocuments?\s+available\b/i, 'AWD'],
     [/\barrived?\b/i, 'ARR'],
     [/\breceived?\s+from\s+flight\b/i, 'RCF'],
+    [/\breceived?\s+from\s+carrier\b/i, 'RCT'],
     [/\breceived?\s+from\s+shipper\b/i, 'RCS'],
     [/\bmanifested?\b/i, 'MAN'],
     [/\bnotified?\s+for\s+delivery\b/i, 'NFD'],
