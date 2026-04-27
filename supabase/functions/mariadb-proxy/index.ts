@@ -4436,9 +4436,9 @@ Deno.serve(async (req) => {
             c.consulted_at_ultima_consulta,
             c.refreshed_at,
             COALESCE(m.consignee, a.consignee_nome) AS cliente,
-            COALESCE(m.mawb, a.awb_number) AS master,
-            COALESCE(m.aeroporto_origem, a.aeroporto_origem) AS aeroporto_origem,
-            COALESCE(m.aeroporto_destino, a.aeroporto_destino) AS aeroporto_destino,
+            COALESCE(m.mawb, a.awb_number, c.awb) AS master,
+            f.origin AS aeroporto_origem,
+            f.destination AS aeroporto_destino,
             COALESCE(m.nome_analista, a.clerk) AS nome_analista,
             COALESCE(m.email_analista, a.clerk_email) AS email_analista,
             m.tratamento,
@@ -4465,8 +4465,6 @@ Deno.serve(async (req) => {
                 TRIM(t.hawb_number) AS hawb_key,
                 TRIM(t.consignee_nome) AS consignee_nome,
                 TRIM(t.awb_number) AS awb_number,
-                t.aeroporto_origem,
-                t.aeroporto_destino,
                 t.clerk,
                 t.clerk_email,
                 t.created_at,
@@ -4480,6 +4478,8 @@ Deno.serve(async (req) => {
             WHERE x.rn = 1
           ) a
             ON a.hawb_key COLLATE utf8mb4_unicode_ci = TRIM(c.hawb) COLLATE utf8mb4_unicode_ci
+          LEFT JOIN ${database}.t_fato_aereo f
+            ON TRIM(f.awb) COLLATE utf8mb4_unicode_ci = TRIM(COALESCE(c.awb, m.mawb, a.awb_number)) COLLATE utf8mb4_unicode_ci
           WHERE c.teve_bloqueio IS NULL
              OR TRIM(c.teve_bloqueio) COLLATE utf8mb4_unicode_ci <> 'Sem retorno CCT' COLLATE utf8mb4_unicode_ci
           ORDER BY c.hawb
