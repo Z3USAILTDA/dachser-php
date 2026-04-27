@@ -330,7 +330,7 @@ export function useProcessosCCT() {
       console.log("CCT: Fetching shipments from MariaDB via mariadb-proxy...");
       
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'get_cct_shipments' }
+        body: { action: 'get_cct_shipments_cached' }
       });
 
       if (error) {
