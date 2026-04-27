@@ -3986,6 +3986,38 @@ Deno.serve(async (req) => {
             FROM ${database}.t_fato_aereo tdaf
             WHERE tdaf.last_status_code IN ('DEP','TFD','TRF','TRM','OFS','RCT','RDP','ARR','RCF','NFD','AWD','PDD','CUS','CCD','DDL')
               AND json_valid(tdaf.hawbs_json)
+          ),
+          eventos_portal AS (
+            SELECT
+              x.hawb,
+              x.situacao_portal,
+              x.data_ultima_atualizacao,
+              ROW_NUMBER() OVER (
+                PARTITION BY x.hawb
+                ORDER BY STR_TO_DATE(x.data_ultima_atualizacao, '%Y-%m-%d %H:%i:%s') DESC
+              ) AS rn
+            FROM (
+              SELECT
+                h.hawb,
+                JSON_UNQUOTE(JSON_EXTRACT(h.json_identificacao, '$.situacaoPortal')) AS situacao_portal,
+                JSON_UNQUOTE(JSON_EXTRACT(h.json_identificacao, '$.dataUltimaAtualizacaoCargaDetalhada')) AS data_ultima_atualizacao
+              FROM ${database}.t_cct_hawb_api_historico h
+              WHERE h.hawb IS NOT NULL
+                AND h.hawb <> ''
+                AND h.json_identificacao IS NOT NULL
+                AND h.json_identificacao <> ''
+                AND JSON_VALID(h.json_identificacao)
+            ) x
+            WHERE x.situacao_portal IS NOT NULL
+              AND x.situacao_portal <> ''
+              AND x.data_ultima_atualizacao IS NOT NULL
+              AND x.data_ultima_atualizacao <> ''
+            GROUP BY x.hawb, x.situacao_portal, x.data_ultima_atualizacao
+          ),
+          ultimo_evento_portal AS (
+            SELECT hawb, situacao_portal, data_ultima_atualizacao
+            FROM eventos_portal
+            WHERE rn = 1
           )
           SELECT
             c.id,
