@@ -4467,6 +4467,9 @@ Deno.serve(async (req) => {
                 TRIM(t.awb_number) AS awb_number,
                 t.aeroporto_origem,
                 t.aeroporto_destino,
+                t.clerk,
+                t.clerk_email,
+                t.created_at,
                 ROW_NUMBER() OVER (
                   PARTITION BY TRIM(t.hawb_number)
                   ORDER BY t.created_at DESC, t.data_emissao DESC
