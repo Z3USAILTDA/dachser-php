@@ -7260,7 +7260,7 @@ Deno.serve(async (req) => {
 
       case 'get_cct_events': {
         const { awb: queryAwb } = body as any;
-        
+
         if (!queryAwb) {
           return new Response(
             JSON.stringify({ error: 'AWB é obrigatório' }),
@@ -7268,275 +7268,81 @@ Deno.serve(async (req) => {
           );
         }
 
-        console.log('Fetching CCT events for AWB from t_cct_hawb_api_historico only:', queryAwb);
+        console.log('Fetching CCT events (situacaoPortal timeline) for AWB:', queryAwb);
 
         try {
-          // Normalize HAWB for lookup
+          // Normalize HAWB for lookup (matches hawb_normalizado convention)
           const hawbNorm = queryAwb.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-          
-          // 1. Fetch historical snapshots with ALL JSON fields
-          const histSnapshots = await client.query(`
-            SELECT id, hawb, consulted_at,
-              json_partes_estoque,
-              json_viagens_associadas,
-              json_bloqueios_ativos,
-              json_bloqueios_baixados,
-              json_documentos_saida,
-              json_divergencias
-            FROM ${database}.t_cct_hawb_api_historico
-            WHERE hawb_normalizado = ?
-            ORDER BY consulted_at ASC
-            LIMIT 500
-          `, [hawbNorm]);
-          
-          console.log(`CCT: Found ${histSnapshots?.length || 0} historical snapshots for HAWB ${queryAwb}`);
-          
-          // Helper: safely parse JSON field
-          const safeParseJson = (field: any): any => {
-            if (!field) return null;
-            try { return typeof field === 'string' ? JSON.parse(field) : field; } catch { return null; }
-          };
-          
-          // Helper: map situacao text to codigo_evento
+          const rawHawb = (queryAwb || '').trim();
+
+          // Map situacao text to codigo_evento
           const mapSituacao = (situacao: string): string => {
-            const lower = situacao.toLowerCase().trim();
+            const lower = (situacao || '').toLowerCase().trim();
             if (lower.includes('manifestada')) return 'MANIFESTADO';
             if (lower.includes('informada')) return 'CHEGADA_INFORMADA';
             if (lower.includes('recepcionada')) return 'RECEPCIONADO';
             if (lower.includes('entregue')) return 'ENTREGUE';
             if (lower.includes('transferência') || lower.includes('transferencia')) return 'AREA_TRANSFERENCIA';
             if (lower.includes('trânsito terrestre') || lower.includes('transito terrestre')) return 'EM_TRANSITO_TERRESTRE';
-            return situacao.toUpperCase().replace(/\s+/g, '_');
+            return (situacao || '').toUpperCase().replace(/\s+/g, '_');
           };
-          
-          // Helper: create event object
-          const mkEvent = (codigo: string, descricao: string, dateStr: string, aeroporto: string | null, snapId: string) => ({
-            id: `rfb-${queryAwb}-${codigo}-${snapId}`,
-            awb: queryAwb,
-            codigo_evento: codigo,
-            descricao_evento: descricao,
-            data_hora_evento: dateStr || '1970-01-01T00:00:00.000Z',
-            fonte: 'RFB',
-            aeroporto: aeroporto,
-            nivel_confianca: 'PRIMARIA',
-            created_at: dateStr || '1970-01-01T00:00:00.000Z',
+
+          // Convert "YYYY-MM-DD HH:mm:ss" (assumed America/Sao_Paulo) to ISO UTC
+          const toIso = (s: string | null): string => {
+            if (!s) return '1970-01-01T00:00:00.000Z';
+            const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+            if (!m) {
+              const d = new Date(s);
+              return isNaN(d.getTime()) ? '1970-01-01T00:00:00.000Z' : d.toISOString();
+            }
+            // Treat MariaDB timestamp as UTC-3 (Sao Paulo) and shift to UTC
+            const d = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}-03:00`);
+            return isNaN(d.getTime()) ? '1970-01-01T00:00:00.000Z' : d.toISOString();
+          };
+
+          // Pull all unique (situacaoPortal, dataUltimaAtualizacaoCargaDetalhada) pairs
+          // from t_cct_hawb_api_historico for this HAWB.
+          const eventRows = await client.query(`
+            SELECT
+              JSON_UNQUOTE(JSON_EXTRACT(h.json_identificacao, '$.situacaoPortal')) AS situacao_portal,
+              JSON_UNQUOTE(JSON_EXTRACT(h.json_identificacao, '$.dataUltimaAtualizacaoCargaDetalhada')) AS data_ultima_atualizacao
+            FROM ${database}.t_cct_hawb_api_historico h
+            WHERE (h.hawb_normalizado = ? OR h.hawb = ?)
+              AND h.json_identificacao IS NOT NULL
+              AND h.json_identificacao <> ''
+              AND JSON_VALID(h.json_identificacao)
+              AND JSON_UNQUOTE(JSON_EXTRACT(h.json_identificacao, '$.situacaoPortal')) IS NOT NULL
+              AND JSON_UNQUOTE(JSON_EXTRACT(h.json_identificacao, '$.situacaoPortal')) <> ''
+              AND JSON_UNQUOTE(JSON_EXTRACT(h.json_identificacao, '$.dataUltimaAtualizacaoCargaDetalhada')) IS NOT NULL
+              AND JSON_UNQUOTE(JSON_EXTRACT(h.json_identificacao, '$.dataUltimaAtualizacaoCargaDetalhada')) <> ''
+            GROUP BY situacao_portal, data_ultima_atualizacao
+            ORDER BY STR_TO_DATE(data_ultima_atualizacao, '%Y-%m-%d %H:%i:%s') ASC
+          `, [hawbNorm, rawHawb]);
+
+          const allEvents = (eventRows || []).map((r: any, idx: number) => {
+            const situacao = r.situacao_portal || '';
+            const codigo = mapSituacao(situacao);
+            const iso = toIso(r.data_ultima_atualizacao);
+            return {
+              id: `cct-${queryAwb}-${idx}-${codigo}`,
+              awb: queryAwb,
+              codigo_evento: codigo,
+              descricao_evento: situacao,
+              data_hora_evento: iso,
+              fonte: 'RFB',
+              aeroporto: null,
+              nivel_confianca: 'PRIMARIA',
+              created_at: iso,
+            };
           });
-          
-          // Helper: fingerprint for comparison (stable JSON string of key fields)
-          const fingerprint = (obj: any): string => {
-            if (!obj) return '';
-            try { return JSON.stringify(obj); } catch { return ''; }
-          };
-          
-          // 2. Compare consecutive snapshots to detect transitions in ALL fields
-          const allEvents: any[] = [];
-          let prevSituacao: string | null = null;
-          let prevViagensFingerprint = '';
-          let prevBloqueiosAtivosFingerprint = '';
-          let prevBloqueiosBaixadosFingerprint = '';
-          let prevDivergenciasFingerprint = '';
-          let prevDocsSaidaFingerprint = '';
-          let prevPesoConstatado: number | null = null;
-          let prevVolumeConstatado: number | null = null;
-          
-          for (const snap of (histSnapshots || [])) {
-            const eventDate = snap.consulted_at || '1970-01-01T00:00:00.000Z';
-            const snapId = snap.id || String(Math.random());
-            
-            // --- A) Situação transitions (existing logic) ---
-            const partes = safeParseJson(snap.json_partes_estoque);
-            if (Array.isArray(partes) && partes.length > 0) {
-              const pe = partes[0];
-              const situacao = pe?.situacaoAtual || pe?.situacao || pe?.status || '';
-              if (situacao) {
-                const codigoEvento = mapSituacao(situacao);
-                if (codigoEvento !== prevSituacao) {
-                  allEvents.push(mkEvent(codigoEvento, situacao, eventDate, pe?.aeroporto || null, snapId));
-                  prevSituacao = codigoEvento;
-                }
-              }
-              
-              // --- B) Peso/Volume constatado (first appearance) ---
-              const pesoConst = parseFloat(pe?.pesoBrutoConstatado) || null;
-              const volConst = parseInt(pe?.quantidadeVolumeConstatado) || null;
-              if (pesoConst && !prevPesoConstatado) {
-                allEvents.push(mkEvent('PESO_CONSTATADO', `Peso constatado: ${pesoConst} kg`, eventDate, pe?.aeroporto || null, `${snapId}-peso`));
-              }
-              if (volConst && !prevVolumeConstatado) {
-                allEvents.push(mkEvent('VOLUME_CONSTATADO', `Volume constatado: ${volConst} volumes`, eventDate, pe?.aeroporto || null, `${snapId}-vol`));
-              }
-              prevPesoConstatado = pesoConst || prevPesoConstatado;
-              prevVolumeConstatado = volConst || prevVolumeConstatado;
-            }
-            
-            // --- C) Viagens (flight events) ---
-            const viagens = safeParseJson(snap.json_viagens_associadas);
-            const viagensFP = fingerprint(viagens);
-            if (viagensFP && viagensFP !== prevViagensFingerprint && Array.isArray(viagens)) {
-              for (const v of viagens) {
-                const voo = v?.numeroVoo || v?.voo || '';
-                const origem = v?.aeroportoOrigem || '';
-                const destino = v?.aeroportoDestino || '';
-                const partida = v?.dataPartidaEfetiva || v?.dataPartidaPrevista || '';
-                const desc = voo ? `${voo} - ${origem}→${destino}` : `${origem}→${destino}`;
-                const dateToUse = partida || eventDate;
-                // Only add if we haven't seen this exact flight
-                const flightId = `${voo}-${origem}-${destino}`;
-                if (!allEvents.some((e: any) => e.id.includes(flightId) && e.codigo_evento === 'VOO_PARTIDA')) {
-                  allEvents.push(mkEvent('VOO_PARTIDA', desc, dateToUse, origem || null, `${snapId}-voo-${flightId}`));
-                }
-              }
-              prevViagensFingerprint = viagensFP;
-            }
-            
-            // --- D) Bloqueios ativos (new blocks) ---
-            const bloqueiosAtivos = safeParseJson(snap.json_bloqueios_ativos);
-            const bloqueiosAtivosFP = fingerprint(bloqueiosAtivos);
-            if (bloqueiosAtivosFP && bloqueiosAtivosFP !== prevBloqueiosAtivosFingerprint) {
-              if (Array.isArray(bloqueiosAtivos) && bloqueiosAtivos.length > 0) {
-                // Check which blocks are new
-                const prevBloqueios = safeParseJson(prevBloqueiosAtivosFingerprint ? prevBloqueiosAtivosFingerprint : '[]') || [];
-                const prevIds = new Set((Array.isArray(prevBloqueios) ? prevBloqueios : []).map((b: any) => b?.numeroBloqueio || b?.id || JSON.stringify(b)));
-                for (const b of bloqueiosAtivos) {
-                  const bId = b?.numeroBloqueio || b?.id || JSON.stringify(b);
-                  if (!prevIds.has(bId)) {
-                    const motivo = b?.motivo || b?.motivoBloqueio || b?.descricao || 'Bloqueio ativo';
-                    allEvents.push(mkEvent('BLOQUEIO', motivo, eventDate, null, `${snapId}-bloq-${bId}`));
-                  }
-                }
-              }
-              prevBloqueiosAtivosFingerprint = bloqueiosAtivosFP;
-            }
-            
-            // --- E) Bloqueios baixados (unblocks) ---
-            const bloqueiosBaixados = safeParseJson(snap.json_bloqueios_baixados);
-            const bloqueiosBaixadosFP = fingerprint(bloqueiosBaixados);
-            if (bloqueiosBaixadosFP && bloqueiosBaixadosFP !== prevBloqueiosBaixadosFingerprint) {
-              if (Array.isArray(bloqueiosBaixados) && bloqueiosBaixados.length > 0) {
-                const prevBaixados = safeParseJson(prevBloqueiosBaixadosFingerprint ? prevBloqueiosBaixadosFingerprint : '[]') || [];
-                const prevBaixadosIds = new Set((Array.isArray(prevBaixados) ? prevBaixados : []).map((b: any) => b?.numeroBloqueio || b?.id || JSON.stringify(b)));
-                for (const b of bloqueiosBaixados) {
-                  const bId = b?.numeroBloqueio || b?.id || JSON.stringify(b);
-                  if (!prevBaixadosIds.has(bId)) {
-                    const motivo = b?.motivo || b?.motivoBloqueio || b?.descricao || 'Bloqueio baixado';
-                    allEvents.push(mkEvent('DESBLOQUEIO', motivo, eventDate, null, `${snapId}-desbloq-${bId}`));
-                  }
-                }
-              }
-              prevBloqueiosBaixadosFingerprint = bloqueiosBaixadosFP;
-            }
-            
-            // --- F) Divergências ---
-            const divergencias = safeParseJson(snap.json_divergencias);
-            const divergenciasFP = fingerprint(divergencias);
-            if (divergenciasFP && divergenciasFP !== prevDivergenciasFingerprint) {
-              if (Array.isArray(divergencias) && divergencias.length > 0 && prevDivergenciasFingerprint === '') {
-                for (const d of divergencias) {
-                  const tipo = d?.tipo || d?.tipoDivergencia || 'Divergência';
-                  const desc = d?.descricao || d?.observacao || tipo;
-                  allEvents.push(mkEvent('DIVERGENCIA', desc, eventDate, null, `${snapId}-div-${tipo}`));
-                }
-              }
-              prevDivergenciasFingerprint = divergenciasFP;
-            }
-            
-            // --- G) Documentos de saída (DUIMP) ---
-            const docsSaida = safeParseJson(snap.json_documentos_saida);
-            const docsSaidaFP = fingerprint(docsSaida);
-            if (docsSaidaFP && docsSaidaFP !== prevDocsSaidaFingerprint) {
-              if (Array.isArray(docsSaida) && docsSaida.length > 0 && prevDocsSaidaFingerprint === '') {
-                for (const doc of docsSaida) {
-                  const numero = doc?.numeroDuimp || doc?.numero || doc?.numeroDocumento || '';
-                  const canal = doc?.canal || doc?.canalParametrizacao || '';
-                  const desc = canal ? `DUIMP ${numero} - Canal ${canal}` : `DUIMP ${numero}`;
-                  allEvents.push(mkEvent('DUIMP_VINCULADA', desc, eventDate, null, `${snapId}-duimp-${numero}`));
-                }
-              }
-              prevDocsSaidaFingerprint = docsSaidaFP;
-            }
-          }
-          
-          // 3. Check t_cct_hawb_api_atual for the latest status
-          try {
-            const atualRows = await client.query(`
-              SELECT id, hawb, consulted_at,
-                json_partes_estoque,
-                json_viagens_associadas,
-                json_bloqueios_ativos,
-                json_bloqueios_baixados,
-                json_documentos_saida,
-                json_divergencias
-              FROM ${database}.t_cct_hawb_api_atual
-              WHERE hawb_normalizado = ?
-              LIMIT 1
-            `, [hawbNorm]);
-            
-            if (atualRows && atualRows.length > 0) {
-              const atual = atualRows[0];
-              const eventDate = atual.consulted_at || new Date().toISOString();
-              
-              // Situação from atual
-              const partes = safeParseJson(atual.json_partes_estoque);
-              if (Array.isArray(partes) && partes.length > 0) {
-                const pe = partes[0];
-                const situacao = pe?.situacaoAtual || pe?.situacao || pe?.status || '';
-                if (situacao) {
-                  const codigoEvento = mapSituacao(situacao);
-                  if (codigoEvento !== prevSituacao) {
-                    allEvents.push(mkEvent(codigoEvento, situacao, eventDate, pe?.aeroporto || null, 'atual'));
-                  }
-                }
-              }
-              
-              // Bloqueios from atual (in case new ones appeared)
-              const bloqueiosAtivos = safeParseJson(atual.json_bloqueios_ativos);
-              const bloqueiosAtivosFP = fingerprint(bloqueiosAtivos);
-              if (bloqueiosAtivosFP && bloqueiosAtivosFP !== prevBloqueiosAtivosFingerprint && Array.isArray(bloqueiosAtivos)) {
-                for (const b of bloqueiosAtivos) {
-                  const motivo = b?.motivo || b?.motivoBloqueio || b?.descricao || 'Bloqueio ativo';
-                  const bId = b?.numeroBloqueio || b?.id || 'latest';
-                  allEvents.push(mkEvent('BLOQUEIO', motivo, eventDate, null, `atual-bloq-${bId}`));
-                }
-              }
-              
-              // Desbloqueios from atual
-              const bloqueiosBaixados = safeParseJson(atual.json_bloqueios_baixados);
-              const bloqueiosBaixadosFP = fingerprint(bloqueiosBaixados);
-              if (bloqueiosBaixadosFP && bloqueiosBaixadosFP !== prevBloqueiosBaixadosFingerprint && Array.isArray(bloqueiosBaixados)) {
-                const prevBaixados = safeParseJson(prevBloqueiosBaixadosFingerprint ? prevBloqueiosBaixadosFingerprint : '[]') || [];
-                const prevBaixadosIds = new Set((Array.isArray(prevBaixados) ? prevBaixados : []).map((b: any) => b?.numeroBloqueio || b?.id || JSON.stringify(b)));
-                for (const b of bloqueiosBaixados) {
-                  const bId = b?.numeroBloqueio || b?.id || JSON.stringify(b);
-                  if (!prevBaixadosIds.has(bId)) {
-                    const motivo = b?.motivo || b?.motivoBloqueio || b?.descricao || 'Bloqueio baixado';
-                    allEvents.push(mkEvent('DESBLOQUEIO', motivo, eventDate, null, `atual-desbloq-${bId}`));
-                  }
-                }
-              }
-              
-              // DUIMP from atual
-              const docsSaida = safeParseJson(atual.json_documentos_saida);
-              const docsSaidaFP = fingerprint(docsSaida);
-              if (docsSaidaFP && docsSaidaFP !== prevDocsSaidaFingerprint && Array.isArray(docsSaida) && docsSaida.length > 0) {
-                for (const doc of docsSaida) {
-                  const numero = doc?.numeroDuimp || doc?.numero || doc?.numeroDocumento || '';
-                  const canal = doc?.canal || doc?.canalParametrizacao || '';
-                  const desc = canal ? `DUIMP ${numero} - Canal ${canal}` : `DUIMP ${numero}`;
-                  allEvents.push(mkEvent('DUIMP_VINCULADA', desc, eventDate, null, `atual-duimp-${numero}`));
-                }
-              }
-            }
-          } catch (atualErr) {
-            console.warn('CCT: Error fetching t_cct_hawb_api_atual for timeline (non-fatal):', atualErr);
-          }
-          
-          // 4. Sort by date DESC for frontend
+
+          // Sort DESC for frontend (most recent first)
           allEvents.sort((a: any, b: any) => new Date(b.data_hora_evento).getTime() - new Date(a.data_hora_evento).getTime());
-          
-          console.log(`CCT: Generated ${allEvents.length} events from snapshots for AWB ${queryAwb}`);
+
+          console.log(`CCT: Returned ${allEvents.length} situacaoPortal events for AWB ${queryAwb}`);
           result = { success: true, data: allEvents };
         } catch (tableErr) {
-          console.log('Error fetching CCT events from snapshots:', tableErr);
+          console.log('Error fetching CCT events (situacaoPortal):', tableErr);
           result = { success: true, data: [] };
         }
         break;
