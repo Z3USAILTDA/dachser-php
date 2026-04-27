@@ -551,6 +551,7 @@ serve(async (req) => {
       if (upper.includes("READY FOR PICK-UP") || upper.includes("AGENT NOTIFIED") || upper.includes("NOTIFIED FOR DELIVERY")) return "NFD";
       if (upper.includes("DOCUMENTS DELIVERED")) return "AWD";
       if (upper.includes("RECEIVED FROM FLIGHT")) return "RCF";
+      if (upper.includes("RECEIVED FROM CARRIER")) return "RCT";
       if (upper.includes("RECEIVED FROM SHIPPER") || upper.includes("READY FOR CARRIAGE")) return "RCS";
       if (upper.includes("FREIGHT ON HAND")) return "FOH";
       if (upper.includes("MANIFESTED")) return "MAN";
