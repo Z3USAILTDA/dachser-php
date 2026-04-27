@@ -4435,10 +4435,10 @@ Deno.serve(async (req) => {
             c.data_ultima_atualizacao_atual,
             c.consulted_at_ultima_consulta,
             c.refreshed_at,
-            m.consignee AS cliente,
-            m.mawb AS master,
-            m.origem AS aeroporto_origem,
-            m.destino AS aeroporto_destino,
+            a.consignee_nome AS cliente,
+            COALESCE(m.mawb, a.awb_number) AS master,
+            a.aeroporto_origem AS aeroporto_origem,
+            a.aeroporto_destino AS aeroporto_destino,
             m.nome_analista,
             m.email_analista,
             m.tratamento,
@@ -4458,6 +4458,25 @@ Deno.serve(async (req) => {
              AND t.data_insert = latest.max_di
           ) m
             ON TRIM(m.hawb) COLLATE utf8mb4_unicode_ci = TRIM(c.hawb) COLLATE utf8mb4_unicode_ci
+          LEFT JOIN (
+            SELECT x.*
+            FROM (
+              SELECT
+                TRIM(t.hawb_number) AS hawb_key,
+                TRIM(t.consignee_nome) AS consignee_nome,
+                TRIM(t.awb_number) AS awb_number,
+                t.aeroporto_origem,
+                t.aeroporto_destino,
+                ROW_NUMBER() OVER (
+                  PARTITION BY TRIM(t.hawb_number)
+                  ORDER BY t.created_at DESC, t.data_emissao DESC
+                ) AS rn
+              FROM ${database}.t_dados_aereo t
+              WHERE t.hawb_number IS NOT NULL AND TRIM(t.hawb_number) <> ''
+            ) x
+            WHERE x.rn = 1
+          ) a
+            ON a.hawb_key COLLATE utf8mb4_unicode_ci = TRIM(c.hawb) COLLATE utf8mb4_unicode_ci
           WHERE c.teve_bloqueio IS NULL
              OR TRIM(c.teve_bloqueio) COLLATE utf8mb4_unicode_ci <> 'Sem retorno CCT' COLLATE utf8mb4_unicode_ci
           ORDER BY c.hawb
