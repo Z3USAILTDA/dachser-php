@@ -4435,15 +4435,15 @@ Deno.serve(async (req) => {
             c.data_ultima_atualizacao_atual,
             c.consulted_at_ultima_consulta,
             c.refreshed_at,
-            a.consignee_nome AS cliente,
+            COALESCE(m.consignee, a.consignee_nome) AS cliente,
             COALESCE(m.mawb, a.awb_number) AS master,
-            a.aeroporto_origem AS aeroporto_origem,
-            a.aeroporto_destino AS aeroporto_destino,
-            m.nome_analista,
-            m.email_analista,
+            COALESCE(m.aeroporto_origem, a.aeroporto_origem) AS aeroporto_origem,
+            COALESCE(m.aeroporto_destino, a.aeroporto_destino) AS aeroporto_destino,
+            COALESCE(m.nome_analista, a.clerk) AS nome_analista,
+            COALESCE(m.email_analista, a.clerk_email) AS email_analista,
             m.tratamento,
             m.tratamentos_especiais,
-            m.data_insert AS created_at
+            COALESCE(m.data_insert, a.created_at) AS created_at
           FROM ${database}.t_cct_dashboard_cache c
           LEFT JOIN (
             SELECT t.*
@@ -4467,6 +4467,9 @@ Deno.serve(async (req) => {
                 TRIM(t.awb_number) AS awb_number,
                 t.aeroporto_origem,
                 t.aeroporto_destino,
+                t.clerk,
+                t.clerk_email,
+                t.created_at,
                 ROW_NUMBER() OVER (
                   PARTITION BY TRIM(t.hawb_number)
                   ORDER BY t.created_at DESC, t.data_emissao DESC
