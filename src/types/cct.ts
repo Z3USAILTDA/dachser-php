@@ -313,6 +313,15 @@ export interface CCTRegraNotificacao {
   updated_at: string;
 }
 
+export interface CCTCacheMeta {
+  teve_bloqueio: string | null;
+  motivos_bloqueio: string | null;
+  situacao_portal_atual: string | null;
+  data_ultima_atualizacao_atual: string | null;
+  consulted_at_ultima_consulta: string | null;
+  refreshed_at: string | null;
+}
+
 export interface ProcessoCCT {
   shipment: CCTShipment;
   status_atual: CCTStatusAtual;
@@ -320,6 +329,7 @@ export interface ProcessoCCT {
   excecoes: CCTExcecao[];
   origem_cct?: OrigemCCT;
   data_entregue?: string | null;
+  cache_meta?: CCTCacheMeta;
 }
 
 export interface CodigoIATA {

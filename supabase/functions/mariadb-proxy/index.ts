@@ -4407,8 +4407,63 @@ Deno.serve(async (req) => {
           };
         });
 
-        console.log(`CCT: Found ${processedShipments.length} shipments from t_cct_hawb_api_atual`);
+         console.log(`CCT: Found ${processedShipments.length} shipments from t_cct_hawb_api_atual`);
         result = { success: true, data: processedShipments };
+        break;
+      }
+
+      // ==================== CCT - CACHED (NEW SOURCE) ====================
+      // Reads exclusively from dados_dachser.t_cct_dashboard_cache and complements
+      // with t_master_dados (cliente, master, rota, analista, tratamentos).
+      // No JSON re-processing, no RFB/LeadComex/tracking_status joins.
+      // Frontend is responsible for chronological ordering of `eventos`.
+      case 'get_cct_shipments_cached': {
+        console.log('Fetching CCT shipments from t_cct_dashboard_cache (lightweight)...');
+        const cachedRows = await client.query(`
+          SELECT
+            c.hawb,
+            c.awb,
+            c.eventos,
+            c.teve_bloqueio,
+            c.motivos_bloqueio,
+            c.data_decolagem,
+            c.peso_recebido_declarado,
+            c.peso_constatado,
+            c.volume_recebido_declarado,
+            c.volume_constatado,
+            c.situacao_portal_atual,
+            c.data_ultima_atualizacao_atual,
+            c.consulted_at_ultima_consulta,
+            c.refreshed_at,
+            m.consignee AS cliente,
+            m.mawb AS master,
+            m.origem AS aeroporto_origem,
+            m.destino AS aeroporto_destino,
+            m.nome_analista,
+            m.email_analista,
+            m.tratamento,
+            m.tratamentos_especiais,
+            m.data_insert AS created_at
+          FROM ${database}.t_cct_dashboard_cache c
+          LEFT JOIN (
+            SELECT t.*
+            FROM ${database}.t_master_dados t
+            INNER JOIN (
+              SELECT TRIM(hawb) COLLATE utf8mb4_unicode_ci AS h, MAX(data_insert) AS max_di
+              FROM ${database}.t_master_dados
+              WHERE hawb IS NOT NULL AND TRIM(hawb) <> ''
+              GROUP BY TRIM(hawb) COLLATE utf8mb4_unicode_ci
+            ) latest
+              ON TRIM(t.hawb) COLLATE utf8mb4_unicode_ci = latest.h
+             AND t.data_insert = latest.max_di
+          ) m
+            ON TRIM(m.hawb) COLLATE utf8mb4_unicode_ci = TRIM(c.hawb) COLLATE utf8mb4_unicode_ci
+          WHERE c.teve_bloqueio IS NULL
+             OR TRIM(c.teve_bloqueio) COLLATE utf8mb4_unicode_ci <> 'Sem retorno CCT' COLLATE utf8mb4_unicode_ci
+          ORDER BY c.hawb
+        `);
+        console.log(`CCT (cached): Found ${cachedRows?.length || 0} shipments`);
+        result = { success: true, data: cachedRows || [] };
         break;
       }
 

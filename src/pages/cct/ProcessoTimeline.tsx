@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge, SLAInfoBadge } from "@/components/cct/StatusBadge";
 import { InnerNavTabs } from "@/components/cct/InnerNavTabs";
 import { EventTimeline } from "@/components/cct/EventTimeline";
-import { useProcessosCCT, useRegistrarPeso, useUpdateDecolagem, useCCTEvents } from "@/hooks/useCCTData";
+import { useProcessosCCT, useRegistrarPeso, useUpdateDecolagem } from "@/hooks/useCCTData";
 import { toast } from "sonner";
 import {
   Clock,
@@ -47,8 +47,9 @@ export default function ProcessoTimeline() {
     return processos.find(p => p.shipment.id === id);
   }, [processos, id]);
 
-  // Fetch events from history table using the AWB (house - HAWB) + Master (MAWB) for RFB lookup
-  const { data: eventosHistorico = [], isLoading: isLoadingEvents } = useCCTEvents(processo?.shipment.house || '', processo?.shipment.master || '');
+  // Eventos: usados direto da cache (já vem ordenado cronologicamente do hook)
+  const eventosHistorico: CCTEvento[] = useMemo(() => processo?.eventos || [], [processo]);
+  const isLoadingEvents = false;
 
   const [activeTab, setActiveTab] = useState("timeline");
   const [editingPeso, setEditingPeso] = useState(false);
@@ -59,12 +60,10 @@ export default function ProcessoTimeline() {
   const [volumeConstatado, setVolumeConstatado] = useState("");
   const [dataDecolagem, setDataDecolagem] = useState("");
 
-  // Combine historic events with fallback evento from processo
+  // Timeline = eventos (already chronologically sorted ASC by useCCTData)
   const allEventos = useMemo(() => {
-    if (!processo) return [];
-    const fallback = processo.eventos || [];
-    return eventosHistorico.length > 0 ? eventosHistorico : fallback;
-  }, [processo, eventosHistorico]);
+    return processo?.eventos || [];
+  }, [processo]);
 
   // Use o status oficial do processo diretamente, igual ao dashboard
   const effectiveStatus = useMemo(() => {
