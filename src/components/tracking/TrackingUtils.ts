@@ -29,6 +29,7 @@ export const airlineTrackingLinks: Record<string, string> = {
   "086": "https://www.siacargo.com/e-services/quicksearch_public/",
   "098": "https://cargo.airindia.com/in/en/track-shipment.html",
   "118": "https://flytaag.com/en/",
+  "071": "https://cargo.ethiopianairlines.com/my-cargo/track-your-shipment?awbnumber=${pr}-${awb}",
 };
 
 export const getAirlinePrefix = (awbNumber: string): string => {
