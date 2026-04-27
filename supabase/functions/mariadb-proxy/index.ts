@@ -4087,10 +4087,14 @@ Deno.serve(async (req) => {
             c.json_frete,
             c.json_manuseios_especiais,
             c.json_bloqueios_ativos,
-            ts.last_status_code AS tracking_status
+            ts.last_status_code AS tracking_status,
+            uep.situacao_portal AS ultimo_situacao_portal,
+            uep.data_ultima_atualizacao AS ultimo_situacao_portal_data
           FROM base_cct c
           LEFT JOIN aereo_latest a
             ON TRIM(a.hawb) COLLATE utf8mb4_unicode_ci = TRIM(c.hawb) COLLATE utf8mb4_unicode_ci
+          LEFT JOIN ultimo_evento_portal uep
+            ON TRIM(uep.hawb) COLLATE utf8mb4_unicode_ci = TRIM(c.hawb) COLLATE utf8mb4_unicode_ci
           INNER JOIN tracking_status ts
             ON json_contains(ts.hawbs_json, JSON_ARRAY(c.hawb))
             OR json_contains(ts.hawbs_json, JSON_ARRAY(CONCAT(LEFT(c.hawb, 3), '-', SUBSTRING(c.hawb, 4))))
