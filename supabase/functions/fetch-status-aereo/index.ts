@@ -291,6 +291,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     'ARR': 'ARR', 'ARRIVED': 'ARR',
     'RCF': 'RCF', 'RECEIVED FROM FLIGHT': 'RCF',
     'RCS': 'RCS', 'RECEIVED FROM SHIPPER': 'RCS',
+    'RECEIVED FROM CARRIER': 'RCT',
     'MAN': 'MAN', 'MANIFESTED': 'MAN',
     'NFD': 'NFD', 'NOTIFIED FOR DELIVERY': 'NFD',
     // AWD e variantes (incluindo AWA = Air China "Documents Available")
