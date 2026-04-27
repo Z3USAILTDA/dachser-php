@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge, SLAInfoBadge } from "@/components/cct/StatusBadge";
 import { InnerNavTabs } from "@/components/cct/InnerNavTabs";
 import { EventTimeline } from "@/components/cct/EventTimeline";
-import { useProcessosCCT, useRegistrarPeso, useUpdateDecolagem, useCCTEvents } from "@/hooks/useCCTData";
+import { useProcessosCCT, useRegistrarPeso, useUpdateDecolagem } from "@/hooks/useCCTData";
 import { toast } from "sonner";
 import {
   Clock,
