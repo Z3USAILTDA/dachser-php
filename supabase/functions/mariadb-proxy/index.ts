@@ -4442,7 +4442,7 @@ Deno.serve(async (req) => {
             COALESCE(m.nome_analista, a.clerk) AS nome_analista,
             COALESCE(m.email_analista, a.clerk_email) AS email_analista,
             m.tratamento,
-            m.tratamentos_especiais,
+            NULL AS tratamentos_especiais,
             COALESCE(m.data_insert, a.created_at) AS created_at
           FROM ${database}.t_cct_dashboard_cache c
           LEFT JOIN (
