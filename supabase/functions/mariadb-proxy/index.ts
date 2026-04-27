@@ -3984,7 +3984,7 @@ Deno.serve(async (req) => {
               tdaf.last_status_code,
               tdaf.hawbs_json
             FROM ${database}.t_fato_aereo tdaf
-            WHERE tdaf.last_status_code IN ('DEP','TFD','TRF','TRM','OFS','RCT','RDP','ARR','RCF','NFD','AWD','PDD','CUS','CCD','DDL')
+            WHERE (tdaf.last_status_code IS NULL OR tdaf.last_status_code NOT IN ('DLV','POD'))
               AND json_valid(tdaf.hawbs_json)
           ),
           eventos_portal AS (
