@@ -4189,9 +4189,37 @@ Deno.serve(async (req) => {
           return 'AGUARDANDO_CONSULTA';
         };
 
+        // Helpers for situacaoPortal -> canonical CCT status and ISO date conversion
+        const mapSituacaoPortalToCanonical = (situacao: string | null): string | null => {
+          if (!situacao) return null;
+          const u = situacao.toUpperCase().trim();
+          if (u.includes('ENTREGUE')) return 'ENTREGUE';
+          if (u.includes('TRÂNSITO TERRESTRE') || u.includes('TRANSITO TERRESTRE')) return 'EM_TRANSITO_TERRESTRE';
+          if (u.includes('TROCA') && u.includes('RECINTO')) return 'EM_TROCA_RECINTOS';
+          if (u.includes('RECEPCIONADA')) return 'RECEPCIONADA';
+          if (u.includes('TRANSFERÊNCIA') || u.includes('TRANSFERENCIA')) return 'EM_AREA_TRANSFERENCIA';
+          if (u.includes('MANIFESTADA')) return 'MANIFESTADA';
+          if (u.includes('INFORMADA')) return 'INFORMADA';
+          return null;
+        };
+        const portalDateToIso = (s: string | null): string | null => {
+          if (!s) return null;
+          const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+          if (!m) {
+            const d = new Date(s);
+            return isNaN(d.getTime()) ? null : d.toISOString();
+          }
+          const d = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}-03:00`);
+          return isNaN(d.getTime()) ? null : d.toISOString();
+        };
+
         // ==================== MAP ROWS TO enrichedShipments ====================
         const enrichedShipments = (cctRows || []).map((row: any) => {
-          const statusCctOficial = mapStatusTelaToCanonical(row.status_tela);
+          // Prefer the cronological "last event" from eventos_portal (situacaoPortal history)
+          const ultimoSituacaoPortal: string | null = row.ultimo_situacao_portal || null;
+          const ultimoSituacaoPortalIso = portalDateToIso(row.ultimo_situacao_portal_data);
+          const statusFromPortal = mapSituacaoPortalToCanonical(ultimoSituacaoPortal);
+          const statusCctOficial = statusFromPortal || mapStatusTelaToCanonical(row.status_tela);
 
           // Parse json_manuseios_especiais for tratamento
           const manuseios = safeParseJson(row.json_manuseios_especiais) || [];
@@ -4235,8 +4263,9 @@ Deno.serve(async (req) => {
             aeroporto_destino: (row.aeroporto_destino || '').trim() || null,
             dep_datetime: row.data_decolagem || null,
             ultimo_status_raw: statusCctOficial,
-            ultimo_evento_data: row.consulted_at || null,
+            ultimo_evento_data: ultimoSituacaoPortalIso || row.consulted_at || null,
             ultimo_evento_codigo: statusCctOficial,
+            ultimo_evento_descricao: ultimoSituacaoPortal || statusCctOficial,
             status_cct_oficial: statusCctOficial,
             data_atraso: null,
             arr_datetime: null,
@@ -4247,7 +4276,7 @@ Deno.serve(async (req) => {
             indicador_madeira: row.indicador_madeira === 'S',
             info_frete: infoFrete,
             manuseios_especiais_rfb: manuseiosCodes,
-            rfb_situacao: row.situacao_estoque_atual || row.situacao_portal || null,
+            rfb_situacao: ultimoSituacaoPortal || row.situacao_estoque_atual || row.situacao_portal || null,
             peso_declarado: row.peso_declarado ? Number(row.peso_declarado) : null,
             volume_declarado: row.volume_declarado ? Number(row.volume_declarado) : null,
             peso_constatado: row.peso_constatado ? Number(row.peso_constatado) : null,
