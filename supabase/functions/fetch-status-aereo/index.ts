@@ -47,6 +47,7 @@ function getEventStatusCode(ev: any): string {
     const upper = desc.toUpperCase();
     // Order matters: more specific patterns first
     if (/\bRECEIVED\s+FROM\s+FLIGHT\b/.test(upper)) return 'RCF';
+    if (/\bRECEIVED\s+FROM\s+CARRIER\b/.test(upper)) return 'RCT';
     if (/\bRECEIVED\s+FROM\s+SHIPPER\b/.test(upper) || /\bREADY\s+FOR\s+CARRIAGE\b/.test(upper)) return 'RCS';
     if (/\bREADY\s+FOR\s+PICK[-\s]?UP\b/.test(upper) || /\bAGENT\s+NOTIFIED\b/.test(upper) || /\bNOTIFIED\s+FOR\s+DELIVERY\b/.test(upper)) return 'NFD';
     if (/\bAWAITING\s+DELIVERY\b/.test(upper) || /\bDOCUMENTS?\s+DELIVERED\b/.test(upper)) return 'AWD';
