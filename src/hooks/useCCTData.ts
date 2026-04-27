@@ -52,78 +52,212 @@ const CODIGOS_IATA: CodigoIATA[] = [
 ];
 
 /**
- * Map MariaDB row to ProcessoCCT structure
- * Data comes directly from mariadb-proxy get_cct_shipments action
+ * Map a free-form portal situation/event description to a canonical CCT status.
+ * Returns null when no confident mapping is possible.
+ */
+function mapSituacaoToCCT(raw: string | null | undefined): StatusCCTOficial | null {
+  if (!raw) return null;
+  const s = String(raw).toLowerCase().trim();
+  if (!s) return null;
+  if (s.includes('bloque')) return 'BLOQUEIO';
+  if (s.includes('entregue')) return 'ENTREGUE';
+  if (s.includes('trans') && s.includes('terre')) return 'EM_TRANSITO_TERRESTRE';
+  if (s.includes('troca') && s.includes('recint')) return 'EM_TROCA_RECINTOS';
+  if (s.includes('recepc')) return 'RECEPCIONADA';
+  if (s.includes('transfer')) return 'EM_AREA_TRANSFERENCIA';
+  if (s.includes('manifest')) return 'MANIFESTADA';
+  if (s.includes('inform')) return 'INFORMADA';
+  return null;
+}
+
+/**
+ * Parse the `eventos` JSON column from t_cct_dashboard_cache.
+ * The column may arrive as a JSON string or as an already-parsed array,
+ * and the array is NOT guaranteed to be in chronological order.
+ *
+ * Returns events sorted ASCENDING by event date. Items with invalid/missing
+ * dates are still included but pushed to the end.
+ */
+function parseAndSortEventos(raw: any, shipmentId: string): CCTEvento[] {
+  if (!raw) return [];
+  let arr: any[] = [];
+  try {
+    if (typeof raw === 'string') {
+      const parsed = JSON.parse(raw);
+      arr = Array.isArray(parsed) ? parsed : [];
+    } else if (Array.isArray(raw)) {
+      arr = raw;
+    }
+  } catch {
+    return [];
+  }
+
+  const pickDate = (e: any): string | null => {
+    return (
+      e?.data_hora_evento ||
+      e?.data_hora ||
+      e?.dataHora ||
+      e?.data ||
+      e?.dataEvento ||
+      e?.timestamp ||
+      e?.dt ||
+      null
+    );
+  };
+
+  const pickDescricao = (e: any): string => {
+    return (
+      e?.descricao ||
+      e?.descricao_evento ||
+      e?.evento ||
+      e?.situacao ||
+      e?.situacao_portal ||
+      e?.codigo_evento ||
+      e?.codigo ||
+      ''
+    );
+  };
+
+  const pickCodigo = (e: any): string => {
+    return (
+      e?.codigo_evento ||
+      e?.codigo ||
+      pickDescricao(e) ||
+      'EVENTO'
+    );
+  };
+
+  const pickAeroporto = (e: any): string | null => {
+    return e?.aeroporto || e?.recinto || e?.local || null;
+  };
+
+  const enriched = arr
+    .filter((e: any) => e && typeof e === 'object')
+    .map((e: any, idx: number) => {
+      const dateStr = pickDate(e);
+      const ts = dateStr ? new Date(String(dateStr).replace(' ', 'T')).getTime() : NaN;
+      return {
+        raw: e,
+        dateStr,
+        ts: isNaN(ts) ? null : ts,
+        idx,
+      };
+    });
+
+  enriched.sort((a, b) => {
+    if (a.ts === null && b.ts === null) return a.idx - b.idx;
+    if (a.ts === null) return 1;
+    if (b.ts === null) return -1;
+    return a.ts - b.ts;
+  });
+
+  return enriched.map((item, i) => ({
+    id: `event-${shipmentId}-${i}`,
+    shipment_id: shipmentId,
+    codigo_evento: pickCodigo(item.raw),
+    data_hora_evento: item.dateStr || new Date(0).toISOString(),
+    descricao: pickDescricao(item.raw) || pickCodigo(item.raw),
+    fonte: 'TRACKING' as FonteEvento,
+    nivel_confianca: 'PRIMARIA' as NivelConfianca,
+    aeroporto: pickAeroporto(item.raw),
+    created_at: item.dateStr || new Date(0).toISOString(),
+  }));
+}
+
+/**
+ * Map a row from `get_cct_shipments_cached` (t_cct_dashboard_cache + t_master_dados)
+ * into a ProcessoCCT. The cache is the SOLE source of operational fields:
+ *   - eventos / teve_bloqueio / motivos_bloqueio
+ *   - data_decolagem
+ *   - peso/volume (declarado + constatado)
+ *   - situacao_portal_atual (used only when it agrees with the latest chronological event)
+ * Complementary fields (cliente, master, rota, analista, tratamentos) come from t_master_dados.
  */
 function mapRowToProcessoCCT(row: any): ProcessoCCT {
-  // Parse tratamento from t_master_dados - this is the primary source
-  // Also check tratamentos_especiais as fallback
+  const shipmentId = (row.hawb || row.awb || '').toString();
+
+  // Tratamentos especiais
   let tratamentos: string[] | null = null;
   const tratamentoSource = row.tratamento || row.tratamentos_especiais;
   if (tratamentoSource) {
     if (Array.isArray(tratamentoSource)) {
       tratamentos = tratamentoSource;
     } else if (typeof tratamentoSource === 'string') {
-      // Parse comma-separated, semicolon-separated, or space-separated codes
       tratamentos = tratamentoSource
         .split(/[,;\/\s]+/)
         .map((t: string) => t.trim().toUpperCase())
-        .filter((t: string) => t.length > 0 && t.length <= 5); // IATA codes are typically 2-4 chars
+        .filter((t: string) => t.length > 0 && t.length <= 5);
     }
   }
 
-  // Build shipment object
+  // Eventos (chronologically sorted)
+  const eventos = parseAndSortEventos(row.eventos, shipmentId);
+  const ultimoEvento = eventos.length > 0 ? eventos[eventos.length - 1] : null;
+
+  // Effective status: latest chronological event WINS over situacao_portal_atual
+  // when both map to a canonical status and they DIFFER.
+  const statusFromEvento = ultimoEvento
+    ? mapSituacaoToCCT(ultimoEvento.descricao) || mapSituacaoToCCT(ultimoEvento.codigo_evento)
+    : null;
+  const statusFromPortal = mapSituacaoToCCT(row.situacao_portal_atual);
+  const effectiveStatus: StatusCCTOficial =
+    statusFromEvento || statusFromPortal || 'INFORMADA';
+
+  // Bloqueio handling
+  const bloqueioRaw = (row.teve_bloqueio || '').toString().trim();
+  const bloqueioLower = bloqueioRaw.toLowerCase();
+  const hasBloqueio =
+    bloqueioRaw !== '' &&
+    bloqueioLower !== 'sem retorno cct' &&
+    bloqueioLower !== 'não' &&
+    bloqueioLower !== 'nao' &&
+    bloqueioLower !== 'no' &&
+    bloqueioLower !== 'false' &&
+    bloqueioLower !== '0';
+  const finalStatus: StatusCCTOficial = hasBloqueio ? 'BLOQUEIO' : effectiveStatus;
+
   const shipment: CCTShipment = {
-    id: row.id?.toString() || row.master,
-    house: row.house || '',
-    master: row.master || '',
+    id: shipmentId,
+    house: row.hawb || '',
+    master: row.master || row.awb || '',
     cliente: row.cliente || '',
-    cnpj_consignatario: row.cnpj_consignatario,
+    cnpj_consignatario: null,
     aeroporto_origem: row.aeroporto_origem || 'N/A',
     aeroporto_destino: row.aeroporto_destino || 'GRU',
-    eta: row.eta,
-    etd: row.etd,
-    peso_declarado: row.peso_declarado ? Number(row.peso_declarado) : null,
-    peso_constatado: row.peso_constatado ? Number(row.peso_constatado) : null,
-    volume_declarado: row.volume_declarado,
-    volume_constatado: row.volume_constatado,
+    eta: null,
+    etd: null,
+    peso_declarado: row.peso_recebido_declarado != null ? Number(row.peso_recebido_declarado) : null,
+    peso_constatado: row.peso_constatado != null ? Number(row.peso_constatado) : null,
+    volume_declarado: row.volume_recebido_declarado != null ? Number(row.volume_recebido_declarado) : null,
+    volume_constatado: row.volume_constatado != null ? Number(row.volume_constatado) : null,
     tratamentos_especiais: tratamentos,
-    status_manifestacao: row.status_manifestacao || 'AGUARDANDO',
+    status_manifestacao: finalStatus,
     analista_id: null,
-    analista: row.nome_analista ? {
-      id: 'analyst-legacy',
-      nome: row.nome_analista,
-      email: row.email_analista || '',
-    } : null,
+    analista: row.nome_analista
+      ? {
+          id: 'analyst-legacy',
+          nome: row.nome_analista,
+          email: row.email_analista || '',
+        }
+      : null,
     nome_analista_legado: row.nome_analista,
-    // Priorizar dep_datetime (DEP real da companhia aérea) para data de decolagem
-    data_decolagem_ultimo_trecho: row.dep_datetime || row.data_decolagem_ultimo_trecho || null,
-    dep_datetime: row.dep_datetime || null,
-    data_manifestacao_cct: row.data_manifestacao_cct,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    // t_aereo_cct (RFB) enrichment
-    ruc: row.ruc || null,
-    recinto_aduaneiro: row.recinto_aduaneiro || null,
-    numero_voo: row.numero_voo || null,
-    data_emissao: row.data_emissao || null,
-    indicador_madeira: row.indicador_madeira || false,
-    info_frete: row.info_frete || null,
-    manuseios_especiais_rfb: row.manuseios_especiais_rfb || [],
-    rfb_situacao: row.rfb_situacao || null,
+    data_decolagem_ultimo_trecho: row.data_decolagem || null,
+    dep_datetime: row.data_decolagem || null,
+    data_manifestacao_cct: null,
+    created_at: row.created_at || row.refreshed_at || null,
+    updated_at: row.data_ultima_atualizacao_atual || row.refreshed_at || null,
+    ruc: null,
+    recinto_aduaneiro: null,
+    numero_voo: null,
+    data_emissao: null,
+    indicador_madeira: false,
+    info_frete: null,
+    manuseios_especiais_rfb: [],
+    rfb_situacao: null,
   };
 
-  // Build status_atual object - status is derived from ultimo_evento_codigo
-  // Extract sla_info from backend response for detailed SLA display
-  const sla_info = row.sla_info ? {
-    status: (row.sla_info.status || row.sla_status || 'OK') as SLAStatus,
-    horasRestantes: row.sla_info.horasRestantes ?? null,
-    percentual: row.sla_info.percentual ?? null,
-    slaConfigHoras: row.sla_info.slaConfigHoras ?? row.sla_info.horasLimite ?? 24,
-    tempoResposta: row.sla_info.tempoResposta ?? null,
-    usouNovaLogica: row.sla_info.usouNovaLogica ?? false,
-  } : {
-    status: (row.sla_status || 'OK') as SLAStatus,
+  const sla_info = {
+    status: 'OK' as SLAStatus,
     horasRestantes: null,
     percentual: null,
     slaConfigHoras: 24,
@@ -132,47 +266,31 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
   };
 
   const status_atual: CCTStatusAtual = {
-    id: `status-${row.id}`,
-    shipment_id: row.id?.toString() || row.master,
-    status_cct_oficial: row.status_cct_oficial as StatusCCTOficial || 'INFORMADA',
+    id: `status-${shipmentId}`,
+    shipment_id: shipmentId,
+    status_cct_oficial: finalStatus,
     sla_status: sla_info.status,
-    sla_limite: row.sla_limite,
+    sla_limite: null,
     sla_info,
     proximo_evento_esperado: null,
-    tipo_voo: row.tipo_voo as TipoVoo || null,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
+    tipo_voo: null,
+    created_at: row.created_at || row.refreshed_at || null,
+    updated_at: row.data_ultima_atualizacao_atual || row.refreshed_at || null,
   };
 
-  // Build eventos array from ultimo_evento_* fields (fallback - will be replaced by useCCTEvents)
-  const eventos: CCTEvento[] = [];
-  if (row.ultimo_evento_data && row.ultimo_evento_codigo) {
-    eventos.push({
-      id: `event-${row.id}-1`,
-      shipment_id: row.id?.toString() || row.master,
-      codigo_evento: row.ultimo_evento_codigo,
-      data_hora_evento: row.ultimo_evento_data,
-      descricao: row.ultimo_evento_descricao || row.ultimo_evento_codigo,
-      fonte: 'RFB' as FonteEvento,
-      nivel_confianca: 'PRIMARIA' as NivelConfianca,
-      aeroporto: row.aeroporto_destino || null,
-      created_at: row.ultimo_evento_data,
-    });
-  }
-
-  // Build excecoes array based on alert conditions
+  // Excecoes derived from bloqueio
   const excecoes: CCTExcecao[] = [];
-  if (row.excecoes_abertas > 0) {
+  if (hasBloqueio) {
     excecoes.push({
-      id: `exc-${row.id}`,
-      shipment_id: row.id?.toString() || row.master,
-      tipo_excecao: 'ATRASO_EVENTO',
-      descricao: `Status de alerta: ${row.ultimo_evento_codigo || 'Exceção aberta'}`,
+      id: `exc-${shipmentId}`,
+      shipment_id: shipmentId,
+      tipo_excecao: 'CARGA_BLOQUEADA',
+      descricao: row.motivos_bloqueio || `Bloqueio: ${bloqueioRaw}`,
       status_excecao: 'ABERTA' as StatusExcecao,
-      fonte_detectou: 'SISTEMA',
+      fonte_detectou: 'CCT_CACHE',
       resolvido_em: null,
-      created_at: row.updated_at,
-      updated_at: row.updated_at,
+      created_at: row.data_ultima_atualizacao_atual || row.refreshed_at || new Date().toISOString(),
+      updated_at: row.data_ultima_atualizacao_atual || row.refreshed_at || new Date().toISOString(),
     });
   }
 
@@ -181,9 +299,18 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
     status_atual,
     eventos,
     excecoes,
-    origem_cct: row.origem_cct || 'OUTRO',
-    data_entregue: row.data_entregue || null,
-  };
+    origem_cct: 'OUTRO',
+    data_entregue: finalStatus === 'ENTREGUE' ? row.data_ultima_atualizacao_atual || null : null,
+    // Extra cache metadata exposed for UI tooltips
+    cache_meta: {
+      teve_bloqueio: row.teve_bloqueio || null,
+      motivos_bloqueio: row.motivos_bloqueio || null,
+      situacao_portal_atual: row.situacao_portal_atual || null,
+      data_ultima_atualizacao_atual: row.data_ultima_atualizacao_atual || null,
+      consulted_at_ultima_consulta: row.consulted_at_ultima_consulta || null,
+      refreshed_at: row.refreshed_at || null,
+    },
+  } as ProcessoCCT;
 }
 
 // ==================== HOOKS ====================
