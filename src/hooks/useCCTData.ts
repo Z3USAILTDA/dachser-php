@@ -231,7 +231,7 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
     volume_declarado: row.volume_recebido_declarado != null ? Number(row.volume_recebido_declarado) : null,
     volume_constatado: row.volume_constatado != null ? Number(row.volume_constatado) : null,
     tratamentos_especiais: tratamentos,
-    status_manifestacao: finalStatus,
+    status_manifestacao: finalStatus === 'ENTREGUE' ? 'ENTREGUE' : 'AGUARDANDO',
     analista_id: null,
     analista: row.nome_analista
       ? {
