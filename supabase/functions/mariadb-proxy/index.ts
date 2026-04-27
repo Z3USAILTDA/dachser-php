@@ -4419,7 +4419,8 @@ Deno.serve(async (req) => {
       // Frontend is responsible for chronological ordering of `eventos`.
       case 'get_cct_shipments_cached': {
         console.log('Fetching CCT shipments from t_cct_dashboard_cache (lightweight)...');
-        const cachedRows = await client.query(`
+        const cachedRows = await queryWithRetry(
+          () => client!.query(`
           SELECT
             c.hawb,
             c.awb,
@@ -4483,7 +4484,11 @@ Deno.serve(async (req) => {
           WHERE c.teve_bloqueio IS NULL
              OR TRIM(c.teve_bloqueio) COLLATE utf8mb4_unicode_ci <> 'Sem retorno CCT' COLLATE utf8mb4_unicode_ci
           ORDER BY c.hawb
-        `);
+        `),
+          // Sem retry: a query é pesada e refazê-la enquanto o MariaDB está
+          // saturado/lento só piora a fila de conexões.
+          { label: 'get_cct_shipments_cached', attempts: 1, timeoutMs: 15000 }
+        );
         console.log(`CCT (cached): Found ${cachedRows?.length || 0} shipments`);
         result = { success: true, data: cachedRows || [] };
         break;
