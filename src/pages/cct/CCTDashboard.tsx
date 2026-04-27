@@ -253,13 +253,10 @@ export default function CCTDashboard() {
       {/* Main Content */}
       <main className="relative z-10 max-w-[95%] mx-auto px-2 pb-8">
         <div className="space-y-6">
-          {error && (
-            <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 p-3 flex items-center gap-2">
-              <Database className="h-5 w-5 text-rose-400" />
-              <span className="text-sm text-rose-400">Erro ao conectar: {error.message}</span>
-            </div>
-          )}
-          
+          {/* Banner de erro de conexão removido por preferência do projeto:
+              não exibir avisos visuais de "offline" / falha de DB para o usuário.
+              Os dados em cache permanecem visíveis e o React Query refaz quando o backend voltar. */}
+
           {/* Metric Cards - Show on Dashboard tab */}
           {activeTab === "dashboard" && (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
