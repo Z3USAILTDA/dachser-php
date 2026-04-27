@@ -349,8 +349,23 @@ export function useProcessosCCT() {
       console.log(`CCT: Loaded ${processos.length} processos from MariaDB (total: ${allProcessos.length})`);
       return processos;
     },
-    staleTime: 30000,
-    refetchInterval: 60000,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    refetchInterval: 120_000,
+    refetchOnWindowFocus: false,
+    // Evita martelar o MariaDB quando ele está saturado/lento.
+    // Erros transitórios (max_user_connections / connection read timed out)
+    // já vêm como Error do invoke; não tentar novamente automaticamente.
+    retry: (failureCount, error: any) => {
+      const msg = String(error?.message || '').toLowerCase();
+      const transient =
+        msg.includes('temporariamente indisponível') ||
+        msg.includes('max_user_connections') ||
+        msg.includes('timed out');
+      if (transient) return false;
+      return failureCount < 1;
+    },
+    retryDelay: 5000,
   });
 }
 
