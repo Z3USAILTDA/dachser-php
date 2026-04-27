@@ -343,6 +343,7 @@ function resolveUnkFromTimeline(timelineJson: string | null, awbForDebug?: strin
     [/\bdocuments?\s+available\b/i, 'AWD'],
     [/\barrived?\b/i, 'ARR'],
     [/\breceived?\s+from\s+flight\b/i, 'RCF'],
+    [/\breceived?\s+from\s+carrier\b/i, 'RCT'],
     [/\breceived?\s+from\s+shipper\b/i, 'RCS'],
     [/\bmanifested?\b/i, 'MAN'],
     [/\bnotified?\s+for\s+delivery\b/i, 'NFD'],
