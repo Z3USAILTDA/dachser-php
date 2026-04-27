@@ -268,6 +268,7 @@ const airlines = [
   { code: "047", name: "TAP Air Portugal Cargo" },
   { code: "055", name: "ITA Airways Cargo" },
   { code: "057", name: "Air France Cargo" },
+  { code: "071", name: "Ethiopian Airlines Cargo" },
   { code: "074", name: "KLM Cargo" },
   { code: "075", name: "IAG Cargo" },
   { code: "083", name: "South African Airways Cargo" },
@@ -307,6 +308,7 @@ const monitoredAirlinesData = {
     { code: "047", name: "TAP Air Portugal Cargo" },
     { code: "055", name: "ITA Airways Cargo" },
     { code: "057", name: "Air France Cargo" },
+    { code: "071", name: "Ethiopian Airlines Cargo" },
     { code: "074", name: "KLM Cargo" },
     { code: "075", name: "IAG Cargo" },
     { code: "083", name: "South African Airways Cargo" },
@@ -332,7 +334,7 @@ const monitoredAirlinesData = {
     { code: "881", name: "Condor Cargo" },
     { code: "996", name: "Air Europa Cargo" },
   ],
-  totalAirlines: 33,
+  totalAirlines: 34,
 };
 
 // ─── Component ───
