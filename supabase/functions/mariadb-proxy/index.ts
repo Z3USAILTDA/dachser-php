@@ -4435,7 +4435,7 @@ Deno.serve(async (req) => {
             c.data_ultima_atualizacao_atual,
             c.consulted_at_ultima_consulta,
             c.refreshed_at,
-            COALESCE(m.consignee, a.consignee_nome) AS cliente,
+            a.consignee_nome AS cliente,
             COALESCE(m.mawb, a.awb_number, c.awb) AS master,
             f.origin AS aeroporto_origem,
             f.destination AS aeroporto_destino,
