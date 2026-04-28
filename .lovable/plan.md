@@ -1,55 +1,48 @@
-## Diagnóstico
+# Popular a coluna SLA do CCT
 
-A tabela `dados_dachser.t_cct_dashboard_cache` já é a **única fonte de verdade** para o CCT, com a coluna `eventos` consolidada por HAWB. O problema atual é que **dashboard e timeline do detalhe usam fontes diferentes**:
+## Problema
+Na lista `/air/cct`, a coluna **SLA** mostra sempre badge verde "OK" sem horas restantes nem tipo de voo. O motivo é que em `src/hooks/useCCTData.ts` o objeto `sla_info` de cada processo está **hardcoded** (`status: 'OK'`, todos os demais campos `null`), mesmo já tendo `data_decolagem` no cache e o status canônico derivado dos eventos.
 
-- **Dashboard / lista CCT (`get_cct_shipments_cached`)** → lê `t_cct_dashboard_cache.eventos` (correto). O hook `useCCTData` já ordena cronologicamente e usa o último evento como status efetivo. ✓
-- **Detalhe / Timeline do processo (`get_cct_events`)** → lê `t_cct_hawb_api_historico` direto, com `STR_TO_DATE` instável e tiebreaker indefinido. Por isso o status do header (vindo do shipment do dashboard) e a timeline (vinda do histórico) podem divergir, e até dentro da própria timeline o "último evento" pode ser o errado.
+## Regras de SLA (já em memória)
+Conforme `mem://cct/sla-calculation-rules-v3`:
 
-No print: header "Informada" vs timeline "EM TRÂNSITO TERRESTRE 31/03 16:09" — sintoma típico de duas pipelines separadas para o mesmo HAWB.
+- **VOO_CURTO** (origem América do Sul): limite = `data_decolagem + 30 min`.
+- **VOO_LONGO** (intercontinental): limite = `eta − 4h` ou, se ETA ausente, `data_decolagem + 4h`.
+- **CUMPRIDO** (badge esmeralda) quando `data_manifestacao_cct` existir **OU** o status oficial alcançar `MANIFESTADA` ou qualquer evento posterior na hierarquia (`EM_AREA_TRANSFERENCIA`, `RECEPCIONADA`, `EM_TROCA_RECINTOS`, `EM_TRANSITO_TERRESTRE`, `ENTREGUE`).
+- **Excluir** (sem badge SLA / mostrar `CUMPRIDO`) para status finais (`ENTREGUE`).
+- Faixas: `OK` (>4h restantes), `ALERTA` (≤4h e >0), `CRITICO` (≤1h e >0), `VENCIDO` (<0).
 
-## Solução: Single Source of Truth = `t_cct_dashboard_cache.eventos`
+## Implementação (mínima e cirúrgica)
 
-### 1. Reescrever `get_cct_events` no `mariadb-proxy`
-Substituir a query atual (que vai em `t_cct_hawb_api_historico`) por:
+### 1. `src/utils/cctSLA.ts` (novo, pequeno helper)
+Função pura `computeSLAInfo({ depDatetime, eta, originAirport, status, dataManifestacao })` retornando `SLAInfo` com:
+- `tipoVoo` baseado em `originAirport` (lista de aeroportos sul-americanos: `EZE, SCL, BOG, LIM, UIO, CCS, MVD, ASU, GRU/etc internos não se aplicam → todo origem fora-Brasil/SA = VOO_LONGO`).
+- `slaLimite` calculado conforme regras acima.
+- `status` (`CUMPRIDO` se cumprido pelo status hierárquico OU `data_manifestacao_cct`; senão `OK/ALERTA/CRITICO/VENCIDO` por horas restantes vs. `slaLimite`).
+- `horasRestantes` arredondado em horas.
+- `slaConfigHoras` (30 min ou 4 h conforme tipo de voo).
 
-```sql
-SELECT eventos, situacao_portal_atual, data_ultima_atualizacao_atual, refreshed_at
-FROM dados_dachser.t_cct_dashboard_cache
-WHERE hawb = ? OR REPLACE(REPLACE(hawb,'-',''),' ','') = ?
-LIMIT 1
+Hierarquia de cumprimento:
 ```
+INFORMADA < MANIFESTADA < EM_AREA_TRANSFERENCIA < RECEPCIONADA < EM_TROCA_RECINTOS < EM_TRANSITO_TERRESTRE < ENTREGUE
+```
+Cumprido = índice ≥ índice de `MANIFESTADA`.
 
-E na edge function:
-- Reusar a mesma lógica de `parseAndSortEventos` (hoje só no front) para parsear `eventos` (JSON ou pipe-format `Descricao | dd/MM/yyyy HH:mm:ss || ...`).
-- Ordenar **cronologicamente DESC** por data parseada.
-- Tiebreaker estável: índice de inserção (preserva ordem do array original quando datas empatam).
-- Mapear cada item para o formato consumido por `EventTimeline` (`codigo_evento`, `descricao_evento`, `data_hora_evento` em ISO com `-03:00`, `fonte: 'RFB'`).
+### 2. `src/hooks/useCCTData.ts`
+- Importar `computeSLAInfo`.
+- Substituir o bloco hardcoded `sla_info` (linhas ~304-311) pela chamada real, passando `data_decolagem`, `aeroporto_origem`, `finalStatus` e `data_manifestacao_cct` (que hoje é `null` mas alimentará a regra fallback via status hierárquico).
+- Atribuir `sla_status: sla_info.status` e `sla_limite: sla_info.slaLimite`.
+- `tipo_voo: sla_info.tipoVoo` em `status_atual`.
 
-Isso elimina o `STR_TO_DATE` frágil e o JOIN no histórico.
+### 3. Sem mudanças em UI
+`SLAInfoBadge` já consome `slaInfo.status`, `horasRestantes`, `tipoVoo` e `slaLimite` — passará a exibir corretamente assim que o cálculo retornar valores.
 
-### 2. Garantir que o status do header use o mesmo último evento
-Em `src/pages/cct/ProcessoTimeline.tsx`:
-- O status mostrado no card "Status" deve vir de `getLatestTimelineStatus(eventos)` (helper já existe em `cctStatusResolver`), aplicado sobre os eventos retornados por `useCCTEvents`.
-- Só usar `status_cct_oficial` do shipment como fallback quando `eventos` estiver vazio.
+## Arquivos alterados
+- `src/utils/cctSLA.ts` (novo)
+- `src/hooks/useCCTData.ts` (substitui ~10 linhas no `mapRowToProcessoCCT`)
 
-Resultado: header e timeline mostram exatamente o mesmo último estado.
-
-### 3. Reaproveitar parser entre front e edge
-Mover `parseAndSortEventos` + `normalizeEventCode` + `parsePipeDateToISO` de `useCCTData.ts` para um util compartilhado (lógica idêntica), e duplicar a função dentro do edge function (edge functions não importam de `src/`). Isso garante que dashboard, detalhe e timeline interpretem `eventos` da mesma maneira.
-
-### 4. Logging de validação
-No primeiro deploy, logar para o HAWB consultado: total de eventos, primeiro e último evento parseado, e qual ganhou como status. Permite confirmar rapidamente se algum HAWB ainda diverge.
-
-## Arquivos a alterar
-
-- `supabase/functions/mariadb-proxy/index.ts` — reescrever case `get_cct_events` para ler de `t_cct_dashboard_cache.eventos` + parser cronológico.
-- `src/pages/cct/ProcessoTimeline.tsx` — derivar status do header a partir de `eventos` (via `getLatestTimelineStatus`).
-- `src/utils/cctStatusResolver.ts` — pequeno ajuste para também aceitar `EM_TRANSITO_TERRESTRE` como código direto (hoje só mapeia `EM_TRANSITO`).
-- `src/hooks/useCCTData.ts` — sem mudanças funcionais; só remove o uso indireto de campos antigos se necessário.
-
-## Não muda
-
-- Estrutura de `t_cct_dashboard_cache` (já tem tudo).
-- Pipeline `get_cct_shipments_cached` (dashboard) — já está certo.
-- Componente `EventTimeline` — só passa a receber dados consistentes.
-- Cálculo de SLA, divergências, bloqueios.
+## Não faz parte
+- Não altera Edge Functions (`mariadb-proxy`).
+- Não altera schema MariaDB.
+- Não altera lógica de timeline (já corrigida).
+- Não altera badge/UI da tabela.
