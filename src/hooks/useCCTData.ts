@@ -301,24 +301,23 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
     rfb_situacao: null,
   };
 
-  const sla_info = {
-    status: 'OK' as SLAStatus,
-    horasRestantes: null,
-    percentual: null,
-    slaConfigHoras: 24,
-    tempoResposta: null,
-    usouNovaLogica: false,
-  };
+  const sla_info = computeSLAInfo({
+    depDatetime: row.data_decolagem || null,
+    eta: null,
+    originAirport: row.aeroporto_origem || null,
+    status: finalStatus,
+    dataManifestacao: null,
+  });
 
   const status_atual: CCTStatusAtual = {
     id: `status-${shipmentId}`,
     shipment_id: shipmentId,
     status_cct_oficial: finalStatus,
     sla_status: sla_info.status,
-    sla_limite: null,
+    sla_limite: sla_info.slaLimite || null,
     sla_info,
     proximo_evento_esperado: null,
-    tipo_voo: null,
+    tipo_voo: sla_info.tipoVoo || null,
     created_at: row.created_at || row.refreshed_at || null,
     updated_at: row.data_ultima_atualizacao_atual || row.refreshed_at || null,
   };
