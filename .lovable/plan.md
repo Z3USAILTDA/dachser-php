@@ -1,108 +1,100 @@
-## Entendimento do erro
+# Relatório Detalhado de Conexões ao Banco de Dados — Sistema Dachser
 
-O erro da imagem não é mais o erro de coluna inexistente (`m.consignee` / `m.tratamentos_especiais`). Agora o backend está conseguindo iniciar a consulta, mas o MariaDB está falhando por indisponibilidade/saturação.
+## Objetivo
 
-Evidências encontradas:
+Gerar um relatório **completo e detalhado** mapeando todas as conexões a bancos de dados do ecossistema Dachser, entregue como **PDF + XLSX + Markdown** em `/mnt/documents/`.
 
-```text
-get_cct_shipments_cached -> Connection read timed out
-get_cct_shipments_cached -> User 'root' has exceeded the 'max_user_connections' resource (current value: 30)
-```
+## Escopo
 
-Ou seja: a tela `/air/cct` chama a função `mariadb-proxy`, ação `get_cct_shipments_cached`. Essa ação abre conexão com o MariaDB e executa uma consulta sobre `t_cct_dashboard_cache`, complementando com `t_master_dados`, `t_dados_aereo` e `t_fato_aereo`. Em alguns momentos, a consulta demora demais ou não consegue abrir conexão porque o usuário MariaDB chegou ao limite de 30 conexões simultâneas.
+### Bancos cobertos
 
-A mensagem visual aparece porque o hook do CCT recebe:
+1. **MariaDB `dados_dachser`** (`MARIADB_HOST`) — operacional principal (~95 edge functions)
+   - Tabelas: `t_master_dados`, `t_dados_aereo`, `t_fato_aereo`, `t_air_master`, `t_sea_master`, `t_voucher_*`, `t_demurrage_*`, `t_cct_dashboard_cache`, `t_dachser_analistas`, `t_leadcomex_enrichment_logs`, `t_sla_config`, `t_accrual_entries`, etc.
+2. **MariaDB `ai_agente`** (mesmo host) — análise/IA
+   - Tabelas: `t_chb_client_config`, `t_analise_documental_historico`, `t_dachser_chb_runs`, `t_dachser_chb_extracted_data`
+3. **MariaDB Charges** (`MARIADB_CHARGES_HOST` / `MARIADB_CHARGES_DATABASE`) — Local Charges
+4. **Supabase Postgres (Lovable Cloud)** — auth, perfis, papéis, shipments CCT, histórico de análise documental, storage buckets
 
-```json
-{
-  "success": false,
-  "error": "Servidor temporariamente indisponível. Tente novamente em alguns segundos.",
-  "details": "Connection read timed out",
-  "retryable": true,
-  "transient": true
-}
-```
+### Camadas analisadas
 
-## Causa provável
+- **Edge Functions** (144 totais; ~95 conectam a MariaDB)
+- **Frontend `src/`** (hooks, páginas) — uso do client `supabase` e invocações de edge functions
+- **Infra/Secrets** — variáveis `MARIADB_*`, `MARIADB_CHARGES_*`, `SUPABASE_*`
 
-Há uma combinação de dois fatores:
+## Conteúdo detalhado do relatório
 
-1. **Saturação real do MariaDB**
-   - O log mostra `max_user_connections`, então o banco está recusando novas conexões para o usuário atual.
-   - Também há `Connection read timed out`, indicando consulta lenta, fila, lock, carga alta ou resposta demorada.
+### 1. Sumário Executivo
+- Totais por banco (nº de funções, nº de tabelas distintas, nº de hooks consumidores)
+- Top 10 funções mais críticas (mais tabelas tocadas, mais chamadas/dia se inferível)
+- Mapa de risco resumido
 
-2. **A tela CCT aumenta a pressão quando há falha**
-   - `useProcessosCCT` usa React Query com `refetchInterval: 60000`.
-   - Quando a consulta falha, o React Query também pode refazer tentativas automáticas.
-   - Como o backend devolve HTTP 200 mesmo para erro transitório, o frontend trata `success:false` como erro e pode entrar em novas tentativas.
-   - Várias abas/usuários acessando o CCT ao mesmo tempo podem empilhar chamadas iguais de `get_cct_shipments_cached`.
+### 2. Diagrama de Arquitetura (ASCII)
+Camadas: Frontend → Edge Functions → (MariaDB principal | MariaDB ai_agente | MariaDB Charges | Supabase Postgres) → integrações externas (Hapag, LeadComex, JsonCargo, etc.)
 
-## Plano de correção
+### 3. Inventário por Banco
 
-### 1. Reduzir pressão no frontend CCT
+Para **cada banco**:
 
-Arquivo: `src/hooks/useCCTData.ts`
+#### 3.1 Configuração de conexão
+- Secret host/port/user/database utilizado
+- Padrão de conexão observado (conexão direta `new Client().connect`, proxy `mariadb-proxy`, `queryWithRetry`)
+- Limites conhecidos (`max_user_connections=30` no MariaDB principal)
 
-Ajustar `useProcessosCCT` para:
+#### 3.2 Tabela de Edge Functions
+Colunas: `função | propósito (1 linha) | tabelas lidas | tabelas escritas | usa proxy? | tem close()? | tem retry? | risco`
 
-- Limitar tentativas automáticas para erro transitório.
-- Aplicar backoff maior quando o erro for `Servidor temporariamente indisponível`.
-- Evitar refetch agressivo enquanto o backend estiver retornando indisponibilidade.
-- Manter dados anteriores na tela quando houver erro transitório, para não causar sensação de tela quebrada.
+#### 3.3 Tabelas do banco
+Listagem das tabelas detectadas, com:
+- Funções que leem
+- Funções que escrevem
+- Hooks/páginas frontend que consomem indiretamente
 
-### 2. Tratar erro transitório de forma menos invasiva na UI
+#### 3.4 Tabelas Postgres (Supabase)
+- Schema, RLS policies resumidas, hooks que consomem direto via `supabase` client
 
-Arquivo: `src/pages/cct/CCTDashboard.tsx`
+### 4. Inventário Frontend
+- Hook → Edge Function → Banco/Tabelas
+- Páginas que invocam edge functions diretamente (sem hook)
+- Uso direto do client Supabase (auth, profiles, user_roles, shipments)
 
-Hoje a tela exibe banner vermelho:
+### 5. Integrações Externas (contexto de tráfego DB)
+- Hapag-Lloyd, LeadComex, JsonCargo, FlightRadar, LH Cargo, Azul, Anthropic, OpenAI, Lovable AI Gateway, Resend, SMTP — quais funções chamam e quais tabelas MariaDB persistem o resultado
 
-```text
-Erro ao conectar: Servidor temporariamente indisponível...
-```
+### 6. Análise de Riscos e Recomendações
+- Pontos de saturação (`max_user_connections`)
+- Funções sem `close()` em `finally`
+- Queries longas sem timeout/retry
+- Polling agressivo no frontend
+- Tabelas sem índice óbvio para joins frequentes (heurística por nome de coluna)
+- Recomendações de pooling, cache (`t_cct_dashboard_cache` como referência), e proxy unificado
 
-Mas a memória do projeto diz para não mostrar banners visuais de erro/offline para falhas de conexão com banco. Então a correção será:
+### 7. Apêndices
+- Lista completa de secrets relacionados a DB
+- Glossário de prefixos (`t_`, `t_dachser_`, `t_air_`, `t_sea_`, `t_voucher_`, `t_demurrage_`, `t_cct_`)
 
-- Remover ou suavizar esse banner para erros transitórios de conexão.
-- Se houver dados em cache, manter a tabela/cards visíveis.
-- Para indisponibilidade temporária, não exibir alerta vermelho permanente no topo.
+## Como será gerado (técnico)
 
-### 3. Proteger o backend contra retries que pioram saturação
+1. **Script de varredura** em `/tmp/scan-db.ts` (Deno):
+   - Percorre `supabase/functions/*/index.ts`
+   - Detecta padrões: `new Client()`, `Deno.env.get("MARIADB...")`, `db: "..."`, chamadas a `mariadb-proxy`
+   - Extrai referências SQL via regex multi-padrão (`FROM`, `JOIN`, `INSERT INTO`, `UPDATE`, `DELETE FROM`, `CREATE TABLE`)
+   - Extrai propósito da função do comentário/header ou do nome
+   - Detecta presença de `close()`, `try/finally`, `queryWithRetry`, timeouts
+2. **Script de varredura frontend** em `src/hooks` e `src/pages`:
+   - Mapeia `supabase.functions.invoke('xxx')` → edge function
+   - Mapeia `supabase.from('xxx')` → tabela Postgres
+3. **Geração XLSX** (openpyxl) com 6 abas:
+   - `Resumo`, `MariaDB-dados_dachser`, `MariaDB-ai_agente`, `MariaDB-Charges`, `Postgres`, `Frontend-Map`, `Riscos`
+   - Coloração: azul=inputs, amarelo=alertas, vermelho=risco alto
+4. **Geração PDF** via Markdown → `pandoc` (ou impressão do XLSX) com formatação dachser (cabeçalho, paginação)
+5. **Markdown** versão navegável e versionável
+6. **QA**: converter PDF para imagens e inspecionar todas as páginas; validar XLSX com `recalculate_formulas.py`
 
-Arquivo: `supabase/functions/mariadb-proxy/index.ts`
+## Entregáveis
 
-A função já detecta `max_user_connections` e `Connection read timed out`, mas ainda há pontos que podem piorar a carga. Ajustar de forma cirúrgica:
+- `/mnt/documents/dachser-db-connections-report.pdf` — relatório formatado para leitura
+- `/mnt/documents/dachser-db-connections.xlsx` — planilha multi-aba para filtragem
+- `/mnt/documents/dachser-db-connections-report.md` — versão Markdown
+- Resumo no chat com principais achados e riscos
 
-- Para `max_user_connections`, continuar fail-fast, sem retry.
-- Para `get_cct_shipments_cached`, evitar múltiplas tentativas de consulta pesada quando o banco já está demorando.
-- Manter retorno controlado `{ success:false, retryable:true, transient:true }`, mas sem abrir novas conexões desnecessárias.
-
-### 4. Avaliar a consulta `get_cct_shipments_cached` sem alterar a regra de negócio
-
-Arquivo: `supabase/functions/mariadb-proxy/index.ts`
-
-Revisar apenas o trecho dessa query para reduzir custo, mantendo as regras já definidas:
-
-- Fonte principal: `t_cct_dashboard_cache`.
-- Complemento por HAWB em `t_master_dados`.
-- Fallback em `t_dados_aereo` quando AWB/HAWB não existir no master.
-- Rota via `t_fato_aereo`.
-- Collation explícita `utf8mb4_unicode_ci` nos joins.
-
-Possíveis ajustes cirúrgicos:
-
-- Garantir que subqueries de `t_master_dados` e `t_dados_aereo` selecionem apenas colunas necessárias.
-- Evitar ordenações/subqueries desnecessárias quando possível.
-- Preservar o contrato atual esperado pelo frontend.
-
-## Resultado esperado
-
-Depois da correção:
-
-- A tela CCT deixa de martelar o MariaDB quando ele está saturado.
-- Erros transitórios não geram banner vermelho persistente nem sensação de quebra.
-- Dados já carregados continuam visíveis enquanto uma atualização falha.
-- O backend continua retornando falhas controladas, mas com menor risco de multiplicar conexões.
-- A regra de preenchimento permanece:
-  - `t_master_dados` quando houver dados do master;
-  - `t_dados_aereo` como fallback;
-  - rota via `t_fato_aereo`.
+Sem qualquer alteração no código da aplicação ou nos bancos — apenas leitura e geração de artefatos.
