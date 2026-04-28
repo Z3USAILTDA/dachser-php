@@ -443,7 +443,7 @@ Deno.serve(async (req) => {
           username: dbUser,
           password: dbPassword,
           charset: "utf8mb4",
-          timeout: 10000,
+          timeout: 45000,
         });
         console.log(`Connected to MariaDB on attempt ${attempt}`);
         break;
@@ -4548,7 +4548,7 @@ Deno.serve(async (req) => {
         `),
           // Sem retry: a query é pesada e refazê-la enquanto o MariaDB está
           // saturado/lento só piora a fila de conexões.
-          { label: 'get_cct_shipments_cached', attempts: 1, timeoutMs: 15000 }
+          { label: 'get_cct_shipments_cached', attempts: 1, timeoutMs: 40000 }
         );
         console.log(`CCT (cached): Found ${cachedRows?.length || 0} shipments`);
         result = { success: true, data: cachedRows || [] };
