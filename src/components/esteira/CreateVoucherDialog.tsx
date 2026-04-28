@@ -683,7 +683,10 @@ export const CreateVoucherDialog = ({
       });
 
       // Se o voucher entra direto no FINANCEIRO, inserir em t_dados_rm
-      if (!isDraft && etapaAtual === "FINANCEIRO") {
+      // EXCEÇÃO: vouchers manuais (sem id_rm vinculado) NÃO devem ser inseridos em t_dados_rm
+      // até que a integração com o RM (t_dados_financeiro_voucher) esteja completa.
+      const isManualEntry = entryMode !== "rm" || !idRM;
+      if (!isDraft && etapaAtual === "FINANCEIRO" && !isManualEntry) {
         try {
           const { insertDadosRmOnFinanceiro } = await import("@/utils/voucherRmSync");
           const { isBoleto } = await import("@/types/voucher");

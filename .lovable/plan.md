@@ -1,52 +1,36 @@
-# Bloqueio de avanço do Fiscal para vouchers manuais sem integração RM
+# Bloqueio de avanço Financeiro→Robô para vouchers manuais sem integração RM
 
 ## Regra de negócio
-Vouchers criados manualmente (origem `MANUAL`) já entram normalmente na etapa **FISCAL**. Porém, ao tentar avançar para a próxima etapa (FINANCEIRO ou SUPERVISOR), o sistema deve **bloquear** se ainda não existir um registro completo em `dados_dachser.t_dados_financeiro_voucher` correspondente — ou seja, enquanto a integração com o RM não tiver sido concluída.
+Vouchers criados manualmente que vão **direto para o Financeiro** (regra atual: "contabilização com fiscal = CLIENTE/Não") devem:
 
-Critério de match: `t_dados_financeiro_voucher.nd = voucher.numero_spo`.
-
-Campos que devem estar **NÃO NULOS / NÃO VAZIOS** no registro encontrado:
-`documento, nd, numero_nf, numero_processo, modal, tipo_pag, forma_pag, data_emissao, data_vencimento, valor_nf, cnpj, razao_social`.
-
-Vouchers que NÃO são manuais (Robo, Master, etc.) seguem o fluxo atual sem checagem adicional.
-
-## Comportamento na UI
-Quando o Fiscal clicar em **"Aprovar e Enviar para Financeiro"** em um voucher manual:
-- Frontend chama uma nova ação backend `check_voucher_rm_ready` antes do `update_voucher_esteira`.
-- Se faltar registro ou campos: exibir toast destrutivo:
-  > "A integração com o RM não foi concluída para o voucher [SPO]. Aguarde a sincronização com o RM antes de aprovar. Campos faltantes: [lista]."
-- Não altera etapa, não grava log de aprovação.
-- Se OK: segue exatamente o fluxo atual (incluindo roteamento AJUSTE_FISCAL→solicitante e `insertDadosRmOnFinanceiro`).
-
-A devolução para Operação (`Devolver`) **não** é bloqueada — Fiscal sempre pode devolver.
+1. Aparecer normalmente na etapa **FINANCEIRO**.
+2. Exibir **alerta visual** indicando que a integração com o RM ainda não foi concluída.
+3. **Bloquear** o botão "Baixar e enviar para Robô" enquanto não houver registro completo em `dados_dachser.t_dados_financeiro_voucher` (mesmo critério já aplicado no Fiscal — match por `nd = numero_spo`, todos os campos principais preenchidos).
+4. **NÃO inserir** em `t_dados_rm` no momento da criação (hoje ocorre dentro de `CreateVoucherDialog` quando `etapaAtual === "FINANCEIRO"`). A inserção em `t_dados_rm` só pode acontecer no `handleBaixar` do Financeiro, depois que a integração com RM estiver pronta — o que já é exigido pela checagem.
 
 ## Mudanças técnicas
 
-### 1. `supabase/functions/mariadb-proxy/index.ts`
-Nova action `check_voucher_rm_ready`:
-```sql
-SELECT documento, nd, numero_nf, numero_processo, modal, tipo_pag,
-       forma_pag, data_emissao, data_vencimento, valor_nf, cnpj, razao_social
-FROM dados_dachser.t_dados_financeiro_voucher
-WHERE nd COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
-LIMIT 1
-```
-Resposta:
-```ts
-{ ready: boolean, found: boolean, missingFields: string[] }
-```
-Considera campo "faltante" quando `null`, `''`, ou (para `valor_nf`) `0`.
+### 1. `src/components/esteira/CreateVoucherDialog.tsx` (linhas ~685-705)
+Hoje insere em `t_dados_rm` sempre que o voucher entra direto em FINANCEIRO. Acrescentar condição: pular essa inserção quando o voucher é entrada manual (`entryMode !== "rm" || !idRM`). Justificativa: voucher recém-criado manualmente nunca tem registro em `t_dados_financeiro_voucher`, portanto não deve aparecer em `t_dados_rm` ainda.
 
-### 2. `src/components/esteira/VoucherFiscalActions.tsx`
-Em `handleAprovar`, antes do `update_voucher_esteira`:
-- Detectar se é voucher manual via `voucher.origemCriacao === "MANUAL"` (preservando exceção de master e do fluxo `AJUSTE_FISCAL` que apenas devolve ao solicitante — neste caso aplicar a mesma checagem).
-- Invocar `check_voucher_rm_ready` com `numero_spo`.
-- Se `ready === false`: `toast` destrutivo com mensagem padrão + lista de campos, `return`.
-- Se `ready === true`: segue fluxo atual.
+### 2. `src/components/esteira/VoucherFinanceiroActions.tsx`
+- Novo `useEffect` (ou `useState` + `useEffect`) que, se `voucher.origemCriacao === "MANUAL"`, chama `mariadb-proxy` action `check_voucher_rm_ready` (já existente — implementada na conversa anterior) e armazena `{ ready, missingFields }` em estado local.
+- Adicionar **bloco de alerta amber/destructive** no topo do componente (antes do checklist de prontidão), visível apenas quando `origemCriacao === "MANUAL"` e `rmReady === false`:
+  > "Integração com RM pendente. Este voucher manual ainda não possui registro completo em `t_dados_financeiro_voucher`. Aguarde a sincronização antes de baixar. Campos faltantes: …"
+- Em `handleBaixar`, antes do envio para `insert_dados_rm` / `update_voucher_esteira`, refazer a checagem (defesa em profundidade) e abortar com `toast` destrutivo se `ready === false`. Mensagem padrão alinhada com o Fiscal.
+- Botão "Baixar e enviar para Robô" deve ficar **desabilitado** quando manual e `rmReady === false` (mantendo o gate `isProntoParaRobo` atual com lógica AND).
 
-Nenhuma outra alteração de UI; nenhum novo componente.
+### 3. Backend
+Nenhuma alteração — action `check_voucher_rm_ready` já existe em `supabase/functions/mariadb-proxy/index.ts`.
+
+## Comportamento por tipo de voucher
+| Origem | Etapa entrada | Inserção em t_dados_rm | Avanço Financeiro→Robô |
+|---|---|---|---|
+| RM (vinculado a id_rm) | FISCAL ou FINANCEIRO | Imediata na criação (se direto FIN) | Liberado |
+| MANUAL (CLIENTE/sem fiscal) | FINANCEIRO | **Não insere** na criação; inserção ocorre no `handleBaixar` quando integração concluída | **Bloqueado** até integração RM completa |
+| MANUAL (DACHSER/com fiscal) | FISCAL → FINANCEIRO | Inserido no Fiscal (`insertDadosRmOnFinanceiro`) somente após `check_voucher_rm_ready` aprovar | Já bloqueado no Fiscal |
 
 ## Fora de escopo
-- Nenhuma migração de schema (somente leitura de tabela existente).
-- Nenhuma alteração no fluxo Robo/Supervisor/Operação.
-- Nenhuma alteração no critério de exibição do voucher na esteira (continua aparecendo no Fiscal normalmente).
+- Sem alteração de schema.
+- Sem alteração no fluxo Robo/Supervisor/Operação.
+- Sem mexer na lógica de FORNECEDORES_SEM_FISCAL nem em vouchers urgentes.
