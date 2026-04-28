@@ -343,6 +343,39 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
             </div>
           </div>
 
+          {/* Origem do Processo */}
+          <div className="space-y-2">
+            <Label>Origem do Processo</Label>
+            <div className="flex flex-wrap gap-2">
+              {(["AIR", "SEA", "CHB", "ROD"] as const).map((tipo) => (
+                <Button
+                  key={tipo}
+                  type="button"
+                  size="sm"
+                  variant={formData.origemProcesso === tipo ? "default" : "outline"}
+                  onClick={() =>
+                    setFormData({
+                      ...formData,
+                      origemProcesso: formData.origemProcesso === tipo ? "" : tipo,
+                    })
+                  }
+                >
+                  {tipo}
+                </Button>
+              ))}
+              {formData.origemProcesso && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setFormData({ ...formData, origemProcesso: "" })}
+                >
+                  Limpar
+                </Button>
+              )}
+            </div>
+          </div>
+
           <div className="space-y-2">
             <div className="flex items-center gap-3 flex-wrap">
               <Label htmlFor="edit-necessita-fiscal">
