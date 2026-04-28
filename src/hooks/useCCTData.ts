@@ -199,7 +199,9 @@ function parseAndSortEventos(raw: any, shipmentId: string): CCTEvento[] {
   });
 
   return enriched.map((item, i) => ({
-    id: `event-${shipmentId}-${i}`,
+    // Numeric-friendly id so cctStatusResolver's tiebreaker (id desc) picks
+    // the chronologically latest event when timestamps are tied.
+    id: String(i + 1),
     shipment_id: shipmentId,
     codigo_evento: pickCodigo(item.raw),
     data_hora_evento: item.dateStr || new Date(0).toISOString(),
