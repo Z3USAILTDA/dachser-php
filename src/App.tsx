@@ -113,7 +113,21 @@ import AWBList from "./pages/AWBList";
 import SupervisorConfirmacao from "./pages/SupervisorConfirmacao";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+// Defaults globais para reduzir pressão no MariaDB:
+// - sem refetch automático ao focar a janela / reconectar
+// - staleTime de 60s (cache reaproveitado entre navegações curtas)
+// - 1 retry com backoff curto
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      staleTime: 60_000,
+      retry: 1,
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
