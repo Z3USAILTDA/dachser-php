@@ -1,92 +1,76 @@
-# Relatório v3 — Conexões reais e tabelas por tela
+# Ajustes na Esteira do Voucher
 
-## Problema com a v2
+## 1. Renomear título do botão/modal "Fornecedores sem Fiscal"
 
-O scanner usava regex simples `/FROM\s+(\w+)/`, que falhou em vários casos:
+**Arquivo:** `src/components/esteira/FornecedoresSemFiscalDialog.tsx`
 
-- **Queries multilinha** (`FROM \n      t_master_dados`) — o `\n` quebrava o regex e ficava `—`.
-- **Template strings com variável** (`INSERT INTO ${table}`, `UPDATE ${table} SET ...`) no `mariadb-proxy`, `voucher-mariadb-sync`, `olimpo-proxy` — sem parse, ficavam vazias ou poluídas.
-- **Tabelas referenciadas como string passada do frontend** (ex.: `supabase.functions.invoke('mariadb-proxy', { body: { table: 't_xxx', ... } })`) — não eram coletadas.
-- **Operações Postgres em hooks/components** via `supabase.from('t_xxx')` em **components**, não só em hooks/pages.
-- Identificadores capturados com lixo (palavras-chave SQL `INNER`, `LEFT`, `INFORMATION_SCHEMA.COLUMNS`, etc.)
+- Alterar o label do trigger padrão de:
+  - `"Ver fornecedores que não precisam da etapa Fiscal"`
+  - para: `"Documentos em nome do cliente - Ver fornecedores que não precisam da etapa Fiscal"`
+- Manter o `DialogTitle` interno como está (ou ajustar para refletir o novo contexto, se preferir).
 
-Resultado: muitas telas mostraram `Tabelas: —`, perdendo o ponto principal do relatório.
+## 2. Adicionar campo "Origem do Processo" no Editar Voucher (Operacional)
 
-## Plano da v3
+**Arquivo:** `src/components/esteira/EditVoucherDialog.tsx`
 
-### 1. Scanner SQL aprimorado (edge functions)
+- Adicionar o campo `origemProcesso` (AIR / SEA / CHB / ROD) no formulário de edição, replicando o padrão de botões usado no `CreateVoucherDialog.tsx` (linhas ~1003).
+- Persistir via `update_voucher` no MariaDB através do mariadb-proxy, salvando em `origem_processo` na `t_dados_financeiro_voucher`.
+- Pré-popular com o valor atual do voucher (`voucher.origemProcesso`).
 
-Para cada `supabase/functions/*/index.ts`:
+## 3. Migrar lista de "Fornecedores sem Fiscal" do hardcode para tabela + permitir Fiscal cadastrar
 
-- **Normalizar o source**: remover comentários (`//`, `/* */`), colapsar whitespace.
-- **Regex multilinha**: `/\b(FROM|JOIN|INTO|UPDATE|DELETE\s+FROM)\s+([`"]?[\w.${}]+[`"]?)/gis` com flag `s` para incluir quebras.
-- **Whitelist de identificadores válidos**: começam com `t_`, `tbaixas`, `dados_dachser.`, `ai_agente.`, `Charges.`, `INFORMATION_SCHEMA.`, ou o padrão `${var}` (marcado como dinâmico).
-- **Blacklist explícita** de palavras-chave SQL.
-- **Capturar `${var}`**: marcar a função como "tabelas dinâmicas" e listar as tabelas que o frontend passa nos `body.table`.
+### 3.1 Banco de dados (MariaDB via migration no mariadb-proxy)
 
-### 2. Scanner do frontend para `body.table` / `body.tableName`
-
-Procurar nos arquivos do frontend chamadas como:
-```ts
-supabase.functions.invoke('mariadb-proxy', {
-  body: { action: 'select', table: 't_dachser_demurrage_containers', ... }
-})
+Criar tabela `t_voucher_fornecedores_sem_fiscal`:
+```sql
+CREATE TABLE t_voucher_fornecedores_sem_fiscal (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  cnpj VARCHAR(20) NOT NULL UNIQUE,
+  nome VARCHAR(255) NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  created_by VARCHAR(100),
+  active TINYINT(1) DEFAULT 1
+) COLLATE=utf8mb4_unicode_ci;
 ```
 
-Extrair o valor literal de `table` / `tableName` / `from` e atribuí-lo à tela que faz a chamada. Isso resolve o problema do proxy genérico.
+Seed inicial: importar os 37 registros atuais de `src/data/fornecedoresSemFiscal.ts`.
 
-### 3. Cobertura completa de Postgres
+### 3.2 Edge function (`mariadb-proxy`)
 
-Procurar `supabase.from('xxx')`, `supabase.rpc('xxx')` e `supabase.storage.from('xxx')` em:
-- `src/pages/**/*.tsx`
-- `src/hooks/**/*.{ts,tsx}`
-- `src/components/**/*.{ts,tsx}` (componentes usados pelas telas — já parcialmente coberto)
-- `src/utils/**/*.ts`
+Adicionar 3 actions:
+- `get_fornecedores_sem_fiscal` — lista todos onde `active = 1`.
+- `add_fornecedor_sem_fiscal` — recebe `{ cnpj, nome }`, valida CNPJ não-duplicado, registra `created_by`. Permitido apenas para roles `FISCAL`, `GESTOR_FISCAL`, `ADMIN`.
+- `remove_fornecedor_sem_fiscal` — soft delete (`active = 0`). Mesmas roles.
 
-### 4. Resolução transitiva mais profunda
+### 3.3 Frontend
 
-A v2 só seguia `pages → hooks` e `pages → components (1 nível)`. Agora:
-- Construir um grafo `pageRel → set(arquivos importados)` (até 2 níveis dentro de `src/`).
-- Acumular `invokes`, `pgTables`, `buckets`, `proxyTables` de todos os nós alcançáveis.
+**`src/components/esteira/FornecedoresSemFiscalDialog.tsx`:**
+- Substituir importação de `FORNECEDORES_SEM_FISCAL` por hook que busca da edge function.
+- Adicionar formulário no topo (visível apenas para Fiscal/Gestor/Admin via `useUserRole`) com campos CNPJ + Nome e botão "Adicionar".
+- Adicionar botão de remover por linha (mesmas roles).
+- Manter lógica de busca/filtragem.
 
-### 5. Novo formato por tela
+**Locais que usam `FORNECEDORES_SEM_FISCAL` para roteamento (pular Fiscal):**
+- Verificar `src/utils/voucherAjusteRouting.ts` e `CreateVoucherDialog`/fluxos que checam CNPJ — adaptar para consultar a tabela (cache em hook compartilhado para evitar múltiplas chamadas).
 
-Cada tela mostra:
+Manter `src/data/fornecedoresSemFiscal.ts` apenas como fallback até confirmação de migração; depois remover.
 
-```text
-Tela: src/pages/sea/DraftExportacao.tsx       Rota: /sea/draft-exportacao
-Hooks: useDraftData
-─ Conexões diretas ────────────────────────────────────
-  Postgres (Supabase): shipments, profiles
-  Storage:              maritime-files
-─ Edge Functions chamadas ─────────────────────────────
-  ▸ draft-fetch-mariadb       → MariaDB.dados_dachser
-       Lê:    t_master_dados, t_dados_aereo
-       Grava: —
-  ▸ mariadb-proxy             → MariaDB (genérico)
-       Tabelas usadas por esta tela: t_draft_export, t_tracking_sea
-  ▸ hapag-tracking            → MariaDB.dados_dachser  + API Hapag
-       Lê/Grava: t_tracking_sea, t_sea_master
-─ Risco: MÉDIO ────────────────────────────────────────
-```
+## 4. Filtro por Fornecedor na tela de Pagamentos
 
-Separação **Lê vs Grava** (FROM/JOIN/SELECT vs INSERT/UPDATE/DELETE) para cada function.
+**Arquivo:** `src/components/esteira/PagamentosTab.tsx`
 
-### 6. Entregáveis
+- Backend já suporta (`filterFornecedor` em mariadb-proxy linha 9508 — `LIKE %...%`).
+- Adicionar `const [filterFornecedor, setFilterFornecedor] = useState("")` com debounce (~400ms).
+- Renderizar `<Input>` na barra de filtros (próximo aos demais Selects, ~linha 637) com placeholder `"Buscar por fornecedor..."`.
+- Incluir `filterFornecedor` no payload (linha ~249) e nas dependências do useEffect (linha 315).
 
-- `/mnt/documents/dachser-db-by-module-v3.md`
-- `/mnt/documents/dachser-db-by-module-v3.pdf` (mesma identidade visual, novo layout por tela)
-- `/mnt/documents/dachser-db-by-module-v3.xlsx` com abas:
-  - **Resumo** (telas, fns, tabelas únicas por módulo)
-  - **Por-Tela** (uma linha por tela, com listas consolidadas)
-  - **Matriz** (tela × function × tabela × operação L/E/Storage)
-  - **Cobertura-Tabelas** (cada tabela MariaDB/PG → quais telas a usam)
-  - **Edge-Functions** (todas as 143, com Lê / Grava separados)
-  - **Sistema-Background** (94 órfãs categorizadas)
+## Resumo técnico
 
-### 7. QA
+| Item | Tipo | Esforço |
+|------|------|---------|
+| 1. Título do modal | Frontend pontual | ~1 linha |
+| 2. Origem no editor | Frontend + 1 update SQL | médio |
+| 3. Tabela fornecedores | Migration MariaDB + 3 actions edge + UI com permissões | maior |
+| 4. Filtro fornecedor | Frontend (backend pronto) | pequeno |
 
-- Spot-check manual de 5 telas (DraftExportacao, AWBList, EsteiraVoucherDetails, DemurrageMonitor, CCTDashboard) comparando o relatório com o código real.
-- Render do PDF página a página até não encontrar overflow ou tabelas vazias indevidas.
-
-Sem alteração no código da aplicação ou no banco — apenas geração de artefatos em `/mnt/documents/`.
+Nada quebra fluxos atuais; mudanças são aditivas. O item 3 exige seed dos 37 fornecedores existentes para preservar o comportamento de roteamento.

@@ -37,6 +37,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
     filial: "",
     urgente: false,
     chavePix: "",
+    origemProcesso: "" as "" | "AIR" | "SEA" | "CHB" | "ROD",
   });
 
   // Helper to extract date string as YYYY-MM-DD without timezone conversion
@@ -83,6 +84,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
         filial: voucher.filial || "",
         urgente: voucher.urgenciaTipo === "URGENTE_REAL",
         chavePix: voucher.chavePix || "",
+        origemProcesso: ((voucher.origemProcesso || "") as "" | "AIR" | "SEA" | "CHB" | "ROD"),
       });
     }
   }, [voucher]);
@@ -140,6 +142,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
             filial: formData.filial || null,
             urgencia_tipo: urgenciaTipo,
             chave_pix: formData.formaPagamento === "PIX" ? (formData.chavePix || null) : null,
+            origem_processo: formData.origemProcesso || null,
           },
           user_id: userData?.user?.id,
           user_name: userData?.user?.email,
@@ -337,6 +340,39 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
                   <SelectItem value="ADF">ADF</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          {/* Origem do Processo */}
+          <div className="space-y-2">
+            <Label>Origem do Processo</Label>
+            <div className="flex flex-wrap gap-2">
+              {(["AIR", "SEA", "CHB", "ROD"] as const).map((tipo) => (
+                <Button
+                  key={tipo}
+                  type="button"
+                  size="sm"
+                  variant={formData.origemProcesso === tipo ? "default" : "outline"}
+                  onClick={() =>
+                    setFormData({
+                      ...formData,
+                      origemProcesso: formData.origemProcesso === tipo ? "" : tipo,
+                    })
+                  }
+                >
+                  {tipo}
+                </Button>
+              ))}
+              {formData.origemProcesso && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setFormData({ ...formData, origemProcesso: "" })}
+                >
+                  Limpar
+                </Button>
+              )}
             </div>
           </div>
 

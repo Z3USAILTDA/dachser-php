@@ -31,6 +31,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -135,6 +136,8 @@ export const PagamentosTab = () => {
   const [filterTipoExecucao, setFilterTipoExecucao] = useState<string>("all");
   const [filterFormaPagamento, setFilterFormaPagamento] = useState<string>("all");
   const [filterStatusIntegracaoRm, setFilterStatusIntegracaoRm] = useState<string>("all");
+  const [filterFornecedor, setFilterFornecedor] = useState<string>("");
+  const [filterFornecedorDebounced, setFilterFornecedorDebounced] = useState<string>("");
   const [activeCardFilter, setActiveCardFilter] = useState<string | null>(null);
   
   // Selection
@@ -250,7 +253,8 @@ export const PagamentosTab = () => {
           filterStatusPagamento: filterStatusPagamento === "all" ? undefined : filterStatusPagamento,
           filterTipoExecucao: filterTipoExecucao === "all" ? undefined : filterTipoExecucao,
           filterFormaPagamento: filterFormaPagamento === "all" ? undefined : filterFormaPagamento,
-          filterStatusIntegracaoRm: filterStatusIntegracaoRm === "all" ? undefined : filterStatusIntegracaoRm
+          filterStatusIntegracaoRm: filterStatusIntegracaoRm === "all" ? undefined : filterStatusIntegracaoRm,
+          filterFornecedor: filterFornecedorDebounced.trim() || undefined
         }
       });
 
@@ -312,7 +316,13 @@ export const PagamentosTab = () => {
 
   useEffect(() => {
     loadPagamentos();
-  }, [filterVencimento, filterStatusPagamento, filterTipoExecucao, filterFormaPagamento, filterStatusIntegracaoRm]);
+  }, [filterVencimento, filterStatusPagamento, filterTipoExecucao, filterFormaPagamento, filterStatusIntegracaoRm, filterFornecedorDebounced]);
+
+  // Debounce do filtro de fornecedor (texto livre)
+  useEffect(() => {
+    const t = setTimeout(() => setFilterFornecedorDebounced(filterFornecedor), 400);
+    return () => clearTimeout(t);
+  }, [filterFornecedor]);
 
   useEffect(() => {
     // Serialize bank data requests to avoid exhausting MariaDB connections
@@ -633,7 +643,17 @@ export const PagamentosTab = () => {
           </div>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Filtro por fornecedor */}
+          <div className="relative">
+            <Input
+              value={filterFornecedor}
+              onChange={(e) => setFilterFornecedor(e.target.value)}
+              placeholder="Buscar por fornecedor..."
+              className="w-[220px] bg-card border-border rounded-full pl-3"
+            />
+          </div>
+
           {/* Quick filters */}
           <Select value={filterVencimento} onValueChange={(v) => setFilterVencimento(v as FilterVencimento)}>
             <SelectTrigger className="w-[140px] bg-card border-border rounded-full">

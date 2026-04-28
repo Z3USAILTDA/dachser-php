@@ -9004,6 +9004,157 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ==================== FORNECEDORES SEM FISCAL ====================
+      case 'get_fornecedores_sem_fiscal': {
+        try {
+          await client.execute(`
+            CREATE TABLE IF NOT EXISTS dados_dachser.t_voucher_fornecedores_sem_fiscal (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              cnpj VARCHAR(20) NOT NULL,
+              nome VARCHAR(255) NOT NULL,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              created_by VARCHAR(150) NULL,
+              active TINYINT(1) DEFAULT 1,
+              UNIQUE KEY uniq_cnpj (cnpj)
+            ) COLLATE=utf8mb4_unicode_ci
+          `);
+
+          // Seed inicial caso a tabela esteja vazia
+          const countRes = await client.query(
+            `SELECT COUNT(*) AS total FROM dados_dachser.t_voucher_fornecedores_sem_fiscal`
+          );
+          const total = Number(countRes[0]?.total || 0);
+          if (total === 0) {
+            const seed: Array<[string, string]> = [
+              ["10.250.551/0003-29", "LECHMAN TERMINAIS EIRELI"],
+              ["02.762.121/0009-53", "SANTOS BRASIL PARTICIPACOES S/A"],
+              ["15.578.569/0001-06", "GRU AIRPORT"],
+              ["86.846.847/0001-07", "ALLINK TRANSPORTES INTERNACIONAIS LTDA"],
+              ["02.502.234/0001-62", "COSCO BRASIL"],
+              ["58.188.756/0001-96", "DEICMAR ARMAZENAGEM E"],
+              ["30.259.220/0002-86", "MAERSK BRASIL LTDA"],
+              ["01.777.936/0001-96", "AURORA TERMINAIS E"],
+              ["60.526.977/0198-64", "MULTILOG"],
+              ["14.672.378/0001-46", "ATLANTIS GUARUJA"],
+              ["00.394.460/0001-41", "SRF - SECRETARIA DA RECEITA FEDERAL"],
+              ["08.017.952/0002-00", "Suntrans Logistica do Brasil LTDA"],
+              ["52.147.923/0001-74", "GEODIS GERENCIAMENTO"],
+              ["49.728.108/0001-94", "PANALPINA LTDA"],
+              ["04.887.625/0001-78", "BRASIL TERMINAL PORTUÁRIO S.A."],
+              ["58.890.252/0001-13", "DHL EXPRESS (BRASIL) LTDA"],
+              ["10.228.777/0004-04", "DHL GLOBAL FORWARDING (BRAZIL) LOGÍSTICA LTDA"],
+              ["12.919.786/0001-24", "TERMINAL PORTUÁRIO MOVIMENTAÇÃO"],
+              ["21.378.906/0001-14", "AGA ARMAZÉNS GERAIS AGRÍCOLA LTDA"],
+              ["89.384.895/0001-19", "ASSOCIAÇÃO COMERCIAL E INDUSTRIAL DE URUGUAIANA"],
+              ["62.226.170/0001-46", "CIESP"],
+              ["74.182.593/0001-90", "DC LOGISTICS BRASIL LTDA"],
+              ["00.662.270/0003-20", "INMETRO"],
+              ["01.317.277/0001-05", "ITAPOÁ TERMINAIS"],
+              ["03.795.647/0002-26", "LIBRA PORT"],
+              ["60.526.977/0204-47", "EADI SUL"],
+              ["02.762.121/0001-04", "SANTOS BRASIL PARTICIPAÇÕES"],
+              ["14.522.178/0001-07", "AEROPORTOS BRASIL VIRACOPOS S.A."],
+              ["82.270.711/0008-17", "CARGOLIFT LOGÍSTICA S/A"],
+              ["19.674.909/0001-53", "CONCESSIONÁRIA D A I D CONFINS S/A"],
+              ["02.502.234/0002-43", "COSCO BRASIL"],
+              ["01.831.941/0001-30", "CRAFT"],
+              ["37.115.342/0031-82", "DEPARTAMENTO FUNDO DE MARINHA MERCANTE"],
+              ["05.895.924/0001-17", "TK BR DESPACHANTE ADUANEIRO"],
+              ["24.620.316/0003-06", "PAC LOG"],
+              ["28.689.596/0001-06", "ONE OCEAN"],
+              ["02.378.779/0001-09", "MSC MEDITERRANEAN"],
+            ];
+            for (const [cnpj, nome] of seed) {
+              try {
+                await client.execute(
+                  `INSERT IGNORE INTO dados_dachser.t_voucher_fornecedores_sem_fiscal (cnpj, nome, created_by) VALUES (?, ?, ?)`,
+                  [cnpj, nome, 'SEED']
+                );
+              } catch (_e) { /* ignore individual seed errors */ }
+            }
+          }
+
+          const rows = await client.query(
+            `SELECT id, cnpj, nome, created_by, created_at
+             FROM dados_dachser.t_voucher_fornecedores_sem_fiscal
+             WHERE active = 1
+             ORDER BY nome ASC`
+          );
+          result = { success: true, data: rows || [] };
+        } catch (err: any) {
+          console.error('get_fornecedores_sem_fiscal error:', err);
+          result = { success: false, error: err?.message || 'Erro ao listar fornecedores' };
+        }
+        break;
+      }
+
+      case 'add_fornecedor_sem_fiscal': {
+        const { cnpj: novoCnpj, nome: novoNome, created_by: addedBy } = body as {
+          cnpj?: string; nome?: string; created_by?: string;
+        };
+        if (!novoCnpj || !novoNome) {
+          result = { success: false, error: 'CNPJ e Nome são obrigatórios' };
+          break;
+        }
+        try {
+          await client.execute(`
+            CREATE TABLE IF NOT EXISTS dados_dachser.t_voucher_fornecedores_sem_fiscal (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              cnpj VARCHAR(20) NOT NULL,
+              nome VARCHAR(255) NOT NULL,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              created_by VARCHAR(150) NULL,
+              active TINYINT(1) DEFAULT 1,
+              UNIQUE KEY uniq_cnpj (cnpj)
+            ) COLLATE=utf8mb4_unicode_ci
+          `);
+
+          // Se já existir (mesmo inativo), reativar/atualizar nome
+          const exists = await client.query(
+            `SELECT id FROM dados_dachser.t_voucher_fornecedores_sem_fiscal WHERE cnpj = ? LIMIT 1`,
+            [novoCnpj]
+          );
+          if (exists && exists.length > 0) {
+            await client.execute(
+              `UPDATE dados_dachser.t_voucher_fornecedores_sem_fiscal
+               SET nome = ?, active = 1, created_by = COALESCE(?, created_by)
+               WHERE cnpj = ?`,
+              [novoNome, addedBy || null, novoCnpj]
+            );
+            result = { success: true, message: 'Fornecedor reativado/atualizado' };
+          } else {
+            await client.execute(
+              `INSERT INTO dados_dachser.t_voucher_fornecedores_sem_fiscal (cnpj, nome, created_by) VALUES (?, ?, ?)`,
+              [novoCnpj, novoNome, addedBy || null]
+            );
+            result = { success: true, message: 'Fornecedor adicionado' };
+          }
+        } catch (err: any) {
+          console.error('add_fornecedor_sem_fiscal error:', err);
+          result = { success: false, error: err?.message || 'Erro ao adicionar fornecedor' };
+        }
+        break;
+      }
+
+      case 'remove_fornecedor_sem_fiscal': {
+        const { id: removeId } = body as { id?: number };
+        if (!removeId) {
+          result = { success: false, error: 'ID é obrigatório' };
+          break;
+        }
+        try {
+          await client.execute(
+            `UPDATE dados_dachser.t_voucher_fornecedores_sem_fiscal SET active = 0 WHERE id = ?`,
+            [removeId]
+          );
+          result = { success: true };
+        } catch (err: any) {
+          console.error('remove_fornecedor_sem_fiscal error:', err);
+          result = { success: false, error: err?.message || 'Erro ao remover fornecedor' };
+        }
+        break;
+      }
+
       case 'get_dados_bancarios_fornecedor': {
         const { cnpj: cnpjFornecedor } = body as { cnpj?: string };
         
