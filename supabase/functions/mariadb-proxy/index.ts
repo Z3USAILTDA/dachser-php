@@ -9510,6 +9510,37 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'check_voucher_rm_ready': {
+        const { numero_spo } = body as { numero_spo?: string };
+        if (!numero_spo || !String(numero_spo).trim()) {
+          result = { ready: false, found: false, missingFields: ['numero_spo'] };
+          break;
+        }
+        const rows: any[] = await client.execute(`
+          SELECT documento, nd, numero_nf, numero_processo, modal, tipo_pag,
+                 forma_pag, data_emissao, data_vencimento, valor_nf, cnpj, razao_social
+          FROM dados_dachser.t_dados_financeiro_voucher
+          WHERE nd COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+          LIMIT 1
+        `, [String(numero_spo).trim()]);
+
+        if (!rows || rows.length === 0) {
+          result = { ready: false, found: false, missingFields: ['registro inexistente em t_dados_financeiro_voucher'] };
+          break;
+        }
+        const row = rows[0];
+        const required = ['documento','nd','numero_nf','numero_processo','modal','tipo_pag','forma_pag','data_emissao','data_vencimento','valor_nf','cnpj','razao_social'];
+        const missingFields: string[] = [];
+        for (const f of required) {
+          const v = row[f];
+          if (v === null || v === undefined) { missingFields.push(f); continue; }
+          if (typeof v === 'string' && v.trim() === '') { missingFields.push(f); continue; }
+          if (f === 'valor_nf' && (Number(v) === 0 || Number.isNaN(Number(v)))) { missingFields.push(f); continue; }
+        }
+        result = { ready: missingFields.length === 0, found: true, missingFields };
+        break;
+      }
+
       case 'insert_dados_financeiro_voucher': {
         const { 
           documento,
