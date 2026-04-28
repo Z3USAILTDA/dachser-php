@@ -135,6 +135,8 @@ export const PagamentosTab = () => {
   const [filterTipoExecucao, setFilterTipoExecucao] = useState<string>("all");
   const [filterFormaPagamento, setFilterFormaPagamento] = useState<string>("all");
   const [filterStatusIntegracaoRm, setFilterStatusIntegracaoRm] = useState<string>("all");
+  const [filterFornecedor, setFilterFornecedor] = useState<string>("");
+  const [filterFornecedorDebounced, setFilterFornecedorDebounced] = useState<string>("");
   const [activeCardFilter, setActiveCardFilter] = useState<string | null>(null);
   
   // Selection
@@ -250,7 +252,8 @@ export const PagamentosTab = () => {
           filterStatusPagamento: filterStatusPagamento === "all" ? undefined : filterStatusPagamento,
           filterTipoExecucao: filterTipoExecucao === "all" ? undefined : filterTipoExecucao,
           filterFormaPagamento: filterFormaPagamento === "all" ? undefined : filterFormaPagamento,
-          filterStatusIntegracaoRm: filterStatusIntegracaoRm === "all" ? undefined : filterStatusIntegracaoRm
+          filterStatusIntegracaoRm: filterStatusIntegracaoRm === "all" ? undefined : filterStatusIntegracaoRm,
+          filterFornecedor: filterFornecedorDebounced.trim() || undefined
         }
       });
 
@@ -312,7 +315,13 @@ export const PagamentosTab = () => {
 
   useEffect(() => {
     loadPagamentos();
-  }, [filterVencimento, filterStatusPagamento, filterTipoExecucao, filterFormaPagamento, filterStatusIntegracaoRm]);
+  }, [filterVencimento, filterStatusPagamento, filterTipoExecucao, filterFormaPagamento, filterStatusIntegracaoRm, filterFornecedorDebounced]);
+
+  // Debounce do filtro de fornecedor (texto livre)
+  useEffect(() => {
+    const t = setTimeout(() => setFilterFornecedorDebounced(filterFornecedor), 400);
+    return () => clearTimeout(t);
+  }, [filterFornecedor]);
 
   useEffect(() => {
     // Serialize bank data requests to avoid exhausting MariaDB connections
