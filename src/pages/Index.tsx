@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { filterByYearIfNotZ3us, isZ3usAdmin } from "@/utils/adminAccess";
@@ -703,19 +704,20 @@ const Index = () => {
     }
   }, []);
 
-  // Load status aereo data on mount
+  // Load status aereo data on mount + sempre que a aba ficar visível.
+  // Pollings só rodam enquanto a aba está em foco — economiza conexões MariaDB.
+  const isVisible = usePageVisibility();
   useEffect(() => {
-
-
+    if (!isVisible) return;
     fetchStatusAereoData();
     fetchDbStats();
-    const interval = setInterval(fetchStatusAereoData, 30000); // Refresh every 30s
-    const statsInterval = setInterval(fetchDbStats, 60000); // Refresh stats every 60s
+    const interval = setInterval(fetchStatusAereoData, 30000); // 30s enquanto visível
+    const statsInterval = setInterval(fetchDbStats, 60000);    // 60s enquanto visível
     return () => {
       clearInterval(interval);
       clearInterval(statsInterval);
     };
-  }, [fetchStatusAereoData, fetchDbStats]);
+  }, [isVisible, fetchStatusAereoData, fetchDbStats]);
 
   // Function to re-track AWBs from t_status_aereo
   // sendNoChangesEmail: only send "no changes" email when explicitly triggered by user (button click)

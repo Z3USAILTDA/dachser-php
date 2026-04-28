@@ -88,7 +88,8 @@ export function useLeadcomexLogs(filters: LeadcomexLogFilters) {
         offset: data.offset as number,
       };
     },
-    refetchInterval: 30000, // Refresh every 30s
+    refetchInterval: () => (typeof document !== "undefined" && document.visibilityState === "visible" ? 30000 : false),
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -131,7 +132,8 @@ export function useLeadcomexLogsStats(dateFrom?: string, dateTo?: string) {
       
       return data.stats as LeadcomexLogStats;
     },
-    refetchInterval: 60000, // Refresh every minute
+    refetchInterval: () => (typeof document !== "undefined" && document.visibilityState === "visible" ? 60000 : false),
+    refetchIntervalInBackground: false,
   });
 }
 

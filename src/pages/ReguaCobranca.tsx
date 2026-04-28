@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useNavigate } from "react-router-dom";
 import { CalendarRange, HelpCircle, Mail, Send, RefreshCw, FileText, Clock, Flag, Search, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -208,7 +209,9 @@ function ReguaCobrancaContent() {
     }
   }, []);
 
+  const isVisible = usePageVisibility();
   useEffect(() => {
+    if (!isVisible) return;
     const loadData = async () => {
       try {
         await fetchCounts();
@@ -221,7 +224,7 @@ function ReguaCobrancaContent() {
     loadData();
     const statsInterval = setInterval(fetchDbStats, 60000);
     return () => clearInterval(statsInterval);
-  }, [fetchCounts, fetchDbStats]);
+  }, [isVisible, fetchCounts, fetchDbStats]);
 
   const fetchStageRows = async (stage: string) => {
     setStageLoading(true);

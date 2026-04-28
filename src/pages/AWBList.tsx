@@ -15,7 +15,7 @@ import {
 import { Search, Plane, Package, ArrowLeft, HelpCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { DatabaseConnectionIndicator } from "@/components/DatabaseConnectionIndicator";
+
 
 const AWBList = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -37,7 +37,8 @@ const AWBList = () => {
 
       return data;
     },
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: () => (typeof document !== "undefined" && document.visibilityState === "visible" ? 30000 : false),
+    refetchIntervalInBackground: false,
     retry: 1,
   });
 
@@ -51,7 +52,7 @@ const AWBList = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/5">
-      <DatabaseConnectionIndicator />
+      
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
