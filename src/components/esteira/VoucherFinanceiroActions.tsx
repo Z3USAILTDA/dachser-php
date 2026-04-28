@@ -520,7 +520,7 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
         ) : (
           <Button
             onClick={handleBaixar}
-            disabled={loading || !isProntoParaRobo}
+            disabled={loading || !isProntoParaRobo || (isManualVoucher && (rmCheckLoading || !rmReady))}
             className="gap-2 bg-primary hover:bg-primary/90"
           >
             {loading ? (
