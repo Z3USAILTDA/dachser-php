@@ -1,76 +1,52 @@
-# Ajustes na Esteira do Voucher
+# Bloqueio de avanço do Fiscal para vouchers manuais sem integração RM
 
-## 1. Renomear título do botão/modal "Fornecedores sem Fiscal"
+## Regra de negócio
+Vouchers criados manualmente (origem `MANUAL`) já entram normalmente na etapa **FISCAL**. Porém, ao tentar avançar para a próxima etapa (FINANCEIRO ou SUPERVISOR), o sistema deve **bloquear** se ainda não existir um registro completo em `dados_dachser.t_dados_financeiro_voucher` correspondente — ou seja, enquanto a integração com o RM não tiver sido concluída.
 
-**Arquivo:** `src/components/esteira/FornecedoresSemFiscalDialog.tsx`
+Critério de match: `t_dados_financeiro_voucher.nd = voucher.numero_spo`.
 
-- Alterar o label do trigger padrão de:
-  - `"Ver fornecedores que não precisam da etapa Fiscal"`
-  - para: `"Documentos em nome do cliente - Ver fornecedores que não precisam da etapa Fiscal"`
-- Manter o `DialogTitle` interno como está (ou ajustar para refletir o novo contexto, se preferir).
+Campos que devem estar **NÃO NULOS / NÃO VAZIOS** no registro encontrado:
+`documento, nd, numero_nf, numero_processo, modal, tipo_pag, forma_pag, data_emissao, data_vencimento, valor_nf, cnpj, razao_social`.
 
-## 2. Adicionar campo "Origem do Processo" no Editar Voucher (Operacional)
+Vouchers que NÃO são manuais (Robo, Master, etc.) seguem o fluxo atual sem checagem adicional.
 
-**Arquivo:** `src/components/esteira/EditVoucherDialog.tsx`
+## Comportamento na UI
+Quando o Fiscal clicar em **"Aprovar e Enviar para Financeiro"** em um voucher manual:
+- Frontend chama uma nova ação backend `check_voucher_rm_ready` antes do `update_voucher_esteira`.
+- Se faltar registro ou campos: exibir toast destrutivo:
+  > "A integração com o RM não foi concluída para o voucher [SPO]. Aguarde a sincronização com o RM antes de aprovar. Campos faltantes: [lista]."
+- Não altera etapa, não grava log de aprovação.
+- Se OK: segue exatamente o fluxo atual (incluindo roteamento AJUSTE_FISCAL→solicitante e `insertDadosRmOnFinanceiro`).
 
-- Adicionar o campo `origemProcesso` (AIR / SEA / CHB / ROD) no formulário de edição, replicando o padrão de botões usado no `CreateVoucherDialog.tsx` (linhas ~1003).
-- Persistir via `update_voucher` no MariaDB através do mariadb-proxy, salvando em `origem_processo` na `t_dados_financeiro_voucher`.
-- Pré-popular com o valor atual do voucher (`voucher.origemProcesso`).
+A devolução para Operação (`Devolver`) **não** é bloqueada — Fiscal sempre pode devolver.
 
-## 3. Migrar lista de "Fornecedores sem Fiscal" do hardcode para tabela + permitir Fiscal cadastrar
+## Mudanças técnicas
 
-### 3.1 Banco de dados (MariaDB via migration no mariadb-proxy)
-
-Criar tabela `t_voucher_fornecedores_sem_fiscal`:
+### 1. `supabase/functions/mariadb-proxy/index.ts`
+Nova action `check_voucher_rm_ready`:
 ```sql
-CREATE TABLE t_voucher_fornecedores_sem_fiscal (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  cnpj VARCHAR(20) NOT NULL UNIQUE,
-  nome VARCHAR(255) NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  created_by VARCHAR(100),
-  active TINYINT(1) DEFAULT 1
-) COLLATE=utf8mb4_unicode_ci;
+SELECT documento, nd, numero_nf, numero_processo, modal, tipo_pag,
+       forma_pag, data_emissao, data_vencimento, valor_nf, cnpj, razao_social
+FROM dados_dachser.t_dados_financeiro_voucher
+WHERE nd COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+LIMIT 1
 ```
+Resposta:
+```ts
+{ ready: boolean, found: boolean, missingFields: string[] }
+```
+Considera campo "faltante" quando `null`, `''`, ou (para `valor_nf`) `0`.
 
-Seed inicial: importar os 37 registros atuais de `src/data/fornecedoresSemFiscal.ts`.
+### 2. `src/components/esteira/VoucherFiscalActions.tsx`
+Em `handleAprovar`, antes do `update_voucher_esteira`:
+- Detectar se é voucher manual via `voucher.origemCriacao === "MANUAL"` (preservando exceção de master e do fluxo `AJUSTE_FISCAL` que apenas devolve ao solicitante — neste caso aplicar a mesma checagem).
+- Invocar `check_voucher_rm_ready` com `numero_spo`.
+- Se `ready === false`: `toast` destrutivo com mensagem padrão + lista de campos, `return`.
+- Se `ready === true`: segue fluxo atual.
 
-### 3.2 Edge function (`mariadb-proxy`)
+Nenhuma outra alteração de UI; nenhum novo componente.
 
-Adicionar 3 actions:
-- `get_fornecedores_sem_fiscal` — lista todos onde `active = 1`.
-- `add_fornecedor_sem_fiscal` — recebe `{ cnpj, nome }`, valida CNPJ não-duplicado, registra `created_by`. Permitido apenas para roles `FISCAL`, `GESTOR_FISCAL`, `ADMIN`.
-- `remove_fornecedor_sem_fiscal` — soft delete (`active = 0`). Mesmas roles.
-
-### 3.3 Frontend
-
-**`src/components/esteira/FornecedoresSemFiscalDialog.tsx`:**
-- Substituir importação de `FORNECEDORES_SEM_FISCAL` por hook que busca da edge function.
-- Adicionar formulário no topo (visível apenas para Fiscal/Gestor/Admin via `useUserRole`) com campos CNPJ + Nome e botão "Adicionar".
-- Adicionar botão de remover por linha (mesmas roles).
-- Manter lógica de busca/filtragem.
-
-**Locais que usam `FORNECEDORES_SEM_FISCAL` para roteamento (pular Fiscal):**
-- Verificar `src/utils/voucherAjusteRouting.ts` e `CreateVoucherDialog`/fluxos que checam CNPJ — adaptar para consultar a tabela (cache em hook compartilhado para evitar múltiplas chamadas).
-
-Manter `src/data/fornecedoresSemFiscal.ts` apenas como fallback até confirmação de migração; depois remover.
-
-## 4. Filtro por Fornecedor na tela de Pagamentos
-
-**Arquivo:** `src/components/esteira/PagamentosTab.tsx`
-
-- Backend já suporta (`filterFornecedor` em mariadb-proxy linha 9508 — `LIKE %...%`).
-- Adicionar `const [filterFornecedor, setFilterFornecedor] = useState("")` com debounce (~400ms).
-- Renderizar `<Input>` na barra de filtros (próximo aos demais Selects, ~linha 637) com placeholder `"Buscar por fornecedor..."`.
-- Incluir `filterFornecedor` no payload (linha ~249) e nas dependências do useEffect (linha 315).
-
-## Resumo técnico
-
-| Item | Tipo | Esforço |
-|------|------|---------|
-| 1. Título do modal | Frontend pontual | ~1 linha |
-| 2. Origem no editor | Frontend + 1 update SQL | médio |
-| 3. Tabela fornecedores | Migration MariaDB + 3 actions edge + UI com permissões | maior |
-| 4. Filtro fornecedor | Frontend (backend pronto) | pequeno |
-
-Nada quebra fluxos atuais; mudanças são aditivas. O item 3 exige seed dos 37 fornecedores existentes para preservar o comportamento de roteamento.
+## Fora de escopo
+- Nenhuma migração de schema (somente leitura de tabela existente).
+- Nenhuma alteração no fluxo Robo/Supervisor/Operação.
+- Nenhuma alteração no critério de exibição do voucher na esteira (continua aparecendo no Fiscal normalmente).

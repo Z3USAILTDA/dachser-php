@@ -134,6 +134,24 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
       const requester = isAjusteFiscal ? parseRequesterFromAjuste(voucher.ajusteFiscal) : null;
       const proximaEtapa: "FINANCEIRO" | "SUPERVISOR" = requester === "SUPERVISOR" ? "SUPERVISOR" : "FINANCEIRO";
 
+      // Bloqueio: vouchers MANUAIS só avançam quando a integração com RM (t_dados_financeiro_voucher) estiver completa
+      if (voucher.origemCriacao === "MANUAL") {
+        const { data: rmCheck, error: rmCheckErr } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "check_voucher_rm_ready", numero_spo: voucher.numeroSPO },
+        });
+        if (rmCheckErr) throw rmCheckErr;
+        if (rmCheck && rmCheck.ready === false) {
+          const faltantes = (rmCheck.missingFields || []).join(", ") || "registro ausente";
+          toast({
+            title: "Integração com RM pendente",
+            description: `A integração com o RM não foi concluída para o voucher ${voucher.numeroSPO || ""}. Aguarde a sincronização antes de aprovar. Campos faltantes: ${faltantes}.`,
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
       // Update voucher in MariaDB
       const { error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
