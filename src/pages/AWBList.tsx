@@ -26,8 +26,8 @@ const AWBList = () => {
   const { data, isLoading, error } = useQuery({
     queryKey: ['awbs', searchTerm, statusFilter],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('fetch-awbs', {
-        body: { search: searchTerm, status: statusFilter }
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'fetch_tracked_awbs', params: { search: searchTerm, status: statusFilter } }
       });
 
       if (error) {

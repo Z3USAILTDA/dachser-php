@@ -1146,7 +1146,9 @@ const EsteiraIndex = () => {
   const fetchFinDbStats = async () => {
     setIsLoadingDbStats(true);
     try {
-      const { data, error } = await supabase.functions.invoke("fetch-fin-voucher-stats");
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "fetch_fin_voucher_stats" }
+      });
       
       if (error) {
         console.error("Error fetching fin db stats:", error);
