@@ -705,20 +705,7 @@ const Index = () => {
 
   // Load status aereo data on mount
   useEffect(() => {
-    // Initialize database columns if needed
-    const initColumns = async () => {
-      try {
-        await supabase.functions.invoke("add-alert-status-column", { body: {} });
-      } catch (e) {
-        console.log("Alert column already exists or initialization skipped");
-      }
-      try {
-        await supabase.functions.invoke("add-arr-check-column", { body: {} });
-      } catch (e) {
-        console.log("arr_check_count column already exists or initialization skipped");
-      }
-    };
-    initColumns();
+
 
     fetchStatusAereoData();
     fetchDbStats();
