@@ -9,52 +9,85 @@ export function useUserRole() {
   const [esteiraActive, setEsteiraActive] = useState<boolean>(false);
 
   useEffect(() => {
+    const ROLE_CACHE_KEY = "esteira_role_cache_v1";
+    const ROLE_CACHE_TTL_MS = 60_000;
+
+    const applyRoleData = (
+      esteiraRoleRaw: string | null,
+      active: boolean,
+      isAdminUser: boolean,
+    ) => {
+      if (esteiraRoleRaw) {
+        const parsedRoles = esteiraRoleRaw.split(",").map(r => r.trim()).filter(Boolean) as UserRole[];
+        setRoles(parsedRoles);
+        setRole(parsedRoles[0] || null);
+        setEsteiraActive(active);
+      } else if (isAdminUser) {
+        setRole("ADMIN");
+        setRoles(["ADMIN"]);
+        setEsteiraActive(true);
+      } else {
+        setRole(null);
+        setRoles([]);
+        setEsteiraActive(false);
+      }
+    };
+
     const fetchRole = async () => {
       try {
-        // Check if user is logged in via DACHSER (MariaDB)
         const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
-        
+
         if (storedUser) {
           const parsed = JSON.parse(storedUser);
           const userId = parsed.id;
           const isAdminUser = parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
-          
-          // Fetch esteira role from database
+
+          // 1) Tenta cache de sessão (evita chamada ao MariaDB a cada navegação)
+          try {
+            const cachedRaw = sessionStorage.getItem(ROLE_CACHE_KEY);
+            if (cachedRaw) {
+              const cached = JSON.parse(cachedRaw);
+              if (
+                cached &&
+                cached.userId === userId &&
+                typeof cached.timestamp === "number" &&
+                Date.now() - cached.timestamp < ROLE_CACHE_TTL_MS
+              ) {
+                applyRoleData(cached.esteiraRoleRaw ?? null, !!cached.active, isAdminUser);
+                setLoading(false);
+                return;
+              }
+            }
+          } catch {
+            // ignora cache corrompido
+          }
+
+          // 2) Busca esteira role do banco
           try {
             const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
               body: { action: "get_user_esteira_role", userId },
             });
-            
+
             if (!error && data?.success) {
               const esteiraRoleRaw = data.esteira_role as string | null;
               const active = data.esteira_active === 1;
-              
-              if (esteiraRoleRaw) {
-                // Parse comma-separated roles (e.g., "SUPERVISOR,FINANCEIRO")
-                const parsedRoles = esteiraRoleRaw.split(",").map(r => r.trim()).filter(Boolean) as UserRole[];
-                setRoles(parsedRoles);
-                // Set primary role as the first one
-                setRole(parsedRoles[0] || null);
-                setEsteiraActive(active);
-              } else if (isAdminUser) {
-                // Admin users always have access
-                setRole("ADMIN");
-                setRoles(["ADMIN"]);
-                setEsteiraActive(true);
-              } else {
-                // No role defined - no access
-                setRole(null);
-                setRoles([]);
-                setEsteiraActive(false);
+
+              applyRoleData(esteiraRoleRaw, active, isAdminUser);
+
+              try {
+                sessionStorage.setItem(
+                  ROLE_CACHE_KEY,
+                  JSON.stringify({ userId, esteiraRoleRaw, active, timestamp: Date.now() }),
+                );
+              } catch {
+                // sessionStorage cheio / indisponível — segue sem cache
               }
             } else {
-              // If fetch fails, fallback to is_admin check
               if (isAdminUser) {
                 setRole("ADMIN");
                 setRoles(["ADMIN"]);
                 setEsteiraActive(true);
               } else {
-                // No access
                 setRole(null);
                 setRoles([]);
                 setEsteiraActive(false);
@@ -62,7 +95,6 @@ export function useUserRole() {
             }
           } catch (fetchErr) {
             console.error("Error fetching esteira role:", fetchErr);
-            // Fallback to is_admin
             if (isAdminUser) {
               setRole("ADMIN");
               setRoles(["ADMIN"]);
@@ -79,9 +111,8 @@ export function useUserRole() {
 
         // Check Supabase auth (fallback)
         const { data: { user } } = await supabase.auth.getUser();
-        
+
         if (!user) {
-          // No user - no access
           setRole(null);
           setRoles([]);
           setEsteiraActive(false);
@@ -89,7 +120,6 @@ export function useUserRole() {
           return;
         }
 
-        // Try to get role from user_roles table
         const { data: roleData } = await supabase
           .from("user_roles")
           .select("role")
@@ -107,7 +137,6 @@ export function useUserRole() {
         }
       } catch (error) {
         console.error("Error fetching user role:", error);
-        // Fallback to localStorage check for admin
         const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
         if (storedUser) {
           const parsed = JSON.parse(storedUser);
