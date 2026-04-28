@@ -1,36 +1,92 @@
-# Bloqueio de avanço Financeiro→Robô para vouchers manuais sem integração RM
+# Pausar consultas ao banco quando a tela não está ativa + timeout de inatividade
 
-## Regra de negócio
-Vouchers criados manualmente que vão **direto para o Financeiro** (regra atual: "contabilização com fiscal = CLIENTE/Não") devem:
+## Princípios
+- Telas chamam o banco **apenas** quando o usuário está nelas (componente montado **e** aba visível **e** usuário ativo).
+- Background = **cron no servidor**, nunca polling no frontend.
+- Após **20 min sem interação**, sessão é encerrada e usuário volta para `/login`.
 
-1. Aparecer normalmente na etapa **FINANCEIRO**.
-2. Exibir **alerta visual** indicando que a integração com o RM ainda não foi concluída.
-3. **Bloquear** o botão "Baixar e enviar para Robô" enquanto não houver registro completo em `dados_dachser.t_dados_financeiro_voucher` (mesmo critério já aplicado no Fiscal — match por `nd = numero_spo`, todos os campos principais preenchidos).
-4. **NÃO inserir** em `t_dados_rm` no momento da criação (hoje ocorre dentro de `CreateVoucherDialog` quando `etapaAtual === "FINANCEIRO"`). A inserção em `t_dados_rm` só pode acontecer no `handleBaixar` do Financeiro, depois que a integração com RM estiver pronta — o que já é exigido pela checagem.
+---
 
-## Mudanças técnicas
+## Parte 1 — Pausar polling quando a aba não está visível
 
-### 1. `src/components/esteira/CreateVoucherDialog.tsx` (linhas ~685-705)
-Hoje insere em `t_dados_rm` sempre que o voucher entra direto em FINANCEIRO. Acrescentar condição: pular essa inserção quando o voucher é entrada manual (`entryMode !== "rm" || !idRM`). Justificativa: voucher recém-criado manualmente nunca tem registro em `t_dados_financeiro_voucher`, portanto não deve aparecer em `t_dados_rm` ainda.
+### Problema
+Mesmo com a aba minimizada, estes pollings continuam disparando edge functions MariaDB:
 
-### 2. `src/components/esteira/VoucherFinanceiroActions.tsx`
-- Novo `useEffect` (ou `useState` + `useEffect`) que, se `voucher.origemCriacao === "MANUAL"`, chama `mariadb-proxy` action `check_voucher_rm_ready` (já existente — implementada na conversa anterior) e armazena `{ ready, missingFields }` em estado local.
-- Adicionar **bloco de alerta amber/destructive** no topo do componente (antes do checklist de prontidão), visível apenas quando `origemCriacao === "MANUAL"` e `rmReady === false`:
-  > "Integração com RM pendente. Este voucher manual ainda não possui registro completo em `t_dados_financeiro_voucher`. Aguarde a sincronização antes de baixar. Campos faltantes: …"
-- Em `handleBaixar`, antes do envio para `insert_dados_rm` / `update_voucher_esteira`, refazer a checagem (defesa em profundidade) e abortar com `toast` destrutivo se `ready === false`. Mensagem padrão alinhada com o Fiscal.
-- Botão "Baixar e enviar para Robô" deve ficar **desabilitado** quando manual e `rmReady === false` (mantendo o gate `isProntoParaRobo` atual com lógica AND).
+| Local | Frequência | Edge function |
+|---|---|---|
+| `src/pages/Index.tsx` (Dashboard) | 30s + 60s | `fetch-status-aereo`, `fetch-master-dados-stats` |
+| `src/pages/ReguaCobranca.tsx` | 60s | `fetch-master-dados-stats` (regua) |
+| `src/pages/air/TrackingAereo.tsx` | 30s | `fetch-tracking-aereo` |
+| `src/pages/ContainerTracking.tsx` | 12h auto-sync | sync marítimo |
+| `src/pages/AWBList.tsx` | 30s (refetchInterval) | `fetch-awbs` |
+| `src/hooks/useCCTData.ts` | 120s | dados CCT |
+| `src/hooks/useLeadcomexLogs.ts` | 30s + 60s | logs Leadcomex |
+| `src/components/demurrage/JobExecutionLogsPanel.tsx` | 30s | logs jobs |
+| `src/components/DatabaseConnectionIndicator.tsx` | 60s | `check-db-connection` |
 
-### 3. Backend
-Nenhuma alteração — action `check_voucher_rm_ready` já existe em `supabase/functions/mariadb-proxy/index.ts`.
+### Solução
+1. **Novo hook** `src/hooks/usePageVisibility.ts` — retorna `isVisible: boolean` baseado em `document.visibilityState` + listener `visibilitychange`.
+2. **`setInterval` manuais**: o `useEffect` passa a depender de `isVisible`. Se `false`, não cria interval. Quando volta a `true`, faz fetch imediato e arma o interval.
+   - Arquivos: `Index.tsx` (linhas 707–718), `ReguaCobranca.tsx` (211–224), `TrackingAereo.tsx` (477–481), `ContainerTracking.tsx` (1855–1863).
+3. **`refetchInterval` do React Query**: trocar valor numérico por função:
+   ```ts
+   refetchInterval: () => (document.visibilityState === 'visible' ? 30000 : false),
+   refetchIntervalInBackground: false,
+   ```
+   - Arquivos: `AWBList.tsx`, `useCCTData.ts`, `useLeadcomexLogs.ts` (2 queries), `JobExecutionLogsPanel.tsx`.
+4. **Remover `DatabaseConnectionIndicator`** (viola memória "Never show offline indicators"; função `check-db-connection` já está neutralizada):
+   - Remover import + JSX em `AWBList.tsx`.
+   - Deletar `src/components/DatabaseConnectionIndicator.tsx`.
+   - Deletar edge function `supabase/functions/check-db-connection/`.
 
-## Comportamento por tipo de voucher
-| Origem | Etapa entrada | Inserção em t_dados_rm | Avanço Financeiro→Robô |
-|---|---|---|---|
-| RM (vinculado a id_rm) | FISCAL ou FINANCEIRO | Imediata na criação (se direto FIN) | Liberado |
-| MANUAL (CLIENTE/sem fiscal) | FINANCEIRO | **Não insere** na criação; inserção ocorre no `handleBaixar` quando integração concluída | **Bloqueado** até integração RM completa |
-| MANUAL (DACHSER/com fiscal) | FISCAL → FINANCEIRO | Inserido no Fiscal (`insertDadosRmOnFinanceiro`) somente após `check_voucher_rm_ready` aprovar | Já bloqueado no Fiscal |
+### O que NÃO mudar
+- `setInterval` de barras de progresso de upload (`SubmeterHblMbl`, `SubmeterManifestHbl`, `InvoicesDraftHbl`, `esteira/FileUpload`) — não tocam o banco.
+- `usePolling.ts` — polling pontual de uma análise iniciada pelo usuário, termina sozinho.
+- Crons no servidor (pg_cron) — esses são exatamente o caminho correto.
 
-## Fora de escopo
-- Sem alteração de schema.
-- Sem alteração no fluxo Robo/Supervisor/Operação.
-- Sem mexer na lógica de FORNECEDORES_SEM_FISCAL nem em vouchers urgentes.
+---
+
+## Parte 2 — Timeout de inatividade (20 minutos)
+
+### Comportamento
+- Conta como **interação**: `mousemove`, `mousedown`, `keydown`, `touchstart`, `scroll`, `click`.
+- Após **20 min sem nenhum desses eventos**:
+  1. Chama `supabase.auth.signOut()`.
+  2. Redireciona para `/login` com `?reason=inactivity`.
+  3. Toast informando "Sessão encerrada por inatividade".
+- Aviso opcional aos **19 min**: toast "Sua sessão expirará em 1 minuto" (configurável; incluído por padrão para evitar perda de trabalho não salvo).
+- O timer **só roda quando há sessão ativa** (`user` presente em `useAuth`).
+- O timer é **resetado** a cada interação real; com `throttle` de 5s para não recriar o timeout a cada `mousemove`.
+
+### Implementação
+1. **Novo hook** `src/hooks/useInactivityTimeout.ts`:
+   - Parâmetros: `timeoutMs` (default 20 * 60 * 1000), `warningMs` (default 1 min antes), callbacks `onWarning` e `onTimeout`.
+   - Adiciona listeners globais (`window`) para os eventos de interação com `{ passive: true }`.
+   - Mantém `lastActivityRef` + `setTimeout` reagendado.
+   - Cleanup remove listeners e cancela timers.
+2. **Integrar em `App.tsx`** dentro de um componente `<InactivityGuard>` montado quando há sessão:
+   - Usa `useAuth()` para saber se está logado.
+   - Usa `useNavigate()` para redirecionar.
+   - Chama `signOut()` + `navigate('/login?reason=inactivity', { replace: true })` no timeout.
+3. **`Login.tsx`**: ler `searchParams.reason === 'inactivity'` e exibir toast/aviso uma vez.
+
+### Detalhes técnicos
+- Listeners no `window` (não em `document`) para captura ampla.
+- Throttle manual via flag + `setTimeout` curto, evitando dependência extra.
+- O timer não é afetado por visibilidade da aba: se o usuário deixou aberto e foi embora, deve ser deslogado mesmo assim — esse é o objetivo do timeout.
+- Não interfere com Parte 1: visibilidade pausa **rede**, inatividade encerra **sessão**.
+
+---
+
+## Impacto esperado
+- Aba em segundo plano: **0 chamadas/min** ao MariaDB pelo frontend (hoje: ~6–10/min por aba).
+- Aba ativa e usuário interagindo: comportamento idêntico ao atual.
+- Aba ativa mas abandonada: após 20 min, sessão encerrada → libera conexões e remove risco de uso por terceiros na máquina.
+- Picos no limite de 30 conexões MariaDB caem significativamente em horários fora de pico.
+- Remoção de 1 indicador visual obsoleto + 1 edge function não usada.
+
+## Resumo de arquivos
+- **Novos**: `src/hooks/usePageVisibility.ts`, `src/hooks/useInactivityTimeout.ts`, componente `InactivityGuard` (pode viver dentro de `App.tsx`).
+- **Editados**: `Index.tsx`, `ReguaCobranca.tsx`, `TrackingAereo.tsx`, `ContainerTracking.tsx`, `AWBList.tsx`, `useCCTData.ts`, `useLeadcomexLogs.ts`, `JobExecutionLogsPanel.tsx`, `App.tsx`, `Login.tsx`.
+- **Removidos**: `src/components/DatabaseConnectionIndicator.tsx`, `supabase/functions/check-db-connection/`.
+- **Banco**: nenhuma migração.
