@@ -85,6 +85,29 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
       return;
     }
 
+    // Gate de integração com RM para vouchers manuais (defesa em profundidade)
+    if (isManualVoucher) {
+      try {
+        const { data: rmCheck, error: rmCheckErr } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "check_voucher_rm_ready", numero_spo: voucher.numeroSPO },
+        });
+        if (rmCheckErr) throw rmCheckErr;
+        if (rmCheck && rmCheck.ready === false) {
+          const faltantes = (rmCheck.missingFields || []).join(", ") || "registro ausente";
+          setRmReady(false);
+          setRmMissingFields(rmCheck.missingFields || []);
+          toast({
+            title: "Integração com RM pendente",
+            description: `A integração com o RM não foi concluída para o voucher ${voucher.numeroSPO || ""}. Aguarde a sincronização antes de baixar. Campos faltantes: ${faltantes}.`,
+            variant: "destructive",
+          });
+          return;
+        }
+      } catch (err) {
+        console.error("[VoucherFinanceiroActions] check_voucher_rm_ready (handleBaixar) falhou:", err);
+      }
+    }
+
     try {
       setLoading(true);
       const userData = getUserData();
