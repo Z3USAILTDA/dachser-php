@@ -99,6 +99,11 @@ const MetricsUsage = () => {
   const [sessionsTotalPages, setSessionsTotalPages] = useState(1);
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
 
+  // Conexões Ativas: badge no header (atualizado a cada 30s só com aba visível) + modal
+  const [activeDialogOpen, setActiveDialogOpen] = useState(false);
+  const [activeUsersCount, setActiveUsersCount] = useState<number | null>(null);
+  const isVisible = usePageVisibility();
+
   // Função auxiliar para obter data no formato YYYY-MM-DD em fuso local (São Paulo)
   const getLocalDateString = (date: Date): string => {
     const year = date.getFullYear();
