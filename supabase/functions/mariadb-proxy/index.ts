@@ -841,6 +841,67 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'get_active_connections': {
+        const { requesterUsername: acRequester } = body;
+        // Janela de 20 min = mesmo limite de inatividade do front (useInactivityTimeout)
+        const ACTIVITY_WINDOW_MIN = 20;
+
+        const DACHSER_ADMIN_USERS_AC = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
+        const HIDDEN_LOG_USERS_AC = ["admin", "teste.test3"];
+        const isDachserUserAC = acRequester && DACHSER_ADMIN_USERS_AC.includes(acRequester);
+
+        const acConds: string[] = [
+          "event_time >= (NOW() - INTERVAL ? MINUTE)",
+          "username != 'unknown'",
+          "username IS NOT NULL",
+          "username != ''",
+          "session_id IS NOT NULL",
+        ];
+        const acParams: (string | number)[] = [ACTIVITY_WINDOW_MIN];
+        if (isDachserUserAC) {
+          acConds.push(`username NOT IN (${HIDDEN_LOG_USERS_AC.map(() => '?').join(', ')})`);
+          acParams.push(...HIDDEN_LOG_USERS_AC);
+        }
+
+        const acRows = await client.query(
+          `SELECT
+             session_id,
+             MIN(username)   AS username,
+             MIN(event_time) AS session_started_at,
+             MAX(event_time) AS last_activity_at,
+             COUNT(*)        AS event_count,
+             SUBSTRING_INDEX(
+               GROUP_CONCAT(endpoint ORDER BY event_time DESC SEPARATOR '||'),
+               '||', 1
+             ) AS current_endpoint
+           FROM ai_agente.t_dachser_usage_logs
+           WHERE ${acConds.join(' AND ')}
+           GROUP BY session_id
+           ORDER BY last_activity_at DESC`,
+          acParams
+        );
+
+        const connections = acRows.map((r: { session_id: string; username: string; session_started_at: string; last_activity_at: string; event_count: number; current_endpoint: string | null }) => ({
+          sessionId: r.session_id,
+          username: r.username,
+          sessionStartedAt: r.session_started_at,
+          lastActivityAt: r.last_activity_at,
+          eventCount: Number(r.event_count),
+          currentEndpoint: String(r.current_endpoint || '').replace(/#dur=\d+$/, ''),
+        }));
+
+        const uniqueUsers = new Set(connections.map((c) => c.username)).size;
+
+        result = {
+          success: true,
+          activityWindowMin: ACTIVITY_WINDOW_MIN,
+          totalSessions: connections.length,
+          uniqueUsers,
+          connections,
+          serverNow: new Date().toISOString(),
+        };
+        break;
+      }
 
       case 'get_metrics': {
         const { username, dateFrom: reqDateFrom, dateTo: reqDateTo, module: reqModule, perPage: reqPerPage, page: reqPage, requesterUsername } = body;
