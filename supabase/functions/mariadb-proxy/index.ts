@@ -16924,6 +16924,97 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ===== Consolidated actions (Front 3): merged from standalone functions =====
+
+      case 'fetch_tracked_awbs': {
+        // Migrated from edge function `fetch-awbs` to centralize MariaDB connections.
+        const search = (params?.search ?? '').toString();
+        const status = (params?.status ?? '').toString();
+
+        let q = 'SELECT * FROM t_tracked_awbs WHERE 1=1';
+        const qParams: any[] = [];
+        if (search) {
+          q += ' AND (awb LIKE ? OR consignee_name LIKE ? OR airline_code LIKE ?)';
+          const s = `%${search}%`;
+          qParams.push(s, s, s);
+        }
+        if (status) {
+          q += ' AND status = ?';
+          qParams.push(status);
+        }
+        q += ' ORDER BY created_at DESC LIMIT 100';
+
+        try {
+          const rows = await client.query(q, qParams);
+          result = { success: true, data: rows || [] };
+        } catch (e: any) {
+          console.error('[fetch_tracked_awbs] Error:', e);
+          result = { success: false, data: [], error: e.message };
+        }
+        break;
+      }
+
+      case 'fetch_fin_voucher_stats': {
+        // Migrated from edge function `fetch-fin-voucher-stats` to centralize MariaDB connections.
+        try {
+          const lastUpdateRows = await client.query(`
+            SELECT MAX(data_insert) as last_update
+            FROM t_dados_financeiro_voucher
+            WHERE modal IS NULL OR modal <> 'ADM'
+          `);
+          const lastUpdate = lastUpdateRows[0]?.last_update || null;
+
+          const statsRows = await client.query(`
+            SELECT
+              COUNT(*) as total_records,
+              COALESCE(SUM(valor_nf), 0) as total_valor
+            FROM t_dados_financeiro_voucher
+            WHERE modal IS NULL OR modal <> 'ADM'
+          `);
+
+          const etapaRows = await client.query(`
+            SELECT
+              COALESCE(etapa_atual, 'OPERACAO') as etapa,
+              COUNT(*) as count
+            FROM t_vouchers
+            GROUP BY etapa_atual
+            ORDER BY count DESC
+          `);
+
+          const etapaLabels: Record<string, string> = {
+            RASCUNHO: 'Rascunho',
+            OPERACAO: 'Operação',
+            FISCAL: 'Fiscal',
+            SUPERVISOR: 'Supervisor',
+            FINANCEIRO: 'Financeiro',
+            ROBO: 'Robô',
+            CONCLUIDO: 'Concluído',
+            CANCELADO: 'Cancelado',
+            A_PROCESSAR: 'A Processar',
+          };
+
+          const etapaBreakdown = (etapaRows || []).map((row: any) => ({
+            etapa: row.etapa || 'OPERACAO',
+            label: etapaLabels[row.etapa] || row.etapa || 'Operação',
+            count: Number(row.count) || 0,
+          }));
+
+          result = {
+            success: true,
+            stats: {
+              lastUpdate,
+              totalVouchers: Number(statsRows[0]?.total_records) || 0,
+              totalValor: Number(statsRows[0]?.total_valor) || 0,
+              etapaBreakdown,
+            },
+          };
+        } catch (e: any) {
+          console.error('[fetch_fin_voucher_stats] Error:', e);
+          result = { success: false, error: e.message };
+        }
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
