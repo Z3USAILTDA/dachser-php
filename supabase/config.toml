@@ -15,25 +15,10 @@ verify_jwt = false
 [functions.fetch-status-aereo]
 verify_jwt = false
 
-[functions.add-alert-status-column]
-verify_jwt = false
-
-[functions.add-arr-check-column]
-verify_jwt = false
-
-[functions.add-arr-datetime-column]
-verify_jwt = false
-
-[functions.add-dep-datetime-column]
-verify_jwt = false
-
 [functions.send-voucher-notification]
 verify_jwt = false
 
 [functions.olimpo-proxy]
-verify_jwt = false
-
-[functions.olimpo-setup]
 verify_jwt = false
 
 [functions.olimpo-sync]
@@ -51,19 +36,7 @@ verify_jwt = false
 [functions.add-awb-to-status]
 verify_jwt = false
 
-[functions.add-email-cliente-column]
-verify_jwt = false
-
-[functions.add-origin-destination-columns]
-verify_jwt = false
-
 [functions.check-db-connection]
-verify_jwt = false
-
-[functions.check-table-structure]
-verify_jwt = false
-
-[functions.diagnose-queue]
 verify_jwt = false
 
 [functions.fetch-air-imports]
@@ -75,9 +48,6 @@ verify_jwt = false
 [functions.fetch-awbs-for-retrack]
 verify_jwt = false
 
-[functions.get-last-processed-awb]
-verify_jwt = false
-
 [functions.manage-processing-queue]
 verify_jwt = false
 
@@ -85,12 +55,6 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.validate-dachser-user]
-verify_jwt = false
-
-[functions.update-customer-email]
-verify_jwt = false
-
-[functions.update-analyst-emails]
 verify_jwt = false
 
 [functions.track-awb]
@@ -163,19 +127,10 @@ verify_jwt = false
 [functions.sea-get-system-logs]
 verify_jwt = false
 
-[functions.sea-migrate-to-mariadb]
-verify_jwt = false
-
 [functions.sea-extract-attachments]
 verify_jwt = false
 
 [functions.voucher-mariadb-sync]
-verify_jwt = false
-
-[functions.voucher-mariadb-setup]
-verify_jwt = false
-
-[functions.voucher-mariadb-migrate]
 verify_jwt = false
 
 [functions.voucher-integrate-rm]
@@ -196,28 +151,13 @@ verify_jwt = false
 [functions.voucher-sync-rm-pending]
 verify_jwt = false
 
-[functions.sea-setup-approved-examples]
-verify_jwt = false
-
-[functions.add-tipo-servico-column]
-verify_jwt = false
-
 [functions.send-password-reset-code]
 verify_jwt = false
 
 [functions.send-container-status-email]
 verify_jwt = false
 
-[functions.reset-awb-status]
-verify_jwt = false
-
 [functions.extract-boleto-barcode]
-verify_jwt = false
-
-[functions.voucher-pagamentos-setup]
-verify_jwt = false
-
-[functions.voucher-migrate-processo]
 verify_jwt = false
 
 [functions.regua-send-emails]
@@ -286,12 +226,6 @@ verify_jwt = false
 [functions.compare-documents-llm]
 verify_jwt = false
 timeout = 120
-
-[functions.reclassify-awb-errors]
-verify_jwt = false
-
-[functions.check-specific-awbs]
-verify_jwt = false
 
 [functions.fetch-database-stats]
 verify_jwt = false
