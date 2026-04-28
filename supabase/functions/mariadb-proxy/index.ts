@@ -7476,66 +7476,136 @@ Deno.serve(async (req) => {
           );
         }
 
-        console.log('Fetching CCT events (situacaoPortal timeline) for AWB:', queryAwb);
+        console.log('Fetching CCT events from t_cct_dashboard_cache for AWB:', queryAwb);
 
         try {
-          // Normalize HAWB for lookup (matches hawb_normalizado convention)
-          const hawbNorm = queryAwb.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+          // Single source of truth: t_cct_dashboard_cache.eventos
           const rawHawb = (queryAwb || '').trim();
+          const hawbNorm = queryAwb.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
-          // Map situacao text to codigo_evento
+          // Map free-text situacao -> canonical CCT codigo_evento
           const mapSituacao = (situacao: string): string => {
             const lower = (situacao || '').toLowerCase().trim();
-            if (lower.includes('manifestada')) return 'MANIFESTADO';
-            if (lower.includes('informada')) return 'CHEGADA_INFORMADA';
-            if (lower.includes('recepcionada')) return 'RECEPCIONADO';
             if (lower.includes('entregue')) return 'ENTREGUE';
+            if (lower.includes('chegada') && lower.includes('inform')) return 'CHEGADA_INFORMADA';
+            if (lower.includes('recepc')) return 'RECEPCIONADO';
+            if ((lower.includes('trânsito') || lower.includes('transito')) && lower.includes('terre')) return 'EM_TRANSITO_TERRESTRE';
             if (lower.includes('transferência') || lower.includes('transferencia')) return 'AREA_TRANSFERENCIA';
-            if (lower.includes('trânsito terrestre') || lower.includes('transito terrestre')) return 'EM_TRANSITO_TERRESTRE';
-            return (situacao || '').toUpperCase().replace(/\s+/g, '_');
+            if (lower.includes('troca') && lower.includes('recint')) return 'EM_TROCA_RECINTOS';
+            if (lower.includes('manifest')) return 'MANIFESTADO';
+            if (lower.includes('inform')) return 'CHEGADA_INFORMADA';
+            if (lower.includes('bloque')) return 'BLOQUEIO';
+            return (situacao || '').toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
           };
 
-          // Convert "YYYY-MM-DD HH:mm:ss" (assumed America/Sao_Paulo) to ISO UTC
-          const toIso = (s: string | null): string => {
-            if (!s) return '1970-01-01T00:00:00.000Z';
-            const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
-            if (!m) {
-              const d = new Date(s);
-              return isNaN(d.getTime()) ? '1970-01-01T00:00:00.000Z' : d.toISOString();
+          // Convert "YYYY-MM-DD HH:mm:ss" or "dd/MM/yyyy HH:mm:ss" (Sao Paulo) to ISO
+          const toIso = (s: string | null): string | null => {
+            if (!s) return null;
+            const trimmed = String(s).trim();
+            // ISO-ish "YYYY-MM-DD[ T]HH:mm:ss"
+            let m = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+            if (m) {
+              const d = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6] || '00'}-03:00`);
+              return isNaN(d.getTime()) ? null : d.toISOString();
             }
-            // Treat MariaDB timestamp as UTC-3 (Sao Paulo) and shift to UTC
-            const d = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}-03:00`);
-            return isNaN(d.getTime()) ? '1970-01-01T00:00:00.000Z' : d.toISOString();
+            // Brazilian "dd/MM/yyyy HH:mm:ss"
+            m = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+            if (m) {
+              const d = new Date(`${m[3]}-${m[2]}-${m[1]}T${m[4] || '00'}:${m[5] || '00'}:${m[6] || '00'}-03:00`);
+              return isNaN(d.getTime()) ? null : d.toISOString();
+            }
+            const d = new Date(trimmed);
+            return isNaN(d.getTime()) ? null : d.toISOString();
           };
 
-          // Pull all unique (situacaoPortal, dataUltimaAtualizacaoCargaDetalhada) pairs
-          // from t_cct_hawb_api_historico for this HAWB.
-          const eventRows = await client.query(`
-            SELECT
-              JSON_UNQUOTE(JSON_EXTRACT(h.json_identificacao, '$.situacaoPortal')) AS situacao_portal,
-              JSON_UNQUOTE(JSON_EXTRACT(h.json_identificacao, '$.dataUltimaAtualizacaoCargaDetalhada')) AS data_ultima_atualizacao
-            FROM ${database}.t_cct_hawb_api_historico h
-            WHERE (h.hawb_normalizado = ? OR h.hawb = ?)
-              AND h.json_identificacao IS NOT NULL
-              AND h.json_identificacao <> ''
-              AND JSON_VALID(h.json_identificacao)
-              AND JSON_UNQUOTE(JSON_EXTRACT(h.json_identificacao, '$.situacaoPortal')) IS NOT NULL
-              AND JSON_UNQUOTE(JSON_EXTRACT(h.json_identificacao, '$.situacaoPortal')) <> ''
-              AND JSON_UNQUOTE(JSON_EXTRACT(h.json_identificacao, '$.dataUltimaAtualizacaoCargaDetalhada')) IS NOT NULL
-              AND JSON_UNQUOTE(JSON_EXTRACT(h.json_identificacao, '$.dataUltimaAtualizacaoCargaDetalhada')) <> ''
-            GROUP BY situacao_portal, data_ultima_atualizacao
-            ORDER BY STR_TO_DATE(data_ultima_atualizacao, '%Y-%m-%d %H:%i:%s') ASC
-          `, [hawbNorm, rawHawb]);
+          // Read the consolidated `eventos` column from the cache
+          const cacheRows = await client.query(`
+            SELECT eventos, situacao_portal_atual, data_ultima_atualizacao_atual
+            FROM ${database}.t_cct_dashboard_cache
+            WHERE hawb COLLATE utf8mb4_unicode_ci = ?
+               OR REPLACE(REPLACE(UPPER(hawb),'-',''),' ','') COLLATE utf8mb4_unicode_ci = ?
+            LIMIT 1
+          `, [rawHawb, hawbNorm]);
 
-          const allEvents = (eventRows || []).map((r: any, idx: number) => {
-            const situacao = r.situacao_portal || '';
-            const codigo = mapSituacao(situacao);
-            const iso = toIso(r.data_ultima_atualizacao);
+          if (!cacheRows || cacheRows.length === 0) {
+            console.log(`CCT: No cache row for HAWB ${queryAwb}`);
+            result = { success: true, data: [] };
+            break;
+          }
+
+          const row = cacheRows[0];
+
+          // Parse `eventos` — may be JSON string, JSON array, or pipe-format
+          // "Descricao | dd/MM/yyyy HH:mm:ss || Descricao | ..."
+          const parseEventos = (raw: any): Array<{ descricao: string; dataIso: string | null; idx: number }> => {
+            if (!raw) return [];
+            let arr: any[] = [];
+
+            if (Array.isArray(raw)) {
+              arr = raw;
+            } else if (typeof raw === 'string') {
+              const trimmed = raw.trim();
+              if (!trimmed) return [];
+              if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+                try {
+                  const parsed = JSON.parse(trimmed);
+                  arr = Array.isArray(parsed) ? parsed : [];
+                } catch {
+                  arr = [];
+                }
+              } else if (trimmed.includes('|')) {
+                return trimmed
+                  .split('||')
+                  .map((c: string) => c.trim())
+                  .filter((c: string) => c.length > 0)
+                  .map((chunk: string, idx: number) => {
+                    const [descPart, datePart] = chunk.split('|').map((s) => s.trim());
+                    return {
+                      descricao: descPart || '',
+                      dataIso: toIso(datePart || null),
+                      idx,
+                    };
+                  })
+                  .filter((e) => e.descricao);
+              }
+            }
+
+            return arr
+              .filter((e: any) => e && typeof e === 'object')
+              .map((e: any, idx: number) => {
+                const descricao =
+                  e.descricao || e.descricao_evento || e.evento ||
+                  e.situacao || e.situacao_portal || e.codigo_evento || e.codigo || '';
+                const dateRaw =
+                  e.data_hora_evento || e.data_hora || e.dataHora ||
+                  e.data || e.dataEvento || e.timestamp || e.dt || null;
+                return { descricao, dataIso: toIso(dateRaw), idx };
+              })
+              .filter((e) => e.descricao);
+          };
+
+          const parsed = parseEventos(row.eventos);
+
+          // Sort DESC by parsed date; events without date go to the end.
+          // Stable tiebreaker by original idx (preserves array order).
+          parsed.sort((a, b) => {
+            const ta = a.dataIso ? new Date(a.dataIso).getTime() : null;
+            const tb = b.dataIso ? new Date(b.dataIso).getTime() : null;
+            if (ta === null && tb === null) return a.idx - b.idx;
+            if (ta === null) return 1;
+            if (tb === null) return -1;
+            if (tb !== ta) return tb - ta;
+            return a.idx - b.idx;
+          });
+
+          const allEvents = parsed.map((e, i) => {
+            const codigo = mapSituacao(e.descricao);
+            const iso = e.dataIso || '1970-01-01T00:00:00.000Z';
             return {
-              id: `cct-${queryAwb}-${idx}-${codigo}`,
+              id: `cct-${queryAwb}-${i}-${codigo}`,
               awb: queryAwb,
               codigo_evento: codigo,
-              descricao_evento: situacao,
+              descricao_evento: e.descricao,
               data_hora_evento: iso,
               fonte: 'RFB',
               aeroporto: null,
@@ -7544,17 +7614,19 @@ Deno.serve(async (req) => {
             };
           });
 
-          // Sort DESC for frontend (most recent first)
-          allEvents.sort((a: any, b: any) => new Date(b.data_hora_evento).getTime() - new Date(a.data_hora_evento).getTime());
-
-          console.log(`CCT: Returned ${allEvents.length} situacaoPortal events for AWB ${queryAwb}`);
+          console.log(
+            `CCT: Returned ${allEvents.length} events from cache for ${queryAwb}. ` +
+            `Latest=${allEvents[0]?.codigo_evento || '-'} @ ${allEvents[0]?.data_hora_evento || '-'} ` +
+            `| portal_atual=${row.situacao_portal_atual || '-'}`
+          );
           result = { success: true, data: allEvents };
         } catch (tableErr) {
-          console.log('Error fetching CCT events (situacaoPortal):', tableErr);
+          console.log('Error fetching CCT events from cache:', tableErr);
           result = { success: true, data: [] };
         }
         break;
       }
+
 
       // ==================== AWB TRACKING EVENTS (from t_aereo_ws_firecrawl.timeline_json) ====================
       case 'get_awb_tracking_events': {
