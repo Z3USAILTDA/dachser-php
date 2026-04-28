@@ -241,16 +241,16 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
 
   // Eventos (chronologically sorted)
   const eventos = parseAndSortEventos(row.eventos, shipmentId);
-  const ultimoEvento = eventos.length > 0 ? eventos[eventos.length - 1] : null;
 
-  // Effective status: latest chronological event WINS over situacao_portal_atual
-  // when both map to a canonical status and they DIFFER.
-  const statusFromEvento = ultimoEvento
-    ? mapSituacaoToCCT(ultimoEvento.descricao) || mapSituacaoToCCT(ultimoEvento.codigo_evento)
-    : null;
+  // Status derivation MUST go through the same resolver used by the detail
+  // header (ProcessoTimeline) so that dashboard and detail never diverge.
+  // Fallback hierarchy: latest event -> situacao_portal_atual -> INFORMADA.
+  const statusFromTimeline = eventos.length
+    ? getLatestTimelineStatus(eventos, '' as any)
+    : '';
   const statusFromPortal = mapSituacaoToCCT(row.situacao_portal_atual);
   const effectiveStatus: StatusCCTOficial =
-    statusFromEvento || statusFromPortal || 'INFORMADA';
+    (statusFromTimeline as StatusCCTOficial) || statusFromPortal || 'INFORMADA';
 
   // Bloqueio handling
   const bloqueioRaw = (row.teve_bloqueio || '').toString().trim();
