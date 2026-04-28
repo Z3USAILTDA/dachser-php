@@ -1,84 +1,92 @@
-# Relatório Reorganizado por Módulo e Tela
+# Relatório v3 — Conexões reais e tabelas por tela
 
-## Objetivo
+## Problema com a v2
 
-Reestruturar o relatório de conexões ao banco de dados, agrupando as informações por **Módulo → Tela → Edge Functions → Tabelas**, ao invés de agrupar por banco. Itens que não pertencem a nenhuma tela específica vão para uma seção **"Sistema / Background / Não-mapeado"**.
+O scanner usava regex simples `/FROM\s+(\w+)/`, que falhou em vários casos:
 
-## Nova estrutura do relatório
+- **Queries multilinha** (`FROM \n      t_master_dados`) — o `\n` quebrava o regex e ficava `—`.
+- **Template strings com variável** (`INSERT INTO ${table}`, `UPDATE ${table} SET ...`) no `mariadb-proxy`, `voucher-mariadb-sync`, `olimpo-proxy` — sem parse, ficavam vazias ou poluídas.
+- **Tabelas referenciadas como string passada do frontend** (ex.: `supabase.functions.invoke('mariadb-proxy', { body: { table: 't_xxx', ... } })`) — não eram coletadas.
+- **Operações Postgres em hooks/components** via `supabase.from('t_xxx')` em **components**, não só em hooks/pages.
+- Identificadores capturados com lixo (palavras-chave SQL `INNER`, `LEFT`, `INFORMATION_SCHEMA.COLUMNS`, etc.)
 
-### 1. Sumário Executivo
-- Total de módulos, telas, edge functions e tabelas envolvidas
-- Top 5 telas com maior dependência de banco
-- Telas com risco alto (funções sem `close()`, polling agressivo, múltiplos bancos)
+Resultado: muitas telas mostraram `Tabelas: —`, perdendo o ponto principal do relatório.
 
-### 2. Mapa por Módulo
+## Plano da v3
 
-Cada módulo terá seu próprio capítulo. Identificados a partir de `src/pages/`:
+### 1. Scanner SQL aprimorado (edge functions)
 
-- **AIR** — `src/pages/air/*`, `AWBList`, `ManualTracking`, `CadastroNova`, `ManualAwbList`, `ManualCheckAwb`, `ManualStatusAereo`
-- **SEA / Maritime** — `src/pages/sea/*`, `SeaAnalysis`, `CadastroHbl`, `CadastroManifest`, `LocalCharges`, `InvoicesDraftHbl`, `SubmeterHblMbl`, `SubmeterManifestHbl`, `DraftExportacao`
-- **Demurrage** — `src/pages/demurrage/*` (Monitor, FreeTimes, Rates, PreInvoicing, CarrierCosts, Disputes, Clients, Analytics, Settings)
-- **CCT** — `src/pages/cct/*` (Dashboard, Analytics, ConsoleTecnico, Excecoes, LeadcomexLogs, ProcessoTimeline, RegrasNotificacao)
-- **CHB** — `src/pages/ChbAnalises`, `ConferenciaChb`, `chb/ManualChb`
-- **Análise Documental** — `AnaliseDocumental`, `AnaliseDocumentalComparar`, `AnaliseDocumentalDetalhes`
-- **Esteira / Vouchers** — `src/pages/esteira/*` (Dashboard, Manual, Reports, UserManagement, VoucherDetails, VoucherRules, ComprovanteRobot, EmailPreview, AccrualManagement)
-- **Financeiro / Régua** — `ReguaCobranca`, `AlteracoesFee`, `fin/OthelloImport`, `fin/ManualFinanceiro`
-- **Olimpo** — `olimpo/OlimpoIndex`, `OlimpoFaturamento`
-- **Admin** — `admin/*` (UserManagement, CronManager, DatabaseMonitor, FirecrawlMonitor, UploadMaster, ApiKeyTest, ManualAdmin)
-- **Auth / Conta** — `Login`, `Register`, `ForgotPassword`, `ResetPassword`, `VerifyResetCode`, `ChangePassword`, `SupervisorConfirmacao`
-- **Geral** — `Dashboard`, `Logs`, `SystemLogs`, `MetricsUsage`, `NotFound`
+Para cada `supabase/functions/*/index.ts`:
 
-### 3. Para cada Tela
-Bloco padronizado:
+- **Normalizar o source**: remover comentários (`//`, `/* */`), colapsar whitespace.
+- **Regex multilinha**: `/\b(FROM|JOIN|INTO|UPDATE|DELETE\s+FROM)\s+([`"]?[\w.${}]+[`"]?)/gis` com flag `s` para incluir quebras.
+- **Whitelist de identificadores válidos**: começam com `t_`, `tbaixas`, `dados_dachser.`, `ai_agente.`, `Charges.`, `INFORMATION_SCHEMA.`, ou o padrão `${var}` (marcado como dinâmico).
+- **Blacklist explícita** de palavras-chave SQL.
+- **Capturar `${var}`**: marcar a função como "tabelas dinâmicas" e listar as tabelas que o frontend passa nos `body.table`.
 
-```text
-Tela: src/pages/sea/DraftExportacao.tsx
-Rota: /sea/draft-exportacao
-Hooks usados: useDraftData, useSeaRegrasNotificacao
-Edge functions invocadas:
-  - draft-sync           → MariaDB dados_dachser  → t_draft_export, t_tracking_sea
-  - hapag-tracking       → MariaDB dados_dachser  → t_tracking_sea, t_sea_master
-  - mariadb-proxy        → Charges               → fee_history, vendor_rates
-Tabelas Postgres (via supabase client): (nenhuma)
-Storage buckets: (nenhum)
-Risco: MÉDIO — polling 60s + 3 funções concorrentes
+### 2. Scanner do frontend para `body.table` / `body.tableName`
+
+Procurar nos arquivos do frontend chamadas como:
+```ts
+supabase.functions.invoke('mariadb-proxy', {
+  body: { action: 'select', table: 't_dachser_demurrage_containers', ... }
+})
 ```
 
-### 4. Seção "Sistema / Background / Não-mapeado"
-Para itens sem tela direta:
-- **Cron jobs** (sync periódicos, retracks, accruals, voucher-cron)
-- **Webhooks** (auth-handler, email handlers, supervisor approvals externos)
-- **Edge functions internas** chamadas só por outras funções (mariadb-proxy, ai-helpers)
-- **Triggers Postgres** e funções `security definer`
-- **Buckets de storage** (`voucher-anexos`, `hawb-documents`)
-- **Edge functions órfãs** (sem invocação detectada no frontend)
+Extrair o valor literal de `table` / `tableName` / `from` e atribuí-lo à tela que faz a chamada. Isso resolve o problema do proxy genérico.
 
-### 5. Matriz de Cobertura (anexo XLSX)
-Aba dedicada `Modulo-Tela-Function-Tabela` para filtragem livre, colunas:
-`modulo | tela_path | rota | hook | edge_function | banco | tabelas | proxy? | risco`
+### 3. Cobertura completa de Postgres
 
-### 6. Riscos por Módulo
-Resumo de risco agregado por módulo (quantas funções high-risk, polling, conexões diretas vs proxy).
+Procurar `supabase.from('xxx')`, `supabase.rpc('xxx')` e `supabase.storage.from('xxx')` em:
+- `src/pages/**/*.tsx`
+- `src/hooks/**/*.{ts,tsx}`
+- `src/components/**/*.{ts,tsx}` (componentes usados pelas telas — já parcialmente coberto)
+- `src/utils/**/*.ts`
 
-## Como será gerado (técnico)
+### 4. Resolução transitiva mais profunda
 
-1. **Reaproveitar o scan já feito** das ~144 edge functions (resultado em memória do passo anterior).
-2. **Novo scanner frontend** (`/tmp/scan-pages.mjs`):
-   - Para cada arquivo em `src/pages/**/*.tsx`:
-     - Extrair imports de hooks (`from "@/hooks/..."`)
-     - Extrair `supabase.functions.invoke('xxx')` diretos
-     - Extrair `supabase.from('xxx')` diretos
-     - Extrair `supabase.storage.from('xxx')`
-   - Para cada hook em `src/hooks/*.ts`:
-     - Mesma extração — para resolver indiretamente quais funções a tela chama
-3. **Resolver rotas** lendo `src/App.tsx` (mapeamento path → componente).
-4. **Inferir módulo** pelo prefixo do path (`pages/sea/` → SEA, `pages/cct/` → CCT, etc.).
-5. **Cruzar** tela → hook → edge function → banco/tabelas (do scan anterior).
-6. **Identificar não-mapeados**: edge functions que não aparecem em nenhuma tela/hook → vão para Seção 4.
-7. **Gerar artefatos**:
-   - `/mnt/documents/dachser-db-by-module-v2.md`
-   - `/mnt/documents/dachser-db-by-module-v2.pdf` (reportlab, com TOC por módulo)
-   - `/mnt/documents/dachser-db-by-module-v2.xlsx` (abas: `Resumo`, `Por-Modulo`, `Por-Tela`, `Matriz`, `Sistema-Background`, `Riscos`)
-8. **QA**: converter PDF para imagens e revisar todas as páginas; validar XLSX com `recalculate_formulas.py`.
+A v2 só seguia `pages → hooks` e `pages → components (1 nível)`. Agora:
+- Construir um grafo `pageRel → set(arquivos importados)` (até 2 níveis dentro de `src/`).
+- Acumular `invokes`, `pgTables`, `buckets`, `proxyTables` de todos os nós alcançáveis.
 
-Sem alterações no código da aplicação ou no banco — apenas leitura e geração de artefatos em `/mnt/documents/`.
+### 5. Novo formato por tela
+
+Cada tela mostra:
+
+```text
+Tela: src/pages/sea/DraftExportacao.tsx       Rota: /sea/draft-exportacao
+Hooks: useDraftData
+─ Conexões diretas ────────────────────────────────────
+  Postgres (Supabase): shipments, profiles
+  Storage:              maritime-files
+─ Edge Functions chamadas ─────────────────────────────
+  ▸ draft-fetch-mariadb       → MariaDB.dados_dachser
+       Lê:    t_master_dados, t_dados_aereo
+       Grava: —
+  ▸ mariadb-proxy             → MariaDB (genérico)
+       Tabelas usadas por esta tela: t_draft_export, t_tracking_sea
+  ▸ hapag-tracking            → MariaDB.dados_dachser  + API Hapag
+       Lê/Grava: t_tracking_sea, t_sea_master
+─ Risco: MÉDIO ────────────────────────────────────────
+```
+
+Separação **Lê vs Grava** (FROM/JOIN/SELECT vs INSERT/UPDATE/DELETE) para cada function.
+
+### 6. Entregáveis
+
+- `/mnt/documents/dachser-db-by-module-v3.md`
+- `/mnt/documents/dachser-db-by-module-v3.pdf` (mesma identidade visual, novo layout por tela)
+- `/mnt/documents/dachser-db-by-module-v3.xlsx` com abas:
+  - **Resumo** (telas, fns, tabelas únicas por módulo)
+  - **Por-Tela** (uma linha por tela, com listas consolidadas)
+  - **Matriz** (tela × function × tabela × operação L/E/Storage)
+  - **Cobertura-Tabelas** (cada tabela MariaDB/PG → quais telas a usam)
+  - **Edge-Functions** (todas as 143, com Lê / Grava separados)
+  - **Sistema-Background** (94 órfãs categorizadas)
+
+### 7. QA
+
+- Spot-check manual de 5 telas (DraftExportacao, AWBList, EsteiraVoucherDetails, DemurrageMonitor, CCTDashboard) comparando o relatório com o código real.
+- Render do PDF página a página até não encontrar overflow ou tabelas vazias indevidas.
+
+Sem alteração no código da aplicação ou no banco — apenas geração de artefatos em `/mnt/documents/`.
