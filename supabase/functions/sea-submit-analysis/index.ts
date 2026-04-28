@@ -2094,140 +2094,130 @@ serve(async (req) => {
       await dbClient.close();
 
       // Background processing
+      // CONNECTION LIFESPAN OPTIMIZATION:
+      // Open DB only for short bursts (status updates, save results) and CLOSE
+      // before/after the long-running LLM pipeline. This frees a MariaDB slot
+      // during the 1-3min Flash→Claude→Pro analysis.
       const processAnalysis = async () => {
         const startTime = Date.now();
-        let bgClient: Client | null = null;
-        
+
+        // Helper: open DB, run callback, always close
+        const withDb = async <T>(fn: (c: Client) => Promise<T>): Promise<T> => {
+          const c = await getDbClient();
+          try {
+            return await fn(c);
+          } finally {
+            try { await c.close(); } catch { /* ignore */ }
+          }
+        };
+
         try {
           console.log(`📊 Background analysis started for run ${runId}`);
-          
-          bgClient = await getDbClient();
-          
-          // Update status to analyzing
-          await bgClient.execute(`
-            UPDATE ai_agente.t_dachser_sea_runs SET status = 'analisando' WHERE id = ?
-          `, [runId]);
-          
-          // Run 3-step LLM analysis
+
+          // 1) Mark as analyzing (short DB burst, then close)
+          await withDb(async (c) => {
+            await c.execute(`
+              UPDATE ai_agente.t_dachser_sea_runs SET status = 'analisando' WHERE id = ?
+            `, [runId]);
+          });
+
+          // 2) Run 3-step LLM analysis WITHOUT holding a DB connection
           const result = await analyzeWithLLM(
             analysisType,
-            allFiles.map(f => ({ file_name: f.name, file_type: f.file_type, file_url: f.url })), 
+            allFiles.map(f => ({ file_name: f.name, file_type: f.file_type, file_url: f.url })),
             { consignee, container }
           );
-          
+
           const elapsed = Math.round((Date.now() - startTime) / 1000);
           console.log(`✅ Analysis complete in ${elapsed}s (${result.result_text?.length || 0} chars)`);
 
-          let finalStatus = 'completed';
           const isValidNoChanges = result.result_text && (
             result.result_text.includes('No changes required') ||
             result.result_text.includes('Hello, team')
           );
-          
           if (!result.result_text || (result.result_text.length < 200 && !isValidNoChanges)) {
-            finalStatus = 'error';
+            // keep behavior: still save below; previous code used this flag only locally
           }
 
-          // Update run with result (using only existing columns)
-          await bgClient.execute(`
-            UPDATE ai_agente.t_dachser_sea_runs 
-            SET status = 'realizado',
-                result_text = ?,
-                result_json = ?
-            WHERE id = ?
-          `, [
-            result.result_text || '',
-            JSON.stringify(result.json_result || {}),
-            runId
-          ]);
-          
-          // Extract and save HBL shipping data (container, vessel, voyage, origem, destino)
           const hblShippingData = extractHblShippingData(result.result_text || '');
-          if (hblShippingData) {
-            console.log(`📦 Extracted HBL shipping data:`, hblShippingData);
-            
-            // Update item with extracted metadata (consignee, container) but NOT status
-            // Status 'realizado' should only be set when user clicks "Concluir Análise"
-            if (actualItemId) {
-              const updateFields: string[] = [];
-              const updateValues: any[] = [];
-              
-              if (hblShippingData.container) {
-                updateFields.push('container = ?');
-                updateValues.push(hblShippingData.container);
+
+          // 3) Persist results in a single short DB burst
+          await withDb(async (c) => {
+            await c.execute(`
+              UPDATE ai_agente.t_dachser_sea_runs
+              SET status = 'realizado',
+                  result_text = ?,
+                  result_json = ?
+              WHERE id = ?
+            `, [
+              result.result_text || '',
+              JSON.stringify(result.json_result || {}),
+              runId
+            ]);
+
+            if (hblShippingData) {
+              console.log(`📦 Extracted HBL shipping data:`, hblShippingData);
+              if (actualItemId) {
+                const updateFields: string[] = [];
+                const updateValues: any[] = [];
+                if (hblShippingData.container) { updateFields.push('container = ?'); updateValues.push(hblShippingData.container); }
+                if (hblShippingData.consignee) { updateFields.push('consignee = ?'); updateValues.push(hblShippingData.consignee); }
+                if (hblShippingData.mbl_number) { updateFields.push('mbl_number = ?'); updateValues.push(hblShippingData.mbl_number); }
+                if (hblShippingData.carrier) { updateFields.push('carrier = ?'); updateValues.push(hblShippingData.carrier); }
+                if (hblShippingData.ata_date) { updateFields.push('ata_date = ?'); updateValues.push(hblShippingData.ata_date); }
+
+                if (updateFields.length > 0) {
+                  updateValues.push(actualItemId);
+                  await c.execute(`
+                    UPDATE ai_agente.t_dachser_sea_items
+                    SET ${updateFields.join(', ')}, status = 'analisado'
+                    WHERE id = ?
+                  `, updateValues);
+                  console.log(`✅ Updated item ${actualItemId} with metadata, status = 'analisado'`);
+                } else {
+                  await c.execute(`
+                    UPDATE ai_agente.t_dachser_sea_items SET status = 'analisado' WHERE id = ?
+                  `, [actualItemId]);
+                  console.log(`✅ Updated item ${actualItemId} status to 'analisado'`);
+                }
               }
-              if (hblShippingData.consignee) {
-                updateFields.push('consignee = ?');
-                updateValues.push(hblShippingData.consignee);
-              }
-              if (hblShippingData.mbl_number) {
-                updateFields.push('mbl_number = ?');
-                updateValues.push(hblShippingData.mbl_number);
-              }
-              if (hblShippingData.carrier) {
-                updateFields.push('carrier = ?');
-                updateValues.push(hblShippingData.carrier);
-              }
-              if (hblShippingData.ata_date) {
-                updateFields.push('ata_date = ?');
-                updateValues.push(hblShippingData.ata_date);
-              }
-              
-              if (updateFields.length > 0) {
-                // Set status to 'analisado' (analysis done, pending user review)
-                updateValues.push(actualItemId);
-                await bgClient.execute(`
-                  UPDATE ai_agente.t_dachser_sea_items 
-                  SET ${updateFields.join(', ')}, status = 'analisado'
-                  WHERE id = ?
-                `, updateValues);
-                console.log(`✅ Updated item ${actualItemId} with metadata (incl. mbl/carrier/ata), status = 'analisado'`);
-              } else {
-                // No metadata but update status to 'analisado'
-                await bgClient.execute(`
+              console.log(`ℹ️ Container data extracted but will be saved on analysis completion only`);
+            } else {
+              console.log(`⚠️ No HBL shipping data found in analysis result`);
+              if (actualItemId) {
+                await c.execute(`
                   UPDATE ai_agente.t_dachser_sea_items SET status = 'analisado' WHERE id = ?
                 `, [actualItemId]);
-                console.log(`✅ Updated item ${actualItemId} status to 'analisado'`);
+                console.log(`✅ Updated item ${actualItemId} status to 'analisado' (no metadata)`);
               }
             }
-            
-            // Container data will be saved to t_dachser_container only when user completes the analysis
-            // via the complete_maritimo_analysis action (not automatically here)
-            console.log(`ℹ️ Container data extracted but will be saved on analysis completion only`);
-          } else {
-            console.log(`⚠️ No HBL shipping data found in analysis result`);
-            // Update item status to 'analisado' even without metadata
-            if (actualItemId) {
-              await bgClient.execute(`
-                UPDATE ai_agente.t_dachser_sea_items SET status = 'analisado' WHERE id = ?
-              `, [actualItemId]);
-              console.log(`✅ Updated item ${actualItemId} status to 'analisado' (no metadata)`);
-            }
-          }
+          });
 
-          
           console.log(`✅ Run ${runId} completed successfully with ${result.model}`);
-          
+
         } catch (err) {
           const elapsed = Math.round((Date.now() - startTime) / 1000);
           console.error(`❌ Analysis error after ${elapsed}s:`, err);
-          
-          if (!bgClient) bgClient = await getDbClient();
-          
-          await bgClient.execute(`
-            UPDATE ai_agente.t_dachser_sea_runs 
-            SET status = 'erro',
-                result_text = ?
-            WHERE id = ?
-          `, [err instanceof Error ? err.message : 'Unknown error', runId]);
-          
-          if (actualItemId) {
-            await bgClient.execute(`
-              UPDATE ai_agente.t_dachser_sea_items SET status = 'erro' WHERE id = ?
-            `, [actualItemId]);
+
+          // Error path: open a fresh short-lived connection just to record the error
+          try {
+            await withDb(async (c) => {
+              await c.execute(`
+                UPDATE ai_agente.t_dachser_sea_runs
+                SET status = 'erro',
+                    result_text = ?
+                WHERE id = ?
+              `, [err instanceof Error ? err.message : 'Unknown error', runId]);
+
+              if (actualItemId) {
+                await c.execute(`
+                  UPDATE ai_agente.t_dachser_sea_items SET status = 'erro' WHERE id = ?
+                `, [actualItemId]);
+              }
+            });
+          } catch (dbErr) {
+            console.error('Failed to record analysis error in DB:', dbErr);
           }
-        } finally {
-          if (bgClient) await bgClient.close();
         }
       };
 
