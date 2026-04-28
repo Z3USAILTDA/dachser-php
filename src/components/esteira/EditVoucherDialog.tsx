@@ -37,6 +37,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
     filial: "",
     urgente: false,
     chavePix: "",
+    origemProcesso: "" as "" | "AIR" | "SEA" | "CHB" | "ROD",
   });
 
   // Helper to extract date string as YYYY-MM-DD without timezone conversion
