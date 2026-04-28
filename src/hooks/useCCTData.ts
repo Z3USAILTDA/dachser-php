@@ -20,6 +20,7 @@ import type {
 } from "@/types/cct";
 import { toast } from "sonner";
 import { computeSLAInfo } from "@/utils/cctSLA";
+import { getLatestTimelineStatus } from "@/utils/cctStatusResolver";
 
 // Static data for airports
 const AEROPORTOS: CCTAeroporto[] = [
@@ -198,7 +199,9 @@ function parseAndSortEventos(raw: any, shipmentId: string): CCTEvento[] {
   });
 
   return enriched.map((item, i) => ({
-    id: `event-${shipmentId}-${i}`,
+    // Numeric-friendly id so cctStatusResolver's tiebreaker (id desc) picks
+    // the chronologically latest event when timestamps are tied.
+    id: String(i + 1),
     shipment_id: shipmentId,
     codigo_evento: pickCodigo(item.raw),
     data_hora_evento: item.dateStr || new Date(0).toISOString(),
@@ -238,16 +241,16 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
 
   // Eventos (chronologically sorted)
   const eventos = parseAndSortEventos(row.eventos, shipmentId);
-  const ultimoEvento = eventos.length > 0 ? eventos[eventos.length - 1] : null;
 
-  // Effective status: latest chronological event WINS over situacao_portal_atual
-  // when both map to a canonical status and they DIFFER.
-  const statusFromEvento = ultimoEvento
-    ? mapSituacaoToCCT(ultimoEvento.descricao) || mapSituacaoToCCT(ultimoEvento.codigo_evento)
-    : null;
+  // Status derivation MUST go through the same resolver used by the detail
+  // header (ProcessoTimeline) so that dashboard and detail never diverge.
+  // Fallback hierarchy: latest event -> situacao_portal_atual -> INFORMADA.
+  const statusFromTimeline = eventos.length
+    ? getLatestTimelineStatus(eventos, '' as any)
+    : '';
   const statusFromPortal = mapSituacaoToCCT(row.situacao_portal_atual);
   const effectiveStatus: StatusCCTOficial =
-    statusFromEvento || statusFromPortal || 'INFORMADA';
+    (statusFromTimeline as StatusCCTOficial) || statusFromPortal || 'INFORMADA';
 
   // Bloqueio handling
   const bloqueioRaw = (row.teve_bloqueio || '').toString().trim();
