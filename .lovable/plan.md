@@ -1,48 +1,55 @@
-# Popular a coluna SLA do CCT
+# Unificar status CCT: dashboard ↔ detalhe
 
-## Problema
-Na lista `/air/cct`, a coluna **SLA** mostra sempre badge verde "OK" sem horas restantes nem tipo de voo. O motivo é que em `src/hooks/useCCTData.ts` o objeto `sla_info` de cada processo está **hardcoded** (`status: 'OK'`, todos os demais campos `null`), mesmo já tendo `data_decolagem` no cache e o status canônico derivado dos eventos.
+## Diagnóstico
 
-## Regras de SLA (já em memória)
-Conforme `mem://cct/sla-calculation-rules-v3`:
+A tela de detalhe (`ProcessoTimeline.tsx`) e a tela inicial (`CCTDashboard` / `ProcessosTable`) leem da **mesma tabela** (`t_cct_dashboard_cache.eventos`), porém o **último status** é calculado por **dois caminhos diferentes**, com resultados divergentes em alguns processos:
 
-- **VOO_CURTO** (origem América do Sul): limite = `data_decolagem + 30 min`.
-- **VOO_LONGO** (intercontinental): limite = `eta − 4h` ou, se ETA ausente, `data_decolagem + 4h`.
-- **CUMPRIDO** (badge esmeralda) quando `data_manifestacao_cct` existir **OU** o status oficial alcançar `MANIFESTADA` ou qualquer evento posterior na hierarquia (`EM_AREA_TRANSFERENCIA`, `RECEPCIONADA`, `EM_TROCA_RECINTOS`, `EM_TRANSITO_TERRESTRE`, `ENTREGUE`).
-- **Excluir** (sem badge SLA / mostrar `CUMPRIDO`) para status finais (`ENTREGUE`).
-- Faixas: `OK` (>4h restantes), `ALERTA` (≤4h e >0), `CRITICO` (≤1h e >0), `VENCIDO` (<0).
+| Camada | Onde calcula | Função usada | Como escolhe o "último" |
+|---|---|---|---|
+| **Detalhe (header)** | `ProcessoTimeline.tsx` chama `useCCTEvents` → action `get_cct_events` (proxy parseia e ordena DESC) → `getLatestTimelineStatus` (`cctStatusResolver.ts`) | `mapEventCodeToStatus` + `mapDescriptionToStatus` | Ordena DESC por `data_hora_evento`, depois `created_at`, depois `id` |
+| **Dashboard (linha da tabela)** | `useCCTData.ts` → `mapRowToProcessoCCT` parseia `row.eventos` localmente e pega `eventos[length-1]` | `mapSituacaoToCCT` (parser local, mais restrito) | Ordena ASC por data; tiebreaker por **índice original** |
 
-## Implementação (mínima e cirúrgica)
+Causas concretas da divergência observada em processos reais:
 
-### 1. `src/utils/cctSLA.ts` (novo, pequeno helper)
-Função pura `computeSLAInfo({ depDatetime, eta, originAirport, status, dataManifestacao })` retornando `SLAInfo` com:
-- `tipoVoo` baseado em `originAirport` (lista de aeroportos sul-americanos: `EZE, SCL, BOG, LIM, UIO, CCS, MVD, ASU, GRU/etc internos não se aplicam → todo origem fora-Brasil/SA = VOO_LONGO`).
-- `slaLimite` calculado conforme regras acima.
-- `status` (`CUMPRIDO` se cumprido pelo status hierárquico OU `data_manifestacao_cct`; senão `OK/ALERTA/CRITICO/VENCIDO` por horas restantes vs. `slaLimite`).
-- `horasRestantes` arredondado em horas.
-- `slaConfigHoras` (30 min ou 4 h conforme tipo de voo).
+1. **Mapeadores diferentes.** O resolver do detalhe cobre variantes que o `mapSituacaoToCCT` do dashboard não cobre (ex.: códigos `DESEMBARACO`, `LIBERADO`, `DESBLOQUEIO`, typo `EM_TRNSITO_TERRESTRE`, `EM_TROCA_RECINTOS` por código). Quando o último evento cai num desses, o dashboard volta para `INFORMADA` (fallback) enquanto o detalhe acerta.
+2. **Tiebreaker diferente quando há eventos com a mesma data/hora.** O dashboard usa ordem original do array; o detalhe usa `id` desc. Em HAWBs com dois eventos no mesmo timestamp (comum em "Recepcionada" + "Em trânsito terrestre" registrados juntos), cada tela escolhe um evento distinto.
+3. **Pipeline de parse separado.** O proxy (`get_cct_events`) e o hook (`parseAndSortEventos`) têm ramos próprios para o formato pipe e JSON; pequenas diferenças de filtro fazem o "último" ser outro item.
+4. **`status_cct_oficial` no objeto do dashboard nunca passa pelo `cctStatusResolver`.** Logo, qualquer melhoria feita no resolver (memória `dashboard-cache-single-source`) não chega à listagem.
 
-Hierarquia de cumprimento:
-```
-INFORMADA < MANIFESTADA < EM_AREA_TRANSFERENCIA < RECEPCIONADA < EM_TROCA_RECINTOS < EM_TRANSITO_TERRESTRE < ENTREGUE
-```
-Cumprido = índice ≥ índice de `MANIFESTADA`.
+Resultado: detalhe mostra, p.ex., `EM_TRANSITO_TERRESTRE` (correto), e a linha da tabela ainda mostra `RECEPCIONADA` ou `INFORMADA`.
 
-### 2. `src/hooks/useCCTData.ts`
-- Importar `computeSLAInfo`.
-- Substituir o bloco hardcoded `sla_info` (linhas ~304-311) pela chamada real, passando `data_decolagem`, `aeroporto_origem`, `finalStatus` e `data_manifestacao_cct` (que hoje é `null` mas alimentará a regra fallback via status hierárquico).
-- Atribuir `sla_status: sla_info.status` e `sla_limite: sla_info.slaLimite`.
-- `tipo_voo: sla_info.tipoVoo` em `status_atual`.
+## Solução
 
-### 3. Sem mudanças em UI
-`SLAInfoBadge` já consome `slaInfo.status`, `horasRestantes`, `tipoVoo` e `slaLimite` — passará a exibir corretamente assim que o cálculo retornar valores.
+Fazer o dashboard derivar o status pelo **mesmo caminho** do detalhe, sem mexer na fonte de dados nem no proxy.
 
-## Arquivos alterados
-- `src/utils/cctSLA.ts` (novo)
-- `src/hooks/useCCTData.ts` (substitui ~10 linhas no `mapRowToProcessoCCT`)
+### 1. `src/hooks/useCCTData.ts` — `mapRowToProcessoCCT`
 
-## Não faz parte
-- Não altera Edge Functions (`mariadb-proxy`).
-- Não altera schema MariaDB.
-- Não altera lógica de timeline (já corrigida).
-- Não altera badge/UI da tabela.
+- Remover o cálculo local de `effectiveStatus` baseado em `mapSituacaoToCCT(ultimoEvento.descricao)`.
+- Após `parseAndSortEventos`, chamar `getLatestTimelineStatus(eventos, fallback)` do `cctStatusResolver` para obter o status canônico.
+- Manter a regra de bloqueio (`hasBloqueio` → `BLOQUEIO`) como override final, igual hoje.
+- Manter `situacao_portal_atual` apenas como fallback quando `eventos` estiver vazio (idêntico ao header do detalhe).
+
+### 2. `src/hooks/useCCTData.ts` — `parseAndSortEventos`
+
+- Garantir que cada evento gerado tem `id` estável e crescente segundo a ordem cronológica, para que o `compareCCTEventsByRecency` do resolver produza o mesmo desempate do detalhe (eventos do mesmo timestamp ficam ordenados pelo índice do array original via `id` numérico desc).
+- Preencher `created_at` igual ao `data_hora_evento` (já é o caso) para neutralizar o segundo critério do resolver.
+
+### 3. Sem mudanças no proxy
+
+`get_cct_events` continua igual. Ambos os caminhos lerão `t_cct_dashboard_cache.eventos`, e os mapeadores agora serão os mesmos (`cctStatusResolver`).
+
+### 4. Memória
+
+Atualizar `mem://cct/dashboard-cache-single-source` acrescentando: "tanto o `status_atual.status_cct_oficial` exibido no dashboard quanto o header do detalhe DEVEM ser derivados via `getLatestTimelineStatus` do `cctStatusResolver`. O parser local `mapSituacaoToCCT` em `useCCTData.ts` não pode ser usado para definir status final."
+
+## Arquivos afetados
+
+- `src/hooks/useCCTData.ts` (modificar `mapRowToProcessoCCT` e ajuste leve em `parseAndSortEventos`)
+- `.lovable/memory/cct/dashboard-cache-single-source.md` (acréscimo)
+
+## Como validar
+
+- Abrir um HAWB cuja tela de detalhe mostra status diferente da listagem (ex.: o que motivou o report).
+- Após o deploy, a coluna **Status CCT** da listagem deve passar a refletir o mesmo status do header do detalhe e do topo da timeline.
+- Processos com bloqueio continuam marcados como `BLOQUEIO`.
+- Processos sem nenhum evento continuam caindo no fallback `situacao_portal_atual` → `INFORMADA`.

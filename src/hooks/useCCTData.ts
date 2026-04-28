@@ -20,6 +20,7 @@ import type {
 } from "@/types/cct";
 import { toast } from "sonner";
 import { computeSLAInfo } from "@/utils/cctSLA";
+import { getLatestTimelineStatus } from "@/utils/cctStatusResolver";
 
 // Static data for airports
 const AEROPORTOS: CCTAeroporto[] = [
