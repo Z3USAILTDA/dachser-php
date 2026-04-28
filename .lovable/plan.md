@@ -1,38 +1,77 @@
-## Ajuste de frequência dos crons
+## Diagnóstico
 
-Vou alterar a frequência dos cron jobs no `cron.schedule` (pg_cron) reduzindo a pressão sobre o MariaDB:
+47 edge functions abrem conexão direta ao MariaDB com o **mesmo usuário**, competindo pelo mesmo `max_user_connections`. Crons já foram afrouxados. Restam 3 frentes (Frente 2 — usuário dedicado para crons — **descartada por sua decisão**).
 
-| Job | Antes | Depois |
+---
+
+## Frente 1 — Reduzir polling e refetch do frontend (rápido, alto impacto)
+
+Ajustes pontuais nos hooks/painéis mais ativos:
+
+| Hook/painel | Hoje | Ajuste |
 |---|---|---|
-| `sync-voucher-statuses` | `*/5 * * * *` (5 min) | `*/10 * * * *` (10 min) |
-| `sea-analysis-watchdog-check` | `*/5 * * * *` (5 min) | `5-59/10 * * * *` (10 min, offset 5) |
-| `air-tracking-failed-alert` | `*/10 * * * *` (10 min) | `*/30 * * * *` (30 min) |
+| `useUserRole` | Refetch a cada navegação | Cache em `sessionStorage` por 60s |
+| `useCCTData` | Refetch ao focar janela | Desabilitar `refetchOnWindowFocus`, manter cache 60s |
+| `useDemurrageData` / `DemurrageMonitor` | Polling curto | Subir intervalo para ≥60s |
+| `useDraftData` / `DraftSyncDashboard` | Auto-refresh curto | Subir para 30–60s |
+| `usePolling` (genérico) | Default curto | Elevar default e revisar callers |
+| `DatabaseStatsPanel` / `SeaDbStatsPanel` / `ReguaDbStatsPanel` | Stats em loop | Refresh manual ou ≥120s |
 
-**Por que offset no `sea-analysis-watchdog-check`:** se ambos rodassem em `*/10 * * * *`, disparariam exatamente no mesmo segundo (00, 10, 20...) — exatamente o pico que está estourando hoje. Com offset de 5, rodam alternados (00→sync, 05→watchdog, 10→sync, 15→watchdog…).
+Também: na página `EsteiraVoucherDetails`, adicionar **retry client-side (até 2x)**, **remover o `navigate` em erro** e expor botão **“Tentar novamente”** — para o usuário não ser jogado para fora quando o pico acontece.
 
-## Implementação
+**Ganho esperado:** ~−40% de chamadas ao `mariadb-proxy` em uso normal e fim do sintoma “Erro ao carregar voucher”.
 
-Uma única operação SQL via insert (não migração — contém referências dependentes de ambiente do pg_cron):
+---
 
-```sql
-SELECT cron.unschedule('sync-voucher-statuses');
-SELECT cron.unschedule('sea-analysis-watchdog-check');
-SELECT cron.unschedule('air-tracking-failed-alert');
+## Frente 2 — Conectar tarde, fechar cedo (dentro das edge functions)
 
-SELECT cron.schedule('sync-voucher-statuses', '*/10 * * * *', $$ ... $$);
-SELECT cron.schedule('sea-analysis-watchdog-check', '5-59/10 * * * *', $$ ... $$);
-SELECT cron.schedule('air-tracking-failed-alert', '*/30 * * * *', $$ ... $$);
-```
+Padrão atual em várias functions: abre conexão → chama LLM ou API externa de tracking (30–120s) → grava resultado → fecha. A conexão fica **ociosa segurando slot** durante toda a chamada externa.
 
-Vou recuperar o `command` atual de cada job antes de re-agendar para preservar o corpo do `net.http_post` exatamente como está hoje.
+Refatorar para abrir a conexão **só no momento de ler/gravar** e fechá-la antes da chamada externa, reabrindo só para persistir:
 
-## Resultado esperado
+- `sea-submit-analysis`
+- `maritimo-analyze`
+- `compare-documents-llm`
+- `chb-corrections`
+- `fetch-tracking-aereo`
+- `draft-track-hapag`, `draft-track-msc`, `draft-track-one`, `draft-track-navigator`
 
-- **−50%** de invocações de `sync-voucher-statuses` e `sea-analysis-watchdog-check` (de 12/h para 6/h cada).
-- **−66%** de invocações de `air-tracking-failed-alert` (de 6/h para 2/h).
-- Eliminação dos picos sincronizados em `:00`, `:05`, `:10`… que aparecem nos logs como sequência de erros `max_user_connections`.
+**Ganho:** uma conexão que hoje fica aberta 30–120s passa a 1–3s. Reduz drasticamente conexões simultâneas durante batches de tracking/análise.
 
-## O que NÃO muda
+---
 
-- Demais crons (`db-status-report`, `db-critical-alert`, `firecrawl-monitor-alert`, `air-dep-transition-alert`, `air-scan-finalized`, `voucher-monthly-report`) ficam como estão.
-- Nenhum código de edge function ou frontend é alterado nesta etapa.
+## Frente 3 — Consolidar functions “gêmeas” no `mariadb-proxy`
+
+Várias functions fazem operações triviais que poderiam virar `action` do `mariadb-proxy` (já tem cache de schema e tratamento centralizado), eliminando pontos de conexão paralelos:
+
+Migrar para `mariadb-proxy` e remover conexão própria:
+
+- `fetch-awbs`, `fetch-awbs-dep`, `fetch-awbs-for-retrack`
+- `fetch-air-imports`
+- `fetch-fin-voucher-stats`
+- `fetch-sea-master-dados-stats`
+- `add-awb-to-status`
+- `validate-dachser-user`
+- `client-freetime-crud`
+
+**Não migrar agora** (alto risco / lógica complexa): `mariadb-sync`, `voucher-mariadb-sync`, `demurrage-mariadb-sync`, `olimpo-sync`, `cct-ingest`, `mariadb-contacts-sync`.
+
+**Ganho:** menos pontos de falha, menos picos paralelos, telemetria centralizada. Aplicada por último por ser a mais invasiva.
+
+---
+
+## Ordem de execução
+
+1. **Frente 1** — sem dependência externa, ganho imediato.
+2. **Frente 2** — incremental, function por function (começando pelas mais lentas).
+3. **Frente 3** — última, mais invasiva.
+
+## O que NÃO vamos fazer
+
+- ~~Usuário MariaDB dedicado para crons~~ (descartado).
+- Pool de conexões persistente: o runtime Deno serverless **não suporta** pool entre invocações (cada cold start = nova VM).
+- Trocar MariaDB ou migrar tabelas para o Postgres da Cloud.
+
+---
+
+Posso começar pela **Frente 1** assim que aprovar.
