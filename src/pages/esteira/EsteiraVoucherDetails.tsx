@@ -222,8 +222,24 @@ const EsteiraVoucherDetails = () => {
   if (!voucher) {
     return (
       <PageLayout backTo="/fin/esteira">
-        <div className="flex-1 flex items-center justify-center min-h-[60vh]">
-          <p className="text-muted-foreground">Voucher/SPO não encontrado</p>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 min-h-[60vh] text-center px-4">
+          <AlertCircle className="h-10 w-10 text-muted-foreground" />
+          <div className="space-y-1">
+            <p className="text-foreground font-medium">
+              {loadError ? "Não foi possível carregar o voucher" : "Voucher/SPO não encontrado"}
+            </p>
+            {loadError && (
+              <p className="text-sm text-muted-foreground max-w-md">
+                A conexão com o banco está temporariamente sobrecarregada. Tente novamente em alguns segundos.
+              </p>
+            )}
+          </div>
+          {loadError && (
+            <Button variant="outline" onClick={loadVoucher} className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Tentar novamente
+            </Button>
+          )}
         </div>
       </PageLayout>
     );
