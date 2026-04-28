@@ -642,7 +642,17 @@ export const PagamentosTab = () => {
           </div>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Filtro por fornecedor */}
+          <div className="relative">
+            <Input
+              value={filterFornecedor}
+              onChange={(e) => setFilterFornecedor(e.target.value)}
+              placeholder="Buscar por fornecedor..."
+              className="w-[220px] bg-card border-border rounded-full pl-3"
+            />
+          </div>
+
           {/* Quick filters */}
           <Select value={filterVencimento} onValueChange={(v) => setFilterVencimento(v as FilterVencimento)}>
             <SelectTrigger className="w-[140px] bg-card border-border rounded-full">
