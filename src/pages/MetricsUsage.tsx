@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChartLine, RotateCcw, Download, FileText, HelpCircle } from "lucide-react";
+import { ChartLine, RotateCcw, Download, FileText, HelpCircle, Wifi } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -13,6 +13,8 @@ import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { ActiveConnectionsDialog } from "@/components/admin/ActiveConnectionsDialog";
+import { usePageVisibility } from "@/hooks/usePageVisibility";
 import {
   LineChart,
   Line,
@@ -97,6 +99,11 @@ const MetricsUsage = () => {
   const [sessionsTotalPages, setSessionsTotalPages] = useState(1);
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
 
+  // Conexões Ativas: badge no header (atualizado a cada 30s só com aba visível) + modal
+  const [activeDialogOpen, setActiveDialogOpen] = useState(false);
+  const [activeUsersCount, setActiveUsersCount] = useState<number | null>(null);
+  const isVisible = usePageVisibility();
+
   // Função auxiliar para obter data no formato YYYY-MM-DD em fuso local (São Paulo)
   const getLocalDateString = (date: Date): string => {
     const year = date.getFullYear();
@@ -164,6 +171,30 @@ const MetricsUsage = () => {
       fetchSessions();
     }
   }, [user, dateFrom, dateTo, usernameFilter, sessionsPage]);
+
+  // Polling leve apenas para o badge "Conexões Ativas" — só roda com aba visível.
+  useEffect(() => {
+    if (!user || (user.is_admin !== 1 && user.metrics_only !== 1)) return;
+
+    const fetchActiveCount = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "get_active_connections", requesterUsername: user?.username },
+        });
+        if (!error && data?.success) {
+          setActiveUsersCount(Number(data.uniqueUsers || 0));
+        }
+      } catch (err) {
+        console.warn("Failed to fetch active connections count:", err);
+      }
+    };
+
+    if (isVisible) {
+      fetchActiveCount();
+      const id = window.setInterval(fetchActiveCount, 30_000);
+      return () => window.clearInterval(id);
+    }
+  }, [user, isVisible]);
 
   const fetchModuleStats = async () => {
     setLoadingModules(true);
@@ -371,6 +402,17 @@ const MetricsUsage = () => {
   const rightContent = (
     <div className="flex items-center gap-3">
       <button
+        onClick={() => setActiveDialogOpen(true)}
+        className="h-8 px-3 rounded-full border border-white/25 flex items-center gap-2 bg-black/70 text-foreground hover:text-[#ffc800] hover:border-[#ffc800]/60 transition-colors text-xs uppercase tracking-[0.12em]"
+        title="Ver usuários com conexão ativa no momento"
+      >
+        <Wifi className="h-4 w-4 text-primary" />
+        <span className="hidden sm:inline">Conexões Ativas</span>
+        <span className="px-1.5 py-0.5 rounded-full bg-primary/15 border border-primary/40 text-primary font-bold min-w-[1.5rem] text-center">
+          {activeUsersCount === null ? "…" : activeUsersCount}
+        </span>
+      </button>
+      <button
         onClick={() => navigate("/admin/manual")}
         className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
         title="Manual do usuário"
@@ -384,7 +426,7 @@ const MetricsUsage = () => {
   );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Métricas de Uso" pageIcon={ChartLine} backTo="/dashboard" exclusiveAccess={isMetricsOnly}>
+    <PageLayout title="DACHSER" subtitle="Métricas de Uso" pageIcon={ChartLine} backTo="/dashboard" exclusiveAccess={isMetricsOnly} rightContent={rightContent}>
       {/* Grid: Stats + Filters */}
       <div className="grid grid-cols-1 lg:grid-cols-[2.2fr_1.2fr] gap-5">
         {/* Stats Panel */}
@@ -912,6 +954,13 @@ const MetricsUsage = () => {
       <div className="text-center text-[10px] text-muted-foreground uppercase tracking-[0.16em]">
         Z3US.AI • For Logistics
       </div>
+
+      <ActiveConnectionsDialog
+        open={activeDialogOpen}
+        onOpenChange={setActiveDialogOpen}
+        requesterUsername={user?.username}
+        onCountChange={(uniq) => setActiveUsersCount(uniq)}
+      />
     </PageLayout>
   );
 };
