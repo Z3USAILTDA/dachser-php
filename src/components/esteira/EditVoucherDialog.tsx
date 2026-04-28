@@ -84,6 +84,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
         filial: voucher.filial || "",
         urgente: voucher.urgenciaTipo === "URGENTE_REAL",
         chavePix: voucher.chavePix || "",
+        origemProcesso: ((voucher.origemProcesso || "") as "" | "AIR" | "SEA" | "CHB" | "ROD"),
       });
     }
   }, [voucher]);
