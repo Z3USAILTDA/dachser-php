@@ -375,6 +375,28 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
         </div>
       )}
 
+      {/* Alerta - Voucher manual sem integração com RM (bloqueia avanço) */}
+      {isManualVoucher && !rmCheckLoading && !rmReady && (
+        <div className="flex items-start gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/40">
+          <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-medium text-destructive">
+              Integração com RM pendente
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Este voucher manual ainda não possui registro completo na base do RM
+              (<code className="text-xs">t_dados_financeiro_voucher</code>).
+              Não é possível baixar nem enviar para a t_dados_rm enquanto a sincronização não for concluída.
+            </p>
+            {rmMissingFields.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-2">
+                <span className="font-medium">Campos faltantes:</span> {rmMissingFields.join(", ")}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Checklist de Prontidão */}
       <div className="p-4 rounded-lg bg-secondary/30 border border-border">
         <ProntidaoChecklist voucher={voucher} />
