@@ -6,8 +6,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Voucher, STATUS_INTEGRACAO_RM_LABELS, StatusIntegracaoRM } from "@/types/voucher";
 import { stripRequesterMarker } from "@/utils/voucherAjusteRouting";
-import { Loader2, Receipt, AlertCircle, Clock } from "lucide-react";
+import { Loader2, Receipt, AlertCircle, Clock, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -28,116 +29,124 @@ const EsteiraVoucherDetails = () => {
   const { role, isAdmin, hasRole, hasEsteiraAccess } = useUserRole();
   const [voucher, setVoucher] = useState<Voucher | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadVoucher = async () => {
     if (!id) return;
-    
-    try {
-      setLoading(true);
-      
-      // Fetch voucher data from MariaDB
-      const { data: responseData, error: fnError } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'get_voucher_by_id', voucher_id: id }
-      });
 
-      if (fnError) throw fnError;
-      
-      if (!responseData?.success || !responseData?.data) {
-        throw new Error('Voucher/SPO não encontrado');
+    const MAX_ATTEMPTS = 2;
+    let attempt = 0;
+    let lastError: any = null;
+
+    setLoading(true);
+    setLoadError(null);
+
+    while (attempt < MAX_ATTEMPTS) {
+      attempt++;
+      try {
+        const { data: responseData, error: fnError } = await supabase.functions.invoke('mariadb-proxy', {
+          body: { action: 'get_voucher_by_id', voucher_id: id }
+        });
+
+        if (fnError) throw fnError;
+
+        if (!responseData?.success || !responseData?.data) {
+          throw new Error('Voucher/SPO não encontrado');
+        }
+
+        const data = responseData.data;
+        const anexos = responseData.anexos || [];
+        const logs = responseData.logs || [];
+
+        const mappedVoucher: Voucher = {
+          id: data.id,
+          numeroSPO: data.numero_spo,
+          fornecedor: data.fornecedor,
+          cnpjFornecedor: data.cnpj_fornecedor,
+          valor: data.valor ? parseFloat(data.valor) : undefined,
+          moeda: data.moeda || "BRL",
+          vencimento: parseDBDate(data.vencimento) || new Date(),
+          dataEmissaoDocumento: parseDBDate(data.data_emissao_documento) || undefined,
+          cobrancaEmNomeDe: data.cobranca_em_nome_de || 'DACHSER',
+          formaPagamento: data.forma_pagamento || 'BOLETO',
+          tipoDocumento: data.tipo_documento,
+          filial: data.filial,
+          remessa: data.remessa,
+          urgente: data.urgencia_tipo !== "NORMAL",
+          urgenciaTipo: data.urgencia_tipo || "NORMAL",
+          comentariosOperacao: data.comentarios_operacao,
+          comentariosFiscal: data.comentarios_fiscal,
+          comentariosFinanceiro: data.comentarios_financeiro,
+          ajusteOperacao: data.ajuste_operacao,
+          ajusteFiscal: data.ajuste_fiscal,
+          etapaAtual: data.etapa_atual || 'OPERACAO',
+          statusBaixa: data.status_baixa || "PENDENTE",
+          statusFinanceiro: data.status_financeiro || "PENDENTE",
+          statusEnvioCliente: data.status_envio_cliente,
+          criadoPorUserId: data.criado_por_user_id,
+          responsavelOperacaoUserId: data.responsavel_operacao_user_id,
+          responsavelFiscalUserId: data.responsavel_fiscal_user_id,
+          responsavelSupervisorUserId: data.responsavel_supervisor_user_id,
+          responsavelFinanceiroUserId: data.responsavel_financeiro_user_id,
+          aprovadoPorUserId: data.aprovado_por_user_id,
+          clienteEmail: data.cliente_email,
+          processoId: data.processo_id || null,
+          origemProcesso: data.origem_processo || null,
+          createdAt: parseDBDate(data.created_at) || new Date(),
+          updatedAt: parseDBDate(data.updated_at) || new Date(),
+          anexos: anexos.map((a: any) => ({
+            id: a.id,
+            voucherId: data.id,
+            tipo: a.tipo,
+            fileName: a.file_name,
+            fileUrl: a.file_url,
+            fileSize: a.file_size,
+            uploadedByUserId: data.criado_por_user_id,
+            createdAt: parseDBDate(a.created_at) || new Date(),
+          })),
+          logs: logs.map((l: any) => ({
+            id: l.id,
+            voucherId: data.id,
+            dataHora: parseDBDate(l.data_hora) || new Date(),
+            userId: l.user_id,
+            userName: l.user_name,
+            acao: l.acao,
+            detalhe: l.detalhe,
+          })).sort((a: any, b: any) => b.dataHora.getTime() - a.dataHora.getTime()),
+          tipoExecucaoPagamento: data.tipo_execucao_pagamento,
+          isProntoParaRobo: data.is_pronto_para_robo === 1 || data.is_pronto_para_robo === true,
+          linhaDigitavel: data.linha_digitavel,
+          codigoBarras: data.codigo_barras,
+          statusIntegracaoRm: data.status_integracao_rm as StatusIntegracaoRM | undefined,
+          dadosBancarios: responseData.dadosBancarios || undefined,
+          cancelamentoMotivo: data.cancelamento_motivo,
+          cancelamentoVoucherCredito: data.cancelamento_voucher_credito,
+          canceladoPorUserId: data.cancelado_por_user_id,
+          canceladoEm: parseDBDate(data.cancelado_em) || undefined,
+          chavePix: data.chave_pix || null,
+          statusDocumentoFiscal: data.status_documento_fiscal || "ANEXADO",
+          isMaster: data.is_master === 1 || data.is_master === true,
+          origemCriacao: data.is_master ? "MASTER" : data.id_rm ? "RM" : "MANUAL",
+          nomeMaster: data.nome_master || null,
+        };
+
+        setVoucher(mappedVoucher);
+        setLoadError(null);
+        setLoading(false);
+        return;
+      } catch (error: any) {
+        lastError = error;
+        console.error(`Error loading voucher (attempt ${attempt}/${MAX_ATTEMPTS}):`, error);
+        // backoff curto entre tentativas (300ms, 900ms)
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise((r) => setTimeout(r, 300 * attempt * attempt));
+        }
       }
-
-      const data = responseData.data;
-      const anexos = responseData.anexos || [];
-      const logs = responseData.logs || [];
-
-      const mappedVoucher: Voucher = {
-        id: data.id,
-        numeroSPO: data.numero_spo,
-        fornecedor: data.fornecedor,
-        cnpjFornecedor: data.cnpj_fornecedor,
-        valor: data.valor ? parseFloat(data.valor) : undefined,
-        moeda: data.moeda || "BRL",
-        vencimento: parseDBDate(data.vencimento) || new Date(),
-        dataEmissaoDocumento: parseDBDate(data.data_emissao_documento) || undefined,
-        cobrancaEmNomeDe: data.cobranca_em_nome_de || 'DACHSER',
-        formaPagamento: data.forma_pagamento || 'BOLETO',
-        tipoDocumento: data.tipo_documento,
-        filial: data.filial,
-        remessa: data.remessa,
-        urgente: data.urgencia_tipo !== "NORMAL",
-        urgenciaTipo: data.urgencia_tipo || "NORMAL",
-        comentariosOperacao: data.comentarios_operacao,
-        comentariosFiscal: data.comentarios_fiscal,
-        comentariosFinanceiro: data.comentarios_financeiro,
-        ajusteOperacao: data.ajuste_operacao,
-        ajusteFiscal: data.ajuste_fiscal,
-        etapaAtual: data.etapa_atual || 'OPERACAO',
-        statusBaixa: data.status_baixa || "PENDENTE",
-        statusFinanceiro: data.status_financeiro || "PENDENTE",
-        statusEnvioCliente: data.status_envio_cliente,
-        criadoPorUserId: data.criado_por_user_id,
-        responsavelOperacaoUserId: data.responsavel_operacao_user_id,
-        responsavelFiscalUserId: data.responsavel_fiscal_user_id,
-        responsavelSupervisorUserId: data.responsavel_supervisor_user_id,
-        responsavelFinanceiroUserId: data.responsavel_financeiro_user_id,
-        aprovadoPorUserId: data.aprovado_por_user_id,
-        clienteEmail: data.cliente_email,
-        processoId: data.processo_id || null,
-        origemProcesso: data.origem_processo || null,
-        createdAt: parseDBDate(data.created_at) || new Date(),
-        updatedAt: parseDBDate(data.updated_at) || new Date(),
-        anexos: anexos.map((a: any) => ({
-          id: a.id,
-          voucherId: data.id,
-          tipo: a.tipo,
-          fileName: a.file_name,
-          fileUrl: a.file_url,
-          fileSize: a.file_size,
-          uploadedByUserId: data.criado_por_user_id,
-          createdAt: parseDBDate(a.created_at) || new Date(),
-        })),
-        logs: logs.map((l: any) => ({
-          id: l.id,
-          voucherId: data.id,
-          dataHora: parseDBDate(l.data_hora) || new Date(),
-          userId: l.user_id,
-          userName: l.user_name,
-          acao: l.acao,
-          detalhe: l.detalhe,
-        })).sort((a: any, b: any) => b.dataHora.getTime() - a.dataHora.getTime()),
-        // Payment related fields
-        tipoExecucaoPagamento: data.tipo_execucao_pagamento,
-        isProntoParaRobo: data.is_pronto_para_robo === 1 || data.is_pronto_para_robo === true,
-        linhaDigitavel: data.linha_digitavel,
-        codigoBarras: data.codigo_barras,
-        statusIntegracaoRm: data.status_integracao_rm as StatusIntegracaoRM | undefined,
-        dadosBancarios: responseData.dadosBancarios || undefined,
-        // Cancellation fields
-        cancelamentoMotivo: data.cancelamento_motivo,
-        cancelamentoVoucherCredito: data.cancelamento_voucher_credito,
-        canceladoPorUserId: data.cancelado_por_user_id,
-        canceladoEm: parseDBDate(data.cancelado_em) || undefined,
-        chavePix: data.chave_pix || null,
-        // ADF status
-        statusDocumentoFiscal: data.status_documento_fiscal || "ANEXADO",
-        // Master voucher fields
-        isMaster: data.is_master === 1 || data.is_master === true,
-        origemCriacao: data.is_master ? "MASTER" : data.id_rm ? "RM" : "MANUAL",
-        nomeMaster: data.nome_master || null,
-      };
-
-      setVoucher(mappedVoucher);
-    } catch (error: any) {
-      console.error('Error loading voucher:', error);
-      toast({
-        title: "Erro ao carregar voucher/SPO",
-        description: error.message,
-        variant: "destructive",
-      });
-      navigate("/fin/esteira");
-    } finally {
-      setLoading(false);
     }
+
+    // Esgotou as tentativas — exibe estado de erro inline (sem expulsar o usuário)
+    setLoadError(lastError?.message || "Não foi possível carregar o voucher.");
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -213,8 +222,24 @@ const EsteiraVoucherDetails = () => {
   if (!voucher) {
     return (
       <PageLayout backTo="/fin/esteira">
-        <div className="flex-1 flex items-center justify-center min-h-[60vh]">
-          <p className="text-muted-foreground">Voucher/SPO não encontrado</p>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 min-h-[60vh] text-center px-4">
+          <AlertCircle className="h-10 w-10 text-muted-foreground" />
+          <div className="space-y-1">
+            <p className="text-foreground font-medium">
+              {loadError ? "Não foi possível carregar o voucher" : "Voucher/SPO não encontrado"}
+            </p>
+            {loadError && (
+              <p className="text-sm text-muted-foreground max-w-md">
+                A conexão com o banco está temporariamente sobrecarregada. Tente novamente em alguns segundos.
+              </p>
+            )}
+          </div>
+          {loadError && (
+            <Button variant="outline" onClick={loadVoucher} className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Tentar novamente
+            </Button>
+          )}
         </div>
       </PageLayout>
     );
