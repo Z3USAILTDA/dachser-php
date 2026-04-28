@@ -8,7 +8,7 @@ interface PollingOptions {
   onError?: (error: string) => void;
 }
 
-export const usePolling = ({ interval = 2000, onComplete, onError }: PollingOptions = {}) => {
+export const usePolling = ({ interval = 4000, onComplete, onError }: PollingOptions = {}) => {
   const [isPolling, setIsPolling] = useState(false);
   const [currentStatus, setCurrentStatus] = useState<string>('');
   const [currentStep, setCurrentStep] = useState<string>('');
