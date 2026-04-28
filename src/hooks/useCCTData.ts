@@ -78,18 +78,63 @@ function mapSituacaoToCCT(raw: string | null | undefined): StatusCCTOficial | nu
  * Returns events sorted ASCENDING by event date. Items with invalid/missing
  * dates are still included but pushed to the end.
  */
+function normalizeEventCode(descricao: string): string {
+  const s = (descricao || '').toLowerCase().trim();
+  if (!s) return 'EVENTO';
+  if (s.includes('entregue')) return 'ENTREGUE';
+  if (s.includes('chegada') && s.includes('inform')) return 'CHEGADA_INFORMADA';
+  if (s.includes('recepc')) return 'RECEPCIONADO';
+  if (s.includes('trans') && s.includes('terre')) return 'EM_TRANSITO';
+  if (s.includes('transfer')) return 'EM_AREA_TRANSFERENCIA';
+  if (s.includes('manifest')) return 'MANIFESTADO';
+  if (s.includes('inform')) return 'MANIFESTADO';
+  if (s.includes('bloque')) return 'BLOQUEIO';
+  if (s.includes('troca') && s.includes('recint')) return 'EM_TROCA_RECINTOS';
+  return descricao.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
+}
+
+function parsePipeDateToISO(dateStr: string): string | null {
+  // dd/MM/yyyy HH:mm:ss
+  const m = dateStr.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}):(\d{2}))?$/);
+  if (!m) return null;
+  const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = m;
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}`;
+}
+
 function parseAndSortEventos(raw: any, shipmentId: string): CCTEvento[] {
   if (!raw) return [];
   let arr: any[] = [];
-  try {
-    if (typeof raw === 'string') {
-      const parsed = JSON.parse(raw);
-      arr = Array.isArray(parsed) ? parsed : [];
-    } else if (Array.isArray(raw)) {
-      arr = raw;
+
+  if (Array.isArray(raw)) {
+    arr = raw;
+  } else if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    const looksJson = trimmed.startsWith('[') || trimmed.startsWith('{');
+    if (looksJson) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        arr = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        arr = [];
+      }
+    } else if (trimmed.includes('|')) {
+      // Pipe format: "Descricao | dd/MM/yyyy HH:mm:ss || Descricao | ..."
+      arr = trimmed
+        .split('||')
+        .map((chunk) => chunk.trim())
+        .filter((chunk) => chunk.length > 0)
+        .map((chunk) => {
+          const [descPart, datePart] = chunk.split('|').map((s) => s.trim());
+          const descricao = descPart || '';
+          const iso = datePart ? parsePipeDateToISO(datePart) : null;
+          return {
+            descricao,
+            data_hora_evento: iso,
+            codigo_evento: normalizeEventCode(descricao),
+          };
+        })
+        .filter((e) => e.descricao);
     }
-  } catch {
-    return [];
   }
 
   const pickDate = (e: any): string | null => {
