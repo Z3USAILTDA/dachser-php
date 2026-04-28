@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Voucher, validarProntoParaRobo } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,6 +31,43 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
   const validacao = useMemo(() => validarProntoParaRobo(voucher), [voucher]);
   const isProntoParaRobo = validacao.valido;
 
+  // Bloqueio para vouchers MANUAIS sem integração com RM (t_dados_financeiro_voucher)
+  const isManualVoucher = voucher.origemCriacao === "MANUAL";
+  const [rmCheckLoading, setRmCheckLoading] = useState<boolean>(isManualVoucher);
+  const [rmReady, setRmReady] = useState<boolean>(!isManualVoucher);
+  const [rmMissingFields, setRmMissingFields] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkRm = async () => {
+      if (!isManualVoucher || !voucher.numeroSPO) {
+        setRmReady(true);
+        setRmCheckLoading(false);
+        return;
+      }
+      setRmCheckLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "check_voucher_rm_ready", numero_spo: voucher.numeroSPO },
+        });
+        if (cancelled) return;
+        if (error) throw error;
+        setRmReady(Boolean(data?.ready));
+        setRmMissingFields(Array.isArray(data?.missingFields) ? data.missingFields : []);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("[VoucherFinanceiroActions] check_voucher_rm_ready falhou:", err);
+        // Em caso de erro, não bloqueia o avanço (degradação suave)
+        setRmReady(true);
+        setRmMissingFields([]);
+      } finally {
+        if (!cancelled) setRmCheckLoading(false);
+      }
+    };
+    checkRm();
+    return () => { cancelled = true; };
+  }, [voucher.id, voucher.numeroSPO, isManualVoucher]);
+
   // Get user data from localStorage (MariaDB auth)
   const getUserData = () => {
     const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
@@ -46,6 +83,29 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
         variant: "destructive",
       });
       return;
+    }
+
+    // Gate de integração com RM para vouchers manuais (defesa em profundidade)
+    if (isManualVoucher) {
+      try {
+        const { data: rmCheck, error: rmCheckErr } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "check_voucher_rm_ready", numero_spo: voucher.numeroSPO },
+        });
+        if (rmCheckErr) throw rmCheckErr;
+        if (rmCheck && rmCheck.ready === false) {
+          const faltantes = (rmCheck.missingFields || []).join(", ") || "registro ausente";
+          setRmReady(false);
+          setRmMissingFields(rmCheck.missingFields || []);
+          toast({
+            title: "Integração com RM pendente",
+            description: `A integração com o RM não foi concluída para o voucher ${voucher.numeroSPO || ""}. Aguarde a sincronização antes de baixar. Campos faltantes: ${faltantes}.`,
+            variant: "destructive",
+          });
+          return;
+        }
+      } catch (err) {
+        console.error("[VoucherFinanceiroActions] check_voucher_rm_ready (handleBaixar) falhou:", err);
+      }
     }
 
     try {
@@ -315,6 +375,28 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
         </div>
       )}
 
+      {/* Alerta - Voucher manual sem integração com RM (bloqueia avanço) */}
+      {isManualVoucher && !rmCheckLoading && !rmReady && (
+        <div className="flex items-start gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/40">
+          <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-medium text-destructive">
+              Integração com RM pendente
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Este voucher manual ainda não possui registro completo na base do RM
+              (<code className="text-xs">t_dados_financeiro_voucher</code>).
+              Não é possível baixar nem enviar para a t_dados_rm enquanto a sincronização não for concluída.
+            </p>
+            {rmMissingFields.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-2">
+                <span className="font-medium">Campos faltantes:</span> {rmMissingFields.join(", ")}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Checklist de Prontidão */}
       <div className="p-4 rounded-lg bg-secondary/30 border border-border">
         <ProntidaoChecklist voucher={voucher} />
@@ -438,7 +520,7 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
         ) : (
           <Button
             onClick={handleBaixar}
-            disabled={loading || !isProntoParaRobo}
+            disabled={loading || !isProntoParaRobo || (isManualVoucher && (rmCheckLoading || !rmReady))}
             className="gap-2 bg-primary hover:bg-primary/90"
           >
             {loading ? (
