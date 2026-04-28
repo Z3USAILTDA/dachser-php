@@ -31,6 +31,43 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
   const validacao = useMemo(() => validarProntoParaRobo(voucher), [voucher]);
   const isProntoParaRobo = validacao.valido;
 
+  // Bloqueio para vouchers MANUAIS sem integração com RM (t_dados_financeiro_voucher)
+  const isManualVoucher = voucher.origemCriacao === "MANUAL";
+  const [rmCheckLoading, setRmCheckLoading] = useState<boolean>(isManualVoucher);
+  const [rmReady, setRmReady] = useState<boolean>(!isManualVoucher);
+  const [rmMissingFields, setRmMissingFields] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkRm = async () => {
+      if (!isManualVoucher || !voucher.numeroSPO) {
+        setRmReady(true);
+        setRmCheckLoading(false);
+        return;
+      }
+      setRmCheckLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "check_voucher_rm_ready", numero_spo: voucher.numeroSPO },
+        });
+        if (cancelled) return;
+        if (error) throw error;
+        setRmReady(Boolean(data?.ready));
+        setRmMissingFields(Array.isArray(data?.missingFields) ? data.missingFields : []);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("[VoucherFinanceiroActions] check_voucher_rm_ready falhou:", err);
+        // Em caso de erro, não bloqueia o avanço (degradação suave)
+        setRmReady(true);
+        setRmMissingFields([]);
+      } finally {
+        if (!cancelled) setRmCheckLoading(false);
+      }
+    };
+    checkRm();
+    return () => { cancelled = true; };
+  }, [voucher.id, voucher.numeroSPO, isManualVoucher]);
+
   // Get user data from localStorage (MariaDB auth)
   const getUserData = () => {
     const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
