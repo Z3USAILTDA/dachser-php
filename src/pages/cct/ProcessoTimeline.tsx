@@ -66,10 +66,13 @@ export default function ProcessoTimeline() {
     return processo?.eventos || [];
   }, [processo]);
 
-  // Use o status oficial do processo diretamente, igual ao dashboard
+  // Status do header derivado do último evento da timeline (single source of truth: t_cct_dashboard_cache.eventos).
+  // Fallback para status_cct_oficial somente quando não houver eventos.
   const effectiveStatus = useMemo(() => {
-    return processo?.status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
-  }, [processo]);
+    const fallback = processo?.status_atual?.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
+    if (!allEventos || allEventos.length === 0) return fallback;
+    return getLatestTimelineStatus(allEventos, fallback);
+  }, [allEventos, processo]);
 
   // Initialize form values when processo loads - use useEffect to properly update state
   useEffect(() => {
