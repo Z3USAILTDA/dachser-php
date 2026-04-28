@@ -36,9 +36,6 @@ verify_jwt = false
 [functions.add-awb-to-status]
 verify_jwt = false
 
-[functions.check-db-connection]
-verify_jwt = false
-
 [functions.fetch-air-imports]
 verify_jwt = false
 
