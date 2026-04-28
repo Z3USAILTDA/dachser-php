@@ -1,94 +1,38 @@
-## Objetivo
+## Ajuste de frequência dos crons
 
-Corrigir dois problemas na tela **Monitoramento Pós-Embarque (CCT)**:
-1. Coluna **CLIENTE** vazia para vários processos.
-2. Aba **Timeline** dos detalhes mostrando "Nenhum evento registrado" para todos os processos.
+Vou alterar a frequência dos cron jobs no `cron.schedule` (pg_cron) reduzindo a pressão sobre o MariaDB:
 
----
+| Job | Antes | Depois |
+|---|---|---|
+| `sync-voucher-statuses` | `*/5 * * * *` (5 min) | `*/10 * * * *` (10 min) |
+| `sea-analysis-watchdog-check` | `*/5 * * * *` (5 min) | `5-59/10 * * * *` (10 min, offset 5) |
+| `air-tracking-failed-alert` | `*/10 * * * *` (10 min) | `*/30 * * * *` (30 min) |
 
-## Correção 1 — Cliente vazio na listagem
+**Por que offset no `sea-analysis-watchdog-check`:** se ambos rodassem em `*/10 * * * *`, disparariam exatamente no mesmo segundo (00, 10, 20...) — exatamente o pico que está estourando hoje. Com offset de 5, rodam alternados (00→sync, 05→watchdog, 10→sync, 15→watchdog…).
 
-### Causa raiz
+## Implementação
 
-Em `supabase/functions/mariadb-proxy/index.ts`, linha **4500**, a query `get_cct_shipments_cached` busca o cliente apenas de `t_dados_aereo`:
-
-```sql
-a.consignee_nome AS cliente,
-```
-
-Para HAWBs sem registro em `t_dados_aereo` (típico de processos `0226102456`, `AMS-27722024`, `BKK-69915067`), retorna `NULL` mesmo quando `t_master_dados.cliente` tem o valor.
-
-### Mudança
-
-A complementação correta é **`t_master_dados` (prioridade) + `t_dados_aereo` (fallback)** — sem usar `nome_consignatario_leadcomex`. O JOIN com `m` (t_master_dados, alias já existente na query) já está montado, basta usar a coluna `m.cliente`.
-
-`supabase/functions/mariadb-proxy/index.ts` (linha 4500):
+Uma única operação SQL via insert (não migração — contém referências dependentes de ambiente do pg_cron):
 
 ```sql
--- antes
-a.consignee_nome AS cliente,
+SELECT cron.unschedule('sync-voucher-statuses');
+SELECT cron.unschedule('sea-analysis-watchdog-check');
+SELECT cron.unschedule('air-tracking-failed-alert');
 
--- depois
-COALESCE(NULLIF(TRIM(m.cliente), ''), NULLIF(TRIM(a.consignee_nome), '')) AS cliente,
+SELECT cron.schedule('sync-voucher-statuses', '*/10 * * * *', $$ ... $$);
+SELECT cron.schedule('sea-analysis-watchdog-check', '5-59/10 * * * *', $$ ... $$);
+SELECT cron.schedule('air-tracking-failed-alert', '*/30 * * * *', $$ ... $$);
 ```
 
-- `m.cliente` (t_master_dados) tem prioridade — é a fonte oficial do cadastro.
-- `a.consignee_nome` (t_dados_aereo) é fallback quando o master ainda não foi cadastrado.
-- `NULLIF(TRIM(...), '')` evita que strings em branco "ganhem" do valor seguinte.
-
-Mudança cirúrgica de 1 linha. Filtros, joins, ordem e demais campos permanecem inalterados.
-
----
-
-## Correção 2 — Timeline de eventos vazia
-
-### Causa raiz
-
-O backend retorna `eventos` da `t_cct_dashboard_cache` como **string pipe-separada**:
-
-```
-"Chegada Informada | 25/03/2026 19:18:08 || Entregue | 01/04/2026 16:22:55 || Informada | 24/03/2026 08:25:59 || Recepcionada | 26/03/2026 04:54:01"
-```
-
-Formato:
-- Eventos separados por `||`
-- Cada evento: `Descrição | dd/MM/yyyy HH:mm:ss`
-
-Mas o parser `parseAndSortEventos` em `src/hooks/useCCTData.ts` (linhas 81-165) faz **`JSON.parse(raw)`** e, ao falhar, cai silenciosamente no `catch` retornando `[]`. Como **todas** as linhas do cache vêm em pipe, **todos** os processos ficam sem timeline.
-
-### Mudança
-
-`src/hooks/useCCTData.ts` — função `parseAndSortEventos`:
-
-1. Antes do `JSON.parse`, detectar se a string **começa com `[` ou `{`** (JSON) ou se contém `|` (pipe).
-2. Se for **pipe-separada**: split por `||`, depois cada item por `|` em `[descricao, dataStr]`. Converter `dd/MM/yyyy HH:mm:ss` para ISO. Construir objetos `{ descricao, data_hora_evento, codigo_evento }`.
-3. Se for **JSON**: manter o caminho atual (retrocompatibilidade).
-4. Resto da função (sort cronológico ASC, mapeamento para `CCTEvento`) inalterado.
-
-Normalizar `codigo_evento` a partir da descrição do formato pipe para que `EventTimeline` aplique cores/ícones corretos:
-- "Entregue" → `ENTREGUE`
-- "Chegada Informada" → `CHEGADA_INFORMADA`
-- "Informada" → `MANIFESTADO`
-- "Recepcionada" → `RECEPCIONADO`
-- "Em trânsito terrestre" → `EM_TRANSITO`
-- Outros → `descricao.toUpperCase().replace(/\s+/g, '_')`
-
-Mudança contida em **1 função** de **1 arquivo**.
-
----
+Vou recuperar o `command` atual de cada job antes de re-agendar para preservar o corpo do `net.http_post` exatamente como está hoje.
 
 ## Resultado esperado
 
-- **Listagem CCT**: processos sem `t_dados_aereo` passam a exibir o cliente vindo do cadastro `t_master_dados`. Quem tem `consignee_nome` continua usando o de `t_dados_aereo` como fallback (sem regressão). `nome_consignatario_leadcomex` **não** é mais consultado.
-- **Timeline de detalhes**: todos os processos passam a listar eventos cronologicamente, com ícones e cores corretos por tipo (entregue/recepcionada/informada/etc).
+- **−50%** de invocações de `sync-voucher-statuses` e `sea-analysis-watchdog-check` (de 12/h para 6/h cada).
+- **−66%** de invocações de `air-tracking-failed-alert` (de 6/h para 2/h).
+- Eliminação dos picos sincronizados em `:00`, `:05`, `:10`… que aparecem nos logs como sequência de erros `max_user_connections`.
 
-## Arquivos alterados
+## O que NÃO muda
 
-- `supabase/functions/mariadb-proxy/index.ts` — 1 linha (4500)
-- `src/hooks/useCCTData.ts` — função `parseAndSortEventos`
-
-## Não envolve
-
-- Mudanças de schema, RLS, migrations.
-- Mudanças em outras queries, joins ou actions do proxy.
-- Refatoração de componentes; `EventTimeline` e `ProcessoTimeline` permanecem inalterados.
+- Demais crons (`db-status-report`, `db-critical-alert`, `firecrawl-monitor-alert`, `air-dep-transition-alert`, `air-scan-finalized`, `voucher-monthly-report`) ficam como estão.
+- Nenhum código de edge function ou frontend é alterado nesta etapa.
