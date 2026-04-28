@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUsageLog, trackEvent } from "@/hooks/useUsageLog";
@@ -474,11 +475,13 @@ const TrackingAereo = () => {
   //   }
   // }, []);
 
+  const isVisible = usePageVisibility();
   useEffect(() => {
+    if (!isVisible) return;
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => { clearInterval(interval); };
-  }, [fetchData]);
+  }, [isVisible, fetchData]);
 
   // ─── Alert for tracking failures ───
   useEffect(() => {

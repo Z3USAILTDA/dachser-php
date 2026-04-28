@@ -351,7 +351,8 @@ export function useProcessosCCT() {
     },
     staleTime: 60_000,
     gcTime: 10 * 60_000,
-    refetchInterval: 120_000,
+    refetchInterval: () => (typeof document !== "undefined" && document.visibilityState === "visible" ? 120_000 : false),
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
     // Evita martelar o MariaDB quando ele está saturado/lento.
     // Erros transitórios (max_user_connections / connection read timed out)

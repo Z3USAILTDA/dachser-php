@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, Fragment, useRef } from "react";
+import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUsageLog, trackEvent } from "@/hooks/useUsageLog";
@@ -1852,15 +1853,16 @@ const ContainerTracking = () => {
       setIsExportingExcel(false);
     }
   };
+  const isVisibleSync = usePageVisibility();
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isVisibleSync) return;
     const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
     const interval = setInterval(() => {
       console.log('[AutoSync] 12-hour interval triggered');
       runAutoSync();
     }, TWELVE_HOURS_MS);
     return () => clearInterval(interval);
-  }, [user, runAutoSync]);
+  }, [user, isVisibleSync, runAutoSync]);
 
   // Delete MBL from tracking
   const handleDeleteMbl = async (mbl_id: string) => {

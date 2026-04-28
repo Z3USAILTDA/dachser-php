@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { SeaThemeGuard } from "@/components/SeaThemeGuard";
+import { InactivityGuard } from "@/components/InactivityGuard";
 import Login from "./pages/Login";
 import ChangePassword from "./pages/ChangePassword";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -121,6 +122,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <SeaThemeGuard />
+        <InactivityGuard />
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/air/tracking" element={<Index />} />

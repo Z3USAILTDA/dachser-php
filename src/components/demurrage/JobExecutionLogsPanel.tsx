@@ -56,7 +56,8 @@ export function JobExecutionLogsPanel() {
 
       return (data?.data || []) as EdgeLog[];
     },
-    refetchInterval: 30000,
+    refetchInterval: () => (typeof document !== "undefined" && document.visibilityState === "visible" ? 30000 : false),
+    refetchIntervalInBackground: false,
   });
 
   const getStatusBadge = (statusCode: number) => {
