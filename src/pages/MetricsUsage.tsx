@@ -954,6 +954,13 @@ const MetricsUsage = () => {
       <div className="text-center text-[10px] text-muted-foreground uppercase tracking-[0.16em]">
         Z3US.AI • For Logistics
       </div>
+
+      <ActiveConnectionsDialog
+        open={activeDialogOpen}
+        onOpenChange={setActiveDialogOpen}
+        requesterUsername={user?.username}
+        onCountChange={(uniq) => setActiveUsersCount(uniq)}
+      />
     </PageLayout>
   );
 };
