@@ -402,6 +402,17 @@ const MetricsUsage = () => {
   const rightContent = (
     <div className="flex items-center gap-3">
       <button
+        onClick={() => setActiveDialogOpen(true)}
+        className="h-8 px-3 rounded-full border border-white/25 flex items-center gap-2 bg-black/70 text-foreground hover:text-[#ffc800] hover:border-[#ffc800]/60 transition-colors text-xs uppercase tracking-[0.12em]"
+        title="Ver usuários com conexão ativa no momento"
+      >
+        <Wifi className="h-4 w-4 text-primary" />
+        <span className="hidden sm:inline">Conexões Ativas</span>
+        <span className="px-1.5 py-0.5 rounded-full bg-primary/15 border border-primary/40 text-primary font-bold min-w-[1.5rem] text-center">
+          {activeUsersCount === null ? "…" : activeUsersCount}
+        </span>
+      </button>
+      <button
         onClick={() => navigate("/admin/manual")}
         className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
         title="Manual do usuário"
