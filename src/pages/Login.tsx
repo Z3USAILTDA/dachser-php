@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,10 +11,27 @@ import { Eye, EyeOff } from "lucide-react";
 
 const Login = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const inactivityToastShownRef = useRef(false);
+
+  useEffect(() => {
+    if (searchParams.get("reason") === "inactivity" && !inactivityToastShownRef.current) {
+      inactivityToastShownRef.current = true;
+      toast({
+        title: "Sessão encerrada",
+        description: "Você foi desconectado por inatividade. Faça login novamente.",
+      });
+      // Limpa o query param para não exibir novamente em refresh
+      const next = new URLSearchParams(searchParams);
+      next.delete("reason");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
