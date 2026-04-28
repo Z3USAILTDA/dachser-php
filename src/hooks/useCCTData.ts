@@ -19,6 +19,7 @@ import type {
   NivelConfianca,
 } from "@/types/cct";
 import { toast } from "sonner";
+import { computeSLAInfo } from "@/utils/cctSLA";
 
 // Static data for airports
 const AEROPORTOS: CCTAeroporto[] = [
