@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChartLine, RotateCcw, Download, FileText, HelpCircle } from "lucide-react";
+import { ChartLine, RotateCcw, Download, FileText, HelpCircle, Wifi } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -13,6 +13,8 @@ import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { ActiveConnectionsDialog } from "@/components/admin/ActiveConnectionsDialog";
+import { usePageVisibility } from "@/hooks/usePageVisibility";
 import {
   LineChart,
   Line,
