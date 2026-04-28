@@ -172,6 +172,30 @@ const MetricsUsage = () => {
     }
   }, [user, dateFrom, dateTo, usernameFilter, sessionsPage]);
 
+  // Polling leve apenas para o badge "Conexões Ativas" — só roda com aba visível.
+  useEffect(() => {
+    if (!user || (user.is_admin !== 1 && user.metrics_only !== 1)) return;
+
+    const fetchActiveCount = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "get_active_connections", requesterUsername: user?.username },
+        });
+        if (!error && data?.success) {
+          setActiveUsersCount(Number(data.uniqueUsers || 0));
+        }
+      } catch (err) {
+        console.warn("Failed to fetch active connections count:", err);
+      }
+    };
+
+    if (isVisible) {
+      fetchActiveCount();
+      const id = window.setInterval(fetchActiveCount, 30_000);
+      return () => window.clearInterval(id);
+    }
+  }, [user, isVisible]);
+
   const fetchModuleStats = async () => {
     setLoadingModules(true);
     try {
