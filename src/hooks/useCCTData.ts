@@ -387,28 +387,6 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
  */
 // Todos os usuários autenticados podem ver dados do CCT
 
-const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
-
-/**
- * Extract the timeline event date when the LAST chronological event is "Entregue".
- * Returns null if not delivered or no valid date is found.
- */
-function getDeliveredAtFromProcesso(p: ProcessoCCT): string | null {
-  const status = p.status_atual?.status_cct_oficial;
-  if (status !== 'ENTREGUE') return null;
-  const eventos = p.eventos || [];
-  if (eventos.length === 0) return null;
-  // eventos already sorted ascending by date in mapRowToProcessoCCT
-  const last = eventos[eventos.length - 1];
-  const desc = `${(last as any).descricao || ''} ${last.codigo_evento || ''}`.toLowerCase();
-  if (!desc.includes('entreg')) return null;
-  const dt = last.data_hora_evento;
-  if (!dt) return null;
-  const ts = new Date(String(dt).replace(' ', 'T')).getTime();
-  if (isNaN(ts)) return null;
-  return new Date(ts).toISOString();
-}
-
 export function useProcessosCCT() {
   return useQuery({
     queryKey: ["cct-processos"],
@@ -416,7 +394,7 @@ export function useProcessosCCT() {
       // Todos os usuários autenticados podem ver dados
 
       console.log("CCT: Fetching shipments from MariaDB via mariadb-proxy...");
-      
+
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: { action: 'get_cct_shipments_cached' }
       });
@@ -431,68 +409,18 @@ export function useProcessosCCT() {
         throw new Error(data?.error || 'Erro ao buscar processos CCT');
       }
 
+      // O edge `get_cct_shipments_cached` já aplica a regra de retenção
+      // (oculta entregues após 5 dias do evento via dados_dachser.t_cct_hidden_hawbs).
       const allProcessos: ProcessoCCT[] = (data.data || []).map(mapRowToProcessoCCT);
-
-      // === Hidden HAWBs (entregues há mais de 5 dias) ===
-      // Persiste na tabela própria do CCT `cct_hidden_hawbs` os HAWBs cujo último
-      // evento da timeline é "Entregue" (com a data real do evento). Após 5 dias
-      // dessa data, o processo é ocultado da listagem padrão.
-      try {
-        // 1) Detecta novos entregues e faz upsert (somente quando ainda não existe).
-        const newlyDelivered = allProcessos
-          .map((p) => ({ hawb: p.shipment.house, delivered_at: getDeliveredAtFromProcesso(p) }))
-          .filter((x): x is { hawb: string; delivered_at: string } => !!x.hawb && !!x.delivered_at);
-
-        if (newlyDelivered.length > 0) {
-          await supabase
-            .from('cct_hidden_hawbs')
-            .upsert(
-              newlyDelivered.map((x) => ({ hawb: x.hawb, reason: 'ENTREGUE', delivered_at: x.delivered_at })),
-              { onConflict: 'hawb', ignoreDuplicates: true }
-            );
-        }
-
-        // 2) Carrega ocultos e calcula expirados (>5 dias).
-        const { data: hiddenRows } = await supabase
-          .from('cct_hidden_hawbs')
-          .select('hawb, delivered_at');
-
-        const now = Date.now();
-        const expiredHidden = new Set<string>(
-          (hiddenRows || [])
-            .filter((r: any) => {
-              const ts = new Date(r.delivered_at).getTime();
-              return !isNaN(ts) && now - ts > FIVE_DAYS_MS;
-            })
-            .map((r: any) => r.hawb)
-        );
-
-        // Stash em window para o componente saber quem foi ocultado (busca opcional).
-        if (typeof window !== 'undefined') {
-          (window as any).__cctExpiredHidden = expiredHidden;
-        }
-
-        // 3) Filtra: oculta apenas após 5 dias do evento de entrega.
-        const visible = allProcessos.filter((p) => !expiredHidden.has(p.shipment.house));
-        const processos = filterByYearIfNotZ3us<ProcessoCCT>(visible, (p) => p.shipment.created_at);
-        console.log(
-          `CCT: Loaded ${processos.length} visíveis (total: ${allProcessos.length}, ocultos >5d: ${expiredHidden.size})`
-        );
-        return processos;
-      } catch (e) {
-        console.warn('CCT: Falha ao aplicar cct_hidden_hawbs, exibindo todos:', e);
-        const processos = filterByYearIfNotZ3us<ProcessoCCT>(allProcessos, (p) => p.shipment.created_at);
-        return processos;
-      }
+      const processos = filterByYearIfNotZ3us<ProcessoCCT>(allProcessos, (p) => p.shipment.created_at);
+      console.log(`CCT: Loaded ${processos.length} processos (total: ${allProcessos.length})`);
+      return processos;
     },
     staleTime: 60_000,
     gcTime: 10 * 60_000,
     refetchInterval: () => (typeof document !== "undefined" && document.visibilityState === "visible" ? 120_000 : false),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
-    // Evita martelar o MariaDB quando ele está saturado/lento.
-    // Erros transitórios (max_user_connections / connection read timed out)
-    // já vêm como Error do invoke; não tentar novamente automaticamente.
     retry: (failureCount, error: any) => {
       const msg = String(error?.message || '').toLowerCase();
       const transient =
