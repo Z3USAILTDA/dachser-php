@@ -263,7 +263,25 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
     bloqueioLower !== 'no' &&
     bloqueioLower !== 'false' &&
     bloqueioLower !== '0';
-  const finalStatus: StatusCCTOficial = hasBloqueio ? 'BLOQUEIO' : effectiveStatus;
+  // Status final = derivado APENAS da timeline (via cctStatusResolver).
+  // teve_bloqueio é histórico e NÃO pode sobrepor o status; alimenta apenas a aba Exceções.
+  const finalStatus: StatusCCTOficial = effectiveStatus;
+
+  // Evidência de manifestação na timeline para SLA.
+  // Se qualquer evento ≥ MANIFESTADA existir, SLA está cumprido — mesmo que o status
+  // corrente tenha regredido (ex.: bloqueio após manifestação/entrega).
+  const manifestadoEvent = eventos.find((e) => {
+    const s = `${(e as any).descricao || ''} ${e.codigo_evento || ''}`.toLowerCase();
+    return (
+      s.includes('manifest') ||
+      s.includes('recepc') ||
+      s.includes('entreg') ||
+      s.includes('transfer') ||
+      (s.includes('trans') && s.includes('terre')) ||
+      (s.includes('troca') && s.includes('recint'))
+    );
+  });
+  const dataManifestacaoFromTimeline = manifestadoEvent?.data_hora_evento || null;
 
   const shipment: CCTShipment = {
     id: shipmentId,
@@ -310,7 +328,7 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
     eta: null,
     originAirport: row.aeroporto_origem || null,
     status: finalStatus,
-    dataManifestacao: null,
+    dataManifestacao: dataManifestacaoFromTimeline,
   });
 
   const status_atual: CCTStatusAtual = {
