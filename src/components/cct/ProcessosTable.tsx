@@ -35,17 +35,9 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
   const filteredProcessos = useMemo(() => {
     let filtered = processos;
 
-    // Hide ENTREGUE processes older than 5 days (unless searching)
-    if (!searchTerm) {
-      const fiveDaysMs = 5 * 24 * 60 * 60 * 1000;
-      const now = new Date().getTime();
-      filtered = filtered.filter(p => {
-        if (p.status_atual?.status_cct_oficial !== 'ENTREGUE') return true;
-        const entregueDate = p.data_entregue || p.shipment.updated_at;
-        if (!entregueDate) return true;
-        return now - new Date(entregueDate).getTime() <= fiveDaysMs;
-      });
-    }
+    // Visibilidade de entregues é controlada pelo hook useProcessosCCT via
+    // tabela cct_hidden_hawbs (oculta apenas após 5 dias do evento "Entregue").
+    // Não há filtro adicional aqui — busca explícita também é livre.
 
     // Apply metric filter
     if (metricFilter === "alerta") {
