@@ -1,55 +1,87 @@
-# Unificar status CCT: dashboard ↔ detalhe
-
 ## Diagnóstico
 
-A tela de detalhe (`ProcessoTimeline.tsx`) e a tela inicial (`CCTDashboard` / `ProcessosTable`) leem da **mesma tabela** (`t_cct_dashboard_cache.eventos`), porém o **último status** é calculado por **dois caminhos diferentes**, com resultados divergentes em alguns processos:
+Processo **BRE-16429822** tem timeline com 5 eventos, ordem cronológica DESC: **ENTREGUE (23/04 17:06)** → BLOQUEIO (17/04 09:30) → RECEPCIONADO (17/04 03:05) → CHEGADA INFORMADA (16/04) → MANIFESTADO (11/04).
 
-| Camada | Onde calcula | Função usada | Como escolhe o "último" |
-|---|---|---|---|
-| **Detalhe (header)** | `ProcessoTimeline.tsx` chama `useCCTEvents` → action `get_cct_events` (proxy parseia e ordena DESC) → `getLatestTimelineStatus` (`cctStatusResolver.ts`) | `mapEventCodeToStatus` + `mapDescriptionToStatus` | Ordena DESC por `data_hora_evento`, depois `created_at`, depois `id` |
-| **Dashboard (linha da tabela)** | `useCCTData.ts` → `mapRowToProcessoCCT` parseia `row.eventos` localmente e pega `eventos[length-1]` | `mapSituacaoToCCT` (parser local, mais restrito) | Ordena ASC por data; tiebreaker por **índice original** |
+O detalhe está correto (mostra `Entregue` no header). O dashboard está errado em **dois pontos**:
 
-Causas concretas da divergência observada em processos reais:
+### Bug 1 — Override de bloqueio sobrepõe o status final
 
-1. **Mapeadores diferentes.** O resolver do detalhe cobre variantes que o `mapSituacaoToCCT` do dashboard não cobre (ex.: códigos `DESEMBARACO`, `LIBERADO`, `DESBLOQUEIO`, typo `EM_TRNSITO_TERRESTRE`, `EM_TROCA_RECINTOS` por código). Quando o último evento cai num desses, o dashboard volta para `INFORMADA` (fallback) enquanto o detalhe acerta.
-2. **Tiebreaker diferente quando há eventos com a mesma data/hora.** O dashboard usa ordem original do array; o detalhe usa `id` desc. Em HAWBs com dois eventos no mesmo timestamp (comum em "Recepcionada" + "Em trânsito terrestre" registrados juntos), cada tela escolhe um evento distinto.
-3. **Pipeline de parse separado.** O proxy (`get_cct_events`) e o hook (`parseAndSortEventos`) têm ramos próprios para o formato pipe e JSON; pequenas diferenças de filtro fazem o "último" ser outro item.
-4. **`status_cct_oficial` no objeto do dashboard nunca passa pelo `cctStatusResolver`.** Logo, qualquer melhoria feita no resolver (memória `dashboard-cache-single-source`) não chega à listagem.
+`src/hooks/useCCTData.ts` linhas 256–266:
 
-Resultado: detalhe mostra, p.ex., `EM_TRANSITO_TERRESTRE` (correto), e a linha da tabela ainda mostra `RECEPCIONADA` ou `INFORMADA`.
+```ts
+const hasBloqueio = (row.teve_bloqueio || '').trim() !== '' && !== 'sem retorno cct' && ...;
+const finalStatus = hasBloqueio ? 'BLOQUEIO' : effectiveStatus;
+```
 
-## Solução
+Esse override é incondicional — ignora se o bloqueio já foi resolvido por eventos posteriores (RECEPCIONADO, ENTREGUE). Como `t_cct_dashboard_cache.teve_bloqueio` guarda o **histórico** ("teve" bloqueio em algum momento), o dashboard marca `BLOQUEIO` mesmo depois da entrega.
 
-Fazer o dashboard derivar o status pelo **mesmo caminho** do detalhe, sem mexer na fonte de dados nem no proxy.
+O detalhe (`ProcessoTimeline.tsx`, linha 71–75) **não** faz esse override — usa só `getLatestTimelineStatus(eventos)`. Por isso diverge.
 
-### 1. `src/hooks/useCCTData.ts` — `mapRowToProcessoCCT`
+A própria timeline já contém o evento `BLOQUEIO`, então o resolver detectaria bloqueio sozinho **se ele fosse o último evento**. Como há eventos posteriores (RECEPCIONADO + ENTREGUE), o status correto é `ENTREGUE`.
 
-- Remover o cálculo local de `effectiveStatus` baseado em `mapSituacaoToCCT(ultimoEvento.descricao)`.
-- Após `parseAndSortEventos`, chamar `getLatestTimelineStatus(eventos, fallback)` do `cctStatusResolver` para obter o status canônico.
-- Manter a regra de bloqueio (`hasBloqueio` → `BLOQUEIO`) como override final, igual hoje.
-- Manter `situacao_portal_atual` apenas como fallback quando `eventos` estiver vazio (idêntico ao header do detalhe).
+### Bug 2 — SLA não detecta cumprimento via eventos
 
-### 2. `src/hooks/useCCTData.ts` — `parseAndSortEventos`
+`src/utils/cctSLA.ts` recebe `status: finalStatus` (que está corrompido para `BLOQUEIO`) e `dataManifestacao: null`. A função `isFulfilledByStatus('BLOQUEIO')` retorna `false` porque `BLOQUEIO` não está em `STATUS_ORDER`. Logo, calcula horas restantes a partir da decolagem (FRA, voo longo) e mostra `-308.5h VENCIDO`.
 
-- Garantir que cada evento gerado tem `id` estável e crescente segundo a ordem cronológica, para que o `compareCCTEventsByRecency` do resolver produza o mesmo desempate do detalhe (eventos do mesmo timestamp ficam ordenados pelo índice do array original via `id` numérico desc).
-- Preencher `created_at` igual ao `data_hora_evento` (já é o caso) para neutralizar o segundo critério do resolver.
+Mesmo se o `finalStatus` fosse corrigido para `ENTREGUE`, o SLA funcionaria pelo `STATUS_ORDER.ENTREGUE = 7 ≥ MANIFESTADA_INDEX`. Mas há um caso colateral: quando o status atual for `BLOQUEIO` legítimo (último evento), o SLA deveria considerar **se já houve manifestação anterior na timeline** para marcar `CUMPRIDO`. Hoje não considera.
 
-### 3. Sem mudanças no proxy
+## Mudança proposta (cirúrgica)
 
-`get_cct_events` continua igual. Ambos os caminhos lerão `t_cct_dashboard_cache.eventos`, e os mapeadores agora serão os mesmos (`cctStatusResolver`).
+### Arquivo 1: `src/hooks/useCCTData.ts`
 
-### 4. Memória
+**Remover o override de bloqueio do status final.** Manter `hasBloqueio` apenas para alimentar `excecoes[]` (aba Exceções continua funcionando com o histórico).
 
-Atualizar `mem://cct/dashboard-cache-single-source` acrescentando: "tanto o `status_atual.status_cct_oficial` exibido no dashboard quanto o header do detalhe DEVEM ser derivados via `getLatestTimelineStatus` do `cctStatusResolver`. O parser local `mapSituacaoToCCT` em `useCCTData.ts` não pode ser usado para definir status final."
+- Linha 266: trocar
+  ```ts
+  const finalStatus: StatusCCTOficial = hasBloqueio ? 'BLOQUEIO' : effectiveStatus;
+  ```
+  por
+  ```ts
+  const finalStatus: StatusCCTOficial = effectiveStatus;
+  ```
+
+Resultado: status do dashboard passa a vir 100% da timeline (via `getLatestTimelineStatus`), igual ao detalhe. `BLOQUEIO` só aparece quando for o último evento real (o resolver já mapeia "Bloqueio" → `BLOQUEIO`).
+
+### Arquivo 2: `src/hooks/useCCTData.ts` — passar evidência de manifestação ao SLA
+
+Antes de chamar `computeSLAInfo` (linha 308), derivar:
+
+```ts
+const manifestadoEvent = eventos.find(e => {
+  const s = (e.descricao || e.codigo_evento || '').toLowerCase();
+  return s.includes('manifest') || s.includes('recepc') || s.includes('entreg')
+      || s.includes('trans') || s.includes('transfer') || s.includes('troca');
+});
+const dataManifestacaoFromTimeline = manifestadoEvent?.data_hora_evento || null;
+```
+
+Passar `dataManifestacao: dataManifestacaoFromTimeline` para `computeSLAInfo`. Isso garante `CUMPRIDO` sempre que houver qualquer evento ≥ MANIFESTADA na timeline, mesmo que o status corrente seja `BLOQUEIO`.
+
+### Arquivo 3: `.lovable/memory/cct/dashboard-cache-single-source.md`
+
+Acrescentar:
+
+> **Override de `teve_bloqueio` proibido como status final.** A coluna `teve_bloqueio` é histórica e alimenta APENAS a aba "Exceções". O status `BLOQUEIO` só deve ser exibido quando aparecer como último evento da timeline (já tratado pelo `cctStatusResolver`).
+>
+> **SLA — cumprimento por timeline.** `computeSLAInfo` deve receber `dataManifestacao` derivada do primeiro evento da timeline cujo código/descrição indique manifestação ou estágio posterior (manifest, recepc, transfer, troca, trans terre, entreg). Isso preserva o cumprimento de SLA mesmo quando o status corrente regrediu (ex.: bloqueio após manifestação).
+
+## Resultado esperado para BRE-16429822
+
+- Header dashboard: **Entregue** (igual ao detalhe).
+- Badge SLA: **CUMPRIDO** (verde), substituindo `-308.5h`.
+- Aba Exceções: continua mostrando "1" (bloqueio histórico preservado).
+- Timeline do detalhe: inalterada, continua mostrando os 5 eventos.
+
+## Casos cobertos
+
+| Cenário | Antes | Depois |
+|---|---|---|
+| Entregue após bloqueio resolvido | BLOQUEIO + SLA vencido | ENTREGUE + CUMPRIDO |
+| Bloqueio ativo (último evento) | BLOQUEIO | BLOQUEIO (resolver detecta) |
+| Bloqueio ativo após manifestação anterior | BLOQUEIO + SLA vencido | BLOQUEIO + CUMPRIDO |
+| Sem qualquer evento, só `teve_bloqueio` | BLOQUEIO | Fallback `situacao_portal_atual` ou `INFORMADA` (com exceção registrada) |
 
 ## Arquivos afetados
 
-- `src/hooks/useCCTData.ts` (modificar `mapRowToProcessoCCT` e ajuste leve em `parseAndSortEventos`)
-- `.lovable/memory/cct/dashboard-cache-single-source.md` (acréscimo)
-
-## Como validar
-
-- Abrir um HAWB cuja tela de detalhe mostra status diferente da listagem (ex.: o que motivou o report).
-- Após o deploy, a coluna **Status CCT** da listagem deve passar a refletir o mesmo status do header do detalhe e do topo da timeline.
-- Processos com bloqueio continuam marcados como `BLOQUEIO`.
-- Processos sem nenhum evento continuam caindo no fallback `situacao_portal_atual` → `INFORMADA`.
+- `src/hooks/useCCTData.ts` (2 ajustes pontuais em `mapRowToProcessoCCT`)
+- `.lovable/memory/cct/dashboard-cache-single-source.md` (acréscimo de regras)
