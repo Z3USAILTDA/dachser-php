@@ -314,10 +314,10 @@ serve(async (req) => {
     // Connect to MariaDB
     const mysql = await import("npm:mysql2@3.11.3/promise");
     conn = await mysql.createConnection({
-      host: Deno.env.get('MARIADB_HOST'),
-      port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
-      user: Deno.env.get('MARIADB_USER'),
-      password: Deno.env.get('MARIADB_PASSWORD'),
+      host: (Deno.env.get('MARIADB_SEA_HOST') || Deno.env.get('MARIADB_HOST')),
+      port: parseInt((Deno.env.get('MARIADB_SEA_PORT') || Deno.env.get('MARIADB_PORT')) || '3306'),
+      user: (Deno.env.get('MARIADB_SEA_USER') || Deno.env.get('MARIADB_USER')),
+      password: (Deno.env.get('MARIADB_SEA_PASSWORD') || Deno.env.get('MARIADB_PASSWORD')),
       database: 'dados_dachser',
       connectTimeout: 15000,
     });

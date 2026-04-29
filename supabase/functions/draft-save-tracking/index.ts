@@ -91,11 +91,11 @@ Deno.serve(async (req) => {
     console.log('Received tracking data for MBL:', trackingData.mbl_id);
 
     // Get MariaDB credentials from environment
-    const mariadbHost = Deno.env.get('MARIADB_HOST');
-    const mariadbPort = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-    const mariadbUser = Deno.env.get('MARIADB_USER');
-    const mariadbPassword = Deno.env.get('MARIADB_PASSWORD');
-    const mariadbDatabase = Deno.env.get('MARIADB_DATABASE');
+    const mariadbHost = (Deno.env.get('MARIADB_SEA_HOST') || Deno.env.get('MARIADB_HOST'));
+    const mariadbPort = parseInt((Deno.env.get('MARIADB_SEA_PORT') || Deno.env.get('MARIADB_PORT')) || '3306');
+    const mariadbUser = (Deno.env.get('MARIADB_SEA_USER') || Deno.env.get('MARIADB_USER'));
+    const mariadbPassword = (Deno.env.get('MARIADB_SEA_PASSWORD') || Deno.env.get('MARIADB_PASSWORD'));
+    const mariadbDatabase = (Deno.env.get('MARIADB_SEA_DATABASE') || Deno.env.get('MARIADB_DATABASE'));
 
     if (!mariadbHost || !mariadbUser || !mariadbPassword || !mariadbDatabase) {
       throw new Error('MariaDB credentials not configured');
