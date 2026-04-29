@@ -4560,7 +4560,7 @@ Deno.serve(async (req) => {
         // Garante que a tabela existe (idempotente). Schema mínimo com unique em hawb.
         try {
           await client!.query(`
-            CREATE TABLE IF NOT EXISTS ${database}.t_cct_hidden_hawbs (
+            CREATE TABLE IF NOT EXISTS dados_dachser.t_cct_hidden_hawbs (
               id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
               hawb VARCHAR(64) NOT NULL,
               reason VARCHAR(32) NOT NULL DEFAULT 'ENTREGUE',
