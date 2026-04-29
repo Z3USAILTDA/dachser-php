@@ -4652,8 +4652,9 @@ Deno.serve(async (req) => {
         let hiddenRows: any[] = [];
         try {
           hiddenRows = await client!.query(
-            `SELECT hawb, delivered_at FROM ${database}.t_cct_hidden_hawbs`
+            `SELECT hawb, delivered_at FROM dados_dachser.t_cct_hidden_hawbs`
           );
+          console.log(`CCT hidden: carregadas ${hiddenRows?.length || 0} linhas de dados_dachser.t_cct_hidden_hawbs (db env="${database}")`);
         } catch (e) {
           console.warn('CCT hidden: falha ao carregar t_cct_hidden_hawbs:', e);
           hiddenRows = [];
