@@ -1,0 +1,1 @@
+SELECT cron.unschedule(jobid) FROM cron.job WHERE jobid IN (21, 27, 32, 1, 13, 12, 31, 5);
