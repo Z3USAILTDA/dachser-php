@@ -37,8 +37,32 @@ export function useAuth() {
         const parsedUser = JSON.parse(storedUser);
         setUser(parsedUser);
         setLoading(false);
-        // Don't set up Supabase listeners for MariaDB users
-        return;
+
+        // Forced logout polling (manutenção MariaDB).
+        // Verifica a cada 15s se este username está na lista forced_logouts ativa.
+        const username = (parsedUser?.username ?? "").toString().toLowerCase();
+        const checkForcedLogout = async () => {
+          if (!username) return;
+          try {
+            const { data, error } = await supabase
+              .from("forced_logouts")
+              .select("id")
+              .eq("active", true)
+              .ilike("username", username)
+              .limit(1);
+            if (!error && data && data.length > 0) {
+              console.warn("[forced_logouts] Sessão derrubada por manutenção:", username);
+              localStorage.removeItem("user");
+              setUser(null);
+              window.location.href = "/login";
+            }
+          } catch (e) {
+            // silencioso — não bloquear UX por falha de rede
+          }
+        };
+        checkForcedLogout();
+        const intervalId = window.setInterval(checkForcedLogout, 15000);
+        return () => window.clearInterval(intervalId);
       } catch (e) {
         console.warn("Failed to parse stored user:", e);
         localStorage.removeItem("user");
