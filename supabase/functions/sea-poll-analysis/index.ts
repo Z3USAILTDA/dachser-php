@@ -7,11 +7,11 @@ const corsHeaders = {
 };
 
 async function getConnection(retries = 2, backoffMs = 1500): Promise<any> {
-  const host = Deno.env.get('MARIADB_HOST');
-  const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-  const database = Deno.env.get('MARIADB_DATABASE');
-  const user = Deno.env.get('MARIADB_USER');
-  const password = Deno.env.get('MARIADB_PASSWORD');
+  const host = (Deno.env.get('MARIADB_SEA_HOST') || Deno.env.get('MARIADB_HOST'));
+  const port = parseInt((Deno.env.get('MARIADB_SEA_PORT') || Deno.env.get('MARIADB_PORT')) || '3306');
+  const database = (Deno.env.get('MARIADB_SEA_DATABASE') || Deno.env.get('MARIADB_DATABASE'));
+  const user = (Deno.env.get('MARIADB_SEA_USER') || Deno.env.get('MARIADB_USER'));
+  const password = (Deno.env.get('MARIADB_SEA_PASSWORD') || Deno.env.get('MARIADB_PASSWORD'));
 
   if (!host || !database || !user || !password) {
     throw new Error('Database configuration error');

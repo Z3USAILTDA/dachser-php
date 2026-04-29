@@ -63,10 +63,10 @@ serve(async (req) => {
     const { itemId, forceAll } = body;
 
     // Connect to MariaDB
-    const dbHost = Deno.env.get('MARIADB_HOST') ?? '';
-    const dbPort = parseInt(Deno.env.get('MARIADB_PORT') ?? '3306');
-    const dbUser = Deno.env.get('MARIADB_USER') ?? '';
-    const dbPassword = Deno.env.get('MARIADB_PASSWORD') ?? '';
+    const dbHost = (Deno.env.get('MARIADB_SEA_HOST') || Deno.env.get('MARIADB_HOST')) ?? '';
+    const dbPort = parseInt((Deno.env.get('MARIADB_SEA_PORT') || Deno.env.get('MARIADB_PORT')) ?? '3306');
+    const dbUser = (Deno.env.get('MARIADB_SEA_USER') || Deno.env.get('MARIADB_USER')) ?? '';
+    const dbPassword = (Deno.env.get('MARIADB_SEA_PASSWORD') || Deno.env.get('MARIADB_PASSWORD')) ?? '';
     
     dbClient = await new Client().connect({
       hostname: dbHost,

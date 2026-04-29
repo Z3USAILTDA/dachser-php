@@ -22,11 +22,11 @@ const ANALISANDO_TIMEOUT_MINUTES = 10;  // Analysis shouldn't take more than 10 
 const PENDENTE_TIMEOUT_MINUTES = 30;     // Pending shouldn't stay more than 30 minutes
 
 async function getDbClient(): Promise<Client> {
-  const host = Deno.env.get('MARIADB_HOST');
-  const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-  const database = Deno.env.get('MARIADB_DATABASE');
-  const dbUser = Deno.env.get('MARIADB_USER');
-  const dbPassword = Deno.env.get('MARIADB_PASSWORD');
+  const host = (Deno.env.get('MARIADB_SEA_HOST') || Deno.env.get('MARIADB_HOST'));
+  const port = parseInt((Deno.env.get('MARIADB_SEA_PORT') || Deno.env.get('MARIADB_PORT')) || '3306');
+  const database = (Deno.env.get('MARIADB_SEA_DATABASE') || Deno.env.get('MARIADB_DATABASE'));
+  const dbUser = (Deno.env.get('MARIADB_SEA_USER') || Deno.env.get('MARIADB_USER'));
+  const dbPassword = (Deno.env.get('MARIADB_SEA_PASSWORD') || Deno.env.get('MARIADB_PASSWORD'));
 
   if (!host || !database || !dbUser || !dbPassword) {
     throw new Error('Database configuration missing');
