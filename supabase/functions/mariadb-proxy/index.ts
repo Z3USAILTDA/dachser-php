@@ -4640,7 +4640,7 @@ Deno.serve(async (req) => {
               params.push(x.hawb, 'ENTREGUE', x.deliveredAt);
             }
             await client!.query(
-              `INSERT IGNORE INTO ${database}.t_cct_hidden_hawbs (hawb, reason, delivered_at) VALUES ${values}`,
+              `INSERT IGNORE INTO dados_dachser.t_cct_hidden_hawbs (hawb, reason, delivered_at) VALUES ${values}`,
               params
             );
           } catch (e) {
