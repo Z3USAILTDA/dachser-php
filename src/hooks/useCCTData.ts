@@ -328,7 +328,7 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
     eta: null,
     originAirport: row.aeroporto_origem || null,
     status: finalStatus,
-    dataManifestacao: null,
+    dataManifestacao: dataManifestacaoFromTimeline,
   });
 
   const status_atual: CCTStatusAtual = {
