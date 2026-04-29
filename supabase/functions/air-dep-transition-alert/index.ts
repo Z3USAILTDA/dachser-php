@@ -35,11 +35,11 @@ interface StuckAWB {
 
 async function getConnection() {
   const conn = await mysql.createConnection({
-    host: Deno.env.get("MARIADB_HOST") || "",
-    port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
-    user: Deno.env.get("MARIADB_USER") || "",
-    password: Deno.env.get("MARIADB_PASSWORD") || "",
-    database: Deno.env.get("MARIADB_DATABASE") || "dados_dachser",
+    host: (Deno.env.get("MARIADB_AIR_HOST") || Deno.env.get("MARIADB_HOST")) || "",
+    port: parseInt((Deno.env.get("MARIADB_AIR_PORT") || Deno.env.get("MARIADB_PORT")) || "3306"),
+    user: (Deno.env.get("MARIADB_AIR_USER") || Deno.env.get("MARIADB_USER")) || "",
+    password: (Deno.env.get("MARIADB_AIR_PASSWORD") || Deno.env.get("MARIADB_PASSWORD")) || "",
+    database: (Deno.env.get("MARIADB_AIR_DATABASE") || Deno.env.get("MARIADB_DATABASE")) || "dados_dachser",
     connectTimeout: 10000,
   });
   return conn;
@@ -144,7 +144,7 @@ Deno.serve(async (req) => {
     const isTest = body.test === true;
 
     conn = await getConnection();
-    const database = Deno.env.get("MARIADB_DATABASE") || "dados_dachser";
+    const database = (Deno.env.get("MARIADB_AIR_DATABASE") || Deno.env.get("MARIADB_DATABASE")) || "dados_dachser";
 
     // Ensure deduplication table exists
     await conn.execute(`

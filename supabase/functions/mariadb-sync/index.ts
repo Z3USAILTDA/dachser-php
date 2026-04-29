@@ -61,11 +61,11 @@ serve(async (req) => {
     }
 
     // MariaDB credentials
-    const host = Deno.env.get('MARIADB_HOST');
-    const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-    const database = Deno.env.get('MARIADB_DATABASE');
-    const username = Deno.env.get('MARIADB_USER');
-    const password = Deno.env.get('MARIADB_PASSWORD');
+    const host = (Deno.env.get('MARIADB_AIR_HOST') || Deno.env.get('MARIADB_HOST'));
+    const port = parseInt((Deno.env.get('MARIADB_AIR_PORT') || Deno.env.get('MARIADB_PORT')) || '3306');
+    const database = (Deno.env.get('MARIADB_AIR_DATABASE') || Deno.env.get('MARIADB_DATABASE'));
+    const username = (Deno.env.get('MARIADB_AIR_USER') || Deno.env.get('MARIADB_USER'));
+    const password = (Deno.env.get('MARIADB_AIR_PASSWORD') || Deno.env.get('MARIADB_PASSWORD'));
 
     // Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
