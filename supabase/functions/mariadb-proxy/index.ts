@@ -418,7 +418,7 @@ Deno.serve(async (req) => {
     // MariaDB está saturado (max_user_connections=30). Bloqueia tudo que não
     // for esteira de vouchers / login / auth, sem abrir conexão MariaDB.
     // Para reabrir: setar MARIADB_PROXY_KILL_SWITCH=off ou removê-la.
-    const KILL_SWITCH = (Deno.env.get('MARIADB_PROXY_KILL_SWITCH') ?? 'off') !== 'off';
+    const KILL_SWITCH = Deno.env.get('MARIADB_PROXY_KILL_SWITCH') === 'on';
 
     // Ações de auth/sessão sempre permitidas (precisam funcionar para todos
     // poderem logar/deslogar mesmo no modo emergencial)
