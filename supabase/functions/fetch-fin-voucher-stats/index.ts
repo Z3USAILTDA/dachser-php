@@ -8,11 +8,11 @@ const corsHeaders = {
 
 async function getMariaDBClient() {
   return await new Client().connect({
-    hostname: Deno.env.get("MARIADB_HOST") || "",
-    username: Deno.env.get("MARIADB_USER") || "",
-    password: Deno.env.get("MARIADB_PASSWORD") || "",
-    db: Deno.env.get("MARIADB_DATABASE") || "",
-    port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
+    hostname: Deno.env.get("MARIADB_FIN_HOST") || "",
+    username: Deno.env.get("MARIADB_FIN_USER") || "",
+    password: Deno.env.get("MARIADB_FIN_PASSWORD") || "",
+    db: Deno.env.get("MARIADB_FIN_DATABASE") || "",
+    port: parseInt(Deno.env.get("MARIADB_FIN_PORT") || "3306"),
   });
 }
 

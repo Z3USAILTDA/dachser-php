@@ -377,11 +377,11 @@ serve(async (req) => {
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     if (!RESEND_API_KEY) throw new Error("Missing RESEND_API_KEY");
 
-    const host = Deno.env.get("MARIADB_HOST");
-    const port = parseInt(Deno.env.get("MARIADB_PORT") || "3306");
-    const database = Deno.env.get("MARIADB_DATABASE");
-    const username = Deno.env.get("MARIADB_USER");
-    const password = Deno.env.get("MARIADB_PASSWORD");
+    const host = Deno.env.get("MARIADB_FIN_HOST");
+    const port = parseInt(Deno.env.get("MARIADB_FIN_PORT") || "3306");
+    const database = Deno.env.get("MARIADB_FIN_DATABASE");
+    const username = Deno.env.get("MARIADB_FIN_USER");
+    const password = Deno.env.get("MARIADB_FIN_PASSWORD");
     if (!host || !database || !username || !password) {
       throw new Error("MariaDB credentials not configured");
     }

@@ -27,11 +27,11 @@ serve(async (req) => {
     const { action, table, data, where, query, params } = await req.json() as MariaDBRequest;
 
     // Get credentials from environment
-    const host = Deno.env.get('MARIADB_HOST');
-    const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-    const database = Deno.env.get('MARIADB_DATABASE');
-    const username = Deno.env.get('MARIADB_USER');
-    const password = Deno.env.get('MARIADB_PASSWORD');
+    const host = Deno.env.get('MARIADB_FIN_HOST');
+    const port = parseInt(Deno.env.get('MARIADB_FIN_PORT') || '3306');
+    const database = Deno.env.get('MARIADB_FIN_DATABASE');
+    const username = Deno.env.get('MARIADB_FIN_USER');
+    const password = Deno.env.get('MARIADB_FIN_PASSWORD');
 
     if (!host || !database || !username || !password) {
       throw new Error('Missing MariaDB credentials in environment variables');
