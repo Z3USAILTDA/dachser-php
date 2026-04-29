@@ -4648,28 +4648,29 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Carrega hidden e calcula expirados (>5 dias).
+        // Carrega somente os hidden já expirados pelo relógio do próprio MariaDB (>5 dias).
+        // Isso evita erro de parsing de DATETIME no runtime e normaliza HAWB com espaços.
         let hiddenRows: any[] = [];
         try {
           hiddenRows = await client!.query(
-            `SELECT hawb, delivered_at FROM dados_dachser.t_cct_hidden_hawbs`
+            `SELECT hawb, delivered_at
+             FROM dados_dachser.t_cct_hidden_hawbs
+             WHERE delivered_at < DATE_SUB(NOW(), INTERVAL 5 DAY)`
           );
-          console.log(`CCT hidden: carregadas ${hiddenRows?.length || 0} linhas de dados_dachser.t_cct_hidden_hawbs (db env="${database}")`);
+          console.log(`CCT hidden: carregadas ${hiddenRows?.length || 0} linhas expiradas de dados_dachser.t_cct_hidden_hawbs (db env="${database}")`);
         } catch (e) {
           console.warn('CCT hidden: falha ao carregar t_cct_hidden_hawbs:', e);
           hiddenRows = [];
         }
-        const now = Date.now();
+        const normalizeCctHawb = (value: any) => String(value || '').replace(/\s+/g, '').trim().toUpperCase();
         const expiredHidden = new Set<string>();
         for (const r of hiddenRows) {
-          const ts = r.delivered_at ? new Date(String(r.delivered_at).replace(' ', 'T')).getTime() : NaN;
-          if (!isNaN(ts) && now - ts > FIVE_DAYS_MS) {
-            expiredHidden.add(String(r.hawb).trim());
-          }
+          const hawb = normalizeCctHawb(r.hawb);
+          if (hawb) expiredHidden.add(hawb);
         }
 
         const visibleRows = (cachedRows || []).filter(
-          (r: any) => !expiredHidden.has(String(r.hawb || '').trim())
+          (r: any) => !expiredHidden.has(normalizeCctHawb(r.hawb))
         );
 
         console.log(
