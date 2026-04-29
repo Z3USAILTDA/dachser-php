@@ -4560,7 +4560,7 @@ Deno.serve(async (req) => {
         // Garante que a tabela existe (idempotente). Schema mínimo com unique em hawb.
         try {
           await client!.query(`
-            CREATE TABLE IF NOT EXISTS ${database}.t_cct_hidden_hawbs (
+            CREATE TABLE IF NOT EXISTS dados_dachser.t_cct_hidden_hawbs (
               id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
               hawb VARCHAR(64) NOT NULL,
               reason VARCHAR(32) NOT NULL DEFAULT 'ENTREGUE',
@@ -4640,7 +4640,7 @@ Deno.serve(async (req) => {
               params.push(x.hawb, 'ENTREGUE', x.deliveredAt);
             }
             await client!.query(
-              `INSERT IGNORE INTO ${database}.t_cct_hidden_hawbs (hawb, reason, delivered_at) VALUES ${values}`,
+              `INSERT IGNORE INTO dados_dachser.t_cct_hidden_hawbs (hawb, reason, delivered_at) VALUES ${values}`,
               params
             );
           } catch (e) {
@@ -4652,8 +4652,9 @@ Deno.serve(async (req) => {
         let hiddenRows: any[] = [];
         try {
           hiddenRows = await client!.query(
-            `SELECT hawb, delivered_at FROM ${database}.t_cct_hidden_hawbs`
+            `SELECT hawb, delivered_at FROM dados_dachser.t_cct_hidden_hawbs`
           );
+          console.log(`CCT hidden: carregadas ${hiddenRows?.length || 0} linhas de dados_dachser.t_cct_hidden_hawbs (db env="${database}")`);
         } catch (e) {
           console.warn('CCT hidden: falha ao carregar t_cct_hidden_hawbs:', e);
           hiddenRows = [];
