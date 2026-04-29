@@ -488,21 +488,79 @@ Deno.serve(async (req) => {
       }
     }
 
-    const host = Deno.env.get('MARIADB_HOST');
-    const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-    const database = Deno.env.get('MARIADB_DATABASE');
-    const dbUser = Deno.env.get('MARIADB_USER');
-    const dbPassword = Deno.env.get('MARIADB_PASSWORD');
+    // ====================================================================
+    // FINANCE ROUTING: actions tocando dados_dachser financeiros usam MARIADB_FIN_*
+    // (vouchers/esteira, régua de cobrança, RM/remessa/accrual, disputas,
+    //  baixas, fornecedores fiscais, comprovantes, master/consolidação,
+    //  othello, faturamento, financeiro_nfs). Demais actions seguem em MARIADB_*.
+    // ====================================================================
+    const FIN_ACTIONS = new Set<string>([
+      // Vouchers / Esteira
+      'save_voucher_esteira','save_voucher_anexo','update_voucher_esteira','update_voucher_by_numero_spo',
+      'cleanup_invalid_vouchers','fix_sync_vouchers_to_a_processar','delete_sync_duplicates',
+      'admin_bulk_update_etapa','admin_reset_all_to_a_processar','admin_reset_stale_to_a_processar',
+      'get_vouchers_esteira','get_voucher_by_id','get_voucher_responsaveis_emails',
+      'save_voucher_log','save_voucher_log_extended','get_voucher_anexos','delete_voucher_anexo',
+      'delete_voucher_esteira','get_esteira_users','update_esteira_role','toggle_esteira_active',
+      'get_users_by_esteira_roles','get_all_users_esteira','update_user_esteira_role',
+      'update_user_esteira_active','update_user_supervisor','get_user_esteira_role',
+      'cancelar_voucher','consolidar_vouchers','get_vouchers_agrupados','get_vouchers_filhos',
+      'get_vouchers_pendentes_rm','get_vouchers_ativos','get_vouchers_combined',
+      'get_voucher_filhos_batch','search_masters_by_child_spo','sync_vouchers_incremental',
+      'sync_vouchers_baixados','get_sync_status','cleanup_auto_sync_vouchers',
+      'sync_voucher_statuses','search_vouchers_for_master','create_voucher_master',
+      'get_voucher_filhos','update_voucher_numero_spo','disassemble_master_voucher',
+      'update_master_processo_ids','fix_master_numero_spo','export_vouchers_report',
+      'get_pending_vouchers_for_report','find_voucher_by_spo','find_voucher_by_nd',
+      'get_vouchers_for_comprovante','attach_comprovante_batch',
+      // Régua / Cobrança / Aging / Disputas
+      'get_regua_counts','get_aging_overview','get_aging_by_client','get_client_cnpj_detail',
+      'get_client_faturas','save_cobranca_observacao','get_budget_forecast_auto',
+      'get_pymt_term_rating','get_aging_analitico','get_regua_stage','get_regua_clientes_resumo',
+      'get_disputas','update_disputa_observacoes','update_disputa_responsavel','lookup_documento',
+      'save_disputa','delete_disputa','resolve_disputa','check_disputas_planilha',
+      'import_disputas_planilha','bulk_delete_disputas','bulk_resolve_disputas',
+      'get_aging_historical','get_aging_historical_by_client','get_pymt_term_by_client',
+      // Fornecedores fiscais / dados bancários
+      'get_faturas_do_dia','get_fornecedores_sem_fiscal','add_fornecedor_sem_fiscal',
+      'remove_fornecedor_sem_fiscal','get_dados_bancarios_fornecedor',
+      // RM / Pagamentos / Remessa / CRASS / Comprovantes
+      'insert_dados_rm','update_tipo_exec_dados_rm','get_voucher_for_rm',
+      'backfill_tipo_exec_dados_rm','sync_baixa_remessa_to_dados_rm','save_linha_digitavel',
+      'check_voucher_rm_ready','insert_dados_financeiro_voucher','list_pagamentos',
+      'migrate_tipo_exec_column_to_varchar','set_tipo_execucao_pagamento','set_ready_for_robo',
+      'update_status_pagamento','update_codigo_barras','batch_set_tipo_execucao',
+      'list_comprovantes','create_remessa_lote','add_itens_remessa','remove_item_remessa',
+      'update_lote_status','get_remessa_lote_by_id','list_remessa_lotes',
+      'upload_crass','get_crass_vigente','list_crass_historico',
+      'update_status_integracao_rm','import_voucher_from_rm',
+      'get_historico_baixas','get_baixas_sem_voucher',
+      // Accrual
+      'get_accrual_entries','create_accrual_entry','bulk_create_accrual',
+      'delete_accrual_entry','clear_accrual_entries',
+      // Faturamento / NFS / Stats financeiras
+      'get_faturamento_dashboard','get_financeiro_nfs_stats','fetch_fin_voucher_stats',
+      // Supervisor tokens (aprovação fluxo voucher)
+      'setup_supervisor_tokens_table','create_supervisor_token',
+      'validate_supervisor_token','mark_supervisor_token_used',
+    ]);
+
+    const useFinDb = FIN_ACTIONS.has(action);
+    const host = Deno.env.get(useFinDb ? 'MARIADB_FIN_HOST' : 'MARIADB_HOST');
+    const port = parseInt(Deno.env.get(useFinDb ? 'MARIADB_FIN_PORT' : 'MARIADB_PORT') || '3306');
+    const database = Deno.env.get(useFinDb ? 'MARIADB_FIN_DATABASE' : 'MARIADB_DATABASE');
+    const dbUser = Deno.env.get(useFinDb ? 'MARIADB_FIN_USER' : 'MARIADB_USER');
+    const dbPassword = Deno.env.get(useFinDb ? 'MARIADB_FIN_PASSWORD' : 'MARIADB_PASSWORD');
 
     if (!host || !database || !dbUser || !dbPassword) {
-      console.error('Missing database credentials');
+      console.error(`Missing database credentials (pool=${useFinDb ? 'FIN' : 'DEFAULT'})`);
       return new Response(
         JSON.stringify({ error: 'Database configuration error' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Connecting to MariaDB at ${host}:${port}/${database} - Action: ${action}`);
+    console.log(`Connecting to MariaDB[${useFinDb ? 'FIN' : 'DEFAULT'}] at ${host}:${port}/${database} - Action: ${action}`);
     
     // Retry logic for transient connection errors
     const maxRetries = 3;
