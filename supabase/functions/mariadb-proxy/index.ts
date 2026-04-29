@@ -4550,8 +4550,131 @@ Deno.serve(async (req) => {
           // saturado/lento só piora a fila de conexões.
           { label: 'get_cct_shipments_cached', attempts: 1, timeoutMs: 40000 }
         );
-        console.log(`CCT (cached): Found ${cachedRows?.length || 0} shipments`);
-        result = { success: true, data: cachedRows || [] };
+
+        // === Visibilidade pós-entrega (tabela própria do CCT no MariaDB) ===
+        // Regra: HAWBs cujo último evento é "Entregue" são persistidos em
+        // dados_dachser.t_cct_hidden_hawbs com a data REAL do evento (delivered_at).
+        // Após 5 dias dessa data, são ocultados da listagem padrão.
+        const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+
+        // Garante que a tabela existe (idempotente). Schema mínimo com unique em hawb.
+        try {
+          await client!.query(`
+            CREATE TABLE IF NOT EXISTS ${database}.t_cct_hidden_hawbs (
+              id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+              hawb VARCHAR(64) NOT NULL,
+              reason VARCHAR(32) NOT NULL DEFAULT 'ENTREGUE',
+              delivered_at DATETIME NOT NULL,
+              created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              UNIQUE KEY uq_cct_hidden_hawbs_hawb (hawb),
+              KEY idx_cct_hidden_hawbs_delivered_at (delivered_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+          `);
+        } catch (e) {
+          console.warn('CCT hidden: falha ao garantir tabela t_cct_hidden_hawbs:', e);
+        }
+
+        // Helper: extrai a data do último evento "Entregue" a partir do campo `eventos`.
+        // Aceita tanto JSON array quanto formato pipe ("Descricao | dd/MM/yyyy HH:mm:ss || ...").
+        const parsePipeDateToISO = (s: string): string | null => {
+          const m = s.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}):(\d{2}))?$/);
+          if (!m) return null;
+          const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = m;
+          return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+        };
+        const getDeliveredAt = (raw: any): string | null => {
+          if (!raw) return null;
+          let arr: any[] = [];
+          if (Array.isArray(raw)) {
+            arr = raw;
+          } else if (typeof raw === 'string') {
+            const trimmed = raw.trim();
+            if (trimmed.startsWith('[')) {
+              try { arr = JSON.parse(trimmed); } catch { arr = []; }
+            } else if (trimmed.includes('|')) {
+              arr = trimmed.split('||').map((c) => c.trim()).filter(Boolean).map((chunk) => {
+                const [d, dt] = chunk.split('|').map((s) => s.trim());
+                return { descricao: d, data_hora_evento: dt ? parsePipeDateToISO(dt) : null };
+              });
+            }
+          }
+          if (!Array.isArray(arr) || arr.length === 0) return null;
+
+          // Ordena ascendente por data, ignorando inválidos.
+          const norm = arr
+            .filter((e) => e && typeof e === 'object')
+            .map((e: any) => {
+              const desc = String(e.descricao || e.evento || e.codigo_evento || '').toLowerCase();
+              const dt = e.data_hora_evento || e.data_hora || e.dataHora || e.data || null;
+              const ts = dt ? new Date(String(dt).replace(' ', 'T')).getTime() : NaN;
+              return { desc, dt, ts: isNaN(ts) ? null : ts };
+            });
+          norm.sort((a, b) => {
+            if (a.ts === null && b.ts === null) return 0;
+            if (a.ts === null) return 1;
+            if (b.ts === null) return -1;
+            return (a.ts as number) - (b.ts as number);
+          });
+          const last = norm[norm.length - 1];
+          if (!last || !last.desc.includes('entreg') || !last.dt) return null;
+          // Retorna no formato MariaDB DATETIME.
+          const d = new Date(String(last.dt).replace(' ', 'T'));
+          if (isNaN(d.getTime())) return null;
+          return d.toISOString().slice(0, 19).replace('T', ' ');
+        };
+
+        // Detecta os entregues e faz upsert ignorando duplicados.
+        const newlyDelivered: Array<{ hawb: string; deliveredAt: string }> = [];
+        for (const row of (cachedRows || [])) {
+          const hawb = String(row.hawb || '').trim();
+          if (!hawb) continue;
+          const deliveredAt = getDeliveredAt(row.eventos);
+          if (deliveredAt) newlyDelivered.push({ hawb, deliveredAt });
+        }
+        if (newlyDelivered.length > 0) {
+          try {
+            // INSERT IGNORE para preservar a delivered_at original do primeiro registro.
+            const values = newlyDelivered.map(() => '(?, ?, ?)').join(', ');
+            const params: any[] = [];
+            for (const x of newlyDelivered) {
+              params.push(x.hawb, 'ENTREGUE', x.deliveredAt);
+            }
+            await client!.query(
+              `INSERT IGNORE INTO ${database}.t_cct_hidden_hawbs (hawb, reason, delivered_at) VALUES ${values}`,
+              params
+            );
+          } catch (e) {
+            console.warn('CCT hidden: falha ao persistir entregues:', e);
+          }
+        }
+
+        // Carrega hidden e calcula expirados (>5 dias).
+        let hiddenRows: any[] = [];
+        try {
+          hiddenRows = await client!.query(
+            `SELECT hawb, delivered_at FROM ${database}.t_cct_hidden_hawbs`
+          );
+        } catch (e) {
+          console.warn('CCT hidden: falha ao carregar t_cct_hidden_hawbs:', e);
+          hiddenRows = [];
+        }
+        const now = Date.now();
+        const expiredHidden = new Set<string>();
+        for (const r of hiddenRows) {
+          const ts = r.delivered_at ? new Date(String(r.delivered_at).replace(' ', 'T')).getTime() : NaN;
+          if (!isNaN(ts) && now - ts > FIVE_DAYS_MS) {
+            expiredHidden.add(String(r.hawb).trim());
+          }
+        }
+
+        const visibleRows = (cachedRows || []).filter(
+          (r: any) => !expiredHidden.has(String(r.hawb || '').trim())
+        );
+
+        console.log(
+          `CCT (cached): ${cachedRows?.length || 0} total, ${expiredHidden.size} ocultos >5d, ${visibleRows.length} visíveis`
+        );
+        result = { success: true, data: visibleRows };
         break;
       }
 
