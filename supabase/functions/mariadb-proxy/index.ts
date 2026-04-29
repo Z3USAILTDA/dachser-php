@@ -414,6 +414,49 @@ Deno.serve(async (req) => {
     const body = await req.json() as QueryRequest;
     const { action } = body;
 
+    // ==================== KILL SWITCH (manutenção) ====================
+    // MariaDB está saturado (max_user_connections=30). Bloqueia tudo que não
+    // for esteira de vouchers / login / auth, sem abrir conexão MariaDB.
+    // Para reabrir: setar MARIADB_PROXY_KILL_SWITCH=off ou removê-la.
+    const KILL_SWITCH = (Deno.env.get('MARIADB_PROXY_KILL_SWITCH') ?? 'on') !== 'off';
+    if (KILL_SWITCH) {
+      const ALLOWED_ACTIONS = new Set<string>([
+        // Login / sessão / inatividade
+        'login', 'logout', 'change_password', 'forgot_password', 'verify_reset_code',
+        'reset_password', 'log_usage', 'get_user_esteira_role', 'get_active_connections',
+        // Esteira de vouchers (whitelist completa)
+        'add_fornecedor_sem_fiscal', 'attach_comprovante_batch', 'batch_set_tipo_execucao',
+        'cancelar_voucher', 'check_voucher_rm_ready', 'create_voucher_master',
+        'delete_voucher_anexo', 'delete_voucher_esteira', 'disassemble_master_voucher',
+        'export_vouchers_report', 'fetch', 'fetch_fin_voucher_stats',
+        'find_voucher_by_nd', 'find_voucher_by_spo', 'get_all_users_esteira',
+        'get_dados_bancarios_fornecedor', 'get_esteira_users', 'get_faturas_do_dia',
+        'get_fornecedores_sem_fiscal', 'get_historico_baixas', 'get_voucher_anexos',
+        'get_voucher_by_id', 'get_voucher_filhos', 'get_voucher_filhos_batch',
+        'get_vouchers_combined', 'get_vouchers_esteira', 'get_vouchers_for_comprovante',
+        'get_vouchers_pendentes_rm', 'import', 'import_voucher_from_rm',
+        'insert_dados_rm', 'list_comprovantes', 'list_pagamentos',
+        'remove_fornecedor_sem_fiscal', 'save_linha_digitavel', 'save_voucher_anexo',
+        'save_voucher_esteira', 'save_voucher_log', 'save_voucher_log_extended',
+        'search_masters_by_child_spo', 'search_vouchers_for_master', 'set_ready_for_robo',
+        'set_tipo_execucao_pagamento', 'sync_voucher_statuses', 'sync_vouchers_baixados',
+        'sync_vouchers_incremental', 'toggle_esteira_active', 'update_esteira_role',
+        'update_status_integracao_rm', 'update_tipo_exec_dados_rm',
+        'update_voucher_esteira', 'update_voucher_numero_spo',
+      ]);
+      if (!ALLOWED_ACTIONS.has(action)) {
+        console.warn(`[KILL_SWITCH] Blocked action: ${action}`);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Sistema em manutenção. Apenas a Esteira de Vouchers está disponível no momento.',
+            killSwitch: true,
+          }),
+          { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     const host = Deno.env.get('MARIADB_HOST');
     const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
     const database = Deno.env.get('MARIADB_DATABASE');
