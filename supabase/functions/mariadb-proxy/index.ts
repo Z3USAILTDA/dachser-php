@@ -419,11 +419,42 @@ Deno.serve(async (req) => {
     // for esteira de vouchers / login / auth, sem abrir conexão MariaDB.
     // Para reabrir: setar MARIADB_PROXY_KILL_SWITCH=off ou removê-la.
     const KILL_SWITCH = (Deno.env.get('MARIADB_PROXY_KILL_SWITCH') ?? 'on') !== 'off';
+
+    // Ações de auth/sessão sempre permitidas (precisam funcionar para todos
+    // poderem logar/deslogar mesmo no modo emergencial)
+    const AUTH_ACTIONS = new Set<string>([
+      'login', 'logout', 'change_password', 'forgot_password',
+      'verify_reset_code', 'reset_password', 'log_usage',
+      'get_user_esteira_role', 'get_active_connections',
+    ]);
+
+    // ==== Bloqueio por usuário (modo emergencial) ====
+    // Apenas cleiciane.faconi pode usar funcionalidades além do auth.
+    const ALLOWED_USERS = new Set<string>(['cleiciane.faconi']);
+    const requesterUsernameRaw = (body as any).requesterUsername;
+    const requesterUsername = typeof requesterUsernameRaw === 'string'
+      ? requesterUsernameRaw.trim().toLowerCase()
+      : '';
+    if (
+      requesterUsername &&
+      !AUTH_ACTIONS.has(action) &&
+      !ALLOWED_USERS.has(requesterUsername)
+    ) {
+      console.warn(`[USER_BLOCK] Blocked user "${requesterUsername}" action: ${action}`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Sistema em manutenção. Acesso temporariamente restrito.',
+          killSwitch: true,
+        }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     if (KILL_SWITCH) {
       const ALLOWED_ACTIONS = new Set<string>([
         // Login / sessão / inatividade
-        'login', 'logout', 'change_password', 'forgot_password', 'verify_reset_code',
-        'reset_password', 'log_usage', 'get_user_esteira_role', 'get_active_connections',
+        ...AUTH_ACTIONS,
         // Esteira de vouchers (whitelist completa)
         'add_fornecedor_sem_fiscal', 'attach_comprovante_batch', 'batch_set_tipo_execucao',
         'cancelar_voucher', 'check_voucher_rm_ready', 'create_voucher_master',

@@ -112,6 +112,10 @@ import AWBList from "./pages/AWBList";
 
 import SupervisorConfirmacao from "./pages/SupervisorConfirmacao";
 import NotFound from "./pages/NotFound";
+import { installInvokeUserGuard } from "@/utils/installInvokeUserGuard";
+
+// Modo emergencial: bloqueia chamadas MariaDB de usuários fora da whitelist
+installInvokeUserGuard();
 
 // Defaults globais para reduzir pressão no MariaDB:
 // - sem refetch automático ao focar a janela / reconectar
