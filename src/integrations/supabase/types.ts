@@ -272,6 +272,30 @@ export type Database = {
           },
         ]
       }
+      forced_logouts: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          reason: string | null
+          username: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          reason?: string | null
+          username: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          reason?: string | null
+          username?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           active: boolean | null
