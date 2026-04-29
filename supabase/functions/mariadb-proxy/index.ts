@@ -564,27 +564,53 @@ Deno.serve(async (req) => {
       'fetch_tracked_awbs',
     ]);
 
-    const useFinDb = FIN_ACTIONS.has(action);
-    const useAirDb = !useFinDb && AIR_ACTIONS.has(action);
+    // ====================================================================
+    // SEA ROUTING: actions do módulo marítimo (tracking, demurrage,
+    // local charges, análise maritimo, export draft, container data)
+    // usam MARIADB_SEA_*. Demais actions seguem AIR/FIN/DEFAULT.
+    // ====================================================================
+    const SEA_ACTIONS = new Set<string>([
+      // Maritimo / análise (ai_agente.t_dachser_sea_*)
+      'get_maritimo_items','get_maritimo_item','upload_maritimo_base_file',
+      'get_maritimo_history','get_maritimo_files','create_maritimo_run',
+      'save_maritimo_file','delete_maritimo_item','update_maritimo_item',
+      'export_sea_report','get_maritimo_analysis_status',
+      'complete_maritimo_analysis','reextract_maritimo_metadata',
+      'extract_maritimo_attachments',
+      // Containers / dashboard SEA
+      'save_container_data','get_container_data',
+      'get_sea_container_count','get_sea_mbls_export',
+      // Local charges (Hapag/MSC/CMA/HMM/ONE/ZIM + history)
+      'get_local_charges','update_local_charges','update_local_charge',
+      'set_local_charge','search_local_charges',
+    ]);
+    // Prefix-based routing for demurrage_* actions
+    const isSeaPrefixed = action.startsWith('demurrage_');
 
-    let pool: 'AIR' | 'FIN' | 'DEFAULT' = 'DEFAULT';
+    const useFinDb = FIN_ACTIONS.has(action);
+    const useSeaDb = !useFinDb && (SEA_ACTIONS.has(action) || isSeaPrefixed);
+    const useAirDb = !useFinDb && !useSeaDb && AIR_ACTIONS.has(action);
+
+    let pool: 'AIR' | 'FIN' | 'SEA' | 'DEFAULT' = 'DEFAULT';
     if (useAirDb) pool = 'AIR';
     else if (useFinDb) pool = 'FIN';
+    else if (useSeaDb) pool = 'SEA';
 
-    // Resolve secrets per pool, with safe fallback to DEFAULT if AIR/FIN secrets
+    // Resolve secrets per pool, with safe fallback to DEFAULT if pool secrets
     // are not yet configured (avoids breakage during rollout).
-    const pickSecret = (airKey: string, finKey: string, defKey: string) => {
+    const pickSecret = (airKey: string, finKey: string, seaKey: string, defKey: string) => {
       if (pool === 'AIR') return Deno.env.get(airKey) || Deno.env.get(defKey);
       if (pool === 'FIN') return Deno.env.get(finKey) || Deno.env.get(defKey);
+      if (pool === 'SEA') return Deno.env.get(seaKey) || Deno.env.get(defKey);
       return Deno.env.get(defKey);
     };
 
-    const host = pickSecret('MARIADB_AIR_HOST', 'MARIADB_FIN_HOST', 'MARIADB_HOST');
-    const portStr = pickSecret('MARIADB_AIR_PORT', 'MARIADB_FIN_PORT', 'MARIADB_PORT') || '3306';
+    const host = pickSecret('MARIADB_AIR_HOST', 'MARIADB_FIN_HOST', 'MARIADB_SEA_HOST', 'MARIADB_HOST');
+    const portStr = pickSecret('MARIADB_AIR_PORT', 'MARIADB_FIN_PORT', 'MARIADB_SEA_PORT', 'MARIADB_PORT') || '3306';
     const port = parseInt(portStr);
-    const database = pickSecret('MARIADB_AIR_DATABASE', 'MARIADB_FIN_DATABASE', 'MARIADB_DATABASE');
-    const dbUser = pickSecret('MARIADB_AIR_USER', 'MARIADB_FIN_USER', 'MARIADB_USER');
-    const dbPassword = pickSecret('MARIADB_AIR_PASSWORD', 'MARIADB_FIN_PASSWORD', 'MARIADB_PASSWORD');
+    const database = pickSecret('MARIADB_AIR_DATABASE', 'MARIADB_FIN_DATABASE', 'MARIADB_SEA_DATABASE', 'MARIADB_DATABASE');
+    const dbUser = pickSecret('MARIADB_AIR_USER', 'MARIADB_FIN_USER', 'MARIADB_SEA_USER', 'MARIADB_USER');
+    const dbPassword = pickSecret('MARIADB_AIR_PASSWORD', 'MARIADB_FIN_PASSWORD', 'MARIADB_SEA_PASSWORD', 'MARIADB_PASSWORD');
 
     if (!host || !database || !dbUser || !dbPassword) {
       console.error(`Missing database credentials (pool=${pool})`);
