@@ -225,30 +225,6 @@ export type Database = {
           },
         ]
       }
-      cct_hidden_hawbs: {
-        Row: {
-          created_at: string
-          delivered_at: string
-          hawb: string
-          id: string
-          reason: string | null
-        }
-        Insert: {
-          created_at?: string
-          delivered_at: string
-          hawb: string
-          id?: string
-          reason?: string | null
-        }
-        Update: {
-          created_at?: string
-          delivered_at?: string
-          hawb?: string
-          id?: string
-          reason?: string | null
-        }
-        Relationships: []
-      }
       cct_status_atual: {
         Row: {
           created_at: string

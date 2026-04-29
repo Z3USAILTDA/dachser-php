@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS public.cct_hidden_hawbs;
