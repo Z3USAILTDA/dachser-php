@@ -1,87 +1,113 @@
-## Diagnóstico
+## Objetivo
 
-Processo **BRE-16429822** tem timeline com 5 eventos, ordem cronológica DESC: **ENTREGUE (23/04 17:06)** → BLOQUEIO (17/04 09:30) → RECEPCIONADO (17/04 03:05) → CHEGADA INFORMADA (16/04) → MANIFESTADO (11/04).
+Replicar no CCT o padrão da tela de tracking aérea: processos cujo último evento é "Entregue" são persistidos numa **tabela própria** `cct_hidden_hawbs` e ocultados do dashboard **somente após 5 dias** da data do evento de entrega. Antes disso, continuam visíveis normalmente. Reaparecem em qualquer momento via busca explícita.
 
-O detalhe está correto (mostra `Entregue` no header). O dashboard está errado em **dois pontos**:
+## Padrão de referência (Air)
 
-### Bug 1 — Override de bloqueio sobrepõe o status final
+`supabase/functions/fetch-status-aereo/index.ts` usa `air_hidden_awbs` (tabela exclusiva do módulo aéreo) com upsert dos AWBs entregues, e a regra de 5 dias é aplicada na filtragem do payload.
 
-`src/hooks/useCCTData.ts` linhas 256–266:
+Para CCT criaremos tabela **separada** (`cct_hidden_hawbs`) — não reutilizar `air_hidden_awbs`, conforme solicitado.
 
-```ts
-const hasBloqueio = (row.teve_bloqueio || '').trim() !== '' && !== 'sem retorno cct' && ...;
-const finalStatus = hasBloqueio ? 'BLOQUEIO' : effectiveStatus;
+## Mudança proposta
+
+### 1. Migração — nova tabela `cct_hidden_hawbs`
+
+```sql
+CREATE TABLE public.cct_hidden_hawbs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  hawb text NOT NULL UNIQUE,
+  reason text DEFAULT 'ENTREGUE',
+  delivered_at timestamptz NOT NULL,   -- data do evento "Entregue" da timeline
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE public.cct_hidden_hawbs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated can view"
+  ON public.cct_hidden_hawbs FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Anyone can insert"
+  ON public.cct_hidden_hawbs FOR INSERT WITH CHECK (true);
+
+CREATE INDEX idx_cct_hidden_hawbs_hawb ON public.cct_hidden_hawbs (hawb);
+CREATE INDEX idx_cct_hidden_hawbs_delivered_at ON public.cct_hidden_hawbs (delivered_at);
 ```
 
-Esse override é incondicional — ignora se o bloqueio já foi resolvido por eventos posteriores (RECEPCIONADO, ENTREGUE). Como `t_cct_dashboard_cache.teve_bloqueio` guarda o **histórico** ("teve" bloqueio em algum momento), o dashboard marca `BLOQUEIO` mesmo depois da entrega.
+A coluna `delivered_at` é o que dispara a regra de 5 dias. Espelha as RLS de `air_hidden_awbs` (sem UPDATE/DELETE).
 
-O detalhe (`ProcessoTimeline.tsx`, linha 71–75) **não** faz esse override — usa só `getLatestTimelineStatus(eventos)`. Por isso diverge.
+### 2. Edge Function — `mariadb-proxy` action `get_cct_shipments_cached`
 
-A própria timeline já contém o evento `BLOQUEIO`, então o resolver detectaria bloqueio sozinho **se ele fosse o último evento**. Como há eventos posteriores (RECEPCIONADO + ENTREGUE), o status correto é `ENTREGUE`.
+Em `supabase/functions/mariadb-proxy/index.ts`, dentro do `case 'get_cct_shipments_cached'`:
 
-### Bug 2 — SLA não detecta cumprimento via eventos
-
-`src/utils/cctSLA.ts` recebe `status: finalStatus` (que está corrompido para `BLOQUEIO`) e `dataManifestacao: null`. A função `isFulfilledByStatus('BLOQUEIO')` retorna `false` porque `BLOQUEIO` não está em `STATUS_ORDER`. Logo, calcula horas restantes a partir da decolagem (FRA, voo longo) e mostra `-308.5h VENCIDO`.
-
-Mesmo se o `finalStatus` fosse corrigido para `ENTREGUE`, o SLA funcionaria pelo `STATUS_ORDER.ENTREGUE = 7 ≥ MANIFESTADA_INDEX`. Mas há um caso colateral: quando o status atual for `BLOQUEIO` legítimo (último evento), o SLA deveria considerar **se já houve manifestação anterior na timeline** para marcar `CUMPRIDO`. Hoje não considera.
-
-## Mudança proposta (cirúrgica)
-
-### Arquivo 1: `src/hooks/useCCTData.ts`
-
-**Remover o override de bloqueio do status final.** Manter `hasBloqueio` apenas para alimentar `excecoes[]` (aba Exceções continua funcionando com o histórico).
-
-- Linha 266: trocar
-  ```ts
-  const finalStatus: StatusCCTOficial = hasBloqueio ? 'BLOQUEIO' : effectiveStatus;
-  ```
-  por
-  ```ts
-  const finalStatus: StatusCCTOficial = effectiveStatus;
-  ```
-
-Resultado: status do dashboard passa a vir 100% da timeline (via `getLatestTimelineStatus`), igual ao detalhe. `BLOQUEIO` só aparece quando for o último evento real (o resolver já mapeia "Bloqueio" → `BLOQUEIO`).
-
-### Arquivo 2: `src/hooks/useCCTData.ts` — passar evidência de manifestação ao SLA
-
-Antes de chamar `computeSLAInfo` (linha 308), derivar:
-
+**a) Detectar entregues e gravar `delivered_at`**
+Para cada linha de `cachedRows`, varrer `eventos` (já ordenados) e identificar o último evento com descrição contendo "entreg". Se for o último evento da timeline:
 ```ts
-const manifestadoEvent = eventos.find(e => {
-  const s = (e.descricao || e.codigo_evento || '').toLowerCase();
-  return s.includes('manifest') || s.includes('recepc') || s.includes('entreg')
-      || s.includes('trans') || s.includes('transfer') || s.includes('troca');
-});
-const dataManifestacaoFromTimeline = manifestadoEvent?.data_hora_evento || null;
+const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+
+const newlyDelivered = cachedRows
+  .map(r => ({ row: r, deliveredAt: getDeliveredAtFromTimeline(r.eventos) }))
+  .filter(x => x.deliveredAt)
+  .map(x => ({
+    hawb: x.row.hawb,
+    reason: 'ENTREGUE',
+    delivered_at: x.deliveredAt
+  }));
+
+if (newlyDelivered.length > 0) {
+  await supabaseClient.from('cct_hidden_hawbs')
+    .upsert(newlyDelivered, { onConflict: 'hawb', ignoreDuplicates: true });
+}
 ```
 
-Passar `dataManifestacao: dataManifestacaoFromTimeline` para `computeSLAInfo`. Isso garante `CUMPRIDO` sempre que houver qualquer evento ≥ MANIFESTADA na timeline, mesmo que o status corrente seja `BLOQUEIO`.
+**b) Carregar ocultos e aplicar regra dos 5 dias**
+```ts
+const { data: hiddenRows } = await supabaseClient
+  .from('cct_hidden_hawbs')
+  .select('hawb, delivered_at');
 
-### Arquivo 3: `.lovable/memory/cct/dashboard-cache-single-source.md`
+const now = Date.now();
+const expiredHidden = new Set(
+  (hiddenRows || [])
+    .filter(r => now - new Date(r.delivered_at).getTime() > FIVE_DAYS_MS)
+    .map(r => r.hawb)
+);
+```
 
-Acrescentar:
+**c) Filtrar payload**
+```ts
+const visibleRows = body.includeHidden
+  ? cachedRows
+  : cachedRows.filter(r => !expiredHidden.has(r.hawb));
+```
 
-> **Override de `teve_bloqueio` proibido como status final.** A coluna `teve_bloqueio` é histórica e alimenta APENAS a aba "Exceções". O status `BLOQUEIO` só deve ser exibido quando aparecer como último evento da timeline (já tratado pelo `cctStatusResolver`).
->
-> **SLA — cumprimento por timeline.** `computeSLAInfo` deve receber `dataManifestacao` derivada do primeiro evento da timeline cujo código/descrição indique manifestação ou estágio posterior (manifest, recepc, transfer, troca, trans terre, entreg). Isso preserva o cumprimento de SLA mesmo quando o status corrente regrediu (ex.: bloqueio após manifestação).
+A action passa a aceitar `{ includeHidden?: boolean, searchHawb?: string }`. Quando `searchHawb` é fornecido, retorna registros mesmo ocultos para suportar busca histórica.
 
-## Resultado esperado para BRE-16429822
+### 3. Frontend — `src/hooks/useCCTData.ts`
 
-- Header dashboard: **Entregue** (igual ao detalhe).
-- Badge SLA: **CUMPRIDO** (verde), substituindo `-308.5h`.
-- Aba Exceções: continua mostrando "1" (bloqueio histórico preservado).
-- Timeline do detalhe: inalterada, continua mostrando os 5 eventos.
+Adicionar parâmetro opcional `searchHawb` / `includeHidden`. Em modo busca, repassa ao edge para trazer também HAWBs já fora da janela dos 5 dias.
 
-## Casos cobertos
+### 4. Frontend — `src/components/cct/ProcessosTable.tsx`
 
-| Cenário | Antes | Depois |
-|---|---|---|
-| Entregue após bloqueio resolvido | BLOQUEIO + SLA vencido | ENTREGUE + CUMPRIDO |
-| Bloqueio ativo (último evento) | BLOQUEIO | BLOQUEIO (resolver detecta) |
-| Bloqueio ativo após manifestação anterior | BLOQUEIO + SLA vencido | BLOQUEIO + CUMPRIDO |
-| Sem qualquer evento, só `teve_bloqueio` | BLOQUEIO | Fallback `situacao_portal_atual` ou `INFORMADA` (com exceção registrada) |
+- Remover o filtro client-side de retenção de 5 dias atual (a lógica passa a viver no edge, com base no `delivered_at` real do evento, não em `updated_at`).
+- Quando o usuário digita no campo de busca, disparar refetch do hook passando `searchHawb` para que processos ocultos por 5+ dias reapareçam.
+
+### 5. Memória
+
+Atualizar `mem://cct/visibility-and-retention-rules-v3` ou criar `mem://cct/hidden-hawbs-pattern`:
+> Processos CCT entregues são persistidos em `public.cct_hidden_hawbs` (tabela exclusiva do CCT — não reutilizar `air_hidden_awbs`). Coluna `delivered_at` guarda a data do evento "Entregue" da timeline. Filtragem ocorre server-side no edge `mariadb-proxy`/`get_cct_shipments_cached`: o HAWB só é ocultado após **5 dias** desde `delivered_at`. Antes disso permanece visível. Busca explícita por HAWB ignora a ocultação.
 
 ## Arquivos afetados
 
-- `src/hooks/useCCTData.ts` (2 ajustes pontuais em `mapRowToProcessoCCT`)
-- `.lovable/memory/cct/dashboard-cache-single-source.md` (acréscimo de regras)
+- **Nova migração** criando `public.cct_hidden_hawbs`
+- `supabase/functions/mariadb-proxy/index.ts` (case `get_cct_shipments_cached`)
+- `src/hooks/useCCTData.ts`
+- `src/components/cct/ProcessosTable.tsx`
+- `.lovable/memory/cct/visibility-and-retention-rules-v3.md` (atualização)
+
+## Resultado esperado
+
+- HAWB com último evento "Entregue" continua visível no dashboard pelos primeiros 5 dias após a data do evento.
+- Após 5 dias, é ocultado automaticamente da listagem padrão.
+- Buscar pelo HAWB no campo de busca traz o processo de volta a qualquer momento.
+- Tela de detalhe (`ProcessoTimeline`) continua acessível por URL direta.
+- Tabela `cct_hidden_hawbs` é totalmente independente de `air_hidden_awbs`.
