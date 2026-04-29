@@ -545,22 +545,56 @@ Deno.serve(async (req) => {
       'validate_supervisor_token','mark_supervisor_token_used',
     ]);
 
+    // ====================================================================
+    // AIR ROUTING: actions tocando tabelas do módulo aéreo (status_aereo,
+    // dados_aereo, fato_aereo, eventos_awb, tracked_awbs, master_swap_log,
+    // aereo_api/ws_firecrawl) e CCT (cct_dashboard_cache, cct_shipments,
+    // cct_eventos_historico, cct_pending_hawbs, cct_hawb_api_*) usam
+    // MARIADB_AIR_*. Demais actions seguem MARIADB_FIN_* / MARIADB_*.
+    // ====================================================================
+    const AIR_ACTIONS = new Set<string>([
+      // CCT shipments / eventos / leadcomex
+      'get_cct_shipments','get_cct_shipments_cached','get_cct_shipment',
+      'update_cct_shipment','update_leadcomex_data','reset_leadcomex_status',
+      'get_cct_analytics','get_cct_profiles',
+      'create_cct_events_table','insert_cct_event','get_cct_events',
+      'get_cct_pending_hawbs',
+      // AWB tracking / status aéreo
+      'get_awb_tracking_events','fix_historical_dis_awbs','update_awb_status',
+      'fetch_tracked_awbs',
+    ]);
+
     const useFinDb = FIN_ACTIONS.has(action);
-    const host = Deno.env.get(useFinDb ? 'MARIADB_FIN_HOST' : 'MARIADB_HOST');
-    const port = parseInt(Deno.env.get(useFinDb ? 'MARIADB_FIN_PORT' : 'MARIADB_PORT') || '3306');
-    const database = Deno.env.get(useFinDb ? 'MARIADB_FIN_DATABASE' : 'MARIADB_DATABASE');
-    const dbUser = Deno.env.get(useFinDb ? 'MARIADB_FIN_USER' : 'MARIADB_USER');
-    const dbPassword = Deno.env.get(useFinDb ? 'MARIADB_FIN_PASSWORD' : 'MARIADB_PASSWORD');
+    const useAirDb = !useFinDb && AIR_ACTIONS.has(action);
+
+    let pool: 'AIR' | 'FIN' | 'DEFAULT' = 'DEFAULT';
+    if (useAirDb) pool = 'AIR';
+    else if (useFinDb) pool = 'FIN';
+
+    // Resolve secrets per pool, with safe fallback to DEFAULT if AIR/FIN secrets
+    // are not yet configured (avoids breakage during rollout).
+    const pickSecret = (airKey: string, finKey: string, defKey: string) => {
+      if (pool === 'AIR') return Deno.env.get(airKey) || Deno.env.get(defKey);
+      if (pool === 'FIN') return Deno.env.get(finKey) || Deno.env.get(defKey);
+      return Deno.env.get(defKey);
+    };
+
+    const host = pickSecret('MARIADB_AIR_HOST', 'MARIADB_FIN_HOST', 'MARIADB_HOST');
+    const portStr = pickSecret('MARIADB_AIR_PORT', 'MARIADB_FIN_PORT', 'MARIADB_PORT') || '3306';
+    const port = parseInt(portStr);
+    const database = pickSecret('MARIADB_AIR_DATABASE', 'MARIADB_FIN_DATABASE', 'MARIADB_DATABASE');
+    const dbUser = pickSecret('MARIADB_AIR_USER', 'MARIADB_FIN_USER', 'MARIADB_USER');
+    const dbPassword = pickSecret('MARIADB_AIR_PASSWORD', 'MARIADB_FIN_PASSWORD', 'MARIADB_PASSWORD');
 
     if (!host || !database || !dbUser || !dbPassword) {
-      console.error(`Missing database credentials (pool=${useFinDb ? 'FIN' : 'DEFAULT'})`);
+      console.error(`Missing database credentials (pool=${pool})`);
       return new Response(
         JSON.stringify({ error: 'Database configuration error' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Connecting to MariaDB[${useFinDb ? 'FIN' : 'DEFAULT'}] at ${host}:${port}/${database} - Action: ${action}`);
+    console.log(`Connecting to MariaDB[${pool}] at ${host}:${port}/${database} - Action: ${action}`);
     
     // Retry logic for transient connection errors
     const maxRetries = 3;

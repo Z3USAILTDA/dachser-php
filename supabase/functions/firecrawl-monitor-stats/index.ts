@@ -16,11 +16,11 @@ async function connectWithRetry(maxRetries = 3): Promise<Client> {
     try {
       console.log(`[firecrawl-monitor-stats] Connection attempt ${attempt}/${maxRetries}...`);
       const client = await new Client().connect({
-        hostname: Deno.env.get("MARIADB_HOST") || "",
-        port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
-        username: Deno.env.get("MARIADB_USER") || "",
-        password: Deno.env.get("MARIADB_PASSWORD") || "",
-        db: Deno.env.get("MARIADB_DATABASE") || "",
+        hostname: (Deno.env.get("MARIADB_AIR_HOST") || Deno.env.get("MARIADB_HOST")) || "",
+        port: parseInt((Deno.env.get("MARIADB_AIR_PORT") || Deno.env.get("MARIADB_PORT")) || "3306"),
+        username: (Deno.env.get("MARIADB_AIR_USER") || Deno.env.get("MARIADB_USER")) || "",
+        password: (Deno.env.get("MARIADB_AIR_PASSWORD") || Deno.env.get("MARIADB_PASSWORD")) || "",
+        db: (Deno.env.get("MARIADB_AIR_DATABASE") || Deno.env.get("MARIADB_DATABASE")) || "",
       });
       console.log(`[firecrawl-monitor-stats] Connected on attempt ${attempt}`);
       return client;
@@ -51,7 +51,7 @@ serve(async (req) => {
 
   try {
     client = await connectWithRetry(3);
-    const database = Deno.env.get("MARIADB_DATABASE") || "dados_dachser";
+    const database = (Deno.env.get("MARIADB_AIR_DATABASE") || Deno.env.get("MARIADB_DATABASE")) || "dados_dachser";
 
     const rows = await client.query(`
       SELECT 
