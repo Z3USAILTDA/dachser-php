@@ -121,7 +121,9 @@ export default function ProcessoTimeline() {
 
   const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return "—";
-    return format(new Date(dateStr), "dd/MM/yyyy HH:mm", { locale: ptBR });
+    const d = new Date(String(dateStr).replace(" ", "T"));
+    if (isNaN(d.getTime())) return "—";
+    return format(d, "dd/MM/yyyy HH:mm", { locale: ptBR });
   };
 
   if (isLoading) {
