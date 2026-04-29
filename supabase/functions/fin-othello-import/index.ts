@@ -40,11 +40,11 @@ serve(async (req) => {
     }
 
     client = await new Client().connect({
-      hostname: Deno.env.get("MARIADB_HOST")!,
-      port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
-      username: Deno.env.get("MARIADB_USER")!,
-      password: Deno.env.get("MARIADB_PASSWORD")!,
-      db: Deno.env.get("MARIADB_DATABASE")!,
+      hostname: Deno.env.get("MARIADB_FIN_HOST")!,
+      port: parseInt(Deno.env.get("MARIADB_FIN_PORT") || "3306"),
+      username: Deno.env.get("MARIADB_FIN_USER")!,
+      password: Deno.env.get("MARIADB_FIN_PASSWORD")!,
+      db: Deno.env.get("MARIADB_FIN_DATABASE")!,
     });
 
     await client.execute("START TRANSACTION");

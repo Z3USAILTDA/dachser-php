@@ -301,11 +301,11 @@ serve(async (req: Request): Promise<Response> => {
     const resend = new Resend(resendApiKey);
 
     // Connect to MariaDB with retry
-    const host = Deno.env.get("MARIADB_HOST");
-    const port = parseInt(Deno.env.get("MARIADB_PORT") || "3306");
-    const database = Deno.env.get("MARIADB_DATABASE");
-    const dbUser = Deno.env.get("MARIADB_USER");
-    const dbPassword = Deno.env.get("MARIADB_PASSWORD");
+    const host = Deno.env.get("MARIADB_FIN_HOST");
+    const port = parseInt(Deno.env.get("MARIADB_FIN_PORT") || "3306");
+    const database = Deno.env.get("MARIADB_FIN_DATABASE");
+    const dbUser = Deno.env.get("MARIADB_FIN_USER");
+    const dbPassword = Deno.env.get("MARIADB_FIN_PASSWORD");
 
     if (!host || !database || !dbUser || !dbPassword) {
       throw new Error("Credenciais do banco de dados não configuradas");
