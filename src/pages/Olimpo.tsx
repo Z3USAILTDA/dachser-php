@@ -946,7 +946,7 @@ function OlimpoContent() {
             <p className="text-xl font-semibold">{kpis.seaTransit + kpis.airActive}</p>
           </div>
           <div className="bg-[#151515] rounded-lg px-4 py-3 border border-white/[0.06] flex-1">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-[0.14em]">Atrasos</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-[0.14em]">DIS, Atrasos</p>
             <p className="text-xl font-semibold text-[#ff8b8b]">{kpis.delayed}</p>
           </div>
         </div>
@@ -1382,7 +1382,7 @@ function OlimpoContent() {
                   <p className="text-[9px] md:text-xs text-[#7fd0ff]">SEA + AIR</p>
                 </div>
                 <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
-                  <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Atrasos</p>
+                  <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">DIS, Atrasos</p>
                   <p className="text-base md:text-lg font-semibold">{kpis.delayed}</p>
                   <p className="text-[9px] md:text-xs text-[#ff8b8b]">Impacto</p>
                 </div>
