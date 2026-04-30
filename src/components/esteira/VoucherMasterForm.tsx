@@ -674,7 +674,18 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
           </Button>
           <Button
             type="button"
-            onClick={form.handleSubmit(handleSubmit)}
+            onClick={form.handleSubmit(handleSubmit, (errors) => {
+              // Abrir o collapsible automaticamente para o usuário ver os erros
+              const camposObrigatorios = ["valorTotal", "vencimento", "formaPagamento", "tipoDocumento", "cobrancaEmNomeDe"];
+              if (camposObrigatorios.some((k) => (errors as any)[k])) {
+                setDadosExpanded(true);
+              }
+              toast({
+                title: "Preencha os campos obrigatórios",
+                description: "Há campos obrigatórios não preenchidos no bloco \"Editar Dados Consolidados\".",
+                variant: "destructive",
+              });
+            })}
             disabled={isSubmitting || selectedVouchers.length < 2}
             className="bg-purple-600 hover:bg-purple-700 text-white gap-2"
           >
