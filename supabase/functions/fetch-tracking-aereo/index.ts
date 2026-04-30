@@ -343,6 +343,7 @@ serve(async (req) => {
            AND JSON_VALID(tdaf.hawbs_json)
            AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
           WHERE (tda.master_insert >= '2026-03-20' OR tda.created_at >= '2026-03-20')
+            ${awbInClause}
             AND tdaf.timeline_json IS NOT NULL
             AND JSON_VALID(tdaf.timeline_json)
         ),
