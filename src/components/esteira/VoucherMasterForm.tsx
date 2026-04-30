@@ -710,7 +710,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
             type="button"
             onClick={form.handleSubmit(handleSubmit, (errors) => {
               // Abrir o collapsible automaticamente para o usuário ver os erros
-              const camposObrigatorios = ["valorTotal", "vencimento", "formaPagamento", "tipoDocumento", "cobrancaEmNomeDe"];
+              const camposObrigatorios = ["vencimento", "formaPagamento", "tipoDocumento", "cobrancaEmNomeDe"];
               if (camposObrigatorios.some((k) => (errors as any)[k])) {
                 setDadosExpanded(true);
               }
