@@ -316,7 +316,21 @@ serve(async (req) => {
 
     // Step 3d: Load discrepancy data via SQL (pieces divergence + DIS events)
     let discrepancyMap: Record<string, { pieces_discrepancy: boolean; baseline_pieces: number | null; has_dis_event: boolean }> = {};
-    try {
+
+    // Cache curto para reduzir CPU em chamadas concorrentes (polling da página)
+    if (discrepancyCache && Date.now() - discrepancyCache.at < DISCREPANCY_CACHE_TTL_MS) {
+      discrepancyMap = discrepancyCache.data;
+      console.log(`Reused discrepancy cache (${Object.keys(discrepancyMap).length} records, age=${Math.round((Date.now() - discrepancyCache.at) / 1000)}s)`);
+    } else try {
+      // Restringe o universo da query aos AWBs realmente em tela (reduz drasticamente o JSON_TABLE)
+      const activeAwbs = [...new Set(
+        (rows || [])
+          .map((r: any) => (r.AWB || "").toString().trim())
+          .filter((a: string) => a.length > 0)
+      )] as string[];
+      const awbInClause = activeAwbs.length > 0
+        ? `AND tda.awb_number IN (${activeAwbs.map(a => `'${a.replace(/'/g, "''")}'`).join(",")})`
+        : "AND 1=0";
       const discrepancySql = `
         WITH base_disc AS (
           SELECT
