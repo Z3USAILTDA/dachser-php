@@ -1,82 +1,41 @@
 ## Objetivo
 
-Eliminar todo uso dos secrets genéricos `MARIADB_USER` / `MARIADB_PASSWORD` / `MARIADB_HOST` / `MARIADB_DATABASE` / `MARIADB_PORT` (que historicamente apontavam para `root`) substituindo o fallback por `MARIADB_OPS_*`, que possui acesso pleno a `dados_dachser`, `ai_agente` e `ai_dachser` (e com 500 conexões simultâneas).
+Remover do Lovable Cloud o secret `MARIADB_USER` (e os 4 secrets genéricos irmãos, hoje órfãos) e atualizar o relatório `relatorio_conexoes_mariadb.pdf` refletindo a remoção.
 
-## Mudança a aplicar
+## Contexto verificado
 
-Em cada arquivo, trocar o segundo operando do `||`:
+- `rg` em `supabase/functions/` e `src/` confirma **zero** referências aos secrets genéricos (`MARIADB_USER`, `MARIADB_PASSWORD`, `MARIADB_HOST`, `MARIADB_DATABASE`, `MARIADB_PORT`).
+- Todas as 57 edge functions usam pools nomeados (`MARIADB_OPS_*`, `MARIADB_AIR_*`, `MARIADB_SEA_*`, `MARIADB_FIN_*`, `MARIADB_CHARGES_*`).
+- Os 5 secrets legados ainda existem no Cloud, mas não são lidos por nada.
 
-```diff
-- Deno.env.get('MARIADB_AIR_USER')     || Deno.env.get('MARIADB_USER')
-+ Deno.env.get('MARIADB_AIR_USER')     || Deno.env.get('MARIADB_OPS_USER')
+## Ações
 
-- Deno.env.get('MARIADB_AIR_PASSWORD') || Deno.env.get('MARIADB_PASSWORD')
-+ Deno.env.get('MARIADB_AIR_PASSWORD') || Deno.env.get('MARIADB_OPS_PASSWORD')
+### 1. Deletar secrets do Lovable Cloud (5 secrets)
 
-- Deno.env.get('MARIADB_AIR_HOST')     || Deno.env.get('MARIADB_HOST')
-+ Deno.env.get('MARIADB_AIR_HOST')     || Deno.env.get('MARIADB_OPS_HOST')
+Via `delete_secret`:
+- `MARIADB_USER`
+- `MARIADB_PASSWORD`
+- `MARIADB_HOST`
+- `MARIADB_DATABASE`
+- `MARIADB_PORT`
 
-- Deno.env.get('MARIADB_AIR_DATABASE') || Deno.env.get('MARIADB_DATABASE')
-+ Deno.env.get('MARIADB_AIR_DATABASE') || Deno.env.get('MARIADB_OPS_DATABASE')
+Justificativa para remover os 5 juntos: sem `MARIADB_USER` (que apontava para `root`), os outros 4 secrets do mesmo conjunto ficam órfãos — removê-los junto evita confusão futura e elimina completamente o vetor de credencial `root`. Se você preferir remover **somente** `MARIADB_USER` e manter os outros, me avise.
 
-- Deno.env.get('MARIADB_AIR_PORT')     || Deno.env.get('MARIADB_PORT')
-+ Deno.env.get('MARIADB_AIR_PORT')     || Deno.env.get('MARIADB_OPS_PORT')
-```
+### 2. Regenerar `relatorio_conexoes_mariadb.pdf`
 
-A mesma regra vale para o prefixo `MARIADB_SEA_*` (e qualquer outro pool nas mesmas linhas).
-Mudança puramente cirúrgica — apenas substituição de string nas chamadas `Deno.env.get(...)`. Nenhum refactor, nenhuma nova função, nenhuma alteração de lógica.
+Atualizar o script Python que gerou o relatório para refletir:
 
-## Arquivos afetados (35)
-
-**Pool AIR (17):**
-- `add-awb-to-status`
-- `air-dep-transition-alert`
-- `air-scan-finalized`
-- `air-tracking-failed-alert`
-- `arr-to-cct-sync`
-- `fetch-air-imports`
-- `fetch-awbs`
-- `fetch-awbs-dep`
-- `fetch-awbs-for-retrack`
-- `fetch-master-dados-stats`
-- `fetch-status-aereo`
-- `fetch-tracking-aereo`
-- `firecrawl-monitor-alert`
-- `firecrawl-monitor-stats`
-- `manage-processing-queue`
-- `mariadb-dep-sync`
-- `mariadb-sync`
-
-**Pool SEA (18):**
-- `client-freetime-crud`
-- `demurrage-auto-invoice`
-- `demurrage-mariadb-sync`
-- `demurrage-recalc`
-- `demurrage-send-alert`
-- `draft-fetch-mariadb`
-- `draft-fetch-tracking-status`
-- `draft-save-tracking`
-- `fetch-sea-master-dados-stats`
-- `hapag-batch-discover`
-- `sea-analysis-watchdog`
-- `sea-carrier-fallback`
-- `sea-msc-batch-update`
-- `sea-poll-analysis`
-- `sea-reextract-metadata`
-- `sea-submit-analysis`
-- `sea-tracking-transship-backfill`
-- `sea-upload-base-file`
-
-## Validação após implementação
-
-1. `rg "Deno\.env\.get\(['\"]MARIADB_(USER|PASSWORD|HOST|DATABASE|PORT)['\"]\)" supabase/functions/` deve retornar **zero** resultados.
-2. Build do projeto continua passando (typecheck automático).
-3. Após o deploy, você pode (opcionalmente) **deletar os secrets** `MARIADB_USER`, `MARIADB_PASSWORD`, `MARIADB_HOST`, `MARIADB_DATABASE`, `MARIADB_PORT` do Lovable Cloud — não estarão mais sendo lidos por nada.
+- **Seção "Pools de Credenciais"**: marcar `MARIADB_USER` (root) como **REMOVIDO** em vez de "legado / a remover".
+- **Seção "Remediação de Segurança"**: trocar de "pode ser removido" para "✅ removido em <data>", com nota de que o vetor `root` foi eliminado.
+- **Adicionar changelog** ao final do documento:
+  - `2026-04-30`: secrets `MARIADB_USER`, `MARIADB_PASSWORD`, `MARIADB_HOST`, `MARIADB_DATABASE`, `MARIADB_PORT` deletados do Lovable Cloud.
+- **Lista de pools ativos** passa a ser: `OPS`, `AIR`, `SEA`, `FIN`, `CHARGES` (sem mais menção a fallback genérico legado).
+- Salvar como `/mnt/documents/relatorio_conexoes_mariadb.pdf` (sobrescreve o atual; mantém o nome para continuidade).
+- QA visual: converter páginas para imagem e inspecionar antes de entregar.
 
 ## Fora de escopo
 
-- Nenhuma mudança de lógica, schema, RLS, ou comportamento.
-- `mariadb-proxy`, `mariadb-connect`, `voucher-mariadb-sync`, `db-status-report`, `db-critical-alert` e `olimpo-proxy` já usam exclusivamente secrets nomeados (`MARIADB_OPS_*`, `MARIADB_FIN_*`) — **não serão tocados**.
-- Não vou alterar nenhum cron job; eles apenas chamam edge functions via HTTP.
+- Nenhuma mudança em código de edge functions (já feito na rodada anterior).
+- Pools nomeados (`MARIADB_OPS_*` etc.) permanecem intactos.
 
-Pode aprovar que aplico as 35 substituições em paralelo.
+Pode aprovar?
