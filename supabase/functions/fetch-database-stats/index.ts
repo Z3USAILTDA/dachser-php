@@ -47,11 +47,11 @@ async function connectWithRetry(maxRetries = 3) {
       console.log(`[fetch-database-stats] Connection attempt ${attempt}/${maxRetries}...`);
       
       const connection = await mysql.createConnection({
-        host: Deno.env.get("MARIADB_HOST") || "",
-        port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
-        user: Deno.env.get("MARIADB_USER") || "",
-        password: Deno.env.get("MARIADB_PASSWORD") || "",
-        database: Deno.env.get("MARIADB_DATABASE") || "",
+        host: Deno.env.get("MARIADB_OPS_HOST") || "",
+        port: parseInt(Deno.env.get("MARIADB_OPS_PORT") || "3306"),
+        user: Deno.env.get("MARIADB_OPS_USER") || "",
+        password: Deno.env.get("MARIADB_OPS_PASSWORD") || "",
+        database: Deno.env.get("MARIADB_OPS_DATABASE") || "",
         connectTimeout: 10000,
       });
       
