@@ -538,9 +538,15 @@ serve(async (req) => {
           has_dis_event: Number(dr.HAS_DIS_EVENT) === 1,
         };
       }
-      console.log(`Loaded ${Object.keys(discrepancyMap).length} discrepancy records`);
+      console.log(`Loaded ${Object.keys(discrepancyMap).length} discrepancy records (filtered to ${activeAwbs.length} active AWBs)`);
+      discrepancyCache = { at: Date.now(), data: discrepancyMap };
     } catch (err) {
       console.warn("Could not load discrepancy data:", err);
+      // Em caso de erro, usar cache antigo se existir (mesmo expirado), em vez de zerar
+      if (discrepancyCache) {
+        discrepancyMap = discrepancyCache.data;
+        console.warn(`Falling back to stale discrepancy cache (${Object.keys(discrepancyMap).length} records)`);
+      }
     }
 
     // Step 3d-bis: Discrepancy detection for prefix 996 (Air Europa via uxtracking)
