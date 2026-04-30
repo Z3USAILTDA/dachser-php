@@ -87,7 +87,7 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({
             <span className="text-3xl font-semibold text-primary">
               {emAlerta}
             </span>
-            <span className="text-xs text-primary/80">Atrasos</span>
+            <span className="text-xs text-primary/80">DIS, Atrasos</span>
           </div>
         </div>
       </Card>
