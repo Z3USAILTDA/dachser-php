@@ -36,12 +36,18 @@ const formSchema = z.object({
   nomeMaster: z.string().optional(), // Nome personalizado do master
   fornecedor: z.string().optional(),
   cnpjFornecedor: z.string().optional(),
-  valorTotal: z.string().optional(),
+  valorTotal: z
+    .string({ required_error: "Valor Total é obrigatório" })
+    .min(1, "Valor Total é obrigatório")
+    .refine((v) => {
+      const n = parseFloat((v || "").replace(/\./g, "").replace(",", "."));
+      return !isNaN(n) && n > 0;
+    }, "Valor Total deve ser maior que zero"),
   moeda: z.string().default("BRL"),
-  vencimento: z.date().optional(),
-  formaPagamento: z.string().default("BOLETO"),
-  tipoDocumento: z.string().optional(),
-  cobrancaEmNomeDe: z.enum(["DACHSER", "CLIENTE"]).default("DACHSER"),
+  vencimento: z.date({ required_error: "Vencimento é obrigatório", invalid_type_error: "Vencimento é obrigatório" }),
+  formaPagamento: z.string({ required_error: "Forma de Pagamento é obrigatória" }).min(1, "Forma de Pagamento é obrigatória"),
+  tipoDocumento: z.string({ required_error: "Tipo de Documento é obrigatório" }).min(1, "Tipo de Documento é obrigatório"),
+  cobrancaEmNomeDe: z.enum(["DACHSER", "CLIENTE"], { required_error: "Campo obrigatório" }),
   filial: z.string().optional(),
   comentariosOperacao: z.string().optional(),
 });
