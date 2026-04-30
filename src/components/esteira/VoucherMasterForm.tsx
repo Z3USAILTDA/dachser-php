@@ -68,10 +68,12 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
   const navigate = useNavigate();
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
+    mode: "onSubmit",
     defaultValues: {
       moeda: "BRL",
       formaPagamento: "BOLETO",
       cobrancaEmNomeDe: "DACHSER",
+      tipoDocumento: "",
     },
   });
 
