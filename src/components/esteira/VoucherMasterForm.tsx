@@ -501,7 +501,8 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
               <DateInputField
                 control={form.control}
                 name="vencimento"
-                label={<>Vencimento <span className="text-destructive">*</span></> as any}
+                label="Vencimento"
+                required
               />
             </div>
 
