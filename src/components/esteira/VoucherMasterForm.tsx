@@ -469,7 +469,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                 name="valorTotal"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Valor Total <span className="text-destructive">*</span></FormLabel>
+                    <FormLabel>Valor Total</FormLabel>
                     <FormControl>
                       <Input {...field} className="bg-background/50 border-border" />
                     </FormControl>
