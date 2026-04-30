@@ -469,6 +469,12 @@ Deno.serve(async (req) => {
       // Supervisor tokens (aprovação fluxo voucher)
       'setup_supervisor_tokens_table','create_supervisor_token',
       'validate_supervisor_token','mark_supervisor_token_used',
+      // Auth / Sessão / Usuários (tcredenciais_app reside no banco FIN)
+      'login','logout','change_password','forgot_password',
+      'verify_reset_code','reset_password','reset_password_by_email',
+      'log_usage','get_active_connections','kill_active_connection',
+      'get_user_by_email','get_users','create_user','update_user',
+      'delete_user','reset_user_password','toggle_user_active','update_user_role',
     ]);
 
     // ====================================================================
