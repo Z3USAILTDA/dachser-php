@@ -330,7 +330,10 @@ serve(async (req) => {
         ),
         eventos_disc AS (
           SELECT
-            b.awb, b.hawb,
+            b.awb,
+            b.hawb,
+            jt.ordem,
+            jt.description,
             CASE
               WHEN UPPER(COALESCE(jt.description, '')) REGEXP 'OFFLOADED|OFLD'
                    AND (
@@ -339,16 +342,16 @@ serve(async (req) => {
                        OR UPPER(jt.description) REGEXP 'PIECES?:[[:space:]]*0([^0-9]|$)'
                    )
               THEN NULL
-              WHEN UPPER(COALESCE(jt.description, '')) REGEXP 'QTY:[[:space:]]*[1-9][0-9]*'
-              THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), 'QTY:[[:space:]]*[1-9][0-9]*'), '[1-9][0-9]*') AS UNSIGNED)
-              WHEN UPPER(COALESCE(jt.description, '')) REGEXP 'PIECES?:[[:space:]]*[1-9][0-9]*'
-              THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), 'PIECES?:[[:space:]]*[1-9][0-9]*'), '[1-9][0-9]*') AS UNSIGNED)
-              WHEN UPPER(COALESCE(jt.description, '')) REGEXP '[1-9][0-9]*[[:space:]]+PIECE\\\\(S\\\\)'
-              THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), '[1-9][0-9]*[[:space:]]+PIECE\\\\(S\\\\)'), '[1-9][0-9]*') AS UNSIGNED)
-              WHEN UPPER(COALESCE(jt.description, '')) REGEXP '[1-9][0-9]*[[:space:]]+PIECES?'
-              THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), '[1-9][0-9]*[[:space:]]+PIECES?'), '[1-9][0-9]*') AS UNSIGNED)
-              WHEN UPPER(COALESCE(jt.description, '')) REGEXP '[1-9][0-9]*[[:space:]]*/[[:space:]]*[0-9]+([.,][0-9]+)?[[:space:]]*(KGS|KG|LBS|LB)'
-              THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), '[1-9][0-9]*[[:space:]]*/[[:space:]]*[0-9]+([.,][0-9]+)?[[:space:]]*(KGS|KG|LBS|LB)'), '[1-9][0-9]*') AS UNSIGNED)
+              WHEN UPPER(jt.description) REGEXP 'QTY:[[:space:]]*[1-9][0-9]*'
+                THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), 'QTY:[[:space:]]*[1-9][0-9]*'), '[1-9][0-9]*') AS UNSIGNED)
+              WHEN UPPER(jt.description) REGEXP 'PIECES?:[[:space:]]*[1-9][0-9]*'
+                THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), 'PIECES?:[[:space:]]*[1-9][0-9]*'), '[1-9][0-9]*') AS UNSIGNED)
+              WHEN UPPER(jt.description) REGEXP '[1-9][0-9]*[[:space:]]+PIECE\\\\(S\\\\)'
+                THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), '[1-9][0-9]*[[:space:]]+PIECE\\\\(S\\\\)'), '[1-9][0-9]*') AS UNSIGNED)
+              WHEN UPPER(jt.description) REGEXP '[1-9][0-9]*[[:space:]]+PIECES?'
+                THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), '[1-9][0-9]*[[:space:]]+PIECES?'), '[1-9][0-9]*') AS UNSIGNED)
+              WHEN UPPER(jt.description) REGEXP '[1-9][0-9]*[[:space:]]*/[[:space:]]*[0-9]+([.,][0-9]+)?[[:space:]]*(KGS|KG|LBS|LB)'
+                THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), '[1-9][0-9]*[[:space:]]*/[[:space:]]*[0-9]+([.,][0-9]+)?[[:space:]]*(KGS|KG|LBS|LB)'), '[1-9][0-9]*') AS UNSIGNED)
               ELSE NULL
             END AS pieces_extraidas,
             CASE
@@ -364,23 +367,147 @@ serve(async (req) => {
             )
           ) jt
         ),
+        baseline_pieces AS (
+          SELECT awb, hawb, pieces_extraidas AS baseline_pecas
+          FROM (
+            SELECT
+              e.*,
+              ROW_NUMBER() OVER (PARTITION BY e.awb, e.hawb ORDER BY e.ordem) AS rn
+            FROM eventos_disc e
+            WHERE e.pieces_extraidas IS NOT NULL
+              AND e.pieces_extraidas > 0
+          ) x
+          WHERE x.rn = 1
+        ),
+        ultimo_evento_absoluto AS (
+          SELECT
+            awb,
+            hawb,
+            is_dis_event AS ultimo_is_dis_event
+          FROM (
+            SELECT
+              e.*,
+              ROW_NUMBER() OVER (PARTITION BY e.awb, e.hawb ORDER BY e.ordem DESC) AS rn
+            FROM eventos_disc e
+          ) x
+          WHERE x.rn = 1
+        ),
+        eventos_validos_pecas AS (
+          SELECT
+            e.awb,
+            e.hawb,
+            e.ordem,
+            e.pieces_extraidas,
+            ROW_NUMBER() OVER (
+              PARTITION BY e.awb, e.hawb
+              ORDER BY e.ordem DESC
+            ) AS rn_desc,
+            SUM(e.pieces_extraidas) OVER (
+              PARTITION BY e.awb, e.hawb
+              ORDER BY e.ordem DESC
+              ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            ) AS soma_pecas_desc
+          FROM eventos_disc e
+          WHERE e.pieces_extraidas IS NOT NULL
+            AND e.pieces_extraidas > 0
+        ),
+        ultimo_evento_pecas AS (
+          SELECT
+            awb,
+            hawb,
+            pieces_extraidas AS ultimo_evento_pecas
+          FROM eventos_validos_pecas
+          WHERE rn_desc = 1
+        ),
+        normalizado_por_soma_final AS (
+          SELECT
+            v.awb,
+            v.hawb,
+            MAX(
+              CASE
+                WHEN bp.baseline_pecas IS NOT NULL
+                 AND v.rn_desc >= 2
+                 AND v.soma_pecas_desc = bp.baseline_pecas
+                THEN 1
+                ELSE 0
+              END
+            ) AS normalizado_soma_final
+          FROM eventos_validos_pecas v
+          LEFT JOIN baseline_pieces bp
+            ON bp.awb = v.awb
+           AND bp.hawb = v.hawb
+          GROUP BY v.awb, v.hawb
+        ),
         agregado_disc AS (
           SELECT
-            ev.awb, ev.hawb,
+            ev.awb,
+            ev.hawb,
             MIN(CASE WHEN ev.pieces_extraidas IS NOT NULL AND ev.pieces_extraidas > 0 THEN ev.pieces_extraidas END) AS min_pieces,
-            MAX(CASE WHEN ev.pieces_extraidas IS NOT NULL AND ev.pieces_extraidas > 0 THEN ev.pieces_extraidas END) AS max_pieces,
-            MAX(ev.is_dis_event) AS has_dis_event
+            MAX(CASE WHEN ev.pieces_extraidas IS NOT NULL AND ev.pieces_extraidas > 0 THEN ev.pieces_extraidas END) AS max_pieces
           FROM eventos_disc ev
           GROUP BY ev.awb, ev.hawb
+        ),
+        final_classificacao AS (
+          SELECT
+            a.awb,
+            a.hawb,
+            bp.baseline_pecas,
+            up.ultimo_evento_pecas,
+            CASE
+              WHEN bp.baseline_pecas IS NOT NULL
+               AND a.min_pieces IS NOT NULL
+               AND a.max_pieces IS NOT NULL
+               AND a.min_pieces <> a.max_pieces
+               AND NOT (
+                 up.ultimo_evento_pecas IS NOT NULL
+                 AND up.ultimo_evento_pecas = bp.baseline_pecas
+               )
+               AND COALESCE(ns.normalizado_soma_final, 0) = 0
+              THEN 1
+              ELSE 0
+            END AS pieces_discrepancy,
+            CASE
+              WHEN ua.ultimo_is_dis_event = 1 THEN 1
+              ELSE 0
+            END AS has_dis_event,
+            CASE
+              WHEN ua.ultimo_is_dis_event = 1 THEN 'DIS_ULTIMO_EVENTO'
+              WHEN bp.baseline_pecas IS NOT NULL
+               AND a.min_pieces IS NOT NULL
+               AND a.max_pieces IS NOT NULL
+               AND a.min_pieces <> a.max_pieces
+               AND NOT (
+                 up.ultimo_evento_pecas IS NOT NULL
+                 AND up.ultimo_evento_pecas = bp.baseline_pecas
+               )
+               AND COALESCE(ns.normalizado_soma_final, 0) = 0
+              THEN 'DISCREPANCIA_REAL'
+              ELSE 'SEM_DISCREPANCIA'
+            END AS status_final
+          FROM agregado_disc a
+          LEFT JOIN baseline_pieces bp
+            ON bp.awb = a.awb
+           AND bp.hawb = a.hawb
+          LEFT JOIN ultimo_evento_pecas up
+            ON up.awb = a.awb
+           AND up.hawb = a.hawb
+          LEFT JOIN ultimo_evento_absoluto ua
+            ON ua.awb = a.awb
+           AND ua.hawb = a.hawb
+          LEFT JOIN normalizado_por_soma_final ns
+            ON ns.awb = a.awb
+           AND ns.hawb = a.hawb
         )
         SELECT
-          awb AS AWB, hawb AS HAWB,
-          min_pieces AS BASELINE_PECAS,
-          CASE WHEN min_pieces IS NOT NULL AND max_pieces IS NOT NULL AND min_pieces <> max_pieces THEN 1 ELSE 0 END AS PIECES_DISCREPANCY,
-          has_dis_event AS HAS_DIS_EVENT
-        FROM agregado_disc
-        WHERE (min_pieces IS NOT NULL AND max_pieces IS NOT NULL AND min_pieces <> max_pieces)
-           OR has_dis_event = 1
+          awb AS AWB,
+          hawb AS HAWB,
+          baseline_pecas AS BASELINE_PECAS,
+          ultimo_evento_pecas AS ULTIMO_EVENTO_PECAS,
+          pieces_discrepancy AS PIECES_DISCREPANCY,
+          has_dis_event AS HAS_DIS_EVENT,
+          status_final AS STATUS_FINAL
+        FROM final_classificacao
+        WHERE status_final IN ('DIS_ULTIMO_EVENTO', 'DISCREPANCIA_REAL')
       `;
       console.log("Executing discrepancy query...");
       const discRows = await queryWithRetry(client, discrepancySql);
