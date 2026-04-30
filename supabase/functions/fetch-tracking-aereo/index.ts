@@ -6,6 +6,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Cache em memória (escopo do módulo) — TTL 60s para reduzir CPU em chamadas concorrentes.
+let discrepancyCache: { at: number; data: Record<string, { pieces_discrepancy: boolean; baseline_pieces: number | null; has_dis_event: boolean }> } | null = null;
+const DISCREPANCY_CACHE_TTL_MS = 60_000;
+
 async function queryWithRetry(client: Client, sql: string, params: any[] = [], maxRetries = 3): Promise<any> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
