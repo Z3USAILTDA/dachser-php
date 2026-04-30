@@ -809,21 +809,60 @@ const TrackingAereo = () => {
                       const isDelayed = statusCode === "DIS";
 
                       // Route highlighting logic
+                      // Priority: 1) terminal/pre-departure status by code, 2) last_event_location IATA match,
+                      // 3) status-based fallback when location doesn't map to any route segment.
                       const conexoes = awb.conexao ? awb.conexao.split(',').map(c => c.trim()).filter(Boolean) : [];
-                      const PRE_DEPARTURE = ['BKD','PRE','MAN','DOC','RCS','RDP','RCT','LAT','TKG','SCR','ECC'];
+                      const PRE_DEPARTURE = ['BKD','PRE','MAN','DOC','RCS','RDP','RCT','LAT','TKG','SCR','ECC','FOH'];
                       const FINAL_DESTINO_ONLY = ['DLV','POD','ARR - DESTINO'];
-                      const POST_DESTINO = ['ARR','RCF','NFD','AWD','DLV','POD','CCD','AWR','FOH'];
                       let highlightOrigin = false, highlightDestino = false, highlightConexaoIndex = -1;
 
-                      if (conexoes.length > 0) {
-                        if (FINAL_DESTINO_ONLY.includes(statusCode)) highlightDestino = true;
-                        else if (PRE_DEPARTURE.includes(statusCode) || statusCode === 'RCF') highlightOrigin = true;
-                        else if (['ARR - CONEXÃO','ARR - CONEXAO','DEP'].includes(statusCode)) highlightConexaoIndex = conexoes.length - 1;
-                        else if (POST_DESTINO.includes(statusCode)) highlightDestino = true;
-                        else highlightOrigin = true;
-                      } else {
-                        if (POST_DESTINO.includes(statusCode)) highlightDestino = true;
-                        else highlightOrigin = true;
+                      // Extract IATA (3 uppercase letters) from a free-form location string
+                      const extractIata = (raw: string | undefined | null): string => {
+                        if (!raw) return '';
+                        const s = String(raw).toUpperCase();
+                        const m = s.match(/\b([A-Z]{3})\b/);
+                        return m ? m[1] : '';
+                      };
+                      const origemIata = extractIata(awb.origem);
+                      const destinoIata = extractIata(awb.destino);
+                      const conexoesIata = conexoes.map(c => extractIata(c));
+                      const eventIata = extractIata((awb as any).last_event_location);
+
+                      const matchSegmentByLocation = (): boolean => {
+                        if (!eventIata) return false;
+                        // Prefer connection match first (most informative)
+                        const ci = conexoesIata.findIndex(c => c && c === eventIata);
+                        if (ci >= 0) { highlightConexaoIndex = ci; return true; }
+                        if (destinoIata && eventIata === destinoIata) { highlightDestino = true; return true; }
+                        if (origemIata && eventIata === origemIata) { highlightOrigin = true; return true; }
+                        return false;
+                      };
+
+                      if (FINAL_DESTINO_ONLY.includes(statusCode)) {
+                        highlightDestino = true;
+                      } else if (PRE_DEPARTURE.includes(statusCode)) {
+                        highlightOrigin = true;
+                      } else if (!matchSegmentByLocation()) {
+                        // Fallback: location didn't map to any segment of the cataloged route
+                        if (conexoes.length > 0) {
+                          if (statusCode === 'ARR - CONEXÃO' || statusCode === 'ARR - CONEXAO') {
+                            highlightConexaoIndex = conexoes.length - 1;
+                          } else if (statusCode === 'DEP') {
+                            highlightConexaoIndex = 0;
+                          } else if (statusCode === 'RCF') {
+                            highlightConexaoIndex = conexoes.length - 1;
+                          } else if (['ARR','NFD','AWD','DLV','POD','CCD','AWR'].includes(statusCode)) {
+                            highlightDestino = true;
+                          } else {
+                            highlightOrigin = true;
+                          }
+                        } else {
+                          if (['ARR','RCF','NFD','AWD','DLV','POD','CCD','AWR','ARR - DESTINO'].includes(statusCode)) {
+                            highlightDestino = true;
+                          } else {
+                            highlightOrigin = true;
+                          }
+                        }
                       }
 
                       const activeClass = "text-[#ffc800] font-semibold";
