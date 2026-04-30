@@ -8577,6 +8577,10 @@ Deno.serve(async (req) => {
             if (/(OFLD|OFFLOAD|OFFLOADED)/i.test(text) && /(^|[^0-9])0\s+PIECES?([^A-Z]|$)/i.test(text)) {
               return null;
             }
+            // Ignore booking/reservation events: pieces shown reflect flight capacity, not actual cargo
+            if (/(^|[^A-Z])(BOOKED|BOOKING)([^A-Z]|$)/i.test(text)) {
+              return null;
+            }
             // Pattern: "Pcs/Wt: 10/27,3" (uxtracking real format, no unit suffix) — priority
             const pcsWtMatch = text.match(/Pcs\s*\/\s*Wt\s*[:=]?\s*(\d+)\s*\/\s*[\d.,]+/i);
             if (pcsWtMatch) return parseInt(pcsWtMatch[1], 10);
