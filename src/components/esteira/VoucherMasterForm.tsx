@@ -36,12 +36,18 @@ const formSchema = z.object({
   nomeMaster: z.string().optional(), // Nome personalizado do master
   fornecedor: z.string().optional(),
   cnpjFornecedor: z.string().optional(),
-  valorTotal: z.string().optional(),
+  valorTotal: z
+    .string({ required_error: "Valor Total é obrigatório" })
+    .min(1, "Valor Total é obrigatório")
+    .refine((v) => {
+      const n = parseFloat((v || "").replace(/\./g, "").replace(",", "."));
+      return !isNaN(n) && n > 0;
+    }, "Valor Total deve ser maior que zero"),
   moeda: z.string().default("BRL"),
-  vencimento: z.date().optional(),
-  formaPagamento: z.string().default("BOLETO"),
-  tipoDocumento: z.string().optional(),
-  cobrancaEmNomeDe: z.enum(["DACHSER", "CLIENTE"]).default("DACHSER"),
+  vencimento: z.date({ required_error: "Vencimento é obrigatório", invalid_type_error: "Vencimento é obrigatório" }),
+  formaPagamento: z.string({ required_error: "Forma de Pagamento é obrigatória" }).min(1, "Forma de Pagamento é obrigatória"),
+  tipoDocumento: z.string({ required_error: "Tipo de Documento é obrigatório" }).min(1, "Tipo de Documento é obrigatório"),
+  cobrancaEmNomeDe: z.enum(["DACHSER", "CLIENTE"], { required_error: "Campo obrigatório" }),
   filial: z.string().optional(),
   comentariosOperacao: z.string().optional(),
 });
@@ -62,10 +68,12 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
   const navigate = useNavigate();
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
+    mode: "onSubmit",
     defaultValues: {
       moeda: "BRL",
       formaPagamento: "BOLETO",
       cobrancaEmNomeDe: "DACHSER",
+      tipoDocumento: "",
     },
   });
 
@@ -460,10 +468,11 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                 name="valorTotal"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Valor Total</FormLabel>
+                    <FormLabel>Valor Total <span className="text-destructive">*</span></FormLabel>
                     <FormControl>
                       <Input {...field} className="bg-background/50 border-border" />
                     </FormControl>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -485,6 +494,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                         <SelectItem value="EUR">EUR</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -492,32 +502,62 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                 control={form.control}
                 name="vencimento"
                 label="Vencimento"
+                required
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="formaPagamento"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Forma de Pagamento</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="bg-background/50 border-border max-w-md">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="BOLETO">Boleto</SelectItem>
-                      <SelectItem value="PIX">PIX</SelectItem>
-                      <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
-                      <SelectItem value="DARF">DARF</SelectItem>
-                      <SelectItem value="GPS">GPS</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="formaPagamento"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Forma de Pagamento <span className="text-destructive">*</span></FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="bg-background/50 border-border">
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="BOLETO">Boleto</SelectItem>
+                        <SelectItem value="PIX">PIX</SelectItem>
+                        <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
+                        <SelectItem value="DARF">DARF</SelectItem>
+                        <SelectItem value="GPS">GPS</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="tipoDocumento"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipo de Documento <span className="text-destructive">*</span></FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="bg-background/50 border-border">
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="VOUCHER">Voucher</SelectItem>
+                        <SelectItem value="SPO">SPO</SelectItem>
+                        <SelectItem value="ICMS">ICMS</SelectItem>
+                        <SelectItem value="ARMAZENAGEM">Armazenagem</SelectItem>
+                        <SelectItem value="ADF">ADF</SelectItem>
+                        <SelectItem value="OUTROS">Outros</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}
@@ -525,13 +565,13 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
               render={({ field }) => (
                 <FormItem>
                   <div className="flex items-center gap-3 flex-wrap">
-                    <FormLabel>É necessário contabilização com o fiscal?</FormLabel>
+                    <FormLabel>É necessário contabilização com o fiscal? <span className="text-destructive">*</span></FormLabel>
                     <FornecedoresSemFiscalDialog />
                   </div>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                     <FormControl>
                       <SelectTrigger className="bg-background/50 border-border max-w-md">
-                        <SelectValue />
+                        <SelectValue placeholder="Selecione..." />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -539,6 +579,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                       <SelectItem value="CLIENTE">Não — enviar diretamente para o Financeiro</SelectItem>
                     </SelectContent>
                   </Select>
+                  <FormMessage />
                 </FormItem>
               )}
             />
@@ -666,7 +707,18 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
           </Button>
           <Button
             type="button"
-            onClick={form.handleSubmit(handleSubmit)}
+            onClick={form.handleSubmit(handleSubmit, (errors) => {
+              // Abrir o collapsible automaticamente para o usuário ver os erros
+              const camposObrigatorios = ["valorTotal", "vencimento", "formaPagamento", "tipoDocumento", "cobrancaEmNomeDe"];
+              if (camposObrigatorios.some((k) => (errors as any)[k])) {
+                setDadosExpanded(true);
+              }
+              toast({
+                title: "Preencha os campos obrigatórios",
+                description: "Há campos obrigatórios não preenchidos no bloco \"Editar Dados Consolidados\".",
+                variant: "destructive",
+              });
+            })}
             disabled={isSubmitting || selectedVouchers.length < 2}
             className="bg-purple-600 hover:bg-purple-700 text-white gap-2"
           >

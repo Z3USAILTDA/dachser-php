@@ -6,6 +6,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Cache em memória (escopo do módulo) — TTL 60s para reduzir CPU em chamadas concorrentes.
+let discrepancyCache: { at: number; data: Record<string, { pieces_discrepancy: boolean; baseline_pieces: number | null; has_dis_event: boolean }> } | null = null;
+const DISCREPANCY_CACHE_TTL_MS = 60_000;
+
 async function queryWithRetry(client: Client, sql: string, params: any[] = [], maxRetries = 3): Promise<any> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -312,7 +316,21 @@ serve(async (req) => {
 
     // Step 3d: Load discrepancy data via SQL (pieces divergence + DIS events)
     let discrepancyMap: Record<string, { pieces_discrepancy: boolean; baseline_pieces: number | null; has_dis_event: boolean }> = {};
-    try {
+
+    // Cache curto para reduzir CPU em chamadas concorrentes (polling da página)
+    if (discrepancyCache && Date.now() - discrepancyCache.at < DISCREPANCY_CACHE_TTL_MS) {
+      discrepancyMap = discrepancyCache.data;
+      console.log(`Reused discrepancy cache (${Object.keys(discrepancyMap).length} records, age=${Math.round((Date.now() - discrepancyCache.at) / 1000)}s)`);
+    } else try {
+      // Restringe o universo da query aos AWBs realmente em tela (reduz drasticamente o JSON_TABLE)
+      const activeAwbs = [...new Set(
+        (rows || [])
+          .map((r: any) => (r.AWB || "").toString().trim())
+          .filter((a: string) => a.length > 0)
+      )] as string[];
+      const awbInClause = activeAwbs.length > 0
+        ? `AND tda.awb_number IN (${activeAwbs.map(a => `'${a.replace(/'/g, "''")}'`).join(",")})`
+        : "AND 1=0";
       const discrepancySql = `
         WITH base_disc AS (
           SELECT
@@ -325,6 +343,7 @@ serve(async (req) => {
            AND JSON_VALID(tdaf.hawbs_json)
            AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
           WHERE (tda.master_insert >= '2026-03-20' OR tda.created_at >= '2026-03-20')
+            ${awbInClause}
             AND tdaf.timeline_json IS NOT NULL
             AND JSON_VALID(tdaf.timeline_json)
         ),
@@ -519,9 +538,15 @@ serve(async (req) => {
           has_dis_event: Number(dr.HAS_DIS_EVENT) === 1,
         };
       }
-      console.log(`Loaded ${Object.keys(discrepancyMap).length} discrepancy records`);
+      console.log(`Loaded ${Object.keys(discrepancyMap).length} discrepancy records (filtered to ${activeAwbs.length} active AWBs)`);
+      discrepancyCache = { at: Date.now(), data: discrepancyMap };
     } catch (err) {
       console.warn("Could not load discrepancy data:", err);
+      // Em caso de erro, usar cache antigo se existir (mesmo expirado), em vez de zerar
+      if (discrepancyCache) {
+        discrepancyMap = discrepancyCache.data;
+        console.warn(`Falling back to stale discrepancy cache (${Object.keys(discrepancyMap).length} records)`);
+      }
     }
 
     // Step 3d-bis: Discrepancy detection for prefix 996 (Air Europa via uxtracking)
