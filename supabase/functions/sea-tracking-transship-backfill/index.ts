@@ -12,10 +12,10 @@ serve(async (req) => {
 
   const url = new URL(req.url);
   const dryRun = url.searchParams.get('dry_run') === '1';
-  const mariadbHost = (Deno.env.get('MARIADB_SEA_HOST') || Deno.env.get('MARIADB_HOST'));
-  const mariadbPort = (Deno.env.get('MARIADB_SEA_PORT') || Deno.env.get('MARIADB_PORT')) || '3306';
-  const mariadbUser = (Deno.env.get('MARIADB_SEA_USER') || Deno.env.get('MARIADB_USER'));
-  const mariadbPass = (Deno.env.get('MARIADB_SEA_PASSWORD') || Deno.env.get('MARIADB_PASSWORD'));
+  const mariadbHost = (Deno.env.get('MARIADB_SEA_HOST') || Deno.env.get('MARIADB_OPS_HOST'));
+  const mariadbPort = (Deno.env.get('MARIADB_SEA_PORT') || Deno.env.get('MARIADB_OPS_PORT')) || '3306';
+  const mariadbUser = (Deno.env.get('MARIADB_SEA_USER') || Deno.env.get('MARIADB_OPS_USER'));
+  const mariadbPass = (Deno.env.get('MARIADB_SEA_PASSWORD') || Deno.env.get('MARIADB_OPS_PASSWORD'));
 
   if (!mariadbHost || !mariadbUser || !mariadbPass) {
     return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {

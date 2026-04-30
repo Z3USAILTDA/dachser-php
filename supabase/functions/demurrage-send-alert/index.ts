@@ -143,11 +143,11 @@ async function fetchRatesFromMariaDB(): Promise<RateRow[]> {
   let conn;
   try {
     conn = await mysql.createConnection({
-      host: (Deno.env.get("MARIADB_SEA_HOST") || Deno.env.get("MARIADB_HOST")),
-      port: Number((Deno.env.get("MARIADB_SEA_PORT") || Deno.env.get("MARIADB_PORT")) || "3306"),
-      user: (Deno.env.get("MARIADB_SEA_USER") || Deno.env.get("MARIADB_USER")),
-      password: (Deno.env.get("MARIADB_SEA_PASSWORD") || Deno.env.get("MARIADB_PASSWORD")),
-      database: (Deno.env.get("MARIADB_SEA_DATABASE") || Deno.env.get("MARIADB_DATABASE")),
+      host: (Deno.env.get("MARIADB_SEA_HOST") || Deno.env.get("MARIADB_OPS_HOST")),
+      port: Number((Deno.env.get("MARIADB_SEA_PORT") || Deno.env.get("MARIADB_OPS_PORT")) || "3306"),
+      user: (Deno.env.get("MARIADB_SEA_USER") || Deno.env.get("MARIADB_OPS_USER")),
+      password: (Deno.env.get("MARIADB_SEA_PASSWORD") || Deno.env.get("MARIADB_OPS_PASSWORD")),
+      database: (Deno.env.get("MARIADB_SEA_DATABASE") || Deno.env.get("MARIADB_OPS_DATABASE")),
       connectTimeout: 10000,
     });
     const [rows] = await conn.execute(

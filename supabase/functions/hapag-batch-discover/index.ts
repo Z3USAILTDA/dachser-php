@@ -22,10 +22,10 @@ serve(async (req) => {
       });
     }
 
-    const mariadbHost = (Deno.env.get('MARIADB_SEA_HOST') || Deno.env.get('MARIADB_HOST'));
-    const mariadbUser = (Deno.env.get('MARIADB_SEA_USER') || Deno.env.get('MARIADB_USER'));
-    const mariadbPassword = (Deno.env.get('MARIADB_SEA_PASSWORD') || Deno.env.get('MARIADB_PASSWORD'));
-    const mariadbPort = parseInt((Deno.env.get('MARIADB_SEA_PORT') || Deno.env.get('MARIADB_PORT')) || '3306');
+    const mariadbHost = (Deno.env.get('MARIADB_SEA_HOST') || Deno.env.get('MARIADB_OPS_HOST'));
+    const mariadbUser = (Deno.env.get('MARIADB_SEA_USER') || Deno.env.get('MARIADB_OPS_USER'));
+    const mariadbPassword = (Deno.env.get('MARIADB_SEA_PASSWORD') || Deno.env.get('MARIADB_OPS_PASSWORD'));
+    const mariadbPort = parseInt((Deno.env.get('MARIADB_SEA_PORT') || Deno.env.get('MARIADB_OPS_PORT')) || '3306');
     if (!mariadbHost || !mariadbUser || !mariadbPassword) {
       return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }

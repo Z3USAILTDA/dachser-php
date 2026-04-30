@@ -15,11 +15,11 @@ serve(async (req) => {
   try {
     console.log('Fetching tracking status from MariaDB...');
 
-    const host = (Deno.env.get('MARIADB_SEA_HOST') || Deno.env.get('MARIADB_HOST'));
-    const port = parseInt((Deno.env.get('MARIADB_SEA_PORT') || Deno.env.get('MARIADB_PORT')) || '3306');
-    const username = (Deno.env.get('MARIADB_SEA_USER') || Deno.env.get('MARIADB_USER'));
-    const password = (Deno.env.get('MARIADB_SEA_PASSWORD') || Deno.env.get('MARIADB_PASSWORD'));
-    const database = (Deno.env.get('MARIADB_SEA_DATABASE') || Deno.env.get('MARIADB_DATABASE'));
+    const host = (Deno.env.get('MARIADB_SEA_HOST') || Deno.env.get('MARIADB_OPS_HOST'));
+    const port = parseInt((Deno.env.get('MARIADB_SEA_PORT') || Deno.env.get('MARIADB_OPS_PORT')) || '3306');
+    const username = (Deno.env.get('MARIADB_SEA_USER') || Deno.env.get('MARIADB_OPS_USER'));
+    const password = (Deno.env.get('MARIADB_SEA_PASSWORD') || Deno.env.get('MARIADB_OPS_PASSWORD'));
+    const database = (Deno.env.get('MARIADB_SEA_DATABASE') || Deno.env.get('MARIADB_OPS_DATABASE'));
 
     console.log(`Connecting to MariaDB at ${host}:${port}...`);
 

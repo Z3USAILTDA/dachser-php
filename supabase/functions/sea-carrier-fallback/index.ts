@@ -23,11 +23,11 @@ const DELAY_MS = 1500;
 
 async function getMariaClient(): Promise<Client> {
   return await new Client().connect({
-    hostname: (Deno.env.get('MARIADB_SEA_HOST') || Deno.env.get('MARIADB_HOST'))!,
-    port: parseInt((Deno.env.get('MARIADB_SEA_PORT') || Deno.env.get('MARIADB_PORT')) || '3306'),
-    db: (Deno.env.get('MARIADB_SEA_DATABASE') || Deno.env.get('MARIADB_DATABASE'))!,
-    username: (Deno.env.get('MARIADB_SEA_USER') || Deno.env.get('MARIADB_USER'))!,
-    password: (Deno.env.get('MARIADB_SEA_PASSWORD') || Deno.env.get('MARIADB_PASSWORD'))!,
+    hostname: (Deno.env.get('MARIADB_SEA_HOST') || Deno.env.get('MARIADB_OPS_HOST'))!,
+    port: parseInt((Deno.env.get('MARIADB_SEA_PORT') || Deno.env.get('MARIADB_OPS_PORT')) || '3306'),
+    db: (Deno.env.get('MARIADB_SEA_DATABASE') || Deno.env.get('MARIADB_OPS_DATABASE'))!,
+    username: (Deno.env.get('MARIADB_SEA_USER') || Deno.env.get('MARIADB_OPS_USER'))!,
+    password: (Deno.env.get('MARIADB_SEA_PASSWORD') || Deno.env.get('MARIADB_OPS_PASSWORD'))!,
   });
 }
 

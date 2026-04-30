@@ -17,11 +17,11 @@ serve(async (req) => {
     const body = await req.json();
     const { action, mawb, limit = 100, offset = 0 } = body;
 
-    const host = (Deno.env.get('MARIADB_AIR_HOST') || Deno.env.get('MARIADB_HOST'));
-    const port = parseInt((Deno.env.get('MARIADB_AIR_PORT') || Deno.env.get('MARIADB_PORT')) || '3306');
-    const database = (Deno.env.get('MARIADB_AIR_DATABASE') || Deno.env.get('MARIADB_DATABASE'));
-    const dbUser = (Deno.env.get('MARIADB_AIR_USER') || Deno.env.get('MARIADB_USER'));
-    const dbPassword = (Deno.env.get('MARIADB_AIR_PASSWORD') || Deno.env.get('MARIADB_PASSWORD'));
+    const host = (Deno.env.get('MARIADB_AIR_HOST') || Deno.env.get('MARIADB_OPS_HOST'));
+    const port = parseInt((Deno.env.get('MARIADB_AIR_PORT') || Deno.env.get('MARIADB_OPS_PORT')) || '3306');
+    const database = (Deno.env.get('MARIADB_AIR_DATABASE') || Deno.env.get('MARIADB_OPS_DATABASE'));
+    const dbUser = (Deno.env.get('MARIADB_AIR_USER') || Deno.env.get('MARIADB_OPS_USER'));
+    const dbPassword = (Deno.env.get('MARIADB_AIR_PASSWORD') || Deno.env.get('MARIADB_OPS_PASSWORD'));
 
     if (!host || !database || !dbUser || !dbPassword) {
       console.error('Missing database credentials');
