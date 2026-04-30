@@ -354,6 +354,9 @@ serve(async (req) => {
             jt.ordem,
             jt.description,
             CASE
+              -- Ignore booking/reservation events: pieces shown are flight capacity, not actual cargo
+              WHEN UPPER(COALESCE(jt.description, '')) REGEXP '(^|[^A-Z])(BOOKED|BOOKING)([^A-Z]|$)'
+                THEN NULL
               WHEN UPPER(COALESCE(jt.description, '')) REGEXP 'OFFLOADED|OFLD'
                    AND (
                        UPPER(jt.description) REGEXP '(^|[^0-9])0[[:space:]]+PIECES?([^A-Z]|$)'
