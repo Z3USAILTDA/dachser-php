@@ -468,10 +468,11 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                 name="valorTotal"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Valor Total</FormLabel>
+                    <FormLabel>Valor Total <span className="text-destructive">*</span></FormLabel>
                     <FormControl>
                       <Input {...field} className="bg-background/50 border-border" />
                     </FormControl>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -493,39 +494,69 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                         <SelectItem value="EUR">EUR</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
               <DateInputField
                 control={form.control}
                 name="vencimento"
-                label="Vencimento"
+                label={<>Vencimento <span className="text-destructive">*</span></> as any}
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="formaPagamento"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Forma de Pagamento</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="bg-background/50 border-border max-w-md">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="BOLETO">Boleto</SelectItem>
-                      <SelectItem value="PIX">PIX</SelectItem>
-                      <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
-                      <SelectItem value="DARF">DARF</SelectItem>
-                      <SelectItem value="GPS">GPS</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="formaPagamento"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Forma de Pagamento <span className="text-destructive">*</span></FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="bg-background/50 border-border">
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="BOLETO">Boleto</SelectItem>
+                        <SelectItem value="PIX">PIX</SelectItem>
+                        <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
+                        <SelectItem value="DARF">DARF</SelectItem>
+                        <SelectItem value="GPS">GPS</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="tipoDocumento"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipo de Documento <span className="text-destructive">*</span></FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="bg-background/50 border-border">
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="VOUCHER">Voucher</SelectItem>
+                        <SelectItem value="SPO">SPO</SelectItem>
+                        <SelectItem value="ICMS">ICMS</SelectItem>
+                        <SelectItem value="ARMAZENAGEM">Armazenagem</SelectItem>
+                        <SelectItem value="ADF">ADF</SelectItem>
+                        <SelectItem value="OUTROS">Outros</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}
@@ -533,13 +564,13 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
               render={({ field }) => (
                 <FormItem>
                   <div className="flex items-center gap-3 flex-wrap">
-                    <FormLabel>É necessário contabilização com o fiscal?</FormLabel>
+                    <FormLabel>É necessário contabilização com o fiscal? <span className="text-destructive">*</span></FormLabel>
                     <FornecedoresSemFiscalDialog />
                   </div>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                     <FormControl>
                       <SelectTrigger className="bg-background/50 border-border max-w-md">
-                        <SelectValue />
+                        <SelectValue placeholder="Selecione..." />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -547,6 +578,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                       <SelectItem value="CLIENTE">Não — enviar diretamente para o Financeiro</SelectItem>
                     </SelectContent>
                   </Select>
+                  <FormMessage />
                 </FormItem>
               )}
             />
