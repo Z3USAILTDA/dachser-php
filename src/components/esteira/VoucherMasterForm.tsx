@@ -37,10 +37,11 @@ const formSchema = z.object({
   fornecedor: z.string().optional(),
   cnpjFornecedor: z.string().optional(),
   valorTotal: z
-    .string({ required_error: "Valor Total é obrigatório" })
-    .min(1, "Valor Total é obrigatório")
+    .string()
+    .optional()
     .refine((v) => {
-      const n = parseFloat((v || "").replace(/\./g, "").replace(",", "."));
+      if (!v || v.trim() === "") return true;
+      const n = parseFloat(v.replace(/\./g, "").replace(",", "."));
       return !isNaN(n) && n > 0;
     }, "Valor Total deve ser maior que zero"),
   moeda: z.string().default("BRL"),
@@ -468,7 +469,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                 name="valorTotal"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Valor Total <span className="text-destructive">*</span></FormLabel>
+                    <FormLabel>Valor Total</FormLabel>
                     <FormControl>
                       <Input {...field} className="bg-background/50 border-border" />
                     </FormControl>
@@ -709,7 +710,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
             type="button"
             onClick={form.handleSubmit(handleSubmit, (errors) => {
               // Abrir o collapsible automaticamente para o usuário ver os erros
-              const camposObrigatorios = ["valorTotal", "vencimento", "formaPagamento", "tipoDocumento", "cobrancaEmNomeDe"];
+              const camposObrigatorios = ["vencimento", "formaPagamento", "tipoDocumento", "cobrancaEmNomeDe"];
               if (camposObrigatorios.some((k) => (errors as any)[k])) {
                 setDadosExpanded(true);
               }
