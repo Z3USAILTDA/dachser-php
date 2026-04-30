@@ -23,11 +23,11 @@ serve(async (req) => {
 
     // Conectar ao MariaDB
     client = await new Client().connect({
-      hostname: (Deno.env.get("MARIADB_SEA_HOST") || Deno.env.get("MARIADB_HOST")) || "",
-      username: (Deno.env.get("MARIADB_SEA_USER") || Deno.env.get("MARIADB_USER")) || "",
-      password: (Deno.env.get("MARIADB_SEA_PASSWORD") || Deno.env.get("MARIADB_PASSWORD")) || "",
-      db: (Deno.env.get("MARIADB_SEA_DATABASE") || Deno.env.get("MARIADB_DATABASE")) || "",
-      port: parseInt((Deno.env.get("MARIADB_SEA_PORT") || Deno.env.get("MARIADB_PORT")) || "3306"),
+      hostname: (Deno.env.get("MARIADB_SEA_HOST") || Deno.env.get("MARIADB_OPS_HOST")) || "",
+      username: (Deno.env.get("MARIADB_SEA_USER") || Deno.env.get("MARIADB_OPS_USER")) || "",
+      password: (Deno.env.get("MARIADB_SEA_PASSWORD") || Deno.env.get("MARIADB_OPS_PASSWORD")) || "",
+      db: (Deno.env.get("MARIADB_SEA_DATABASE") || Deno.env.get("MARIADB_OPS_DATABASE")) || "",
+      port: parseInt((Deno.env.get("MARIADB_SEA_PORT") || Deno.env.get("MARIADB_OPS_PORT")) || "3306"),
     });
 
     console.log("Conectado ao MariaDB");

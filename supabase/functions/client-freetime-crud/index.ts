@@ -32,11 +32,11 @@ function isRetryableError(err: unknown): boolean {
 }
 
 async function connectWithRetry(maxRetries = 5): Promise<Client> {
-  const host = (Deno.env.get('MARIADB_SEA_HOST') || Deno.env.get('MARIADB_HOST'));
-  const port = parseInt((Deno.env.get('MARIADB_SEA_PORT') || Deno.env.get('MARIADB_PORT')) || '3306');
-  const database = (Deno.env.get('MARIADB_SEA_DATABASE') || Deno.env.get('MARIADB_DATABASE'));
-  const username = (Deno.env.get('MARIADB_SEA_USER') || Deno.env.get('MARIADB_USER'));
-  const password = (Deno.env.get('MARIADB_SEA_PASSWORD') || Deno.env.get('MARIADB_PASSWORD'));
+  const host = (Deno.env.get('MARIADB_SEA_HOST') || Deno.env.get('MARIADB_OPS_HOST'));
+  const port = parseInt((Deno.env.get('MARIADB_SEA_PORT') || Deno.env.get('MARIADB_OPS_PORT')) || '3306');
+  const database = (Deno.env.get('MARIADB_SEA_DATABASE') || Deno.env.get('MARIADB_OPS_DATABASE'));
+  const username = (Deno.env.get('MARIADB_SEA_USER') || Deno.env.get('MARIADB_OPS_USER'));
+  const password = (Deno.env.get('MARIADB_SEA_PASSWORD') || Deno.env.get('MARIADB_OPS_PASSWORD'));
 
   if (!host || !database || !username || !password) {
     throw new Error('Missing MariaDB credentials');

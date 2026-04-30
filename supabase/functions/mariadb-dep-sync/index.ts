@@ -142,11 +142,11 @@ Deno.serve(async (req) => {
     if (action === 'health') {
       try {
         mariaClient = await new Client().connect({
-          hostname: (Deno.env.get('MARIADB_AIR_HOST') || Deno.env.get('MARIADB_HOST')) || '',
-          port: parseInt((Deno.env.get('MARIADB_AIR_PORT') || Deno.env.get('MARIADB_PORT')) || '3306'),
-          username: (Deno.env.get('MARIADB_AIR_USER') || Deno.env.get('MARIADB_USER')) || '',
-          password: (Deno.env.get('MARIADB_AIR_PASSWORD') || Deno.env.get('MARIADB_PASSWORD')) || '',
-          db: (Deno.env.get('MARIADB_AIR_DATABASE') || Deno.env.get('MARIADB_DATABASE')) || '',
+          hostname: (Deno.env.get('MARIADB_AIR_HOST') || Deno.env.get('MARIADB_OPS_HOST')) || '',
+          port: parseInt((Deno.env.get('MARIADB_AIR_PORT') || Deno.env.get('MARIADB_OPS_PORT')) || '3306'),
+          username: (Deno.env.get('MARIADB_AIR_USER') || Deno.env.get('MARIADB_OPS_USER')) || '',
+          password: (Deno.env.get('MARIADB_AIR_PASSWORD') || Deno.env.get('MARIADB_OPS_PASSWORD')) || '',
+          db: (Deno.env.get('MARIADB_AIR_DATABASE') || Deno.env.get('MARIADB_OPS_DATABASE')) || '',
         });
 
         const startTime = Date.now();
@@ -181,11 +181,11 @@ Deno.serve(async (req) => {
       console.log(`[MARIADB-DEP-SYNC] Iniciando recuperação de processos perdidos (${daysBack} dias)...`);
 
       mariaClient = await new Client().connect({
-        hostname: (Deno.env.get('MARIADB_AIR_HOST') || Deno.env.get('MARIADB_HOST')) || '',
-        port: parseInt((Deno.env.get('MARIADB_AIR_PORT') || Deno.env.get('MARIADB_PORT')) || '3306'),
-        username: (Deno.env.get('MARIADB_AIR_USER') || Deno.env.get('MARIADB_USER')) || '',
-        password: (Deno.env.get('MARIADB_AIR_PASSWORD') || Deno.env.get('MARIADB_PASSWORD')) || '',
-        db: (Deno.env.get('MARIADB_AIR_DATABASE') || Deno.env.get('MARIADB_DATABASE')) || '',
+        hostname: (Deno.env.get('MARIADB_AIR_HOST') || Deno.env.get('MARIADB_OPS_HOST')) || '',
+        port: parseInt((Deno.env.get('MARIADB_AIR_PORT') || Deno.env.get('MARIADB_OPS_PORT')) || '3306'),
+        username: (Deno.env.get('MARIADB_AIR_USER') || Deno.env.get('MARIADB_OPS_USER')) || '',
+        password: (Deno.env.get('MARIADB_AIR_PASSWORD') || Deno.env.get('MARIADB_OPS_PASSWORD')) || '',
+        db: (Deno.env.get('MARIADB_AIR_DATABASE') || Deno.env.get('MARIADB_OPS_DATABASE')) || '',
       });
 
       console.log('[MARIADB-DEP-SYNC] Conectado ao MariaDB');
@@ -294,11 +294,11 @@ Deno.serve(async (req) => {
       console.log('[MARIADB-DEP-SYNC] Iniciando sincronização DEP → Shipments...');
 
       mariaClient = await new Client().connect({
-        hostname: (Deno.env.get('MARIADB_AIR_HOST') || Deno.env.get('MARIADB_HOST')) || '',
-        port: parseInt((Deno.env.get('MARIADB_AIR_PORT') || Deno.env.get('MARIADB_PORT')) || '3306'),
-        username: (Deno.env.get('MARIADB_AIR_USER') || Deno.env.get('MARIADB_USER')) || '',
-        password: (Deno.env.get('MARIADB_AIR_PASSWORD') || Deno.env.get('MARIADB_PASSWORD')) || '',
-        db: (Deno.env.get('MARIADB_AIR_DATABASE') || Deno.env.get('MARIADB_DATABASE')) || '',
+        hostname: (Deno.env.get('MARIADB_AIR_HOST') || Deno.env.get('MARIADB_OPS_HOST')) || '',
+        port: parseInt((Deno.env.get('MARIADB_AIR_PORT') || Deno.env.get('MARIADB_OPS_PORT')) || '3306'),
+        username: (Deno.env.get('MARIADB_AIR_USER') || Deno.env.get('MARIADB_OPS_USER')) || '',
+        password: (Deno.env.get('MARIADB_AIR_PASSWORD') || Deno.env.get('MARIADB_OPS_PASSWORD')) || '',
+        db: (Deno.env.get('MARIADB_AIR_DATABASE') || Deno.env.get('MARIADB_OPS_DATABASE')) || '',
       });
 
       console.log('[MARIADB-DEP-SYNC] Conectado ao MariaDB');
@@ -387,11 +387,11 @@ Deno.serve(async (req) => {
     // Preview
     if (action === 'preview') {
       mariaClient = await new Client().connect({
-        hostname: (Deno.env.get('MARIADB_AIR_HOST') || Deno.env.get('MARIADB_HOST')) || '',
-        port: parseInt((Deno.env.get('MARIADB_AIR_PORT') || Deno.env.get('MARIADB_PORT')) || '3306'),
-        username: (Deno.env.get('MARIADB_AIR_USER') || Deno.env.get('MARIADB_USER')) || '',
-        password: (Deno.env.get('MARIADB_AIR_PASSWORD') || Deno.env.get('MARIADB_PASSWORD')) || '',
-        db: (Deno.env.get('MARIADB_AIR_DATABASE') || Deno.env.get('MARIADB_DATABASE')) || '',
+        hostname: (Deno.env.get('MARIADB_AIR_HOST') || Deno.env.get('MARIADB_OPS_HOST')) || '',
+        port: parseInt((Deno.env.get('MARIADB_AIR_PORT') || Deno.env.get('MARIADB_OPS_PORT')) || '3306'),
+        username: (Deno.env.get('MARIADB_AIR_USER') || Deno.env.get('MARIADB_OPS_USER')) || '',
+        password: (Deno.env.get('MARIADB_AIR_PASSWORD') || Deno.env.get('MARIADB_OPS_PASSWORD')) || '',
+        db: (Deno.env.get('MARIADB_AIR_DATABASE') || Deno.env.get('MARIADB_OPS_DATABASE')) || '',
       });
 
       const depAwbs = await mariaClient.query(`
