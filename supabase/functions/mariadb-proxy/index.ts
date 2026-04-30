@@ -605,12 +605,12 @@ Deno.serve(async (req) => {
       return Deno.env.get(defKey);
     };
 
-    const host = pickSecret('MARIADB_AIR_HOST', 'MARIADB_FIN_HOST', 'MARIADB_SEA_HOST', 'MARIADB_HOST');
-    const portStr = pickSecret('MARIADB_AIR_PORT', 'MARIADB_FIN_PORT', 'MARIADB_SEA_PORT', 'MARIADB_PORT') || '3306';
+    const host = pickSecret('MARIADB_AIR_HOST', 'MARIADB_FIN_HOST', 'MARIADB_SEA_HOST', 'MARIADB_OPS_HOST');
+    const portStr = pickSecret('MARIADB_AIR_PORT', 'MARIADB_FIN_PORT', 'MARIADB_SEA_PORT', 'MARIADB_OPS_PORT') || '3306';
     const port = parseInt(portStr);
-    const database = pickSecret('MARIADB_AIR_DATABASE', 'MARIADB_FIN_DATABASE', 'MARIADB_SEA_DATABASE', 'MARIADB_DATABASE');
-    const dbUser = pickSecret('MARIADB_AIR_USER', 'MARIADB_FIN_USER', 'MARIADB_SEA_USER', 'MARIADB_USER');
-    const dbPassword = pickSecret('MARIADB_AIR_PASSWORD', 'MARIADB_FIN_PASSWORD', 'MARIADB_SEA_PASSWORD', 'MARIADB_PASSWORD');
+    const database = pickSecret('MARIADB_AIR_DATABASE', 'MARIADB_FIN_DATABASE', 'MARIADB_SEA_DATABASE', 'MARIADB_OPS_DATABASE');
+    const dbUser = pickSecret('MARIADB_AIR_USER', 'MARIADB_FIN_USER', 'MARIADB_SEA_USER', 'MARIADB_OPS_USER');
+    const dbPassword = pickSecret('MARIADB_AIR_PASSWORD', 'MARIADB_FIN_PASSWORD', 'MARIADB_SEA_PASSWORD', 'MARIADB_OPS_PASSWORD');
 
     if (!host || !database || !dbUser || !dbPassword) {
       console.error(`Missing database credentials (pool=${pool})`);

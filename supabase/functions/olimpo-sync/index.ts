@@ -10,10 +10,10 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const mariadbHost = Deno.env.get('MARIADB_HOST');
-  const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-  const mariadbUser = Deno.env.get('MARIADB_USER');
-  const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+  const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+  const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+  const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+  const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
   const mariadbDb = 'dados_dachser';
 
   if (!mariadbHost || !mariadbUser || !mariadbPass) {

@@ -18,11 +18,11 @@ serve(async (req) => {
     const { action, query, params } = await req.json();
 
     // Get MariaDB credentials from secrets
-    const host = Deno.env.get('MARIADB_HOST');
-    const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-    const database = Deno.env.get('MARIADB_DATABASE');
-    const username = Deno.env.get('MARIADB_USER');
-    const password = Deno.env.get('MARIADB_PASSWORD');
+    const host = Deno.env.get('MARIADB_OPS_HOST');
+    const port = parseInt(Deno.env.get('MARIADB_OPS_PORT') || '3306');
+    const database = Deno.env.get('MARIADB_OPS_DATABASE');
+    const username = Deno.env.get('MARIADB_OPS_USER');
+    const password = Deno.env.get('MARIADB_OPS_PASSWORD');
 
     if (!host || !database || !username || !password) {
       throw new Error('MariaDB credentials not configured');

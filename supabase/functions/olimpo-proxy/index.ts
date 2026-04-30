@@ -379,11 +379,11 @@ async function findVesselImo(vesselName: string, dbClient?: any): Promise<string
     if (dbClient) {
       dbImo = await lookupImoInDb(dbClient);
     } else {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const mariadbDb = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_OPS_DATABASE') || 'dados_dachser';
 
       if (mariadbHost && mariadbUser && mariadbPass) {
         const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
@@ -429,11 +429,11 @@ async function findVesselImo(vesselName: string, dbClient?: any): Promise<string
     if (dbClient) {
       shipImo = await lookupShipImos(dbClient);
     } else {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const mariadbDb = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_OPS_DATABASE') || 'dados_dachser';
 
       if (mariadbHost && mariadbUser && mariadbPass) {
         const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
@@ -515,10 +515,10 @@ serve(async (req) => {
 
     // ===== SEED_ALL: Leitura unificada da tabela centralizada t_olimpo_tracking =====
     if (action === 'seed_all') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
@@ -600,11 +600,11 @@ serve(async (req) => {
 
     // ===== SEA: seed do banco de containers =====
     if (action === 'sea_seed') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_OPS_DATABASE');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass || !mariadbDb) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
@@ -655,11 +655,11 @@ serve(async (req) => {
       // FLAG: Chamadas JSONCargo ATIVADAS para tracking de todos armadores
       const SKIP_API_CALLS = false;
       
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_OPS_DATABASE');
       const apiKey = SKIP_API_CALLS ? null : Deno.env.get('JSONCARGO_API_KEY');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass || !mariadbDb) {
@@ -985,10 +985,10 @@ serve(async (req) => {
 
     // ===== ENRICH MISSING COORDS: Busca lat/lon via JsonCargo para containers sem coordenadas =====
     if (action === 'enrich_missing_coords') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
       const apiKey = Deno.env.get('JSONCARGO_API_KEY');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
@@ -1279,11 +1279,11 @@ serve(async (req) => {
 
     // ===== AIR: seed from database =====
     if (action === 'seed_air') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_OPS_DATABASE');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass || !mariadbDb) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
@@ -1640,10 +1640,10 @@ serve(async (req) => {
 
     // ===== SEA TRACKING DEBUG: Analyze t_master_dados data =====
     if (action === 'debug_sea_tracking') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -1757,10 +1757,10 @@ serve(async (req) => {
 
     // ===== SEA TRACKING: Debug stats for t_tracking_sea table =====
     if (action === 'debug_tracking_stats') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -1838,10 +1838,10 @@ serve(async (req) => {
     // ===== SETUP SEA TRACKING INDEXES =====
     // Creates optimized indexes for the get_sea_tracking query
     if (action === 'setup_sea_tracking_indexes') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -1953,10 +1953,10 @@ serve(async (req) => {
 
     // ===== GET SEA TRACKING - OTIMIZADO =====
     if (action === 'get_sea_tracking') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
@@ -2446,10 +2446,10 @@ serve(async (req) => {
         });
       }
 
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: {} }), {
@@ -2515,10 +2515,10 @@ serve(async (req) => {
         });
       }
 
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
@@ -2624,10 +2624,10 @@ serve(async (req) => {
 
     // ===== SEA TRACKING: Sync from t_master_dados to t_tracking_sea =====
     if (action === 'sync_sea_tracking') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -2805,10 +2805,10 @@ serve(async (req) => {
 
     // ===== SEA TRACKING: Refresh containers in t_tracking_sea (BATCH PROCESSING) =====
     if (action === 'refresh_sea_tracking') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -3918,10 +3918,10 @@ serve(async (req) => {
 
     // ===== SEA TRACKING: Get containers with errors for diagnostics =====
     if (action === 'get_containers_with_errors') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -4042,11 +4042,11 @@ serve(async (req) => {
 
     // ===== UPDATE VESSEL IMO =====
     if (action === 'update_vessel_imo') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const mariadbDb = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_OPS_DATABASE') || 'dados_dachser';
 
       let client: any = null;
       try {
@@ -4128,10 +4128,10 @@ serve(async (req) => {
 
 
     if (action === 'enrich_sea_containers') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -4653,10 +4653,10 @@ serve(async (req) => {
 
     // ===== RESET TIMEOUT COUNT =====
     if (action === 'reset_timeout_count') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -4713,10 +4713,10 @@ serve(async (req) => {
 
     // ===== SEA TRACKING: Manually set transshipment_port for an MBL =====
     if (action === 'set_transshipment_port') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -4773,10 +4773,10 @@ serve(async (req) => {
     // ===== SEA TRACKING: Manually add containers to an MBL =====
     // Use this when the JSONCargo BOL lookup fails but you know the containers
     if (action === 'manual_add_containers') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -4939,10 +4939,10 @@ serve(async (req) => {
 
     // ===== SEA TRACKING: Deactivate MBLs that only have invalid containers or are booking references =====
     if (action === 'deactivate_invalid_mbls') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -5019,10 +5019,10 @@ serve(async (req) => {
 
     // ===== SEA TRACKING: Cleanup orphan PENDENTE containers from MBLs that already have valid containers =====
     if (action === 'cleanup_orphan_pendentes') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -5155,10 +5155,10 @@ serve(async (req) => {
       
       console.log(`[track_sea_container] Container ${containerId}: vessel=${vesselName}, imo=${vesselImo}`);
 
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (mariadbHost && mariadbUser && mariadbPass) {
         const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
@@ -5219,10 +5219,10 @@ serve(async (req) => {
         });
       }
 
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
       const client = await new Client().connect({
@@ -5254,10 +5254,10 @@ serve(async (req) => {
 
     // ===== SEA TRACKING: Cleanup invalid records (mark as inactive) =====
     if (action === 'cleanup_sea_tracking') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -5353,11 +5353,11 @@ serve(async (req) => {
 
     // ===== SEA TRACKING (LEGACY): Get tracked containers =====
     if (action === 'get_tracked_containers') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_OPS_DATABASE');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass || !mariadbDb) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
@@ -5533,11 +5533,11 @@ serve(async (req) => {
         });
       }
 
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_OPS_DATABASE');
 
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
       const client = await new Client().connect({
@@ -5598,11 +5598,11 @@ serve(async (req) => {
         });
       }
 
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_OPS_DATABASE');
 
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
       const client = await new Client().connect({
@@ -5675,16 +5675,16 @@ serve(async (req) => {
           console.log(`[track_container] Container ${containerId}: using shipping_line ${shippingLine} from prefix ${prefix}`);
         } else {
           // SOC container - try to get vessel from database
-          const mariadbHost = Deno.env.get('MARIADB_HOST');
-          const mariadbUser = Deno.env.get('MARIADB_USER');
-          const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-          const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+          const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+          const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+          const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+          const mariadbDb = Deno.env.get('MARIADB_OPS_DATABASE');
           
           if (mariadbHost && mariadbUser && mariadbPass) {
             const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
             const client = await new Client().connect({
               hostname: mariadbHost,
-              port: parseInt(Deno.env.get('MARIADB_PORT') || '3306', 10),
+              port: parseInt(Deno.env.get('MARIADB_OPS_PORT') || '3306', 10),
               username: mariadbUser,
               password: mariadbPass,
               db: mariadbDb,
@@ -5760,11 +5760,11 @@ serve(async (req) => {
       };
 
       // Update tracking in database
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_OPS_DATABASE');
 
       if (mariadbHost && mariadbUser && mariadbPass && mariadbDb) {
         const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
@@ -5812,11 +5812,11 @@ serve(async (req) => {
 
     // ===== SEA TRACKING: Bulk refresh all containers =====
     if (action === 'refresh_all_containers') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_OPS_DATABASE');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass || !mariadbDb) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -6034,11 +6034,11 @@ serve(async (req) => {
 
     // ===== SEA TRACKING: Load containers from t_dachser_sea_items =====
     if (action === 'load_containers_from_sea_items') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_OPS_DATABASE');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass || !mariadbDb) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -6125,11 +6125,11 @@ serve(async (req) => {
 
     // ===== SEA TRACKING: Get available containers from sea_items (not yet tracked) =====
     if (action === 'get_available_containers') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_OPS_DATABASE');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass || !mariadbDb) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
@@ -6184,10 +6184,10 @@ serve(async (req) => {
 
     // ===== SEA TRACKING HISTORY: Setup history table =====
     if (action === 'setup_tracking_history_table') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -6278,10 +6278,10 @@ serve(async (req) => {
         });
       }
 
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -6379,10 +6379,10 @@ serve(async (req) => {
 
     // ===== SEA TRACKING HISTORY: Get history summary (all containers) =====
     if (action === 'get_tracking_history_summary') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -6469,10 +6469,10 @@ serve(async (req) => {
 
     // ===== SEA TRACKING: Setup vessel_imo column =====
     if (action === 'setup_vessel_imo_column') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -6536,10 +6536,10 @@ serve(async (req) => {
         });
       }
 
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -6598,11 +6598,11 @@ serve(async (req) => {
 
     // ===== SETUP: Add sibling sync columns to t_tracking_sea =====
     if (action === 'setup_sibling_sync_columns') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPassword = Deno.env.get('MARIADB_PASSWORD');
-      const mariadbDatabase = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPassword = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const mariadbDatabase = Deno.env.get('MARIADB_OPS_DATABASE') || 'dados_dachser';
 
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
       const client = await new Client().connect({
@@ -6670,10 +6670,10 @@ serve(async (req) => {
       const batchSize = parseInt(url.searchParams.get('batch_size') || '50', 10);
       const maxTimeMs = 45000;
       
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
       const client = await new Client().connect({
@@ -6766,10 +6766,10 @@ serve(async (req) => {
 
     // ===== CLEANUP: Remove "Sibling sync:" prefix from last_event =====
     if (action === 'cleanup_sibling_sync_prefix') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
       const client = await new Client().connect({
@@ -6807,10 +6807,10 @@ serve(async (req) => {
 
     // ===== OLIMPO SEA FROM MONITORING: Buscar dados de t_tracking_sea com coordenadas de t_olimpo_tracking =====
     if (action === 'olimpo_sea_from_monitoring') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
@@ -6947,10 +6947,10 @@ serve(async (req) => {
 
     // ===== SYNC OLIMPO FROM MONITORING: Popular t_olimpo_tracking com dados do t_tracking_sea =====
     if (action === 'sync_olimpo_from_monitoring') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -7052,10 +7052,10 @@ serve(async (req) => {
 
     // ===== REFRESH SEA TRACKING SMART: Re-rastrear apenas quando ETA ≤ 4 dias ou sem coordenadas =====
     if (action === 'refresh_sea_tracking_smart') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
       const apiKey = Deno.env.get('JSONCARGO_API_KEY');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
@@ -7228,10 +7228,10 @@ serve(async (req) => {
     if (action === 'get_sea_regras_notificacao') {
       console.log('[olimpo-proxy] Fetching sea notification rules...');
       
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
       const database = 'dados_dachser';
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
@@ -7303,10 +7303,10 @@ serve(async (req) => {
       const body = await req.json();
       const { cliente_nome, cnpj_consignatario, tipo_processo, portos_origem, portos_destino, eventos_disparo, frequencia, canais, emails_import, emails_export, template_id, ativo, is_default } = body;
       
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
       const database = 'dados_dachser';
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
@@ -7353,10 +7353,10 @@ serve(async (req) => {
       const body = await req.json();
       const { id, cliente_nome, cnpj_consignatario, tipo_processo, portos_origem, portos_destino, eventos_disparo, frequencia, canais, emails_import, emails_export, template_id, ativo, is_default } = body;
       
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
       const database = 'dados_dachser';
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
@@ -7417,10 +7417,10 @@ serve(async (req) => {
       const body = await req.json();
       const { id } = body;
       
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
       const database = 'dados_dachser';
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
@@ -7457,10 +7457,10 @@ serve(async (req) => {
     // ========== ACTION: REFRESH ALL VESSEL IMOS ==========
     // Atualiza em lote as IMOs de todos os containers usando busca por nome do navio
     if (action === 'refresh_all_vessel_imos') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -7563,10 +7563,10 @@ serve(async (req) => {
 
     // ===== ADD TRANSSHIPMENT_PORT COLUMN TO T_TRACKING_SEA =====
     if (action === 'add_transshipment_port_column') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
       const database = 'dados_dachser';
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
@@ -7624,11 +7624,11 @@ serve(async (req) => {
 
     // ===== SEA TRACKING: Setup LCL columns (tipo_carga, coloader) =====
     if (action === 'setup_lcl_columns') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const database = Deno.env.get('MARIADB_OPS_DATABASE') || 'dados_dachser';
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -7705,11 +7705,11 @@ serve(async (req) => {
 
     // ===== SEARCH CLIENTES BASE: Autocomplete for consignee =====
     if (action === 'search_clientes_base') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const database = Deno.env.get('MARIADB_OPS_DATABASE') || 'dados_dachser';
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado', clientes: [] }), {
@@ -7771,11 +7771,11 @@ serve(async (req) => {
 
     // ===== SEA TRACKING: Add LCL container manually =====
     if (action === 'add_lcl_container') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const database = Deno.env.get('MARIADB_OPS_DATABASE') || 'dados_dachser';
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -7898,10 +7898,10 @@ serve(async (req) => {
         });
       }
 
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPassword = Deno.env.get('MARIADB_PASSWORD');
-      const mariadbDatabase = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPassword = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const mariadbDatabase = Deno.env.get('MARIADB_OPS_DATABASE') || 'dados_dachser';
 
       if (!mariadbHost || !mariadbUser || !mariadbPassword) {
         return new Response(JSON.stringify({ error: 'MariaDB credentials not configured' }), {
@@ -7915,7 +7915,7 @@ serve(async (req) => {
         username: mariadbUser,
         password: mariadbPassword,
         db: mariadbDatabase,
-        port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
+        port: parseInt(Deno.env.get('MARIADB_OPS_PORT') || '3306'),
       });
 
       try {
@@ -8237,11 +8237,11 @@ serve(async (req) => {
 
     // ===== SEARCH ANALISTAS: Autocomplete for clerk =====
     if (action === 'search_analistas') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const database = Deno.env.get('MARIADB_OPS_DATABASE') || 'dados_dachser';
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado', analistas: [] }), {
@@ -8308,11 +8308,11 @@ serve(async (req) => {
 
     // ===== SETUP T_CADASTRO_AEREO: Create table if not exists =====
     if (action === 'setup_t_cadastro_aereo') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const database = Deno.env.get('MARIADB_OPS_DATABASE') || 'dados_dachser';
 
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
       const client = await new Client().connect({
@@ -8431,11 +8431,11 @@ serve(async (req) => {
 
     // ===== CREATE CADASTRO AEREO: Insert new record =====
     if (action === 'create_cadastro_aereo') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const database = Deno.env.get('MARIADB_OPS_DATABASE') || 'dados_dachser';
 
       if (!bodyData) {
         try {
@@ -8527,11 +8527,11 @@ serve(async (req) => {
 
     // ===== SETUP T_CADASTRO_MARITIMO: Create table if not exists =====
     if (action === 'setup_t_cadastro_maritimo') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const database = Deno.env.get('MARIADB_OPS_DATABASE') || 'dados_dachser';
 
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
       const client = await new Client().connect({
@@ -8638,11 +8638,11 @@ serve(async (req) => {
 
     // ===== CREATE CADASTRO MARITIMO: Insert new record =====
     if (action === 'create_cadastro_maritimo') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
+      const database = Deno.env.get('MARIADB_OPS_DATABASE') || 'dados_dachser';
 
       if (!bodyData) {
         try {
@@ -8846,10 +8846,10 @@ serve(async (req) => {
 
     // ===== FORCE MASTER SWAP LOG (manual insert for testing) =====
     if (action === 'force_master_swap_log') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -8914,10 +8914,10 @@ serve(async (req) => {
 
     // ===== SWAP MASTER CADASTRO AEREO =====
     if (action === 'swap_master_cadastro_aereo') {
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
@@ -9018,10 +9018,10 @@ serve(async (req) => {
     // ===== BULK MANUAL UPDATE SEA (one-time) =====
     if (action === 'bulk_manual_update_sea') {
       console.log('[bulk_manual_update_sea] Starting bulk manual update...');
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -9380,10 +9380,10 @@ serve(async (req) => {
         });
       }
 
-      const mariadbHost = Deno.env.get('MARIADB_HOST');
-      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
-      const mariadbUser = Deno.env.get('MARIADB_USER');
-      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_OPS_USER');
+      const mariadbPass = Deno.env.get('MARIADB_OPS_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {

@@ -9,11 +9,11 @@ const corsHeaders = {
 // Direct MariaDB connection
 async function getMariaDBClient(): Promise<Client> {
   const client = await new Client().connect({
-    hostname: Deno.env.get('MARIADB_HOST')!,
-    port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
-    db: Deno.env.get('MARIADB_DATABASE')!,
-    username: Deno.env.get('MARIADB_USER')!,
-    password: Deno.env.get('MARIADB_PASSWORD')!,
+    hostname: Deno.env.get('MARIADB_OPS_HOST')!,
+    port: parseInt(Deno.env.get('MARIADB_OPS_PORT') || '3306'),
+    db: Deno.env.get('MARIADB_OPS_DATABASE')!,
+    username: Deno.env.get('MARIADB_OPS_USER')!,
+    password: Deno.env.get('MARIADB_OPS_PASSWORD')!,
   });
   return client;
 }
