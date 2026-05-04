@@ -1230,8 +1230,9 @@ const EsteiraIndex = () => {
       });
     }
 
-    // Filtro manual de etapa desliga restrição de role
-    if (filters.etapa && filters.etapa !== "all") return vouchers;
+    // Qualquer interação manual com o filtro de etapa (incluindo "Todas Etapas")
+    // desliga a restrição de role: o usuário vê o pipeline completo, inclusive A_PROCESSAR.
+    if (etapaFilterTouched) return vouchers;
 
     // União de etapas para usuários com múltiplos roles.
     // Ordem: OPERACAO → FISCAL → SUPERVISOR (supervisor é o último na hierarquia).
@@ -1256,7 +1257,7 @@ const EsteiraIndex = () => {
       (isFiscal && v.responsavelFiscalUserId === currentUserId) ||
       (isSupervisor && v.responsavelSupervisorUserId === currentUserId)
     );
-  }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro, filters.etapa, filters.search]);
+  }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro, etapaFilterTouched, filters.search]);
   // Map de masterId → SPOs dos filhos para busca expandida (lazy, via backend search)
   const [masterChildSPOsMap, setMasterChildSPOsMap] = useState<Map<string, string[]>>(new Map());
   const searchDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
