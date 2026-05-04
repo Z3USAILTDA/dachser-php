@@ -19,13 +19,38 @@ interface ExtractedData {
   dataVencimento: string | null;
   confidence: number;
   source: 'filename' | 'content';
+  candidatosSPO: string[];
+  candidatosND: string[];
 }
 
-// Specific patterns for DACHSER proofs as per user requirements:
-// - Comprovante SPO Remessa: "101-286102D26122025.35" → SPO 286102
-// - Comprovante SPO Manual: "101-286105" → SPO 286105
-// - Comprovante Voucher Remessa: "2025156579326122025.53" → ND 2025156579
-// - Comprovante Voucher Manual: "OT 433-20251877370 + 473-20253775241" → ND múltiplos
+// ============================================================================
+// Padrões de nome de arquivo (DACHSER):
+//   - Comprovante SPO Remessa: "101-286102D26122025.35"           → SPO 286102
+//   - Comprovante SPO Manual:  "101-286105"                       → SPO 286105
+//   - Comprovante Voucher Remessa: "<ND><DDMMYYYY>.<seq>"         → ND variável (10–13 dígitos)
+//       ex.: "2025156579326122025.53"  → ND 2025156579 (10 dígitos)
+//       ex.: "2026377674530042026.13"  → ND 20263776745 (11 dígitos)  ← caso reportado
+//   - Comprovante Voucher Manual: "OT 433-20251877370 + 473-20253775241"
+// ============================================================================
+
+// Valida se 8 dígitos formam uma data DDMMYYYY plausível (ano 2020–2099).
+function isPlausibleDate(ddmmyyyy: string): boolean {
+  return /^(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(20\d{2})$/.test(ddmmyyyy);
+}
+
+// Coleta TODAS as substrings numéricas com 5–13 dígitos do texto, deduplicadas.
+function collectNumericCandidates(text: string): string[] {
+  const set = new Set<string>();
+  const matches = text.matchAll(/(?<![0-9])(\d{5,13})(?![0-9])/g);
+  for (const m of matches) {
+    const n = m[1];
+    // Excluir datas puras
+    if (/^(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(20\d{2})$/.test(n)) continue;
+    if (/^(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/.test(n)) continue;
+    set.add(n);
+  }
+  return Array.from(set);
+}
 
 function extractFromFilename(fileName: string): ExtractedData {
   const result: ExtractedData = {
@@ -37,143 +62,195 @@ function extractFromFilename(fileName: string): ExtractedData {
     dataVencimento: null,
     confidence: 0,
     source: 'filename',
+    candidatosSPO: [],
+    candidatosND: [],
   };
 
-  // Remove file extension for cleaner parsing
   const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
-  
-  console.log(`[SPO Extract] Analyzing filename: "${fileName}", without ext: "${nameWithoutExt}"`);
+  console.log(`[Extract] Analyzing filename: "${fileName}"`);
+
+  // Sempre coletar candidatos numéricos para fallback no frontend
+  const allNumericCandidates = collectNumericCandidates(nameWithoutExt);
 
   // ==========================================
-  // Pattern 0: PURE NUMBER - Filename is just digits
-  // Examples: "20262478210.pdf", "286102.pdf", "20262478210111111.pdf"
-  // When filename is just a number, return it in BOTH fields for flexible search
+  // Pattern LINHA DIGITÁVEL: filename é só dígitos com 44+ caracteres → boleto
   // ==========================================
-  const pureNumberPattern = /^(\d+)$/;
-  const pureNumberMatch = nameWithoutExt.match(pureNumberPattern);
-  if (pureNumberMatch) {
+  const onlyDigits = nameWithoutExt.replace(/\D/g, '');
+  if (/^\d+$/.test(nameWithoutExt) && onlyDigits.length >= 44 && onlyDigits.length <= 48) {
+    result.linhaDigitavel = onlyDigits;
+    result.confidence = 0.85;
+    result.candidatosND = allNumericCandidates;
+    result.candidatosSPO = allNumericCandidates;
+    console.log(`[Extract] Linha digitável detectada: ${onlyDigits}`);
+    return result;
+  }
+
+  // ==========================================
+  // Pattern 0: PURE NUMBER curto (≤ 13 dígitos)
+  // ==========================================
+  const pureNumberMatch = nameWithoutExt.match(/^(\d+)$/);
+  if (pureNumberMatch && pureNumberMatch[1].length <= 13) {
     const extractedNumber = pureNumberMatch[1];
-    // Set in BOTH fields to allow search by SPO or ND/Voucher
     result.numeroSPO = extractedNumber;
     result.numeroND = extractedNumber;
     result.confidence = 0.9;
-    console.log(`[SPO Extract] Pattern 0 - Pure number matched: "${extractedNumber}" (set in both SPO and ND for flexible search)`);
+    result.candidatosSPO = allNumericCandidates;
+    result.candidatosND = allNumericCandidates;
+    console.log(`[Extract] Pure number: ${extractedNumber}`);
     return result;
   }
 
+  // ==========================================
   // Pattern 1: SPO Remessa - "101-286102D26122025.35" → SPO 286102
-  // Format: XXX-XXXXXXDDDMMYYYY.XX where the 6 digits after XXX- is the SPO
-  const spoRemessaPattern = /(\d{3})-(\d{6})[A-Z]\d{8}\.\d{2}/i;
-  const spoRemessaMatch = fileName.match(spoRemessaPattern);
+  // ==========================================
+  const spoRemessaMatch = fileName.match(/(\d{3})-(\d{6})[A-Z]\d{8}\.\d{2}/i);
   if (spoRemessaMatch) {
     result.numeroSPO = spoRemessaMatch[2];
     result.confidence = 0.95;
-    console.log(`[SPO Extract] Pattern SPO Remessa matched: ${result.numeroSPO}`);
+    result.candidatosSPO = [spoRemessaMatch[2], ...allNumericCandidates];
+    result.candidatosND = allNumericCandidates;
+    console.log(`[Extract] SPO Remessa: ${result.numeroSPO}`);
     return result;
   }
 
-  // Pattern 2: SPO Manual - "101-286105" → SPO 286105
-  // Format: XXX-XXXXXX (simpler format)
-  const spoManualPattern = /(\d{3})-(\d{5,6})(?:\.|$|[^0-9])/;
-  const spoManualMatch = fileName.match(spoManualPattern);
+  // ==========================================
+  // Pattern 2: SPO Manual - "101-286105"
+  // ==========================================
+  const spoManualMatch = fileName.match(/(\d{3})-(\d{5,6})(?:\.|$|[^0-9])/);
   if (spoManualMatch) {
     result.numeroSPO = spoManualMatch[2];
     result.confidence = 0.9;
-    console.log(`[SPO Extract] Pattern SPO Manual matched: ${result.numeroSPO}`);
+    result.candidatosSPO = [spoManualMatch[2], ...allNumericCandidates];
+    result.candidatosND = allNumericCandidates;
+    console.log(`[Extract] SPO Manual: ${result.numeroSPO}`);
     return result;
   }
 
-  // Pattern 3: Voucher Remessa - "2025156579326122025.53" → ND 2025156579
-  // Format: YYYYNNNNNN... where first 10 digits is the ND
-  const voucherRemessaPattern = /^(20\d{8})\d{8}\.\d{2}/;
-  const voucherRemessaMatch = fileName.match(voucherRemessaPattern);
-  if (voucherRemessaMatch) {
-    result.numeroND = voucherRemessaMatch[1];
-    result.confidence = 0.9;
-    console.log(`[SPO Extract] Pattern Voucher Remessa matched: ${result.numeroND}`);
-    return result;
+  // ==========================================
+  // Pattern 3: Voucher Remessa - "<ND><DDMMYYYY>.<seq>"
+  // ND tem tamanho variável (10–13 dígitos). Validamos a data ao final.
+  // Tentamos comprimentos de ND de 13 → 10 e validamos os 8 dígitos restantes.
+  // ==========================================
+  const voucherRemessaFull = nameWithoutExt.match(/^(\d{18,21})\.(\d{2})$/);
+  if (voucherRemessaFull) {
+    const digits = voucherRemessaFull[1];
+    // Tenta ND com 13, 12, 11, 10 dígitos
+    for (const ndLen of [13, 12, 11, 10]) {
+      if (digits.length - ndLen !== 8) continue;
+      const ndCandidate = digits.slice(0, ndLen);
+      const datePart = digits.slice(ndLen);
+      if (ndCandidate.startsWith('20') && isPlausibleDate(datePart)) {
+        result.numeroND = ndCandidate;
+        result.confidence = 0.92;
+        // Lista candidatos: o ND escolhido em primeiro, depois variantes (10–13) e demais
+        const ndVariants: string[] = [];
+        for (const len of [10, 11, 12, 13]) {
+          if (digits.length - len === 8 && isPlausibleDate(digits.slice(len))) {
+            const v = digits.slice(0, len);
+            if (v.startsWith('20')) ndVariants.push(v);
+          }
+        }
+        result.candidatosND = Array.from(new Set([ndCandidate, ...ndVariants, ...allNumericCandidates]));
+        result.candidatosSPO = allNumericCandidates;
+        console.log(`[Extract] Voucher Remessa: ND=${ndCandidate} (len=${ndLen}), data=${datePart}`);
+        return result;
+      }
+    }
   }
 
+  // ==========================================
   // Pattern 4: Voucher Manual - "OT 433-20251877370 + 473-20253775241"
-  // Format: OT XXX-NNNNNNNNNN (can have multiple)
-  const voucherManualPattern = /OT\s*\d{3}-(\d{10,})/gi;
-  const voucherManualMatches = [...fileName.matchAll(voucherManualPattern)];
+  // ==========================================
+  const voucherManualMatches = [...fileName.matchAll(/OT\s*\d{3}-(\d{10,})/gi)];
   if (voucherManualMatches.length > 0) {
     result.numeroND = voucherManualMatches[0][1];
     result.confidence = 0.85;
-    console.log(`[SPO Extract] Pattern Voucher Manual matched: ${result.numeroND}`);
+    result.candidatosND = Array.from(new Set([
+      ...voucherManualMatches.map(m => m[1]),
+      ...allNumericCandidates,
+    ]));
+    result.candidatosSPO = allNumericCandidates;
+    console.log(`[Extract] Voucher Manual: ${result.numeroND}`);
     return result;
   }
 
-  // Pattern 5: SPO explicit patterns
+  // ==========================================
+  // Pattern 5: SPO explícito
+  // ==========================================
   const explicitPatterns = [
-    /SPO[-_\s]*(\d{5,7})/i,           // "SPO 286102" or "SPO_286102" or "SPO-286102"
-    /comprovante[-_\s]*(\d{5,7})/i,   // "comprovante_286102"
-    /spo\s*n[°ºo]?\s*(\d{5,7})/i,     // "SPO nº 286102"
+    /SPO[-_\s]*(\d{5,7})/i,
+    /comprovante[-_\s]*(\d{5,7})/i,
+    /spo\s*n[°ºo]?\s*(\d{5,7})/i,
   ];
-
   for (const pattern of explicitPatterns) {
     const match = fileName.match(pattern);
     if (match) {
       result.numeroSPO = match[1];
       result.confidence = 0.85;
-      console.log(`[SPO Extract] Explicit pattern matched: ${result.numeroSPO}`);
+      result.candidatosSPO = Array.from(new Set([match[1], ...allNumericCandidates]));
+      result.candidatosND = allNumericCandidates;
+      console.log(`[Extract] Explicit SPO: ${result.numeroSPO}`);
       return result;
     }
   }
 
-  // Pattern 6: GENERIC - Look for any 5-7 digit sequence in the filename
-  // This is the most flexible pattern and should catch most cases
-  // Priorities longer matches first (6-7 digits are more likely SPO numbers)
-  
-  // First try 6-7 digit sequences (most likely SPO)
-  const sixSevenDigitPattern = /(?<![0-9])(\d{6,7})(?![0-9])/g;
-  const sixSevenMatches = [...nameWithoutExt.matchAll(sixSevenDigitPattern)];
+  // ==========================================
+  // Pattern 6: GENÉRICO 6–7 dígitos
+  // ==========================================
+  const sixSevenMatches = [...nameWithoutExt.matchAll(/(?<![0-9])(\d{6,7})(?![0-9])/g)];
   if (sixSevenMatches.length > 0) {
-    // Filter out date-like patterns (DDMMYYYY, YYYYMMDD)
     const validMatches = sixSevenMatches.filter(m => {
       const num = m[1];
-      // Exclude if it looks like a date (starts with 2024, 2025, etc or common day patterns)
       if (/^20\d{4,5}$/.test(num)) return false;
       if (/^\d{2}(0[1-9]|1[0-2])(20\d{2})$/.test(num)) return false;
       return true;
     });
-    
     if (validMatches.length > 0) {
       const extractedNumber = validMatches[0][1];
-      // Set in both fields for flexible search
       result.numeroSPO = extractedNumber;
       result.numeroND = extractedNumber;
       result.confidence = 0.75;
-      console.log(`[SPO Extract] Generic 6-7 digit pattern matched: "${extractedNumber}" (set in both fields)`);
+      result.candidatosSPO = Array.from(new Set([extractedNumber, ...allNumericCandidates]));
+      result.candidatosND = result.candidatosSPO;
+      console.log(`[Extract] Generic 6-7 digit: ${extractedNumber}`);
       return result;
     }
   }
-  
-  // Then try 5 digit sequences
-  const fiveDigitPattern = /(?<![0-9])(\d{5})(?![0-9])/g;
-  const fiveMatches = [...nameWithoutExt.matchAll(fiveDigitPattern)];
-  if (fiveMatches.length > 0) {
-    const extractedNumber = fiveMatches[0][1];
-    // Set in both fields for flexible search
-    result.numeroSPO = extractedNumber;
-    result.numeroND = extractedNumber;
-    result.confidence = 0.7;
-    console.log(`[SPO Extract] Generic 5 digit pattern matched: "${extractedNumber}" (set in both fields)`);
-    return result;
-  }
 
-  // Pattern 7: ND patterns (10+ digit numbers starting with year)
-  const ndPattern = /(?<![0-9])(20\d{8,})(?![0-9])/g;
-  const ndMatches = [...nameWithoutExt.matchAll(ndPattern)];
+  // ==========================================
+  // Pattern 7: ND genérico (10+ dígitos iniciando com ano)
+  // ==========================================
+  const ndMatches = [...nameWithoutExt.matchAll(/(?<![0-9])(20\d{8,11})(?![0-9])/g)];
   if (ndMatches.length > 0) {
     result.numeroND = ndMatches[0][1];
     result.confidence = 0.7;
-    console.log(`[SPO Extract] ND pattern matched: ${result.numeroND}`);
+    result.candidatosND = Array.from(new Set([
+      ...ndMatches.map(m => m[1]),
+      ...allNumericCandidates,
+    ]));
+    result.candidatosSPO = allNumericCandidates;
+    console.log(`[Extract] ND genérico: ${result.numeroND}`);
     return result;
   }
 
-  console.log(`[SPO Extract] No pattern matched for filename: "${fileName}"`);
+  // ==========================================
+  // Pattern 8: 5 dígitos
+  // ==========================================
+  const fiveMatches = [...nameWithoutExt.matchAll(/(?<![0-9])(\d{5})(?![0-9])/g)];
+  if (fiveMatches.length > 0) {
+    const extractedNumber = fiveMatches[0][1];
+    result.numeroSPO = extractedNumber;
+    result.numeroND = extractedNumber;
+    result.confidence = 0.6;
+    result.candidatosSPO = Array.from(new Set([extractedNumber, ...allNumericCandidates]));
+    result.candidatosND = result.candidatosSPO;
+    return result;
+  }
+
+  // Ainda assim retorna candidatos para o frontend tentar
+  result.candidatosSPO = allNumericCandidates;
+  result.candidatosND = allNumericCandidates;
+  console.log(`[Extract] Nenhum padrão direto matched. Candidatos: ${allNumericCandidates.length}`);
   return result;
 }
 
@@ -192,50 +269,38 @@ serve(async (req) => {
       );
     }
 
-    // First, try to extract from filename (fastest)
     const filenameResult = extractFromFilename(fileName);
-    
-    if (filenameResult.numeroSPO || filenameResult.numeroND) {
-      console.log(`Extracted from filename: SPO=${filenameResult.numeroSPO}, ND=${filenameResult.numeroND}`);
+    const HIGH_CONF_THRESHOLD = 0.85;
+
+    // Se confiança alta, retorna direto (não precisa chamar IA — economia de tokens)
+    if (filenameResult.confidence >= HIGH_CONF_THRESHOLD) {
+      console.log(`[Parse] Alta confiança (${filenameResult.confidence}) — retornando filename`);
       return new Response(
         JSON.stringify({ success: true, data: filenameResult }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // If filename didn't work, use Lovable AI to extract from PDF content
-    console.log('Filename extraction failed, attempting AI content extraction...');
-
+    // Confiança baixa OU sem matches: tentar IA do PDF para complementar
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
-      console.warn('LOVABLE_API_KEY not configured, returning filename-only result');
+      console.warn('[Parse] LOVABLE_API_KEY não configurada — retornando filename');
       return new Response(
         JSON.stringify({ success: true, data: filenameResult }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Call Gemini API to analyze PDF content
     const prompt = `Analyze this bank payment receipt/proof PDF and extract the following information in JSON format:
-    
-    1. "numeroSPO" - Look for SPO number, usually 5-7 digits
-    2. "numeroND" - Look for ND (Número do Documento) or Voucher number, usually 10+ digits starting with year
-    3. "linhaDigitavel" - The barcode/boleto line (linha digitável), usually 47+ digits
-    4. "valor" - The payment amount in BRL (just the number)
-    5. "fornecedor" - The supplier/vendor name
-    6. "dataVencimento" - Due date in YYYY-MM-DD format
-    
-    Return ONLY a JSON object with these fields. Use null for any field you cannot find.
-    
-    Example response:
-    {
-      "numeroSPO": "286102",
-      "numeroND": "2025156579",
-      "linhaDigitavel": "23793.38128 60000.000003 28610.201019 1 98290000050000",
-      "valor": 500.00,
-      "fornecedor": "Empresa XYZ Ltda",
-      "dataVencimento": "2025-01-15"
-    }`;
+
+1. "numeroSPO" - Look for SPO number, usually 5-7 digits
+2. "numeroND" - Look for ND (Número do Documento) or Voucher number, usually 10-13 digits starting with year
+3. "linhaDigitavel" - The barcode/boleto line (linha digitável), usually 44-48 digits
+4. "valor" - The payment amount in BRL (just the number)
+5. "fornecedor" - The supplier/vendor name
+6. "dataVencimento" - Due date in YYYY-MM-DD format
+
+Return ONLY a JSON object with these fields. Use null for any field you cannot find.`;
 
     try {
       const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -263,51 +328,54 @@ serve(async (req) => {
       if (aiResponse.ok) {
         const aiData = await aiResponse.json();
         const content = aiData.choices?.[0]?.message?.content || '';
-        
-        // Try to parse JSON from the response
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
-          
+
+          // Combinar resultado da IA com candidatos do filename
+          const aiSPO = parsed.numeroSPO ? String(parsed.numeroSPO) : null;
+          const aiND = parsed.numeroND ? String(parsed.numeroND) : null;
+
+          const mergedCandidatosSPO = Array.from(new Set([
+            ...(aiSPO ? [aiSPO] : []),
+            ...(filenameResult.numeroSPO ? [filenameResult.numeroSPO] : []),
+            ...filenameResult.candidatosSPO,
+          ]));
+          const mergedCandidatosND = Array.from(new Set([
+            ...(aiND ? [aiND] : []),
+            ...(filenameResult.numeroND ? [filenameResult.numeroND] : []),
+            ...filenameResult.candidatosND,
+          ]));
+
           const contentResult: ExtractedData = {
-            numeroSPO: parsed.numeroSPO || null,
-            numeroND: parsed.numeroND || null,
-            linhaDigitavel: parsed.linhaDigitavel || null,
+            numeroSPO: aiSPO || filenameResult.numeroSPO,
+            numeroND: aiND || filenameResult.numeroND,
+            linhaDigitavel: parsed.linhaDigitavel || filenameResult.linhaDigitavel || null,
             valor: parsed.valor ? Number(parsed.valor) : null,
             fornecedor: parsed.fornecedor || null,
             dataVencimento: parsed.dataVencimento || null,
-            confidence: 0.75,
+            confidence: 0.8,
             source: 'content',
+            candidatosSPO: mergedCandidatosSPO,
+            candidatosND: mergedCandidatosND,
           };
 
-          console.log(`Extracted from AI content analysis: SPO=${contentResult.numeroSPO}, ND=${contentResult.numeroND}`);
+          console.log(`[Parse] IA: SPO=${contentResult.numeroSPO}, ND=${contentResult.numeroND}, candND=${mergedCandidatosND.length}`);
           return new Response(
             JSON.stringify({ success: true, data: contentResult }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
       } else {
-        console.error('AI API error:', aiResponse.status, await aiResponse.text());
+        console.error('[Parse] AI API error:', aiResponse.status, await aiResponse.text());
       }
     } catch (aiError) {
-      console.error('AI extraction error:', aiError);
+      console.error('[Parse] AI extraction error:', aiError);
     }
 
-    // Return empty result if all extraction methods failed
+    // Fallback final: retorna o que foi possível extrair do filename (com candidatos)
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        data: {
-          numeroSPO: null,
-          numeroND: null,
-          linhaDigitavel: null,
-          valor: null,
-          fornecedor: null,
-          dataVencimento: null,
-          confidence: 0,
-          source: 'filename',
-        }
-      }),
+      JSON.stringify({ success: true, data: filenameResult }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
