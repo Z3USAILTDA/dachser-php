@@ -452,7 +452,7 @@ Deno.serve(async (req) => {
       'remove_fornecedor_sem_fiscal','get_dados_bancarios_fornecedor',
       // RM / Pagamentos / Remessa / CRASS / Comprovantes
       'insert_dados_rm','update_tipo_exec_dados_rm','get_voucher_for_rm',
-      'backfill_tipo_exec_dados_rm','sync_baixa_remessa_to_dados_rm','save_linha_digitavel',
+      'backfill_tipo_exec_dados_rm','sync_baixa_remessa_to_dados_rm','replay_dados_rm','save_linha_digitavel',
       'check_voucher_rm_ready','insert_dados_financeiro_voucher','list_pagamentos',
       'migrate_tipo_exec_column_to_varchar','set_tipo_execucao_pagamento','set_ready_for_robo',
       'update_status_pagamento','update_codigo_barras','batch_set_tipo_execucao',
@@ -9906,6 +9906,102 @@ Deno.serve(async (req) => {
           inserted, 
           errors: errors.length > 0 ? errors : undefined 
         };
+        break;
+      }
+
+      case 'replay_dados_rm': {
+        const { identifiers, force } = body as { identifiers?: string[]; force?: boolean };
+        if (!Array.isArray(identifiers) || identifiers.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'identifiers (array) é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const processed: any[] = [];
+        const skipped: any[] = [];
+        const errors: any[] = [];
+
+        for (const rawId of identifiers) {
+          const ident = String(rawId || '').trim();
+          if (!ident) continue;
+          try {
+            // Lookup voucher in t_vouchers (by numero_spo OR id_rm OR processo_id)
+            const vRows = await client.query(`
+              SELECT id, numero_spo, id_rm, forma_pagamento, fornecedor, cnpj_fornecedor,
+                     linha_digitavel, codigo_barras, chave_pix, tipo_execucao_pagamento, processo_id
+              FROM dados_dachser.t_vouchers
+              WHERE numero_spo COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                 OR id_rm COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                 OR processo_id COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+              ORDER BY created_at DESC
+              LIMIT 1
+            `, [ident, ident, ident]);
+
+            if (!vRows || vRows.length === 0) {
+              errors.push({ identifier: ident, error: 'voucher não encontrado em t_vouchers' });
+              continue;
+            }
+            const v = vRows[0];
+            const finalIdRm = v.id_rm || v.numero_spo;
+            const ndVal = v.numero_spo || null;
+
+            // Skip if already exists (unless force)
+            if (!force) {
+              const existing = await client.query(`
+                SELECT id FROM dados_dachser.t_dados_rm
+                WHERE id_rm COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                   OR nd COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                LIMIT 1
+              `, [finalIdRm, ndVal || finalIdRm]);
+              if (existing && existing.length > 0) {
+                skipped.push({ identifier: ident, reason: 'já existe em t_dados_rm', id_rm: finalIdRm });
+                continue;
+              }
+            }
+
+            // regras_forma_pag (Boleto/Itaú/Default)
+            const formaPag = v.forma_pagamento || null;
+            const isBoletoPag = formaPag && formaPag.toUpperCase().includes('BOL');
+            let regrasFormaPagFinal = 'DOC (Compe)';
+            if (isBoletoPag) {
+              regrasFormaPagFinal = 'Boleto';
+            } else if (v.cnpj_fornecedor) {
+              try {
+                const dadosBancarios = await client.query(`
+                  SELECT banco FROM dados_dachser.t_dados_financeiro_pag
+                  WHERE REPLACE(REPLACE(REPLACE(cnpj, '.', ''), '/', ''), '-', '') = ?
+                  LIMIT 1
+                `, [v.cnpj_fornecedor.replace(/\D/g, '')]);
+                if (dadosBancarios && dadosBancarios.length > 0) {
+                  const bancoUpper = (dadosBancarios[0].banco || '').toUpperCase();
+                  if (bancoUpper.includes('ITAU') || bancoUpper.includes('ITAÚ') || bancoUpper.includes('341')) {
+                    regrasFormaPagFinal = 'Crédito em Conta Corrente da Mesma Titularidade';
+                  }
+                }
+              } catch (bankErr) {
+                console.log('[replay_dados_rm] bank lookup failed:', bankErr);
+              }
+            }
+
+            const voucherBoletoFinal = isBoletoPag ? (v.linha_digitavel || v.codigo_barras || null) : null;
+            const chavePixFinal = (formaPag && formaPag.toUpperCase().includes('PIX')) ? (v.chave_pix || null) : null;
+
+            await client.execute(`
+              INSERT INTO dados_dachser.t_dados_rm
+              (id_rm, nd, nf_disputa, voucher_boleto, chave_pix, pix_tipo_chave, forma_pag, fornecedor, regras_forma_pag, tipo_exec)
+              VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
+            `, [finalIdRm, ndVal, voucherBoletoFinal, chavePixFinal, null, formaPag, v.fornecedor || null, regrasFormaPagFinal, v.tipo_execucao_pagamento || 'A_DEFINIR']);
+
+            console.log(`[replay_dados_rm] inserted id_rm=${finalIdRm} nd=${ndVal} forma=${formaPag}`);
+            processed.push({ identifier: ident, id_rm: finalIdRm, nd: ndVal, forma_pag: formaPag, voucher_boleto: voucherBoletoFinal, chave_pix: chavePixFinal });
+          } catch (err: any) {
+            console.error(`[replay_dados_rm] error for ${ident}:`, err);
+            errors.push({ identifier: ident, error: err?.message || String(err) });
+          }
+        }
+
+        result = { success: true, processed, skipped, errors };
         break;
       }
 
