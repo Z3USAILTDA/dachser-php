@@ -1206,17 +1206,17 @@ const EsteiraIndex = () => {
     // If there's a search query, show ALL vouchers (no role-based stage filtering)
     const hasSearchQuery = filters.search && filters.search.trim().length > 0;
 
+    // ADMIN / GESTOR / busca ativa → vê tudo
     if (isAdmin || isGestor || hasSearchQuery) {
       return vouchers;
     }
 
-    // Users with FINANCEIRO role (even with other roles) can see ALL vouchers
-    // FINANCEIRO stage vouchers come first
+    // FINANCEIRO (mesmo combinado com outros roles) vê tudo, com prioridade visual
+    // para FINANCEIRO/ROBO (e SUPERVISOR se também for supervisor)
     if (isFinanceiro) {
       return [...vouchers].sort((a, b) => {
         const aIsFinanceiro = a.etapaAtual === "FINANCEIRO" || a.etapaAtual === "ROBO";
         const bIsFinanceiro = b.etapaAtual === "FINANCEIRO" || b.etapaAtual === "ROBO";
-        // If user also has SUPERVISOR role, prioritize SUPERVISOR stage too
         const aIsSupervisor = isSupervisor && a.etapaAtual === "SUPERVISOR";
         const bIsSupervisor = isSupervisor && b.etapaAtual === "SUPERVISOR";
         const aPriority = aIsFinanceiro || aIsSupervisor;
@@ -1227,26 +1227,32 @@ const EsteiraIndex = () => {
       });
     }
 
-    // Users with only SUPERVISOR role
-    if (isSupervisor) {
-      if (filters.etapa && filters.etapa !== "all") return vouchers;
-      return vouchers.filter(v => v.etapaAtual === "SUPERVISOR" || v.responsavelSupervisorUserId === currentUserId);
-    }
+    // Filtro manual de etapa desliga restrição de role
+    if (filters.etapa && filters.etapa !== "all") return vouchers;
+
+    // União de etapas para usuários com múltiplos roles.
+    // Ordem: OPERACAO → FISCAL → SUPERVISOR (supervisor é o último na hierarquia).
+    const etapasPermitidas = new Set<EtapaAtual>();
     if (isOperacao) {
-      // If user selected a specific etapa filter, show all vouchers (filterVouchers will handle it)
-      if (filters.etapa && filters.etapa !== "all") return vouchers;
-      // Default view: only OPERACAO and A_PROCESSAR
-      return vouchers.filter(v => 
-        v.etapaAtual === "OPERACAO" ||
-        v.etapaAtual === "A_PROCESSAR"
-      );
+      etapasPermitidas.add("OPERACAO");
+      etapasPermitidas.add("A_PROCESSAR");
     }
     if (isFiscal) {
-      if (filters.etapa && filters.etapa !== "all") return vouchers;
-      return vouchers.filter(v => v.etapaAtual === "FISCAL" || v.etapaAtual === "AJUSTE_FISCAL" || v.responsavelFiscalUserId === currentUserId);
+      etapasPermitidas.add("FISCAL");
+      etapasPermitidas.add("AJUSTE_FISCAL");
     }
-    // Users without any role: show all (view-only access)
-    return vouchers;
+    if (isSupervisor) {
+      etapasPermitidas.add("SUPERVISOR");
+    }
+
+    // Sem nenhum role conhecido → view-only de tudo
+    if (etapasPermitidas.size === 0) return vouchers;
+
+    return vouchers.filter(v =>
+      etapasPermitidas.has(v.etapaAtual) ||
+      (isFiscal && v.responsavelFiscalUserId === currentUserId) ||
+      (isSupervisor && v.responsavelSupervisorUserId === currentUserId)
+    );
   }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro, filters.etapa, filters.search]);
   // Map de masterId → SPOs dos filhos para busca expandida (lazy, via backend search)
   const [masterChildSPOsMap, setMasterChildSPOsMap] = useState<Map<string, string[]>>(new Map());
