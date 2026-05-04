@@ -1,64 +1,88 @@
-## Objetivo
+## Problema
 
-Permitir que **qualquer role** (FISCAL, SUPERVISOR, OPERACAO, etc.) consiga ver **todos os processos** — incluindo os cards virtuais `A_PROCESSAR` vindos do RM — quando escolher "Todas Etapas" no filtro, sem perder a visão padrão restrita ao seu role ao abrir a tela.
+A mudança anterior introduziu o estado `etapaFilterTouched` para destravar a visão restrita de role quando o usuário interage com o filtro de Etapa. Porém, o estado **só é setado quando o valor do filtro muda** (`newFilters.etapa !== filters.etapa`).
 
-## Contexto rápido
+O valor inicial de `filters.etapa` é `"all"`. Quando um usuário FISCAL abre a tela e clica em **"Todas Etapas"** no select, o valor selecionado também é `"all"` — ou seja, igual ao valor anterior. Resultado: `etapaFilterTouched` permanece `false`, a restrição de role não é desligada, e o usuário continua sem ver os cards `A_PROCESSAR` e o restante do pipeline.
 
-- `A_PROCESSAR` é uma etapa **virtual**: vem de `t_dados_financeiro_voucher` (RM pendente) e é injetada no client em `loadVouchers` (`EsteiraIndex.tsx` ~linha 1048). Só vira linha real em `t_vouchers` quando OPERACAO importa.
-- Hoje, em `roleFilteredVouchers` (linhas 1230-1255 de `EsteiraIndex.tsx`), o bypass está em `if (filters.etapa && filters.etapa !== "all") return vouchers;` — ou seja, **só** desliga a restrição de role quando o usuário escolhe uma etapa específica. "Todas Etapas" (`"all"`) **mantém** a restrição. Resultado: FISCAL/SUPERVISOR puros ficam presos a `FISCAL`/`AJUSTE_FISCAL`/`SUPERVISOR` e nunca enxergam `A_PROCESSAR` nem o resto do pipeline.
+## Causa raiz
 
-## Mudança proposta (cirúrgica)
+`EsteiraIndex.tsx`, callback `onFilterChange` do `<VoucherTable>` (~linha 2181):
 
-**Arquivo único:** `src/pages/esteira/EsteiraIndex.tsx`
+```ts
+if (newFilters.etapa !== filters.etapa) setEtapaFilterTouched(true);
+```
 
-1. Adicionar um estado local que rastreia se o usuário **interagiu** com o select de etapa:
-   ```ts
-   const [etapaFilterTouched, setEtapaFilterTouched] = useState(false);
-   ```
+Essa condição assume que selecionar "Todas Etapas" muda o valor — mas como `"all"` já é o default, não muda nada na primeira interação.
 
-2. Em `roleFilteredVouchers` (linha 1231), trocar:
-   ```ts
-   if (filters.etapa && filters.etapa !== "all") return vouchers;
-   ```
-   por:
-   ```ts
-   // Qualquer interação manual com o filtro de etapa (incluindo "Todas Etapas")
-   // desliga a restrição de role e mostra o pipeline completo, inclusive A_PROCESSAR.
-   if (etapaFilterTouched) return vouchers;
-   ```
-   E adicionar `etapaFilterTouched` ao array de dependências do `useMemo`.
+## Correção (cirúrgica, 1 arquivo)
 
-3. No callback `onFilterChange` passado ao `<VoucherTable>` (linha ~2176), interceptar mudanças em `etapa` para marcar `etapaFilterTouched`:
-   ```ts
-   onFilterChange={(newFilters) => {
-     if (newFilters.etapa !== filters.etapa) setEtapaFilterTouched(true);
-     setFilters(newFilters);
-     setDrillDownFilter("all");
-   }}
-   ```
+**Arquivo:** `src/pages/esteira/EsteiraIndex.tsx`
 
-4. No botão "Limpar filtros" (linha ~2137), resetar também:
-   ```ts
-   setEtapaFilterTouched(false);
-   ```
+Trocar o callback do `<VoucherTable>` para marcar `etapaFilterTouched = true` **sempre que o usuário tocar no filtro de etapa**, comparando contra o estado anterior do `newFilters` em vez de usar uma condição de mudança de valor. Como `VoucherTable` chama `onFilterChange` apenas quando o usuário interage com algum filtro, basta detectar que `newFilters.etapa` foi explicitamente fornecido e marcar como tocado.
 
-## Comportamento resultante
+Mudança no callback (~linha 2181):
 
-| Ação do usuário | FISCAL puro vê | SUPERVISOR puro vê | OPERACAO puro vê |
-|---|---|---|---|
-| Abre a tela (sem mexer em filtro) | só `FISCAL`+`AJUSTE_FISCAL` (igual hoje) | só `SUPERVISOR` (igual hoje) | `OPERACAO`+`A_PROCESSAR` (igual hoje) |
-| Seleciona **"Todas Etapas"** | **pipeline completo, inclusive os 12 `A_PROCESSAR`** ✅ | **pipeline completo, inclusive `A_PROCESSAR`** ✅ | **pipeline completo** ✅ |
-| Seleciona uma etapa específica | só aquela etapa (igual hoje) | só aquela etapa (igual hoje) | só aquela etapa (igual hoje) |
-| Clica "Limpar filtros" | volta à visão restrita do role | volta à visão restrita do role | volta à visão restrita do role |
+```ts
+onFilterChange={(newFilters) => {
+  // Qualquer chamada vinda do VoucherTable significa interação manual.
+  // Se a chave 'etapa' está presente no payload, considere o filtro de etapa "tocado",
+  // mesmo que o valor escolhido seja igual ao default ("all").
+  if (Object.prototype.hasOwnProperty.call(newFilters, "etapa")) {
+    setEtapaFilterTouched(true);
+  }
+  setFilters(newFilters);
+  setDrillDownFilter("all");
+}}
+```
 
-ADMIN / GESTOR / FINANCEIRO permanecem inalterados (já viam tudo).
+Como o `VoucherTable` sempre envia o objeto inteiro de filtros (spread `{ ...filters, etapa: v }`), a chave `etapa` está sempre presente. Isso poderia ser muito agressivo (qualquer mudança em qualquer filtro destravaria role).
 
-## Observação importante
+**Solução mais precisa:** envolver o `<Select>` de etapa para detectar a interação. Como o select de etapa fica dentro do `VoucherTable`, a forma mais limpa sem refatorar é manter a comparação por valor, mas também marcar como tocado quando o usuário **abre/seleciona** o select com o mesmo valor. Para evitar mexer em `VoucherTable`, ajustar a heurística:
 
-Os `A_PROCESSAR` continuam sendo **read-only** para FISCAL/SUPERVISOR (são cards virtuais; só OPERACAO pode importar/editar). A mudança é apenas de **visibilidade**, não de permissão de ação — as regras `canEdit`, `canDelete`, etc. já existentes seguem intactas.
+```ts
+onFilterChange={(newFilters) => {
+  // Marca como tocado se: (1) valor mudou, OU (2) o usuário escolheu "all" 
+  // explicitamente após não ter tocado ainda (caso típico do FISCAL que 
+  // abre a tela e clica em "Todas Etapas")
+  if (newFilters.etapa !== filters.etapa || (!etapaFilterTouched && newFilters.etapa === "all")) {
+    setEtapaFilterTouched(true);
+  }
+  setFilters(newFilters);
+  setDrillDownFilter("all");
+}}
+```
+
+Isso resolve o caso reportado sem afetar os demais.
+
+**Alternativa mais robusta** (recomendada): não depender de "tocar" o filtro. Em vez disso, **sempre** mostrar o pipeline completo quando `filters.etapa === "all"` para qualquer role — voltando à lógica anterior, mas invertida: a restrição de role só se aplica quando o usuário **não** está pedindo "todas".
+
+```ts
+// Em roleFilteredVouchers (linha 1235), trocar:
+if (etapaFilterTouched) return vouchers;
+// por:
+if (filters.etapa === "all") return vouchers;
+```
+
+E **remover** todo o estado `etapaFilterTouched` (declaração ~linha 609, set no callback, set no "Limpar Todos", e da lista de dependências do `useMemo`).
+
+**Trade-off:** com essa alternativa, a "visão padrão restrita ao role" deixa de existir — qualquer usuário sempre verá o pipeline completo por default. Se isso for aceitável, é a solução mais simples e sem ambiguidade.
+
+## Recomendação
+
+Ir com a **alternativa robusta**: `if (filters.etapa === "all") return vouchers;` e remover `etapaFilterTouched`. Razão: o comportamento "restringir por role na visão default" estava criando confusão, e a regra fica clara — "Todas Etapas" mostra todas, qualquer outra etapa mostra só ela.
+
+## Comportamento resultante (alternativa robusta)
+
+| Ação | FISCAL puro vê | SUPERVISOR puro vê |
+|---|---|---|
+| Abre a tela (etapa = "all" default) | pipeline completo, inclusive `A_PROCESSAR` | pipeline completo |
+| Seleciona etapa específica (ex: "FISCAL") | só FISCAL | só aquela etapa |
+| Clica "Limpar Todos" → volta a "all" | pipeline completo de novo | pipeline completo |
+
+Permissões de ação (editar/deletar/aprovar) seguem inalteradas.
 
 ## Memória
 
-Atualizar `mem://vouchers/ui-spec-and-access-v4`:
+Atualizar `mem://vouchers/ui-spec-and-access-v4` removendo a regra de "etapa filter touch bypass" e substituindo por:
 
-> Quando qualquer role interage com o filtro de Etapa (inclusive selecionando "Todas Etapas"), a restrição de visibilidade por role é desligada e o usuário passa a ver o pipeline completo, incluindo os cards virtuais `A_PROCESSAR` vindos do RM. Sem interação, mantém a visão restrita do seu role. "Limpar filtros" restaura a visão restrita. Permissões de ação (editar/deletar/aprovar) **não** mudam — apenas visibilidade.
+> A visibilidade da grid é controlada pelo filtro de Etapa: quando `filters.etapa === "all"`, qualquer role vê o pipeline completo (inclusive cards virtuais `A_PROCESSAR` vindos do RM); quando uma etapa específica é selecionada, mostra apenas vouchers daquela etapa. Permissões de ação continuam controladas por role.

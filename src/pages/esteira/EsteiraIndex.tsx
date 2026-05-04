@@ -604,9 +604,6 @@ const EsteiraIndex = () => {
   });
   const drillDownFilterInit: DrillDownFilter = "all";
   const [drillDownFilter, setDrillDownFilter] = useState<DrillDownFilter>(drillDownFilterInit);
-  // Quando o usuário interage manualmente com o filtro de Etapa (inclusive "Todas Etapas"),
-  // a restrição de visibilidade por role é desligada e ele passa a ver o pipeline completo.
-  const [etapaFilterTouched, setEtapaFilterTouched] = useState(false);
   const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
   const [finDbStats, setFinDbStats] = useState<FinDbStats | null>(null);
   const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
@@ -1230,9 +1227,10 @@ const EsteiraIndex = () => {
       });
     }
 
-    // Qualquer interação manual com o filtro de etapa (incluindo "Todas Etapas")
-    // desliga a restrição de role: o usuário vê o pipeline completo, inclusive A_PROCESSAR.
-    if (etapaFilterTouched) return vouchers;
+    // Quando o filtro de Etapa está em "all" (default ou após Limpar), qualquer role
+    // vê o pipeline completo, inclusive os cards virtuais A_PROCESSAR vindos do RM.
+    // A restrição de role só se aplica quando uma etapa específica é selecionada.
+    if (!filters.etapa || filters.etapa === "all") return vouchers;
 
     // União de etapas para usuários com múltiplos roles.
     // Ordem: OPERACAO → FISCAL → SUPERVISOR (supervisor é o último na hierarquia).
@@ -1257,7 +1255,7 @@ const EsteiraIndex = () => {
       (isFiscal && v.responsavelFiscalUserId === currentUserId) ||
       (isSupervisor && v.responsavelSupervisorUserId === currentUserId)
     );
-  }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro, etapaFilterTouched, filters.search]);
+  }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro, filters.etapa, filters.search]);
   // Map de masterId → SPOs dos filhos para busca expandida (lazy, via backend search)
   const [masterChildSPOsMap, setMasterChildSPOsMap] = useState<Map<string, string[]>>(new Map());
   const searchDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2167,7 +2165,6 @@ const EsteiraIndex = () => {
                   enviadoPor: "",
                   criadoPor: ""
                 });
-                setEtapaFilterTouched(false);
               }} className="text-[#ffc800] hover:text-white text-[0.8rem] flex items-center gap-1">
                       ✕ Limpar Todos
                     </button>}
@@ -2178,7 +2175,7 @@ const EsteiraIndex = () => {
           {/* Tab Content */}
           {activeTab === "processos" && <div className="mt-3">
               {loading ? <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" /> : <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)] overflow-hidden">
-                    <VoucherTable vouchers={filteredVouchers} onViewDetails={handleViewDetails} onEdit={handleEdit} onDelete={handleDelete} onGoBack={handleGoBack} onCancel={handleCancel} onDisassemble={handleDisassemble} onValidateComprovante={handleValidateComprovante} filters={filters} onFilterChange={(newFilters) => { if (newFilters.etapa !== filters.etapa) setEtapaFilterTouched(true); setFilters(newFilters); setDrillDownFilter("all"); }} canEdit={canEditVoucher} canDelete={canDeleteVoucher} canGoBackStage={canGoBackStage} canCancelVoucher={canCancelVoucher} canDisassembleMaster={canDisassembleMaster} canValidateComprovante={isFinanceiro || isAdmin || isSystemAdmin} canApproveSupervisor={canApproveSupervisor} canRetornarPendente={isFinanceiro || isAdmin || isSystemAdmin} lastUpdateTime={lastUpdateTime} />
+                    <VoucherTable vouchers={filteredVouchers} onViewDetails={handleViewDetails} onEdit={handleEdit} onDelete={handleDelete} onGoBack={handleGoBack} onCancel={handleCancel} onDisassemble={handleDisassemble} onValidateComprovante={handleValidateComprovante} filters={filters} onFilterChange={(newFilters) => { setFilters(newFilters); setDrillDownFilter("all"); }} canEdit={canEditVoucher} canDelete={canDeleteVoucher} canGoBackStage={canGoBackStage} canCancelVoucher={canCancelVoucher} canDisassembleMaster={canDisassembleMaster} canValidateComprovante={isFinanceiro || isAdmin || isSystemAdmin} canApproveSupervisor={canApproveSupervisor} canRetornarPendente={isFinanceiro || isAdmin || isSystemAdmin} lastUpdateTime={lastUpdateTime} />
                 </div>}
             </div>}
 
