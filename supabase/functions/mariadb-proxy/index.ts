@@ -6430,8 +6430,9 @@ Deno.serve(async (req) => {
             cliente_email, filial, data_emissao_documento,
             comentarios_operacao, comentarios_fiscal, comentarios_financeiro,
             ajuste_operacao, ajuste_fiscal, criado_por_user_id,
-            processo_id, origem_processo, chave_pix, status_documento_fiscal
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            processo_id, origem_processo, chave_pix, status_documento_fiscal,
+            tipo_execucao_pagamento
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           voucherId,
           emptyToNull(voucherData.id_rm),
@@ -6463,7 +6464,8 @@ Deno.serve(async (req) => {
           emptyToNull(voucherData.processo_id),
           emptyToNull(voucherData.origem_processo),
           emptyToNull(voucherData.chave_pix),
-          emptyToNull(voucherData.status_documento_fiscal) || 'ANEXADO'
+          emptyToNull(voucherData.status_documento_fiscal) || 'ANEXADO',
+          'A_DEFINIR'
         ]);
         
         console.log('Voucher saved to MariaDB t_vouchers, ID:', voucherId, 'id_rm:', voucherData.id_rm);
