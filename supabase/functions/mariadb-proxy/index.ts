@@ -12352,8 +12352,8 @@ Deno.serve(async (req) => {
                 id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento,
                 forma_pagamento, etapa_atual, status_baixa, status_financeiro,
                 voucher_master_id, origem_criacao, id_rm, criado_por_dfv,
-                criado_por_user_id, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, 'BOLETO', 'OPERACAO', 'PENDENTE', 'PENDENTE', ?, 'RM', ?, ?, ?, NOW(), NOW())
+                criado_por_user_id, tipo_execucao_pagamento, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, 'BOLETO', 'OPERACAO', 'PENDENTE', 'PENDENTE', ?, 'RM', ?, ?, ?, 'A_DEFINIR', NOW(), NOW())
             `, [
               mirrorId,
               row.nd || null,
