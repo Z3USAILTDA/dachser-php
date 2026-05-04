@@ -1331,6 +1331,9 @@ const EsteiraIndex = () => {
         // FINANCEIRO filter should also show ROBO stage
         if (fEtapa === "FINANCEIRO") {
           if (vEtapa !== "FINANCEIRO" && vEtapa !== "ROBO") return false;
+        } else if (fEtapa === "OPERACAO") {
+          // Operacional engloba OPERACAO + A_PROCESSAR
+          if (vEtapa !== "OPERACAO" && vEtapa !== "A_PROCESSAR") return false;
         } else {
           if (vEtapa !== fEtapa) return false;
         }

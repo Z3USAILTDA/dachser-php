@@ -6430,8 +6430,9 @@ Deno.serve(async (req) => {
             cliente_email, filial, data_emissao_documento,
             comentarios_operacao, comentarios_fiscal, comentarios_financeiro,
             ajuste_operacao, ajuste_fiscal, criado_por_user_id,
-            processo_id, origem_processo, chave_pix, status_documento_fiscal
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            processo_id, origem_processo, chave_pix, status_documento_fiscal,
+            tipo_execucao_pagamento
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           voucherId,
           emptyToNull(voucherData.id_rm),
@@ -6463,7 +6464,8 @@ Deno.serve(async (req) => {
           emptyToNull(voucherData.processo_id),
           emptyToNull(voucherData.origem_processo),
           emptyToNull(voucherData.chave_pix),
-          emptyToNull(voucherData.status_documento_fiscal) || 'ANEXADO'
+          emptyToNull(voucherData.status_documento_fiscal) || 'ANEXADO',
+          'A_DEFINIR'
         ]);
         
         console.log('Voucher saved to MariaDB t_vouchers, ID:', voucherId, 'id_rm:', voucherData.id_rm);
@@ -10036,13 +10038,17 @@ Deno.serve(async (req) => {
           result = { ready: false, found: false, missingFields: ['numero_spo'] };
           break;
         }
+        // Normalização: aceitar "105-292964" e "105-292964 DIM-BY"
+        const ndRaw = String(numero_spo).trim();
+        const ndCandidates = Array.from(new Set([ndRaw, ndRaw.split(/\s+/)[0]].filter(Boolean)));
+        const placeholders = ndCandidates.map(() => '? COLLATE utf8mb4_unicode_ci').join(', ');
         const rows: any[] = await client.query(`
           SELECT documento, nd, numero_nf, numero_processo, modal, tipo_pag,
                  forma_pag, data_emissao, data_vencimento, valor_nf, cnpj, razao_social
           FROM dados_dachser.t_dados_financeiro_voucher
-          WHERE nd COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+          WHERE nd COLLATE utf8mb4_unicode_ci IN (${placeholders})
           LIMIT 1
-        `, [String(numero_spo).trim()]);
+        `, ndCandidates);
 
         if (!rows || rows.length === 0) {
           // Voucher genuinamente manual: nunca foi criado no RM. Bloqueia.
@@ -10061,7 +10067,7 @@ Deno.serve(async (req) => {
           if (f === 'valor_nf' && (Number(v) === 0 || Number.isNaN(Number(v)))) { informational.push(f); continue; }
         }
         if (informational.length > 0) {
-          console.log(`[check_voucher_rm_ready] nd=${numero_spo} espelho RM existe; campos informacionais vazios: ${informational.join(',')} (não bloqueia)`);
+          console.log(`[check_voucher_rm_ready] nd=${numero_spo} (candidates=${ndCandidates.join('|')}) espelho RM existe; campos informacionais vazios: ${informational.join(',')} (não bloqueia)`);
         }
         result = { ready: true, found: true, isManual: false, missingFields: [], informationalEmptyFields: informational };
         break;
@@ -11916,8 +11922,8 @@ Deno.serve(async (req) => {
             id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda,
             vencimento, data_emissao_documento, forma_pagamento, tipo_documento,
             cobranca_em_nome_de, etapa_atual, status_baixa, urgencia_tipo,
-            processo_id, criado_por_user_id, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'NORMAL', ?, ?, NOW(), NOW())
+            processo_id, criado_por_user_id, tipo_execucao_pagamento, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'NORMAL', ?, ?, 'A_DEFINIR', NOW(), NOW())
         `, [
           voucherId,
           rm.nd,
@@ -12350,8 +12356,8 @@ Deno.serve(async (req) => {
                 id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento,
                 forma_pagamento, etapa_atual, status_baixa, status_financeiro,
                 voucher_master_id, origem_criacao, id_rm, criado_por_dfv,
-                criado_por_user_id, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, 'BOLETO', 'OPERACAO', 'PENDENTE', 'PENDENTE', ?, 'RM', ?, ?, ?, NOW(), NOW())
+                criado_por_user_id, tipo_execucao_pagamento, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, 'BOLETO', 'OPERACAO', 'PENDENTE', 'PENDENTE', ?, 'RM', ?, ?, ?, 'A_DEFINIR', NOW(), NOW())
             `, [
               mirrorId,
               row.nd || null,
@@ -12445,8 +12451,8 @@ Deno.serve(async (req) => {
             id, numero_spo, nome_master, fornecedor, cnpj_fornecedor, valor, moeda, vencimento,
             forma_pagamento, tipo_documento, cobranca_em_nome_de, filial,
             comentarios_operacao, etapa_atual, status_baixa, status_financeiro,
-            criado_por_user_id, is_master, origem_processo, processo_id, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'PENDENTE', ?, 1, ?, ?, NOW(), NOW())
+            criado_por_user_id, is_master, origem_processo, processo_id, tipo_execucao_pagamento, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'PENDENTE', ?, 1, ?, ?, 'A_DEFINIR', NOW(), NOW())
         `, [
           masterId,
           numeroSpoMaster,
@@ -15094,8 +15100,8 @@ Deno.serve(async (req) => {
                 id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda,
                 vencimento, data_emissao_documento, cobranca_em_nome_de, forma_pagamento,
                 etapa_atual, status_baixa, criado_por_user_id, id_rm, data_insert_rm, sync_status,
-                processo_id, origem_processo
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'SISTEMA_SYNC', ?, ?, 'ATIVO', ?, 'RM')
+                processo_id, origem_processo, tipo_execucao_pagamento
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'SISTEMA_SYNC', ?, ?, 'ATIVO', ?, 'RM', 'A_DEFINIR')
             `, [
               voucherId,
               rm.nd || rm.documento,

@@ -725,6 +725,8 @@ export const PagamentosTab = () => {
             size="sm"
             onClick={() => {
               setRefreshing(true);
+              setDadosBancariosCache({});
+              setPagamentos([]);
               loadPagamentos();
             }}
             disabled={refreshing}
