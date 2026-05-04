@@ -604,6 +604,9 @@ const EsteiraIndex = () => {
   });
   const drillDownFilterInit: DrillDownFilter = "all";
   const [drillDownFilter, setDrillDownFilter] = useState<DrillDownFilter>(drillDownFilterInit);
+  // Quando o usuário interage manualmente com o filtro de Etapa (inclusive "Todas Etapas"),
+  // a restrição de visibilidade por role é desligada e ele passa a ver o pipeline completo.
+  const [etapaFilterTouched, setEtapaFilterTouched] = useState(false);
   const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
   const [finDbStats, setFinDbStats] = useState<FinDbStats | null>(null);
   const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
