@@ -1,32 +1,37 @@
 ## Diagnóstico
 
-O voucher SPO `101-292881 DIM-BY` **já existe na MariaDB** em etapa `OPERACAO` (id `f54fec01-d618-46c4-9fae-fe173a89f675`, criado hoje 11:32). Quando o usuário tenta criá-lo novamente, o handler `save_voucher_esteira` em `mariadb-proxy/index.ts` (linhas 6296–6311) detecta o duplicado e responde com **HTTP 409 + payload `{ error, existingId, existingEtapa }`**.
+A `linha_digitavel` (campo `voucher_boleto` em `t_dados_rm`) chega `NULL` em alguns processos por uma **condição de corrida no front-end**:
 
-O problema: `supabase.functions.invoke()` no front trata qualquer status ≥400 como erro de transporte. O `data` (payload com `existingId`) vem como `null`, e o `error.message` é a string genérica **"Edge Function returned a non-2xx status code"** — sem o `"409"` nem `"já existe"`.
+1. Operador anexa o boleto → `extract-boleto-barcode` extrai a linha digitável **assincronamente** → `save_linha_digitavel` grava em `t_vouchers.linha_digitavel`.
+2. Operador clica "Aprovar/Enviar para Financeiro" antes que o objeto `voucher` em memória (estado React) seja recarregado.
+3. `insertDadosRmOnFinanceiro(voucher)` em `src/utils/voucherRmSync.ts` lê `voucher.linhaDigitavel` do **objeto em memória** (ainda `null`/`undefined`) e envia `voucher_boleto: null` para o handler `insert_dados_rm`.
+4. O handler `insert_dados_rm` (linhas 9579–9706 de `mariadb-proxy/index.ts`) confia cegamente no payload e insere `NULL` em `voucher_boleto`.
+5. **A função foi desenhada para nunca falhar** ("não falha a operação principal — apenas loga"), então o operador nunca é alertado.
 
-Em `src/components/esteira/CreateVoucherDialog.tsx` (linha 540–552), a checagem de duplicado depende exatamente dessas substrings:
+O mesmo problema afeta `chave_pix` quando o pagamento é PIX e o objeto em memória está defasado.
 
-```ts
-if (errorMessage.includes("já existe") || errorMessage.includes("409")) { ... }
-```
-
-Como nenhuma bate, cai no `throw` da linha 552 → toast vermelho **"Erro ao criar voucher/SPO — Erro ao salvar voucher no MariaDB: Edge Function returned a non-2xx status code"**.
-
-Ou seja: **o voucher não foi salvo porque já existia**, mas o usuário recebeu uma mensagem inútil de "erro de servidor" em vez do aviso de duplicado.
+A confirmação: o DB de origem (`t_vouchers`) tem o valor correto — porque `save_linha_digitavel` foi executado com sucesso. Apenas o snapshot que o front enviou estava desatualizado.
 
 ## Plano
 
-Mudança cirúrgica em 2 arquivos, sem alterar contrato nem schema:
+Mudança cirúrgica em **um único ponto**, sem mexer em schema, RLS, nem nos 5+ pontos de chamada do front:
 
-### 1. `supabase/functions/mariadb-proxy/index.ts` — handler `save_voucher_esteira`
-Trocar o status do duplicado em estágio avançado de **409 → 200**, mantendo o mesmo payload (`{ error, existingId, existingEtapa, duplicate: true }`). Assim `mariaResult` chega preenchido no front e o ramo de duplicado já existente (linhas 556–566) trata corretamente.
+### `supabase/functions/mariadb-proxy/index.ts` — handler `insert_dados_rm` (linhas ~9579–9706)
 
-### 2. `src/components/esteira/CreateVoucherDialog.tsx` — defesa adicional
-Tornar a detecção do bloco `if (mariaError)` (linhas 540–552) tolerante a erros opacos do `supabase.functions.invoke`: tentar ler `mariaError.context?.response?.json()` para extrair `{ error, existingId, existingEtapa }` antes de cair no toast genérico. Isso protege contra qualquer outro 4xx futuro e cobre o caso do voucher já existente.
+Adicionar **fallback de leitura na fonte de verdade** logo antes do INSERT:
+
+- Se `voucher_boleto` chegou `null/vazio` **OU** `chave_pix` chegou `null/vazio`, fazer um `SELECT linha_digitavel, codigo_barras, chave_pix FROM dados_dachser.t_vouchers` filtrado por `id = voucher_id` (passar do front quando disponível) ou, na ausência, por `id_rm = ?` ou `numero_spo = ?`.
+- Usar o valor do banco como fallback: `voucherBoletoFinal = voucherBoleto || (isBoleto ? (db.linha_digitavel || db.codigo_barras) : null)` e `chavePixFinal = chavePix || db.chave_pix`.
+- Logar `console.warn` quando o fallback for acionado (rastreabilidade — quem disparou e qual valor foi recuperado).
+
+### Atualização de memória
+
+Registrar a regra: **"`insert_dados_rm` deve sempre validar `voucher_boleto`/`chave_pix` contra `t_vouchers` antes do INSERT, independente do payload do front, para evitar perda por race-condition de extração assíncrona."**
 
 ### Validação pós-deploy
-- Reabrir o RM `101-292881` → tentar criar voucher → deve aparecer o toast amarelo **"Voucher duplicado — Este voucher já existe na etapa OPERACAO. Localize-o na lista principal..."** em vez do toast vermelho.
-- Vouchers genuinamente novos seguem criando normalmente (200 OK, sem duplicado).
-- Erros reais de banco continuam exibindo a mensagem específica do MariaDB.
 
-Sem mudanças em RLS, schema, ou contratos de outras actions.
+- Reproduzir o cenário: anexar boleto + clicar imediatamente em "Aprovar" → conferir que `t_dados_rm.voucher_boleto` foi preenchido a partir do fallback (log warn deve aparecer nos logs do edge).
+- Casos onde o front já manda preenchido seguem funcionando normalmente (sem fallback).
+- Casos genuinamente sem boleto (forma_pag ≠ BOLETO) continuam com `voucher_boleto = NULL` corretamente.
+
+Sem mudanças em qualquer arquivo do front, sem mudanças em outras actions.

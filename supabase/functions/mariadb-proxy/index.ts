@@ -9636,7 +9636,44 @@ Deno.serve(async (req) => {
           }
         }
 
-        console.log('Inserting into t_dados_rm:', { idRm: finalIdRm, nd: numeroSpoRm, formaPag, fornecedorRm, regrasFormaPag: regrasFormaPagFinal, chavePix, pixTipoChave });
+        // FALLBACK: se voucher_boleto/chave_pix não vieram do front (race-condition com extração assíncrona),
+        // buscar valores atuais em t_vouchers (fonte de verdade) antes do INSERT.
+        let voucherBoletoFinal = voucherBoleto && String(voucherBoleto).trim() ? voucherBoleto : null;
+        let chavePixFinal = chavePix && String(chavePix).trim() ? chavePix : null;
+        const needsBoletoLookup = !voucherBoletoFinal && isBoletoPag;
+        const needsPixLookup = !chavePixFinal && formaPag && formaPag.toUpperCase().includes("PIX");
+
+        if (needsBoletoLookup || needsPixLookup) {
+          try {
+            const lookupRows = await client.query(`
+              SELECT linha_digitavel, codigo_barras, chave_pix
+              FROM dados_dachser.t_vouchers
+              WHERE (id_rm COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                  OR numero_spo COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci)
+              ORDER BY created_at DESC
+              LIMIT 1
+            `, [finalIdRm, numeroSpoRm || finalIdRm]);
+
+            if (lookupRows && lookupRows.length > 0) {
+              const dbRow = lookupRows[0];
+              if (needsBoletoLookup) {
+                const recovered = dbRow.linha_digitavel || dbRow.codigo_barras || null;
+                if (recovered) {
+                  console.warn(`[insert_dados_rm] FALLBACK voucher_boleto recovered from t_vouchers for id_rm=${finalIdRm}: ${recovered}`);
+                  voucherBoletoFinal = recovered;
+                }
+              }
+              if (needsPixLookup && dbRow.chave_pix) {
+                console.warn(`[insert_dados_rm] FALLBACK chave_pix recovered from t_vouchers for id_rm=${finalIdRm}`);
+                chavePixFinal = dbRow.chave_pix;
+              }
+            }
+          } catch (lookupErr) {
+            console.error('[insert_dados_rm] Fallback lookup failed:', lookupErr);
+          }
+        }
+
+        console.log('Inserting into t_dados_rm:', { idRm: finalIdRm, nd: numeroSpoRm, formaPag, fornecedorRm, regrasFormaPag: regrasFormaPagFinal, chavePix: chavePixFinal, pixTipoChave, voucherBoleto: voucherBoletoFinal });
         
         // Drop and recreate table if it has wrong structure
         try {
