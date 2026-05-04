@@ -446,7 +446,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                     </SelectTrigger>
                     <SelectContent className="bg-card border-border">
                       <SelectItem value="all">Todas</SelectItem>
-                      <SelectItem value="A_PROCESSAR">A Processar</SelectItem>
+                      
                       <SelectItem value="OPERACAO">Operacional</SelectItem>
                       <SelectItem value="FISCAL">Fiscal</SelectItem>
                       <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
