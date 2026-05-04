@@ -1,74 +1,64 @@
 ## Objetivo
 
-Corrigir o filtro `roleFilteredVouchers` em `src/pages/esteira/EsteiraIndex.tsx` para que usuários com múltiplos roles (ex.: Cleiciane = `OPERACAO,SUPERVISOR`) vejam a **união** das etapas correspondentes a cada role, e não apenas a do primeiro `if` que casar.
+Permitir que **qualquer role** (FISCAL, SUPERVISOR, OPERACAO, etc.) consiga ver **todos os processos** — incluindo os cards virtuais `A_PROCESSAR` vindos do RM — quando escolher "Todas Etapas" no filtro, sem perder a visão padrão restrita ao seu role ao abrir a tela.
 
-Adicionalmente, inverter a ordem de avaliação para que **SUPERVISOR seja o último** na hierarquia, conforme sua diretriz — assim as etapas operacionais entram primeiro no conjunto de visibilidade.
+## Contexto rápido
 
-## Comportamento esperado após a mudança
+- `A_PROCESSAR` é uma etapa **virtual**: vem de `t_dados_financeiro_voucher` (RM pendente) e é injetada no client em `loadVouchers` (`EsteiraIndex.tsx` ~linha 1048). Só vira linha real em `t_vouchers` quando OPERACAO importa.
+- Hoje, em `roleFilteredVouchers` (linhas 1230-1255 de `EsteiraIndex.tsx`), o bypass está em `if (filters.etapa && filters.etapa !== "all") return vouchers;` — ou seja, **só** desliga a restrição de role quando o usuário escolhe uma etapa específica. "Todas Etapas" (`"all"`) **mantém** a restrição. Resultado: FISCAL/SUPERVISOR puros ficam presos a `FISCAL`/`AJUSTE_FISCAL`/`SUPERVISOR` e nunca enxergam `A_PROCESSAR` nem o resto do pipeline.
 
+## Mudança proposta (cirúrgica)
 
-| Roles do usuário                  | Etapas visíveis (default, sem filtro de etapa)                                 |
-| --------------------------------- | ------------------------------------------------------------------------------ |
-| `OPERACAO`                        | `OPERACAO`, `A_PROCESSAR`                                                      |
-| `FISCAL`                          | `FISCAL`, `AJUSTE_FISCAL` + onde é `responsavelFiscalUserId`                   |
-| `SUPERVISOR`                      | `SUPERVISOR` + onde é `responsavelSupervisorUserId`                            |
-| `OPERACAO,SUPERVISOR` (Cleiciane) | `OPERACAO`, `A_PROCESSAR`, `SUPERVISOR` + onde é `responsavelSupervisorUserId` |
-| `FISCAL,SUPERVISOR`               | `FISCAL`, `AJUSTE_FISCAL`, `SUPERVISOR` + responsabilidades                    |
-| `FINANCEIRO` (com ou sem outros)  | continua vendo TODOS (mantém comportamento atual)                              |
-| `ADMIN` / `GESTOR_*`              | continua vendo TODOS (mantém comportamento atual)                              |
+**Arquivo único:** `src/pages/esteira/EsteiraIndex.tsx`
 
+1. Adicionar um estado local que rastreia se o usuário **interagiu** com o select de etapa:
+   ```ts
+   const [etapaFilterTouched, setEtapaFilterTouched] = useState(false);
+   ```
 
-Quando o usuário escolhe um filtro de etapa específico (`filters.etapa !== "all"`), a restrição por role é desligada, igual hoje.
+2. Em `roleFilteredVouchers` (linha 1231), trocar:
+   ```ts
+   if (filters.etapa && filters.etapa !== "all") return vouchers;
+   ```
+   por:
+   ```ts
+   // Qualquer interação manual com o filtro de etapa (incluindo "Todas Etapas")
+   // desliga a restrição de role e mostra o pipeline completo, inclusive A_PROCESSAR.
+   if (etapaFilterTouched) return vouchers;
+   ```
+   E adicionar `etapaFilterTouched` ao array de dependências do `useMemo`.
 
-## Mudança técnica
+3. No callback `onFilterChange` passado ao `<VoucherTable>` (linha ~2176), interceptar mudanças em `etapa` para marcar `etapaFilterTouched`:
+   ```ts
+   onFilterChange={(newFilters) => {
+     if (newFilters.etapa !== filters.etapa) setEtapaFilterTouched(true);
+     setFilters(newFilters);
+     setDrillDownFilter("all");
+   }}
+   ```
 
-**Arquivo:** `src/pages/esteira/EsteiraIndex.tsx` — bloco `roleFilteredVouchers` (linhas ~1205-1250).
+4. No botão "Limpar filtros" (linha ~2137), resetar também:
+   ```ts
+   setEtapaFilterTouched(false);
+   ```
 
-Substituir os `if` em cascata por **construção de um Set de etapas permitidas** (união) + verificação de responsabilidade direta:
+## Comportamento resultante
 
-```ts
-const roleFilteredVouchers = useMemo(() => {
-  const hasSearchQuery = filters.search && filters.search.trim().length > 0;
+| Ação do usuário | FISCAL puro vê | SUPERVISOR puro vê | OPERACAO puro vê |
+|---|---|---|---|
+| Abre a tela (sem mexer em filtro) | só `FISCAL`+`AJUSTE_FISCAL` (igual hoje) | só `SUPERVISOR` (igual hoje) | `OPERACAO`+`A_PROCESSAR` (igual hoje) |
+| Seleciona **"Todas Etapas"** | **pipeline completo, inclusive os 12 `A_PROCESSAR`** ✅ | **pipeline completo, inclusive `A_PROCESSAR`** ✅ | **pipeline completo** ✅ |
+| Seleciona uma etapa específica | só aquela etapa (igual hoje) | só aquela etapa (igual hoje) | só aquela etapa (igual hoje) |
+| Clica "Limpar filtros" | volta à visão restrita do role | volta à visão restrita do role | volta à visão restrita do role |
 
-  // ADMIN / GESTOR / FINANCEIRO / busca ativa → vê tudo
-  if (isAdmin || isGestor || isFinanceiro || hasSearchQuery) {
-    // FINANCEIRO mantém ordenação priorizando FINANCEIRO/ROBO/SUPERVISOR
-    if (isFinanceiro && !isAdmin && !isGestor) { /* sort atual */ }
-    return vouchers;
-  }
+ADMIN / GESTOR / FINANCEIRO permanecem inalterados (já viam tudo).
 
-  // Filtro manual de etapa desliga restrição de role
-  if (filters.etapa && filters.etapa !== "all") return vouchers;
+## Observação importante
 
-  // União de etapas (SUPERVISOR avaliado por último)
-  const etapasPermitidas = new Set<EtapaAtual>();
-  if (isOperacao) { etapasPermitidas.add("OPERACAO"); etapasPermitidas.add("A_PROCESSAR"); }
-  if (isFiscal)   { etapasPermitidas.add("FISCAL"); etapasPermitidas.add("AJUSTE_FISCAL"); }
-  if (isSupervisor) { etapasPermitidas.add("SUPERVISOR"); }
-
-  // Sem nenhum role conhecido → view-only de tudo
-  if (etapasPermitidas.size === 0) return vouchers;
-
-  return vouchers.filter(v =>
-    etapasPermitidas.has(v.etapaAtual) ||
-    (isFiscal && v.responsavelFiscalUserId === currentUserId) ||
-    (isSupervisor && v.responsavelSupervisorUserId === currentUserId)
-  );
-}, [vouchers, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro, filters.etapa, filters.search]);
-```
+Os `A_PROCESSAR` continuam sendo **read-only** para FISCAL/SUPERVISOR (são cards virtuais; só OPERACAO pode importar/editar). A mudança é apenas de **visibilidade**, não de permissão de ação — as regras `canEdit`, `canDelete`, etc. já existentes seguem intactas.
 
 ## Memória
 
-Atualizar `mem://vouchers/ui-spec-and-access-v4` registrando:
+Atualizar `mem://vouchers/ui-spec-and-access-v4`:
 
-- Multi-role usa **união** de etapas, não cascata.
-- Ordem de avaliação: OPERACAO → FISCAL → FINANCEIRO -> SUPERVISOR (supervisor é o último na hierarquia).
-- FINANCEIRO/ADMIN/GESTOR continuam com visão total.
-
-## Validação
-
-Após o ajuste, ao logar como `cleiciane.faconi` em `/fin/esteira`:
-
-- Ela verá os **9 cards `A_PROCESSAR**` (vindos de `t_dados_financeiro_voucher`) imediatamente.
-- Quando houver vouchers em SUPERVISOR no futuro, ela verá ambos simultaneamente.
-- `test.test3` continua vendo o mesmo (apenas OPERACAO/A_PROCESSAR).
+> Quando qualquer role interage com o filtro de Etapa (inclusive selecionando "Todas Etapas"), a restrição de visibilidade por role é desligada e o usuário passa a ver o pipeline completo, incluindo os cards virtuais `A_PROCESSAR` vindos do RM. Sem interação, mantém a visão restrita do seu role. "Limpar filtros" restaura a visão restrita. Permissões de ação (editar/deletar/aprovar) **não** mudam — apenas visibilidade.
