@@ -10038,13 +10038,17 @@ Deno.serve(async (req) => {
           result = { ready: false, found: false, missingFields: ['numero_spo'] };
           break;
         }
+        // Normalização: aceitar "105-292964" e "105-292964 DIM-BY"
+        const ndRaw = String(numero_spo).trim();
+        const ndCandidates = Array.from(new Set([ndRaw, ndRaw.split(/\s+/)[0]].filter(Boolean)));
+        const placeholders = ndCandidates.map(() => '? COLLATE utf8mb4_unicode_ci').join(', ');
         const rows: any[] = await client.query(`
           SELECT documento, nd, numero_nf, numero_processo, modal, tipo_pag,
                  forma_pag, data_emissao, data_vencimento, valor_nf, cnpj, razao_social
           FROM dados_dachser.t_dados_financeiro_voucher
-          WHERE nd COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+          WHERE nd COLLATE utf8mb4_unicode_ci IN (${placeholders})
           LIMIT 1
-        `, [String(numero_spo).trim()]);
+        `, ndCandidates);
 
         if (!rows || rows.length === 0) {
           // Voucher genuinamente manual: nunca foi criado no RM. Bloqueia.
@@ -10063,7 +10067,7 @@ Deno.serve(async (req) => {
           if (f === 'valor_nf' && (Number(v) === 0 || Number.isNaN(Number(v)))) { informational.push(f); continue; }
         }
         if (informational.length > 0) {
-          console.log(`[check_voucher_rm_ready] nd=${numero_spo} espelho RM existe; campos informacionais vazios: ${informational.join(',')} (não bloqueia)`);
+          console.log(`[check_voucher_rm_ready] nd=${numero_spo} (candidates=${ndCandidates.join('|')}) espelho RM existe; campos informacionais vazios: ${informational.join(',')} (não bloqueia)`);
         }
         result = { ready: true, found: true, isManual: false, missingFields: [], informationalEmptyFields: informational };
         break;
