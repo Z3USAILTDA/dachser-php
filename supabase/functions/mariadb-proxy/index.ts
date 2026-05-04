@@ -11918,8 +11918,8 @@ Deno.serve(async (req) => {
             id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda,
             vencimento, data_emissao_documento, forma_pagamento, tipo_documento,
             cobranca_em_nome_de, etapa_atual, status_baixa, urgencia_tipo,
-            processo_id, criado_por_user_id, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'NORMAL', ?, ?, NOW(), NOW())
+            processo_id, criado_por_user_id, tipo_execucao_pagamento, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'NORMAL', ?, ?, 'A_DEFINIR', NOW(), NOW())
         `, [
           voucherId,
           rm.nd,
