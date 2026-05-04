@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Bot, Upload, CheckCircle2, XCircle, AlertCircle, FileText, Search, Link2, ShieldAlert } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
 
@@ -453,7 +454,31 @@ export default function ComprovanteRobot() {
       );
     }
     if (fileMatch.status === "not_identified") {
-      return <Badge variant="destructive">Não identificado</Badge>;
+      const tried = fileMatch.triedCandidates || [];
+      const tooltipContent = (
+        <div className="text-xs space-y-1 max-w-xs">
+          <div className="font-semibold">Por que não foi identificado?</div>
+          {fileMatch.extractedSPO && <div>SPO extraído: <span className="font-mono">{fileMatch.extractedSPO}</span></div>}
+          {fileMatch.extractedND && <div>ND extraído: <span className="font-mono">{fileMatch.extractedND}</span></div>}
+          {tried.length > 0 && (
+            <div>
+              <div className="mt-1">Tentativas no banco ({tried.length}):</div>
+              <div className="font-mono text-[10px] break-all">{tried.slice(0, 8).join(", ")}{tried.length > 8 ? "…" : ""}</div>
+            </div>
+          )}
+          <div className="mt-1 italic">Use o seletor manual abaixo para vincular ao voucher correto.</div>
+        </div>
+      );
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="destructive" className="cursor-help">Não identificado</Badge>
+            </TooltipTrigger>
+            <TooltipContent side="left">{tooltipContent}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
     }
     return <Badge variant="outline">Pendente</Badge>;
   };
