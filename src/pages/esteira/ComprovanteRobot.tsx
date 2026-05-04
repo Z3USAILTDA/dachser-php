@@ -40,6 +40,8 @@ interface FileMatch {
   error?: string;
   confidence: number;
   source: "filename" | "content" | "manual";
+  triedCandidates?: string[];
+  matchedCandidate?: string;
 }
 
 export default function ComprovanteRobot() {
