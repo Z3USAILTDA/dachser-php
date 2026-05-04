@@ -9902,7 +9902,7 @@ Deno.serve(async (req) => {
           result = { ready: false, found: false, missingFields: ['numero_spo'] };
           break;
         }
-        const rows: any[] = await client.execute(`
+        const rows: any[] = await client.query(`
           SELECT documento, nd, numero_nf, numero_processo, modal, tipo_pag,
                  forma_pag, data_emissao, data_vencimento, valor_nf, cnpj, razao_social
           FROM dados_dachser.t_dados_financeiro_voucher
