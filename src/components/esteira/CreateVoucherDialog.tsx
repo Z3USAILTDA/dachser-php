@@ -893,11 +893,15 @@ export const CreateVoucherDialog = ({
                 
                 {/* Voucher Number - Manual Entry */}
                 <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 backdrop-blur-sm">
-                  <div className="flex items-center gap-2 mb-3">
+                  <div className="flex items-center gap-2 mb-1">
                     <FileText className="h-4 w-4 text-primary" />
                     <span className="text-sm font-medium text-primary">Nº do Voucher/SPO</span>
                     <span className="text-destructive">*</span>
                   </div>
+                  <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+                    SPO: Filial + número SPO<br />
+                    Voucher: Ano (2026) + número do Voucher
+                  </p>
                   <FormField
                     control={form.control}
                     name="numeroRM"
