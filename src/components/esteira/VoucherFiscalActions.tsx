@@ -141,10 +141,9 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
         });
         if (rmCheckErr) throw rmCheckErr;
         if (rmCheck && rmCheck.ready === false) {
-          const faltantes = (rmCheck.missingFields || []).join(", ") || "registro ausente";
           toast({
             title: "Integração com RM pendente",
-            description: `A integração com o RM não foi concluída para o voucher ${voucher.numeroSPO || ""}. Aguarde a sincronização antes de aprovar. Campos faltantes: ${faltantes}.`,
+            description: `A integração com o RM ainda não criou o registro deste voucher (${voucher.numeroSPO || ""}). Aguarde a sincronização antes de aprovar.`,
             variant: "destructive",
           });
           setLoading(false);
