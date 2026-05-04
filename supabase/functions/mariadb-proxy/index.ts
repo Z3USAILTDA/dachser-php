@@ -9949,19 +9949,25 @@ Deno.serve(async (req) => {
         `, [String(numero_spo).trim()]);
 
         if (!rows || rows.length === 0) {
-          result = { ready: false, found: false, missingFields: ['registro inexistente em t_dados_financeiro_voucher'] };
+          // Voucher genuinamente manual: nunca foi criado no RM. Bloqueia.
+          result = { ready: false, found: false, isManual: true, missingFields: ['registro inexistente em t_dados_financeiro_voucher'] };
           break;
         }
+        // Espelho RM existe → voucher veio do RM. Não bloquear por campos faltantes
+        // do espelho; t_vouchers (esteira) é a fonte de verdade da operação.
         const row = rows[0];
         const required = ['documento','nd','numero_nf','numero_processo','modal','tipo_pag','forma_pag','data_emissao','data_vencimento','valor_nf','cnpj','razao_social'];
-        const missingFields: string[] = [];
+        const informational: string[] = [];
         for (const f of required) {
           const v = row[f];
-          if (v === null || v === undefined) { missingFields.push(f); continue; }
-          if (typeof v === 'string' && v.trim() === '') { missingFields.push(f); continue; }
-          if (f === 'valor_nf' && (Number(v) === 0 || Number.isNaN(Number(v)))) { missingFields.push(f); continue; }
+          if (v === null || v === undefined) { informational.push(f); continue; }
+          if (typeof v === 'string' && v.trim() === '') { informational.push(f); continue; }
+          if (f === 'valor_nf' && (Number(v) === 0 || Number.isNaN(Number(v)))) { informational.push(f); continue; }
         }
-        result = { ready: missingFields.length === 0, found: true, missingFields };
+        if (informational.length > 0) {
+          console.log(`[check_voucher_rm_ready] nd=${numero_spo} espelho RM existe; campos informacionais vazios: ${informational.join(',')} (não bloqueia)`);
+        }
+        result = { ready: true, found: true, isManual: false, missingFields: [], informationalEmptyFields: informational };
         break;
       }
 

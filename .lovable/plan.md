@@ -1,37 +1,50 @@
-## Diagnóstico
+## Causa raiz
 
-A `linha_digitavel` (campo `voucher_boleto` em `t_dados_rm`) chega `NULL` em alguns processos por uma **condição de corrida no front-end**:
+O gate `check_voucher_rm_ready` foi originalmente desenhado para vouchers **MANUAIS** (criados na esteira sem origem no RM), garantindo que o registro espelho em `t_dados_financeiro_voucher` esteja completo antes de avançar para o Financeiro.
 
-1. Operador anexa o boleto → `extract-boleto-barcode` extrai a linha digitável **assincronamente** → `save_linha_digitavel` grava em `t_vouchers.linha_digitavel`.
-2. Operador clica "Aprovar/Enviar para Financeiro" antes que o objeto `voucher` em memória (estado React) seja recarregado.
-3. `insertDadosRmOnFinanceiro(voucher)` em `src/utils/voucherRmSync.ts` lê `voucher.linhaDigitavel` do **objeto em memória** (ainda `null`/`undefined`) e envia `voucher_boleto: null` para o handler `insert_dados_rm`.
-4. O handler `insert_dados_rm` (linhas 9579–9706 de `mariadb-proxy/index.ts`) confia cegamente no payload e insere `NULL` em `voucher_boleto`.
-5. **A função foi desenhada para nunca falhar** ("não falha a operação principal — apenas loga"), então o operador nunca é alertado.
+O problema: o gate está sendo aplicado também a vouchers que **já vieram do RM** (como o SPO 20261882949), em que `t_dados_financeiro_voucher` existe mas pode ter campos pontuais (ex.: `forma_pag`) `NULL` por motivos do próprio fluxo de importação. Como o usuário já preencheu esses campos na esteira (em `t_vouchers`), não faz sentido travar.
 
-O mesmo problema afeta `chave_pix` quando o pagamento é PIX e o objeto em memória está defasado.
+Confirmado:
+- `check_voucher_rm_ready { numero_spo: "20261882949" }` → `{ found: true, ready: false, missingFields: ["forma_pag"] }`
+- `t_vouchers.forma_pagamento = "TRANSFERENCIA"` (preenchido pelo usuário)
+- O front classificou esse voucher como `origemCriacao = "MANUAL"` apenas porque `id_rm` está `null` no espelho (heurística em `EsteiraVoucherDetails.tsx:129`), mas o registro **existe em `t_dados_financeiro_voucher`** — ou seja, veio do RM.
 
-A confirmação: o DB de origem (`t_vouchers`) tem o valor correto — porque `save_linha_digitavel` foi executado com sucesso. Apenas o snapshot que o front enviou estava desatualizado.
+## Regra acordada
 
-## Plano
+**Se o voucher não foi criado manualmente, ele não deve ser bloqueado por falta de dados em `t_dados_financeiro_voucher`.** O critério de "manual" deve refletir a realidade: **manual = não existe registro em `t_dados_financeiro_voucher`** (o RM nunca o criou).
 
-Mudança cirúrgica em **um único ponto**, sem mexer em schema, RLS, nem nos 5+ pontos de chamada do front:
+## Correção (cirúrgica, dois pontos)
 
-### `supabase/functions/mariadb-proxy/index.ts` — handler `insert_dados_rm` (linhas ~9579–9706)
+### 1) `supabase/functions/mariadb-proxy/index.ts` — handler `check_voucher_rm_ready` (~linha 9937)
 
-Adicionar **fallback de leitura na fonte de verdade** logo antes do INSERT:
+Mudar a semântica do retorno para refletir a regra:
 
-- Se `voucher_boleto` chegou `null/vazio` **OU** `chave_pix` chegou `null/vazio`, fazer um `SELECT linha_digitavel, codigo_barras, chave_pix FROM dados_dachser.t_vouchers` filtrado por `id = voucher_id` (passar do front quando disponível) ou, na ausência, por `id_rm = ?` ou `numero_spo = ?`.
-- Usar o valor do banco como fallback: `voucherBoletoFinal = voucherBoleto || (isBoleto ? (db.linha_digitavel || db.codigo_barras) : null)` e `chavePixFinal = chavePix || db.chave_pix`.
-- Logar `console.warn` quando o fallback for acionado (rastreabilidade — quem disparou e qual valor foi recuperado).
+- Mantém o `SELECT` em `t_dados_financeiro_voucher`.
+- Se `found === false` (registro inexistente) → é **voucher manual sem espelho RM**. Retorna `{ ready: false, found: false, isManual: true, missingFields: ['registro inexistente em t_dados_financeiro_voucher'] }` (comportamento atual).
+- Se `found === true` → **veio do RM**. Retorna `{ ready: true, found: true, isManual: false, missingFields: [] }` independentemente dos campos do espelho. Se houver campos vazios, eles são apenas informativos e logados via `console.log` — não bloqueiam.
 
-### Atualização de memória
+Justificativa: a partir do momento em que existe espelho RM, a esteira é a fonte de verdade da operação; campos espelho podem ser reconciliados depois sem travar o fluxo do operador.
 
-Registrar a regra: **"`insert_dados_rm` deve sempre validar `voucher_boleto`/`chave_pix` contra `t_vouchers` antes do INSERT, independente do payload do front, para evitar perda por race-condition de extração assíncrona."**
+### 2) `src/components/esteira/VoucherFiscalActions.tsx` (linhas ~133-153) e `VoucherFinanceiroActions.tsx` (linhas ~46-60 e ~88-110)
 
-### Validação pós-deploy
+Ajustar o gate para refletir a nova semântica:
 
-- Reproduzir o cenário: anexar boleto + clicar imediatamente em "Aprovar" → conferir que `t_dados_rm.voucher_boleto` foi preenchido a partir do fallback (log warn deve aparecer nos logs do edge).
-- Casos onde o front já manda preenchido seguem funcionando normalmente (sem fallback).
-- Casos genuinamente sem boleto (forma_pag ≠ BOLETO) continuam com `voucher_boleto = NULL` corretamente.
+- Continuar chamando `check_voucher_rm_ready` apenas para vouchers que o front classifica como `origemCriacao === "MANUAL"` (já é o caso em FiscalActions; replicar exatamente a mesma condição em FinanceiroActions).
+- Adicionar uma condição extra: se a resposta vier com `isManual === false` (ou seja, encontrou espelho), **não bloquear** mesmo que `ready === false`. Isso cobre casos como o SPO 20261882949, em que a heurística `id_rm trim → MANUAL` é um falso positivo.
+- Mensagem de bloqueio só aparece quando `found === false` (genuinamente sem espelho RM): "A integração com o RM ainda não criou o registro deste voucher. Aguarde a sincronização."
 
-Sem mudanças em qualquer arquivo do front, sem mudanças em outras actions.
+Sem mudanças em schema, RLS, na origem do `origemCriacao` em `EsteiraVoucherDetails.tsx`, nem em outros pontos.
+
+## Validação pós-deploy
+
+1. `curl mariadb-proxy { action: "check_voucher_rm_ready", numero_spo: "20261882949" }` → `{ found: true, ready: true, isManual: false }`.
+2. Abrir o voucher no Fiscal, clicar "Aprovar e Enviar para Financeiro" → transição ocorre.
+3. Criar um voucher genuinamente manual (sem registro em `t_dados_financeiro_voucher`) e tentar aprovar antes da sincronização → bloqueio continua funcionando com a mensagem clara.
+4. Repetir o teste no Financeiro (botão Baixar) — mesmo comportamento.
+
+## Memória
+
+Adicionar em `.lovable/memory/index.md`:
+- `[check_voucher_rm_ready Scope](mem://vouchers/check-rm-ready-only-blocks-manual)` — gate de prontidão RM só bloqueia vouchers sem espelho em `t_dados_financeiro_voucher`. Vouchers vindos do RM não são bloqueados por campos faltantes no espelho; a esteira (`t_vouchers`) é a fonte de verdade da operação.
+
+Criar `.lovable/memory/vouchers/check-rm-ready-only-blocks-manual.md` com a regra acima.
