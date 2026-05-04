@@ -1,42 +1,32 @@
-## Contexto
+## Diagnóstico
 
-Você confirmou que os dois vouchers que falharam **foram importados via RM** e possuem `id_rm` no banco — portanto **não deveriam** ter sido tratados como `MANUAL`. Existem dois problemas independentes que se somaram:
+O voucher SPO `101-292881 DIM-BY` **já existe na MariaDB** em etapa `OPERACAO` (id `f54fec01-d618-46c4-9fae-fe173a89f675`, criado hoje 11:32). Quando o usuário tenta criá-lo novamente, o handler `save_voucher_esteira` em `mariadb-proxy/index.ts` (linhas 6296–6311) detecta o duplicado e responde com **HTTP 409 + payload `{ error, existingId, existingEtapa }`**.
 
-### Problema 1 — Bug de runtime (causa imediata do 500)
-No handler `check_voucher_rm_ready` (`supabase/functions/mariadb-proxy/index.ts`, ~linha 9905) o `SELECT` é feito com `client.execute(...)`. O driver `deno-mysql` retorna `{ rows, affectedRows, lastInsertId }` para `execute`, **não um array**. Resultado:
-- `rows.length === 0` → `false` (undefined)
-- `rows[0]` → `undefined`
-- `row['documento']` → **TypeError 500**
+O problema: `supabase.functions.invoke()` no front trata qualquer status ≥400 como erro de transporte. O `data` (payload com `existingId`) vem como `null`, e o `error.message` é a string genérica **"Edge Function returned a non-2xx status code"** — sem o `"409"` nem `"já existe"`.
 
-Todos os outros SELECTs do arquivo usam `client.query(...)`. Esse é o único divergente.
+Em `src/components/esteira/CreateVoucherDialog.tsx` (linha 540–552), a checagem de duplicado depende exatamente dessas substrings:
 
-### Problema 2 — Classificação de origem no front
-Em `src/pages/esteira/EsteiraVoucherDetails.tsx` linha 129:
 ```ts
-origemCriacao: data.is_master ? "MASTER" : data.id_rm ? "RM" : "MANUAL"
+if (errorMessage.includes("já existe") || errorMessage.includes("409")) { ... }
 ```
-Se por qualquer motivo `id_rm` chegar como string vazia `""`, `null`, `0` ou não for retornado pelo backend, o voucher é classificado como `MANUAL` e dispara a verificação `check_voucher_rm_ready` desnecessariamente. Foi exatamente o que aconteceu nos vouchers reportados.
 
-## Plano (2 ajustes cirúrgicos)
+Como nenhuma bate, cai no `throw` da linha 552 → toast vermelho **"Erro ao criar voucher/SPO — Erro ao salvar voucher no MariaDB: Edge Function returned a non-2xx status code"**.
 
-### 1. `supabase/functions/mariadb-proxy/index.ts` — handler `check_voucher_rm_ready`
-- Trocar `client.execute(...)` por `client.query(...)`.
-- Manter exatamente a mesma SQL, validações de campos e formato de retorno (`{ ready, found, missingFields }`).
+Ou seja: **o voucher não foi salvo porque já existia**, mas o usuário recebeu uma mensagem inútil de "erro de servidor" em vez do aviso de duplicado.
 
-Resultado: a função para de retornar 500 e responde corretamente `ready/found/missing` em qualquer cenário.
+## Plano
 
-### 2. `src/pages/esteira/EsteiraVoucherDetails.tsx` — derivação de `origemCriacao`
-Tornar a detecção de RM tolerante a strings vazias / espaços:
-```ts
-const idRmStr = String(data.id_rm ?? "").trim();
-origemCriacao: data.is_master ? "MASTER" : (idRmStr ? "RM" : "MANUAL"),
-```
-Assim, vouchers que vieram do RM mas têm `id_rm` salvo de forma inconsistente continuam sendo reconhecidos como `RM` e **não** disparam o bloqueio de integração.
+Mudança cirúrgica em 2 arquivos, sem alterar contrato nem schema:
 
-## Validação após o deploy
-1. Reabrir um dos vouchers afetados (`/fin/esteira/voucher/c2b734dc-...`) e verificar no console que `origemCriacao === "RM"`.
-2. Aprovar como Fiscal — deve avançar direto para `FINANCEIRO`/`SUPERVISOR` sem chamar `check_voucher_rm_ready`.
-3. Testar também um voucher genuinamente MANUAL: a chamada deve retornar 200 com `ready: true/false` (sem 500).
-4. Conferir `function_edge_logs` para confirmar ausência de `TypeError`.
+### 1. `supabase/functions/mariadb-proxy/index.ts` — handler `save_voucher_esteira`
+Trocar o status do duplicado em estágio avançado de **409 → 200**, mantendo o mesmo payload (`{ error, existingId, existingEtapa, duplicate: true }`). Assim `mariaResult` chega preenchido no front e o ramo de duplicado já existente (linhas 556–566) trata corretamente.
 
-Nenhuma mudança de schema, RLS ou contrato de API.
+### 2. `src/components/esteira/CreateVoucherDialog.tsx` — defesa adicional
+Tornar a detecção do bloco `if (mariaError)` (linhas 540–552) tolerante a erros opacos do `supabase.functions.invoke`: tentar ler `mariaError.context?.response?.json()` para extrair `{ error, existingId, existingEtapa }` antes de cair no toast genérico. Isso protege contra qualquer outro 4xx futuro e cobre o caso do voucher já existente.
+
+### Validação pós-deploy
+- Reabrir o RM `101-292881` → tentar criar voucher → deve aparecer o toast amarelo **"Voucher duplicado — Este voucher já existe na etapa OPERACAO. Localize-o na lista principal..."** em vez do toast vermelho.
+- Vouchers genuinamente novos seguem criando normalmente (200 OK, sem duplicado).
+- Erros reais de banco continuam exibindo a mensagem específica do MariaDB.
+
+Sem mudanças em RLS, schema, ou contratos de outras actions.

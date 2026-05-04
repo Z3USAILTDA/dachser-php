@@ -538,18 +538,30 @@ export const CreateVoucherDialog = ({
       }
 
       if (mariaError) {
-        // Check if it's a duplicate error (status 409)
-        const errorMessage = mariaError.message || "";
-        if (errorMessage.includes("já existe") || errorMessage.includes("409")) {
+        // Try to extract structured payload from non-2xx responses (supabase.functions.invoke hides it)
+        let parsedBody: any = null;
+        try {
+          const resp = (mariaError as any)?.context?.response;
+          if (resp && typeof resp.json === "function") {
+            parsedBody = await resp.clone().json();
+          }
+        } catch { /* ignore */ }
+
+        const errorMessage = parsedBody?.error || mariaError.message || "";
+        const isDuplicate = parsedBody?.duplicate || parsedBody?.existingId ||
+          errorMessage.includes("já existe") || errorMessage.includes("409");
+
+        if (isDuplicate) {
+          const etapaLabel = parsedBody?.existingEtapa || "outra etapa";
           toast({
             title: "Voucher duplicado",
-            description: `Este voucher já existe na esteira. Verifique na lista principal.`,
+            description: `Este voucher já existe na etapa "${etapaLabel}". Localize-o na lista principal usando o filtro de busca.`,
             variant: "destructive",
           });
           setIsSubmitting(false);
           return;
         }
-        throw new Error(`Erro ao salvar voucher no MariaDB: ${mariaError.message}`);
+        throw new Error(`Erro ao salvar voucher no MariaDB: ${errorMessage || mariaError.message}`);
       }
       
       // Check response data for duplicate error (409 returns existingId and existingEtapa)
