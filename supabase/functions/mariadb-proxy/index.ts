@@ -12447,8 +12447,8 @@ Deno.serve(async (req) => {
             id, numero_spo, nome_master, fornecedor, cnpj_fornecedor, valor, moeda, vencimento,
             forma_pagamento, tipo_documento, cobranca_em_nome_de, filial,
             comentarios_operacao, etapa_atual, status_baixa, status_financeiro,
-            criado_por_user_id, is_master, origem_processo, processo_id, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'PENDENTE', ?, 1, ?, ?, NOW(), NOW())
+            criado_por_user_id, is_master, origem_processo, processo_id, tipo_execucao_pagamento, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'PENDENTE', ?, 1, ?, ?, 'A_DEFINIR', NOW(), NOW())
         `, [
           masterId,
           numeroSpoMaster,
