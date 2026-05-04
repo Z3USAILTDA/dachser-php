@@ -452,7 +452,7 @@ Deno.serve(async (req) => {
       'remove_fornecedor_sem_fiscal','get_dados_bancarios_fornecedor',
       // RM / Pagamentos / Remessa / CRASS / Comprovantes
       'insert_dados_rm','update_tipo_exec_dados_rm','get_voucher_for_rm',
-      'backfill_tipo_exec_dados_rm','sync_baixa_remessa_to_dados_rm','save_linha_digitavel',
+      'backfill_tipo_exec_dados_rm','sync_baixa_remessa_to_dados_rm','replay_dados_rm','save_linha_digitavel',
       'check_voucher_rm_ready','insert_dados_financeiro_voucher','list_pagamentos',
       'migrate_tipo_exec_column_to_varchar','set_tipo_execucao_pagamento','set_ready_for_robo',
       'update_status_pagamento','update_codigo_barras','batch_set_tipo_execucao',
