@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Bot, Upload, CheckCircle2, XCircle, AlertCircle, FileText, Search, Link2, ShieldAlert } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
 
@@ -40,6 +41,8 @@ interface FileMatch {
   error?: string;
   confidence: number;
   source: "filename" | "content" | "manual";
+  triedCandidates?: string[];
+  matchedCandidate?: string;
 }
 
 export default function ComprovanteRobot() {
@@ -168,31 +171,60 @@ export default function ComprovanteRobot() {
 
         const extractedData = data?.data;
         let foundVoucher: VoucherMatch | null = null;
+        const tried: string[] = [];
+        let matchedCandidate: string | undefined;
 
-        // Try to find voucher by SPO
-        if (extractedData?.numeroSPO) {
-          const { data: spoResult } = await supabase.functions.invoke("mariadb-proxy", {
-            body: {
-              action: "find_voucher_by_spo",
-              numero_spo: extractedData.numeroSPO,
-            },
+        // Helper: tenta um candidato como SPO; se nada, como ND
+        const tryCandidate = async (candidate: string, kind: "spo" | "nd"): Promise<VoucherMatch | null> => {
+          tried.push(`${kind.toUpperCase()}:${candidate}`);
+          const action = kind === "spo" ? "find_voucher_by_spo" : "find_voucher_by_nd";
+          const payloadKey = kind === "spo" ? "numero_spo" : "numero_nd";
+          const { data: r } = await supabase.functions.invoke("mariadb-proxy", {
+            body: { action, [payloadKey]: candidate },
           });
-          if (spoResult?.vouchers?.length > 0) {
-            foundVoucher = spoResult.vouchers.find((v: any) => v.is_master) || spoResult.vouchers[0];
+          if (r?.vouchers?.length > 0) {
+            return r.vouchers.find((v: any) => v.is_master) || r.vouchers[0];
           }
+          return null;
+        };
+
+        // 1) Tentativa primária: SPO principal
+        if (!foundVoucher && extractedData?.numeroSPO) {
+          foundVoucher = await tryCandidate(extractedData.numeroSPO, "spo");
+          if (foundVoucher) matchedCandidate = `SPO:${extractedData.numeroSPO}`;
         }
 
-        // Try to find voucher by ND if SPO didn't work
+        // 2) Tentativa primária: ND principal
         if (!foundVoucher && extractedData?.numeroND) {
-          const { data: ndResult } = await supabase.functions.invoke("mariadb-proxy", {
-            body: {
-              action: "find_voucher_by_nd",
-              numero_nd: extractedData.numeroND,
-            },
-          });
-          if (ndResult?.vouchers?.length > 0) {
-            foundVoucher = ndResult.vouchers.find((v: any) => v.is_master) || ndResult.vouchers[0];
-          }
+          foundVoucher = await tryCandidate(extractedData.numeroND, "nd");
+          if (foundVoucher) matchedCandidate = `ND:${extractedData.numeroND}`;
+        }
+
+        // 3) Linha digitável (busca via ND, que agora cobre linha_digitavel/codigo_barras)
+        if (!foundVoucher && extractedData?.linhaDigitavel) {
+          foundVoucher = await tryCandidate(extractedData.linhaDigitavel, "nd");
+          if (foundVoucher) matchedCandidate = `LINHA:${extractedData.linhaDigitavel}`;
+        }
+
+        // 4) Iterar candidatos múltiplos (ND tem prioridade — é mais específico)
+        const ndCandidates: string[] = (extractedData?.candidatosND || [])
+          .filter((c: string) => c && c !== extractedData?.numeroND);
+        for (const cand of ndCandidates) {
+          if (foundVoucher) break;
+          foundVoucher = await tryCandidate(cand, "nd");
+          if (foundVoucher) matchedCandidate = `ND:${cand}`;
+        }
+
+        const spoCandidates: string[] = (extractedData?.candidatosSPO || [])
+          .filter((c: string) => c && c !== extractedData?.numeroSPO);
+        for (const cand of spoCandidates) {
+          if (foundVoucher) break;
+          foundVoucher = await tryCandidate(cand, "spo");
+          if (foundVoucher) matchedCandidate = `SPO:${cand}`;
+        }
+
+        if (!foundVoucher) {
+          console.warn(`[ComprovanteRobot] Nenhum match para "${fileMatch.fileName}". Tentativas:`, tried);
         }
 
         setFiles((prev) =>
@@ -207,6 +239,8 @@ export default function ComprovanteRobot() {
                   status: foundVoucher ? "identified" : "not_identified",
                   confidence: extractedData?.confidence || 0,
                   source: extractedData?.source || "filename",
+                  triedCandidates: tried,
+                  matchedCandidate,
                 }
               : f
           )
@@ -420,7 +454,31 @@ export default function ComprovanteRobot() {
       );
     }
     if (fileMatch.status === "not_identified") {
-      return <Badge variant="destructive">Não identificado</Badge>;
+      const tried = fileMatch.triedCandidates || [];
+      const tooltipContent = (
+        <div className="text-xs space-y-1 max-w-xs">
+          <div className="font-semibold">Por que não foi identificado?</div>
+          {fileMatch.extractedSPO && <div>SPO extraído: <span className="font-mono">{fileMatch.extractedSPO}</span></div>}
+          {fileMatch.extractedND && <div>ND extraído: <span className="font-mono">{fileMatch.extractedND}</span></div>}
+          {tried.length > 0 && (
+            <div>
+              <div className="mt-1">Tentativas no banco ({tried.length}):</div>
+              <div className="font-mono text-[10px] break-all">{tried.slice(0, 8).join(", ")}{tried.length > 8 ? "…" : ""}</div>
+            </div>
+          )}
+          <div className="mt-1 italic">Use o seletor manual abaixo para vincular ao voucher correto.</div>
+        </div>
+      );
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="destructive" className="cursor-help">Não identificado</Badge>
+            </TooltipTrigger>
+            <TooltipContent side="left">{tooltipContent}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
     }
     return <Badge variant="outline">Pendente</Badge>;
   };

@@ -11171,6 +11171,49 @@ Deno.serve(async (req) => {
           }
         }
 
+        // 6. Match por linha_digitavel ou codigo_barras (substring numérica)
+        if (!vouchers || vouchers.length === 0) {
+          const digitsOnly = String(numero_nd).replace(/\D/g, '');
+          if (digitsOnly.length >= 5) {
+            vouchers = await client.query(`
+              SELECT 
+                id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
+                cobranca_em_nome_de, moeda, id_rm, processo_id
+              FROM dados_dachser.t_vouchers
+              WHERE REPLACE(REPLACE(REPLACE(IFNULL(linha_digitavel,''),' ',''),'.',''),'-','') LIKE CONCAT('%', ?, '%')
+                 OR REPLACE(REPLACE(REPLACE(IFNULL(codigo_barras,''),' ',''),'.',''),'-','') LIKE CONCAT('%', ?, '%')
+              ORDER BY created_at DESC
+              LIMIT 5
+            `, [digitsOnly, digitsOnly]);
+            if (vouchers && vouchers.length > 0) {
+              console.log(`[find_voucher_by_nd] Match via linha_digitavel/codigo_barras: ${vouchers.length}`);
+            }
+          }
+        }
+
+        // 7. Match contra t_dados_financeiro_voucher.nd (fonte de verdade pós-limpeza)
+        if (!vouchers || vouchers.length === 0) {
+          try {
+            vouchers = await client.query(`
+              SELECT 
+                v.id, v.numero_spo, v.fornecedor, v.valor, v.vencimento, v.etapa_atual,
+                v.cobranca_em_nome_de, v.moeda, v.id_rm, v.processo_id
+              FROM dados_dachser.t_vouchers v
+              INNER JOIN dados_dachser.t_dados_financeiro_voucher dfv
+                ON TRIM(dfv.nd) COLLATE utf8mb4_unicode_ci = TRIM(v.numero_spo) COLLATE utf8mb4_unicode_ci
+              WHERE TRIM(dfv.nd) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                 OR ? LIKE CONCAT(TRIM(dfv.nd), '%')
+              ORDER BY v.created_at DESC
+              LIMIT 5
+            `, [numero_nd, numero_nd]);
+            if (vouchers && vouchers.length > 0) {
+              console.log(`[find_voucher_by_nd] Match via t_dados_financeiro_voucher.nd: ${vouchers.length}`);
+            }
+          } catch (e) {
+            console.warn('[find_voucher_by_nd] Tabela t_dados_financeiro_voucher indisponível:', (e as Error).message);
+          }
+        }
+
         result = { success: true, vouchers: vouchers || [] };
         console.log(`Found ${vouchers?.length || 0} vouchers for ND ${numero_nd}`);
         break;
