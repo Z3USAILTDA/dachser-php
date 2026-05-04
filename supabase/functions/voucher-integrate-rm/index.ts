@@ -311,7 +311,10 @@ const handler = async (req: Request): Promise<Response> => {
       try {
         mariaClient = await getMariaDBClient();
         
-        // Buscar na tabela t_dados_financeiro_voucher pelo campo nd
+        // Normalização: aceitar "105-292964" e "105-292964 DIM-BY"
+        const ndRaw = numeroVoucherRM.trim();
+        const ndCandidates = Array.from(new Set([ndRaw, ndRaw.split(/\s+/)[0]].filter(Boolean)));
+        const ndPlaceholders = ndCandidates.map(() => '?').join(', ');
         const result = await mariaClient.query(
           `SELECT 
             id_rm,
@@ -331,9 +334,9 @@ const handler = async (req: Request): Promise<Response> => {
             cnpj,
             razao_social
           FROM dados_dachser.t_dados_financeiro_voucher
-          WHERE nd = ?
+          WHERE nd IN (${ndPlaceholders})
           LIMIT 1`,
-          [numeroVoucherRM.trim()]
+          ndCandidates
         );
         
         console.log("[voucher-integrate-rm] Query result:", result);
