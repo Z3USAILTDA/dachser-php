@@ -6304,9 +6304,10 @@ Deno.serve(async (req) => {
               JSON.stringify({ 
                 error: `Voucher com número ${numeroSpo} já existe na etapa ${advancedVoucher.etapa_atual}`,
                 existingId: advancedVoucher.id,
-                existingEtapa: advancedVoucher.etapa_atual
+                existingEtapa: advancedVoucher.etapa_atual,
+                duplicate: true
               }),
-              { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
           }
           
