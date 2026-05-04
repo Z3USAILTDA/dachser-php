@@ -126,7 +126,7 @@ const EsteiraVoucherDetails = () => {
           chavePix: data.chave_pix || null,
           statusDocumentoFiscal: data.status_documento_fiscal || "ANEXADO",
           isMaster: data.is_master === 1 || data.is_master === true,
-          origemCriacao: data.is_master ? "MASTER" : data.id_rm ? "RM" : "MANUAL",
+          origemCriacao: data.is_master ? "MASTER" : (String(data.id_rm ?? "").trim() ? "RM" : "MANUAL"),
           nomeMaster: data.nome_master || null,
         };
 
