@@ -1387,6 +1387,7 @@ export const PagamentosTab = () => {
             if (!open) {
               setVoltarOperacionalJustificativa("");
               setVoltarOperacionalVoucher(null);
+              setVoltarBatchVouchers([]);
               setVoltarDestinoEtapa("OPERACAO");
             }
           }
@@ -1396,10 +1397,22 @@ export const PagamentosTab = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Undo2 className="h-5 w-5 text-orange-500" />
-              Retornar Voucher
+              {voltarBatchVouchers.length > 0
+                ? `Retornar ${voltarBatchVouchers.length} Vouchers`
+                : "Retornar Voucher"}
             </DialogTitle>
             <DialogDescription>
-              Voucher/SPO: <strong>{voltarOperacionalVoucher?.numero_spo}</strong>
+              {voltarBatchVouchers.length > 0 ? (
+                <>
+                  <span className="block mb-1">SPOs selecionados:</span>
+                  <span className="block text-xs font-mono break-all">
+                    {voltarBatchVouchers.slice(0, 5).map(v => v.numero_spo).join(", ")}
+                    {voltarBatchVouchers.length > 5 ? ` +${voltarBatchVouchers.length - 5} mais` : ""}
+                  </span>
+                </>
+              ) : (
+                <>Voucher/SPO: <strong>{voltarOperacionalVoucher?.numero_spo}</strong></>
+              )}
             </DialogDescription>
           </DialogHeader>
 
