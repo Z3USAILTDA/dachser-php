@@ -936,6 +936,10 @@ export const CreateVoucherDialog = ({
                     </Badge>
                   )}
                 </div>
+                <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+                  SPO: Filial + "-" + número SPO<br />
+                  Voucher: Ano (2026) + número do Voucher
+                </p>
                 <div className="flex gap-2">
                   <FormField
                     control={form.control}
