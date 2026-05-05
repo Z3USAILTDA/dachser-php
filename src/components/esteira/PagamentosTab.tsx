@@ -61,6 +61,7 @@ import { Label } from "@/components/ui/label";
 import { parseDBDate, formatDateOnlyBR } from "@/utils/timezone";
 import { buildAjusteWithRequester } from "@/utils/voucherAjusteRouting";
 import { sendVoucherReturnNotification } from "@/utils/voucherReturnNotification";
+import { TablePagination } from "@/components/layout/TablePagination";
 
 interface PagamentoItem {
   id: string;
@@ -181,7 +182,33 @@ export const PagamentosTab = () => {
       return sortDirection === "asc" ? cmp : -cmp;
     });
   }, [pagamentos, sortField, sortDirection]);
-  
+
+  // Pagination
+  const ITEMS_PER_PAGE = 20;
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(sortedPagamentos.length / ITEMS_PER_PAGE));
+  const pageStartIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedPagamentos = useMemo(
+    () => sortedPagamentos.slice(pageStartIndex, pageStartIndex + ITEMS_PER_PAGE),
+    [sortedPagamentos, pageStartIndex]
+  );
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    filterVencimento,
+    filterStatusPagamento,
+    filterTipoExecucao,
+    filterFormaPagamento,
+    filterStatusIntegracaoRm,
+    filterFornecedorDebounced,
+    activeCardFilter,
+    sortField,
+    sortDirection,
+  ]);
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [totalPages, currentPage]);
+
   // Actions state
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [dadosBancariosCache, setDadosBancariosCache] = useState<Record<string, DadosBancarios>>({});
@@ -373,11 +400,15 @@ export const PagamentosTab = () => {
   };
 
   const handleSelectAll = () => {
-    if (selectedIds.size === pagamentos.length) {
-      setSelectedIds(new Set());
+    const pageIds = paginatedPagamentos.map(p => p.id);
+    const allSelected = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
+    const next = new Set(selectedIds);
+    if (allSelected) {
+      pageIds.forEach(id => next.delete(id));
     } else {
-      setSelectedIds(new Set(pagamentos.map(p => p.id)));
+      pageIds.forEach(id => next.add(id));
     }
+    setSelectedIds(next);
   };
 
   const handleSelectOne = (id: string) => {
@@ -1025,7 +1056,7 @@ export const PagamentosTab = () => {
               <tr>
                 <th className="p-3 text-left">
                   <Checkbox
-                    checked={selectedIds.size === pagamentos.length && pagamentos.length > 0}
+                    checked={paginatedPagamentos.length > 0 && paginatedPagamentos.every(p => selectedIds.has(p.id))}
                     onCheckedChange={handleSelectAll}
                   />
                 </th>
@@ -1051,7 +1082,7 @@ export const PagamentosTab = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {sortedPagamentos.map((pag) => {
+              {paginatedPagamentos.map((pag) => {
                 const vencido = isVencido(pag.vencimento);
                 const hoje = isHoje(pag.vencimento);
                 
@@ -1224,6 +1255,19 @@ export const PagamentosTab = () => {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {sortedPagamentos.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+          <p className="text-xs text-muted-foreground">
+            Mostrando {pageStartIndex + 1}–{Math.min(pageStartIndex + ITEMS_PER_PAGE, sortedPagamentos.length)} de {sortedPagamentos.length} processos
+          </p>
+          <TablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
 
