@@ -454,7 +454,7 @@ Deno.serve(async (req) => {
       'insert_dados_rm','update_tipo_exec_dados_rm','get_voucher_for_rm',
       'backfill_tipo_exec_dados_rm','sync_baixa_remessa_to_dados_rm','replay_dados_rm','save_linha_digitavel',
       'check_voucher_rm_ready','insert_dados_financeiro_voucher','list_pagamentos',
-      'migrate_tipo_exec_column_to_varchar','set_tipo_execucao_pagamento','set_ready_for_robo',
+      'migrate_tipo_exec_column_to_varchar','normalize_tipo_exec_default','set_tipo_execucao_pagamento','set_ready_for_robo',
       'update_status_pagamento','update_codigo_barras','batch_set_tipo_execucao',
       'list_comprovantes','create_remessa_lote','add_itens_remessa','remove_item_remessa',
       'update_lote_status','get_remessa_lote_by_id','list_remessa_lotes',
@@ -10361,6 +10361,47 @@ Deno.serve(async (req) => {
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
+        break;
+      }
+
+      case 'normalize_tipo_exec_default': {
+        // One-shot: ensure column DEFAULT is 'A_DEFINIR' (was legacy 'MANUAL'),
+        // and backfill vouchers que provavelmente foram contaminados pelo default antigo.
+        try {
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_vouchers
+            MODIFY COLUMN tipo_execucao_pagamento VARCHAR(20)
+            CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+            NULL DEFAULT 'A_DEFINIR'
+          `);
+        } catch (alterErr) {
+          console.error('[normalize_tipo_exec_default] ALTER falhou:', alterErr);
+        }
+
+        const backfill = await client.execute(`
+          UPDATE dados_dachser.t_vouchers
+          SET tipo_execucao_pagamento = 'A_DEFINIR', updated_at = NOW()
+          WHERE tipo_execucao_pagamento = 'MANUAL'
+            AND (is_pronto_para_robo = 0 OR is_pronto_para_robo IS NULL)
+            AND etapa_atual IN ('FINANCEIRO','ROBO')
+            AND origem_criacao IN ('OTHELLO','RM')
+            AND (lote_remessa_id IS NULL OR lote_remessa_id = '')
+        `);
+
+        const check = await client.query(`
+          SELECT COLUMN_DEFAULT
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_SCHEMA = 'dados_dachser'
+            AND TABLE_NAME = 't_vouchers'
+            AND COLUMN_NAME = 'tipo_execucao_pagamento'
+        `);
+
+        console.log('[normalize_tipo_exec_default] default agora:', check?.[0]?.COLUMN_DEFAULT, 'backfill:', backfill?.affectedRows);
+        result = {
+          success: true,
+          column_default: check?.[0]?.COLUMN_DEFAULT ?? null,
+          backfilled: backfill?.affectedRows || 0,
+        };
         break;
       }
 
