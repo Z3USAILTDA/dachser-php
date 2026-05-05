@@ -10309,9 +10309,11 @@ Deno.serve(async (req) => {
             SUM(CASE WHEN v.is_pronto_para_robo = 1 AND v.tipo_execucao_pagamento = 'MANUAL' THEN 1 ELSE 0 END) as prontos_manual_count,
             SUM(CASE WHEN v.is_pronto_para_robo = 1 AND v.tipo_execucao_pagamento = 'MANUAL' THEN COALESCE(v.valor, 0) ELSE 0 END) as prontos_manual_valor,
             SUM(COALESCE(v.valor, 0)) as valor_total
-          FROM dados_dachser.t_vouchers v
-          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
-          ${whereClause}`,
+          FROM (
+            SELECT DISTINCT v.* FROM dados_dachser.t_vouchers v
+            LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
+            ${whereClause}
+          ) v`,
           params
         );
 
