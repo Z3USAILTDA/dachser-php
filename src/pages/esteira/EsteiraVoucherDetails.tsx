@@ -202,12 +202,12 @@ const EsteiraVoucherDetails = () => {
   const canShowFiscalActions = () => {
     if (!voucher || !role) return false;
     const isFiscalEtapa = voucher.etapaAtual === "FISCAL" || voucher.etapaAtual === "AJUSTE_FISCAL";
-    const isDachser = voucher.cobrancaEmNomeDe === "DACHSER";
+    // Divergências (ex.: voucher CLIENTE caiu no Fiscal) são tratadas via aviso e não bloqueiam ações.
     const canAct = hasRole("FISCAL") || hasRole("GESTOR_FISCAL") ||
                    hasRole("SUPERVISOR") || hasRole("GESTOR_SUPERVISOR") ||
                    hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO") ||
                    hasRole("ADMIN");
-    return isFiscalEtapa && isDachser && canAct;
+    return isFiscalEtapa && canAct;
   };
 
   const canShowSupervisorActions = () => {
