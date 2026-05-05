@@ -901,25 +901,46 @@ serve(async (req) => {
         FROM rota_base_final f
         LEFT JOIN conexoes_intermediarias ci ON ci.awb = f.awb AND ci.hawb = f.hawb
       `;
-      console.log("[ROUTE] Executing authoritative route query...");
-      const routeRows = await queryWithRetry(client, routeSql);
-      console.log(`[ROUTE] Returned ${routeRows?.length || 0} records`);
-      for (const rr of routeRows || []) {
-        const key = `${rr.AWB || ""}|${rr.HAWB || ""}`;
-        routeMap[key] = {
-          origin: rr.ORIGEM_FINAL || null,
-          destination: rr.DESTINO_FINAL || null,
-          conexoes: rr.CONEXOES || null,
-          status: rr.STATUS_ROTA || "",
-        };
+      // Run the heavy route CTE in background — do NOT block the request.
+      // It uses its own DB connection so we can close `client` immediately.
+      const bgTask = (async () => {
+        let bgClient: Client | null = null;
+        try {
+          bgClient = await new Client().connect({
+            hostname: Deno.env.get("MARIADB_AIR_HOST") || "",
+            port: parseInt(Deno.env.get("MARIADB_AIR_PORT") || "3306"),
+            username: Deno.env.get("MARIADB_AIR_USER") || "",
+            password: Deno.env.get("MARIADB_AIR_PASSWORD") || "",
+            db: Deno.env.get("MARIADB_AIR_DATABASE") || "dados_dachser",
+            timeout: 30000,
+          });
+          console.log("[ROUTE-BG] Executing authoritative route query...");
+          const routeRows = await queryWithRetry(bgClient, routeSql);
+          console.log(`[ROUTE-BG] Returned ${routeRows?.length || 0} records`);
+          const fresh: typeof routeMap = {};
+          for (const rr of routeRows || []) {
+            const key = `${rr.AWB || ""}|${rr.HAWB || ""}`;
+            fresh[key] = {
+              origin: rr.ORIGEM_FINAL || null,
+              destination: rr.DESTINO_FINAL || null,
+              conexoes: rr.CONEXOES || null,
+              status: rr.STATUS_ROTA || "",
+            };
+          }
+          routeCache = { at: Date.now(), data: fresh };
+        } catch (err) {
+          console.warn("[ROUTE-BG] Could not load route map:", err);
+        } finally {
+          if (bgClient) { try { await bgClient.close(); } catch {} }
+        }
+      })();
+      // @ts-ignore - EdgeRuntime is provided by Supabase runtime
+      if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(bgTask);
       }
-      routeCache = { at: Date.now(), data: routeMap };
     } catch (err) {
-      console.warn("[ROUTE] Could not load route map:", err);
-      if (routeCache) {
-        routeMap = routeCache.data;
-        console.warn(`[ROUTE] Falling back to stale route cache (${Object.keys(routeMap).length} records)`);
-      }
+      console.warn("[ROUTE] Could not schedule route map refresh:", err);
     }
 
     await client.close();
