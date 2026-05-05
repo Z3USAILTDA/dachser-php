@@ -10250,6 +10250,8 @@ Deno.serve(async (req) => {
           params.push(filterStatusIntegracaoRm);
         }
 
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
         // Run count + list + stats in parallel (sem JOIN com dfv — não usa colunas dela)
         const countSql = `SELECT COUNT(*) as total FROM dados_dachser.t_vouchers v ${whereClause}`;
 
