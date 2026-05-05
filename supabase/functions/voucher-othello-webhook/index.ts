@@ -127,8 +127,8 @@ const handler = async (req: Request): Promise<Response> => {
         vencimento, data_emissao_documento, cobranca_em_nome_de, forma_pagamento,
         tipo_documento, filial, cliente_email, comentarios_operacao, urgencia_tipo,
         criado_por_user_id, responsavel_operacao_user_id, etapa_atual, status_baixa,
-        origem_criacao, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        origem_criacao, tipo_execucao_pagamento, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'A_DEFINIR', ?, ?)`,
       [
         voucherId,
         payload.numero_spo,
