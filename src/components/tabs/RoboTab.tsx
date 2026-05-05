@@ -214,8 +214,8 @@ export function RoboTab() {
     const file = files[index];
     if (!file.manualSpoInput?.trim()) {
       toast({
-        title: "Informe o SPO",
-        description: "Digite o número SPO para buscar o voucher",
+        title: "Informe o número",
+        description: "Digite o SPO ou ND para buscar o voucher",
         variant: "destructive",
       });
       return;
