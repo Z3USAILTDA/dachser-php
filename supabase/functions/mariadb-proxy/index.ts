@@ -11196,7 +11196,21 @@ Deno.serve(async (req) => {
           LIMIT 5
         `, [numero_spo]);
 
-        // 2. LIKE match
+        // 2a. Exact prefix with optional space-suffix (ex: "105-292915 DIM-BY")
+        if (!vouchers || vouchers.length === 0) {
+          vouchers = await client.query(`
+            SELECT 
+              id, numero_spo, fornecedor, valor, vencimento, etapa_atual, 
+              cobranca_em_nome_de, moeda, is_master, id_rm, nome_master, voucher_master_id
+            FROM dados_dachser.t_vouchers
+            WHERE numero_spo COLLATE utf8mb4_unicode_ci = ?
+               OR numero_spo COLLATE utf8mb4_unicode_ci LIKE CONCAT(?, ' %')
+            ORDER BY CHAR_LENGTH(numero_spo) ASC, created_at DESC
+            LIMIT 5
+          `, [numero_spo, numero_spo]);
+        }
+
+        // 2b. LIKE match (fallback amplo)
         if (!vouchers || vouchers.length === 0) {
           vouchers = await client.query(`
             SELECT 
