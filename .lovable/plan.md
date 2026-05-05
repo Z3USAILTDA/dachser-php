@@ -1,20 +1,15 @@
-## Card de devolução com cor sólida
+## Aviso de divergência mais claro sobre a relação entre vouchers
 
-Trocar o fundo translúcido âmbar do `VoucherDivergenceAlert` por uma cor sólida, alinhada ao tema dark do sistema, mantendo a borda âmbar para indicar atenção.
+O texto atual do alerta fala apenas sobre "este voucher", sem deixar claro que o problema é uma divergência **entre os vouchers do mesmo SPO master**. Vou reescrever título e descrição para enfatizar a comparação entre vouchers.
 
 ### Edit
-**`src/components/esteira/VoucherDivergenceAlert.tsx`** (linhas 104-107):
+**`src/utils/voucherDivergence.ts`** — substituir o bloco de `titulo`/`descricao` (linhas 105-121) por uma única mensagem unificada que sempre fala em "vouchers do SPO master":
 
-- Remover `backdrop-blur-[18px]` e o `style` com `rgba(245, 158, 11, 0.06)`.
-- Aplicar fundo sólido escuro (`bg-[#0a0b10]`) com borda âmbar mais forte (`border-amber-500/60`).
-- O bloco interno de "Vouchers do SPO master" (linha 123) também troca para sólido: `bg-[#050608]` no lugar de `bg-[rgba(5,6,18,0.6)]`.
-- Ícone, títulos, badges e botão permanecem iguais (continua claro que é um aviso âmbar).
+- **Título:** "Atenção: divergência no preenchimento dos vouchers deste SPO master"
+- **Descrição (caso geral, com irmãos):** "Os vouchers deste SPO master foram preenchidos de forma diferente: X marcado(s) como Sim e Y como Não (em N vouchers no total). O campo 'É necessário contabilização com o fiscal?' precisa ter a mesma resposta para todos os vouchers do mesmo SPO master. Quando a resposta é Não, o voucher pula a etapa Fiscal e vai direto para o Financeiro; quando é Sim, passa pelo Fiscal antes. Confira o preenchimento e, se houve engano, devolva para a Operação corrigir."
+- **Descrição (caso sem irmãos carregados):** mantém a mesma ideia — "Este voucher faz parte de um SPO master, mas os demais vouchers parecem ter sido preenchidos como Sim — por isso este, marcado como Não, caiu no Fiscal." + mesmo restante explicativo.
 
-```tsx
-<Card className="p-6 border-2 border-amber-500/60 bg-[#0a0b10]">
-  ...
-  <div className="rounded-lg border border-[rgba(255,255,255,0.10)] bg-[#050608] p-3">
-```
+A regra (`rule`), `siblings`, `spoBase` e `etapaSugerida` permanecem inalterados. Sem mudanças em outras telas, backend ou memória.
 
 ### Resultado
-Card de devolução com fundo sólido escuro e contorno âmbar nítido — sem transparência/blur — destacando-se claramente do restante da tela. Sem mudanças em backend, lógica ou outras telas.
+Usuário lê o aviso e entende imediatamente que o problema é a inconsistência **entre os vouchers do mesmo SPO master**, não algo isolado deste voucher.
