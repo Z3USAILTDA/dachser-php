@@ -1258,6 +1258,19 @@ export const PagamentosTab = () => {
         </div>
       )}
 
+      {sortedPagamentos.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+          <p className="text-xs text-muted-foreground">
+            Mostrando {pageStartIndex + 1}–{Math.min(pageStartIndex + ITEMS_PER_PAGE, sortedPagamentos.length)} de {sortedPagamentos.length} processos
+          </p>
+          <TablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
+        </div>
+      )}
+
       {/* Details Dialog */}
       <Dialog open={detailsDialogOpen} onOpenChange={(open) => {
         if (!open) {
