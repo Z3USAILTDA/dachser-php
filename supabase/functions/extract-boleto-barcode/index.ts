@@ -118,41 +118,108 @@ function validateLinhaDigitavel(barcode: string): ValidationResult {
   };
 }
 
-const EXTRACTION_PROMPT = `Analise este boleto bancário e extraia a linha digitável (código de barras numérico).
+// ===== Arrecadação / Convênio (48 dígitos, 4 campos × 12) =====
+// Posição 1 do código = '8' (identificador de arrecadação)
+// Posição 3 do código define algoritmo do DV de cada campo:
+//   '6' ou '7' → mod-10
+//   '8' ou '9' → mod-11
+function calcModulo11Arrecadacao(digits: string): number {
+  // pesos cíclicos 2..9
+  let sum = 0;
+  let weight = 2;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    sum += parseInt(digits[i]) * weight;
+    weight = weight === 9 ? 2 : weight + 1;
+  }
+  const remainder = sum % 11;
+  const dv = 11 - remainder;
+  if (dv === 0 || dv === 1 || dv === 10 || dv === 11) return 0;
+  return dv;
+}
 
-A linha digitável de boleto bancário tem EXATAMENTE 47 dígitos numéricos, formatada em 5 grupos:
-- Campo 1: 5 dígitos + ponto + 5 dígitos (XXXXX.XXXXX)
-- Campo 2: 5 dígitos + ponto + 6 dígitos (XXXXX.XXXXXX)  
-- Campo 3: 5 dígitos + ponto + 6 dígitos (XXXXX.XXXXXX)
-- Campo 4: 1 dígito
-- Campo 5: 14 dígitos
+function validateLinhaDigitavelArrecadacao(barcode: string): ValidationResult {
+  const details: string[] = [];
+  if (barcode.length !== 48) {
+    return { valid: false, campo1: false, campo2: false, campo3: false, dvGeral: false, details: [`Tamanho inválido (arrecadação): ${barcode.length}`] };
+  }
 
-Exemplo: 23793.38128 60000.000003 00009.001026 1 84350000050000
+  const tipoMoeda = barcode[2];
+  const useMod11 = tipoMoeda === '8' || tipoMoeda === '9';
+  const calc = (d: string) => useMod11 ? calcModulo11Arrecadacao(d) : calcModulo10(d);
 
-RESPONDA no seguinte formato (duas linhas):
-FORMATADA: XXXXX.XXXXX XXXXX.XXXXXX XXXXX.XXXXXX X XXXXXXXXXXXXXX
-LIMPA: 47 dígitos sem pontos ou espaços
+  const fields = [0, 12, 24, 36].map((start) => ({
+    digits: barcode.substring(start, start + 11),
+    dv: parseInt(barcode[start + 11]),
+    label: `Campo ${(start / 12) + 1}`,
+  }));
 
-Se não encontrar, responda apenas: NAO_ENCONTRADO`;
+  const results = fields.map((f) => {
+    const expected = calc(f.digits);
+    const ok = expected === f.dv;
+    if (!ok) details.push(`${f.label} (arrecadação ${useMod11 ? 'mod-11' : 'mod-10'}): DV esperado ${expected}, encontrado ${f.dv}`);
+    return ok;
+  });
 
-function buildRetryPrompt(validation: ValidationResult): string {
+  return {
+    valid: results.every(Boolean),
+    campo1: results[0],
+    campo2: results[1],
+    campo3: results[2],
+    dvGeral: results[3], // reusa slot do "DV geral" para o 4º campo
+    details,
+  };
+}
+
+const EXTRACTION_PROMPT = `Analise este documento e extraia a LINHA DIGITÁVEL (sequência numérica do código de barras).
+
+Existem DOIS formatos possíveis — identifique pelo primeiro dígito:
+
+(A) BOLETO BANCÁRIO — primeiro dígito de 1 a 9 (exceto 8). Tem 47 dígitos em 5 grupos:
+    XXXXX.XXXXX XXXXX.XXXXXX XXXXX.XXXXXX X XXXXXXXXXXXXXX
+    Exemplo: 23793.38128 60000.000003 00009.001026 1 84350000050000
+
+(B) ARRECADAÇÃO/CONVÊNIO — primeiro dígito = 8 (DAI, DARF, tributos, taxas, concessionárias). Tem 48 dígitos em 4 grupos de 12 (11 dígitos + 1 DV separado por hífen):
+    XXXXXXXXXXX-X XXXXXXXXXXX-X XXXXXXXXXXX-X XXXXXXXXXXX-X
+    Exemplo: 85890000460-1 67800012025-9 30000007061-3 41001074014-9
+
+NÃO COMPRIMA nem CORTE dígitos para encaixar em outro formato. Se vir 48 dígitos começando com 8, é arrecadação.
+
+RESPONDA exatamente neste formato:
+TIPO: BANCARIO ou ARRECADACAO
+FORMATADA: <linha formatada conforme o tipo>
+LIMPA: <somente dígitos, 47 ou 48>
+
+Se não encontrar nenhum código, responda apenas: NAO_ENCONTRADO`;
+
+function buildRetryPrompt(validation: ValidationResult, tipo: 'BANCARIO' | 'ARRECADACAO'): string {
   const failedFields: string[] = [];
-  if (!validation.campo1) failedFields.push('Campo 1 (primeiros 10 dígitos)');
-  if (!validation.campo2) failedFields.push('Campo 2 (dígitos 11-21)');
-  if (!validation.campo3) failedFields.push('Campo 3 (dígitos 22-32)');
-  if (!validation.dvGeral) failedFields.push('Dígito verificador geral (posição 33)');
+  if (tipo === 'BANCARIO') {
+    if (!validation.campo1) failedFields.push('Campo 1 (primeiros 10 dígitos)');
+    if (!validation.campo2) failedFields.push('Campo 2 (dígitos 11-21)');
+    if (!validation.campo3) failedFields.push('Campo 3 (dígitos 22-32)');
+    if (!validation.dvGeral) failedFields.push('Dígito verificador geral (posição 33)');
+  } else {
+    if (!validation.campo1) failedFields.push('Campo 1 (dígitos 1-12, DV no 12)');
+    if (!validation.campo2) failedFields.push('Campo 2 (dígitos 13-24, DV no 24)');
+    if (!validation.campo3) failedFields.push('Campo 3 (dígitos 25-36, DV no 36)');
+    if (!validation.dvGeral) failedFields.push('Campo 4 (dígitos 37-48, DV no 48)');
+  }
 
-  return `A leitura anterior da linha digitável falhou na validação matemática dos seguintes campos: ${failedFields.join(', ')}.
+  const formatHint = tipo === 'BANCARIO'
+    ? 'FORMATADA: XXXXX.XXXXX XXXXX.XXXXXX XXXXX.XXXXXX X XXXXXXXXXXXXXX\nLIMPA: 47 dígitos sem pontos/espaços/hífens'
+    : 'FORMATADA: XXXXXXXXXXX-X XXXXXXXXXXX-X XXXXXXXXXXX-X XXXXXXXXXXX-X\nLIMPA: 48 dígitos (começa com 8) sem pontos/espaços/hífens';
 
-Por favor, releia o boleto com EXTREMO CUIDADO, dígito por dígito. Preste atenção especial aos campos que falharam.
+  return `A leitura anterior (tipo ${tipo}) falhou na validação matemática dos campos: ${failedFields.join(', ')}.
+
+Releia o documento com EXTREMO CUIDADO, dígito por dígito. NÃO altere a quantidade total de dígitos para encaixar em outro formato.
 
 Detalhes dos erros: ${validation.details.join('; ')}
 
-RESPONDA no seguinte formato (duas linhas):
-FORMATADA: XXXXX.XXXXX XXXXX.XXXXXX XXXXX.XXXXXX X XXXXXXXXXXXXXX
-LIMPA: 47 dígitos sem pontos ou espaços
+RESPONDA exatamente:
+TIPO: ${tipo}
+${formatHint}
 
-Se não encontrar, responda apenas: NAO_ENCONTRADO`;
+Se não encontrar, responda: NAO_ENCONTRADO`;
 }
 
 function parseExtractionResponse(text: string): string {
