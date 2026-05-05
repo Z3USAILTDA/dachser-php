@@ -1463,6 +1463,7 @@ export const PagamentosTab = () => {
                 setVoltarOperacionalDialogOpen(false);
                 setVoltarOperacionalJustificativa("");
                 setVoltarOperacionalVoucher(null);
+                setVoltarBatchVouchers([]);
                 setVoltarDestinoEtapa("OPERACAO");
               }}
               disabled={voltarOperacionalLoading}
