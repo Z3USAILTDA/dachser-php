@@ -32,50 +32,42 @@ export function RoboTab() {
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const extractSPOFromFilename = (filename: string): { numero: string; formatted: string | null } | null => {
-    // Remove extension for cleaner matching
-    const nameWithoutExt = filename.replace(/\.\w+$/, '');
-    
-    // Enhanced patterns for SPO extraction — try full number FIRST
-    const patterns = [
-      /^(\d{6,})$/,                   // Pure number filename: 20262478848.pdf → full number
-      /^(\d{5,})[-_]/,                // 12345_comprovante.pdf
-      /SPO[-_]?(\d{5,})/i,            // SPO12345.pdf or SPO-12345.pdf
-      /[-_](\d{5,})\./,               // comprovante_12345.pdf
-      /(\d{5,})[-_]comprovante/i,     // 12345-comprovante.pdf
-      /comprovante[-_](\d{5,})/i,     // comprovante_12345.pdf
-      /pgto[-_]?(\d{5,})/i,           // pgto12345.pdf
-      /pag[-_]?(\d{5,})/i,            // pag_12345.pdf
-      /voucher[-_]?(\d{5,})/i,        // voucher_12345.pdf
-      /^(\d{5,})\s/,                  // "12345 alguma coisa.pdf"
-      /\s(\d{5,})\./,                 // "alguma coisa 12345.pdf"
-    ];
+  // Lê o arquivo como base64 para enviar ao parser exaustivo
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.includes(",") ? result.split(",")[1] : result;
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
 
-    // First try against name without extension (for pure number patterns)
-    for (const pattern of patterns) {
-      const match = nameWithoutExt.match(pattern);
-      if (match && match[1]) {
-        return { numero: match[1], formatted: null };
-      }
+  // Chama o parser exaustivo (mesmo usado em /fin/esteira/robot)
+  // Retorna candidatos SPO/ND ordenados por prioridade.
+  const extractCandidatesFromFile = async (
+    file: File
+  ): Promise<{ numeroSPO: string | null; numeroND: string | null; linhaDigitavel: string | null; candidatosSPO: string[]; candidatosND: string[] }> => {
+    try {
+      const base64 = await fileToBase64(file);
+      const { data, error } = await supabase.functions.invoke("parse-comprovante-pdf", {
+        body: { pdfBase64: base64, fileName: file.name },
+      });
+      if (error) throw error;
+      const d = data?.data || {};
+      return {
+        numeroSPO: d.numeroSPO || null,
+        numeroND: d.numeroND || null,
+        linhaDigitavel: d.linhaDigitavel || null,
+        candidatosSPO: Array.isArray(d.candidatosSPO) ? d.candidatosSPO : [],
+        candidatosND: Array.isArray(d.candidatosND) ? d.candidatosND : [],
+      };
+    } catch (e) {
+      console.error("[RoboTab] Erro ao extrair candidatos:", e);
+      return { numeroSPO: null, numeroND: null, linhaDigitavel: null, candidatosSPO: [], candidatosND: [] };
     }
-
-    // Fallback: try against full filename
-    for (const pattern of patterns) {
-      const match = filename.match(pattern);
-      if (match && match[1]) {
-        return { numero: match[1], formatted: null };
-      }
-    }
-
-    // Last resort: concatenated XXX-YYYYYY format (e.g., 101285230D10206 → 101-285230)
-    const concatenatedPattern = /^(\d{3})[-]?(\d{6})/;
-    const concatMatch = nameWithoutExt.match(concatenatedPattern);
-    if (concatMatch) {
-      const formatted = `${concatMatch[1]}-${concatMatch[2]}`;
-      return { numero: concatMatch[1] + concatMatch[2], formatted };
-    }
-
-    return null;
   };
 
   const searchVoucherBySPO = async (spo: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null> => {
