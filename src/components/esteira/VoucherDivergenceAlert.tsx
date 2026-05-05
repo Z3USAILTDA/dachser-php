@@ -6,8 +6,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { getUserData } from "@/utils/userStorage";
 import { sendVoucherReturnNotification } from "@/utils/voucherReturnNotification";
+
+const getUserData = () => {
+  const stored = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+  return stored ? JSON.parse(stored) : { id: 0, username: "sistema" };
+};
 import { buildAjusteWithRequester } from "@/utils/voucherAjusteRouting";
 import type { Voucher } from "@/types/voucher";
 import type { VoucherDivergence } from "@/utils/voucherDivergence";
@@ -38,7 +42,7 @@ export const VoucherDivergenceAlert = ({ voucher, divergence, onUpdated }: Props
       const userData = getUserData();
 
       const ajusteTexto = buildAjusteWithRequester(
-        divergence.fromStage,
+        "FISCAL",
         `[DIVERGÊNCIA DE ROTEAMENTO — ${divergence.rule}] ${motivo}`,
       );
 
@@ -74,7 +78,7 @@ export const VoucherDivergenceAlert = ({ voucher, divergence, onUpdated }: Props
 
       await sendVoucherReturnNotification({
         voucher,
-        fromStage: divergence.fromStage,
+        fromStage: "FISCAL",
         toStage: "AJUSTE_OPERACAO",
         reason: `Divergência de roteamento: ${motivo}`,
         senderName: userData.username,
