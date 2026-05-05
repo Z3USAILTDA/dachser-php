@@ -102,23 +102,16 @@ export const detectVoucherEtapaDivergence = (
   const sims = normalized.filter((s) => s.contabilizaFiscal === "SIM").length;
   const naos = normalized.filter((s) => s.contabilizaFiscal === "NAO").length;
 
-  let titulo: string;
-  let descricao: string;
-
-  if (totalIrmaos > 1 && sims > 0) {
-    titulo = "Atenção: contabilização com o fiscal divergente entre vouchers do mesmo SPO";
-    descricao =
-      `Este voucher está na etapa Fiscal porque o campo "É necessário contabilização com o fiscal?" foi respondido como Não, ` +
-      `mas existem outros vouchers do mesmo SPO master cadastrados como Sim ` +
-      `(${sims} marcado(s) como Sim e ${naos} como Não, em ${totalIrmaos} vouchers). ` +
-      `Confira se o preenchimento está correto. Se foi engano, devolva para a Operação para acertar.`;
-  } else {
-    titulo = "Atenção: este voucher pode estar na etapa errada";
-    descricao =
-      `Este voucher está na etapa Fiscal, mas o campo "É necessário contabilização com o fiscal?" foi respondido como Não. ` +
-      `Quando a resposta é Não, o voucher não passa pelo Fiscal — vai direto da Operação para o Financeiro. ` +
-      `Confira o preenchimento; se foi engano, devolva para a Operação.`;
-  }
+  const titulo = "Atenção: divergência no preenchimento dos vouchers deste SPO master";
+  const irmaosInfo =
+    totalIrmaos > 1
+      ? `Os vouchers deste SPO master foram preenchidos de forma diferente: ${sims} marcado(s) como Sim e ${naos} como Não (em ${totalIrmaos} vouchers no total).`
+      : `Este voucher faz parte de um SPO master, mas os demais vouchers do master parecem ter sido preenchidos como Sim — por isso este, marcado como Não, caiu no Fiscal.`;
+  const descricao =
+    `${irmaosInfo} ` +
+    `O campo "É necessário contabilização com o fiscal?" precisa ter a mesma resposta para todos os vouchers do mesmo SPO master. ` +
+    `Quando a resposta é Não, o voucher pula a etapa Fiscal e vai direto para o Financeiro; quando é Sim, passa pelo Fiscal antes. ` +
+    `Confira o preenchimento e, se houve engano, devolva para a Operação corrigir.`;
 
   return {
     divergent: true,
