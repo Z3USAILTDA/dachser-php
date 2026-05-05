@@ -141,46 +141,73 @@ export function RoboTab() {
   const handleFilesSelected = async (selectedFiles: File[]) => {
     if (selectedFiles.length === 0) return;
 
-    const fileMatches: FileMatch[] = await Promise.all(
-      selectedFiles.map(async (file) => {
-        const extracted = extractSPOFromFilename(file.name);
-        let match: { id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null = null;
-        let displaySPO: string | null = null;
+    const CONCURRENCY = 5;
+    const MAX_CANDIDATES_PER_KIND = 6;
 
-        if (extracted) {
-          if (extracted.formatted) {
-            match = await searchVoucher(extracted.formatted);
-            displaySPO = extracted.formatted;
-          }
-          
-          if (!match) {
-            match = await searchVoucher(extracted.numero);
-            displaySPO = extracted.formatted || extracted.numero;
-          }
+    const processOne = async (file: File): Promise<FileMatch> => {
+      const extracted = await extractCandidatesFromFile(file);
+
+      // Monta lista ordenada de tentativas (kind, value), deduplicada
+      const tries: Array<{ kind: "spo" | "nd"; value: string }> = [];
+      const seen = new Set<string>();
+      const push = (kind: "spo" | "nd", value?: string | null) => {
+        if (!value) return;
+        const key = `${kind}:${value}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        tries.push({ kind, value });
+      };
+
+      // Prioridade: ND principal → linha digitável → demais ND → SPO principal → demais SPO
+      push("nd", extracted.numeroND);
+      push("nd", extracted.linhaDigitavel);
+      for (const c of extracted.candidatosND.slice(0, MAX_CANDIDATES_PER_KIND)) push("nd", c);
+      push("spo", extracted.numeroSPO);
+      for (const c of extracted.candidatosSPO.slice(0, MAX_CANDIDATES_PER_KIND)) push("spo", c);
+
+      let match: { id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null = null;
+      let displayNumero: string | null = null;
+
+      for (const t of tries) {
+        match = t.kind === "spo" ? await searchVoucherBySPO(t.value) : await searchVoucherByND(t.value);
+        if (match) {
+          displayNumero = t.value;
+          break;
         }
+      }
 
-        return {
-          file,
-          fileName: file.name,
-          numeroSPO: displaySPO,
-          voucherId: match?.id || null,
-          masterName: match?.masterName,
-          childSpo: match?.childSpo,
-          isMaster: match?.isMaster,
-          matchedViaChild: match?.matchedViaChild,
-          status: "pending" as const,
-          manualSpoInput: "",
-          isEditingSpo: !extracted,
-        };
-      })
-    );
+      if (!displayNumero) {
+        displayNumero = extracted.numeroND || extracted.numeroSPO || null;
+      }
 
-    setFiles((prev) => [...prev, ...fileMatches]);
+      return {
+        file,
+        fileName: file.name,
+        numeroSPO: displayNumero,
+        voucherId: match?.id || null,
+        masterName: match?.masterName,
+        childSpo: match?.childSpo,
+        isMaster: match?.isMaster,
+        matchedViaChild: match?.matchedViaChild,
+        status: "pending" as const,
+        manualSpoInput: "",
+        isEditingSpo: !displayNumero,
+      };
+    };
 
     toast({
       title: "Arquivos carregados",
-      description: `${selectedFiles.length} arquivo(s) prontos para processamento`,
+      description: `Identificando ${selectedFiles.length} arquivo(s)...`,
     });
+
+    const results: FileMatch[] = new Array(selectedFiles.length);
+    for (let start = 0; start < selectedFiles.length; start += CONCURRENCY) {
+      const slice = selectedFiles.slice(start, start + CONCURRENCY);
+      const batch = await Promise.all(slice.map((f) => processOne(f)));
+      batch.forEach((r, k) => (results[start + k] = r));
+    }
+
+    setFiles((prev) => [...prev, ...results]);
   };
 
   const handleManualSpoSearch = async (index: number) => {
