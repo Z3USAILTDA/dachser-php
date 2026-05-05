@@ -20,6 +20,8 @@ import { VoucherFinanceiroActions } from "@/components/esteira/VoucherFinanceiro
 import { VoucherRoboActions } from "@/components/esteira/VoucherRoboActions";
 import { VoucherRascunhoActions } from "@/components/esteira/VoucherRascunhoActions";
 import { DadosPagamentoPanel } from "@/components/esteira/DadosPagamentoPanel";
+import { VoucherDivergenceAlert } from "@/components/esteira/VoucherDivergenceAlert";
+import { detectVoucherEtapaDivergence, getSpoBase } from "@/utils/voucherDivergence";
 import { parseDBDate } from "@/utils/timezone";
 
 const EsteiraVoucherDetails = () => {
@@ -28,8 +30,30 @@ const EsteiraVoucherDetails = () => {
   const { toast } = useToast();
   const { role, isAdmin, hasRole, hasEsteiraAccess } = useUserRole();
   const [voucher, setVoucher] = useState<Voucher | null>(null);
+  const [siblings, setSiblings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Load sibling vouchers (same SPO base) to enrich divergence context
+  useEffect(() => {
+    if (!voucher) return;
+    const base = getSpoBase(voucher.numeroSPO);
+    if (!base) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "find_voucher_by_nd", numero_nd: base },
+        });
+        if (!cancelled && data?.vouchers) setSiblings(data.vouchers);
+      } catch {
+        /* silent */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [voucher?.id, voucher?.numeroSPO]);
 
   const loadVoucher = async () => {
     if (!id) return;
@@ -372,6 +396,32 @@ const EsteiraVoucherDetails = () => {
                 <VoucherRascunhoActions voucher={voucher} onUpdate={loadVoucher} />
               </Card>
             )}
+
+            {/* Divergence alert: voucher is in an etapa incompatible with its attributes and user has no actions */}
+            {(() => {
+              const divergence = detectVoucherEtapaDivergence(voucher, siblings);
+              const noActionsAvailable =
+                !canShowRascunhoActions() &&
+                !canShowOperacaoActions() &&
+                !canShowFiscalActions() &&
+                !canShowSupervisorActions() &&
+                !canShowFinanceiroActions() &&
+                !canShowRoboActions();
+              const canAct =
+                hasRole("OPERACAO") || hasRole("GESTOR_OPERACAO") ||
+                hasRole("FISCAL") || hasRole("GESTOR_FISCAL") ||
+                hasRole("SUPERVISOR") || hasRole("GESTOR_SUPERVISOR") ||
+                hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO") ||
+                hasRole("ADMIN");
+              if (!divergence.divergent || !noActionsAvailable || !canAct) return null;
+              return (
+                <VoucherDivergenceAlert
+                  voucher={voucher}
+                  divergence={divergence}
+                  onUpdated={loadVoucher}
+                />
+              );
+            })()}
 
             {/* Stage Actions */}
             {canShowOperacaoActions() && (
