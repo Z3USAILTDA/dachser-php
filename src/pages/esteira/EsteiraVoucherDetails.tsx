@@ -202,7 +202,9 @@ const EsteiraVoucherDetails = () => {
   const canShowFiscalActions = () => {
     if (!voucher || !role) return false;
     const isFiscalEtapa = voucher.etapaAtual === "FISCAL" || voucher.etapaAtual === "AJUSTE_FISCAL";
-    // Divergências (ex.: voucher CLIENTE caiu no Fiscal) são tratadas via aviso e não bloqueiam ações.
+    // Bloquear ações Fiscais quando há divergência — só o card de devolução do aviso permite seguir.
+    const divergence = detectVoucherEtapaDivergence(voucher, siblings);
+    if (divergence.divergent) return false;
     const canAct = hasRole("FISCAL") || hasRole("GESTOR_FISCAL") ||
                    hasRole("SUPERVISOR") || hasRole("GESTOR_SUPERVISOR") ||
                    hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO") ||
