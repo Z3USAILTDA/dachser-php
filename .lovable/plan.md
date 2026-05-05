@@ -1,47 +1,40 @@
-Identifiquei a causa provável: a aba Robô usada em `/fin/esteira` ainda usa o componente antigo `RoboTab`, que faz um parser simples local e não usa o parser exaustivo recém-criado em `parse-comprovante-pdf`. O parser novo reconhece corretamente os dois arquivos do print:
+## Problema
 
-- `2026188294004052026.5.pdf` → ND `20261882940`
-- `2026188293704052026.6.pdf` → ND `20261882937`
+Os 6 cards no topo da aba **Pagamentos** (`/fin/esteira` → Pagamentos) — A Vencer, Vencidos, Em Remessa, Manual, Prontos Remessa, Prontos Manual — hoje mostram sempre os totais globais. Quando o usuário aplica um filtro (fornecedor, status, forma de pagamento, status RM, vencimento, ou clica num próprio card), apenas a tabela é filtrada; os números dos cards não mudam.
 
-Plano de implementação:
+A causa está no backend `mariadb-proxy` (case `list_pagamentos`): a query de `stats` usa um `WHERE` fixo, ignorando o `whereClause`/`params` aplicados na query principal.
 
-1. Aplicar o parser exaustivo também na aba Robô principal
-   - Atualizar `src/components/tabs/RoboTab.tsx` para chamar `parse-comprovante-pdf` ao selecionar arquivos.
-   - Usar `numeroND`, `numeroSPO`, `linhaDigitavel`, `candidatosND` e `candidatosSPO` retornados pela função.
-   - Testar primeiro por ND para nomes no formato `<ND><DDMMYYYY>.<seq>.pdf`, porque nestes comprovantes o voucher real está no início do nome do arquivo.
+## Mudança
 
-2. Buscar candidatos de forma mais robusta
-   - Para cada arquivo, tentar os candidatos em ordem de prioridade:
-     - ND principal extraído;
-     - linha digitável, se existir;
-     - demais candidatos ND;
-     - SPO principal extraído;
-     - demais candidatos SPO.
-   - Deduplicar candidatos para evitar chamadas repetidas.
-   - Manter limite de candidatos razoável para não trazer de volta a lentidão.
+### Backend — `supabase/functions/mariadb-proxy/index.ts` (case `list_pagamentos`, ~linhas 10289–10322)
 
-3. Corrigir a UX da aba Robô
-   - Trocar o texto/badge de “SPO não identificado” para algo compatível com SPO/ND, como “Voucher não identificado”.
-   - Mostrar “ND 20261882940” quando o candidato extraído for ND, evitando a falsa impressão de que só procurou SPO.
-   - Ajustar o campo manual para aceitar “SPO ou ND” e buscar por ambos.
-   - Atualizar a lista de padrões aceitos para incluir exemplos reais como `2026188294004052026.5.pdf`.
+Reaproveitar `whereClause` e `params` na query de `stats`, para que os 6 cards reflitam exatamente o subconjunto filtrado:
 
-4. Melhorar a contagem e status após identificação
-   - Garantir que o total identificado seja calculado a partir do resultado atualizado, não do estado antigo.
-   - Manter processamento em paralelo/concurrency limitada para não piorar a demora.
+```sql
+SELECT
+  COUNT(DISTINCT v.id) as total,
+  SUM(CASE WHEN v.vencimento >= CURDATE() THEN 1 ELSE 0 END) as a_vencer_count,
+  ...
+FROM dados_dachser.t_vouchers v
+LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv
+  ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
+${whereClause}
+```
 
-5. Opcional, mas recomendado: otimização backend para reduzir chamadas
-   - Adicionar no `mariadb-proxy` uma ação única de busca por lote/candidatos, por exemplo `find_voucher_by_candidates`.
-   - Assim, cada arquivo chamaria o banco uma vez com todos os candidatos, em vez de várias chamadas separadas.
-   - Isso reduz a latência e também diminui a chance de falha por timeout/conexões.
+Passar `params` na chamada. Manter a mesma lista de colunas (`a_vencer_count/valor`, `vencidos_*`, `em_remessa_*`, `manual_*`, `prontos_remessa_*`, `prontos_manual_*`, `valor_total`) — front não muda.
 
-Arquivos previstos:
+Notas:
+- Como a query agora usa o JOIN com `dfv`, envolver as agregações em `CASE` já lida com duplicatas (cada `v.id` aparece pelo menos uma vez). Para máxima fidelidade do `total`, usar `COUNT(DISTINCT v.id)`.
+- Os filtros existentes (`filterVencimento`, `filterStatusPagamento`, `filterTipoExecucao`, `filterFormaPagamento`, `filterStatusIntegracaoRm`, `filterFornecedor`) já estão no `whereClause` — nada novo a adicionar.
 
-- `src/components/tabs/RoboTab.tsx`
-- Possivelmente `supabase/functions/mariadb-proxy/index.ts`, se implementarmos a busca por lote.
+### Frontend — `src/components/esteira/PagamentosTab.tsx`
 
-Resultado esperado:
+Nenhuma mudança de lógica necessária. Os cards já leem de `stats` e o efeito de `loadPagamentos` já roda quando qualquer filtro muda (linha 320). Pequeno ajuste opcional de UX:
 
-- Os dois arquivos do print passam a identificar automaticamente os vouchers `20261882940` e `20261882937`.
-- A aba Robô deixa de depender apenas de SPO e passa a usar a mesma inteligência SPO/ND já validada no parser novo.
-- A identificação continua rápida, sem voltar para o fluxo antigo sequencial e lento.
+- Adicionar transição suave (`transition-all duration-200`) nos números dos cards para deixar claro que recalcularam.
+
+## Resultado
+
+Aplicar qualquer filtro (incluindo clicar num card) atualiza imediatamente os 6 cards para refletir apenas os vouchers do recorte atual. Limpar filtros volta aos totais globais.
+
+Sem mudanças de schema, memória, ou outras telas.

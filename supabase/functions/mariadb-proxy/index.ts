@@ -10286,10 +10286,10 @@ Deno.serve(async (req) => {
           [...params, perPage, offset]
         );
 
-        // Get summary stats with new cards
+        // Get summary stats with new cards — reflete os mesmos filtros aplicados na listagem
         const statsResult = await client.query(
           `SELECT 
-            COUNT(*) as total,
+            COUNT(DISTINCT v.id) as total,
             -- A Vencer (vencimento >= hoje, independente de is_pronto)
             SUM(CASE WHEN v.vencimento >= CURDATE() THEN 1 ELSE 0 END) as a_vencer_count,
             SUM(CASE WHEN v.vencimento >= CURDATE() THEN COALESCE(v.valor, 0) ELSE 0 END) as a_vencer_valor,
@@ -10302,23 +10302,19 @@ Deno.serve(async (req) => {
             -- Manual (não pronto, tipo execução MANUAL)
             SUM(CASE WHEN (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) AND v.tipo_execucao_pagamento = 'MANUAL' THEN 1 ELSE 0 END) as manual_count,
             SUM(CASE WHEN (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) AND v.tipo_execucao_pagamento = 'MANUAL' THEN COALESCE(v.valor, 0) ELSE 0 END) as manual_valor,
-            -- Prontos Em Remessa (is_pronto = 1 E tipo_execucao IN (REMESSA_10H, REMESSA_15H))
+            -- Prontos Em Remessa
             SUM(CASE WHEN v.is_pronto_para_robo = 1 AND v.tipo_execucao_pagamento IN ('REMESSA_10H', 'REMESSA_15H') THEN 1 ELSE 0 END) as prontos_remessa_count,
             SUM(CASE WHEN v.is_pronto_para_robo = 1 AND v.tipo_execucao_pagamento IN ('REMESSA_10H', 'REMESSA_15H') THEN COALESCE(v.valor, 0) ELSE 0 END) as prontos_remessa_valor,
-            -- Prontos Manual (is_pronto = 1 E tipo_execucao = MANUAL)
+            -- Prontos Manual
             SUM(CASE WHEN v.is_pronto_para_robo = 1 AND v.tipo_execucao_pagamento = 'MANUAL' THEN 1 ELSE 0 END) as prontos_manual_count,
             SUM(CASE WHEN v.is_pronto_para_robo = 1 AND v.tipo_execucao_pagamento = 'MANUAL' THEN COALESCE(v.valor, 0) ELSE 0 END) as prontos_manual_valor,
-            -- Total valor
             SUM(COALESCE(v.valor, 0)) as valor_total
-          FROM dados_dachser.t_vouchers v
-          WHERE v.etapa_atual IN ('FINANCEIRO', 'ROBO')
-          AND NOT EXISTS (
-            SELECT 1 FROM dados_dachser.t_dados_financeiro_voucher dfv 
-            WHERE dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci 
-            AND dfv.modal = 'ADM'
-          )
-          AND v.sync_status = 'ATIVO'
-          AND (v.voucher_master_id IS NULL OR v.voucher_master_id = '')`
+          FROM (
+            SELECT DISTINCT v.* FROM dados_dachser.t_vouchers v
+            LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
+            ${whereClause}
+          ) v`,
+          params
         );
 
         result = {
