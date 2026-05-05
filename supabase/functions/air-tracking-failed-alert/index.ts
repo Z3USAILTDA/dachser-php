@@ -41,7 +41,7 @@ async function fetchTrackingData(): Promise<any[]> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000);
+      const timeoutId = setTimeout(() => controller.abort(), 55000);
 
       const resp = await fetch(`${supabaseUrl}/functions/v1/fetch-tracking-aereo`, {
         method: "POST",
