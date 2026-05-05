@@ -61,6 +61,7 @@ import { Label } from "@/components/ui/label";
 import { parseDBDate, formatDateOnlyBR } from "@/utils/timezone";
 import { buildAjusteWithRequester } from "@/utils/voucherAjusteRouting";
 import { sendVoucherReturnNotification } from "@/utils/voucherReturnNotification";
+import { TablePagination } from "@/components/layout/TablePagination";
 
 interface PagamentoItem {
   id: string;
