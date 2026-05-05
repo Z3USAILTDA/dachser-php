@@ -131,18 +131,24 @@ function extractFromFilename(fileName: string): ExtractedData {
 
   // ---------------------------------------------------------------
   // SPO Remessa: "101-286102D26122025.35"  → SPO 286102 (score 100)
+  // Adiciona TANTO o número curto ("286102") quanto o composto com filial
+  // ("101-286102") como candidato — o composto recebe score maior pois
+  // identifica o voucher mesmo quando há sufixo livre (ex: "101-286102 DIM-BY")
   // ---------------------------------------------------------------
   for (const m of fileName.matchAll(/(\d{3})-(\d{6})[A-Z]\d{8}\.\d{1,2}/gi)) {
+    addCandidate(spoScores, `${m[1]}-${m[2]}`, 102);
     addCandidate(spoScores, m[2], 100);
-    console.log(`[Extract] SPO Remessa: ${m[2]}`);
+    console.log(`[Extract] SPO Remessa: ${m[1]}-${m[2]} (e ${m[2]})`);
   }
 
   // ---------------------------------------------------------------
-  // SPO Manual: "101-286105" (score 95)
+  // SPO Manual: "101-286105" (score 95). Promove "101-286105" como
+  // candidato principal (score 97) e mantém "286105" como secundário.
   // ---------------------------------------------------------------
   for (const m of fileName.matchAll(/(\d{3})-(\d{5,7})(?:\.|$|[^0-9])/g)) {
+    addCandidate(spoScores, `${m[1]}-${m[2]}`, 97);
     addCandidate(spoScores, m[2], 95);
-    console.log(`[Extract] SPO Manual: ${m[2]}`);
+    console.log(`[Extract] SPO Manual: ${m[1]}-${m[2]} (e ${m[2]})`);
   }
 
   // ---------------------------------------------------------------
