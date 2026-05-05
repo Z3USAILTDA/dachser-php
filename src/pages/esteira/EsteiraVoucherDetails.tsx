@@ -202,12 +202,12 @@ const EsteiraVoucherDetails = () => {
   const canShowFiscalActions = () => {
     if (!voucher || !role) return false;
     const isFiscalEtapa = voucher.etapaAtual === "FISCAL" || voucher.etapaAtual === "AJUSTE_FISCAL";
-    const isDachser = voucher.cobrancaEmNomeDe === "DACHSER";
+    // Divergências (ex.: voucher CLIENTE caiu no Fiscal) são tratadas via aviso e não bloqueiam ações.
     const canAct = hasRole("FISCAL") || hasRole("GESTOR_FISCAL") ||
                    hasRole("SUPERVISOR") || hasRole("GESTOR_SUPERVISOR") ||
                    hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO") ||
                    hasRole("ADMIN");
-    return isFiscalEtapa && isDachser && canAct;
+    return isFiscalEtapa && canAct;
   };
 
   const canShowSupervisorActions = () => {
@@ -397,23 +397,16 @@ const EsteiraVoucherDetails = () => {
               </Card>
             )}
 
-            {/* Divergence alert: voucher is in an etapa incompatible with its attributes and user has no actions */}
+            {/* Aviso de divergência: sempre exibido quando detectado, sem travar as ações da etapa */}
             {(() => {
               const divergence = detectVoucherEtapaDivergence(voucher, siblings);
-              const noActionsAvailable =
-                !canShowRascunhoActions() &&
-                !canShowOperacaoActions() &&
-                !canShowFiscalActions() &&
-                !canShowSupervisorActions() &&
-                !canShowFinanceiroActions() &&
-                !canShowRoboActions();
               const canAct =
                 hasRole("OPERACAO") || hasRole("GESTOR_OPERACAO") ||
                 hasRole("FISCAL") || hasRole("GESTOR_FISCAL") ||
                 hasRole("SUPERVISOR") || hasRole("GESTOR_SUPERVISOR") ||
                 hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO") ||
                 hasRole("ADMIN");
-              if (!divergence.divergent || !noActionsAvailable || !canAct) return null;
+              if (!divergence.divergent || !canAct) return null;
               return (
                 <VoucherDivergenceAlert
                   voucher={voucher}
