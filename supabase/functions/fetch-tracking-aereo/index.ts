@@ -1319,14 +1319,26 @@ serve(async (req) => {
       }
 
 
+      // Override origin/destination/conexao with authoritative route map
+      // (CTE com t_iata_airports + fallback de timeline). Mantém fallback para
+      // valores brutos / extração JS quando a CTE não retornou nada.
+      const routeKey = `${row.AWB || ""}|${row.HAWB || ""}`;
+      const routeEntry = routeMap[routeKey];
+      const finalOrigin = routeEntry?.origin || row.ORIGEM || "";
+      const finalDestination = routeEntry?.destination || row.DESTINO || "";
+      const finalConexao = routeEntry
+        ? (routeEntry.conexoes || null)
+        : conexao;
+
       const normalized = {
         awb_number: row.AWB || "",
         hawb_number: row.HAWB || "",
         consignee_nome: row.CLIENTE || clienteMap[row.HAWB] || "",
         clerk: row.ANALISTA || "",
-        origin: row.ORIGEM || "",
-        destination: row.DESTINO || "",
-        conexao,
+        origin: finalOrigin,
+        destination: finalDestination,
+        conexao: finalConexao,
+        route_status: routeEntry?.status || null,
         timeline_json: timeline,
         last_event: finalCode || "",
         last_event_description: getEventDesc(finalCode),
