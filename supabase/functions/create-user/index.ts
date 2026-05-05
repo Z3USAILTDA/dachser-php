@@ -43,7 +43,7 @@ serve(async (req) => {
     // Check if user is admin
     const { data: roleData } = await userClient.rpc("has_role", {
       _user_id: user.id,
-      _role: "admin",
+      _role: "ADMIN",
     });
 
     if (!roleData) {
