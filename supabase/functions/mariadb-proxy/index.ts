@@ -10364,6 +10364,47 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'normalize_tipo_exec_default': {
+        // One-shot: ensure column DEFAULT is 'A_DEFINIR' (was legacy 'MANUAL'),
+        // and backfill vouchers que provavelmente foram contaminados pelo default antigo.
+        try {
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_vouchers
+            MODIFY COLUMN tipo_execucao_pagamento VARCHAR(20)
+            CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+            NULL DEFAULT 'A_DEFINIR'
+          `);
+        } catch (alterErr) {
+          console.error('[normalize_tipo_exec_default] ALTER falhou:', alterErr);
+        }
+
+        const backfill = await client.execute(`
+          UPDATE dados_dachser.t_vouchers
+          SET tipo_execucao_pagamento = 'A_DEFINIR', updated_at = NOW()
+          WHERE tipo_execucao_pagamento = 'MANUAL'
+            AND (is_pronto_para_robo = 0 OR is_pronto_para_robo IS NULL)
+            AND etapa_atual IN ('FINANCEIRO','ROBO')
+            AND origem_criacao IN ('OTHELLO','RM')
+            AND (lote_remessa_id IS NULL OR lote_remessa_id = '')
+        `);
+
+        const check = await client.query(`
+          SELECT COLUMN_DEFAULT
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_SCHEMA = 'dados_dachser'
+            AND TABLE_NAME = 't_vouchers'
+            AND COLUMN_NAME = 'tipo_execucao_pagamento'
+        `);
+
+        console.log('[normalize_tipo_exec_default] default agora:', check?.[0]?.COLUMN_DEFAULT, 'backfill:', backfill?.affectedRows);
+        result = {
+          success: true,
+          column_default: check?.[0]?.COLUMN_DEFAULT ?? null,
+          backfilled: backfill?.affectedRows || 0,
+        };
+        break;
+      }
+
       case 'set_tipo_execucao_pagamento': {
         const { id: voucherId, tipo_execucao_pagamento } = body as {
           id: string;
