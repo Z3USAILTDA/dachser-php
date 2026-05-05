@@ -400,11 +400,15 @@ export const PagamentosTab = () => {
   };
 
   const handleSelectAll = () => {
-    if (selectedIds.size === pagamentos.length) {
-      setSelectedIds(new Set());
+    const pageIds = paginatedPagamentos.map(p => p.id);
+    const allSelected = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
+    const next = new Set(selectedIds);
+    if (allSelected) {
+      pageIds.forEach(id => next.delete(id));
     } else {
-      setSelectedIds(new Set(pagamentos.map(p => p.id)));
+      pageIds.forEach(id => next.add(id));
     }
+    setSelectedIds(next);
   };
 
   const handleSelectOne = (id: string) => {
