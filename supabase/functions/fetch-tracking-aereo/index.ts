@@ -10,6 +10,9 @@ const corsHeaders = {
 let discrepancyCache: { at: number; data: Record<string, { pieces_discrepancy: boolean; baseline_pieces: number | null; has_dis_event: boolean }> } | null = null;
 const DISCREPANCY_CACHE_TTL_MS = 60_000;
 
+let routeCache: { at: number; data: Record<string, { origin: string | null; destination: string | null; conexoes: string | null; status: string }> } | null = null;
+const ROUTE_CACHE_TTL_MS = 60_000;
+
 async function queryWithRetry(client: Client, sql: string, params: any[] = [], maxRetries = 3): Promise<any> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -689,6 +692,230 @@ serve(async (req) => {
       console.warn("[996-DISC] Could not load 996 discrepancy data:", err);
     }
 
+    // Step 3e: Load authoritative ROUTE map (origin/destination/conexoes) using
+    // t_iata_airports + timeline fallback. Mirrors the user-provided CTE exactly.
+    let routeMap: Record<string, {
+      origin: string | null;
+      destination: string | null;
+      conexoes: string | null; // comma-separated IATA codes
+      status: string;
+    }> = {};
+    if (routeCache && Date.now() - routeCache.at < ROUTE_CACHE_TTL_MS) {
+      routeMap = routeCache.data;
+      console.log(`Reused route cache (${Object.keys(routeMap).length} records, age=${Math.round((Date.now() - routeCache.at) / 1000)}s)`);
+    } else try {
+      const activeAwbsRoute = [...new Set(
+        (rows || [])
+          .map((r: any) => (r.AWB || "").toString().trim())
+          .filter((a: string) => a.length > 0)
+      )] as string[];
+      const awbInClauseRoute = activeAwbsRoute.length > 0
+        ? `AND tda.awb_number IN (${activeAwbsRoute.map(a => `'${a.replace(/'/g, "''")}'`).join(",")})`
+        : "AND 1=0";
+
+      const routeSql = `
+        WITH base_rota AS (
+          SELECT
+            tda.awb_number AS awb,
+            tda.hawb_number AS hawb,
+            tdaf.timeline_json,
+            TRIM(COALESCE(tdaf.origin, '')) AS origin_raw,
+            TRIM(COALESCE(tdaf.destination, '')) AS destination_raw
+          FROM dados_dachser.t_dados_aereo tda
+          INNER JOIN dados_dachser.t_fato_aereo tdaf
+            ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
+           AND JSON_VALID(tdaf.hawbs_json)
+           AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
+          WHERE tdaf.timeline_json IS NOT NULL
+            AND JSON_VALID(tdaf.timeline_json)
+            ${awbInClauseRoute}
+        ),
+        base_parse AS (
+          SELECT
+            b.awb, b.hawb, b.timeline_json, b.origin_raw, b.destination_raw,
+            CASE
+              WHEN b.origin_raw REGEXP '\\\\([A-Za-z]{3}\\\\)'
+                THEN UPPER(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(b.origin_raw, '(', -1), ')', 1)))
+              WHEN b.origin_raw REGEXP '^[A-Za-z]{3}$' THEN UPPER(TRIM(b.origin_raw))
+              ELSE NULL
+            END COLLATE utf8mb4_unicode_ci AS origin_candidate_code,
+            CASE
+              WHEN b.destination_raw REGEXP '\\\\([A-Za-z]{3}\\\\)'
+                THEN UPPER(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(b.destination_raw, '(', -1), ')', 1)))
+              WHEN b.destination_raw REGEXP '^[A-Za-z]{3}$' THEN UPPER(TRIM(b.destination_raw))
+              ELSE NULL
+            END COLLATE utf8mb4_unicode_ci AS destination_candidate_code,
+            UPPER(TRIM(b.origin_raw)) COLLATE utf8mb4_unicode_ci AS origin_alias_key,
+            UPPER(TRIM(b.destination_raw)) COLLATE utf8mb4_unicode_ci AS destination_alias_key
+          FROM base_rota b
+        ),
+        base_resolvida AS (
+          SELECT
+            b.awb, b.hawb, b.timeline_json,
+            COALESCE(ai_origin.iata_code, an_origin.iata_code, ac_origin.iata_code) AS origin_code,
+            COALESCE(ai_dest.iata_code, an_dest.iata_code, ac_dest.iata_code) AS destination_code
+          FROM base_parse b
+          LEFT JOIN dados_dachser.t_iata_airports ai_origin
+            ON ai_origin.iata_code COLLATE utf8mb4_unicode_ci = b.origin_candidate_code COLLATE utf8mb4_unicode_ci
+           AND ai_origin.is_active = 1
+          LEFT JOIN dados_dachser.t_iata_airports an_origin
+            ON UPPER(TRIM(an_origin.airport_name)) COLLATE utf8mb4_unicode_ci = b.origin_alias_key COLLATE utf8mb4_unicode_ci
+           AND an_origin.is_active = 1
+          LEFT JOIN dados_dachser.t_iata_airports ac_origin
+            ON UPPER(TRIM(ac_origin.city_name)) COLLATE utf8mb4_unicode_ci = b.origin_alias_key COLLATE utf8mb4_unicode_ci
+           AND ac_origin.is_active = 1
+          LEFT JOIN dados_dachser.t_iata_airports ai_dest
+            ON ai_dest.iata_code COLLATE utf8mb4_unicode_ci = b.destination_candidate_code COLLATE utf8mb4_unicode_ci
+           AND ai_dest.is_active = 1
+          LEFT JOIN dados_dachser.t_iata_airports an_dest
+            ON UPPER(TRIM(an_dest.airport_name)) COLLATE utf8mb4_unicode_ci = b.destination_alias_key COLLATE utf8mb4_unicode_ci
+           AND an_dest.is_active = 1
+          LEFT JOIN dados_dachser.t_iata_airports ac_dest
+            ON UPPER(TRIM(ac_dest.city_name)) COLLATE utf8mb4_unicode_ci = b.destination_alias_key COLLATE utf8mb4_unicode_ci
+           AND ac_dest.is_active = 1
+        ),
+        eventos_raw AS (
+          SELECT b.awb, b.hawb, jt.ordem, TRIM(COALESCE(jt.location, '')) AS location_raw
+          FROM base_resolvida b
+          JOIN JSON_TABLE(
+            b.timeline_json,
+            '$[*]' COLUMNS (ordem FOR ORDINALITY, location VARCHAR(255) PATH '$.location')
+          ) jt
+          WHERE jt.location IS NOT NULL AND TRIM(jt.location) <> ''
+        ),
+        eventos_parse AS (
+          SELECT
+            e.awb, e.hawb, e.ordem, e.location_raw,
+            CASE
+              WHEN e.location_raw REGEXP '\\\\([A-Za-z]{3}\\\\)'
+                THEN UPPER(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(e.location_raw, '(', -1), ')', 1)))
+              WHEN e.location_raw REGEXP '^[A-Za-z]{3}$' THEN UPPER(TRIM(e.location_raw))
+              ELSE NULL
+            END COLLATE utf8mb4_unicode_ci AS location_candidate_code,
+            UPPER(TRIM(e.location_raw)) COLLATE utf8mb4_unicode_ci AS location_alias_key
+          FROM eventos_raw e
+        ),
+        eventos_resolvidos AS (
+          SELECT
+            e.awb, e.hawb, e.ordem,
+            COALESCE(ai.iata_code, an.iata_code, ac.iata_code) AS location_code
+          FROM eventos_parse e
+          LEFT JOIN dados_dachser.t_iata_airports ai
+            ON ai.iata_code COLLATE utf8mb4_unicode_ci = e.location_candidate_code COLLATE utf8mb4_unicode_ci
+           AND ai.is_active = 1
+          LEFT JOIN dados_dachser.t_iata_airports an
+            ON UPPER(TRIM(an.airport_name)) COLLATE utf8mb4_unicode_ci = e.location_alias_key COLLATE utf8mb4_unicode_ci
+           AND an.is_active = 1
+          LEFT JOIN dados_dachser.t_iata_airports ac
+            ON UPPER(TRIM(ac.city_name)) COLLATE utf8mb4_unicode_ci = e.location_alias_key COLLATE utf8mb4_unicode_ci
+           AND ac.is_active = 1
+        ),
+        eventos_validos AS (
+          SELECT awb, hawb, ordem, location_code FROM eventos_resolvidos
+          WHERE location_code IS NOT NULL AND TRIM(location_code) <> ''
+        ),
+        eventos_sem_repeticao_consecutiva AS (
+          SELECT e.awb, e.hawb, e.ordem, e.location_code,
+            LAG(e.location_code) OVER (PARTITION BY e.awb, e.hawb ORDER BY e.ordem) AS prev_location_code
+          FROM eventos_validos e
+        ),
+        rota_timeline_limpa AS (
+          SELECT awb, hawb, ordem, location_code FROM eventos_sem_repeticao_consecutiva
+          WHERE prev_location_code IS NULL
+             OR location_code COLLATE utf8mb4_unicode_ci <> prev_location_code COLLATE utf8mb4_unicode_ci
+        ),
+        timeline_stats AS (
+          SELECT awb, hawb, COUNT(*) AS qtd_pontos_timeline,
+            COUNT(DISTINCT location_code) AS qtd_distintos_timeline
+          FROM rota_timeline_limpa GROUP BY awb, hawb
+        ),
+        primeiro_ultimo_timeline AS (
+          SELECT x.awb, x.hawb,
+            MAX(CASE WHEN x.rn_asc = 1 THEN x.location_code END) AS first_timeline_code,
+            MAX(CASE WHEN x.rn_desc = 1 THEN x.location_code END) AS last_timeline_code
+          FROM (
+            SELECT r.awb, r.hawb, r.location_code,
+              ROW_NUMBER() OVER (PARTITION BY r.awb, r.hawb ORDER BY r.ordem ASC) AS rn_asc,
+              ROW_NUMBER() OVER (PARTITION BY r.awb, r.hawb ORDER BY r.ordem DESC) AS rn_desc
+            FROM rota_timeline_limpa r
+          ) x
+          GROUP BY x.awb, x.hawb
+        ),
+        rota_base_final AS (
+          SELECT b.awb, b.hawb,
+            CASE
+              WHEN b.origin_code IS NOT NULL THEN b.origin_code
+              WHEN b.origin_code IS NULL AND b.destination_code IS NULL
+               AND ts.qtd_distintos_timeline >= 2
+               AND p.first_timeline_code IS NOT NULL AND p.last_timeline_code IS NOT NULL
+               AND p.first_timeline_code COLLATE utf8mb4_unicode_ci <> p.last_timeline_code COLLATE utf8mb4_unicode_ci
+              THEN p.first_timeline_code
+              ELSE NULL
+            END AS origin_final,
+            CASE
+              WHEN b.destination_code IS NOT NULL THEN b.destination_code
+              WHEN b.origin_code IS NULL AND b.destination_code IS NULL
+               AND ts.qtd_distintos_timeline >= 2
+               AND p.first_timeline_code IS NOT NULL AND p.last_timeline_code IS NOT NULL
+               AND p.first_timeline_code COLLATE utf8mb4_unicode_ci <> p.last_timeline_code COLLATE utf8mb4_unicode_ci
+              THEN p.last_timeline_code
+              ELSE NULL
+            END AS destination_final,
+            ts.qtd_pontos_timeline, ts.qtd_distintos_timeline,
+            p.first_timeline_code, p.last_timeline_code
+          FROM base_resolvida b
+          LEFT JOIN timeline_stats ts ON ts.awb = b.awb AND ts.hawb = b.hawb
+          LEFT JOIN primeiro_ultimo_timeline p ON p.awb = b.awb AND p.hawb = b.hawb
+        ),
+        conexoes_intermediarias AS (
+          SELECT r.awb, r.hawb,
+            GROUP_CONCAT(r.location_code ORDER BY r.ordem SEPARATOR ',') AS conexoes
+          FROM rota_timeline_limpa r
+          INNER JOIN rota_base_final f ON f.awb = r.awb AND f.hawb = r.hawb
+          WHERE (f.origin_final IS NULL OR r.location_code COLLATE utf8mb4_unicode_ci <> f.origin_final COLLATE utf8mb4_unicode_ci)
+            AND (f.destination_final IS NULL OR r.location_code COLLATE utf8mb4_unicode_ci <> f.destination_final COLLATE utf8mb4_unicode_ci)
+          GROUP BY r.awb, r.hawb
+        )
+        SELECT
+          f.awb AS AWB, f.hawb AS HAWB,
+          f.origin_final AS ORIGEM_FINAL,
+          f.destination_final AS DESTINO_FINAL,
+          ci.conexoes AS CONEXOES,
+          CASE
+            WHEN f.origin_final IS NULL AND f.destination_final IS NULL THEN 'SEM_ORIGEM_DESTINO_CONFIAVEIS'
+            WHEN f.origin_final IS NULL OR f.destination_final IS NULL THEN 'ROTA_INCOMPLETA'
+            WHEN f.origin_final COLLATE utf8mb4_unicode_ci = f.destination_final COLLATE utf8mb4_unicode_ci THEN 'ORIGEM_DESTINO_IGUAIS'
+            WHEN f.qtd_distintos_timeline = 1 THEN 'TIMELINE_COM_APENAS_UM_PONTO'
+            WHEN f.qtd_distintos_timeline >= 2
+             AND f.first_timeline_code IS NOT NULL AND f.last_timeline_code IS NOT NULL
+             AND f.first_timeline_code COLLATE utf8mb4_unicode_ci = f.last_timeline_code COLLATE utf8mb4_unicode_ci
+            THEN 'TIMELINE_INCONSISTENTE'
+            ELSE 'OK'
+          END AS STATUS_ROTA
+        FROM rota_base_final f
+        LEFT JOIN conexoes_intermediarias ci ON ci.awb = f.awb AND ci.hawb = f.hawb
+      `;
+      console.log("[ROUTE] Executing authoritative route query...");
+      const routeRows = await queryWithRetry(client, routeSql);
+      console.log(`[ROUTE] Returned ${routeRows?.length || 0} records`);
+      for (const rr of routeRows || []) {
+        const key = `${rr.AWB || ""}|${rr.HAWB || ""}`;
+        routeMap[key] = {
+          origin: rr.ORIGEM_FINAL || null,
+          destination: rr.DESTINO_FINAL || null,
+          conexoes: rr.CONEXOES || null,
+          status: rr.STATUS_ROTA || "",
+        };
+      }
+      routeCache = { at: Date.now(), data: routeMap };
+    } catch (err) {
+      console.warn("[ROUTE] Could not load route map:", err);
+      if (routeCache) {
+        routeMap = routeCache.data;
+        console.warn(`[ROUTE] Falling back to stale route cache (${Object.keys(routeMap).length} records)`);
+      }
+    }
+
     await client.close();
     client = null;
 
@@ -1092,14 +1319,26 @@ serve(async (req) => {
       }
 
 
+      // Override origin/destination/conexao with authoritative route map
+      // (CTE com t_iata_airports + fallback de timeline). Mantém fallback para
+      // valores brutos / extração JS quando a CTE não retornou nada.
+      const routeKey = `${row.AWB || ""}|${row.HAWB || ""}`;
+      const routeEntry = routeMap[routeKey];
+      const finalOrigin = routeEntry?.origin || row.ORIGEM || "";
+      const finalDestination = routeEntry?.destination || row.DESTINO || "";
+      const finalConexao = routeEntry
+        ? (routeEntry.conexoes || null)
+        : conexao;
+
       const normalized = {
         awb_number: row.AWB || "",
         hawb_number: row.HAWB || "",
         consignee_nome: row.CLIENTE || clienteMap[row.HAWB] || "",
         clerk: row.ANALISTA || "",
-        origin: row.ORIGEM || "",
-        destination: row.DESTINO || "",
-        conexao,
+        origin: finalOrigin,
+        destination: finalDestination,
+        conexao: finalConexao,
+        route_status: routeEntry?.status || null,
         timeline_json: timeline,
         last_event: finalCode || "",
         last_event_description: getEventDesc(finalCode),
