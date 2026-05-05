@@ -1056,7 +1056,7 @@ export const PagamentosTab = () => {
               <tr>
                 <th className="p-3 text-left">
                   <Checkbox
-                    checked={selectedIds.size === pagamentos.length && pagamentos.length > 0}
+                    checked={paginatedPagamentos.length > 0 && paginatedPagamentos.every(p => selectedIds.has(p.id))}
                     onCheckedChange={handleSelectAll}
                   />
                 </th>
