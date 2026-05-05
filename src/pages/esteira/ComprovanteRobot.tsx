@@ -143,30 +143,22 @@ export default function ComprovanteRobot() {
     setIdentifying(true);
     setProgress(0);
 
-    let identified = 0;
     const totalFiles = files.length;
+    let identified = 0;
+    const CONCURRENCY = 5;
+    const MAX_CANDIDATES_PER_KIND = 6;
 
-    for (let i = 0; i < files.length; i++) {
-      const fileMatch = files[i];
-      
+    const identifyOne = async (fileMatch: typeof files[number], i: number) => {
       setFiles((prev) =>
-        prev.map((f, idx) =>
-          idx === i ? { ...f, status: "identifying" } : f
-        )
+        prev.map((f, idx) => (idx === i ? { ...f, status: "identifying" } : f))
       );
 
       try {
-        // Convert file to base64 for PDF analysis
         const base64 = await fileToBase64(fileMatch.file);
 
-        // Call edge function to parse the comprovante
         const { data, error } = await supabase.functions.invoke("parse-comprovante-pdf", {
-          body: {
-            pdfBase64: base64,
-            fileName: fileMatch.fileName,
-          },
+          body: { pdfBase64: base64, fileName: fileMatch.fileName },
         });
-
         if (error) throw error;
 
         const extractedData = data?.data;
@@ -174,7 +166,6 @@ export default function ComprovanteRobot() {
         const tried: string[] = [];
         let matchedCandidate: string | undefined;
 
-        // Helper: tenta um candidato como SPO; se nada, como ND
         const tryCandidate = async (candidate: string, kind: "spo" | "nd"): Promise<VoucherMatch | null> => {
           tried.push(`${kind.toUpperCase()}:${candidate}`);
           const action = kind === "spo" ? "find_voucher_by_spo" : "find_voucher_by_nd";
@@ -188,35 +179,32 @@ export default function ComprovanteRobot() {
           return null;
         };
 
-        // 1) Tentativa primária: SPO principal
         if (!foundVoucher && extractedData?.numeroSPO) {
           foundVoucher = await tryCandidate(extractedData.numeroSPO, "spo");
           if (foundVoucher) matchedCandidate = `SPO:${extractedData.numeroSPO}`;
         }
-
-        // 2) Tentativa primária: ND principal
         if (!foundVoucher && extractedData?.numeroND) {
           foundVoucher = await tryCandidate(extractedData.numeroND, "nd");
           if (foundVoucher) matchedCandidate = `ND:${extractedData.numeroND}`;
         }
-
-        // 3) Linha digitável (busca via ND, que agora cobre linha_digitavel/codigo_barras)
         if (!foundVoucher && extractedData?.linhaDigitavel) {
           foundVoucher = await tryCandidate(extractedData.linhaDigitavel, "nd");
           if (foundVoucher) matchedCandidate = `LINHA:${extractedData.linhaDigitavel}`;
         }
 
-        // 4) Iterar candidatos múltiplos (ND tem prioridade — é mais específico)
-        const ndCandidates: string[] = (extractedData?.candidatosND || [])
-          .filter((c: string) => c && c !== extractedData?.numeroND);
+        // Limitar a top N candidatos (parser já ordena por score)
+        const ndCandidates: string[] = ((extractedData?.candidatosND || []) as string[])
+          .filter((c) => c && c !== extractedData?.numeroND)
+          .slice(0, MAX_CANDIDATES_PER_KIND);
         for (const cand of ndCandidates) {
           if (foundVoucher) break;
           foundVoucher = await tryCandidate(cand, "nd");
           if (foundVoucher) matchedCandidate = `ND:${cand}`;
         }
 
-        const spoCandidates: string[] = (extractedData?.candidatosSPO || [])
-          .filter((c: string) => c && c !== extractedData?.numeroSPO);
+        const spoCandidates: string[] = ((extractedData?.candidatosSPO || []) as string[])
+          .filter((c) => c && c !== extractedData?.numeroSPO)
+          .slice(0, MAX_CANDIDATES_PER_KIND);
         for (const cand of spoCandidates) {
           if (foundVoucher) break;
           foundVoucher = await tryCandidate(cand, "spo");
@@ -254,14 +242,20 @@ export default function ComprovanteRobot() {
               : f
           )
         );
+      } finally {
+        identified++;
+        setProgress((identified / totalFiles) * 100);
       }
+    };
 
-      identified++;
-      setProgress((identified / totalFiles) * 100);
+    // Processar em batches paralelos com concorrência limitada
+    for (let start = 0; start < files.length; start += CONCURRENCY) {
+      const batch = files.slice(start, start + CONCURRENCY).map((fm, k) => identifyOne(fm, start + k));
+      await Promise.all(batch);
     }
 
     setIdentifying(false);
-    
+
     const identifiedCount = files.filter(f => f.status === "identified").length;
     toast({
       title: "Identificação concluída",
