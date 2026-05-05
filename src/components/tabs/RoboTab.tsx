@@ -419,10 +419,15 @@ export function RoboTab() {
 
   const getStatusBadge = (fileMatch: FileMatch) => {
     if (!fileMatch.numeroSPO) {
-      return <Badge className="bg-destructive text-destructive-foreground">SPO não identificado</Badge>;
+      return <Badge className="bg-destructive text-destructive-foreground">Voucher não identificado</Badge>;
     }
     if (!fileMatch.voucherId) {
-      return <Badge variant="secondary">Voucher não encontrado</Badge>;
+      return (
+        <div className="flex items-center gap-1 flex-wrap">
+          <Badge variant="secondary">Voucher não encontrado</Badge>
+          <Badge variant="outline" className="font-mono">{fileMatch.numeroSPO}</Badge>
+        </div>
+      );
     }
     if (fileMatch.isMaster || fileMatch.matchedViaChild) {
       return (
@@ -435,7 +440,7 @@ export function RoboTab() {
         </div>
       );
     }
-    return <Badge className="bg-primary text-primary-foreground">SPO {fileMatch.numeroSPO}</Badge>;
+    return <Badge className="bg-primary text-primary-foreground">{fileMatch.numeroSPO}</Badge>;
   };
 
   const canProcess = files.length > 0 && files.some((f) => f.voucherId && f.status === "pending");
