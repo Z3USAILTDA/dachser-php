@@ -491,73 +491,97 @@ export const PagamentosTab = () => {
   };
 
   const handleVoltarOperacional = async () => {
-    if (!voltarOperacionalVoucher || voltarOperacionalJustificativa.trim().length < 10) return;
+    if (voltarOperacionalJustificativa.trim().length < 10) return;
+    const isBatch = voltarBatchVouchers.length > 0;
+    const targets: PagamentoItem[] = isBatch
+      ? voltarBatchVouchers
+      : (voltarOperacionalVoucher ? [voltarOperacionalVoucher] : []);
+    if (targets.length === 0) return;
+
     setVoltarOperacionalLoading(true);
-    try {
-      // 1. Update etapa_atual to AJUSTE stage and persist requester marker in ajuste field
-      const isFiscal = voltarDestinoEtapa === "FISCAL";
-      const novaEtapa = isFiscal ? "AJUSTE_FISCAL" : "AJUSTE_OPERACAO";
-      const justificativaComMarcador = buildAjusteWithRequester(
-        "FINANCEIRO",
-        voltarOperacionalJustificativa.trim()
-      );
-      const updatePayload: Record<string, unknown> = {
-        action: "update_voucher_esteira",
-        voucher_id: voltarOperacionalVoucher.id,
-        etapa_atual: novaEtapa,
-      };
-      if (isFiscal) {
-        updatePayload.ajuste_fiscal = justificativaComMarcador;
-      } else {
-        updatePayload.ajuste_operacao = justificativaComMarcador;
-      }
-      const { error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: updatePayload,
-      });
-      if (error) throw error;
+    const isFiscal = voltarDestinoEtapa === "FISCAL";
+    const novaEtapa = isFiscal ? "AJUSTE_FISCAL" : "AJUSTE_OPERACAO";
+    const justificativaComMarcador = buildAjusteWithRequester(
+      "FINANCEIRO",
+      voltarOperacionalJustificativa.trim()
+    );
+    const logAcao = isFiscal ? "RETORNO_AJUSTE_FISCAL" : "RETORNO_AJUSTE_OPERACIONAL";
+    const logLabel = isFiscal ? "Ajuste Fiscal" : "Ajuste Operacional";
+    let sucesso = 0;
+    let falha = 0;
 
-      // 2. Log the action
-      const logAcao = isFiscal ? "RETORNO_AJUSTE_FISCAL" : "RETORNO_AJUSTE_OPERACIONAL";
-      const logLabel = isFiscal ? "Ajuste Fiscal" : "Ajuste Operacional";
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "save_voucher_log",
-          voucher_id: voltarOperacionalVoucher.id,
-          acao: logAcao,
-          detalhe: `Voucher retornado para ${logLabel} (solicitado por FINANCEIRO via tela de Pagamentos). Justificativa: ${voltarOperacionalJustificativa.trim()}`
+    for (const v of targets) {
+      try {
+        const updatePayload: Record<string, unknown> = {
+          action: "update_voucher_esteira",
+          voucher_id: v.id,
+          etapa_atual: novaEtapa,
+        };
+        if (isFiscal) {
+          updatePayload.ajuste_fiscal = justificativaComMarcador;
+        } else {
+          updatePayload.ajuste_operacao = justificativaComMarcador;
         }
-      });
+        const { error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: updatePayload,
+        });
+        if (error) throw error;
 
-      // Notificar responsável da etapa anterior
-      await sendVoucherReturnNotification({
-        voucher: {
-          id: voltarOperacionalVoucher.id,
-          numeroSPO: voltarOperacionalVoucher.numero_spo,
-          fornecedor: voltarOperacionalVoucher.fornecedor,
-          valor: voltarOperacionalVoucher.valor,
-          moeda: voltarOperacionalVoucher.moeda,
-          vencimento: voltarOperacionalVoucher.vencimento,
-        } as any,
-        fromStage: "FINANCEIRO",
-        toStage: novaEtapa as "AJUSTE_OPERACAO" | "AJUSTE_FISCAL",
-        reason: voltarOperacionalJustificativa.trim(),
-      });
+        await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "save_voucher_log",
+            voucher_id: v.id,
+            acao: logAcao,
+            detalhe: `Voucher retornado para ${logLabel} (solicitado por FINANCEIRO via tela de Pagamentos). Justificativa: ${voltarOperacionalJustificativa.trim()}`
+          }
+        });
 
-      toast({ title: `Voucher retornado para ${logLabel} com sucesso` });
-      setVoltarOperacionalDialogOpen(false);
-      setVoltarOperacionalJustificativa("");
-      setVoltarOperacionalVoucher(null);
-      setVoltarDestinoEtapa("OPERACAO");
-      loadPagamentos();
-    } catch (error: unknown) {
-      toast({
-        title: "Erro ao retornar voucher",
-        description: error instanceof Error ? error.message : "Erro desconhecido",
-        variant: "destructive"
-      });
-    } finally {
-      setVoltarOperacionalLoading(false);
+        await sendVoucherReturnNotification({
+          voucher: {
+            id: v.id,
+            numeroSPO: v.numero_spo,
+            fornecedor: v.fornecedor,
+            valor: v.valor,
+            moeda: v.moeda,
+            vencimento: v.vencimento,
+          } as any,
+          fromStage: "FINANCEIRO",
+          toStage: novaEtapa as "AJUSTE_OPERACAO" | "AJUSTE_FISCAL",
+          reason: voltarOperacionalJustificativa.trim(),
+        });
+        sucesso++;
+      } catch (e) {
+        console.error("Erro ao retornar voucher", v.id, e);
+        falha++;
+      }
     }
+
+    if (isBatch) {
+      toast({
+        title: `Retorno em lote para ${logLabel}`,
+        description: `${sucesso} retornado(s)${falha > 0 ? `, ${falha} falha(s)` : ""}`,
+        variant: falha > 0 && sucesso === 0 ? "destructive" : "default",
+      });
+      setSelectedIds(new Set());
+    } else {
+      if (falha > 0) {
+        toast({
+          title: "Erro ao retornar voucher",
+          description: "Não foi possível retornar o voucher",
+          variant: "destructive"
+        });
+      } else {
+        toast({ title: `Voucher retornado para ${logLabel} com sucesso` });
+      }
+    }
+
+    setVoltarOperacionalDialogOpen(false);
+    setVoltarOperacionalJustificativa("");
+    setVoltarOperacionalVoucher(null);
+    setVoltarBatchVouchers([]);
+    setVoltarDestinoEtapa("OPERACAO");
+    setVoltarOperacionalLoading(false);
+    loadPagamentos();
   };
 
   const formatCurrency = (value: number, moeda = "BRL") => {
