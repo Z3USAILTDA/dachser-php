@@ -10182,9 +10182,10 @@ Deno.serve(async (req) => {
 
         const offset = (page - 1) * perPage;
         // Filtrar apenas FINANCEIRO para manter a mesma contagem da aba Processos, e excluir modal ADM
+        // Usa NOT EXISTS para evitar JOIN que duplica linhas e força DISTINCT (perf)
         const conditions: string[] = [
           "v.etapa_atual IN ('FINANCEIRO', 'ROBO')",
-          "(dfv.modal IS NULL OR dfv.modal <> 'ADM')",
+          "NOT EXISTS (SELECT 1 FROM dados_dachser.t_dados_financeiro_voucher dfv2 WHERE dfv2.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci AND dfv2.modal = 'ADM')",
           "v.sync_status = 'ATIVO'",
           "(v.voucher_master_id IS NULL OR v.voucher_master_id = '')"
         ];
