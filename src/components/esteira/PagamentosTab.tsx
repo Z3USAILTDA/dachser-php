@@ -1082,7 +1082,7 @@ export const PagamentosTab = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {sortedPagamentos.map((pag) => {
+              {paginatedPagamentos.map((pag) => {
                 const vencido = isVencido(pag.vencimento);
                 const hoje = isHoje(pag.vencimento);
                 
