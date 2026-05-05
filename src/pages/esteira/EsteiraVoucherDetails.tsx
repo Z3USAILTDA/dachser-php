@@ -20,6 +20,8 @@ import { VoucherFinanceiroActions } from "@/components/esteira/VoucherFinanceiro
 import { VoucherRoboActions } from "@/components/esteira/VoucherRoboActions";
 import { VoucherRascunhoActions } from "@/components/esteira/VoucherRascunhoActions";
 import { DadosPagamentoPanel } from "@/components/esteira/DadosPagamentoPanel";
+import { VoucherDivergenceAlert } from "@/components/esteira/VoucherDivergenceAlert";
+import { detectVoucherEtapaDivergence, getSpoBase } from "@/utils/voucherDivergence";
 import { parseDBDate } from "@/utils/timezone";
 
 const EsteiraVoucherDetails = () => {
