@@ -30,8 +30,30 @@ const EsteiraVoucherDetails = () => {
   const { toast } = useToast();
   const { role, isAdmin, hasRole, hasEsteiraAccess } = useUserRole();
   const [voucher, setVoucher] = useState<Voucher | null>(null);
+  const [siblings, setSiblings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Load sibling vouchers (same SPO base) to enrich divergence context
+  useEffect(() => {
+    if (!voucher) return;
+    const base = getSpoBase(voucher.numeroSPO);
+    if (!base) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "find_voucher_by_nd", numero_nd: base },
+        });
+        if (!cancelled && data?.vouchers) setSiblings(data.vouchers);
+      } catch {
+        /* silent */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [voucher?.id, voucher?.numeroSPO]);
 
   const loadVoucher = async () => {
     if (!id) return;
