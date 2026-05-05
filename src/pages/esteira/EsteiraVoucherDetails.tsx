@@ -397,23 +397,16 @@ const EsteiraVoucherDetails = () => {
               </Card>
             )}
 
-            {/* Divergence alert: voucher is in an etapa incompatible with its attributes and user has no actions */}
+            {/* Aviso de divergência: sempre exibido quando detectado, sem travar as ações da etapa */}
             {(() => {
               const divergence = detectVoucherEtapaDivergence(voucher, siblings);
-              const noActionsAvailable =
-                !canShowRascunhoActions() &&
-                !canShowOperacaoActions() &&
-                !canShowFiscalActions() &&
-                !canShowSupervisorActions() &&
-                !canShowFinanceiroActions() &&
-                !canShowRoboActions();
               const canAct =
                 hasRole("OPERACAO") || hasRole("GESTOR_OPERACAO") ||
                 hasRole("FISCAL") || hasRole("GESTOR_FISCAL") ||
                 hasRole("SUPERVISOR") || hasRole("GESTOR_SUPERVISOR") ||
                 hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO") ||
                 hasRole("ADMIN");
-              if (!divergence.divergent || !noActionsAvailable || !canAct) return null;
+              if (!divergence.divergent || !canAct) return null;
               return (
                 <VoucherDivergenceAlert
                   voucher={voucher}
