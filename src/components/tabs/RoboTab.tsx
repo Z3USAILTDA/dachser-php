@@ -542,7 +542,7 @@ export function RoboTab() {
                       {fileMatch.isEditingSpo && fileMatch.status === "pending" && (
                         <div className="flex items-center gap-2 mt-2">
                           <Input
-                            placeholder="Digite o SPO"
+                            placeholder="SPO ou ND"
                             value={fileMatch.manualSpoInput || ""}
                             onChange={(e) => handleUpdateManualSpo(index, e.target.value)}
                             className="h-8 w-32 text-sm"
