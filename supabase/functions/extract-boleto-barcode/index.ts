@@ -328,52 +328,78 @@ serve(async (req) => {
 
     console.log(`[extract-boleto] Processing ${mediaType} (${base64Data.length} chars)...`);
 
+    // Helpers para detectar tipo e validar
+    const detectTipo = (clean: string): 'BANCARIO' | 'ARRECADACAO' | null => {
+      if (clean.length === 48 && clean[0] === '8') return 'ARRECADACAO';
+      if (clean.length === 47 && clean[0] !== '8') return 'BANCARIO';
+      // ambíguos: 47 começando com 8 → arrecadação truncada (re-pedir como arrecadação)
+      if (clean.length === 47 && clean[0] === '8') return 'ARRECADACAO';
+      // 48 não começando com 8 → bancário com dígito a mais
+      if (clean.length === 48) return 'BANCARIO';
+      if (clean.length >= 40) return clean[0] === '8' ? 'ARRECADACAO' : 'BANCARIO';
+      return null;
+    };
+
+    const validateByTipo = (clean: string, tipo: 'BANCARIO' | 'ARRECADACAO'): ValidationResult | null => {
+      if (tipo === 'BANCARIO' && clean.length === 47) return validateLinhaDigitavel(clean);
+      if (tipo === 'ARRECADACAO' && clean.length === 48) return validateLinhaDigitavelArrecadacao(clean);
+      return null;
+    };
+
     // --- Attempt 1 ---
     const rawResponse1 = await callClaude(anthropicApiKey, mediaType, base64Data, EXTRACTION_PROMPT);
     console.log('[extract-boleto] Attempt 1 raw:', rawResponse1);
-    
+
     let cleanBarcode = parseExtractionResponse(rawResponse1);
     console.log(`[extract-boleto] Attempt 1 clean: ${cleanBarcode} (${cleanBarcode.length} digits)`);
 
-    let validation: ValidationResult | null = null;
-    let validated = false;
+    let tipo = detectTipo(cleanBarcode) || 'BANCARIO';
+    let validation: ValidationResult | null = validateByTipo(cleanBarcode, tipo);
+    let validated = !!validation?.valid;
     let attemptUsed = 1;
+    if (validation) console.log(`[extract-boleto] Attempt 1 validation (${tipo}): ${validated}`, validation.details);
 
-    if (cleanBarcode.length === 47) {
-      validation = validateLinhaDigitavel(cleanBarcode);
-      validated = validation.valid;
-      console.log(`[extract-boleto] Attempt 1 validation: ${validated}`, validation.details);
+    // --- Attempt 2: retry corretivo. Caso especial: 47 começando com 8 → forçar prompt de arrecadação ---
+    const needsRetry = !validated && (validation !== null || (cleanBarcode.length === 47 && cleanBarcode[0] === '8'));
+    if (needsRetry) {
+      console.log('[extract-boleto] Validation failed, retrying with corrective prompt...');
+      const retryPrompt = validation
+        ? buildRetryPrompt(validation, tipo)
+        : `O documento parece ser de ARRECADAÇÃO/CONVÊNIO (começa com 8). A leitura anterior retornou 47 dígitos, mas o formato correto tem 48 dígitos em 4 grupos de 12 (XXXXXXXXXXX-X XXXXXXXXXXX-X XXXXXXXXXXX-X XXXXXXXXXXX-X). Releia sem cortar nenhum dígito.\n\nRESPONDA:\nTIPO: ARRECADACAO\nFORMATADA: XXXXXXXXXXX-X XXXXXXXXXXX-X XXXXXXXXXXX-X XXXXXXXXXXX-X\nLIMPA: 48 dígitos`;
 
-      // --- Attempt 2 (retry) if validation failed ---
-      if (!validated) {
-        console.log('[extract-boleto] Validation failed, retrying with corrective prompt...');
-        const retryPrompt = buildRetryPrompt(validation);
-        const rawResponse2 = await callClaude(anthropicApiKey, mediaType, base64Data, retryPrompt);
-        console.log('[extract-boleto] Attempt 2 raw:', rawResponse2);
+      const rawResponse2 = await callClaude(anthropicApiKey, mediaType, base64Data, retryPrompt);
+      console.log('[extract-boleto] Attempt 2 raw:', rawResponse2);
 
-        const cleanBarcode2 = parseExtractionResponse(rawResponse2);
-        console.log(`[extract-boleto] Attempt 2 clean: ${cleanBarcode2} (${cleanBarcode2.length} digits)`);
+      const cleanBarcode2 = parseExtractionResponse(rawResponse2);
+      console.log(`[extract-boleto] Attempt 2 clean: ${cleanBarcode2} (${cleanBarcode2.length} digits)`);
 
-        if (cleanBarcode2.length === 47) {
-          const validation2 = validateLinhaDigitavel(cleanBarcode2);
-          console.log(`[extract-boleto] Attempt 2 validation: ${validation2.valid}`, validation2.details);
+      const tipo2 = detectTipo(cleanBarcode2) || tipo;
+      const validation2 = validateByTipo(cleanBarcode2, tipo2);
 
-          if (validation2.valid) {
+      if (validation2) {
+        console.log(`[extract-boleto] Attempt 2 validation (${tipo2}): ${validation2.valid}`, validation2.details);
+        if (validation2.valid) {
+          cleanBarcode = cleanBarcode2;
+          validation = validation2;
+          tipo = tipo2;
+          validated = true;
+          attemptUsed = 2;
+        } else {
+          // Use whichever has fewer errors
+          const errors1 = validation?.details.length ?? Infinity;
+          const errors2 = validation2.details.length;
+          if (errors2 < errors1) {
             cleanBarcode = cleanBarcode2;
             validation = validation2;
-            validated = true;
+            tipo = tipo2;
             attemptUsed = 2;
-          } else {
-            // Use whichever has fewer errors
-            const errors1 = validation.details.length;
-            const errors2 = validation2.details.length;
-            if (errors2 < errors1) {
-              cleanBarcode = cleanBarcode2;
-              validation = validation2;
-              attemptUsed = 2;
-            }
           }
         }
+      } else if (cleanBarcode2.length === 47 || cleanBarcode2.length === 48) {
+        // Sem validação possível mas tamanho ok — adota se a primeira não validou
+        cleanBarcode = cleanBarcode2;
+        tipo = tipo2;
+        attemptUsed = 2;
       }
     }
 
@@ -382,6 +408,7 @@ serve(async (req) => {
       const formattedBarcode = formatLinhaDigitavel(cleanBarcode);
       return new Response(JSON.stringify({
         success: true,
+        tipo,
         linhaDigitavel: cleanBarcode,
         linhaDigitavelFormatada: formattedBarcode,
         validated,
