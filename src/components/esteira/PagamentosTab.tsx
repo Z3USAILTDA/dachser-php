@@ -202,6 +202,7 @@ export const PagamentosTab = () => {
   const [voltarOperacionalJustificativa, setVoltarOperacionalJustificativa] = useState("");
   const [voltarOperacionalLoading, setVoltarOperacionalLoading] = useState(false);
   const [voltarDestinoEtapa, setVoltarDestinoEtapa] = useState<"OPERACAO" | "FISCAL">("OPERACAO");
+  const [voltarBatchVouchers, setVoltarBatchVouchers] = useState<PagamentoItem[]>([]);
 
   // Master children state
   const masterChildrenCache = useRef<Map<string, string[]>>(new Map());
