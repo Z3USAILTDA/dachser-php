@@ -602,12 +602,12 @@ export function RoboTab() {
               Padrões de Nome Aceitos
             </h4>
             <ul className="text-sm text-muted-foreground space-y-1 ml-6">
-              <li>• <code className="bg-muted px-1 rounded">101285230010206.pdf</code> - Formato concatenado (101-285230)</li>
+              <li>• <code className="bg-muted px-1 rounded">2026188294004052026.5.pdf</code> - Voucher Remessa (ND no início)</li>
+              <li>• <code className="bg-muted px-1 rounded">101-286102D26122025.35.pdf</code> - SPO Remessa</li>
+              <li>• <code className="bg-muted px-1 rounded">101-286105.pdf</code> - SPO Manual</li>
+              <li>• <code className="bg-muted px-1 rounded">OT 433-20251877370.pdf</code> - Voucher Manual</li>
               <li>• <code className="bg-muted px-1 rounded">20262478210.pdf</code> - Apenas número (SPO ou ND)</li>
-              <li>• <code className="bg-muted px-1 rounded">12345_comprovante.pdf</code> - SPO no início</li>
-              <li>• <code className="bg-muted px-1 rounded">SPO12345.pdf</code> ou <code className="bg-muted px-1 rounded">SPO-12345.pdf</code> - Com prefixo SPO</li>
-              <li>• <code className="bg-muted px-1 rounded">comprovante_12345.pdf</code> - SPO no meio/fim</li>
-              <li>• <code className="bg-muted px-1 rounded">pgto_12345.pdf</code> ou <code className="bg-muted px-1 rounded">pag-12345.pdf</code> - Variações</li>
+              <li>• <code className="bg-muted px-1 rounded">SPO12345.pdf</code> / <code className="bg-muted px-1 rounded">comprovante_12345.pdf</code> - Variações</li>
             </ul>
             <p className="text-sm text-muted-foreground mt-3 flex items-center gap-1">
               <AlertCircle className="h-3 w-3 text-warning" />
