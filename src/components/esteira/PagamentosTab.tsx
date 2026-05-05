@@ -793,8 +793,7 @@ export const PagamentosTab = () => {
             onClick={() => {
               setRefreshing(true);
               setDadosBancariosCache({});
-              setPagamentos([]);
-              loadPagamentos();
+              loadPagamentos({ silent: true });
             }}
             disabled={refreshing}
             className="rounded-full"
