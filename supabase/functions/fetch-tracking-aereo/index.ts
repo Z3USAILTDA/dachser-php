@@ -700,10 +700,16 @@ serve(async (req) => {
       conexoes: string | null; // comma-separated IATA codes
       status: string;
     }> = {};
-    if (routeCache && Date.now() - routeCache.at < ROUTE_CACHE_TTL_MS) {
+    // Always serve current cache (fresh OR stale) to avoid blowing the 2s CPU budget.
+    // Refresh happens in background via EdgeRuntime.waitUntil below when stale/missing.
+    const routeCacheStale = !routeCache || (Date.now() - routeCache.at >= ROUTE_CACHE_TTL_MS);
+    if (routeCache) {
       routeMap = routeCache.data;
-      console.log(`Reused route cache (${Object.keys(routeMap).length} records, age=${Math.round((Date.now() - routeCache.at) / 1000)}s)`);
-    } else try {
+      console.log(`[ROUTE] Using ${routeCacheStale ? "stale" : "fresh"} cache (${Object.keys(routeMap).length} records)`);
+    } else {
+      console.log("[ROUTE] Cold start — routeMap empty this poll, will populate in background");
+    }
+    if (routeCacheStale) try {
       const activeAwbsRoute = [...new Set(
         (rows || [])
           .map((r: any) => (r.AWB || "").toString().trim())
