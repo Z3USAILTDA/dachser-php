@@ -450,36 +450,37 @@ export const PagamentosTab = () => {
     }
 
     setProcessingAction(prev => ({ ...prev, [id]: true }));
+    // Update otimista imediato para feedback instantâneo
+    setPagamentos(prev => prev.map(p => p.id === id ? { ...p, is_pronto_para_robo: isReady } : p));
     try {
-      // 1. Marcar como pronto
-      const { error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "set_ready_for_robo", id, is_pronto: isReady }
-      });
-      if (error) throw error;
+      const pagamento = isReady ? pagamentos.find(p => p.id === id) : null;
 
-      // 2. Ao marcar como pronto, atualizar apenas tipo_exec na t_dados_rm (registro já existe desde entrada no FINANCEIRO)
-      if (isReady) {
-        const pagamento = pagamentos.find(p => p.id === id);
-        if (pagamento) {
-          const { error: rmError } = await supabase.functions.invoke("mariadb-proxy", {
-            body: {
-              action: "update_tipo_exec_dados_rm",
-              id_rm: pagamento.id_rm || null,
-              numero_spo: pagamento.numero_spo,
-              tipo_exec: tipoExecucao
-            }
-          });
+      // Rodar marcação + atualização do tipo_exec em PARALELO (era sequencial)
+      const [readyRes, rmRes] = await Promise.all([
+        supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "set_ready_for_robo", id, is_pronto: isReady }
+        }),
+        isReady && pagamento
+          ? supabase.functions.invoke("mariadb-proxy", {
+              body: {
+                action: "update_tipo_exec_dados_rm",
+                id_rm: pagamento.id_rm || null,
+                numero_spo: pagamento.numero_spo,
+                tipo_exec: tipoExecucao
+              }
+            })
+          : Promise.resolve({ error: null } as any),
+      ]);
 
-          if (rmError) {
-            console.error("Erro ao atualizar tipo_exec em t_dados_rm:", rmError);
-          }
-        }
+      if (readyRes.error) throw readyRes.error;
+      if (rmRes && (rmRes as any).error) {
+        console.error("Erro ao atualizar tipo_exec em t_dados_rm:", (rmRes as any).error);
       }
 
       toast({ title: isReady ? "Marcado como pronto" : "Desmarcado" });
-      // Local state update for performance
-      setPagamentos(prev => prev.map(p => p.id === id ? { ...p, is_pronto_para_robo: isReady } : p));
     } catch (error: unknown) {
+      // Rollback do update otimista em caso de erro
+      setPagamentos(prev => prev.map(p => p.id === id ? { ...p, is_pronto_para_robo: !isReady } : p));
       toast({ 
         title: "Erro ao atualizar", 
         description: error instanceof Error ? error.message : "Erro desconhecido", 
