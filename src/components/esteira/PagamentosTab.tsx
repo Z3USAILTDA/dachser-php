@@ -324,7 +324,9 @@ export const PagamentosTab = () => {
   };
 
   useEffect(() => {
-    loadPagamentos();
+    const t = setTimeout(() => loadPagamentos(), 200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterVencimento, filterStatusPagamento, filterTipoExecucao, filterFormaPagamento, filterStatusIntegracaoRm, filterFornecedorDebounced]);
 
   // Debounce do filtro de fornecedor (texto livre)
