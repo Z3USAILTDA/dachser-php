@@ -32,50 +32,42 @@ export function RoboTab() {
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const extractSPOFromFilename = (filename: string): { numero: string; formatted: string | null } | null => {
-    // Remove extension for cleaner matching
-    const nameWithoutExt = filename.replace(/\.\w+$/, '');
-    
-    // Enhanced patterns for SPO extraction — try full number FIRST
-    const patterns = [
-      /^(\d{6,})$/,                   // Pure number filename: 20262478848.pdf → full number
-      /^(\d{5,})[-_]/,                // 12345_comprovante.pdf
-      /SPO[-_]?(\d{5,})/i,            // SPO12345.pdf or SPO-12345.pdf
-      /[-_](\d{5,})\./,               // comprovante_12345.pdf
-      /(\d{5,})[-_]comprovante/i,     // 12345-comprovante.pdf
-      /comprovante[-_](\d{5,})/i,     // comprovante_12345.pdf
-      /pgto[-_]?(\d{5,})/i,           // pgto12345.pdf
-      /pag[-_]?(\d{5,})/i,            // pag_12345.pdf
-      /voucher[-_]?(\d{5,})/i,        // voucher_12345.pdf
-      /^(\d{5,})\s/,                  // "12345 alguma coisa.pdf"
-      /\s(\d{5,})\./,                 // "alguma coisa 12345.pdf"
-    ];
+  // Lê o arquivo como base64 para enviar ao parser exaustivo
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.includes(",") ? result.split(",")[1] : result;
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
 
-    // First try against name without extension (for pure number patterns)
-    for (const pattern of patterns) {
-      const match = nameWithoutExt.match(pattern);
-      if (match && match[1]) {
-        return { numero: match[1], formatted: null };
-      }
+  // Chama o parser exaustivo (mesmo usado em /fin/esteira/robot)
+  // Retorna candidatos SPO/ND ordenados por prioridade.
+  const extractCandidatesFromFile = async (
+    file: File
+  ): Promise<{ numeroSPO: string | null; numeroND: string | null; linhaDigitavel: string | null; candidatosSPO: string[]; candidatosND: string[] }> => {
+    try {
+      const base64 = await fileToBase64(file);
+      const { data, error } = await supabase.functions.invoke("parse-comprovante-pdf", {
+        body: { pdfBase64: base64, fileName: file.name },
+      });
+      if (error) throw error;
+      const d = data?.data || {};
+      return {
+        numeroSPO: d.numeroSPO || null,
+        numeroND: d.numeroND || null,
+        linhaDigitavel: d.linhaDigitavel || null,
+        candidatosSPO: Array.isArray(d.candidatosSPO) ? d.candidatosSPO : [],
+        candidatosND: Array.isArray(d.candidatosND) ? d.candidatosND : [],
+      };
+    } catch (e) {
+      console.error("[RoboTab] Erro ao extrair candidatos:", e);
+      return { numeroSPO: null, numeroND: null, linhaDigitavel: null, candidatosSPO: [], candidatosND: [] };
     }
-
-    // Fallback: try against full filename
-    for (const pattern of patterns) {
-      const match = filename.match(pattern);
-      if (match && match[1]) {
-        return { numero: match[1], formatted: null };
-      }
-    }
-
-    // Last resort: concatenated XXX-YYYYYY format (e.g., 101285230D10206 → 101-285230)
-    const concatenatedPattern = /^(\d{3})[-]?(\d{6})/;
-    const concatMatch = nameWithoutExt.match(concatenatedPattern);
-    if (concatMatch) {
-      const formatted = `${concatMatch[1]}-${concatMatch[2]}`;
-      return { numero: concatMatch[1] + concatMatch[2], formatted };
-    }
-
-    return null;
   };
 
   const searchVoucherBySPO = async (spo: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null> => {
@@ -149,54 +141,81 @@ export function RoboTab() {
   const handleFilesSelected = async (selectedFiles: File[]) => {
     if (selectedFiles.length === 0) return;
 
-    const fileMatches: FileMatch[] = await Promise.all(
-      selectedFiles.map(async (file) => {
-        const extracted = extractSPOFromFilename(file.name);
-        let match: { id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null = null;
-        let displaySPO: string | null = null;
+    const CONCURRENCY = 5;
+    const MAX_CANDIDATES_PER_KIND = 6;
 
-        if (extracted) {
-          if (extracted.formatted) {
-            match = await searchVoucher(extracted.formatted);
-            displaySPO = extracted.formatted;
-          }
-          
-          if (!match) {
-            match = await searchVoucher(extracted.numero);
-            displaySPO = extracted.formatted || extracted.numero;
-          }
+    const processOne = async (file: File): Promise<FileMatch> => {
+      const extracted = await extractCandidatesFromFile(file);
+
+      // Monta lista ordenada de tentativas (kind, value), deduplicada
+      const tries: Array<{ kind: "spo" | "nd"; value: string }> = [];
+      const seen = new Set<string>();
+      const push = (kind: "spo" | "nd", value?: string | null) => {
+        if (!value) return;
+        const key = `${kind}:${value}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        tries.push({ kind, value });
+      };
+
+      // Prioridade: ND principal → linha digitável → demais ND → SPO principal → demais SPO
+      push("nd", extracted.numeroND);
+      push("nd", extracted.linhaDigitavel);
+      for (const c of extracted.candidatosND.slice(0, MAX_CANDIDATES_PER_KIND)) push("nd", c);
+      push("spo", extracted.numeroSPO);
+      for (const c of extracted.candidatosSPO.slice(0, MAX_CANDIDATES_PER_KIND)) push("spo", c);
+
+      let match: { id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null = null;
+      let displayNumero: string | null = null;
+
+      for (const t of tries) {
+        match = t.kind === "spo" ? await searchVoucherBySPO(t.value) : await searchVoucherByND(t.value);
+        if (match) {
+          displayNumero = t.value;
+          break;
         }
+      }
 
-        return {
-          file,
-          fileName: file.name,
-          numeroSPO: displaySPO,
-          voucherId: match?.id || null,
-          masterName: match?.masterName,
-          childSpo: match?.childSpo,
-          isMaster: match?.isMaster,
-          matchedViaChild: match?.matchedViaChild,
-          status: "pending" as const,
-          manualSpoInput: "",
-          isEditingSpo: !extracted,
-        };
-      })
-    );
+      if (!displayNumero) {
+        displayNumero = extracted.numeroND || extracted.numeroSPO || null;
+      }
 
-    setFiles((prev) => [...prev, ...fileMatches]);
+      return {
+        file,
+        fileName: file.name,
+        numeroSPO: displayNumero,
+        voucherId: match?.id || null,
+        masterName: match?.masterName,
+        childSpo: match?.childSpo,
+        isMaster: match?.isMaster,
+        matchedViaChild: match?.matchedViaChild,
+        status: "pending" as const,
+        manualSpoInput: "",
+        isEditingSpo: !displayNumero,
+      };
+    };
 
     toast({
       title: "Arquivos carregados",
-      description: `${selectedFiles.length} arquivo(s) prontos para processamento`,
+      description: `Identificando ${selectedFiles.length} arquivo(s)...`,
     });
+
+    const results: FileMatch[] = new Array(selectedFiles.length);
+    for (let start = 0; start < selectedFiles.length; start += CONCURRENCY) {
+      const slice = selectedFiles.slice(start, start + CONCURRENCY);
+      const batch = await Promise.all(slice.map((f) => processOne(f)));
+      batch.forEach((r, k) => (results[start + k] = r));
+    }
+
+    setFiles((prev) => [...prev, ...results]);
   };
 
   const handleManualSpoSearch = async (index: number) => {
     const file = files[index];
     if (!file.manualSpoInput?.trim()) {
       toast({
-        title: "Informe o SPO",
-        description: "Digite o número SPO para buscar o voucher",
+        title: "Informe o número",
+        description: "Digite o SPO ou ND para buscar o voucher",
         variant: "destructive",
       });
       return;
@@ -400,10 +419,15 @@ export function RoboTab() {
 
   const getStatusBadge = (fileMatch: FileMatch) => {
     if (!fileMatch.numeroSPO) {
-      return <Badge className="bg-destructive text-destructive-foreground">SPO não identificado</Badge>;
+      return <Badge className="bg-destructive text-destructive-foreground">Voucher não identificado</Badge>;
     }
     if (!fileMatch.voucherId) {
-      return <Badge variant="secondary">Voucher não encontrado</Badge>;
+      return (
+        <div className="flex items-center gap-1 flex-wrap">
+          <Badge variant="secondary">Voucher não encontrado</Badge>
+          <Badge variant="outline" className="font-mono">{fileMatch.numeroSPO}</Badge>
+        </div>
+      );
     }
     if (fileMatch.isMaster || fileMatch.matchedViaChild) {
       return (
@@ -416,7 +440,7 @@ export function RoboTab() {
         </div>
       );
     }
-    return <Badge className="bg-primary text-primary-foreground">SPO {fileMatch.numeroSPO}</Badge>;
+    return <Badge className="bg-primary text-primary-foreground">{fileMatch.numeroSPO}</Badge>;
   };
 
   const canProcess = files.length > 0 && files.some((f) => f.voucherId && f.status === "pending");
@@ -518,7 +542,7 @@ export function RoboTab() {
                       {fileMatch.isEditingSpo && fileMatch.status === "pending" && (
                         <div className="flex items-center gap-2 mt-2">
                           <Input
-                            placeholder="Digite o SPO"
+                            placeholder="SPO ou ND"
                             value={fileMatch.manualSpoInput || ""}
                             onChange={(e) => handleUpdateManualSpo(index, e.target.value)}
                             className="h-8 w-32 text-sm"
@@ -578,12 +602,12 @@ export function RoboTab() {
               Padrões de Nome Aceitos
             </h4>
             <ul className="text-sm text-muted-foreground space-y-1 ml-6">
-              <li>• <code className="bg-muted px-1 rounded">101285230010206.pdf</code> - Formato concatenado (101-285230)</li>
+              <li>• <code className="bg-muted px-1 rounded">2026188294004052026.5.pdf</code> - Voucher Remessa (ND no início)</li>
+              <li>• <code className="bg-muted px-1 rounded">101-286102D26122025.35.pdf</code> - SPO Remessa</li>
+              <li>• <code className="bg-muted px-1 rounded">101-286105.pdf</code> - SPO Manual</li>
+              <li>• <code className="bg-muted px-1 rounded">OT 433-20251877370.pdf</code> - Voucher Manual</li>
               <li>• <code className="bg-muted px-1 rounded">20262478210.pdf</code> - Apenas número (SPO ou ND)</li>
-              <li>• <code className="bg-muted px-1 rounded">12345_comprovante.pdf</code> - SPO no início</li>
-              <li>• <code className="bg-muted px-1 rounded">SPO12345.pdf</code> ou <code className="bg-muted px-1 rounded">SPO-12345.pdf</code> - Com prefixo SPO</li>
-              <li>• <code className="bg-muted px-1 rounded">comprovante_12345.pdf</code> - SPO no meio/fim</li>
-              <li>• <code className="bg-muted px-1 rounded">pgto_12345.pdf</code> ou <code className="bg-muted px-1 rounded">pag-12345.pdf</code> - Variações</li>
+              <li>• <code className="bg-muted px-1 rounded">SPO12345.pdf</code> / <code className="bg-muted px-1 rounded">comprovante_12345.pdf</code> - Variações</li>
             </ul>
             <p className="text-sm text-muted-foreground mt-3 flex items-center gap-1">
               <AlertCircle className="h-3 w-3 text-warning" />

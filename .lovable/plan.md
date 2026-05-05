@@ -1,35 +1,47 @@
-## Problema
+Identifiquei a causa provável: a aba Robô usada em `/fin/esteira` ainda usa o componente antigo `RoboTab`, que faz um parser simples local e não usa o parser exaustivo recém-criado em `parse-comprovante-pdf`. O parser novo reconhece corretamente os dois arquivos do print:
 
-Duas operações estão lentas:
+- `2026188294004052026.5.pdf` → ND `20261882940`
+- `2026188293704052026.6.pdf` → ND `20261882937`
 
-1. **Identificar comprovantes (Robô)**: até **dezenas de segundos** para 5–10 arquivos. Loop sequencial: para cada arquivo, faz 1 chamada de parse + até 5–7 chamadas sequenciais de `find_voucher_by_*` (cada uma com cold-start de edge function + conexão MariaDB).
-2. **Marcar processo como pronto**: faz `set_ready_for_robo` e depois `update_tipo_exec_dados_rm` em sequência, dobrando a latência percebida.
+Plano de implementação:
 
-## Causa raiz
+1. Aplicar o parser exaustivo também na aba Robô principal
+   - Atualizar `src/components/tabs/RoboTab.tsx` para chamar `parse-comprovante-pdf` ao selecionar arquivos.
+   - Usar `numeroND`, `numeroSPO`, `linhaDigitavel`, `candidatosND` e `candidatosSPO` retornados pela função.
+   - Testar primeiro por ND para nomes no formato `<ND><DDMMYYYY>.<seq>.pdf`, porque nestes comprovantes o voucher real está no início do nome do arquivo.
 
-- `ComprovanteRobot.identifyFiles`: `for (let i = 0; i < files.length; i++)` aguarda cada arquivo terminar antes de iniciar o próximo. Dentro de cada arquivo, `tryCandidate` é chamado em loop também sequencial.
-- `PagamentosTab.handleSetReady`: dois `await supabase.functions.invoke` consecutivos quando são independentes.
+2. Buscar candidatos de forma mais robusta
+   - Para cada arquivo, tentar os candidatos em ordem de prioridade:
+     - ND principal extraído;
+     - linha digitável, se existir;
+     - demais candidatos ND;
+     - SPO principal extraído;
+     - demais candidatos SPO.
+   - Deduplicar candidatos para evitar chamadas repetidas.
+   - Manter limite de candidatos razoável para não trazer de volta a lentidão.
 
-## Plano
+3. Corrigir a UX da aba Robô
+   - Trocar o texto/badge de “SPO não identificado” para algo compatível com SPO/ND, como “Voucher não identificado”.
+   - Mostrar “ND 20261882940” quando o candidato extraído for ND, evitando a falsa impressão de que só procurou SPO.
+   - Ajustar o campo manual para aceitar “SPO ou ND” e buscar por ambos.
+   - Atualizar a lista de padrões aceitos para incluir exemplos reais como `2026188294004052026.5.pdf`.
 
-### 1. `src/pages/esteira/ComprovanteRobot.tsx` — paralelizar identificação
+4. Melhorar a contagem e status após identificação
+   - Garantir que o total identificado seja calculado a partir do resultado atualizado, não do estado antigo.
+   - Manter processamento em paralelo/concurrency limitada para não piorar a demora.
 
-- Substituir o loop sequencial por processamento em **paralelo com concorrência limitada (5 simultâneos)**. Isolar a lógica de cada arquivo em uma função `identifyOne(fileMatch, idx)` e disparar batches via `Promise.all`.
-- Manter `setProgress` incrementando à medida que cada promessa resolve (não por índice de loop).
-- Manter `tryCandidate` sequencial dentro de cada arquivo (curto-circuito no primeiro hit é correto), mas limitar a quantidade de candidatos testados para os **top 6 por score** (parser já ordena por prioridade) para evitar desperdício quando há muitos candidatos genéricos de baixa pontuação.
+5. Opcional, mas recomendado: otimização backend para reduzir chamadas
+   - Adicionar no `mariadb-proxy` uma ação única de busca por lote/candidatos, por exemplo `find_voucher_by_candidates`.
+   - Assim, cada arquivo chamaria o banco uma vez com todos os candidatos, em vez de várias chamadas separadas.
+   - Isso reduz a latência e também diminui a chance de falha por timeout/conexões.
 
-### 2. `src/components/esteira/PagamentosTab.tsx` — paralelizar marcar pronto
+Arquivos previstos:
 
-- Em `handleSetReady`, executar `set_ready_for_robo` e `update_tipo_exec_dados_rm` via `Promise.all` (são independentes).
-- Manter validações e o update otimista do estado local.
+- `src/components/tabs/RoboTab.tsx`
+- Possivelmente `supabase/functions/mariadb-proxy/index.ts`, se implementarmos a busca por lote.
 
-### 3. (Opcional, sem mudança de schema) Aumentar feedback visual
+Resultado esperado:
 
-- Em `identifyFiles`, mostrar contador "X de N processados" no toast/progress já existente — sem novo componente.
-
-Sem mudanças de backend, schema, memória ou em outras telas.
-
-## Resultado esperado
-
-- Identificação de 10 comprovantes: de ~30–60s para ~6–12s (5x paralelismo + corte de candidatos).
-- Marcar pronto: de ~1.5–3s para ~0.8–1.5s (uma round-trip em vez de duas).
+- Os dois arquivos do print passam a identificar automaticamente os vouchers `20261882940` e `20261882937`.
+- A aba Robô deixa de depender apenas de SPO e passa a usar a mesma inteligência SPO/ND já validada no parser novo.
+- A identificação continua rápida, sem voltar para o fluxo antigo sequencial e lento.
