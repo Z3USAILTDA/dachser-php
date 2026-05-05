@@ -270,10 +270,11 @@ export const PagamentosTab = () => {
   const { toast } = useToast();
 
   const loadReqIdRef = useRef(0);
-  const loadPagamentos = async () => {
+  const loadPagamentos = async (opts?: { silent?: boolean }) => {
     const reqId = ++loadReqIdRef.current;
+    const silent = opts?.silent === true;
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
         body: { 
           action: "list_pagamentos",
@@ -288,12 +289,10 @@ export const PagamentosTab = () => {
         }
       });
 
-      // Descarta resposta atrasada se já há requisição mais nova
       if (reqId !== loadReqIdRef.current) return;
 
       if (error) throw error;
 
-      // Deduplicate by id (defensive — backend já não duplica)
       const rawVouchers = data?.vouchers || [];
       const seen = new Set<string>();
       const uniqueVouchers = rawVouchers.filter((v: PagamentoItem) => {
@@ -312,9 +311,10 @@ export const PagamentosTab = () => {
         variant: "destructive"
       });
     } finally {
+      // Sempre liberar o botão Atualizar, mesmo se a request foi descartada
+      setRefreshing(false);
       if (reqId === loadReqIdRef.current) {
         setLoading(false);
-        setRefreshing(false);
       }
     }
   };
