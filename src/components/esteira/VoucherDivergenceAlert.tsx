@@ -101,10 +101,7 @@ export const VoucherDivergenceAlert = ({ voucher, divergence, onUpdated }: Props
   };
 
   return (
-    <Card
-      className="p-6 border border-amber-500/40 backdrop-blur-[18px]"
-      style={{ backgroundColor: "rgba(245, 158, 11, 0.06)" }}
-    >
+    <Card className="p-6 border-2 border-amber-500/60 bg-[#0a0b10]">
       <div className="flex items-start gap-4">
         <div className="rounded-full bg-amber-500/15 p-2.5">
           <AlertTriangle className="h-6 w-6 text-amber-400" />
@@ -120,7 +117,7 @@ export const VoucherDivergenceAlert = ({ voucher, divergence, onUpdated }: Props
           </div>
 
           {divergence.siblings.length > 0 && (
-            <div className="rounded-lg border border-[rgba(255,255,255,0.10)] bg-[rgba(5,6,18,0.6)] p-3">
+            <div className="rounded-lg border border-[rgba(255,255,255,0.10)] bg-[#050608] p-3">
               <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
                 Vouchers do SPO master {divergence.spoBase ?? voucher.numeroSPO}
                 {" ("}{divergence.siblings.length} no total{")"}
