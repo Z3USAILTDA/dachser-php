@@ -242,7 +242,9 @@ export const PagamentosTab = () => {
 
   const { toast } = useToast();
 
+  const loadReqIdRef = useRef(0);
   const loadPagamentos = async () => {
+    const reqId = ++loadReqIdRef.current;
     try {
       setLoading(true);
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
@@ -259,9 +261,12 @@ export const PagamentosTab = () => {
         }
       });
 
+      // Descarta resposta atrasada se já há requisição mais nova
+      if (reqId !== loadReqIdRef.current) return;
+
       if (error) throw error;
 
-      // Deduplicate by id (backend JOIN may produce duplicates)
+      // Deduplicate by id (defensive — backend já não duplica)
       const rawVouchers = data?.vouchers || [];
       const seen = new Set<string>();
       const uniqueVouchers = rawVouchers.filter((v: PagamentoItem) => {
@@ -272,6 +277,7 @@ export const PagamentosTab = () => {
       setPagamentos(uniqueVouchers);
       setStats(data?.stats || null);
     } catch (error: unknown) {
+      if (reqId !== loadReqIdRef.current) return;
       console.error("Erro ao carregar pagamentos:", error);
       toast({
         title: "Erro ao carregar pagamentos",
@@ -279,8 +285,10 @@ export const PagamentosTab = () => {
         variant: "destructive"
       });
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (reqId === loadReqIdRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
