@@ -1,42 +1,49 @@
-## Problema
+## Objetivo
 
-O SPO real no banco é **`105-292915 DIM-BY`**, mas o robô de comprovantes:
+Trocar a forma de construir a coluna **Rota** em `/air/tracking-aereo`. Em vez da lógica JS atual (extrai origem/destino/conexões de `t_fato_aereo.origin/destination` + regex sobre `description` da timeline), passar a usar a query autoritativa fornecida (resolve códigos via `t_iata_airports` e cai para a timeline quando ORIGIN/DESTINATION não resolvem).
 
-1. Recebe o arquivo `105-292915.pdf`
-2. O parser (`parse-comprovante-pdf`, regex `(\d{3})-(\d{5,7})`) descarta o prefixo de filial e extrai **apenas `"292915"`** como `numeroSPO` (score 95, alta confiança → não chama IA).
-3. Chama `find_voucher_by_spo("292915")`. O exact-match falha (real é `"105-292915 DIM-BY"`); o LIKE `%292915%` com `LIMIT 5 ORDER BY created_at DESC` pode não retornar o voucher correto se houver outros SPOs contendo `292915`, ou se o voucher ainda não existia no momento da tentativa.
+Regra solicitada:
+- `STATUS_ROTA = 'OK'` → mostrar `ROTA` (origem / conexões / destino) calculada pela query.
+- Caso contrário → consultar a timeline para preencher origem, conexões (se houver) e destino.
 
-Resultado: robô não identificou e não anexou o comprovante.
+A própria query já faz esse fallback na CTE `rota_base_final` (usa `first_timeline_code` / `last_timeline_code` quando `origin_code`/`destination_code` da `t_fato_aereo` não resolvem) e em `conexoes_intermediarias`. Portanto basta executar a query e usar `ORIGEM_FINAL`, `DESTINO_FINAL`, `CONEXOES`, `ROTA` para todos os casos exceto quando `STATUS_ROTA` indicar que a rota é totalmente inconfiável.
 
-## Correção
+## Mudanças
 
-### 1. `supabase/functions/parse-comprovante-pdf/index.ts`
+### 1. `supabase/functions/fetch-tracking-aereo/index.ts`
 
-No bloco "SPO Manual" (linha 143), além de adicionar `m[2]` (`292915`), adicionar também o par completo **`m[1]-m[2]`** (`105-292915`) como candidato com score igual ou superior, e **promovê-lo a `numeroSPO` principal** quando o nome do arquivo bater no padrão `NNN-NNNNNN`. Idem para o padrão "SPO Remessa" (linha 135).
+Adicionar um novo bloco de enrichment (espelhando o padrão do `discrepancyMap`) que:
 
-Assim o frontend tenta primeiro `find_voucher_by_spo("105-292915")`, que casa exatamente com o voucher mesmo havendo o sufixo `" DIM-BY"`.
+a. Restringe a query aos AWBs em tela (mesma técnica `awbInClause`).
+b. Executa a CTE fornecida pelo usuário (preservando exatamente as regras de resolução IATA / `t_iata_airports` / dedupe consecutivo / `JSON_TABLE` da timeline).
+c. Adiciona um pequeno cache TTL (60s) tipo `routeCache` para evitar reprocessar a cada poll.
+d. Monta um mapa `routeMap[awb|hawb] = { origin_final, destination_final, conexoes, rota, status_rota }`.
 
-### 2. `supabase/functions/mariadb-proxy/index.ts` — `find_voucher_by_spo`
+Na montagem do objeto `normalized` (linhas ~1095–1120):
 
-Tornar a busca mais robusta para SPOs que contêm sufixo livre (`" DIM-BY"`, etc.):
+- Substituir `origin: row.ORIGEM`, `destination: row.DESTINO` e o `conexao` calculado por JS pelos valores do `routeMap`:
+  - Se `routeMap` tem entrada e `status_rota === 'OK'`: usar `origin_final`, `destination_final`, `conexoes` (split por ` / ` para virar lista comparável com a UI atual, que usa `,` — manteremos `,` no payload).
+  - Se `routeMap` tem entrada com `status_rota !== 'OK'`: usar `origin_final` / `destination_final` / `conexoes` mesmo assim, pois a CTE já tentou o fallback de timeline. Apenas quando ambos forem `NULL`, cair para `row.ORIGEM` / `row.DESTINO` brutos como último recurso (preserva comportamento atual de "N/A").
+  - Adicionar campo extra opcional `route_status` no payload para depuração futura (sem impacto na UI).
 
-- Após o exact-match, **antes** do LIKE genérico `%X%`, adicionar uma busca por **prefixo exato com possível sufixo separado por espaço**:
-  ```sql
-  WHERE numero_spo = ?
-     OR numero_spo LIKE CONCAT(?, ' %')
-  ```
-  Ex: para `"105-292915"`, casa `"105-292915"` e `"105-292915 DIM-BY"` (mas não `"105-2929150"`).
+Remover a extração de conexões via regex de `description` (linhas ~973–1008) — passa a vir 100% da query.
 
-- Manter `LIMIT 5` mas ordenar priorizando match exato de prefixo sobre LIKE genérico.
+### 2. `src/pages/air/TrackingAereo.tsx`
 
-### 3. (opcional, defensivo) Fluxo no `ComprovanteRobot.tsx`
+- Em `fetchData` (linhas ~400–437): a leitura permanece igual (`item.origin`, `item.destination`, `item.conexao`); apenas garantir que `conexao` continue como string separada por `,` (manteremos o split na edge function).
+- A lógica de highlight da rota (linhas ~810–870) **não muda** — continua operando sobre `awb.origem`, `awb.destino`, `awb.conexao` agora alimentados pela query nova.
+- Nenhuma mudança em outras colunas, dedupe, SLA, status, hide rules, etc.
 
-Se `extractedData.numeroSPO` parecer ser apenas a parte numérica (sem `NNN-`), e `candidatosSPO` contiver uma versão `NNN-NNNNNN` derivada do nome do arquivo, tentar primeiro a versão com prefixo. Já fica coberto pela mudança 1, mas vale uma revisão.
+### 3. Memória
+
+Atualizar `mem://air/tracking/route-logic-and-highlighting` indicando que a fonte de origem/conexão/destino passou a ser a CTE com `t_iata_airports`, com fallback de timeline via `first/last_timeline_code`.
+
+## Não muda
+
+- Schema, migrations, RLS — nenhuma alteração.
+- Demais regras (manual overrides, discrepâncias, SLA, retenção, ground transport) — preservadas.
+- Tela: layout idêntico, só os valores de Rota ficam mais corretos.
 
 ## Resultado esperado
 
-- `105-292915.pdf` → parser extrai `numeroSPO = "105-292915"` (com `"292915"` como candidato secundário)
-- `find_voucher_by_spo("105-292915")` → exact-prefix match → retorna `"105-292915 DIM-BY"`
-- Robô identifica e anexa o comprovante automaticamente.
-
-Sem alterações em UI ou tabelas, sem migrations.
+A coluna **Rota** passa a refletir exatamente o que a query autoritativa retorna: códigos IATA validados em `t_iata_airports`, com fallback para a timeline quando o `t_fato_aereo` não tiver origem/destino confiáveis, sem inventar conexões a partir de regex frágil sobre descrições.
