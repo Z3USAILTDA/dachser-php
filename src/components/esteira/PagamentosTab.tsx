@@ -978,6 +978,23 @@ export const PagamentosTab = () => {
             <Check className="h-4 w-4 mr-2" />
             Marcar Pronto ({selectedIds.size})
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-orange-500/50 text-orange-600 hover:bg-orange-500/10 dark:text-orange-400"
+            onClick={() => {
+              if (selectedIds.size === 0) return;
+              const selected = pagamentos.filter(p => selectedIds.has(p.id));
+              setVoltarBatchVouchers(selected);
+              setVoltarOperacionalVoucher(null);
+              setVoltarDestinoEtapa("OPERACAO");
+              setVoltarOperacionalJustificativa("");
+              setVoltarOperacionalDialogOpen(true);
+            }}
+          >
+            <Undo2 className="h-4 w-4 mr-2" />
+            Retornar Voucher ({selectedIds.size})
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
             Limpar Seleção
           </Button>
