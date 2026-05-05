@@ -117,17 +117,13 @@ export const VoucherDivergenceAlert = ({ voucher, divergence, onUpdated }: Props
             <p className="text-sm text-foreground/90 leading-relaxed">
               {divergence.descricao}
             </p>
-            <p className="text-xs text-muted-foreground leading-relaxed pt-1">
-              <span className="font-medium text-amber-200/80">Causa provável:</span>{" "}
-              {divergence.causaProvavel}
-            </p>
           </div>
 
           {divergence.siblings.length > 0 && (
             <div className="rounded-lg border border-[rgba(255,255,255,0.10)] bg-[rgba(5,6,18,0.6)] p-3">
               <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
-                Contexto do SPO {divergence.spoBase ?? voucher.numeroSPO}
-                {" — "}{divergence.siblings.length} voucher(s)
+                Vouchers do SPO master {divergence.spoBase ?? voucher.numeroSPO}
+                {" ("}{divergence.siblings.length} no total{")"}
               </div>
               <ul className="space-y-1.5 text-sm">
                 {divergence.siblings.map((s) => (
@@ -148,12 +144,14 @@ export const VoucherDivergenceAlert = ({ voucher, divergence, onUpdated }: Props
                       )}
                     </div>
                     <div className="flex items-center gap-2 text-xs">
-                      <span className="text-muted-foreground">{s.cobrancaEmNomeDe}</span>
+                      <span className="text-muted-foreground">
+                        Contabilização: <span className="text-foreground/80">{s.contabilizaFiscal === "SIM" ? "Sim" : "Não"}</span>
+                      </span>
                       <span className="text-muted-foreground/60">•</span>
                       <span className="text-muted-foreground">{s.etapaAtual.replace("_", " ")}</span>
                       {s.compativelComEtapa ? (
                         <Badge className="text-[10px] bg-green-500/15 text-green-400 border-green-500/30 border">
-                          segue Fiscal
+                          correto na etapa Fiscal
                         </Badge>
                       ) : (
                         <Badge className="text-[10px] bg-red-500/15 text-red-400 border-red-500/30 border">
@@ -174,7 +172,7 @@ export const VoucherDivergenceAlert = ({ voucher, divergence, onUpdated }: Props
             <Textarea
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
-              placeholder='Ex.: "Voucher veio para o Fiscal mas a cobrança é CLIENTE — devolvendo para a Operação reavaliar o roteamento."'
+              placeholder='Ex.: "Este voucher foi marcado como Não por engano — devolvendo para a Operação corrigir."'
               rows={3}
               disabled={loading}
             />
