@@ -131,7 +131,7 @@ function extractFromFilename(fileName: string): ExtractedData {
   // ND tem tamanho variável (10–13 dígitos). Validamos a data ao final.
   // Tentamos comprimentos de ND de 13 → 10 e validamos os 8 dígitos restantes.
   // ==========================================
-  const voucherRemessaFull = nameWithoutExt.match(/^(\d{18,21})\.(\d{2})$/);
+  const voucherRemessaFull = nameWithoutExt.match(/^(\d{18,21})\.(\d{1,2})$/);
   if (voucherRemessaFull) {
     const digits = voucherRemessaFull[1];
     // Tenta ND com 13, 12, 11, 10 dígitos
