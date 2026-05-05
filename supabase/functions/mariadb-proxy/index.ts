@@ -10182,9 +10182,10 @@ Deno.serve(async (req) => {
 
         const offset = (page - 1) * perPage;
         // Filtrar apenas FINANCEIRO para manter a mesma contagem da aba Processos, e excluir modal ADM
+        // Usa NOT EXISTS para evitar JOIN que duplica linhas e força DISTINCT (perf)
         const conditions: string[] = [
           "v.etapa_atual IN ('FINANCEIRO', 'ROBO')",
-          "(dfv.modal IS NULL OR dfv.modal <> 'ADM')",
+          "NOT EXISTS (SELECT 1 FROM dados_dachser.t_dados_financeiro_voucher dfv2 WHERE dfv2.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci AND dfv2.modal = 'ADM')",
           "v.sync_status = 'ATIVO'",
           "(v.voucher_master_id IS NULL OR v.voucher_master_id = '')"
         ];
@@ -10251,18 +10252,18 @@ Deno.serve(async (req) => {
 
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-        // Count total (use DISTINCT to avoid duplicate counts from JOIN)
-        const countResult = await client.query(
-          `SELECT COUNT(DISTINCT v.id) as total FROM dados_dachser.t_vouchers v
-           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
-           ${whereClause}`,
-          params
-        );
-        const total = Number(countResult[0]?.total || 0);
+        // Run count + list + stats in parallel (sem JOIN com dfv — não usa colunas dela)
+        const countSql = `SELECT COUNT(*) as total FROM dados_dachser.t_vouchers v ${whereClause}`;
 
-        // Get paginated data with enviado_por from logs (DISTINCT to avoid duplicates)
-        const vouchers = await client.query(
-          `SELECT DISTINCT
+        const listSql = `
+          WITH page_v AS (
+            SELECT v.*
+            FROM dados_dachser.t_vouchers v
+            ${whereClause}
+            ORDER BY v.vencimento ASC, v.created_at DESC
+            LIMIT ? OFFSET ?
+          )
+          SELECT
             v.id, v.numero_spo, v.fornecedor, v.cnpj_fornecedor, v.valor, v.moeda,
             v.vencimento, v.forma_pagamento, v.tipo_documento, v.cobranca_em_nome_de,
             v.filial, v.linha_digitavel, v.codigo_barras, v.status_pagamento,
@@ -10270,52 +10271,57 @@ Deno.serve(async (req) => {
             v.status_integracao_rm, v.etapa_atual, v.status_baixa, v.created_at, v.updated_at,
             v.urgencia_tipo,
             v.is_master, v.nome_master, v.voucher_master_id,
-            (SELECT COUNT(*) FROM dados_dachser.t_voucher_anexos a 
-             WHERE a.voucher_id = v.id AND a.tipo IN ('BOLETO', 'BOLETO_INSTRUCOES')) AS has_boleto_anexo,
-            (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
-             WHERE l.voucher_id = v.id
-             AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
-                           'REENVIO_APOS_AJUSTE', 'APROVADO_URGENTE')
-             ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
-          FROM dados_dachser.t_vouchers v
-           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
-          ${whereClause}
-          GROUP BY v.id
+            COALESCE(a.has_boleto_anexo, 0) AS has_boleto_anexo,
+            l.user_name AS enviado_por_user_name
+          FROM page_v v
+          LEFT JOIN (
+            SELECT voucher_id, COUNT(*) AS has_boleto_anexo
+            FROM dados_dachser.t_voucher_anexos
+            WHERE tipo IN ('BOLETO', 'BOLETO_INSTRUCOES')
+              AND voucher_id IN (SELECT id FROM page_v)
+            GROUP BY voucher_id
+          ) a ON a.voucher_id = v.id
+          LEFT JOIN (
+            SELECT l1.voucher_id, l1.user_name
+            FROM dados_dachser.t_voucher_logs l1
+            INNER JOIN (
+              SELECT voucher_id, MAX(data_hora) AS max_dh
+              FROM dados_dachser.t_voucher_logs
+              WHERE acao IN ('ENVIADO_OPERACAO','APROVADO_FISCAL','APROVADO_SUPERVISOR','REENVIO_APOS_AJUSTE','APROVADO_URGENTE')
+                AND voucher_id IN (SELECT id FROM page_v)
+              GROUP BY voucher_id
+            ) m ON m.voucher_id = l1.voucher_id AND m.max_dh = l1.data_hora
+            WHERE l1.acao IN ('ENVIADO_OPERACAO','APROVADO_FISCAL','APROVADO_SUPERVISOR','REENVIO_APOS_AJUSTE','APROVADO_URGENTE')
+          ) l ON l.voucher_id = v.id
           ORDER BY v.vencimento ASC, v.created_at DESC
-          LIMIT ? OFFSET ?`,
-          [...params, perPage, offset]
-        );
+        `;
 
-        // Get summary stats with new cards — reflete os mesmos filtros aplicados na listagem
-        const statsResult = await client.query(
-          `SELECT 
-            COUNT(DISTINCT v.id) as total,
-            -- A Vencer (vencimento >= hoje, independente de is_pronto)
+        const statsSql = `
+          SELECT
+            COUNT(*) as total,
             SUM(CASE WHEN v.vencimento >= CURDATE() THEN 1 ELSE 0 END) as a_vencer_count,
             SUM(CASE WHEN v.vencimento >= CURDATE() THEN COALESCE(v.valor, 0) ELSE 0 END) as a_vencer_valor,
-            -- Vencidos (vencimento < hoje)
             SUM(CASE WHEN v.vencimento < CURDATE() AND (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) THEN 1 ELSE 0 END) as vencidos_count,
             SUM(CASE WHEN v.vencimento < CURDATE() AND (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) THEN COALESCE(v.valor, 0) ELSE 0 END) as vencidos_valor,
-            -- Em Remessa (não pronto, tipo execução REMESSA_10H ou REMESSA_15H)
             SUM(CASE WHEN (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) AND v.tipo_execucao_pagamento IN ('REMESSA_10H', 'REMESSA_15H') THEN 1 ELSE 0 END) as em_remessa_count,
             SUM(CASE WHEN (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) AND v.tipo_execucao_pagamento IN ('REMESSA_10H', 'REMESSA_15H') THEN COALESCE(v.valor, 0) ELSE 0 END) as em_remessa_valor,
-            -- Manual (não pronto, tipo execução MANUAL)
             SUM(CASE WHEN (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) AND v.tipo_execucao_pagamento = 'MANUAL' THEN 1 ELSE 0 END) as manual_count,
             SUM(CASE WHEN (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) AND v.tipo_execucao_pagamento = 'MANUAL' THEN COALESCE(v.valor, 0) ELSE 0 END) as manual_valor,
-            -- Prontos Em Remessa
             SUM(CASE WHEN v.is_pronto_para_robo = 1 AND v.tipo_execucao_pagamento IN ('REMESSA_10H', 'REMESSA_15H') THEN 1 ELSE 0 END) as prontos_remessa_count,
             SUM(CASE WHEN v.is_pronto_para_robo = 1 AND v.tipo_execucao_pagamento IN ('REMESSA_10H', 'REMESSA_15H') THEN COALESCE(v.valor, 0) ELSE 0 END) as prontos_remessa_valor,
-            -- Prontos Manual
             SUM(CASE WHEN v.is_pronto_para_robo = 1 AND v.tipo_execucao_pagamento = 'MANUAL' THEN 1 ELSE 0 END) as prontos_manual_count,
             SUM(CASE WHEN v.is_pronto_para_robo = 1 AND v.tipo_execucao_pagamento = 'MANUAL' THEN COALESCE(v.valor, 0) ELSE 0 END) as prontos_manual_valor,
             SUM(COALESCE(v.valor, 0)) as valor_total
-          FROM (
-            SELECT DISTINCT v.* FROM dados_dachser.t_vouchers v
-            LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
-            ${whereClause}
-          ) v`,
-          params
-        );
+          FROM dados_dachser.t_vouchers v
+          ${whereClause}
+        `;
+
+        const [countResult, vouchers, statsResult] = await Promise.all([
+          client.query(countSql, params),
+          client.query(listSql, [...params, perPage, offset]),
+          client.query(statsSql, params),
+        ]);
+        const total = Number(countResult[0]?.total || 0);
 
         result = {
           success: true,
