@@ -181,7 +181,33 @@ export const PagamentosTab = () => {
       return sortDirection === "asc" ? cmp : -cmp;
     });
   }, [pagamentos, sortField, sortDirection]);
-  
+
+  // Pagination
+  const ITEMS_PER_PAGE = 20;
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(sortedPagamentos.length / ITEMS_PER_PAGE));
+  const pageStartIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedPagamentos = useMemo(
+    () => sortedPagamentos.slice(pageStartIndex, pageStartIndex + ITEMS_PER_PAGE),
+    [sortedPagamentos, pageStartIndex]
+  );
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    filterVencimento,
+    filterStatusPagamento,
+    filterTipoExecucao,
+    filterFormaPagamento,
+    filterStatusIntegracaoRm,
+    filterFornecedorDebounced,
+    activeCardFilter,
+    sortField,
+    sortDirection,
+  ]);
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [totalPages, currentPage]);
+
   // Actions state
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [dadosBancariosCache, setDadosBancariosCache] = useState<Record<string, DadosBancarios>>({});
