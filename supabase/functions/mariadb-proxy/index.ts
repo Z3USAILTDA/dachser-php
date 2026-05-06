@@ -493,6 +493,10 @@ Deno.serve(async (req) => {
       'update_master_processo_ids','fix_master_numero_spo','export_vouchers_report',
       'get_pending_vouchers_for_report','find_voucher_by_spo','find_voucher_by_nd',
       'get_vouchers_for_comprovante','attach_comprovante_batch',
+      // Importação em lote (admin only)
+      'preview_voucher_batch_import','create_voucher_batch_import','upload_batch_document',
+      'bind_batch_document_to_voucher','unbind_batch_document','get_batch_import_status',
+      'finalize_batch_import',
       // Régua / Cobrança / Aging / Disputas
       'get_regua_counts','get_aging_overview','get_aging_by_client','get_client_cnpj_detail',
       'get_client_faturas','save_cobranca_observacao','get_budget_forecast_auto',
