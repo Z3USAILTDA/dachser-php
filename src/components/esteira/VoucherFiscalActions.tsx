@@ -430,7 +430,7 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
           </Button>
         ) : (
           <Button
-            onClick={handleAprovar}
+            onClick={handleAprovarClick}
             disabled={loading}
             className="gap-2 bg-primary hover:bg-primary/90"
           >
@@ -440,6 +440,19 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
         )}
 
       </div>
+
+      {requester && (
+        <AjusteRouteChoiceDialog
+          open={showRouteChoice}
+          onOpenChange={setShowRouteChoice}
+          requesterStage={requester}
+          normalNextStage={normalNextStage}
+          choice={routeChoice}
+          onChoiceChange={setRouteChoice}
+          onConfirm={() => handleAprovar(routeChoice)}
+          loading={loading}
+        />
+      )}
     </div>
   );
 };
