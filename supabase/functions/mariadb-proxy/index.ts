@@ -15367,7 +15367,11 @@ Deno.serve(async (req) => {
           : [];
 
         const combinedAtivos = await client.query(`
-           SELECT v.*, dfv.id_rm as dfv_id_rm, 
+           SELECT v.*, dfv.id_rm as dfv_id_rm,
+            dfv.numero_processo as dfv_numero_processo,
+            dfv.razao_social as dfv_razao_social,
+            dfv.nome_beneficiario as dfv_nome_beneficiario,
+            dfv.valor_nf as dfv_valor_nf,
             CASE 
               WHEN v.is_master = 1 THEN
                 COALESCE(
@@ -15394,7 +15398,11 @@ Deno.serve(async (req) => {
              ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
           FROM dados_dachser.t_vouchers v
           LEFT JOIN (
-            SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MAX(data_emissao) as data_emissao
+            SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MAX(data_emissao) as data_emissao,
+              MIN(numero_processo) as numero_processo,
+              MAX(razao_social) as razao_social,
+              MAX(nome_beneficiario) as nome_beneficiario,
+              MAX(valor_nf) as valor_nf
             FROM dados_dachser.t_dados_financeiro_voucher
             GROUP BY nd
           ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
