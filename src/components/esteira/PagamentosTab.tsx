@@ -62,6 +62,11 @@ import { parseDBDate, formatDateOnlyBR } from "@/utils/timezone";
 import { buildAjusteWithRequester } from "@/utils/voucherAjusteRouting";
 import { sendVoucherReturnNotification } from "@/utils/voucherReturnNotification";
 import { TablePagination } from "@/components/layout/TablePagination";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format as fnsFormat } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { CalendarIcon } from "lucide-react";
 
 interface PagamentoItem {
   id: string;
@@ -139,6 +144,8 @@ export const PagamentosTab = () => {
   const [filterStatusIntegracaoRm, setFilterStatusIntegracaoRm] = useState<string>("all");
   const [filterFornecedor, setFilterFornecedor] = useState<string>("");
   const [filterFornecedorDebounced, setFilterFornecedorDebounced] = useState<string>("");
+  const [filterDataInicio, setFilterDataInicio] = useState<Date | undefined>(undefined);
+  const [filterDataFim, setFilterDataFim] = useState<Date | undefined>(undefined);
   const [activeCardFilter, setActiveCardFilter] = useState<string | null>(null);
   
   // Selection
@@ -165,9 +172,24 @@ export const PagamentosTab = () => {
       : <ArrowDown className="h-3 w-3 ml-1" />;
   };
 
+  const dateFilteredPagamentos = useMemo(() => {
+    if (!filterDataInicio && !filterDataFim) return pagamentos;
+    const ini = filterDataInicio ? new Date(filterDataInicio) : null;
+    const fim = filterDataFim ? new Date(filterDataFim) : null;
+    if (ini) ini.setHours(0, 0, 0, 0);
+    if (fim) fim.setHours(23, 59, 59, 999);
+    return pagamentos.filter(p => {
+      const d = parseDBDate(p.vencimento);
+      if (!d) return false;
+      if (ini && d < ini) return false;
+      if (fim && d > fim) return false;
+      return true;
+    });
+  }, [pagamentos, filterDataInicio, filterDataFim]);
+
   const sortedPagamentos = useMemo(() => {
-    if (!sortField) return pagamentos;
-    return [...pagamentos].sort((a, b) => {
+    if (!sortField) return dateFilteredPagamentos;
+    return [...dateFilteredPagamentos].sort((a, b) => {
       let valA: any, valB: any;
       switch (sortField) {
         case "numero_spo": valA = a.numero_spo || ""; valB = b.numero_spo || ""; break;
@@ -181,7 +203,7 @@ export const PagamentosTab = () => {
       const cmp = typeof valA === "number" ? valA - valB : String(valA).localeCompare(String(valB), "pt-BR");
       return sortDirection === "asc" ? cmp : -cmp;
     });
-  }, [pagamentos, sortField, sortDirection]);
+  }, [dateFilteredPagamentos, sortField, sortDirection]);
 
   // Pagination
   const ITEMS_PER_PAGE = 20;
@@ -201,6 +223,8 @@ export const PagamentosTab = () => {
     filterFormaPagamento,
     filterStatusIntegracaoRm,
     filterFornecedorDebounced,
+    filterDataInicio,
+    filterDataFim,
     activeCardFilter,
     sortField,
     sortDirection,
@@ -533,12 +557,30 @@ export const PagamentosTab = () => {
   };
 
   const handleVoltarOperacional = async () => {
-    if (voltarOperacionalJustificativa.trim().length < 10) return;
+    if (voltarOperacionalJustificativa.trim().length < 10) {
+      toast({ title: "Justificativa muito curta", description: "Mínimo de 10 caracteres", variant: "destructive" });
+      return;
+    }
     const isBatch = voltarBatchVouchers.length > 0;
     const targets: PagamentoItem[] = isBatch
       ? voltarBatchVouchers
       : (voltarOperacionalVoucher ? [voltarOperacionalVoucher] : []);
-    if (targets.length === 0) return;
+    if (targets.length === 0) {
+      toast({ title: "Nenhum voucher selecionado", variant: "destructive" });
+      return;
+    }
+
+    // Filtra ids sintéticos (RM pendentes ainda não persistidos)
+    const validTargets = targets.filter(t => t.id && !String(t.id).startsWith("rm_pending_"));
+    const skipped = targets.length - validTargets.length;
+    if (validTargets.length === 0) {
+      toast({
+        title: "Vouchers ainda não persistidos",
+        description: "Os itens selecionados ainda não foram criados no sistema. Aguarde a sincronização e tente novamente.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setVoltarOperacionalLoading(true);
     const isFiscal = voltarDestinoEtapa === "FISCAL";
@@ -551,8 +593,9 @@ export const PagamentosTab = () => {
     const logLabel = isFiscal ? "Ajuste Fiscal" : "Ajuste Operacional";
     let sucesso = 0;
     let falha = 0;
+    const errosDetalhe: string[] = [];
 
-    for (const v of targets) {
+    for (const v of validTargets) {
       try {
         const updatePayload: Record<string, unknown> = {
           action: "update_voucher_esteira",
@@ -595,13 +638,14 @@ export const PagamentosTab = () => {
       } catch (e) {
         console.error("Erro ao retornar voucher", v.id, e);
         falha++;
+        errosDetalhe.push(`${v.numero_spo}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
     if (isBatch) {
       toast({
         title: `Retorno em lote para ${logLabel}`,
-        description: `${sucesso} retornado(s)${falha > 0 ? `, ${falha} falha(s)` : ""}`,
+        description: `${sucesso} retornado(s)${falha > 0 ? `, ${falha} falha(s)` : ""}${skipped > 0 ? ` — ${skipped} ignorado(s) (não persistidos)` : ""}${errosDetalhe.length > 0 ? "\n" + errosDetalhe.slice(0, 3).join(" | ") : ""}`,
         variant: falha > 0 && sucesso === 0 ? "destructive" : "default",
       });
       setSelectedIds(new Set());
@@ -609,7 +653,7 @@ export const PagamentosTab = () => {
       if (falha > 0) {
         toast({
           title: "Erro ao retornar voucher",
-          description: "Não foi possível retornar o voucher",
+          description: errosDetalhe[0] || "Não foi possível retornar o voucher",
           variant: "destructive"
         });
       } else {
@@ -746,6 +790,47 @@ export const PagamentosTab = () => {
               <SelectItem value="EM_REMESSA">Em Remessa</SelectItem>
             </SelectContent>
           </Select>
+
+          {/* Filtro por data de vencimento (calendário) */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("rounded-full gap-2", filterDataInicio && "border-primary text-primary")}>
+                <CalendarIcon className="h-4 w-4" />
+                {filterDataInicio ? fnsFormat(filterDataInicio, "dd/MM/yyyy", { locale: ptBR }) : "Venc. de"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 bg-card border-border" align="start">
+              <CalendarPicker
+                mode="single"
+                selected={filterDataInicio}
+                onSelect={setFilterDataInicio}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("rounded-full gap-2", filterDataFim && "border-primary text-primary")}>
+                <CalendarIcon className="h-4 w-4" />
+                {filterDataFim ? fnsFormat(filterDataFim, "dd/MM/yyyy", { locale: ptBR }) : "Venc. até"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 bg-card border-border" align="start">
+              <CalendarPicker
+                mode="single"
+                selected={filterDataFim}
+                onSelect={setFilterDataFim}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+          {(filterDataInicio || filterDataFim) && (
+            <Button variant="ghost" size="sm" className="rounded-full h-8" onClick={() => { setFilterDataInicio(undefined); setFilterDataFim(undefined); }}>
+              Limpar datas
+            </Button>
+          )}
 
           <Select value={filterFormaPagamento} onValueChange={setFilterFormaPagamento}>
             <SelectTrigger className="w-[140px] bg-card border-border rounded-full">

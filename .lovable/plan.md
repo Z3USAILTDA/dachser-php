@@ -1,37 +1,95 @@
-## Alteração na lógica de numeração do voucher master
+## Ajustes na Esteira do Voucher
 
-Hoje o `numero_spo` do voucher master é definido pelo filho com **menor `id_rm`** (resolvido a partir de `t_vouchers.id_rm` ou, em fallback, `t_dados_financeiro_voucher.id_rm`).
+Mudanças cirúrgicas em 6 pontos, sem refactor de estrutura.
 
-Vamos passar a usar **`idmov`** (coluna em `t_dados_financeiro_voucher`) como fonte primária de comparação, mantendo `id_rm` como fallback quando `idmov` for `NULL`.
+### 1. Relatório — Etapa "Operação" inclui também `A_PROCESSAR`
 
-### Regra nova
+**Arquivo:** `supabase/functions/mariadb-proxy/index.ts`, case `export_vouchers_report`.
 
-Para cada filho candidato, calcular uma chave de ordenação:
-- `sort_key = COALESCE(dfv.idmov, COALESCE(v.id_rm, dfv.id_rm))`
+Substituir o filtro:
+```ts
+if (etapa && etapa !== 'all') {
+  whereConditions.push('v.etapa_atual = ?');
+  params.push(etapa);
+}
+```
+por:
+```ts
+if (etapa && etapa !== 'all') {
+  if (etapa === 'OPERACAO') {
+    whereConditions.push("v.etapa_atual IN ('OPERACAO','A_PROCESSAR')");
+  } else {
+    whereConditions.push('v.etapa_atual = ?');
+    params.push(etapa);
+  }
+}
+```
+Mesmo critério já usado no grid principal (`EsteiraIndex.tsx` linha 1334-1336).
 
-O master adota o `numero_spo` do filho com **menor `sort_key`** (não nulo). Se nenhum filho tiver `sort_key`, mantém o fallback atual (primeiro filho / random `MASTER-XXXX`).
+### 2. Relatório — coluna "Criado por" usa `created_by`
 
-Importante: a comparação entre `idmov` e `id_rm` no mesmo conjunto é aceitável pois ambos são inteiros monotônicos do RM — quando `idmov` existe ele é usado, caso contrário cai para `id_rm`. Não há mistura na mesma linha.
+**Arquivos:**
+- `supabase/functions/mariadb-proxy/index.ts` (case `export_vouchers_report`): incluir LEFT JOIN com `t_dados_financeiro_voucher` agregado por `nd` igual ao do `get_vouchers_esteira`, retornando `dfv_created_by`.
+- `src/pages/esteira/EsteiraReports.tsx` (linha 102-103): mapear `criadoPorUserName: v.dfv_created_by || v.criado_por_username` para que o exporter use o `created_by` real do RM/DFV em vez do user_id.
 
-### Arquivos afetados
+A montagem do JOIN e do `dfv_created_by` segue a mesma lógica já existente em `get_vouchers_esteira` (linhas ~7095-7106).
 
-**`supabase/functions/mariadb-proxy/index.ts`** — duas seções:
+### 3. Filtro "Etapa Atual" multi-seleção (tela Processos)
 
-1. **`case 'create_voucher_master'` (~linha 12343)**
-   - Alterar a query `resolvedChildren` para fazer também LEFT JOIN com `t_dados_financeiro_voucher` trazendo `dfv.idmov`, e expor `resolved_sort_key = COALESCE(dfv.idmov, COALESCE(v.id_rm, dfv.id_rm))`.
-   - Trocar a redução `childrenWithIdRm` / `lowestChild` para usar `resolved_sort_key` em vez de `resolved_id_rm`.
-   - Ajustar logs para indicar a fonte (`idmov` vs `id_rm`).
+**Arquivos:**
+- `src/components/esteira/VoucherFilters.tsx` e `src/components/esteira/VoucherTable.tsx` (linha 443-460): trocar o `<Select>` simples por um Popover com checkboxes (padrão shadcn) — multi-seleção.
+- `src/pages/esteira/EsteiraIndex.tsx`:
+  - Trocar `etapa: "all"` por `etapa: [] as string[]` no estado `filters`.
+  - Atualizar a aplicação do filtro (linhas 1233 e 1328-1339) para considerar array vazio = todas; senão verificar `etapas.includes(vEtapa)` mantendo as expansões `OPERACAO → +A_PROCESSAR` e `FINANCEIRO → +ROBO`.
+  - Atualizar todas as referências a `filters.etapa !== "all"` (limpar filtros, badges).
 
-2. **`case 'fix_master_numero_spo'` (~linha 12739)**
-   - Mesma alteração: incluir `dfv.idmov` na subquery dos filhos e usar `COALESCE(dfv.idmov, COALESCE(v.id_rm, dfv.id_rm))` como chave de ordenação.
-   - Atualizar `details` para registrar `lowestSortKey` e `source` (`idmov` ou `id_rm`).
+Nenhuma mudança em backend.
 
-Nada mais é alterado: frontend, demais cases, RM integration e demais tabelas permanecem intactos.
+### 4. Filtro por data (calendário) na tela Pagamentos
+
+**Arquivo:** `src/components/esteira/PagamentosTab.tsx`.
+
+- Adicionar dois estados: `filterDataInicio?: Date`, `filterDataFim?: Date`.
+- Adicionar dois `Popover + Calendar` (padrão shadcn datepicker, com `pointer-events-auto`) ao lado dos filtros existentes (área ~linhas 716+).
+- Aplicar localmente no `useMemo` de `filteredPagamentos` filtrando por `pag.vencimento` (parseado com `parseDBDate`) entre as datas escolhidas.
+- Resetar paginação ao alterar (já existe `useEffect` de reset).
+
+Sem chamada nova ao backend; o filtro é client-side sobre os pagamentos já carregados.
+
+### 5. Retorno em lote na tela Pagamentos não funciona silenciosamente
+
+**Arquivo:** `src/components/esteira/PagamentosTab.tsx`, função `handleVoltarOperacional` (linhas 535-625).
+
+Diagnóstico: o loop `for...of` chama `update_voucher_esteira`. Se `voltarDestinoEtapa` ainda estiver com o valor inicial e o usuário não tiver clicado para escolher, ou se a justificativa não for validada, ele simplesmente retorna em silêncio. Além disso, em modo lote, o disparo na linha 1027-1034 define `setVoltarDestinoEtapa("OPERACAO")`, mas o select de destino dentro do dialog pode resetar.
+
+Correções:
+- Garantir que o dialog em modo lote exibe o seletor de destino (Operação/Fiscal) e que o estado é mantido.
+- Adicionar toast de erro quando nenhum target é processado (`if (targets.length === 0) { toast({ title: 'Selecione ao menos um voucher', variant: 'destructive' }); return; }`).
+- Adicionar `await Promise.all` ou manter o loop, mas mostrar toast de erro detalhado por falha (atualmente só faz `console.error`).
+- Verificar se o `voucher_id` no payload é o id real (lote pode estar enviando `pag.id` que pode ser sintético `rm_pending_*`); se for, pular com aviso ao usuário.
+
+### 6. Colunas vazias no grid Processos: processo / fornecedor / valor total / enviado por
+
+**Diagnóstico em `supabase/functions/mariadb-proxy/index.ts` (case `get_vouchers_esteira`, linhas 7090-7125):**
+
+- A subquery `dfv` agrega `MIN(numero_processo) as numero_processo`, mas o SELECT externo **não traz** essa coluna. Por isso `processoId` chega vazio quando `v.processo_id` é null.
+- O SELECT externo é `v.*` — que **não inclui** `criado_por_user_name` (a tabela `t_vouchers` só tem `criado_por_user_id`). Por isso `criadoPorUserName` no front fica undefined e o fallback de "enviado por" não funciona quando não há log.
+- `fornecedor` e `valor` vêm direto de `v.fornecedor` e `v.valor`. Para vouchers Master ou recém-vindos do RM, esses campos podem estar nulos no `t_vouchers` mas presentes em `t_dados_financeiro_voucher` / `t_dados_rm`.
+
+Correções:
+- Adicionar ao SELECT do `get_vouchers_esteira`: `dfv.numero_processo as dfv_numero_processo`, `(SELECT username FROM ai_agente.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1) AS criado_por_user_name`.
+- Incluir na subquery `dfv` também `MAX(razao_social) as fornecedor_dfv` e `MAX(valor_nf) as valor_dfv`.
+- No SELECT externo expor `dfv.fornecedor_dfv`, `dfv.valor_dfv`.
+- Em `mapVoucherFromDB` (`EsteiraIndex.tsx` linhas 736-790), aplicar fallbacks:
+  - `fornecedor: v.fornecedor || v.fornecedor_dfv`
+  - `valor: v.valor ? parseFloat(v.valor) : (v.valor_dfv ? parseFloat(v.valor_dfv) : null)`
+  - `processoId: v.processo_id || v.dfv_numero_processo || null`
+
+Nenhuma alteração de schema.
 
 ### Memória
 
-Atualizar `mem://vouchers/master-numbering-logic-v1` para refletir a nova prioridade `idmov > id_rm`.
-
-### Observação / pergunta
-
-Confirme que a coluna `idmov` está em `t_dados_financeiro_voucher` (não vi referência prévia no código). Se estiver em outra tabela, me avise para ajustar o JOIN.
+Atualizar `mem://vouchers/data-consistency-and-filtering` para refletir:
+- "Operação" no relatório engloba `OPERACAO + A_PROCESSAR`
+- Filtro de etapa no grid principal aceita multi-seleção
+- Fallbacks para fornecedor/valor/processo/criado_por usam `t_dados_financeiro_voucher` quando `t_vouchers` está vazio.

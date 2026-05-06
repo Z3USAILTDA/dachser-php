@@ -7085,7 +7085,12 @@ Deno.serve(async (req) => {
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
         
         const vouchers = await client.query(`
-           SELECT v.*, dfv.id_rm as dfv_id_rm, 
+           SELECT v.*, dfv.id_rm as dfv_id_rm,
+            dfv.numero_processo as dfv_numero_processo,
+            dfv.razao_social as dfv_razao_social,
+            dfv.nome_beneficiario as dfv_nome_beneficiario,
+            dfv.valor_nf as dfv_valor_nf,
+            (SELECT username FROM ai_agente.t_users_dachser WHERE id = v.criado_por_user_id LIMIT 1) AS criado_por_user_name,
             CASE 
               WHEN v.is_master = 1 THEN
                 COALESCE(
@@ -7115,7 +7120,10 @@ Deno.serve(async (req) => {
              SELECT nd, 
                MIN(id_rm) as id_rm, 
                 MAX(created_by) as created_by,
-                MIN(numero_processo) as numero_processo
+                MIN(numero_processo) as numero_processo,
+                MAX(razao_social) as razao_social,
+                MAX(nome_beneficiario) as nome_beneficiario,
+                MAX(valor_nf) as valor_nf
              FROM dados_dachser.t_dados_financeiro_voucher
              GROUP BY nd
            ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
@@ -11076,8 +11084,12 @@ Deno.serve(async (req) => {
         let params: (string | number)[] = [];
 
         if (etapa && etapa !== 'all') {
-          whereConditions.push('v.etapa_atual = ?');
-          params.push(etapa);
+          if (etapa === 'OPERACAO') {
+            whereConditions.push("v.etapa_atual IN ('OPERACAO','A_PROCESSAR')");
+          } else {
+            whereConditions.push('v.etapa_atual = ?');
+            params.push(etapa);
+          }
         }
 
         if (statusBaixa && statusBaixa !== 'all') {
@@ -11119,13 +11131,19 @@ Deno.serve(async (req) => {
             u_operacao.username AS responsavel_operacao_username,
             u_fiscal.username AS responsavel_fiscal_username,
             u_financeiro.username AS responsavel_financeiro_username,
-            u_supervisor.username AS responsavel_supervisor_username
+            u_supervisor.username AS responsavel_supervisor_username,
+            dfv.created_by AS dfv_created_by
           FROM dados_dachser.t_vouchers v
           LEFT JOIN ai_agente.t_users_dachser u_criado ON v.criado_por_user_id = u_criado.id
           LEFT JOIN ai_agente.t_users_dachser u_operacao ON v.responsavel_operacao_user_id = u_operacao.id
           LEFT JOIN ai_agente.t_users_dachser u_fiscal ON v.responsavel_fiscal_user_id = u_fiscal.id
           LEFT JOIN ai_agente.t_users_dachser u_financeiro ON v.responsavel_financeiro_user_id = u_financeiro.id
           LEFT JOIN ai_agente.t_users_dachser u_supervisor ON v.responsavel_supervisor_user_id = u_supervisor.id
+          LEFT JOIN (
+            SELECT nd, MAX(created_by) AS created_by
+            FROM dados_dachser.t_dados_financeiro_voucher
+            GROUP BY nd
+          ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
           ${whereClause}
           ORDER BY v.created_at DESC
           LIMIT 5000
