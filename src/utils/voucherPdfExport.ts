@@ -49,7 +49,7 @@ export const exportVouchersToPDF = (data: Voucher[]) => {
     ETAPA_LABELS[v.etapaAtual as keyof typeof ETAPA_LABELS] || v.etapaAtual,
     v.statusBaixa || "PENDENTE",
     STATUS_INTEGRACAO_RM_LABELS[v.statusIntegracaoRm as keyof typeof STATUS_INTEGRACAO_RM_LABELS] || v.statusIntegracaoRm || "-",
-    v.criadoPorUserName || "-",
+    v.criadoPorDfv || v.criadoPorUserName || "-",
     format(new Date(v.createdAt), "dd/MM/yyyy", { locale: ptBR }),
   ]);
 

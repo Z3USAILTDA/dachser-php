@@ -42,7 +42,7 @@ export const exportVouchersToExcel = (data: Voucher[]) => {
     "Etapa Atual": ETAPA_LABELS[v.etapaAtual as keyof typeof ETAPA_LABELS] || v.etapaAtual,
     "Status Baixa": v.statusBaixa || "PENDENTE",
     "Status Integração RM": STATUS_INTEGRACAO_RM_LABELS[v.statusIntegracaoRm as keyof typeof STATUS_INTEGRACAO_RM_LABELS] || v.statusIntegracaoRm || "PENDENTE",
-    "Criado Por": v.criadoPorUserName || "-",
+    "Criado Por": v.criadoPorDfv || v.criadoPorUserName || "-",
     "Resp. Operação": v.responsavelOperacaoUserName || "-",
     "Resp. Fiscal": v.responsavelFiscalUserName || "-",
     "Resp. Financeiro": v.responsavelFinanceiroUserName || "-",

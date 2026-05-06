@@ -595,6 +595,7 @@ export const PagamentosTab = () => {
     let falha = 0;
     const errosDetalhe: string[] = [];
 
+    console.log('[VoltarOperacional] Processando', validTargets.length, 'vouchers para', novaEtapa);
     for (const v of validTargets) {
       try {
         const updatePayload: Record<string, unknown> = {
@@ -607,10 +608,11 @@ export const PagamentosTab = () => {
         } else {
           updatePayload.ajuste_operacao = justificativaComMarcador;
         }
-        const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        const { data: updData, error } = await supabase.functions.invoke("mariadb-proxy", {
           body: updatePayload,
         });
         if (error) throw error;
+        if (updData && (updData as any).error) throw new Error(String((updData as any).error));
 
         await supabase.functions.invoke("mariadb-proxy", {
           body: {
@@ -621,22 +623,26 @@ export const PagamentosTab = () => {
           }
         });
 
-        await sendVoucherReturnNotification({
-          voucher: {
-            id: v.id,
-            numeroSPO: v.numero_spo,
-            fornecedor: v.fornecedor,
-            valor: v.valor,
-            moeda: v.moeda,
-            vencimento: v.vencimento,
-          } as any,
-          fromStage: "FINANCEIRO",
-          toStage: novaEtapa as "AJUSTE_OPERACAO" | "AJUSTE_FISCAL",
-          reason: voltarOperacionalJustificativa.trim(),
-        });
+        try {
+          await sendVoucherReturnNotification({
+            voucher: {
+              id: v.id,
+              numeroSPO: v.numero_spo,
+              fornecedor: v.fornecedor,
+              valor: v.valor,
+              moeda: v.moeda,
+              vencimento: v.vencimento,
+            } as any,
+            fromStage: "FINANCEIRO",
+            toStage: novaEtapa as "AJUSTE_OPERACAO" | "AJUSTE_FISCAL",
+            reason: voltarOperacionalJustificativa.trim(),
+          });
+        } catch (notifErr) {
+          console.warn('[VoltarOperacional] Notificação falhou (não crítico)', v.id, notifErr);
+        }
         sucesso++;
       } catch (e) {
-        console.error("Erro ao retornar voucher", v.id, e);
+        console.error("[VoltarOperacional] Erro ao retornar voucher", v.id, v.numero_spo, e);
         falha++;
         errosDetalhe.push(`${v.numero_spo}: ${e instanceof Error ? e.message : String(e)}`);
       }
