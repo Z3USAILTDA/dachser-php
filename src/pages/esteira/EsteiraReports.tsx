@@ -100,7 +100,7 @@ export default function EsteiraReports() {
         statusIntegracaoRm: v.status_integracao_rm || "PENDENTE",
         tipoExecucaoPagamento: v.tipo_execucao_pagamento,
         criadoPorUserId: v.criado_por_user_id,
-        criadoPorUserName: v.criado_por_username,
+        criadoPorUserName: v.dfv_created_by || v.criado_por_username,
         responsavelOperacaoUserId: v.responsavel_operacao_user_id,
         responsavelOperacaoUserName: v.responsavel_operacao_username,
         responsavelFiscalUserId: v.responsavel_fiscal_user_id,
