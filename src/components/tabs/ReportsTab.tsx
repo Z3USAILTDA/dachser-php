@@ -219,8 +219,11 @@ export function ReportsTab() {
                 </SelectTrigger>
                 <SelectContent className="bg-card border-border/50">
                   <SelectItem value="all">Todas</SelectItem>
-                  <SelectItem value="OPERACAO">Operação</SelectItem>
+                  <SelectItem value="OPERACAO">Operação (inclui A Processar / Ajuste)</SelectItem>
+                  <SelectItem value="A_PROCESSAR">A Processar</SelectItem>
+                  <SelectItem value="AJUSTE_OPERACAO">Ajuste Operação</SelectItem>
                   <SelectItem value="FISCAL">Fiscal</SelectItem>
+                  <SelectItem value="AJUSTE_FISCAL">Ajuste Fiscal</SelectItem>
                   <SelectItem value="FINANCEIRO">Financeiro</SelectItem>
                   <SelectItem value="ROBO">Robô</SelectItem>
                   <SelectItem value="CONCLUIDO">Concluído</SelectItem>

@@ -1,46 +1,80 @@
-## Limpeza imediata + prevenção de duplicidade em `save_voucher_esteira`
+## Objetivo
+Simplificar o Excel de relatório (apenas 11 colunas), melhorar o visual e adicionar linha de subtotal. Garantir que vouchers em `A_PROCESSAR` apareçam quando o filtro de etapa for "Operação" (e também em "Todas").
 
-### A. Limpeza dos vouchers duplicados atuais
+---
 
-Manter apenas o "completo" (com anexos + linha digitável + etapa mais avançada) em cada `numero_spo`:
+## 1. Reduzir colunas do Excel para apenas 11
 
-**Manter:**
-- `105-292894 DIM-BY` → `6a647810-5511-486d-9be7-5f81cda3b0cd` (FINANCEIRO, 2 anexos, boleto)
-- `105-292895 DIM-BY` → `79865b98-63ce-4ba5-9348-6cb932fdf440` (FINANCEIRO, 2 anexos, boleto)
+Arquivo: `src/utils/voucherExcelExport.ts`
 
-**Excluir** (sem anexos, sem boleto):
-- `08dde019-8a23-43a8-b72a-8b295fb2a66d` (294, FINANCEIRO duplicado vazio)
-- `10b438a7-f079-4689-a825-4f783f42de8f` (294, OPERACAO vazio)
-- `91f7394f-b32a-46b6-9a68-0154dd5eaa32` (295, OPERACAO vazio)
+Nova ordem/lista de colunas:
 
-Para cada um: DELETE em `t_voucher_logs`, `t_voucher_anexos`, `t_dados_financeiro_voucher` (se espelho), `t_vouchers`. Executado via `supabase--curl_edge_functions` → `mariadb-proxy` (raw_query).
+1. Número SPO/Voucher
+2. Fornecedor
+3. CNPJ Fornecedor
+4. Valor
+5. Moeda
+6. Vencimento
+7. Necessita Fiscal (Sim quando `cobrancaEmNomeDe = DACHSER`)
+8. Forma de Pagamento
+9. Urgente
+10. Etapa Atual
+11. Criado Por (`v.criadoPorDfv || v.criadoPorUserName`)
 
-### B. Correção de raiz em `save_voucher_esteira` (mariadb-proxy/index.ts ~linha 6290)
+Remover do export atual: CNPJ duplicado já mantido; remover Tipo Execução, Filial, Remessa, Status Baixa, Status Integração RM, Resp. Operação/Fiscal/Financeiro, Comentários (3), Data Criação, Última Atualização.
 
-Hoje a checagem de duplicata e o INSERT não são atômicos: dois requests simultâneos veem zero "avançado" e ambos inserem. Corrigir com regra **idempotente pós-INSERT**:
+---
 
-1. Após o INSERT, executar uma query de reconciliação para o mesmo `numero_spo`:
-   ```sql
-   SELECT v.id, v.etapa_atual, v.linha_digitavel, v.created_at,
-          (SELECT COUNT(*) FROM t_voucher_anexos a WHERE a.voucher_id = v.id) AS n_anexos
-   FROM t_vouchers v WHERE numero_spo = ?
-   ```
-2. Se vier mais de 1 linha, aplicar a regra de "vencedor único":
-   - Score = `(n_anexos > 0 ? 100 : 0) + (linha_digitavel IS NOT NULL ? 50 : 0) + ETAPA_RANK(etapa_atual)` onde `ETAPA_RANK`: A_PROCESSAR=0, RASCUNHO=1, OPERACAO=2, AJUSTE_OPERACAO=2, FISCAL=3, AJUSTE_FISCAL=3, SUPERVISOR=4, FINANCEIRO=5, ROBO=6, CONCLUIDO=7.
-   - Em empate, mantém o `id` lexicograficamente menor (estável).
-   - Deletar todos os perdedores (logs, anexos, vouchers).
-3. Adicionar `UNIQUE INDEX` em `t_vouchers(numero_spo)` **depois** da limpeza (via `ALTER TABLE … ADD UNIQUE`). Se já existir índice, `try/catch` silencia. Isso previne duplicidade no banco mesmo sob concorrência futura.
+## 2. Melhorias visuais
 
-### C. Job de limpeza recorrente (defesa em profundidade)
+- Título mesclado no topo (linha 1) "Relatório de Vouchers — DACHSER" com fundo dourado (#D4AF37), fonte 16, branco/preto, altura 32.
+- Linha 2: período/filtros aplicados + data de geração (cinza claro, itálico).
+- Linha 3: cabeçalho das colunas (dourado, negrito, centralizado, altura 26, com borda).
+- Linhas de dados: zebra (cinza claro #F5F5F5 alternado), urgentes em vermelho claro (#FFE5E5) com negrito.
+- Bordas finas em todas as células do range.
+- Coluna "Valor" alinhada à direita e formatada como número com 2 casas (formato Excel `#,##0.00`) em vez de string formatada — permite somatórias.
+- Freeze pane na linha do cabeçalho.
+- Auto-filter aplicado no cabeçalho.
+- Larguras ajustadas para as 11 colunas.
 
-Adicionar action `cleanup_duplicate_vouchers` no `mariadb-proxy` que aplica a regra do passo B a todos os `numero_spo` com `COUNT(*) > 1`. Não precisa de cron novo — pode ser disparado pelo cron existente `vouchers-status-cron` (1 min).
+---
 
-### Arquivos afetados
+## 3. Subtotal no final
 
-- `supabase/functions/mariadb-proxy/index.ts` (handler `save_voucher_esteira` + novo handler `cleanup_duplicate_vouchers`)
-- `supabase/functions/vouchers-status-cron/index.ts` (chamar o cleanup) — se existir; senão, ficam só A+B.
+- Linha extra após a última linha de dados:
+  - Coluna A: "TOTAL" (negrito, fundo dourado claro #FFF4D6).
+  - Coluna D (Valor): fórmula `=SUM(D{first}:D{last})` com formato numérico (mostra soma apenas quando moeda for uniforme; quando houver moedas mistas, ainda soma valores brutos — adicionar célula ao lado com texto "(valores brutos, moedas mistas)" em itálico cinza se houver mais de uma moeda no conjunto).
+  - Demais colunas em branco com fundo dourado claro e borda superior dupla.
 
-### O que NÃO será alterado
+---
 
-- UI/frontend de criação de voucher (ChangeOnly backend).
-- Outros handlers de INSERT (`import_rm_voucher`, `sync_incremental`, `master`) — esses já filtram por `id_rm` ou criam masters; não estão envolvidos no caso reportado.
+## 4. Garantir A_PROCESSAR no relatório de Operação
+
+Investigação:
+- Backend (`mariadb-proxy` → `export_vouchers_report`, linha 11178) já mapeia `OPERACAO` para `('OPERACAO','A_PROCESSAR','AJUSTE_OPERACAO')`. Então o problema reportado provavelmente é um destes:
+  a) Quando o usuário escolhe "Todas", não há filtro — então deveria aparecer naturalmente. Confirmar via consulta ao banco se existem registros com `etapa_atual = 'A_PROCESSAR'` no período.
+  b) O dropdown só lista `OPERACAO`, `FISCAL`, `FINANCEIRO`, `ROBO`, `CONCLUIDO`. Não há opção dedicada "A Processar". Adicionar item explícito **"A Processar"** no `Select` de Etapa de `ReportsTab.tsx` (value `A_PROCESSAR`) para o caso do usuário querer filtrar exclusivamente esses.
+  c) Reforçar o label do item "Operação" para deixar claro que inclui A_PROCESSAR e Ajuste Operação — alterar texto para "Operação (inclui A Processar / Ajuste)".
+
+Ajustes em `src/components/tabs/ReportsTab.tsx`:
+- Adicionar `<SelectItem value="A_PROCESSAR">A Processar</SelectItem>`.
+- Adicionar `<SelectItem value="AJUSTE_OPERACAO">Ajuste Operação</SelectItem>` e `<SelectItem value="AJUSTE_FISCAL">Ajuste Fiscal</SelectItem>` para granularidade.
+- Renomear texto de "Operação" para "Operação (inclui A Processar / Ajuste)".
+
+No backend, garantir que valores `A_PROCESSAR` e `AJUSTE_OPERACAO` quando vierem isolados sejam tratados pelo branch genérico (`v.etapa_atual = ?`) — já é o caso. Sem mudança backend além de validação.
+
+---
+
+## Detalhes técnicos
+
+### voucherExcelExport.ts
+- Trocar `formatCurrency` (string) por valor numérico cru + `cell.z = '#,##0.00'` para a coluna Valor.
+- Header passa para a linha 3 (índice 2). Inserir `ws['!merges']` para título e subtítulo (A1:K1, A2:K2).
+- `ws['!autofilter'] = { ref: 'A3:K{lastDataRow}' }`.
+- `ws['!freeze'] / ws['!views']`: usar `ws['!views'] = [{ state: 'frozen', ySplit: 3 }]` (xlsx-js-style suporta via `!views` ou `!freeze`; usar pattern já compatível).
+- Subtotal: célula `D{lastDataRow+1}` recebe `{ t: 'n', f: 'SUM(D4:D{lastDataRow})', z: '#,##0.00' }`.
+
+### ReportsTab.tsx
+- Apenas adicionar 3 SelectItems e renomear o label de "Operação".
+
+Sem mudanças em PDF (`voucherPdfExport.ts`) — escopo é apenas o Excel.
