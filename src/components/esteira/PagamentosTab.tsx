@@ -796,7 +796,7 @@ export const PagamentosTab = () => {
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className={cn("rounded-full gap-2", filterDataInicio && "border-primary text-primary")}>
                 <CalendarIcon className="h-4 w-4" />
-                {filterDataInicio ? formatDate(filterDataInicio, "dd/MM/yyyy", { locale: ptBR }) : "Venc. de"}
+                {filterDataInicio ? fnsFormat(filterDataInicio, "dd/MM/yyyy", { locale: ptBR }) : "Venc. de"}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0 bg-card border-border" align="start">
@@ -813,7 +813,7 @@ export const PagamentosTab = () => {
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className={cn("rounded-full gap-2", filterDataFim && "border-primary text-primary")}>
                 <CalendarIcon className="h-4 w-4" />
-                {filterDataFim ? formatDate(filterDataFim, "dd/MM/yyyy", { locale: ptBR }) : "Venc. até"}
+                {filterDataFim ? fnsFormat(filterDataFim, "dd/MM/yyyy", { locale: ptBR }) : "Venc. até"}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0 bg-card border-border" align="start">
