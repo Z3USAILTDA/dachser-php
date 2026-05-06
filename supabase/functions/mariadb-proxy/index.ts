@@ -6859,19 +6859,29 @@ Deno.serve(async (req) => {
 
       // ===== Auditoria de diff (read-only) para um voucher específico =====
       case 'audit_voucher_diff': {
-        const { numero_spo, voucher_id } = body as any;
+        const { numero_spo, voucher_id, fornecedor_like } = body as any;
         let vRows: any[] = [];
         if (voucher_id) {
           vRows = await client.query(
-            `SELECT id, numero_spo, vencimento, valor, forma_pagamento, etapa_atual, id_rm, processo_id
+            `SELECT id, numero_spo, fornecedor, vencimento, valor, forma_pagamento, etapa_atual, id_rm, processo_id, created_at, updated_at
                FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1`,
             [voucher_id]
           );
         } else if (numero_spo) {
           vRows = await client.query(
-            `SELECT id, numero_spo, vencimento, valor, forma_pagamento, etapa_atual, id_rm, processo_id
-               FROM dados_dachser.t_vouchers WHERE numero_spo = ? ORDER BY created_at DESC LIMIT 1`,
-            [numero_spo]
+            `SELECT id, numero_spo, fornecedor, vencimento, valor, forma_pagamento, etapa_atual, id_rm, processo_id, created_at, updated_at
+               FROM dados_dachser.t_vouchers
+              WHERE numero_spo = ? OR numero_spo LIKE ?
+              ORDER BY created_at DESC LIMIT 5`,
+            [numero_spo, `%${numero_spo}%`]
+          );
+        } else if (fornecedor_like) {
+          vRows = await client.query(
+            `SELECT id, numero_spo, fornecedor, vencimento, valor, forma_pagamento, etapa_atual, id_rm, processo_id, created_at, updated_at
+               FROM dados_dachser.t_vouchers
+              WHERE fornecedor LIKE ?
+              ORDER BY created_at DESC LIMIT 10`,
+            [`%${fornecedor_like}%`]
           );
         }
         if (!vRows || vRows.length === 0) {
