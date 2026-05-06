@@ -23,14 +23,13 @@ const HEADERS = [
   "Valor",
   "Moeda",
   "Vencimento",
-  "Necessita Fiscal",
   "Forma de Pagamento",
   "Urgente",
   "Etapa Atual",
   "Criado Por",
 ];
 
-const COL_WIDTHS = [22, 38, 22, 18, 10, 14, 18, 22, 12, 26, 30];
+const COL_WIDTHS = [22, 38, 22, 18, 10, 14, 22, 12, 26, 30];
 
 export const exportVouchersToExcel = (data: Voucher[]) => {
   const ws: XLSX.WorkSheet = {};
