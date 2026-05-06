@@ -791,6 +791,47 @@ export const PagamentosTab = () => {
             </SelectContent>
           </Select>
 
+          {/* Filtro por data de vencimento (calendário) */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("rounded-full gap-2", filterDataInicio && "border-primary text-primary")}>
+                <CalendarIcon className="h-4 w-4" />
+                {filterDataInicio ? formatDate(filterDataInicio, "dd/MM/yyyy", { locale: ptBR }) : "Venc. de"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 bg-card border-border" align="start">
+              <CalendarPicker
+                mode="single"
+                selected={filterDataInicio}
+                onSelect={setFilterDataInicio}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("rounded-full gap-2", filterDataFim && "border-primary text-primary")}>
+                <CalendarIcon className="h-4 w-4" />
+                {filterDataFim ? formatDate(filterDataFim, "dd/MM/yyyy", { locale: ptBR }) : "Venc. até"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 bg-card border-border" align="start">
+              <CalendarPicker
+                mode="single"
+                selected={filterDataFim}
+                onSelect={setFilterDataFim}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+          {(filterDataInicio || filterDataFim) && (
+            <Button variant="ghost" size="sm" className="rounded-full h-8" onClick={() => { setFilterDataInicio(undefined); setFilterDataFim(undefined); }}>
+              Limpar datas
+            </Button>
+          )}
+
           <Select value={filterFormaPagamento} onValueChange={setFilterFormaPagamento}>
             <SelectTrigger className="w-[140px] bg-card border-border rounded-full">
               <SelectValue placeholder="Forma Pag." />
