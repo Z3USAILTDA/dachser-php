@@ -100,7 +100,17 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!voucher) return;
-    
+
+    // Defesa em profundidade: edição só é permitida na etapa Operacional
+    if (voucher.etapaAtual !== "A_PROCESSAR") {
+      toast({
+        title: "Edição não permitida",
+        description: "Vouchers só podem ser editados na etapa Operacional.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Block submission if date is expired
     if (isVencido) {
       toast({
@@ -113,7 +123,9 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
 
     setLoading(true);
     try {
-      const { data: userData } = await supabase.auth.getUser();
+      // A esteira autentica via MariaDB + localStorage (não via supabase.auth)
+      const stored = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+      const localUser = stored ? (() => { try { return JSON.parse(stored); } catch { return null; } })() : null;
       
       // Determine urgencia_tipo based on tipoDocumento and urgente flag
       let urgenciaTipo = "NORMAL";
@@ -144,8 +156,8 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
             chave_pix: formData.formaPagamento === "PIX" ? (formData.chavePix || null) : null,
             origem_processo: formData.origemProcesso || null,
           },
-          user_id: userData?.user?.id,
-          user_name: userData?.user?.email,
+          user_id: localUser?.id ? String(localUser.id) : null,
+          user_name: localUser?.username || localUser?.name || localUser?.email || "Sistema",
         },
       });
 

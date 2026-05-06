@@ -475,6 +475,7 @@ Deno.serve(async (req) => {
     const FIN_ACTIONS = new Set<string>([
       // Vouchers / Esteira
       'save_voucher_esteira','save_voucher_anexo','update_voucher_esteira','update_voucher_by_numero_spo','cleanup_duplicate_vouchers',
+      'audit_voucher_diff','revert_voucher_field',
       'cleanup_invalid_vouchers','fix_sync_vouchers_to_a_processar','delete_sync_duplicates',
       'admin_bulk_update_etapa','admin_reset_all_to_a_processar','admin_reset_stale_to_a_processar',
       'get_vouchers_esteira','get_voucher_by_id','get_voucher_responsaveis_emails',
@@ -6654,6 +6655,49 @@ Deno.serve(async (req) => {
         // Support both formats: direct fields or nested 'updates' object
         const updateData = updatesObj || directFields;
         
+        // ============================================================
+        // GUARD: edição só é permitida quando etapa_atual = 'A_PROCESSAR'
+        // (regra de negócio — vale inclusive para ADMIN)
+        // ============================================================
+        const etapaRows = await client.query(
+          `SELECT etapa_atual, vencimento, valor, forma_pagamento, tipo_documento,
+                  fornecedor, cnpj_fornecedor, moeda, data_emissao_documento,
+                  cobranca_em_nome_de, filial, urgencia_tipo, chave_pix,
+                  origem_processo, numero_spo
+             FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1`,
+          [voucher_id]
+        );
+        const currentEtapa = etapaRows?.[0]?.etapa_atual || null;
+        const beforeRow = etapaRows?.[0] || {};
+
+        if (currentEtapa && currentEtapa !== 'A_PROCESSAR') {
+          // Registra tentativa bloqueada para auditoria
+          try {
+            await client.execute(`
+              INSERT INTO dados_dachser.t_voucher_logs (
+                id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+              ) VALUES (?, ?, ?, ?, 'VOUCHER_EDICAO_BLOQUEADA', ?, NOW())
+            `, [
+              crypto.randomUUID(),
+              voucher_id,
+              user_id || null,
+              user_name || 'Sistema (sem identificação)',
+              `Tentativa de edição bloqueada — etapa atual: ${currentEtapa}. Campos enviados: ${Object.keys(updateData).join(', ')}`
+            ]);
+          } catch (logErr) {
+            console.error('Falha ao logar tentativa bloqueada:', logErr);
+          }
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'EDICAO_BLOQUEADA_FORA_OPERACIONAL',
+              message: 'Vouchers só podem ser editados na etapa Operacional.',
+              etapa_atual: currentEtapa,
+            }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         // Ensure status_comprovante column exists (MariaDB compatible)
         try {
           const colCheck = await client.query(`
@@ -6741,11 +6785,38 @@ Deno.serve(async (req) => {
           }
           return fb;
         };
-        
+
+        // Helper para normalizar valor para diff (datas → YYYY-MM-DD; números → string)
+        const normalizeForDiff = (key: string, v: any): string => {
+          if (v === null || v === undefined) return '';
+          if (dateFields.has(key)) {
+            const s = String(v);
+            const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+            return m ? m[1] : s;
+          }
+          if (key === 'valor') {
+            const n = parseFloat(String(v).replace(',', '.'));
+            return isNaN(n) ? String(v) : n.toFixed(2);
+          }
+          return String(v);
+        };
+
+        const diffParts: string[] = [];
+
         for (const [key, dbField] of Object.entries(fieldMapping)) {
           if (updateData[key] !== undefined) {
             updateClauses.push(`${dbField} = ?`);
-            params.push(dateFields.has(key) ? formatDateVal(updateData[key]) : updateData[key]);
+            const newVal = dateFields.has(key) ? formatDateVal(updateData[key]) : updateData[key];
+            params.push(newVal);
+
+            // Calcular diff somente para campos presentes no SELECT prévio
+            if (key in beforeRow) {
+              const beforeNorm = normalizeForDiff(key, (beforeRow as any)[key]);
+              const afterNorm = normalizeForDiff(key, updateData[key]);
+              if (beforeNorm !== afterNorm) {
+                diffParts.push(`${key}: ${beforeNorm || '(vazio)'} → ${afterNorm || '(vazio)'}`);
+              }
+            }
           }
         }
         
@@ -6757,8 +6828,11 @@ Deno.serve(async (req) => {
             UPDATE dados_dachser.t_vouchers SET ${updateClauses.join(', ')} WHERE id = ?
           `, params);
           
-          // Log the update if user info provided
-          if (user_id || user_name) {
+          // Log SEMPRE — independente de ter user_id/user_name
+          const detalhe = diffParts.length > 0
+            ? `Voucher editado.\n${diffParts.join('\n')}`
+            : `Voucher editado. Campos enviados: ${Object.keys(updateData).filter(k => updateData[k] !== undefined && fieldMapping[k]).join(', ')}`;
+          try {
             await client.execute(`
               INSERT INTO dados_dachser.t_voucher_logs (
                 id, voucher_id, user_id, user_name, acao, detalhe, data_hora
@@ -6767,9 +6841,11 @@ Deno.serve(async (req) => {
               crypto.randomUUID(),
               voucher_id,
               user_id || null,
-              user_name || 'Sistema',
-              `Voucher editado. Campos alterados: ${Object.keys(updateData).filter(k => updateData[k] !== undefined && fieldMapping[k]).join(', ')}`
+              user_name || 'Sistema (sem identificação)',
+              detalhe,
             ]);
+          } catch (logErr) {
+            console.error('Falha ao gravar VOUCHER_EDITADO:', logErr);
           }
           
           console.log('Voucher updated successfully:', voucher_id);
@@ -6778,6 +6854,169 @@ Deno.serve(async (req) => {
         }
         
         result = { success: true };
+        break;
+      }
+
+      // ===== Auditoria de diff (read-only) para um voucher específico =====
+      case 'audit_voucher_diff': {
+        const { numero_spo, voucher_id } = body as any;
+        let vRows: any[] = [];
+        if (voucher_id) {
+          vRows = await client.query(
+            `SELECT id, numero_spo, vencimento, valor, forma_pagamento, etapa_atual, id_rm, processo_id
+               FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1`,
+            [voucher_id]
+          );
+        } else if (numero_spo) {
+          vRows = await client.query(
+            `SELECT id, numero_spo, vencimento, valor, forma_pagamento, etapa_atual, id_rm, processo_id
+               FROM dados_dachser.t_vouchers WHERE numero_spo = ? ORDER BY created_at DESC LIMIT 1`,
+            [numero_spo]
+          );
+        }
+        if (!vRows || vRows.length === 0) {
+          result = { success: false, error: 'Voucher não encontrado' };
+          break;
+        }
+        const v = vRows[0];
+
+        // Espelho RM (quando existir)
+        let rmRow: any = null;
+        try {
+          const rmRows = await client.query(
+            `SELECT id_rm, dt_vencimento, valor_total, dt_emissao
+               FROM dados_dachser.t_dados_financeiro_voucher
+              WHERE id_rm = ? LIMIT 1`,
+            [v.id_rm]
+          );
+          rmRow = rmRows?.[0] || null;
+        } catch (e) {
+          console.log('audit_voucher_diff: sem espelho RM', e);
+        }
+
+        const logs = await client.query(
+          `SELECT id, acao, user_name, detalhe, data_hora
+             FROM dados_dachser.t_voucher_logs
+            WHERE voucher_id = ?
+            ORDER BY data_hora DESC LIMIT 30`,
+          [v.id]
+        );
+
+        result = { success: true, voucher: v, espelho_rm: rmRow, logs };
+        break;
+      }
+
+      // ===== Reversão administrativa controlada (ADMIN-only) =====
+      case 'revert_voucher_field': {
+        const { voucher_id, field, old_value, reason, user_id, user_name } = body as any;
+        const userRole = (req.headers.get('x-user-role') || '').toUpperCase();
+
+        if (userRole !== 'ADMIN') {
+          return new Response(
+            JSON.stringify({ success: false, error: 'FORBIDDEN', message: 'Apenas ADMIN pode reverter campos.' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const allowedFields = new Set(['vencimento', 'valor', 'forma_pagamento']);
+        if (!voucher_id || !field || !allowedFields.has(field) || old_value === undefined || !reason) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'INVALID_INPUT',
+              message: 'voucher_id, field (vencimento|valor|forma_pagamento), old_value e reason são obrigatórios.',
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Snapshot do valor atual
+        const cur = await client.query(
+          `SELECT vencimento, valor, forma_pagamento, etapa_atual
+             FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1`,
+          [voucher_id]
+        );
+        if (!cur || cur.length === 0) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'NOT_FOUND' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const before = cur[0];
+
+        // Formata valor para UPDATE
+        let newVal: any = old_value;
+        if (field === 'vencimento') {
+          const s = String(old_value).trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) newVal = `${s} 00:00:00.000`;
+          else if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+            const [d, m, y] = s.split('/');
+            newVal = `${y}-${m}-${d} 00:00:00.000`;
+          }
+        } else if (field === 'valor') {
+          const n = parseFloat(String(old_value).replace(',', '.'));
+          if (isNaN(n)) {
+            return new Response(
+              JSON.stringify({ success: false, error: 'INVALID_VALOR' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          newVal = n;
+        }
+
+        await client.execute(
+          `UPDATE dados_dachser.t_vouchers SET ${field} = ?, updated_at = NOW() WHERE id = ?`,
+          [newVal, voucher_id]
+        );
+
+        const beforeStr = (() => {
+          const v = (before as any)[field];
+          if (field === 'vencimento') {
+            const m = String(v || '').match(/^(\d{4}-\d{2}-\d{2})/);
+            return m ? m[1] : String(v ?? '');
+          }
+          if (field === 'valor') {
+            const n = parseFloat(String(v));
+            return isNaN(n) ? String(v ?? '') : n.toFixed(2);
+          }
+          return String(v ?? '');
+        })();
+        const afterStr = (() => {
+          if (field === 'vencimento') {
+            const s = String(old_value);
+            const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+            return m ? m[1] : s;
+          }
+          if (field === 'valor') {
+            const n = parseFloat(String(old_value).replace(',', '.'));
+            return isNaN(n) ? String(old_value) : n.toFixed(2);
+          }
+          return String(old_value);
+        })();
+
+        const detalhe =
+          `Reversão administrativa — campo: ${field}\n` +
+          `Valor atual: ${beforeStr} → Restaurado para: ${afterStr}\n` +
+          `Justificativa: ${reason}`;
+
+        try {
+          await client.execute(
+            `INSERT INTO dados_dachser.t_voucher_logs (
+               id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+             ) VALUES (?, ?, ?, ?, 'VOUCHER_REVERTIDO_ADMIN', ?, NOW())`,
+            [
+              crypto.randomUUID(),
+              voucher_id,
+              user_id || null,
+              user_name || 'ADMIN',
+              detalhe,
+            ]
+          );
+        } catch (logErr) {
+          console.error('Falha ao logar VOUCHER_REVERTIDO_ADMIN:', logErr);
+        }
+
+        result = { success: true, before: before, restored: { field, value: afterStr } };
         break;
       }
 
