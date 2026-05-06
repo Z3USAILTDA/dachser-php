@@ -12754,19 +12754,22 @@ Deno.serve(async (req) => {
           // Get children with their id_rm
           const children = await client.query(`
             SELECT v.id, v.numero_spo, v.id_rm,
-                   COALESCE(v.id_rm, dfv.id_rm) as resolved_id_rm
+                   dfv.idmov as dfv_idmov,
+                   COALESCE(v.id_rm, dfv.id_rm) as resolved_id_rm,
+                   COALESCE(dfv.idmov, v.id_rm, dfv.id_rm) as resolved_sort_key
             FROM dados_dachser.t_vouchers v
             LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
               ON v.numero_spo COLLATE utf8mb4_general_ci = dfv.nd COLLATE utf8mb4_general_ci
             WHERE v.voucher_master_id = ?
           `, [master.id]);
 
-          const withIdRm = (children || []).filter((c: any) => c.resolved_id_rm != null);
-          if (withIdRm.length > 0) {
-            const lowest = withIdRm.reduce((prev: any, curr: any) => {
-              return (parseInt(prev.resolved_id_rm) || Infinity) < (parseInt(curr.resolved_id_rm) || Infinity) ? prev : curr;
+          const withKey = (children || []).filter((c: any) => c.resolved_sort_key != null);
+          if (withKey.length > 0) {
+            const lowest = withKey.reduce((prev: any, curr: any) => {
+              return (parseInt(prev.resolved_sort_key) || Infinity) < (parseInt(curr.resolved_sort_key) || Infinity) ? prev : curr;
             });
             const newSpo = lowest.numero_spo;
+            const source = lowest.dfv_idmov != null ? 'idmov' : 'id_rm';
             if (newSpo && newSpo !== master.numero_spo) {
               await client.execute(`
                 UPDATE dados_dachser.t_vouchers 
@@ -12774,13 +12777,13 @@ Deno.serve(async (req) => {
                 WHERE id = ?
               `, [newSpo, master.nome_master || master.numero_spo, master.id]);
               fixedCount++;
-              details.push({ masterId: master.id, oldSpo: master.numero_spo, newSpo, lowestIdRm: lowest.resolved_id_rm });
-              console.log(`Fixed master ${master.id}: ${master.numero_spo} -> ${newSpo} (id_rm=${lowest.resolved_id_rm})`);
+              details.push({ masterId: master.id, oldSpo: master.numero_spo, newSpo, lowestSortKey: lowest.resolved_sort_key, source });
+              console.log(`Fixed master ${master.id}: ${master.numero_spo} -> ${newSpo} (${source}=${lowest.resolved_sort_key})`);
             } else {
               details.push({ masterId: master.id, spo: master.numero_spo, status: 'already_correct' });
             }
           } else {
-            details.push({ masterId: master.id, spo: master.numero_spo, status: 'no_children_with_id_rm' });
+            details.push({ masterId: master.id, spo: master.numero_spo, status: 'no_children_with_sort_key' });
           }
         }
 
