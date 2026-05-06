@@ -11076,8 +11076,12 @@ Deno.serve(async (req) => {
         let params: (string | number)[] = [];
 
         if (etapa && etapa !== 'all') {
-          whereConditions.push('v.etapa_atual = ?');
-          params.push(etapa);
+          if (etapa === 'OPERACAO') {
+            whereConditions.push("v.etapa_atual IN ('OPERACAO','A_PROCESSAR')");
+          } else {
+            whereConditions.push('v.etapa_atual = ?');
+            params.push(etapa);
+          }
         }
 
         if (statusBaixa && statusBaixa !== 'all') {
