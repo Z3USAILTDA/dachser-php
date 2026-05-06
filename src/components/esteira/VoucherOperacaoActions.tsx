@@ -30,6 +30,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { AjusteRouteChoiceDialog } from "./AjusteRouteChoiceDialog";
 
 
 interface VoucherOperacaoActionsProps {
@@ -42,6 +43,8 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
   const [syncing, setSyncing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showRouteChoice, setShowRouteChoice] = useState(false);
+  const [routeChoice, setRouteChoice] = useState<"REQUESTER" | "NORMAL">("REQUESTER");
   const [selectedTipo, setSelectedTipo] = useState<TipoAnexo>("FATURA_DEMONSTRATIVO");
   const [respostaAjuste, setRespostaAjuste] = useState(voucher.comentariosOperacao || "");
   const { toast } = useToast();
