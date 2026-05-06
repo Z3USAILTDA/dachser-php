@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, XCircle, Edit3, Layers, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { AjusteRouteChoiceDialog } from "./AjusteRouteChoiceDialog";
 
 interface VoucherFiscalActionsProps {
   voucher: Voucher;
@@ -29,6 +30,8 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
   const [isUpdatingNumero, setIsUpdatingNumero] = useState(false);
   const [vouchersFilhos, setVouchersFilhos] = useState<VoucherFilho[]>([]);
   const [filhosExpanded, setFilhosExpanded] = useState(false);
+  const [showRouteChoice, setShowRouteChoice] = useState(false);
+  const [routeChoice, setRouteChoice] = useState<"REQUESTER" | "NORMAL">("REQUESTER");
   const loadedMasterIdRef = useRef<string | null>(null);
   const { toast } = useToast();
 
@@ -122,17 +125,33 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
     }
   };
 
-  const handleAprovar = async () => {
+  // Compute requester (if voucher came from AJUSTE_FISCAL with marker)
+  const isAjusteFiscal = voucher.etapaAtual === "AJUSTE_FISCAL";
+  const requester = isAjusteFiscal ? parseRequesterFromAjuste(voucher.ajusteFiscal) : null;
+  // Fluxo normal saindo do Fiscal sempre vai para FINANCEIRO
+  const normalNextStage: "FINANCEIRO" = "FINANCEIRO";
+
+  const handleAprovarClick = () => {
+    // Se há marcador de etapa solicitante, abrir diálogo de escolha
+    if (requester && requester !== normalNextStage) {
+      setRouteChoice("REQUESTER");
+      setShowRouteChoice(true);
+      return;
+    }
+    // Sem requester ou requester == fluxo normal: aprovar direto
+    handleAprovar("NORMAL");
+  };
+
+  const handleAprovar = async (chosen: "REQUESTER" | "NORMAL") => {
     try {
       trackEvent("vouchers.fiscal.approve");
       setLoading(true);
       const userData = getUserData();
 
-      // Se este voucher veio de AJUSTE_FISCAL com marcador de etapa solicitante,
-      // ele deve voltar diretamente à etapa que pediu o ajuste (ex.: FINANCEIRO).
-      const isAjusteFiscal = voucher.etapaAtual === "AJUSTE_FISCAL";
-      const requester = isAjusteFiscal ? parseRequesterFromAjuste(voucher.ajusteFiscal) : null;
-      const proximaEtapa: "FINANCEIRO" | "SUPERVISOR" = requester === "SUPERVISOR" ? "SUPERVISOR" : "FINANCEIRO";
+      const proximaEtapa: "FINANCEIRO" | "SUPERVISOR" =
+        chosen === "REQUESTER" && requester
+          ? (requester === "SUPERVISOR" ? "SUPERVISOR" : "FINANCEIRO")
+          : normalNextStage;
 
       // Bloqueio: vouchers MANUAIS só avançam quando a integração com RM (t_dados_financeiro_voucher) estiver completa
       if (voucher.origemCriacao === "MANUAL") {
@@ -166,7 +185,9 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
 
       // Log the action
       const detalheLog = isAjusteFiscal && requester
-        ? `Voucher/SPO ajustado pelo Fiscal e retornado diretamente para ${proximaEtapa} (etapa solicitante)`
+        ? (chosen === "REQUESTER"
+            ? `Voucher/SPO ajustado pelo Fiscal e retornado para ${proximaEtapa} (etapa solicitante, escolhido pelo usuário)`
+            : `Voucher/SPO ajustado pelo Fiscal e enviado pelo fluxo normal para ${proximaEtapa} (escolhido pelo usuário, ignorando solicitante ${requester})`)
         : `Voucher/SPO aprovado pelo Fiscal e enviado para ${proximaEtapa}`;
       await supabase.functions.invoke("mariadb-proxy", {
         body: {
@@ -186,9 +207,10 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
 
       toast({
         title: "Voucher/SPO aprovado!",
-        description: "Voucher/SPO enviado para Financeiro",
+        description: `Voucher/SPO enviado para ${proximaEtapa}`,
       });
 
+      setShowRouteChoice(false);
       onUpdate();
     } catch (error: any) {
       const msg = error.message || "";
