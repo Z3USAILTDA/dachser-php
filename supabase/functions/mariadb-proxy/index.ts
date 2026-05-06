@@ -493,6 +493,10 @@ Deno.serve(async (req) => {
       'update_master_processo_ids','fix_master_numero_spo','export_vouchers_report',
       'get_pending_vouchers_for_report','find_voucher_by_spo','find_voucher_by_nd',
       'get_vouchers_for_comprovante','attach_comprovante_batch',
+      // Importação em lote (admin only)
+      'preview_voucher_batch_import','create_voucher_batch_import','upload_batch_document',
+      'bind_batch_document_to_voucher','unbind_batch_document','get_batch_import_status',
+      'finalize_batch_import',
       // Régua / Cobrança / Aging / Disputas
       'get_regua_counts','get_aging_overview','get_aging_by_client','get_client_cnpj_detail',
       'get_client_faturas','save_cobranca_observacao','get_budget_forecast_auto',
@@ -18087,6 +18091,463 @@ Deno.serve(async (req) => {
           console.error('[fetch_fin_voucher_stats] Error:', e);
           result = { success: false, error: e.message };
         }
+        break;
+      }
+
+      // ==================== IMPORTAÇÃO EM LOTE DE VOUCHERS (ADMIN ONLY) ====================
+      case 'preview_voucher_batch_import':
+      case 'create_voucher_batch_import':
+      case 'upload_batch_document':
+      case 'bind_batch_document_to_voucher':
+      case 'unbind_batch_document':
+      case 'get_batch_import_status':
+      case 'finalize_batch_import': {
+        // Guard: somente ADMIN
+        const requesterId = (body as any).userId ?? (body as any).user_id;
+        if (!requesterId) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Acesso negado. Funcionalidade permitida apenas para ADMIN.' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const adminCheck = await client.query(
+          'SELECT is_admin, username FROM ai_agente.t_users_dachser WHERE id = ?',
+          [requesterId]
+        );
+        if (!adminCheck || adminCheck.length === 0 || Number(adminCheck[0].is_admin) !== 1) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Acesso negado. Funcionalidade permitida apenas para ADMIN.' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const adminUserName = (body as any).user_name || adminCheck[0].username || 'admin';
+
+        // Garantir tabelas
+        try {
+          await client.execute(`
+            CREATE TABLE IF NOT EXISTS dados_dachser.t_voucher_batch_import (
+              id VARCHAR(36) PRIMARY KEY,
+              status VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
+              original_file_name VARCHAR(500) DEFAULT NULL,
+              total_rows INT DEFAULT 0,
+              valid_rows INT DEFAULT 0,
+              error_rows INT DEFAULT 0,
+              created_by_user_id VARCHAR(50) DEFAULT NULL,
+              created_by_user_name VARCHAR(255) DEFAULT NULL,
+              created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              finalized_at TIMESTAMP NULL DEFAULT NULL,
+              finalized_by_user_id VARCHAR(50) DEFAULT NULL,
+              finalized_by_user_name VARCHAR(255) DEFAULT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+          `);
+          await client.execute(`
+            CREATE TABLE IF NOT EXISTS dados_dachser.t_voucher_batch_import_item (
+              id VARCHAR(36) PRIMARY KEY,
+              batch_id VARCHAR(36) NOT NULL,
+              row_index INT NOT NULL DEFAULT 0,
+              voucher_id VARCHAR(36) DEFAULT NULL,
+              processo VARCHAR(100) DEFAULT NULL,
+              item_pagto VARCHAR(100) DEFAULT NULL,
+              fornecedor VARCHAR(255) DEFAULT NULL,
+              valor DECIMAL(18,2) DEFAULT NULL,
+              vencimento DATE DEFAULT NULL,
+              data_fatura DATE DEFAULT NULL,
+              forma_pagamento VARCHAR(50) DEFAULT NULL,
+              fatura VARCHAR(255) DEFAULT NULL,
+              unidade_pagto VARCHAR(100) DEFAULT NULL,
+              historico TEXT DEFAULT NULL,
+              quebra VARCHAR(100) DEFAULT NULL,
+              status VARCHAR(30) NOT NULL DEFAULT 'VALID',
+              validation_message TEXT DEFAULT NULL,
+              raw_json JSON DEFAULT NULL,
+              created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              INDEX idx_batch (batch_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+          `);
+          await client.execute(`
+            CREATE TABLE IF NOT EXISTS dados_dachser.t_voucher_batch_documents (
+              id VARCHAR(36) PRIMARY KEY,
+              batch_id VARCHAR(36) NOT NULL,
+              voucher_id VARCHAR(36) DEFAULT NULL,
+              anexo_id VARCHAR(36) DEFAULT NULL,
+              file_name VARCHAR(500) NOT NULL,
+              file_url TEXT NOT NULL,
+              file_path VARCHAR(500) DEFAULT NULL,
+              mime_type VARCHAR(100) DEFAULT NULL,
+              size_bytes BIGINT DEFAULT 0,
+              tipo_anexo VARCHAR(50) DEFAULT NULL,
+              status VARCHAR(20) NOT NULL DEFAULT 'PENDENTE',
+              uploaded_by_user_id VARCHAR(50) DEFAULT NULL,
+              uploaded_by_user_name VARCHAR(255) DEFAULT NULL,
+              uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              bound_by_user_id VARCHAR(50) DEFAULT NULL,
+              bound_by_user_name VARCHAR(255) DEFAULT NULL,
+              bound_at TIMESTAMP NULL DEFAULT NULL,
+              INDEX idx_batch_docs (batch_id),
+              INDEX idx_voucher_docs (voucher_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+          `);
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS origem_criacao VARCHAR(50) DEFAULT NULL`);
+        } catch (ddlErr) {
+          console.log('Batch DDL skipped:', ddlErr);
+        }
+
+        // Helpers
+        const FORMA_MAP: Record<string, string> = {
+          'BOLETO': 'BOLETO', 'PIX': 'PIX',
+          'TRANSFERENCIA': 'TRANSFERENCIA', 'TRANSFERÊNCIA': 'TRANSFERENCIA',
+          'DEPOSITO': 'DEPOSITO', 'DEPÓSITO': 'DEPOSITO',
+          'DARF': 'DARF', 'GPS': 'GPS',
+          'CAMBIO': 'CAMBIO', 'CÂMBIO': 'CAMBIO',
+          'ADF': 'ADF', 'CARTAO': 'CARTAO', 'CARTÃO': 'CARTAO',
+        };
+        const parseBRMoney = (v: any): number | null => {
+          if (v === null || v === undefined || v === '') return null;
+          if (typeof v === 'number') return isFinite(v) ? v : null;
+          let s = String(v).trim().replace(/[R$\s]/g, '');
+          if (!s) return null;
+          const lc = s.lastIndexOf(','), ld = s.lastIndexOf('.');
+          if (lc > ld) s = s.replace(/\./g, '').replace(',', '.');
+          else if (ld > lc) s = s.replace(/,/g, '');
+          const n = parseFloat(s);
+          return isNaN(n) ? null : n;
+        };
+        const parseDate = (v: any): string | null => {
+          if (!v) return null;
+          const s = String(v).trim();
+          if (!s) return null;
+          if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+          const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+          if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+          const d = new Date(s);
+          if (!isNaN(d.getTime())) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${dd}`;
+          }
+          return null;
+        };
+        const normalizeRow = (raw: any, idx: number) => {
+          const get = (...keys: string[]) => {
+            for (const k of keys) {
+              for (const rk of Object.keys(raw || {})) {
+                if (rk.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() ===
+                    k.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()) {
+                  const v = raw[rk];
+                  if (v !== null && v !== undefined && String(v).trim() !== '') return v;
+                }
+              }
+            }
+            return null;
+          };
+          const fornecedor = get('Fornecedor');
+          const valor = parseBRMoney(get('Valor Solicitação', 'Valor Solicitacao', 'Valor'));
+          const vencimento = parseDate(get('Vencimento', 'Data Vencimento'));
+          const dataFatura = parseDate(get('Data fatura', 'Data Fatura'));
+          const formaRaw = get('Forma Pagto (contas pagar)', 'Forma Pagto', 'Forma Pagamento');
+          const formaKey = formaRaw ? String(formaRaw).trim().toUpperCase() : null;
+          const formaPagamento = formaKey ? FORMA_MAP[formaKey] || null : null;
+          const fatura = get('Fatura');
+          const processo = get('Processo');
+          const itemPagto = get('Item Pagto');
+          const unidade = get('Unidade Pagto');
+          const historico = get('Historico (Contas pagar)', 'Historico', 'Histórico');
+          const quebra = get('Quebra (Obrigatório)', 'Quebra');
+
+          const errors: string[] = [];
+          if (!fornecedor) errors.push('fornecedor obrigatório');
+          if (!valor || valor <= 0) errors.push('valor inválido');
+          if (!vencimento) errors.push('vencimento inválido');
+          if (!formaPagamento) errors.push(formaRaw ? `forma de pagamento desconhecida: ${formaRaw}` : 'forma de pagamento obrigatória');
+          if (!fatura) errors.push('fatura obrigatória');
+
+          return {
+            row_index: idx,
+            processo: processo ? String(processo) : null,
+            item_pagto: itemPagto ? String(itemPagto) : null,
+            fornecedor: fornecedor ? String(fornecedor) : null,
+            valor,
+            vencimento,
+            data_fatura: dataFatura,
+            forma_pagamento: formaPagamento,
+            fatura: fatura ? String(fatura) : null,
+            unidade_pagto: unidade ? String(unidade) : null,
+            historico: historico ? String(historico) : null,
+            quebra: quebra ? String(quebra) : null,
+            status: errors.length ? 'ERROR' : 'VALID',
+            validation_message: errors.length ? errors.join('; ') : null,
+            raw_json: raw,
+          };
+        };
+
+        // ===== preview =====
+        if (action === 'preview_voucher_batch_import') {
+          const rows: any[] = (body as any).rows || [];
+          const items = rows.map((r, i) => normalizeRow(r, i));
+          const valid = items.filter(i => i.status === 'VALID').length;
+          const errs = items.filter(i => i.status === 'ERROR').length;
+          result = { success: true, items, total: items.length, valid, errors: errs };
+          break;
+        }
+
+        // ===== create =====
+        if (action === 'create_voucher_batch_import') {
+          const rows: any[] = (body as any).rows || [];
+          const fileName: string = (body as any).file_name || null;
+          const items = rows.map((r, i) => normalizeRow(r, i));
+          const valid = items.filter(i => i.status === 'VALID');
+          const errs = items.length - valid.length;
+
+          const batchId = crypto.randomUUID();
+          await client.execute(`
+            INSERT INTO dados_dachser.t_voucher_batch_import
+              (id, status, original_file_name, total_rows, valid_rows, error_rows, created_by_user_id, created_by_user_name)
+            VALUES (?, 'PENDING_DOCUMENTS', ?, ?, ?, ?, ?, ?)
+          `, [batchId, fileName, items.length, valid.length, errs, String(requesterId), adminUserName]);
+
+          for (const it of items) {
+            const itemId = crypto.randomUUID();
+            let voucherId: string | null = null;
+
+            if (it.status === 'VALID') {
+              voucherId = crypto.randomUUID();
+              const numeroSpo = it.processo || `LOTE-${batchId.slice(0, 8)}-${it.row_index + 1}`;
+              try {
+                await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS origem_criacao VARCHAR(50) DEFAULT NULL`);
+              } catch (_) {}
+              await client.execute(`
+                INSERT INTO dados_dachser.t_vouchers (
+                  id, numero_spo, vencimento, cobranca_em_nome_de,
+                  forma_pagamento, remessa, urgente, urgencia_tipo,
+                  etapa_atual, status_baixa, status_envio_cliente, status_financeiro,
+                  valor, moeda, fornecedor,
+                  data_emissao_documento, comentarios_operacao,
+                  criado_por_user_id, processo_id, status_documento_fiscal,
+                  tipo_execucao_pagamento, origem_criacao
+                ) VALUES (?, ?, ?, 'DACHSER', ?, 'NENHUM', 0, 'NORMAL',
+                          'OPERACAO', 'PENDENTE', 'NAO_APLICA', 'PENDENTE',
+                          ?, 'BRL', ?, ?, ?, ?, ?, 'PENDENTE', 'A_DEFINIR', 'LOTE_PLANILHA')
+              `, [
+                voucherId, numeroSpo,
+                it.vencimento ? `${it.vencimento} 00:00:00` : null,
+                it.forma_pagamento,
+                it.valor, it.fornecedor,
+                it.data_fatura ? `${it.data_fatura} 00:00:00` : null,
+                it.historico,
+                String(requesterId),
+                it.processo,
+              ]);
+
+              try {
+                const logId = crypto.randomUUID();
+                await client.execute(`
+                  INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+                  VALUES (?, ?, ?, ?, 'VOUCHER_CRIADO_LOTE', ?, NOW())
+                `, [logId, voucherId, String(requesterId), adminUserName, `batch_id=${batchId}; row=${it.row_index}; fatura=${it.fatura ?? ''}`]);
+              } catch (_) {}
+            }
+
+            await client.execute(`
+              INSERT INTO dados_dachser.t_voucher_batch_import_item
+                (id, batch_id, row_index, voucher_id, processo, item_pagto, fornecedor, valor,
+                 vencimento, data_fatura, forma_pagamento, fatura, unidade_pagto, historico, quebra,
+                 status, validation_message, raw_json)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+              itemId, batchId, it.row_index, voucherId,
+              it.processo, it.item_pagto, it.fornecedor, it.valor,
+              it.vencimento, it.data_fatura, it.forma_pagamento, it.fatura,
+              it.unidade_pagto, it.historico, it.quebra,
+              voucherId ? 'VOUCHER_CRIADO' : it.status, it.validation_message,
+              JSON.stringify(it.raw_json || {}),
+            ]);
+          }
+
+          result = { success: true, batch_id: batchId, total: items.length, created: valid.length, errors: errs };
+          break;
+        }
+
+        // ===== upload doc =====
+        if (action === 'upload_batch_document') {
+          const { batch_id, file_name, file_url, file_path, mime_type, size_bytes, tipo_anexo } = body as any;
+          if (!batch_id || !file_name || !file_url) {
+            return new Response(JSON.stringify({ success: false, error: 'batch_id, file_name, file_url são obrigatórios' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const docId = crypto.randomUUID();
+          await client.execute(`
+            INSERT INTO dados_dachser.t_voucher_batch_documents
+              (id, batch_id, file_name, file_url, file_path, mime_type, size_bytes, tipo_anexo, status,
+               uploaded_by_user_id, uploaded_by_user_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDENTE', ?, ?)
+          `, [docId, batch_id, file_name, file_url, file_path || null, mime_type || null, size_bytes || 0, tipo_anexo || null, String(requesterId), adminUserName]);
+          result = { success: true, batch_document_id: docId };
+          break;
+        }
+
+        // ===== bind =====
+        if (action === 'bind_batch_document_to_voucher') {
+          const { batch_document_id, voucher_id, tipo_anexo } = body as any;
+          if (!batch_document_id || !voucher_id || !tipo_anexo) {
+            return new Response(JSON.stringify({ success: false, error: 'batch_document_id, voucher_id, tipo_anexo são obrigatórios' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const docs = await client.query(`SELECT * FROM dados_dachser.t_voucher_batch_documents WHERE id = ?`, [batch_document_id]);
+          if (!docs || docs.length === 0) {
+            return new Response(JSON.stringify({ success: false, error: 'Documento não encontrado' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const doc = docs[0];
+          const items = await client.query(`SELECT id FROM dados_dachser.t_voucher_batch_import_item WHERE batch_id = ? AND voucher_id = ?`, [doc.batch_id, voucher_id]);
+          if (!items || items.length === 0) {
+            return new Response(JSON.stringify({ success: false, error: 'Voucher não pertence a este lote' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const anexoId = crypto.randomUUID();
+          await client.execute(`
+            INSERT INTO dados_dachser.t_voucher_anexos (id, voucher_id, tipo, file_name, file_url, file_size, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, NOW())
+          `, [anexoId, voucher_id, tipo_anexo, doc.file_name, doc.file_url, doc.size_bytes || 0]);
+          await client.execute(`
+            UPDATE dados_dachser.t_voucher_batch_documents
+            SET voucher_id = ?, anexo_id = ?, tipo_anexo = ?, status = 'VINCULADO',
+                bound_by_user_id = ?, bound_by_user_name = ?, bound_at = NOW()
+            WHERE id = ?
+          `, [voucher_id, anexoId, tipo_anexo, String(requesterId), adminUserName, batch_document_id]);
+          try {
+            const logId = crypto.randomUUID();
+            await client.execute(`
+              INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+              VALUES (?, ?, ?, ?, 'ANEXO_VINCULADO_LOTE', ?, NOW())
+            `, [logId, voucher_id, String(requesterId), adminUserName, `batch_id=${doc.batch_id}; tipo=${tipo_anexo}; file=${doc.file_name}`]);
+          } catch (_) {}
+          result = { success: true, anexo_id: anexoId };
+          break;
+        }
+
+        // ===== unbind =====
+        if (action === 'unbind_batch_document') {
+          const { batch_document_id } = body as any;
+          if (!batch_document_id) {
+            return new Response(JSON.stringify({ success: false, error: 'batch_document_id obrigatório' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const docs = await client.query(`SELECT * FROM dados_dachser.t_voucher_batch_documents WHERE id = ?`, [batch_document_id]);
+          if (!docs || docs.length === 0) {
+            return new Response(JSON.stringify({ success: false, error: 'Documento não encontrado' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const doc = docs[0];
+          if (doc.anexo_id) {
+            try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE id = ?`, [doc.anexo_id]); } catch (_) {}
+          }
+          await client.execute(`
+            UPDATE dados_dachser.t_voucher_batch_documents
+            SET voucher_id = NULL, anexo_id = NULL, status = 'PENDENTE',
+                bound_by_user_id = NULL, bound_by_user_name = NULL, bound_at = NULL
+            WHERE id = ?
+          `, [batch_document_id]);
+          if (doc.voucher_id) {
+            try {
+              const logId = crypto.randomUUID();
+              await client.execute(`
+                INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+                VALUES (?, ?, ?, ?, 'ANEXO_DESVINCULADO_LOTE', ?, NOW())
+              `, [logId, doc.voucher_id, String(requesterId), adminUserName, `batch_id=${doc.batch_id}; file=${doc.file_name}`]);
+            } catch (_) {}
+          }
+          result = { success: true };
+          break;
+        }
+
+        // ===== status =====
+        if (action === 'get_batch_import_status') {
+          const { batch_id } = body as any;
+          if (!batch_id) {
+            return new Response(JSON.stringify({ success: false, error: 'batch_id obrigatório' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const batchRows = await client.query(`SELECT * FROM dados_dachser.t_voucher_batch_import WHERE id = ?`, [batch_id]);
+          if (!batchRows || batchRows.length === 0) {
+            return new Response(JSON.stringify({ success: false, error: 'Lote não encontrado' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const items = await client.query(`SELECT * FROM dados_dachser.t_voucher_batch_import_item WHERE batch_id = ? ORDER BY row_index ASC`, [batch_id]);
+          const docs = await client.query(`SELECT * FROM dados_dachser.t_voucher_batch_documents WHERE batch_id = ? ORDER BY uploaded_at ASC`, [batch_id]);
+
+          const voucherIds = items.filter((i: any) => i.voucher_id).map((i: any) => i.voucher_id);
+          let anexosByVoucher: Record<string, any[]> = {};
+          if (voucherIds.length > 0) {
+            const placeholders = voucherIds.map(() => '?').join(',');
+            const allAnexos = await client.query(
+              `SELECT id, voucher_id, tipo, file_name FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${placeholders})`,
+              voucherIds
+            );
+            for (const a of allAnexos) {
+              (anexosByVoucher[a.voucher_id] ||= []).push(a);
+            }
+          }
+
+          const checklist = items.filter((i: any) => i.voucher_id).map((i: any) => {
+            const ax = anexosByVoucher[i.voucher_id] || [];
+            const temFatura = ax.some(a => a.tipo === 'FATURA' || a.tipo === 'FATURA_DEMONSTRATIVO');
+            const temBoleto = ax.some(a => a.tipo === 'BOLETO' || a.tipo === 'BOLETO_INSTRUCOES');
+            const requerBoleto = i.forma_pagamento === 'BOLETO';
+            let status = 'COMPLETO';
+            if (!temFatura && requerBoleto && !temBoleto) status = 'PENDENTE_FATURA_E_BOLETO';
+            else if (!temFatura) status = 'PENDENTE_FATURA';
+            else if (requerBoleto && !temBoleto) status = 'PENDENTE_BOLETO';
+            return { voucher_id: i.voucher_id, fornecedor: i.fornecedor, valor: i.valor, vencimento: i.vencimento, forma_pagamento: i.forma_pagamento, fatura: i.fatura, temFatura, temBoleto, requerBoleto, status };
+          });
+
+          result = { success: true, batch: batchRows[0], items, documents: docs, checklist };
+          break;
+        }
+
+        // ===== finalize =====
+        if (action === 'finalize_batch_import') {
+          const { batch_id } = body as any;
+          if (!batch_id) {
+            return new Response(JSON.stringify({ success: false, error: 'batch_id obrigatório' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const items = await client.query(`SELECT voucher_id, fornecedor, forma_pagamento FROM dados_dachser.t_voucher_batch_import_item WHERE batch_id = ? AND voucher_id IS NOT NULL`, [batch_id]);
+          const voucherIds = items.map((i: any) => i.voucher_id);
+          const pendentes: any[] = [];
+          if (voucherIds.length > 0) {
+            const placeholders = voucherIds.map(() => '?').join(',');
+            const allAnexos = await client.query(
+              `SELECT voucher_id, tipo FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${placeholders})`,
+              voucherIds
+            );
+            const byV: Record<string, string[]> = {};
+            for (const a of allAnexos) (byV[a.voucher_id] ||= []).push(a.tipo);
+            for (const it of items) {
+              const tipos = byV[it.voucher_id] || [];
+              const temFatura = tipos.some(t => t === 'FATURA' || t === 'FATURA_DEMONSTRATIVO');
+              const temBoleto = tipos.some(t => t === 'BOLETO' || t === 'BOLETO_INSTRUCOES');
+              const requerBoleto = it.forma_pagamento === 'BOLETO';
+              const motivos: string[] = [];
+              if (!temFatura) motivos.push('PENDENTE_FATURA');
+              if (requerBoleto && !temBoleto) motivos.push('PENDENTE_BOLETO');
+              if (motivos.length) pendentes.push({ voucher_id: it.voucher_id, fornecedor: it.fornecedor, motivos });
+            }
+          }
+          if (pendentes.length > 0) {
+            return new Response(
+              JSON.stringify({ success: false, error: 'Lote possui pendências', pendentes }),
+              { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          await client.execute(`
+            UPDATE dados_dachser.t_voucher_batch_import
+            SET status = 'COMPLETE', finalized_at = NOW(), finalized_by_user_id = ?, finalized_by_user_name = ?
+            WHERE id = ?
+          `, [String(requesterId), adminUserName, batch_id]);
+          try {
+            const logId = crypto.randomUUID();
+            await client.execute(`
+              INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+              VALUES (?, ?, ?, ?, 'IMPORTACAO_LOTE_FINALIZADA', ?, NOW())
+            `, [logId, voucherIds[0] || batch_id, String(requesterId), adminUserName, `batch_id=${batch_id}; vouchers=${voucherIds.length}`]);
+          } catch (_) {}
+          result = { success: true, batch_id, finalized: true };
+          break;
+        }
+
+        result = { success: false, error: 'action não tratada' };
         break;
       }
 

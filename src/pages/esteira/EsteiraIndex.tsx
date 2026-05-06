@@ -18,6 +18,8 @@ import { VoucherTable, FilterValues } from "@/components/esteira/VoucherTable";
 import { CreateVoucherDialog } from "@/components/esteira/CreateVoucherDialog";
 import { EditVoucherDialog } from "@/components/esteira/EditVoucherDialog";
 import { CancelarVoucherDialog } from "@/components/esteira/CancelarVoucherDialog";
+import { BatchImportVoucherDialog } from "@/components/esteira/BatchImportVoucherDialog";
+import { BatchDocumentBinderDialog } from "@/components/esteira/BatchDocumentBinderDialog";
 import { RoboTab } from "@/components/tabs/RoboTab";
 import { ReportsTab } from "@/components/tabs/ReportsTab";
 // Removed: FaturasDoDiaTab - apenas Pagamentos agora
@@ -612,6 +614,9 @@ const EsteiraIndex = () => {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [showBatchImportDialog, setShowBatchImportDialog] = useState(false);
+  const [showBatchBinderDialog, setShowBatchBinderDialog] = useState(false);
+  const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
   const [showUsersDialog, setShowUsersDialog] = useState(false);
   const [esteiraUsers, setEsteiraUsers] = useState<Array<{
@@ -1908,6 +1913,11 @@ const EsteiraIndex = () => {
               Enviar Voucher/SPO
             </Button>}
 
+          {isAdmin && user?.id && <Button variant="outline" className="gap-2 rounded-full px-4 border-[#ffc800]/40 text-[#ffc800] hover:bg-[#ffc800]/10" onClick={() => setShowBatchImportDialog(true)}>
+              <FileSpreadsheet className="h-4 w-4" />
+              Importar SPO em Lote
+            </Button>}
+
           {user && <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[180px] truncate">
               @{user.username || user.email}
             </div>}
@@ -2205,6 +2215,24 @@ const EsteiraIndex = () => {
       <CreateVoucherDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onSuccess={loadVouchers} />
       <EditVoucherDialog open={showEditDialog} onOpenChange={setShowEditDialog} onSuccess={loadVouchers} voucher={selectedVoucher} />
       {selectedVoucher && <CancelarVoucherDialog open={showCancelDialog} onOpenChange={setShowCancelDialog} voucher={selectedVoucher} onSuccess={loadVouchers} />}
+
+      {isAdmin && user?.id && <BatchImportVoucherDialog
+        open={showBatchImportDialog}
+        onOpenChange={setShowBatchImportDialog}
+        userId={Number(user.id)}
+        onCreated={(batchId) => {
+          setActiveBatchId(batchId);
+          setShowBatchBinderDialog(true);
+          loadVouchers();
+        }}
+      />}
+      {isAdmin && user?.id && <BatchDocumentBinderDialog
+        open={showBatchBinderDialog}
+        onOpenChange={setShowBatchBinderDialog}
+        batchId={activeBatchId}
+        userId={Number(user.id)}
+        onFinalized={() => { setActiveBatchId(null); loadVouchers(); }}
+      />}
 
       {/* Read-only Users Dialog */}
       <Dialog open={showUsersDialog} onOpenChange={open => {
