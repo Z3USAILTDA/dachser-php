@@ -99,7 +99,6 @@ export const exportVouchersToExcel = (data: Voucher[]) => {
         v: v.vencimento ? format(new Date(v.vencimento), "dd/MM/yyyy", { locale: ptBR }) : "-",
         align: "center",
       },
-      { v: v.cobrancaEmNomeDe === "DACHSER" ? "Sim" : "Não", align: "center" },
       { v: v.formaPagamento || "-", align: "center" },
       { v: v.urgente ? "Sim" : "Não", align: "center" },
       {
