@@ -621,7 +621,7 @@ export const PagamentosTab = () => {
     if (isBatch) {
       toast({
         title: `Retorno em lote para ${logLabel}`,
-        description: `${sucesso} retornado(s)${falha > 0 ? `, ${falha} falha(s)` : ""}`,
+        description: `${sucesso} retornado(s)${falha > 0 ? `, ${falha} falha(s)` : ""}${skipped > 0 ? ` — ${skipped} ignorado(s) (não persistidos)` : ""}${errosDetalhe.length > 0 ? "\n" + errosDetalhe.slice(0, 3).join(" | ") : ""}`,
         variant: falha > 0 && sucesso === 0 ? "destructive" : "default",
       });
       setSelectedIds(new Set());
@@ -629,7 +629,7 @@ export const PagamentosTab = () => {
       if (falha > 0) {
         toast({
           title: "Erro ao retornar voucher",
-          description: "Não foi possível retornar o voucher",
+          description: errosDetalhe[0] || "Não foi possível retornar o voucher",
           variant: "destructive"
         });
       } else {
