@@ -403,6 +403,58 @@ function chunkArray<T>(items: T[], chunkSize: number): T[][] {
   return chunks;
 }
 
+const VOUCHER_ETAPA_RANK: Record<string, number> = {
+  A_PROCESSAR: 0, RASCUNHO: 1, OPERACAO: 2, AJUSTE_OPERACAO: 2,
+  FISCAL: 3, AJUSTE_FISCAL: 3, SUPERVISOR: 4, FINANCEIRO: 5,
+  ROBO: 6, CONCLUIDO: 7, CANCELADO: -1,
+};
+
+/**
+ * Reconcilia duplicatas de t_vouchers para um mesmo numero_spo, mantendo o "vencedor":
+ *   score = (n_anexos>0?100:0) + (linha_digitavel?50:0) + ETAPA_RANK
+ * Empate: prefere `preferIfTie`; senão id lexicograficamente menor.
+ * Apaga os perdedores em cascata (logs + anexos + voucher). Retorna o id vencedor.
+ */
+async function reconcileDuplicateVouchersBySpo(
+  client: any,
+  numeroSpo: string,
+  preferIfTie: string | null
+): Promise<string | null> {
+  if (!numeroSpo) return null;
+  const rows = await client.query(
+    `SELECT v.id, v.etapa_atual, v.linha_digitavel, v.codigo_barras, v.created_at,
+            (SELECT COUNT(*) FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id) AS n_anexos
+     FROM dados_dachser.t_vouchers v
+     WHERE v.numero_spo = ?`,
+    [numeroSpo]
+  );
+  if (!rows || rows.length <= 1) return rows && rows[0] ? rows[0].id : null;
+
+  const scored = rows.map((r: any) => ({
+    id: String(r.id),
+    score:
+      ((Number(r.n_anexos) || 0) > 0 ? 100 : 0) +
+      ((r.linha_digitavel || r.codigo_barras) ? 50 : 0) +
+      (VOUCHER_ETAPA_RANK[r.etapa_atual] ?? 0),
+  }));
+  scored.sort((a: any, b: any) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (preferIfTie && a.id === preferIfTie) return -1;
+    if (preferIfTie && b.id === preferIfTie) return 1;
+    return a.id < b.id ? -1 : 1;
+  });
+  const winner = scored[0].id;
+  const losers = scored.slice(1).map((s: any) => s.id);
+  if (losers.length === 0) return winner;
+
+  const placeholders = losers.map(() => '?').join(',');
+  console.log(`Reconcile ${numeroSpo}: keeping ${winner}, deleting ${losers.length}:`, losers);
+  try { await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id IN (${placeholders})`, losers); } catch (e) { console.warn('del logs', e); }
+  try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${placeholders})`, losers); } catch (e) { console.warn('del anexos', e); }
+  try { await client.execute(`DELETE FROM dados_dachser.t_vouchers WHERE id IN (${placeholders})`, losers); } catch (e) { console.warn('del vouchers', e); }
+  return winner;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -422,7 +474,7 @@ Deno.serve(async (req) => {
     // ====================================================================
     const FIN_ACTIONS = new Set<string>([
       // Vouchers / Esteira
-      'save_voucher_esteira','save_voucher_anexo','update_voucher_esteira','update_voucher_by_numero_spo',
+      'save_voucher_esteira','save_voucher_anexo','update_voucher_esteira','update_voucher_by_numero_spo','cleanup_duplicate_vouchers',
       'cleanup_invalid_vouchers','fix_sync_vouchers_to_a_processar','delete_sync_duplicates',
       'admin_bulk_update_etapa','admin_reset_all_to_a_processar','admin_reset_stale_to_a_processar',
       'get_vouchers_esteira','get_voucher_by_id','get_voucher_responsaveis_emails',
@@ -6469,7 +6521,45 @@ Deno.serve(async (req) => {
         ]);
         
         console.log('Voucher saved to MariaDB t_vouchers, ID:', voucherId, 'id_rm:', voucherData.id_rm);
+
+        // Reconciliação pós-INSERT: defesa contra race condition em criações concorrentes.
+        // Se houver mais de 1 voucher para o mesmo numero_spo, mantém apenas o "vencedor".
+        try {
+          const reconciledId = await reconcileDuplicateVouchersBySpo(client, numeroSpo, voucherId);
+          if (reconciledId && reconciledId !== voucherId) {
+            console.log('Reconciliation: returning winner', reconciledId, 'instead of just-inserted', voucherId);
+            result = { success: true, mariadbId: reconciledId, reconciled: true };
+            break;
+          }
+        } catch (recErr) {
+          console.warn('Reconciliation failed (non-fatal):', recErr);
+        }
+
         result = { success: true, mariadbId: voucherId };
+        break;
+      }
+
+      case 'cleanup_duplicate_vouchers': {
+        // Aplica a regra de "vencedor único" a todos os numero_spo com COUNT(*) > 1.
+        const dups = await client.query(`
+          SELECT numero_spo, COUNT(*) AS n
+          FROM dados_dachser.t_vouchers
+          WHERE numero_spo IS NOT NULL AND numero_spo <> ''
+          GROUP BY numero_spo HAVING COUNT(*) > 1
+        `);
+        let processed = 0;
+        let removed = 0;
+        for (const row of (dups || [])) {
+          try {
+            const before = (row.n as number) || 0;
+            await reconcileDuplicateVouchersBySpo(client, row.numero_spo, null);
+            processed++;
+            removed += Math.max(0, before - 1);
+          } catch (e) {
+            console.warn('cleanup error for', row.numero_spo, e);
+          }
+        }
+        result = { success: true, processed, removed };
         break;
       }
 
