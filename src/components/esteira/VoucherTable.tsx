@@ -442,24 +442,66 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                   </Select>
                 </TableHead>
                 <TableHead className="py-2">
-                  <Select value={filters.etapa} onValueChange={(value) => handleFilterChange("etapa", value)}>
-                    <SelectTrigger className="h-8 text-xs bg-card w-28">
-                      <SelectValue placeholder="Todas" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-card border-border">
-                      <SelectItem value="all">Todas</SelectItem>
-                      
-                      <SelectItem value="OPERACAO">Operacional</SelectItem>
-                      <SelectItem value="FISCAL">Fiscal</SelectItem>
-                      <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
-                      <SelectItem value="FINANCEIRO">Financeiro</SelectItem>
-                      <SelectItem value="ROBO">Robô</SelectItem>
-                      <SelectItem value="CONCLUIDO">Concluído</SelectItem>
-                      <SelectItem value="AJUSTE_OPERACAO">Ajuste Op.</SelectItem>
-                      <SelectItem value="AJUSTE_FISCAL">Ajuste Fiscal</SelectItem>
-                      <SelectItem value="CANCELADO">Cancelado</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {(() => {
+                    const ETAPA_OPTIONS: { value: string; label: string }[] = [
+                      { value: "OPERACAO", label: "Operacional" },
+                      { value: "FISCAL", label: "Fiscal" },
+                      { value: "SUPERVISOR", label: "Supervisor" },
+                      { value: "FINANCEIRO", label: "Financeiro" },
+                      { value: "ROBO", label: "Robô" },
+                      { value: "CONCLUIDO", label: "Concluído" },
+                      { value: "AJUSTE_OPERACAO", label: "Ajuste Op." },
+                      { value: "AJUSTE_FISCAL", label: "Ajuste Fiscal" },
+                      { value: "CANCELADO", label: "Cancelado" },
+                    ];
+                    const raw = (filters.etapa || "all").trim();
+                    const selected = !raw || raw === "all" ? [] : raw.split(",").map(s => s.trim()).filter(Boolean);
+                    const toggle = (val: string) => {
+                      const set = new Set(selected);
+                      if (set.has(val)) set.delete(val); else set.add(val);
+                      handleFilterChange("etapa", set.size === 0 ? "all" : Array.from(set).join(","));
+                    };
+                    const triggerLabel = selected.length === 0
+                      ? "Todas"
+                      : selected.length === 1
+                        ? (ETAPA_OPTIONS.find(o => o.value === selected[0])?.label || selected[0])
+                        : `${selected.length} selecionadas`;
+                    return (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-8 text-xs bg-card w-28 justify-between font-normal">
+                            <span className="truncate">{triggerLabel}</span>
+                            <ArrowUpDown className="h-3 w-3 opacity-50 shrink-0" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-48 p-2 bg-card border-border" align="start">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs text-muted-foreground">Etapas</span>
+                            {selected.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleFilterChange("etapa", "all")}
+                                className="text-xs text-primary hover:underline"
+                              >
+                                Limpar
+                              </button>
+                            )}
+                          </div>
+                          <div className="space-y-1 max-h-72 overflow-auto">
+                            {ETAPA_OPTIONS.map(opt => (
+                              <label key={opt.value} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted/50 rounded px-1 py-1">
+                                <Checkbox
+                                  checked={selected.includes(opt.value)}
+                                  onCheckedChange={() => toggle(opt.value)}
+                                />
+                                <span>{opt.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    );
+                  })()}
                 </TableHead>
                 <TableHead className="py-2">
                   <Select value={filters.slaStatus || "all"} onValueChange={(value) => handleFilterChange("slaStatus", value)}>
