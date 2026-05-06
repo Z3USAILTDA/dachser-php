@@ -154,7 +154,7 @@ export const exportVouchersToExcel = (data: Voucher[]) => {
       ws[addr] = {
         t: "n",
         f: data.length > 0 ? `SUM(D${firstDataExcelRow}:D${lastDataExcelRow})` : undefined,
-        v: data.reduce((s, x) => s + (typeof x.valor === "number" ? x.valor : 0), 0),
+        v: data.reduce((s, x) => s + (Number(x.valor) || 0), 0),
         z: "#,##0.00",
         s: { ...totalStyle, alignment: { ...totalStyle.alignment, horizontal: "right" } },
       };
