@@ -403,6 +403,58 @@ function chunkArray<T>(items: T[], chunkSize: number): T[][] {
   return chunks;
 }
 
+const VOUCHER_ETAPA_RANK: Record<string, number> = {
+  A_PROCESSAR: 0, RASCUNHO: 1, OPERACAO: 2, AJUSTE_OPERACAO: 2,
+  FISCAL: 3, AJUSTE_FISCAL: 3, SUPERVISOR: 4, FINANCEIRO: 5,
+  ROBO: 6, CONCLUIDO: 7, CANCELADO: -1,
+};
+
+/**
+ * Reconcilia duplicatas de t_vouchers para um mesmo numero_spo, mantendo o "vencedor":
+ *   score = (n_anexos>0?100:0) + (linha_digitavel?50:0) + ETAPA_RANK
+ * Empate: prefere `preferIfTie`; senão id lexicograficamente menor.
+ * Apaga os perdedores em cascata (logs + anexos + voucher). Retorna o id vencedor.
+ */
+async function reconcileDuplicateVouchersBySpo(
+  client: any,
+  numeroSpo: string,
+  preferIfTie: string | null
+): Promise<string | null> {
+  if (!numeroSpo) return null;
+  const rows = await client.query(
+    `SELECT v.id, v.etapa_atual, v.linha_digitavel, v.codigo_barras, v.created_at,
+            (SELECT COUNT(*) FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id) AS n_anexos
+     FROM dados_dachser.t_vouchers v
+     WHERE v.numero_spo = ?`,
+    [numeroSpo]
+  );
+  if (!rows || rows.length <= 1) return rows && rows[0] ? rows[0].id : null;
+
+  const scored = rows.map((r: any) => ({
+    id: String(r.id),
+    score:
+      ((Number(r.n_anexos) || 0) > 0 ? 100 : 0) +
+      ((r.linha_digitavel || r.codigo_barras) ? 50 : 0) +
+      (VOUCHER_ETAPA_RANK[r.etapa_atual] ?? 0),
+  }));
+  scored.sort((a: any, b: any) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (preferIfTie && a.id === preferIfTie) return -1;
+    if (preferIfTie && b.id === preferIfTie) return 1;
+    return a.id < b.id ? -1 : 1;
+  });
+  const winner = scored[0].id;
+  const losers = scored.slice(1).map((s: any) => s.id);
+  if (losers.length === 0) return winner;
+
+  const placeholders = losers.map(() => '?').join(',');
+  console.log(`Reconcile ${numeroSpo}: keeping ${winner}, deleting ${losers.length}:`, losers);
+  try { await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id IN (${placeholders})`, losers); } catch (e) { console.warn('del logs', e); }
+  try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${placeholders})`, losers); } catch (e) { console.warn('del anexos', e); }
+  try { await client.execute(`DELETE FROM dados_dachser.t_vouchers WHERE id IN (${placeholders})`, losers); } catch (e) { console.warn('del vouchers', e); }
+  return winner;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
