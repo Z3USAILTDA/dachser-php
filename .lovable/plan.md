@@ -1,73 +1,102 @@
-## Preencher "Emissão" e "Enviado por" vazios na esteira
+## Regra de negócio
 
-Aplica-se aos vouchers fora da etapa `A_PROCESSAR` exibidos em `VoucherTable`.
+Vouchers só podem ser editados quando `etapa_atual = 'A_PROCESSAR'` (Operacional). Em qualquer outra etapa a edição é proibida — sem exceção, inclusive ADMIN. Edições válidas precisam aparecer no histórico com responsável e diff.
 
-### 1. Backend — query (`supabase/functions/mariadb-proxy/index.ts`)
+---
 
-Atualizar `get_vouchers_ativos` e `get_vouchers_combined` (ramo ativos) para usar fallbacks já no SELECT:
+## Plano de correção
 
-- **Emissão**: trocar `v.data_emissao_documento` exibido por
-  `COALESCE(v.data_emissao_documento, dfv.data_emissao) AS data_emissao_documento`.
-  (incluir `MAX(data_emissao) AS data_emissao` no subselect `dfv` em `get_vouchers_ativos`, igual já existe em `combined`).
+### 1. Bloqueio de edição fora da Operacional
 
-- **Enviado por**: relaxar o filtro de ações no subselect `enviado_por_user_name` — remover o `IN (...)` e usar o último log de qualquer ação:
-  ```
-  (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
-   WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
-     AND l.user_name IS NOT NULL AND l.user_name <> ''
-   ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
-  ```
+**Front — `src/components/esteira/VoucherTable.tsx`**
+Trocar:
+```ts
+canEdit={canEdit && voucher.etapaAtual !== "CANCELADO"}
+```
+por:
+```ts
+canEdit={canEdit && voucher.etapaAtual === "A_PROCESSAR"}
+```
+O item "Editar" some do menu fora da etapa Operacional.
 
-### 2. Backend — nova action de backfill
-
-Adicionar action `backfill_emissao_enviado_por` em `mariadb-proxy/index.ts` (registrar na lista de actions permitidas). Executa duas atualizações em `dados_dachser.t_vouchers`, restritas a vouchers fora de `A_PROCESSAR`:
-
-```sql
--- A) Emissão: copiar de dfv.data_emissao quando vazia
-UPDATE dados_dachser.t_vouchers v
-JOIN (
-  SELECT nd, MAX(data_emissao) AS data_emissao
-  FROM dados_dachser.t_dados_financeiro_voucher
-  WHERE data_emissao IS NOT NULL
-  GROUP BY nd
-) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
-SET v.data_emissao_documento = dfv.data_emissao
-WHERE v.etapa_atual <> 'A_PROCESSAR'
-  AND (v.data_emissao_documento IS NULL OR v.data_emissao_documento = '0000-00-00');
-
--- B) Enviado por: gravar em coluna dedicada (criar se não existir)
-ALTER TABLE dados_dachser.t_vouchers
-  ADD COLUMN IF NOT EXISTS enviado_por_user_name VARCHAR(120) NULL;
-
-UPDATE dados_dachser.t_vouchers v
-JOIN (
-  SELECT l.voucher_id, l.user_name
-  FROM dados_dachser.t_voucher_logs l
-  JOIN (
-    SELECT voucher_id, MAX(data_hora) AS max_dh
-    FROM dados_dachser.t_voucher_logs
-    WHERE user_name IS NOT NULL AND user_name <> ''
-    GROUP BY voucher_id
-  ) m ON m.voucher_id = l.voucher_id AND m.max_dh = l.data_hora
-) lg ON lg.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
-SET v.enviado_por_user_name = lg.user_name
-WHERE v.etapa_atual <> 'A_PROCESSAR'
-  AND (v.enviado_por_user_name IS NULL OR v.enviado_por_user_name = '');
+**Front — `src/components/esteira/EditVoucherDialog.tsx`** (defesa em profundidade)
+No `handleSubmit`, antes da chamada à edge function:
+```ts
+if (voucher.etapaAtual !== "A_PROCESSAR") {
+  toast({ title: "Edição não permitida",
+          description: "Vouchers só podem ser editados na etapa Operacional.",
+          variant: "destructive" });
+  return;
+}
 ```
 
-A action retorna `{ updated_emissao, updated_enviado_por }` (via `affectedRows`).
+**Backend — `supabase/functions/mariadb-proxy/index.ts` › `update_voucher_esteira`**
+Antes do UPDATE:
+```sql
+SELECT etapa_atual FROM dados_dachser.t_vouchers WHERE id = ?
+```
+Se `etapa_atual <> 'A_PROCESSAR'`:
+- Retorna 403 `{ success:false, error:"EDICAO_BLOQUEADA_FORA_OPERACIONAL", message:"Vouchers só podem ser editados na etapa Operacional." }`.
+- Insere log `VOUCHER_EDICAO_BLOQUEADA` em `t_voucher_logs` registrando a tentativa (usuário, etapa, campos enviados).
 
-### 3. UI — fallback final em runtime (`src/components/esteira/VoucherTable.tsx`)
+Operações internas legítimas (transições de etapa, upload de comprovante, robô etc.) usam outras actions e seguem funcionando.
 
-Como rede de segurança, manter o que já existe na coluna "Enviado por":
-`voucher.enviadoPorUserName || voucher.criadoPorUserName || voucher.criadoPorDfv || "-"`.
-Nenhuma outra mudança visual.
+### 2. Captura correta do usuário no log
 
-### 4. Disparo do backfill
+`EditVoucherDialog.tsx` usa `supabase.auth.getUser()` (linha ~116), mas a esteira autentica via MariaDB + `localStorage("user"|"dachser_user")` → `userData.user` é `null` → `user_id`/`user_name` chegam `undefined` → no proxy o `if (user_id || user_name)` falha e **nenhum log é gravado**.
 
-Executar a action `backfill_emissao_enviado_por` uma vez logo após o deploy (via chamada manual a partir do console do navegador autenticado, ou um botão temporário — preferência: chamada manual única, sem UI).
+Trocar pela leitura do `localStorage` (mesmo padrão do `CreateVoucherDialog`):
+```ts
+const stored = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+const u = stored ? JSON.parse(stored) : null;
+// ...
+user_id:   u?.id?.toString() ?? null,
+user_name: u?.username ?? "Sistema",
+```
 
-### Observações
-- Sem mudanças em `t_vouchers` além do `ADD COLUMN IF NOT EXISTS enviado_por_user_name` (idempotente).
-- Sem alteração no fluxo de cadastro/transição: novos registros continuam recebendo o valor pelas queries de leitura (subselect).
-- `A_PROCESSAR` permanece intocado (sem registro em `t_vouchers`).
+### 3. Log sempre, com diff antes/depois
+
+No `update_voucher_esteira`:
+- Remover o `if (user_id || user_name)` — log sempre é inserido.
+- Antes do UPDATE, `SELECT` dos campos atuais; calcular diff só dos campos efetivamente alterados.
+- Gravar `t_voucher_logs.detalhe` legível, ex.:
+  ```
+  Vencimento: 2026-05-15 → 2026-05-11
+  Valor: 1500.00 → 1234.56
+  ```
+- Quando faltar `user_name`, registrar `"Sistema (sem identificação)"`.
+
+### 4. Reverter o voucher 105-292893 ao valor original
+
+Operação pontual via edge function, em duas etapas controladas:
+
+**4.1. Diagnóstico (read-only)** — nova action `audit_voucher_diff` em `mariadb-proxy`:
+- `SELECT id, numero_spo, vencimento, valor, etapa_atual` de `t_vouchers WHERE numero_spo = '105-292893'`.
+- `SELECT dt_vencimento, valor_total` de `t_dados_financeiro_voucher` (espelho RM) para o mesmo voucher.
+- `SELECT * FROM t_voucher_logs WHERE voucher_id = ? ORDER BY data_hora DESC LIMIT 20`.
+- Retorna o JSON consolidado para confirmação visual antes de reverter.
+
+**4.2. Reversão controlada** — nova action `revert_voucher_field` (ADMIN-only via header `x-user-role`):
+- Recebe `{ voucher_id, field, old_value, reason, user_id, user_name }`.
+- Whitelist de campos: `vencimento`, `valor`, `forma_pagamento`.
+- Faz o UPDATE direcionado e grava log `VOUCHER_REVERTIDO_ADMIN` com `detalhe`:
+  ```
+  Reversão administrativa — campo: vencimento
+  Valor atual: 2026-05-15 → Restaurado para: 2026-05-11
+  Justificativa: <reason>
+  ```
+- Não passa pelo bloqueio da etapa (é justamente a ferramenta de correção para vouchers fora da Operacional).
+
+**Disparo da reversão**: depois que o plano for aprovado, eu executo o passo 4.1, mostro o diff aqui no chat, você confirma o valor original (vencimento 11/05) e eu disparo o 4.2 com sua justificativa. O log da reversão fica permanente em `t_voucher_logs`.
+
+---
+
+## Arquivos alterados
+
+- `src/components/esteira/VoucherTable.tsx` — `canEdit` somente em `A_PROCESSAR`.
+- `src/components/esteira/EditVoucherDialog.tsx` — guard de etapa + leitura de usuário do `localStorage`.
+- `supabase/functions/mariadb-proxy/index.ts`:
+  - `update_voucher_esteira`: bloqueio por etapa + log de tentativa + log sempre com diff.
+  - Novas actions `audit_voucher_diff`, `revert_voucher_field`.
+
+Sem alterações de design ou de outros fluxos. Aprovando, eu implemento (1–3) e em seguida rodo o passo 4 sob sua confirmação do valor original.
