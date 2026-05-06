@@ -30,6 +30,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { AjusteRouteChoiceDialog } from "./AjusteRouteChoiceDialog";
 
 
 interface VoucherOperacaoActionsProps {
@@ -42,6 +43,8 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
   const [syncing, setSyncing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showRouteChoice, setShowRouteChoice] = useState(false);
+  const [routeChoice, setRouteChoice] = useState<"REQUESTER" | "NORMAL">("REQUESTER");
   const [selectedTipo, setSelectedTipo] = useState<TipoAnexo>("FATURA_DEMONSTRATIVO");
   const [respostaAjuste, setRespostaAjuste] = useState(voucher.comentariosOperacao || "");
   const { toast } = useToast();
@@ -236,81 +239,97 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
     }
   };
 
-  const handleEnviar = async () => {
+  // Pré-validações antes de abrir qualquer confirmação
+  const validateBeforeSend = (): boolean => {
+    if (isRmPendente) {
+      toast({
+        title: "Voucher/SPO com RM Pendente",
+        description: "Sincronize os dados do RM antes de enviar para a próxima etapa.",
+        variant: "destructive",
+      });
+      return false;
+    }
+    const camposFaltantes: string[] = [];
+    if (!voucher.tipoDocumento) camposFaltantes.push("Tipo de Documento");
+    if (!voucher.formaPagamento) camposFaltantes.push("Forma de Pagamento");
+    if (!voucher.vencimento) camposFaltantes.push("Vencimento");
+    if (camposFaltantes.length > 0) {
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: `Preencha: ${camposFaltantes.join(", ")}`,
+        variant: "destructive",
+      });
+      return false;
+    }
+    if (!isMaster) {
+      const hasFatura = voucher.anexos.some(a => a.tipo === "FATURA_DEMONSTRATIVO" || a.tipo === "FATURA");
+      const hasBoleto = voucher.anexos.some(a => a.tipo === "BOLETO_INSTRUCOES" || a.tipo === "BOLETO");
+      const boletoObrigatorio = voucher.formaPagamento === "BOLETO";
+      if (!hasFatura || (boletoObrigatorio && !hasBoleto)) {
+        toast({
+          title: "Anexos obrigatórios faltando",
+          description: boletoObrigatorio
+            ? "É necessário anexar Fatura/Demonstrativo e Boleto/Instruções"
+            : "É necessário anexar Fatura/Demonstrativo",
+          variant: "destructive",
+        });
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Calcula a etapa do fluxo normal (ignorando o requester do ajuste)
+  const computeNormalNextStage = (): "FISCAL" | "FINANCEIRO" | "SUPERVISOR" => {
+    if (isMaster) return "FISCAL";
+    if (voucher.urgenciaTipo === "URGENTE_REAL") return "SUPERVISOR";
+    if (voucher.cobrancaEmNomeDe === "DACHSER") return "FISCAL";
+    return "FINANCEIRO";
+  };
+
+  const requesterFromAjuste = isAjusteOperacao
+    ? parseRequesterFromAjuste(voucher.ajusteOperacao)
+    : null;
+  const normalNextStageOp = computeNormalNextStage();
+
+  const handleSendClick = () => {
+    if (!validateBeforeSend()) return;
+    // Se há marcador de requester e ele difere do fluxo normal → abrir diálogo de escolha
+    if (requesterFromAjuste && requesterFromAjuste !== normalNextStageOp) {
+      setRouteChoice("REQUESTER");
+      setShowRouteChoice(true);
+      return;
+    }
+    // Caso normal: confirmação simples
+    setShowConfirm(true);
+  };
+
+  const handleEnviar = async (chosen: "REQUESTER" | "NORMAL" = "NORMAL") => {
     try {
       setLoading(true);
 
-      // BLOQUEIO: Não permite avançar se RM pendente
-      if (isRmPendente) {
-        toast({
-          title: "Voucher/SPO com RM Pendente",
-          description: "Sincronize os dados do RM antes de enviar para a próxima etapa.",
-          variant: "destructive",
-        });
+      // Re-validação defensiva (caso estado tenha mudado)
+      if (!validateBeforeSend()) {
+        setLoading(false);
         return;
       }
 
-      // Validação de campos obrigatórios
-      const camposFaltantes: string[] = [];
-      if (!voucher.tipoDocumento) camposFaltantes.push("Tipo de Documento");
-      if (!voucher.formaPagamento) camposFaltantes.push("Forma de Pagamento");
-      if (!voucher.vencimento) camposFaltantes.push("Vencimento");
-      if (camposFaltantes.length > 0) {
-        toast({
-          title: "Campos obrigatórios não preenchidos",
-          description: `Preencha: ${camposFaltantes.join(", ")}`,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Verificar anexos obrigatórios (não se aplica a masters)
-      if (!isMaster) {
-        const hasFatura = voucher.anexos.some(a => a.tipo === "FATURA_DEMONSTRATIVO" || a.tipo === "FATURA");
-        const hasBoleto = voucher.anexos.some(a => a.tipo === "BOLETO_INSTRUCOES" || a.tipo === "BOLETO");
-        const boletoObrigatorio = voucher.formaPagamento === "BOLETO";
-
-        if (!hasFatura || (boletoObrigatorio && !hasBoleto)) {
-          toast({
-            title: "Anexos obrigatórios faltando",
-            description: boletoObrigatorio
-              ? "É necessário anexar Fatura/Demonstrativo e Boleto/Instruções"
-              : "É necessário anexar Fatura/Demonstrativo",
-            variant: "destructive",
-          });
-          return;
-        }
-      }
-
-      // Determinar próxima etapa (Masters sempre vão para FISCAL, ADF segue fluxo normal)
       let proximaEtapa: "FISCAL" | "FINANCEIRO" | "SUPERVISOR";
-      
+      if (chosen === "REQUESTER" && requesterFromAjuste) {
+        proximaEtapa = requesterFromAjuste === "SUPERVISOR" ? "SUPERVISOR" : "FINANCEIRO";
+      } else {
+        proximaEtapa = normalNextStageOp;
+      }
+
       console.log("[VoucherOperacaoActions] Routing decision:", {
         isMaster,
         urgenciaTipo: voucher.urgenciaTipo,
         cobrancaEmNomeDe: voucher.cobrancaEmNomeDe,
-        tipoDocumento: voucher.tipoDocumento,
         etapaAtual: voucher.etapaAtual,
+        requesterFromAjuste,
+        chosen,
+        proximaEtapa,
       });
-
-      // Roteamento direto à etapa solicitante do ajuste, se houver marcador
-      const requester = isAjusteOperacao ? parseRequesterFromAjuste(voucher.ajusteOperacao) : null;
-
-      if (requester === "FINANCEIRO") {
-        proximaEtapa = "FINANCEIRO";
-      } else if (requester === "SUPERVISOR") {
-        proximaEtapa = "SUPERVISOR";
-      } else if (isMaster) {
-        proximaEtapa = "FISCAL";
-      } else if (voucher.urgenciaTipo === "URGENTE_REAL") {
-        proximaEtapa = "SUPERVISOR";
-      } else if (voucher.cobrancaEmNomeDe === "DACHSER") {
-        proximaEtapa = "FISCAL";
-      } else {
-        proximaEtapa = "FINANCEIRO";
-      }
-      
-      console.log("[VoucherOperacaoActions] → proximaEtapa:", proximaEtapa);
 
       const updateData: Record<string, any> = {
         etapa_atual: proximaEtapa,
@@ -338,9 +357,14 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
                          proximaEtapa === "FISCAL" ? "Fiscal" : "Financeiro";
       const acaoLog = isMaster ? "MASTER_APROVADO_OPERACAO" : 
                       isAjusteOperacao ? "REENVIO_APOS_AJUSTE" : "ENVIADO_OPERACAO";
-      const detalheLog = isMaster 
+      const choiceSuffix = (isAjusteOperacao && requesterFromAjuste)
+        ? (chosen === "REQUESTER"
+            ? ` (retornado para etapa solicitante ${requesterFromAjuste}, escolhido pelo usuário)`
+            : ` (fluxo normal, escolhido pelo usuário, ignorando solicitante ${requesterFromAjuste})`)
+        : "";
+      const detalheLog = (isMaster 
         ? `Voucher master aprovado pela Operação e enviado para ${etapaLabel}`
-        : `Voucher/SPO enviado para ${etapaLabel}`;
+        : `Voucher/SPO enviado para ${etapaLabel}`) + choiceSuffix;
       
       await supabase.functions.invoke("mariadb-proxy", {
         body: {
@@ -409,6 +433,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
     } finally {
       setLoading(false);
       setShowConfirm(false);
+      setShowRouteChoice(false);
     }
   };
 
@@ -579,7 +604,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
           Editar Dados
         </Button>
         <Button
-          onClick={() => setShowConfirm(true)}
+          onClick={handleSendClick}
           disabled={loading || !canEnviar}
           className={`gap-2 ${isMaster ? 'bg-purple-600 hover:bg-purple-700' : 'bg-primary hover:bg-primary/90'}`}
         >
@@ -608,12 +633,25 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleEnviar} disabled={loading}>
+            <AlertDialogAction onClick={() => handleEnviar("NORMAL")} disabled={loading}>
               {loading ? "Enviando..." : "Confirmar Envio"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {requesterFromAjuste && (
+        <AjusteRouteChoiceDialog
+          open={showRouteChoice}
+          onOpenChange={setShowRouteChoice}
+          requesterStage={requesterFromAjuste}
+          normalNextStage={normalNextStageOp}
+          choice={routeChoice}
+          onChoiceChange={setRouteChoice}
+          onConfirm={() => handleEnviar(routeChoice)}
+          loading={loading}
+        />
+      )}
     </div>
   );
 };

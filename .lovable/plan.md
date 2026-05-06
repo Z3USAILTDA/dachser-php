@@ -1,89 +1,82 @@
 ## Objetivo
 
-1. **Liberar edição** de vouchers tanto em `A_PROCESSAR` quanto em `OPERACAO`.
-2. **Prevenir duplicação** na sincronização vinda do RM (caso 105-293183 DIM-BY gerou 2 UUIDs com o mesmo `id_rm` 4663577).
-3. **Resolver os duplicados existentes** do processo afetado.
+Quando um voucher estiver retornando de um ajuste (`AJUSTE_OPERACAO` ou `AJUSTE_FISCAL`) e o marcador identifica a etapa solicitante, o usuário que aprova deve **escolher** entre:
+
+1. **Voltar para a etapa solicitante** (quem pediu o ajuste — ex.: Financeiro ou Supervisor)
+2. **Seguir o fluxo normal** (próxima etapa padrão — ex.: Fiscal → Financeiro)
+
+Hoje a decisão é automática (sempre volta para o solicitante).
 
 ---
 
-## Etapa 1 — Liberar edição em A_PROCESSAR + OPERACAO
+## Fluxos atuais (resumo técnico)
 
-**Backend** — `supabase/functions/mariadb-proxy/index.ts`, action `update_voucher_esteira` (linhas ~6651-6699):
-- Trocar guard atual (`etapa_atual === 'A_PROCESSAR'`) por:
-  ```
-  if (!['A_PROCESSAR', 'OPERACAO'].includes(etapa_atual)) → 403
-  ```
-- Atualizar mensagem de erro: "Edição permitida apenas nas etapas A Processar e Operacional".
-- Manter log `VOUCHER_EDICAO_BLOQUEADA` para auditoria nos demais casos (FISCAL, FINANCEIRO, SUPERVISOR, CONCLUIDO, etc.).
+**`VoucherOperacaoActions.handleEnviar`** (etapa `AJUSTE_OPERACAO`):
+- Se há `requester` no marcador → vai direto para `FINANCEIRO`/`SUPERVISOR`.
+- Senão → fluxo normal: `FISCAL` (DACHSER) ou `FINANCEIRO` (CLIENTE) ou `SUPERVISOR` (URGENTE_REAL) etc.
 
-**Frontend** — `src/components/esteira/EditVoucherDialog.tsx` (linha ~109):
-- Trocar guard front-end:
-  ```
-  if (!['A_PROCESSAR', 'OPERACAO'].includes(voucher.etapaAtual)) → toast erro
-  ```
-- Atualizar copy do toast para refletir as duas etapas permitidas.
+**`VoucherFiscalActions.handleAprovar`** (etapa `AJUSTE_FISCAL`):
+- Se há `requester` → volta para `FINANCEIRO`/`SUPERVISOR`.
+- Senão → `FINANCEIRO`.
 
-**Tabela/Listagem** — verificar `VoucherTable.tsx` / `EsteiraIndex.tsx`: garantir que o botão "Editar" apareça também quando `etapaAtual === 'OPERACAO'` (hoje provavelmente já condiciona a `A_PROCESSAR`).
+A função `parseRequesterFromAjuste` (em `src/utils/voucherAjusteRouting.ts`) extrai a etapa solicitante do texto do ajuste.
 
 ---
 
-## Etapa 2 — Tratar duplicados existentes (105-293183 DIM-BY)
+## Mudanças
 
-- Deletar 1 dos 2 UUIDs via action `delete_voucher_esteira` (sugestão: manter `cf29d111-19fa-44cd-ae6f-d30b41bf8112`, remover `f5c0fe62-53c3-40a3-a2e2-f58212315724`).
-- Registrar log `VOUCHER_DELETADO_DUPLICADO_ADMIN` em `t_vouchers_logs` com motivo + id removido.
-- Após Etapa 1 estar no ar, o UUID restante (em `OPERACAO`) já estará editável — **não precisa** reverter etapa.
+### 1. UI — Diálogo de escolha de roteamento
 
----
+Em `VoucherOperacaoActions.tsx` e `VoucherFiscalActions.tsx`:
 
-## Etapa 3 — Prevenir duplicação no sync RM
+- Quando o usuário clicar em **Aprovar/Enviar** e o voucher estiver em `AJUSTE_OPERACAO`/`AJUSTE_FISCAL` **com `requester` identificado**, abrir um `AlertDialog` com duas opções (RadioGroup):
 
-No `mariadb-proxy`, actions `voucher_sync_rm_pending` e `voucher_integrate_rm`:
-
-- Antes de cada `INSERT INTO t_vouchers`, executar guarda:
-  ```sql
-  SELECT id FROM t_vouchers
-   WHERE id_rm = ? AND numero_spo = ? AND ativo = 1
-   LIMIT 1;
   ```
-  Se já existir → pular insert e logar `VOUCHER_RM_DUPLICADO_IGNORADO` (com `id_rm`, `numero_spo`, `usuario_origem`, `id_existente`).
-
-- Pre-check em produção antes de criar índice único:
-  ```sql
-  SELECT id_rm, numero_spo, COUNT(*) c
-    FROM t_vouchers
-   WHERE id_rm IS NOT NULL AND ativo = 1
-   GROUP BY id_rm, numero_spo
-   HAVING c > 1;
+  Para onde enviar este voucher?
+  ◉ Retornar para [Etapa Solicitante]   (recomendado)
+     "Voltar diretamente para quem solicitou o ajuste."
+  ◯ Seguir o fluxo normal → [Próxima Etapa]
+     "Reenviar pelo fluxo padrão da esteira."
   ```
 
-- Se pre-check vier limpo (ou após limpar duplicados):
-  ```sql
-  ALTER TABLE t_vouchers
-    ADD UNIQUE KEY uq_voucher_rm_spo (id_rm, numero_spo);
-  ```
-  Aplicado via action SQL admin existente. Caso o pre-check encontre outros duplicados, **paro e reporto** antes de criar o índice.
+- Default: "Retornar para a etapa solicitante" (mantém comportamento atual).
+- Botão **Confirmar** dispara a aprovação com a etapa escolhida.
+- Se **não houver requester** (ajuste sem marcador de etapa), nada muda — segue direto para o fluxo normal sem mostrar o diálogo.
+
+### 2. Lógica de roteamento
+
+Em ambos os handlers (`handleEnviar` da Operação e `handleAprovar` do Fiscal):
+
+- Calcular `proximaEtapaSolicitante` (via `parseRequesterFromAjuste`) **e** `proximaEtapaFluxoNormal` (lógica atual sem o desvio do requester).
+- Usar a opção escolhida pelo usuário no diálogo como `proximaEtapa`.
+- Atualizar o log para registrar a decisão tomada:
+  - `APROVADO_FISCAL` / `REENVIO_APOS_AJUSTE` com `detalhe` distinto:
+    - "...retornado para [Etapa Solicitante] (escolhido pelo usuário)"
+    - "...enviado pelo fluxo normal para [Etapa] (escolhido pelo usuário, ignorando solicitante)"
+
+### 3. Nada muda para vouchers sem ajuste
+
+Vouchers que não estão em `AJUSTE_*` ou que não têm marcador de requester continuam aprovando direto, sem diálogo.
 
 ---
 
 ## Detalhes técnicos
 
-**Arquivos afetados**
-- `supabase/functions/mariadb-proxy/index.ts` — guard de edição + hardening sync RM + (opcional) action SQL admin para o ALTER TABLE
-- `src/components/esteira/EditVoucherDialog.tsx` — guard front-end + copy
-- Possível ajuste em `src/components/voucher/VoucherTable.tsx` e/ou `src/pages/esteira/EsteiraIndex.tsx` para liberar botão Editar em `OPERACAO`
+**Arquivos a alterar**
+- `src/components/esteira/VoucherOperacaoActions.tsx` — adicionar `AlertDialog` de escolha + ajuste em `handleEnviar`.
+- `src/components/esteira/VoucherFiscalActions.tsx` — adicionar `AlertDialog` de escolha + ajuste em `handleAprovar`.
 
-**Logs novos**
-- `VOUCHER_DELETADO_DUPLICADO_ADMIN`
-- `VOUCHER_RM_DUPLICADO_IGNORADO`
+**Sem mudanças**
+- `voucherAjusteRouting.ts` (utilitário continua o mesmo)
+- Backend `mariadb-proxy` (a etapa final continua chegando via `update_voucher_esteira`)
+- `VoucherSupervisorActions` e `VoucherFinanceiroActions` (a devolução para ajuste continua como está; só a aprovação é que ganha a escolha)
 
-**Sem mudanças** em UI fora do dialog/tabela, autenticação, RLS Supabase, schema relacional além do índice único.
-
-**Memória a atualizar** após implementação: `mem://vouchers/workflow-logic-and-stages-v6` — registrar que edição é permitida em `A_PROCESSAR` **e** `OPERACAO`.
+**Memória a atualizar** após implementação: `mem://vouchers/workflow-logic-and-stages-v6` — registrar que o aprovador pode escolher entre voltar ao solicitante ou seguir o fluxo normal.
 
 ---
 
 ## Pontos de confirmação
 
-1. Confirma manter `cf29d111…` e deletar `f5c0fe62…`?
-2. Posso aplicar o `UNIQUE (id_rm, numero_spo)` em `t_vouchers` após pre-check? (Se houver outros duplicados, paro e reporto.)
-3. A liberação `A_PROCESSAR + OPERACAO` vale para todos os perfis que hoje editam (Operação, Supervisor, ADMIN), ou alguma role deve continuar restrita?
+1. O diálogo de escolha deve aparecer também quando o **Supervisor/Financeiro** aprovam um voucher que veio originalmente via fluxo de ajuste? Ou apenas para Operação (saindo de AJUSTE_OPERACAO) e Fiscal (saindo de AJUSTE_FISCAL)?
+2. O default sugerido é "Retornar ao solicitante" (mantém comportamento atual). Confirma?
+3. Quando **não houver marcador** de requester (ajuste sem etapa registrada), devo **ainda assim** abrir o diálogo perguntando para qual etapa enviar, ou seguir direto pelo fluxo normal sem perguntar?
