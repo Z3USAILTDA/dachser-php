@@ -11252,7 +11252,59 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // ==================== PENDING VOUCHERS FOR DAILY REPORT ====================
+      // ==================== BACKFILL EMISSAO + ENVIADO POR ====================
+      case 'backfill_emissao_enviado_por': {
+        // Garante coluna enviado_por_user_name (idempotente)
+        try {
+          await client.query(`
+            ALTER TABLE dados_dachser.t_vouchers
+            ADD COLUMN IF NOT EXISTS enviado_por_user_name VARCHAR(120) NULL
+          `);
+        } catch (e) {
+          console.warn('[backfill] ALTER ADD COLUMN ignored:', (e as any)?.message);
+        }
+
+        // A) Emissão: copiar de dfv.data_emissao quando vazia
+        const updEmissao: any = await client.query(`
+          UPDATE dados_dachser.t_vouchers v
+          JOIN (
+            SELECT nd, MAX(data_emissao) AS data_emissao
+            FROM dados_dachser.t_dados_financeiro_voucher
+            WHERE data_emissao IS NOT NULL
+            GROUP BY nd
+          ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
+          SET v.data_emissao_documento = dfv.data_emissao
+          WHERE v.etapa_atual <> 'A_PROCESSAR'
+            AND (v.data_emissao_documento IS NULL OR v.data_emissao_documento = '0000-00-00')
+        `);
+
+        // B) Enviado por: gravar último user_name de t_voucher_logs
+        const updEnviado: any = await client.query(`
+          UPDATE dados_dachser.t_vouchers v
+          JOIN (
+            SELECT l.voucher_id, l.user_name
+            FROM dados_dachser.t_voucher_logs l
+            JOIN (
+              SELECT voucher_id, MAX(data_hora) AS max_dh
+              FROM dados_dachser.t_voucher_logs
+              WHERE user_name IS NOT NULL AND user_name <> ''
+              GROUP BY voucher_id
+            ) m ON m.voucher_id = l.voucher_id AND m.max_dh = l.data_hora
+          ) lg ON lg.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+          SET v.enviado_por_user_name = lg.user_name
+          WHERE v.etapa_atual <> 'A_PROCESSAR'
+            AND (v.enviado_por_user_name IS NULL OR v.enviado_por_user_name = '')
+        `);
+
+        result = {
+          success: true,
+          updated_emissao: updEmissao?.affectedRows ?? 0,
+          updated_enviado_por: updEnviado?.affectedRows ?? 0,
+        };
+        console.log('[backfill_emissao_enviado_por]', result);
+        break;
+      }
+
       case 'get_pending_vouchers_for_report': {
         const twentyFourHoursAgo = new Date();
         twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
