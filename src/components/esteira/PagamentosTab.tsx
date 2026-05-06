@@ -139,6 +139,8 @@ export const PagamentosTab = () => {
   const [filterStatusIntegracaoRm, setFilterStatusIntegracaoRm] = useState<string>("all");
   const [filterFornecedor, setFilterFornecedor] = useState<string>("");
   const [filterFornecedorDebounced, setFilterFornecedorDebounced] = useState<string>("");
+  const [filterDataInicio, setFilterDataInicio] = useState<Date | undefined>(undefined);
+  const [filterDataFim, setFilterDataFim] = useState<Date | undefined>(undefined);
   const [activeCardFilter, setActiveCardFilter] = useState<string | null>(null);
   
   // Selection
