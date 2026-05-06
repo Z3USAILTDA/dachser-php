@@ -12410,17 +12410,18 @@ Deno.serve(async (req) => {
           return fallback;
         };
 
-        // Inserir na t_vouchers
+        // Inserir na t_vouchers (gravando id_rm para reforçar anti-duplicação)
         await client.execute(`
           INSERT INTO dados_dachser.t_vouchers (
-            id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda,
+            id, numero_spo, id_rm, fornecedor, cnpj_fornecedor, valor, moeda,
             vencimento, data_emissao_documento, forma_pagamento, tipo_documento,
             cobranca_em_nome_de, etapa_atual, status_baixa, urgencia_tipo,
             processo_id, criado_por_user_id, tipo_execucao_pagamento, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'NORMAL', ?, ?, 'A_DEFINIR', NOW(), NOW())
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'NORMAL', ?, ?, 'A_DEFINIR', NOW(), NOW())
         `, [
           voucherId,
           rm.nd,
+          rm.id_rm || null,
           rm.nome_beneficiario || rm.razao_social,
           rm.cnpj,
           rm.valor_nf || 0,
