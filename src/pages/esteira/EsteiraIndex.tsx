@@ -1324,19 +1324,18 @@ const EsteiraIndex = () => {
         if (!voucher.fornecedor?.toLowerCase().includes(searchLower)) return false;
       }
 
-      // Filtro de etapa (normalizado)
-      if (filters.etapa !== "all") {
+      // Filtro de etapa (normalizado, suporta múltiplas via CSV)
+      if (filters.etapa && filters.etapa !== "all") {
         const vEtapa = (voucher.etapaAtual || "").trim().toUpperCase();
-        const fEtapa = filters.etapa.trim().toUpperCase();
-        // FINANCEIRO filter should also show ROBO stage
-        if (fEtapa === "FINANCEIRO") {
-          if (vEtapa !== "FINANCEIRO" && vEtapa !== "ROBO") return false;
-        } else if (fEtapa === "OPERACAO") {
-          // Operacional engloba OPERACAO + A_PROCESSAR
-          if (vEtapa !== "OPERACAO" && vEtapa !== "A_PROCESSAR") return false;
-        } else {
-          if (vEtapa !== fEtapa) return false;
+        const selected = filters.etapa.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
+        // Expansões: FINANCEIRO inclui ROBO; OPERACAO inclui A_PROCESSAR
+        const expanded = new Set<string>();
+        for (const e of selected) {
+          expanded.add(e);
+          if (e === "FINANCEIRO") expanded.add("ROBO");
+          if (e === "OPERACAO") expanded.add("A_PROCESSAR");
         }
+        if (!expanded.has(vEtapa)) return false;
       }
 
 
