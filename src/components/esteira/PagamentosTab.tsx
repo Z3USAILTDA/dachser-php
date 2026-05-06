@@ -65,7 +65,7 @@ import { TablePagination } from "@/components/layout/TablePagination";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format as fnsFormat } from "date-fns";
-import { ptBR } from "date-fns/locale";
+
 import { CalendarIcon } from "lucide-react";
 
 interface PagamentoItem {
