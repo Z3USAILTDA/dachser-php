@@ -1,169 +1,205 @@
 import * as XLSX from "xlsx-js-style";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Voucher, ETAPA_LABELS, STATUS_INTEGRACAO_RM_LABELS } from "@/types/voucher";
+import { Voucher, ETAPA_LABELS } from "@/types/voucher";
 
-const COLORS = {
-  header: { fgColor: { rgb: "D4AF37" } }, // Dourado
-  headerText: { color: { rgb: "000000" } },
-  urgentRow: { fgColor: { rgb: "FFE5E5" } }, // Vermelho claro
-  alternateRow: { fgColor: { rgb: "F5F5F5" } }, // Cinza claro
-  border: {
-    top: { style: "thin", color: { rgb: "CCCCCC" } },
-    bottom: { style: "thin", color: { rgb: "CCCCCC" } },
-    left: { style: "thin", color: { rgb: "CCCCCC" } },
-    right: { style: "thin", color: { rgb: "CCCCCC" } },
-  },
+const GOLD = "D4AF37";
+const GOLD_LIGHT = "FFF4D6";
+const ROW_ALT = "F5F5F5";
+const URGENT = "FFE5E5";
+const BORDER_GRAY = "CCCCCC";
+
+const thinBorder = {
+  top: { style: "thin", color: { rgb: BORDER_GRAY } },
+  bottom: { style: "thin", color: { rgb: BORDER_GRAY } },
+  left: { style: "thin", color: { rgb: BORDER_GRAY } },
+  right: { style: "thin", color: { rgb: BORDER_GRAY } },
 };
 
-const formatCurrency = (value: number | undefined, moeda: string = "BRL"): string => {
-  if (value === undefined || value === null) return "-";
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: moeda,
-  }).format(value);
-};
+const HEADERS = [
+  "Número SPO/Voucher",
+  "Fornecedor",
+  "CNPJ Fornecedor",
+  "Valor",
+  "Moeda",
+  "Vencimento",
+  "Necessita Fiscal",
+  "Forma de Pagamento",
+  "Urgente",
+  "Etapa Atual",
+  "Criado Por",
+];
+
+const COL_WIDTHS = [18, 32, 20, 16, 8, 12, 16, 22, 10, 22, 26];
 
 export const exportVouchersToExcel = (data: Voucher[]) => {
-  // Preparar dados com novas colunas
-  const excelData = data.map((v) => ({
-    "Número SPO": v.numeroSPO,
-    "Fornecedor": v.fornecedor || "-",
-    "CNPJ Fornecedor": v.cnpjFornecedor || "-",
-    "Valor": formatCurrency(v.valor, v.moeda),
-    "Moeda": v.moeda || "BRL",
-    "Vencimento": format(new Date(v.vencimento), "dd/MM/yyyy", { locale: ptBR }),
-    "Necessita Fiscal": v.cobrancaEmNomeDe === "DACHSER" ? "Sim" : "Não",
-    "Forma Pagamento": v.formaPagamento,
-    "Tipo Execução": v.tipoExecucaoPagamento || "-",
-    "Filial": v.filial || "-",
-    "Remessa": v.remessa || "NENHUM",
-    "Urgente": v.urgente ? "Sim" : "Não",
-    "Etapa Atual": ETAPA_LABELS[v.etapaAtual as keyof typeof ETAPA_LABELS] || v.etapaAtual,
-    "Status Baixa": v.statusBaixa || "PENDENTE",
-    "Status Integração RM": STATUS_INTEGRACAO_RM_LABELS[v.statusIntegracaoRm as keyof typeof STATUS_INTEGRACAO_RM_LABELS] || v.statusIntegracaoRm || "PENDENTE",
-    "Criado Por": v.criadoPorDfv || v.criadoPorUserName || "-",
-    "Resp. Operação": v.responsavelOperacaoUserName || "-",
-    "Resp. Fiscal": v.responsavelFiscalUserName || "-",
-    "Resp. Financeiro": v.responsavelFinanceiroUserName || "-",
-    "Comentários Operação": v.comentariosOperacao || "-",
-    "Comentários Fiscal": v.comentariosFiscal || "-",
-    "Comentários Financeiro": v.comentariosFinanceiro || "-",
-    "Data Criação": format(new Date(v.createdAt), "dd/MM/yyyy HH:mm", {
-      locale: ptBR,
-    }),
-    "Última Atualização": format(new Date(v.updatedAt), "dd/MM/yyyy HH:mm", {
-      locale: ptBR,
-    }),
-  }));
+  const ws: XLSX.WorkSheet = {};
+  const lastCol = HEADERS.length - 1; // 10 (K)
+  const lastColLetter = XLSX.utils.encode_col(lastCol);
 
-  // Criar worksheet
-  const ws = XLSX.utils.json_to_sheet(excelData);
+  // Row 1: Title (merged A1:K1)
+  ws["A1"] = {
+    t: "s",
+    v: "Relatório de Vouchers — DACHSER",
+    s: {
+      fill: { fgColor: { rgb: GOLD } },
+      font: { bold: true, sz: 16, color: { rgb: "000000" } },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: thinBorder,
+    },
+  };
 
-  // Obter range
-  const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+  // Row 2: Subtitle with generation date
+  ws["A2"] = {
+    t: "s",
+    v: `Gerado em ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })} • ${data.length} voucher(s)`,
+    s: {
+      fill: { fgColor: { rgb: "FAFAFA" } },
+      font: { italic: true, sz: 10, color: { rgb: "666666" } },
+      alignment: { horizontal: "center", vertical: "center" },
+    },
+  };
 
-  // Estilizar cabeçalho
-  for (let col = range.s.c; col <= range.e.c; col++) {
-    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-    if (!ws[cellAddress]) continue;
-
-    ws[cellAddress].s = {
-      fill: COLORS.header,
-      font: {
-        bold: true,
-        sz: 12,
-        color: COLORS.headerText.color,
+  // Row 3: Headers
+  HEADERS.forEach((h, idx) => {
+    const addr = XLSX.utils.encode_cell({ r: 2, c: idx });
+    ws[addr] = {
+      t: "s",
+      v: h,
+      s: {
+        fill: { fgColor: { rgb: GOLD } },
+        font: { bold: true, sz: 12, color: { rgb: "000000" } },
+        alignment: { horizontal: "center", vertical: "center", wrapText: true },
+        border: thinBorder,
       },
-      alignment: {
-        horizontal: "center",
-        vertical: "center",
-      },
-      border: COLORS.border,
     };
-  }
+  });
 
-  // Estilizar linhas de dados
-  for (let row = range.s.r + 1; row <= range.e.r; row++) {
-    const isUrgent = data[row - 1]?.urgente;
-    const isAlternate = row % 2 === 0;
+  // Data rows starting at row 4 (index 3)
+  data.forEach((v, i) => {
+    const r = 3 + i;
+    const isUrgent = !!v.urgente;
+    const isAlt = i % 2 === 1;
+    const rowFill = isUrgent ? URGENT : isAlt ? ROW_ALT : "FFFFFF";
 
-    for (let col = range.s.c; col <= range.e.c; col++) {
-      const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
-      if (!ws[cellAddress]) continue;
+    const baseStyle = {
+      fill: { fgColor: { rgb: rowFill } },
+      font: { sz: 10, bold: isUrgent, color: { rgb: "000000" } },
+      alignment: { vertical: "center", wrapText: true },
+      border: thinBorder,
+    };
 
-      ws[cellAddress].s = {
-        fill: isUrgent
-          ? COLORS.urgentRow
-          : isAlternate
-          ? COLORS.alternateRow
-          : { fgColor: { rgb: "FFFFFF" } },
-        font: {
-          sz: 10,
-          bold: isUrgent,
+    const cells: Array<{ v: any; t?: string; z?: string; align?: string }> = [
+      { v: v.numeroSPO, align: "center" },
+      { v: v.fornecedor || "-" },
+      { v: v.cnpjFornecedor || "-", align: "center" },
+      { v: typeof v.valor === "number" ? v.valor : 0, t: "n", z: "#,##0.00", align: "right" },
+      { v: v.moeda || "BRL", align: "center" },
+      {
+        v: v.vencimento ? format(new Date(v.vencimento), "dd/MM/yyyy", { locale: ptBR }) : "-",
+        align: "center",
+      },
+      { v: v.cobrancaEmNomeDe === "DACHSER" ? "Sim" : "Não", align: "center" },
+      { v: v.formaPagamento || "-", align: "center" },
+      { v: v.urgente ? "Sim" : "Não", align: "center" },
+      {
+        v: ETAPA_LABELS[v.etapaAtual as keyof typeof ETAPA_LABELS] || v.etapaAtual || "-",
+        align: "center",
+      },
+      { v: v.criadoPorDfv || v.criadoPorUserName || "-" },
+    ];
+
+    cells.forEach((cell, c) => {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      ws[addr] = {
+        t: cell.t || "s",
+        v: cell.v,
+        ...(cell.z ? { z: cell.z } : {}),
+        s: {
+          ...baseStyle,
+          alignment: { ...baseStyle.alignment, horizontal: cell.align || "left" },
         },
-        alignment: {
-          horizontal: col === 0 ? "center" : "left",
-          vertical: "center",
-          wrapText: col >= 19, // Wrap text para comentários
-        },
-        border: COLORS.border,
       };
+    });
+  });
+
+  // Subtotal row
+  const totalRowIdx = 3 + data.length; // 0-based
+  const totalExcelRow = totalRowIdx + 1; // 1-based for formula
+  const firstDataExcelRow = 4;
+  const lastDataExcelRow = 3 + data.length;
+  const moedas = new Set(data.map((d) => d.moeda || "BRL").filter(Boolean));
+  const mixedMoedas = moedas.size > 1;
+
+  const totalStyle = {
+    fill: { fgColor: { rgb: GOLD_LIGHT } },
+    font: { bold: true, sz: 11, color: { rgb: "000000" } },
+    alignment: { vertical: "center" },
+    border: {
+      ...thinBorder,
+      top: { style: "double", color: { rgb: GOLD } },
+    },
+  };
+
+  for (let c = 0; c <= lastCol; c++) {
+    const addr = XLSX.utils.encode_cell({ r: totalRowIdx, c });
+    if (c === 0) {
+      ws[addr] = {
+        t: "s",
+        v: "TOTAL",
+        s: { ...totalStyle, alignment: { ...totalStyle.alignment, horizontal: "center" } },
+      };
+    } else if (c === 3) {
+      ws[addr] = {
+        t: "n",
+        f: data.length > 0 ? `SUM(D${firstDataExcelRow}:D${lastDataExcelRow})` : undefined,
+        v: data.reduce((s, x) => s + (typeof x.valor === "number" ? x.valor : 0), 0),
+        z: "#,##0.00",
+        s: { ...totalStyle, alignment: { ...totalStyle.alignment, horizontal: "right" } },
+      };
+    } else if (c === 4 && mixedMoedas) {
+      ws[addr] = {
+        t: "s",
+        v: "(moedas mistas)",
+        s: {
+          ...totalStyle,
+          font: { italic: true, sz: 9, color: { rgb: "888888" } },
+          alignment: { ...totalStyle.alignment, horizontal: "center" },
+        },
+      };
+    } else {
+      ws[addr] = { t: "s", v: "", s: totalStyle };
     }
   }
 
-  // Ajustar largura das colunas (24 colunas agora)
-  const colWidths = [
-    { wch: 15 }, // Número SPO
-    { wch: 30 }, // Fornecedor
-    { wch: 18 }, // CNPJ Fornecedor
-    { wch: 15 }, // Valor
-    { wch: 8 },  // Moeda
-    { wch: 12 }, // Vencimento
-    { wch: 16 }, // Necessita Fiscal
-    { wch: 20 }, // Forma Pagamento
-    { wch: 15 }, // Tipo Execução
-    { wch: 10 }, // Filial
-    { wch: 15 }, // Remessa
-    { wch: 8 },  // Urgente
-    { wch: 18 }, // Etapa Atual
-    { wch: 15 }, // Status Baixa
-    { wch: 18 }, // Status Integração RM
-    { wch: 25 }, // Criado Por
-    { wch: 25 }, // Resp. Operação
-    { wch: 25 }, // Resp. Fiscal
-    { wch: 25 }, // Resp. Financeiro
-    { wch: 40 }, // Comentários Operação
-    { wch: 40 }, // Comentários Fiscal
-    { wch: 40 }, // Comentários Financeiro
-    { wch: 18 }, // Data Criação
-    { wch: 18 }, // Última Atualização
+  // Worksheet metadata
+  ws["!ref"] = `A1:${lastColLetter}${totalExcelRow}`;
+  ws["!merges"] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: lastCol } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: lastCol } },
   ];
-  ws["!cols"] = colWidths;
-
-  // Ajustar altura das linhas
+  ws["!cols"] = COL_WIDTHS.map((w) => ({ wch: w }));
   const rowHeights: { hpt: number }[] = [];
-  rowHeights[0] = { hpt: 25 }; // Header height
-  for (let row = 1; row <= range.e.r; row++) {
-    rowHeights[row] = { hpt: 20 }; // Data row height
-  }
+  rowHeights[0] = { hpt: 32 };
+  rowHeights[1] = { hpt: 20 };
+  rowHeights[2] = { hpt: 28 };
+  for (let i = 0; i < data.length; i++) rowHeights[3 + i] = { hpt: 20 };
+  rowHeights[totalRowIdx] = { hpt: 24 };
   ws["!rows"] = rowHeights;
+  ws["!autofilter"] = { ref: `A3:${lastColLetter}${lastDataExcelRow > 3 ? lastDataExcelRow : 3}` };
+  // Freeze header (row 3)
+  (ws as any)["!views"] = [{ state: "frozen", ySplit: 3 }];
 
-  // Criar workbook
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Vouchers");
-
-  // Adicionar informações do documento
   wb.Props = {
     Title: "Relatório de Vouchers",
-    Subject: "Vouchers Z3US.AI",
+    Subject: "Vouchers DACHSER",
     Author: "Sistema Z3US.AI Workflow Voucher",
     CreatedDate: new Date(),
   };
 
-  // Gerar arquivo
   const fileName = `vouchers_${format(new Date(), "yyyy-MM-dd_HH-mm")}.xlsx`;
   XLSX.writeFile(wb, fileName, { cellStyles: true });
-
   return fileName;
 };
