@@ -11827,7 +11827,8 @@ Deno.serve(async (req) => {
             dfv.valor_nf,
             dfv.moeda,
             dfv.cnpj,
-            dfv.razao_social
+            dfv.razao_social,
+            dfv.created_by
           FROM dados_dachser.t_dados_financeiro_voucher dfv
           LEFT JOIN dados_dachser.t_vouchers v ON dfv.nd COLLATE utf8mb4_unicode_ci = v.numero_spo COLLATE utf8mb4_unicode_ci
           LEFT JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
