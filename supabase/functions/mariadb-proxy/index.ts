@@ -6656,10 +6656,20 @@ Deno.serve(async (req) => {
         const updateData = updatesObj || directFields;
         
         // ============================================================
-        // GUARD: edição permitida apenas nas etapas A_PROCESSAR e OPERACAO
-        // (regra de negócio — vale inclusive para ADMIN)
+        // GUARD: edição de DADOS do voucher permitida apenas em
+        // A_PROCESSAR / OPERACAO. Operações de workflow (etapa_atual,
+        // status_*, comentarios_*, ajuste_*, responsavel_*, aprovado_*,
+        // status_documento_fiscal, status_comprovante) NÃO são bloqueadas.
         // ============================================================
         const ETAPAS_EDITAVEIS = ['A_PROCESSAR', 'OPERACAO'];
+        const DATA_EDIT_FIELDS = new Set([
+          'numero_spo', 'fornecedor', 'cnpj_fornecedor', 'valor', 'moeda',
+          'vencimento', 'data_emissao_documento', 'cobranca_em_nome_de',
+          'forma_pagamento', 'tipo_documento', 'filial', 'urgencia_tipo',
+          'cliente_email', 'remessa', 'chave_pix',
+        ]);
+        const hasDataEdit = Object.keys(updateData || {}).some((k) => DATA_EDIT_FIELDS.has(k));
+
         const etapaRows = await client.query(
           `SELECT etapa_atual, vencimento, valor, forma_pagamento, tipo_documento,
                   fornecedor, cnpj_fornecedor, moeda, data_emissao_documento,
@@ -6671,7 +6681,7 @@ Deno.serve(async (req) => {
         const currentEtapa = etapaRows?.[0]?.etapa_atual || null;
         const beforeRow = etapaRows?.[0] || {};
 
-        if (currentEtapa && !ETAPAS_EDITAVEIS.includes(currentEtapa)) {
+        if (hasDataEdit && currentEtapa && !ETAPAS_EDITAVEIS.includes(currentEtapa)) {
           // Registra tentativa bloqueada para auditoria
           try {
             await client.execute(`
@@ -6683,7 +6693,7 @@ Deno.serve(async (req) => {
               voucher_id,
               user_id || null,
               user_name || 'Sistema (sem identificação)',
-              `Tentativa de edição bloqueada — etapa atual: ${currentEtapa}. Campos enviados: ${Object.keys(updateData).join(', ')}`
+              `Tentativa de edição de dados bloqueada — etapa atual: ${currentEtapa}. Campos enviados: ${Object.keys(updateData).join(', ')}`
             ]);
           } catch (logErr) {
             console.error('Falha ao logar tentativa bloqueada:', logErr);
@@ -6692,7 +6702,7 @@ Deno.serve(async (req) => {
             JSON.stringify({
               success: false,
               error: 'EDICAO_BLOQUEADA_ETAPA',
-              message: 'Edição permitida apenas nas etapas A Processar e Operacional.',
+              message: 'Edição de dados permitida apenas nas etapas A Processar e Operacional.',
               etapa_atual: currentEtapa,
             }),
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
