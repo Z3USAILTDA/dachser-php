@@ -357,9 +357,14 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
                          proximaEtapa === "FISCAL" ? "Fiscal" : "Financeiro";
       const acaoLog = isMaster ? "MASTER_APROVADO_OPERACAO" : 
                       isAjusteOperacao ? "REENVIO_APOS_AJUSTE" : "ENVIADO_OPERACAO";
-      const detalheLog = isMaster 
+      const choiceSuffix = (isAjusteOperacao && requesterFromAjuste)
+        ? (chosen === "REQUESTER"
+            ? ` (retornado para etapa solicitante ${requesterFromAjuste}, escolhido pelo usuário)`
+            : ` (fluxo normal, escolhido pelo usuário, ignorando solicitante ${requesterFromAjuste})`)
+        : "";
+      const detalheLog = (isMaster 
         ? `Voucher master aprovado pela Operação e enviado para ${etapaLabel}`
-        : `Voucher/SPO enviado para ${etapaLabel}`;
+        : `Voucher/SPO enviado para ${etapaLabel}`) + choiceSuffix;
       
       await supabase.functions.invoke("mariadb-proxy", {
         body: {
@@ -428,6 +433,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
     } finally {
       setLoading(false);
       setShowConfirm(false);
+      setShowRouteChoice(false);
     }
   };
 
