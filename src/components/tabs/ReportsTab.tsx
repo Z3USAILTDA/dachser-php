@@ -57,22 +57,13 @@ export function ReportsTab() {
 
       const data = response?.vouchers || [];
 
-      if (!data || data.length === 0) {
-        toast({
-          title: "Sem dados",
-          description: "Nenhum voucher encontrado com os filtros selecionados",
-          variant: "destructive",
-        });
-        return;
-      }
-
       // Map MariaDB data to Voucher type
       const mappedVouchers: Voucher[] = data.map((v: any) => ({
         id: v.id,
         numeroSPO: v.numero_spo,
         fornecedor: v.fornecedor,
         cnpjFornecedor: v.cnpj_fornecedor,
-        valor: v.valor,
+        valor: v.valor != null && v.valor !== '' ? Number(v.valor) : null,
         moeda: v.moeda || "BRL",
         vencimento: parseMariaDBDate(v.vencimento) || new Date(),
         dataEmissaoDocumento: parseMariaDBDate(v.data_emissao_documento) || undefined,
@@ -109,6 +100,68 @@ export function ReportsTab() {
         anexos: [],
         logs: [],
       }));
+
+      // Incluir vouchers RM pendentes (etapa A_PROCESSAR) quando a etapa solicitada
+      // for "all", "OPERACAO" ou "A_PROCESSAR" — esses vouchers vivem em outra
+      // tabela (RM) e não são retornados por export_vouchers_report.
+      const includeRmPending =
+        (filters.etapa === 'all' || filters.etapa === 'OPERACAO' || filters.etapa === 'A_PROCESSAR') &&
+        filters.statusBaixa === 'all' &&
+        filters.statusIntegracaoRm === 'all' &&
+        filters.tipoExecucaoPagamento === 'all';
+
+      if (includeRmPending) {
+        try {
+          const { data: rmResp } = await supabase.functions.invoke('mariadb-proxy', {
+            body: { action: 'get_vouchers_pendentes_rm' }
+          });
+          const rmRows: any[] = rmResp?.data || [];
+          const existingSPOs = new Set(mappedVouchers.map(v => v.numeroSPO));
+          const mapFormaPag = (fp: string | null): string => {
+            const m: Record<string, string> = {
+              BOL: 'BOLETO', BOLETO: 'BOLETO', PIX: 'PIX',
+              TED: 'TRANSFERENCIA', TRANSF: 'TRANSFERENCIA',
+              DEBITO: 'DEBITO', CAMBIO: 'CAMBIO', DARF: 'DARF', GPS: 'GPS',
+            };
+            return m[(fp || '').toUpperCase()] || 'BOLETO';
+          };
+          const rmVouchers: Voucher[] = rmRows
+            .filter(rm => !existingSPOs.has(rm.nd))
+            .map(rm => ({
+              id: `rm_pending_${rm.nd}`,
+              numeroSPO: rm.nd,
+              fornecedor: rm.nome_beneficiario || rm.razao_social || '-',
+              cnpjFornecedor: rm.cnpj || '-',
+              valor: rm.valor_nf != null && rm.valor_nf !== '' ? Number(rm.valor_nf) : null,
+              moeda: rm.moeda || 'BRL',
+              vencimento: parseMariaDBDate(rm.data_vencimento) || new Date(),
+              cobrancaEmNomeDe: rm.nome_cobranca === 'CLIENTE' ? 'CLIENTE' : 'DACHSER',
+              formaPagamento: mapFormaPag(rm.forma_pag) as any,
+              urgente: false,
+              urgenciaTipo: 'NORMAL' as any,
+              etapaAtual: 'A_PROCESSAR' as any,
+              statusBaixa: 'PENDENTE' as any,
+              criadoPorDfv: rm.created_by || null,
+              criadoPorUserName: rm.created_by || null,
+              createdAt: parseMariaDBDate(rm.created_at) || new Date(),
+              updatedAt: parseMariaDBDate(rm.updated_at || rm.created_at) || new Date(),
+              anexos: [],
+              logs: [],
+            } as unknown as Voucher));
+          mappedVouchers.push(...rmVouchers);
+        } catch (e) {
+          console.warn('Falha ao carregar RM pendentes para o relatório:', e);
+        }
+      }
+
+      if (mappedVouchers.length === 0) {
+        toast({
+          title: "Sem dados",
+          description: "Nenhum voucher encontrado com os filtros selecionados",
+          variant: "destructive",
+        });
+        return;
+      }
 
       let fileName: string;
       if (exportType === "excel") {
