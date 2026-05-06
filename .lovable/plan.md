@@ -1,49 +1,37 @@
-## Objetivo
+## Alteração na lógica de numeração do voucher master
 
-Trocar a forma de construir a coluna **Rota** em `/air/tracking-aereo`. Em vez da lógica JS atual (extrai origem/destino/conexões de `t_fato_aereo.origin/destination` + regex sobre `description` da timeline), passar a usar a query autoritativa fornecida (resolve códigos via `t_iata_airports` e cai para a timeline quando ORIGIN/DESTINATION não resolvem).
+Hoje o `numero_spo` do voucher master é definido pelo filho com **menor `id_rm`** (resolvido a partir de `t_vouchers.id_rm` ou, em fallback, `t_dados_financeiro_voucher.id_rm`).
 
-Regra solicitada:
-- `STATUS_ROTA = 'OK'` → mostrar `ROTA` (origem / conexões / destino) calculada pela query.
-- Caso contrário → consultar a timeline para preencher origem, conexões (se houver) e destino.
+Vamos passar a usar **`idmov`** (coluna em `t_dados_financeiro_voucher`) como fonte primária de comparação, mantendo `id_rm` como fallback quando `idmov` for `NULL`.
 
-A própria query já faz esse fallback na CTE `rota_base_final` (usa `first_timeline_code` / `last_timeline_code` quando `origin_code`/`destination_code` da `t_fato_aereo` não resolvem) e em `conexoes_intermediarias`. Portanto basta executar a query e usar `ORIGEM_FINAL`, `DESTINO_FINAL`, `CONEXOES`, `ROTA` para todos os casos exceto quando `STATUS_ROTA` indicar que a rota é totalmente inconfiável.
+### Regra nova
 
-## Mudanças
+Para cada filho candidato, calcular uma chave de ordenação:
+- `sort_key = COALESCE(dfv.idmov, COALESCE(v.id_rm, dfv.id_rm))`
 
-### 1. `supabase/functions/fetch-tracking-aereo/index.ts`
+O master adota o `numero_spo` do filho com **menor `sort_key`** (não nulo). Se nenhum filho tiver `sort_key`, mantém o fallback atual (primeiro filho / random `MASTER-XXXX`).
 
-Adicionar um novo bloco de enrichment (espelhando o padrão do `discrepancyMap`) que:
+Importante: a comparação entre `idmov` e `id_rm` no mesmo conjunto é aceitável pois ambos são inteiros monotônicos do RM — quando `idmov` existe ele é usado, caso contrário cai para `id_rm`. Não há mistura na mesma linha.
 
-a. Restringe a query aos AWBs em tela (mesma técnica `awbInClause`).
-b. Executa a CTE fornecida pelo usuário (preservando exatamente as regras de resolução IATA / `t_iata_airports` / dedupe consecutivo / `JSON_TABLE` da timeline).
-c. Adiciona um pequeno cache TTL (60s) tipo `routeCache` para evitar reprocessar a cada poll.
-d. Monta um mapa `routeMap[awb|hawb] = { origin_final, destination_final, conexoes, rota, status_rota }`.
+### Arquivos afetados
 
-Na montagem do objeto `normalized` (linhas ~1095–1120):
+**`supabase/functions/mariadb-proxy/index.ts`** — duas seções:
 
-- Substituir `origin: row.ORIGEM`, `destination: row.DESTINO` e o `conexao` calculado por JS pelos valores do `routeMap`:
-  - Se `routeMap` tem entrada e `status_rota === 'OK'`: usar `origin_final`, `destination_final`, `conexoes` (split por ` / ` para virar lista comparável com a UI atual, que usa `,` — manteremos `,` no payload).
-  - Se `routeMap` tem entrada com `status_rota !== 'OK'`: usar `origin_final` / `destination_final` / `conexoes` mesmo assim, pois a CTE já tentou o fallback de timeline. Apenas quando ambos forem `NULL`, cair para `row.ORIGEM` / `row.DESTINO` brutos como último recurso (preserva comportamento atual de "N/A").
-  - Adicionar campo extra opcional `route_status` no payload para depuração futura (sem impacto na UI).
+1. **`case 'create_voucher_master'` (~linha 12343)**
+   - Alterar a query `resolvedChildren` para fazer também LEFT JOIN com `t_dados_financeiro_voucher` trazendo `dfv.idmov`, e expor `resolved_sort_key = COALESCE(dfv.idmov, COALESCE(v.id_rm, dfv.id_rm))`.
+   - Trocar a redução `childrenWithIdRm` / `lowestChild` para usar `resolved_sort_key` em vez de `resolved_id_rm`.
+   - Ajustar logs para indicar a fonte (`idmov` vs `id_rm`).
 
-Remover a extração de conexões via regex de `description` (linhas ~973–1008) — passa a vir 100% da query.
+2. **`case 'fix_master_numero_spo'` (~linha 12739)**
+   - Mesma alteração: incluir `dfv.idmov` na subquery dos filhos e usar `COALESCE(dfv.idmov, COALESCE(v.id_rm, dfv.id_rm))` como chave de ordenação.
+   - Atualizar `details` para registrar `lowestSortKey` e `source` (`idmov` ou `id_rm`).
 
-### 2. `src/pages/air/TrackingAereo.tsx`
+Nada mais é alterado: frontend, demais cases, RM integration e demais tabelas permanecem intactos.
 
-- Em `fetchData` (linhas ~400–437): a leitura permanece igual (`item.origin`, `item.destination`, `item.conexao`); apenas garantir que `conexao` continue como string separada por `,` (manteremos o split na edge function).
-- A lógica de highlight da rota (linhas ~810–870) **não muda** — continua operando sobre `awb.origem`, `awb.destino`, `awb.conexao` agora alimentados pela query nova.
-- Nenhuma mudança em outras colunas, dedupe, SLA, status, hide rules, etc.
+### Memória
 
-### 3. Memória
+Atualizar `mem://vouchers/master-numbering-logic-v1` para refletir a nova prioridade `idmov > id_rm`.
 
-Atualizar `mem://air/tracking/route-logic-and-highlighting` indicando que a fonte de origem/conexão/destino passou a ser a CTE com `t_iata_airports`, com fallback de timeline via `first/last_timeline_code`.
+### Observação / pergunta
 
-## Não muda
-
-- Schema, migrations, RLS — nenhuma alteração.
-- Demais regras (manual overrides, discrepâncias, SLA, retenção, ground transport) — preservadas.
-- Tela: layout idêntico, só os valores de Rota ficam mais corretos.
-
-## Resultado esperado
-
-A coluna **Rota** passa a refletir exatamente o que a query autoritativa retorna: códigos IATA validados em `t_iata_airports`, com fallback para a timeline quando o `t_fato_aereo` não tiver origem/destino confiáveis, sem inventar conexões a partir de regex frágil sobre descrições.
+Confirme que a coluna `idmov` está em `t_dados_financeiro_voucher` (não vi referência prévia no código). Se estiver em outra tabela, me avise para ajustar o JOIN.
