@@ -533,12 +533,30 @@ export const PagamentosTab = () => {
   };
 
   const handleVoltarOperacional = async () => {
-    if (voltarOperacionalJustificativa.trim().length < 10) return;
+    if (voltarOperacionalJustificativa.trim().length < 10) {
+      toast({ title: "Justificativa muito curta", description: "Mínimo de 10 caracteres", variant: "destructive" });
+      return;
+    }
     const isBatch = voltarBatchVouchers.length > 0;
     const targets: PagamentoItem[] = isBatch
       ? voltarBatchVouchers
       : (voltarOperacionalVoucher ? [voltarOperacionalVoucher] : []);
-    if (targets.length === 0) return;
+    if (targets.length === 0) {
+      toast({ title: "Nenhum voucher selecionado", variant: "destructive" });
+      return;
+    }
+
+    // Filtra ids sintéticos (RM pendentes ainda não persistidos)
+    const validTargets = targets.filter(t => t.id && !String(t.id).startsWith("rm_pending_"));
+    const skipped = targets.length - validTargets.length;
+    if (validTargets.length === 0) {
+      toast({
+        title: "Vouchers ainda não persistidos",
+        description: "Os itens selecionados ainda não foram criados no sistema. Aguarde a sincronização e tente novamente.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setVoltarOperacionalLoading(true);
     const isFiscal = voltarDestinoEtapa === "FISCAL";
@@ -551,8 +569,9 @@ export const PagamentosTab = () => {
     const logLabel = isFiscal ? "Ajuste Fiscal" : "Ajuste Operacional";
     let sucesso = 0;
     let falha = 0;
+    const errosDetalhe: string[] = [];
 
-    for (const v of targets) {
+    for (const v of validTargets) {
       try {
         const updatePayload: Record<string, unknown> = {
           action: "update_voucher_esteira",
@@ -595,6 +614,7 @@ export const PagamentosTab = () => {
       } catch (e) {
         console.error("Erro ao retornar voucher", v.id, e);
         falha++;
+        errosDetalhe.push(`${v.numero_spo}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
