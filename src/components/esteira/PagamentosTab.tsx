@@ -167,9 +167,24 @@ export const PagamentosTab = () => {
       : <ArrowDown className="h-3 w-3 ml-1" />;
   };
 
+  const dateFilteredPagamentos = useMemo(() => {
+    if (!filterDataInicio && !filterDataFim) return pagamentos;
+    const ini = filterDataInicio ? new Date(filterDataInicio) : null;
+    const fim = filterDataFim ? new Date(filterDataFim) : null;
+    if (ini) ini.setHours(0, 0, 0, 0);
+    if (fim) fim.setHours(23, 59, 59, 999);
+    return pagamentos.filter(p => {
+      const d = parseDBDate(p.vencimento);
+      if (!d) return false;
+      if (ini && d < ini) return false;
+      if (fim && d > fim) return false;
+      return true;
+    });
+  }, [pagamentos, filterDataInicio, filterDataFim]);
+
   const sortedPagamentos = useMemo(() => {
-    if (!sortField) return pagamentos;
-    return [...pagamentos].sort((a, b) => {
+    if (!sortField) return dateFilteredPagamentos;
+    return [...dateFilteredPagamentos].sort((a, b) => {
       let valA: any, valB: any;
       switch (sortField) {
         case "numero_spo": valA = a.numero_spo || ""; valB = b.numero_spo || ""; break;
@@ -183,7 +198,7 @@ export const PagamentosTab = () => {
       const cmp = typeof valA === "number" ? valA - valB : String(valA).localeCompare(String(valB), "pt-BR");
       return sortDirection === "asc" ? cmp : -cmp;
     });
-  }, [pagamentos, sortField, sortDirection]);
+  }, [dateFilteredPagamentos, sortField, sortDirection]);
 
   // Pagination
   const ITEMS_PER_PAGE = 20;
