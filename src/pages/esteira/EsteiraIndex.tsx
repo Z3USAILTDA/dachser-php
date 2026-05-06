@@ -771,7 +771,7 @@ const EsteiraIndex = () => {
     nomeMaster: v.nome_master || null,
     voucherMasterId: v.voucher_master_id || null,
     origemCriacao: v.is_master ? "MASTER" : v.id_rm ? "RM" : "MANUAL",
-    processoId: v.processo_id || null,
+    processoId: v.processo_id || v.dfv_numero_processo || null,
     origemProcesso: v.origem_processo || null,
     chavePix: v.chave_pix || null,
     statusDocumentoFiscal: v.status_documento_fiscal || "ANEXADO",
