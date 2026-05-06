@@ -12342,7 +12342,9 @@ Deno.serve(async (req) => {
         // First, resolve the actual UUIDs from t_vouchers by numero_spo
         const resolvedChildren = await client.query(`
           SELECT v.id, v.numero_spo, v.valor, v.vencimento, v.origem_processo, v.processo_id, v.id_rm,
-                 COALESCE(v.id_rm, dfv.id_rm) as resolved_id_rm
+                 dfv.idmov as dfv_idmov,
+                 COALESCE(v.id_rm, dfv.id_rm) as resolved_id_rm,
+                 COALESCE(dfv.idmov, v.id_rm, dfv.id_rm) as resolved_sort_key
           FROM dados_dachser.t_vouchers v
           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
             ON v.numero_spo COLLATE utf8mb4_general_ci = dfv.nd COLLATE utf8mb4_general_ci
@@ -12353,15 +12355,16 @@ Deno.serve(async (req) => {
         const resolvedProcessos = (resolvedChildren || []).map((c: any) => c.numero_spo);
         console.log(`Resolved ${resolvedIds.length} child voucher IDs from ${voucher_ids.length} processo values`);
 
-        // Determine numero_spo for master from child with lowest id_rm
+        // Determine numero_spo for master from child with lowest sort_key (idmov primary, id_rm fallback)
         let numeroSpoMaster: string;
-        const childrenWithIdRm = (resolvedChildren || []).filter((c: any) => c.resolved_id_rm != null);
-        if (childrenWithIdRm.length > 0) {
-          const lowestChild = childrenWithIdRm.reduce((prev: any, curr: any) => {
-            return (parseInt(prev.resolved_id_rm) || Infinity) < (parseInt(curr.resolved_id_rm) || Infinity) ? prev : curr;
+        const childrenWithKey = (resolvedChildren || []).filter((c: any) => c.resolved_sort_key != null);
+        if (childrenWithKey.length > 0) {
+          const lowestChild = childrenWithKey.reduce((prev: any, curr: any) => {
+            return (parseInt(prev.resolved_sort_key) || Infinity) < (parseInt(curr.resolved_sort_key) || Infinity) ? prev : curr;
           });
           numeroSpoMaster = lowestChild.numero_spo;
-          console.log(`Master numero_spo determined from child with lowest id_rm (${lowestChild.resolved_id_rm}): ${numeroSpoMaster}`);
+          const source = lowestChild.dfv_idmov != null ? 'idmov' : 'id_rm';
+          console.log(`Master numero_spo determined from child with lowest ${source} (${lowestChild.resolved_sort_key}): ${numeroSpoMaster}`);
         } else {
           // Fallback: use first child's numero_spo or generate random
           numeroSpoMaster = resolvedProcessos[0] || voucher_ids[0] || `MASTER-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
