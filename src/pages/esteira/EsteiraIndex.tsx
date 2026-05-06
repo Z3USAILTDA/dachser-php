@@ -947,9 +947,9 @@ const EsteiraIndex = () => {
       const mappedVouchers: Voucher[] = (esteiraResult.data?.data || []).map((v: any) => ({
         id: v.id,
         numeroSPO: v.numero_spo,
-        fornecedor: v.fornecedor,
+        fornecedor: v.fornecedor || v.dfv_razao_social || v.dfv_nome_beneficiario || null,
         cnpjFornecedor: v.cnpj_fornecedor,
-        valor: v.valor ? parseFloat(v.valor) : null,
+        valor: v.valor ? parseFloat(v.valor) : (v.dfv_valor_nf ? parseFloat(v.dfv_valor_nf) : null),
         moeda: v.moeda || "BRL",
         vencimento: parseMariaDBDate(v.vencimento) || new Date(),
         dataEmissaoDocumento: parseMariaDBDate(v.data_emissao_documento) || undefined,
