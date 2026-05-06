@@ -62,6 +62,11 @@ import { parseDBDate, formatDateOnlyBR } from "@/utils/timezone";
 import { buildAjusteWithRequester } from "@/utils/voucherAjusteRouting";
 import { sendVoucherReturnNotification } from "@/utils/voucherReturnNotification";
 import { TablePagination } from "@/components/layout/TablePagination";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format as formatDate } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { CalendarIcon } from "lucide-react";
 
 interface PagamentoItem {
   id: string;
