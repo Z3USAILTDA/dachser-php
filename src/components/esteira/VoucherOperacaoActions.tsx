@@ -604,7 +604,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
           Editar Dados
         </Button>
         <Button
-          onClick={() => setShowConfirm(true)}
+          onClick={handleSendClick}
           disabled={loading || !canEnviar}
           className={`gap-2 ${isMaster ? 'bg-purple-600 hover:bg-purple-700' : 'bg-primary hover:bg-primary/90'}`}
         >
@@ -633,12 +633,25 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleEnviar} disabled={loading}>
+            <AlertDialogAction onClick={() => handleEnviar("NORMAL")} disabled={loading}>
               {loading ? "Enviando..." : "Confirmar Envio"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {requesterFromAjuste && (
+        <AjusteRouteChoiceDialog
+          open={showRouteChoice}
+          onOpenChange={setShowRouteChoice}
+          requesterStage={requesterFromAjuste}
+          normalNextStage={normalNextStageOp}
+          choice={routeChoice}
+          onChoiceChange={setRouteChoice}
+          onConfirm={() => handleEnviar(routeChoice)}
+          loading={loading}
+        />
+      )}
     </div>
   );
 };
