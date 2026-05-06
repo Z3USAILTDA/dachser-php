@@ -223,8 +223,6 @@ export function ReportsTab() {
                   <SelectItem value="FINANCEIRO">Financeiro</SelectItem>
                   <SelectItem value="ROBO">Robô</SelectItem>
                   <SelectItem value="CONCLUIDO">Concluído</SelectItem>
-                  <SelectItem value="AJUSTE_OPERACAO">Ajuste - Operação</SelectItem>
-                  <SelectItem value="AJUSTE_FISCAL">Ajuste - Fiscal</SelectItem>
                 </SelectContent>
               </Select>
             </div>

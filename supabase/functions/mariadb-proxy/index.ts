@@ -11085,7 +11085,9 @@ Deno.serve(async (req) => {
 
         if (etapa && etapa !== 'all') {
           if (etapa === 'OPERACAO') {
-            whereConditions.push("v.etapa_atual IN ('OPERACAO','A_PROCESSAR')");
+            whereConditions.push("v.etapa_atual IN ('OPERACAO','A_PROCESSAR','AJUSTE_OPERACAO')");
+          } else if (etapa === 'FISCAL') {
+            whereConditions.push("v.etapa_atual IN ('FISCAL','AJUSTE_FISCAL')");
           } else {
             whereConditions.push('v.etapa_atual = ?');
             params.push(etapa);

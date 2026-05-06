@@ -1,35 +1,12 @@
-## Ajustes no filtro unificado de data
+## Ajustar filtro de Etapa em Relatórios
 
-### 1. Layout horizontal dos calendários
-No `PopoverContent`, exibir os dois calendários **lado a lado** (De à esquerda, Até à direita) em vez de empilhados:
+Em `src/components/tabs/ReportsTab.tsx`, no Select de "Etapa":
 
-```tsx
-<PopoverContent className="w-auto p-3 ...">
-  <div className="flex gap-4">
-    <div>
-      <div className="text-xs ... mb-1">De</div>
-      <CalendarPicker mode="single" selected={filterDataInicio} onSelect={setFilterDataInicio} />
-    </div>
-    <div>
-      <div className="text-xs ... mb-1">Até</div>
-      <CalendarPicker mode="single" selected={filterDataFim} onSelect={setFilterDataFim} />
-    </div>
-  </div>
-  {(filterDataInicio || filterDataFim) && <Button>Limpar datas</Button>}
-</PopoverContent>
-```
+1. **Remover** os itens `AJUSTE_OPERACAO` ("Ajuste - Operação") e `AJUSTE_FISCAL` ("Ajuste - Fiscal").
+2. **Ajustar a lógica de envio** do filtro no `handleExport`: quando o usuário selecionar `OPERACAO`, enviar `['OPERACAO', 'AJUSTE_OPERACAO']`; quando selecionar `FISCAL`, enviar `['FISCAL', 'AJUSTE_FISCAL']`. Para os demais valores, manter o envio atual.
 
-Em mobile (`max-md`), usar `flex-col` para empilhar.
+### Detalhes técnicos
+- Alterar o body de `supabase.functions.invoke('mariadb-proxy', ...)` para passar `etapa` como array (ou string com vírgulas) nos casos de Operação/Fiscal, mantendo retrocompatibilidade — preferência: enviar campo adicional `etapas: string[]` quando aplicável, sem quebrar o `etapa` atual. Se preferir minimizar mudança no backend, mando apenas o valor selecionado e adapto o proxy para expandir.
+- Sem mudanças em outros componentes ou no backend (a expansão fica do lado do client invocando filtro `IN`).
 
-### 2. Reordenar o filtro
-Mover o bloco do `<Popover>` unificado para **antes** do `<Select>` "Vencimento" (Todos/Hoje/Vencidos/Próximos 7), ou seja, logo após o campo de busca.
-
-Ordem final na barra de filtros:
-```
-[🔍 Busca] [📅 Vencimento (calendário)] [▼ Vencimento rápido] [Status ▼] ...
-```
-
-### Arquivo
-- `src/components/esteira/PagamentosTab.tsx` (única alteração)
-
-Sem mudanças de lógica, estado ou backend.
+Arquivo afetado: `src/components/tabs/ReportsTab.tsx`.
