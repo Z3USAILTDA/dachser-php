@@ -765,6 +765,64 @@ export const PagamentosTab = () => {
             />
           </div>
 
+          {/* Filtro unificado por data de vencimento (De / Até opcionais) */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "rounded-full gap-2",
+                  (filterDataInicio || filterDataFim) && "border-primary text-primary"
+                )}
+              >
+                <CalendarIcon className="h-4 w-4" />
+                {filterDataInicio && filterDataFim
+                  ? `${fnsFormat(filterDataInicio, "dd/MM")} ─ ${fnsFormat(filterDataFim, "dd/MM")}`
+                  : filterDataInicio
+                  ? `≥ ${fnsFormat(filterDataInicio, "dd/MM/yyyy")}`
+                  : filterDataFim
+                  ? `≤ ${fnsFormat(filterDataFim, "dd/MM/yyyy")}`
+                  : "Vencimento"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-3 bg-card border-border" align="start">
+              <div className="flex flex-col md:flex-row gap-4">
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground mb-1 px-1">De</div>
+                  <CalendarPicker
+                    mode="single"
+                    selected={filterDataInicio}
+                    onSelect={setFilterDataInicio}
+                    className={cn("p-0 pointer-events-auto")}
+                  />
+                </div>
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground mb-1 px-1">Até</div>
+                  <CalendarPicker
+                    mode="single"
+                    selected={filterDataFim}
+                    onSelect={setFilterDataFim}
+                    className={cn("p-0 pointer-events-auto")}
+                  />
+                </div>
+              </div>
+              {(filterDataInicio || filterDataFim) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full mt-3"
+                  onClick={() => {
+                    setFilterDataInicio(undefined);
+                    setFilterDataFim(undefined);
+                  }}
+                >
+                  Limpar datas
+                </Button>
+              )}
+            </PopoverContent>
+          </Popover>
+
           {/* Quick filters */}
           <Select value={filterVencimento} onValueChange={(v) => setFilterVencimento(v as FilterVencimento)}>
             <SelectTrigger className="w-[140px] bg-card border-border rounded-full">
@@ -790,62 +848,6 @@ export const PagamentosTab = () => {
               <SelectItem value="EM_REMESSA">Em Remessa</SelectItem>
             </SelectContent>
           </Select>
-
-          {/* Filtro unificado por data de vencimento (De / Até opcionais) */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className={cn(
-                  "rounded-full gap-2",
-                  (filterDataInicio || filterDataFim) && "border-primary text-primary"
-                )}
-              >
-                <CalendarIcon className="h-4 w-4" />
-                {filterDataInicio && filterDataFim
-                  ? `${fnsFormat(filterDataInicio, "dd/MM")} ─ ${fnsFormat(filterDataFim, "dd/MM")}`
-                  : filterDataInicio
-                  ? `≥ ${fnsFormat(filterDataInicio, "dd/MM/yyyy")}`
-                  : filterDataFim
-                  ? `≤ ${fnsFormat(filterDataFim, "dd/MM/yyyy")}`
-                  : "Vencimento"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-3 bg-card border-border space-y-3" align="start">
-              <div>
-                <div className="text-xs font-medium text-muted-foreground mb-1 px-1">De</div>
-                <CalendarPicker
-                  mode="single"
-                  selected={filterDataInicio}
-                  onSelect={setFilterDataInicio}
-                  className={cn("p-0 pointer-events-auto")}
-                />
-              </div>
-              <div>
-                <div className="text-xs font-medium text-muted-foreground mb-1 px-1">Até</div>
-                <CalendarPicker
-                  mode="single"
-                  selected={filterDataFim}
-                  onSelect={setFilterDataFim}
-                  className={cn("p-0 pointer-events-auto")}
-                />
-              </div>
-              {(filterDataInicio || filterDataFim) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => {
-                    setFilterDataInicio(undefined);
-                    setFilterDataFim(undefined);
-                  }}
-                >
-                  Limpar datas
-                </Button>
-              )}
-            </PopoverContent>
-          </Popover>
 
           <Select value={filterFormaPagamento} onValueChange={setFilterFormaPagamento}>
             <SelectTrigger className="w-[140px] bg-card border-border rounded-full">
