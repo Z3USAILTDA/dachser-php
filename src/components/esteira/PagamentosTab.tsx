@@ -218,6 +218,8 @@ export const PagamentosTab = () => {
     filterFormaPagamento,
     filterStatusIntegracaoRm,
     filterFornecedorDebounced,
+    filterDataInicio,
+    filterDataFim,
     activeCardFilter,
     sortField,
     sortDirection,
