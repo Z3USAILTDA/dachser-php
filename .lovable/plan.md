@@ -1,40 +1,73 @@
-## Atualizar PDF para seguir padrão do Excel
+## Preencher "Emissão" e "Enviado por" vazios na esteira
 
-Alinhar o `voucherPdfExport.ts` ao layout e colunas do `voucherExcelExport.ts`.
+Aplica-se aos vouchers fora da etapa `A_PROCESSAR` exibidos em `VoucherTable`.
 
-### Mudanças em `src/utils/voucherPdfExport.ts`
+### 1. Backend — query (`supabase/functions/mariadb-proxy/index.ts`)
 
-**Colunas (10, iguais ao Excel):**
-1. Número SPO/Voucher
-2. Fornecedor
-3. CNPJ Fornecedor
-4. Valor
-5. Moeda
-6. Vencimento
-7. Forma de Pagamento
-8. Urgente
-9. Etapa Atual
-10. Criado Por
+Atualizar `get_vouchers_ativos` e `get_vouchers_combined` (ramo ativos) para usar fallbacks já no SELECT:
 
-**Cabeçalho/título:**
-- Título: "Relatório de Vouchers — DACHSER" (faixa dourada)
-- Subtítulo: "Gerado em DD/MM/YYYY às HH:mm • N voucher(s)"
+- **Emissão**: trocar `v.data_emissao_documento` exibido por
+  `COALESCE(v.data_emissao_documento, dfv.data_emissao) AS data_emissao_documento`.
+  (incluir `MAX(data_emissao) AS data_emissao` no subselect `dfv` em `get_vouchers_ativos`, igual já existe em `combined`).
 
-**Estilos da tabela:**
-- Header dourado (#D4AF37), texto preto, negrito, centralizado
-- Linhas alternadas cinza claro (#F5F5F5)
-- Linhas urgentes destacadas em vermelho claro (#FFE5E5) e negrito
-- Bordas finas cinza
-- Valor formatado com `#,##0.00` (numérico, alinhado à direita)
-- Datas em `dd/MM/yyyy`
+- **Enviado por**: relaxar o filtro de ações no subselect `enviado_por_user_name` — remover o `IN (...)` e usar o último log de qualquer ação:
+  ```
+  (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
+   WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+     AND l.user_name IS NOT NULL AND l.user_name <> ''
+   ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
+  ```
 
-**Linha de TOTAL:**
-- Última linha com fundo dourado claro (#FFF4D6), borda superior dupla
-- "TOTAL" na coluna 1, soma na coluna Valor
-- Se houver moedas mistas, exibir "(moedas mistas)" na coluna Moeda
+### 2. Backend — nova action de backfill
 
-**Largura das colunas:** proporcional ao Excel, ajustada à página A4 paisagem (~277mm úteis).
+Adicionar action `backfill_emissao_enviado_por` em `mariadb-proxy/index.ts` (registrar na lista de actions permitidas). Executa duas atualizações em `dados_dachser.t_vouchers`, restritas a vouchers fora de `A_PROCESSAR`:
 
-**Página de resumo:** manter a página de resumo existente (estatísticas por etapa, urgentes, valor total agregado por moeda quando aplicável).
+```sql
+-- A) Emissão: copiar de dfv.data_emissao quando vazia
+UPDATE dados_dachser.t_vouchers v
+JOIN (
+  SELECT nd, MAX(data_emissao) AS data_emissao
+  FROM dados_dachser.t_dados_financeiro_voucher
+  WHERE data_emissao IS NOT NULL
+  GROUP BY nd
+) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
+SET v.data_emissao_documento = dfv.data_emissao
+WHERE v.etapa_atual <> 'A_PROCESSAR'
+  AND (v.data_emissao_documento IS NULL OR v.data_emissao_documento = '0000-00-00');
 
-Sem alterações no Excel nem no `ReportsTab.tsx`.
+-- B) Enviado por: gravar em coluna dedicada (criar se não existir)
+ALTER TABLE dados_dachser.t_vouchers
+  ADD COLUMN IF NOT EXISTS enviado_por_user_name VARCHAR(120) NULL;
+
+UPDATE dados_dachser.t_vouchers v
+JOIN (
+  SELECT l.voucher_id, l.user_name
+  FROM dados_dachser.t_voucher_logs l
+  JOIN (
+    SELECT voucher_id, MAX(data_hora) AS max_dh
+    FROM dados_dachser.t_voucher_logs
+    WHERE user_name IS NOT NULL AND user_name <> ''
+    GROUP BY voucher_id
+  ) m ON m.voucher_id = l.voucher_id AND m.max_dh = l.data_hora
+) lg ON lg.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+SET v.enviado_por_user_name = lg.user_name
+WHERE v.etapa_atual <> 'A_PROCESSAR'
+  AND (v.enviado_por_user_name IS NULL OR v.enviado_por_user_name = '');
+```
+
+A action retorna `{ updated_emissao, updated_enviado_por }` (via `affectedRows`).
+
+### 3. UI — fallback final em runtime (`src/components/esteira/VoucherTable.tsx`)
+
+Como rede de segurança, manter o que já existe na coluna "Enviado por":
+`voucher.enviadoPorUserName || voucher.criadoPorUserName || voucher.criadoPorDfv || "-"`.
+Nenhuma outra mudança visual.
+
+### 4. Disparo do backfill
+
+Executar a action `backfill_emissao_enviado_por` uma vez logo após o deploy (via chamada manual a partir do console do navegador autenticado, ou um botão temporário — preferência: chamada manual única, sem UI).
+
+### Observações
+- Sem mudanças em `t_vouchers` além do `ADD COLUMN IF NOT EXISTS enviado_por_user_name` (idempotente).
+- Sem alteração no fluxo de cadastro/transição: novos registros continuam recebendo o valor pelas queries de leitura (subselect).
+- `A_PROCESSAR` permanece intocado (sem registro em `t_vouchers`).

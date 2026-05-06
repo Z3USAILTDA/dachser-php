@@ -484,6 +484,7 @@ Deno.serve(async (req) => {
       'update_user_esteira_active','update_user_supervisor','get_user_esteira_role',
       'cancelar_voucher','consolidar_vouchers','get_vouchers_agrupados','get_vouchers_filhos',
       'get_vouchers_pendentes_rm','get_vouchers_ativos','get_vouchers_combined',
+      'backfill_emissao_enviado_por',
       'get_voucher_filhos_batch','search_masters_by_child_spo','sync_vouchers_incremental',
       'sync_vouchers_baixados','get_sync_status','cleanup_auto_sync_vouchers',
       'sync_voucher_statuses','search_vouchers_for_master','create_voucher_master',
@@ -11251,7 +11252,59 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // ==================== PENDING VOUCHERS FOR DAILY REPORT ====================
+      // ==================== BACKFILL EMISSAO + ENVIADO POR ====================
+      case 'backfill_emissao_enviado_por': {
+        // Garante coluna enviado_por_user_name (idempotente)
+        try {
+          await client.query(`
+            ALTER TABLE dados_dachser.t_vouchers
+            ADD COLUMN IF NOT EXISTS enviado_por_user_name VARCHAR(120) NULL
+          `);
+        } catch (e) {
+          console.warn('[backfill] ALTER ADD COLUMN ignored:', (e as any)?.message);
+        }
+
+        // A) Emissão: copiar de dfv.data_emissao quando vazia
+        const updEmissao: any = await client.query(`
+          UPDATE dados_dachser.t_vouchers v
+          JOIN (
+            SELECT nd, MAX(data_emissao) AS data_emissao
+            FROM dados_dachser.t_dados_financeiro_voucher
+            WHERE data_emissao IS NOT NULL
+            GROUP BY nd
+          ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
+          SET v.data_emissao_documento = dfv.data_emissao
+          WHERE v.etapa_atual <> 'A_PROCESSAR'
+            AND (v.data_emissao_documento IS NULL OR v.data_emissao_documento = '0000-00-00')
+        `);
+
+        // B) Enviado por: gravar último user_name de t_voucher_logs
+        const updEnviado: any = await client.query(`
+          UPDATE dados_dachser.t_vouchers v
+          JOIN (
+            SELECT l.voucher_id, l.user_name
+            FROM dados_dachser.t_voucher_logs l
+            JOIN (
+              SELECT voucher_id, MAX(data_hora) AS max_dh
+              FROM dados_dachser.t_voucher_logs
+              WHERE user_name IS NOT NULL AND user_name <> ''
+              GROUP BY voucher_id
+            ) m ON m.voucher_id = l.voucher_id AND m.max_dh = l.data_hora
+          ) lg ON lg.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+          SET v.enviado_por_user_name = lg.user_name
+          WHERE v.etapa_atual <> 'A_PROCESSAR'
+            AND (v.enviado_por_user_name IS NULL OR v.enviado_por_user_name = '')
+        `);
+
+        result = {
+          success: true,
+          updated_emissao: updEmissao?.affectedRows ?? 0,
+          updated_enviado_por: updEnviado?.affectedRows ?? 0,
+        };
+        console.log('[backfill_emissao_enviado_por]', result);
+        break;
+      }
+
       case 'get_pending_vouchers_for_report': {
         const twentyFourHoursAgo = new Date();
         twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
@@ -15387,7 +15440,9 @@ Deno.serve(async (req) => {
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
         
         const vouchers = await client.query(`
-           SELECT v.*, dfv.id_rm as dfv_id_rm,
+           SELECT v.*,
+            COALESCE(v.data_emissao_documento, dfv.data_emissao) AS data_emissao_documento,
+            dfv.id_rm as dfv_id_rm,
             dfv.numero_processo as dfv_numero_processo,
             dfv.razao_social as dfv_razao_social,
             dfv.nome_beneficiario as dfv_nome_beneficiario,
@@ -15410,15 +15465,17 @@ Deno.serve(async (req) => {
                   v.criado_por_user_id
                 )
             END as dfv_created_by,
-            (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
-             WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
-             AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
-                           'REENVIO_APOS_AJUSTE', 'APROVADO_URGENTE', 'BAIXA_MANUAL', 'VOUCHER_CRIADO',
-                           'RASCUNHO_ENVIADO', 'MASTER_APROVADO_OPERACAO')
-             ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
+            COALESCE(
+              NULLIF(v.enviado_por_user_name, ''),
+              (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
+               WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+                 AND l.user_name IS NOT NULL AND l.user_name <> ''
+               ORDER BY l.data_hora DESC LIMIT 1)
+            ) AS enviado_por_user_name
           FROM dados_dachser.t_vouchers v
           LEFT JOIN (
             SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by,
+              MAX(data_emissao) as data_emissao,
               MIN(numero_processo) as numero_processo,
               MAX(razao_social) as razao_social,
               MAX(nome_beneficiario) as nome_beneficiario,
@@ -15458,7 +15515,9 @@ Deno.serve(async (req) => {
           : [];
 
         const combinedAtivos = await client.query(`
-           SELECT v.*, dfv.id_rm as dfv_id_rm,
+           SELECT v.*,
+            COALESCE(v.data_emissao_documento, dfv.data_emissao) AS data_emissao_documento,
+            dfv.id_rm as dfv_id_rm,
             dfv.numero_processo as dfv_numero_processo,
             dfv.razao_social as dfv_razao_social,
             dfv.nome_beneficiario as dfv_nome_beneficiario,
@@ -15481,12 +15540,13 @@ Deno.serve(async (req) => {
                   v.criado_por_user_id
                 )
             END as dfv_created_by,
-            (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
-             WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
-             AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
-                           'REENVIO_APOS_AJUSTE', 'APROVADO_URGENTE', 'BAIXA_MANUAL', 'VOUCHER_CRIADO',
-                           'RASCUNHO_ENVIADO', 'MASTER_APROVADO_OPERACAO')
-             ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
+            COALESCE(
+              NULLIF(v.enviado_por_user_name, ''),
+              (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
+               WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+                 AND l.user_name IS NOT NULL AND l.user_name <> ''
+               ORDER BY l.data_hora DESC LIMIT 1)
+            ) AS enviado_por_user_name
           FROM dados_dachser.t_vouchers v
           LEFT JOIN (
             SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MAX(data_emissao) as data_emissao,
