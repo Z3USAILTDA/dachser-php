@@ -11123,13 +11123,19 @@ Deno.serve(async (req) => {
             u_operacao.username AS responsavel_operacao_username,
             u_fiscal.username AS responsavel_fiscal_username,
             u_financeiro.username AS responsavel_financeiro_username,
-            u_supervisor.username AS responsavel_supervisor_username
+            u_supervisor.username AS responsavel_supervisor_username,
+            dfv.created_by AS dfv_created_by
           FROM dados_dachser.t_vouchers v
           LEFT JOIN ai_agente.t_users_dachser u_criado ON v.criado_por_user_id = u_criado.id
           LEFT JOIN ai_agente.t_users_dachser u_operacao ON v.responsavel_operacao_user_id = u_operacao.id
           LEFT JOIN ai_agente.t_users_dachser u_fiscal ON v.responsavel_fiscal_user_id = u_fiscal.id
           LEFT JOIN ai_agente.t_users_dachser u_financeiro ON v.responsavel_financeiro_user_id = u_financeiro.id
           LEFT JOIN ai_agente.t_users_dachser u_supervisor ON v.responsavel_supervisor_user_id = u_supervisor.id
+          LEFT JOIN (
+            SELECT nd, MAX(created_by) AS created_by
+            FROM dados_dachser.t_dados_financeiro_voucher
+            GROUP BY nd
+          ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
           ${whereClause}
           ORDER BY v.created_at DESC
           LIMIT 5000
