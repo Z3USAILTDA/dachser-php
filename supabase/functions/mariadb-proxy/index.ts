@@ -6469,7 +6469,45 @@ Deno.serve(async (req) => {
         ]);
         
         console.log('Voucher saved to MariaDB t_vouchers, ID:', voucherId, 'id_rm:', voucherData.id_rm);
+
+        // Reconciliação pós-INSERT: defesa contra race condition em criações concorrentes.
+        // Se houver mais de 1 voucher para o mesmo numero_spo, mantém apenas o "vencedor".
+        try {
+          const reconciledId = await reconcileDuplicateVouchersBySpo(client, numeroSpo, voucherId);
+          if (reconciledId && reconciledId !== voucherId) {
+            console.log('Reconciliation: returning winner', reconciledId, 'instead of just-inserted', voucherId);
+            result = { success: true, mariadbId: reconciledId, reconciled: true };
+            break;
+          }
+        } catch (recErr) {
+          console.warn('Reconciliation failed (non-fatal):', recErr);
+        }
+
         result = { success: true, mariadbId: voucherId };
+        break;
+      }
+
+      case 'cleanup_duplicate_vouchers': {
+        // Aplica a regra de "vencedor único" a todos os numero_spo com COUNT(*) > 1.
+        const dups = await client.query(`
+          SELECT numero_spo, COUNT(*) AS n
+          FROM dados_dachser.t_vouchers
+          WHERE numero_spo IS NOT NULL AND numero_spo <> ''
+          GROUP BY numero_spo HAVING COUNT(*) > 1
+        `);
+        let processed = 0;
+        let removed = 0;
+        for (const row of (dups || [])) {
+          try {
+            const before = (row.n as number) || 0;
+            await reconcileDuplicateVouchersBySpo(client, row.numero_spo, null);
+            processed++;
+            removed += Math.max(0, before - 1);
+          } catch (e) {
+            console.warn('cleanup error for', row.numero_spo, e);
+          }
+        }
+        result = { success: true, processed, removed };
         break;
       }
 
