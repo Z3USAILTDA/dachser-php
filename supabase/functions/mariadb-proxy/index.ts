@@ -6656,9 +6656,10 @@ Deno.serve(async (req) => {
         const updateData = updatesObj || directFields;
         
         // ============================================================
-        // GUARD: edição só é permitida quando etapa_atual = 'A_PROCESSAR'
+        // GUARD: edição permitida apenas nas etapas A_PROCESSAR e OPERACAO
         // (regra de negócio — vale inclusive para ADMIN)
         // ============================================================
+        const ETAPAS_EDITAVEIS = ['A_PROCESSAR', 'OPERACAO'];
         const etapaRows = await client.query(
           `SELECT etapa_atual, vencimento, valor, forma_pagamento, tipo_documento,
                   fornecedor, cnpj_fornecedor, moeda, data_emissao_documento,
@@ -6670,7 +6671,7 @@ Deno.serve(async (req) => {
         const currentEtapa = etapaRows?.[0]?.etapa_atual || null;
         const beforeRow = etapaRows?.[0] || {};
 
-        if (currentEtapa && currentEtapa !== 'A_PROCESSAR') {
+        if (currentEtapa && !ETAPAS_EDITAVEIS.includes(currentEtapa)) {
           // Registra tentativa bloqueada para auditoria
           try {
             await client.execute(`
@@ -6690,8 +6691,8 @@ Deno.serve(async (req) => {
           return new Response(
             JSON.stringify({
               success: false,
-              error: 'EDICAO_BLOQUEADA_FORA_OPERACIONAL',
-              message: 'Vouchers só podem ser editados na etapa Operacional.',
+              error: 'EDICAO_BLOQUEADA_ETAPA',
+              message: 'Edição permitida apenas nas etapas A Processar e Operacional.',
               etapa_atual: currentEtapa,
             }),
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -7790,6 +7791,39 @@ Deno.serve(async (req) => {
         
         console.log('Voucher deleted successfully:', voucher_id);
         result = { success: true };
+        break;
+      }
+
+      case 'voucher_create_unique_index_rm': {
+        // Pre-check duplicados ativos por (id_rm, numero_spo)
+        const dupes = await client.query(`
+          SELECT id_rm, numero_spo, COUNT(*) AS c, GROUP_CONCAT(id) AS ids
+            FROM dados_dachser.t_vouchers
+           WHERE id_rm IS NOT NULL
+           GROUP BY id_rm, numero_spo
+          HAVING c > 1
+        `);
+        if (dupes && dupes.length > 0) {
+          result = { success: false, error: 'DUPLICADOS_EXISTENTES', duplicados: dupes };
+          break;
+        }
+        // Verifica se já existe índice
+        const existing = await client.query(`
+          SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+           WHERE TABLE_SCHEMA = 'dados_dachser'
+             AND TABLE_NAME = 't_vouchers'
+             AND INDEX_NAME = 'uq_voucher_rm_spo'
+           LIMIT 1
+        `);
+        if (existing && existing.length > 0) {
+          result = { success: true, alreadyExists: true };
+          break;
+        }
+        await client.execute(`
+          ALTER TABLE dados_dachser.t_vouchers
+            ADD UNIQUE KEY uq_voucher_rm_spo (id_rm, numero_spo)
+        `);
+        result = { success: true, created: true };
         break;
       }
 
@@ -12299,16 +12333,39 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Check for existing voucher with same numero_spo
+        // Anti-duplicação: busca por numero_spo OU id_rm (qualquer sync_status)
+        // Resolve id_rm a partir do RM antes de checar
+        const rmLookup = await client.query(
+          `SELECT id_rm FROM dados_dachser.t_dados_financeiro_voucher WHERE nd = ? LIMIT 1`,
+          [nd]
+        );
+        const lookupIdRm = rmLookup?.[0]?.id_rm || null;
+
         const existingVoucher = await client.query(`
-          SELECT id FROM dados_dachser.t_vouchers 
-          WHERE numero_spo = ? AND sync_status = 'ATIVO' 
-          LIMIT 1
-        `, [nd]);
+          SELECT id, etapa_atual, id_rm, numero_spo
+            FROM dados_dachser.t_vouchers
+           WHERE numero_spo = ?
+              OR (id_rm IS NOT NULL AND id_rm = ?)
+           LIMIT 1
+        `, [nd, lookupIdRm]);
 
         if (existingVoucher && existingVoucher.length > 0) {
-          console.log(`Voucher ${nd} already exists as ${existingVoucher[0].id}, skipping duplicate insert`);
-          result = { success: true, voucherId: existingVoucher[0].id, numeroSPO: nd, alreadyExists: true };
+          const ev = existingVoucher[0];
+          console.log(`[ANTI-DUP] Voucher já existe (id=${ev.id}, numero_spo=${ev.numero_spo}, id_rm=${ev.id_rm}, etapa=${ev.etapa_atual}). Skip de import_voucher_from_rm para nd=${nd}, id_rm=${lookupIdRm}`);
+          try {
+            await client.execute(`
+              INSERT INTO dados_dachser.t_voucher_logs (
+                id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+              ) VALUES (?, ?, ?, ?, 'VOUCHER_RM_DUPLICADO_IGNORADO', ?, NOW())
+            `, [
+              crypto.randomUUID(),
+              ev.id,
+              user_id || null,
+              user_name || 'Sistema',
+              `Tentativa de import duplicado bloqueada. nd=${nd}, id_rm=${lookupIdRm}, etapa_existente=${ev.etapa_atual}`
+            ]);
+          } catch (_e) { /* log best-effort */ }
+          result = { success: true, voucherId: ev.id, numeroSPO: nd, alreadyExists: true };
           break;
         }
 
@@ -12386,17 +12443,18 @@ Deno.serve(async (req) => {
           return fallback;
         };
 
-        // Inserir na t_vouchers
+        // Inserir na t_vouchers (gravando id_rm para reforçar anti-duplicação)
         await client.execute(`
           INSERT INTO dados_dachser.t_vouchers (
-            id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda,
+            id, numero_spo, id_rm, fornecedor, cnpj_fornecedor, valor, moeda,
             vencimento, data_emissao_documento, forma_pagamento, tipo_documento,
             cobranca_em_nome_de, etapa_atual, status_baixa, urgencia_tipo,
             processo_id, criado_por_user_id, tipo_execucao_pagamento, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'NORMAL', ?, ?, 'A_DEFINIR', NOW(), NOW())
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'NORMAL', ?, ?, 'A_DEFINIR', NOW(), NOW())
         `, [
           voucherId,
           rm.nd,
+          rm.id_rm || null,
           rm.nome_beneficiario || rm.razao_social,
           rm.cnpj,
           rm.valor_nf || 0,

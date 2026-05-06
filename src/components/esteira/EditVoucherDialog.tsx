@@ -101,11 +101,11 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
     e.preventDefault();
     if (!voucher) return;
 
-    // Defesa em profundidade: edição só é permitida na etapa Operacional
-    if (voucher.etapaAtual !== "A_PROCESSAR") {
+    // Defesa em profundidade: edição permitida em A_PROCESSAR e OPERACAO
+    if (!["A_PROCESSAR", "OPERACAO"].includes(voucher.etapaAtual as string)) {
       toast({
         title: "Edição não permitida",
-        description: "Vouchers só podem ser editados na etapa Operacional.",
+        description: "Vouchers só podem ser editados nas etapas A Processar e Operacional.",
         variant: "destructive",
       });
       return;
