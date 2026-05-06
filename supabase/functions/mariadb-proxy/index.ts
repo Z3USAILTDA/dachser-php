@@ -15463,7 +15463,9 @@ Deno.serve(async (req) => {
           : [];
 
         const combinedAtivos = await client.query(`
-           SELECT v.*, dfv.id_rm as dfv_id_rm,
+           SELECT v.*,
+            COALESCE(v.data_emissao_documento, dfv.data_emissao) AS data_emissao_documento,
+            dfv.id_rm as dfv_id_rm,
             dfv.numero_processo as dfv_numero_processo,
             dfv.razao_social as dfv_razao_social,
             dfv.nome_beneficiario as dfv_nome_beneficiario,
@@ -15486,12 +15488,13 @@ Deno.serve(async (req) => {
                   v.criado_por_user_id
                 )
             END as dfv_created_by,
-            (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
-             WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
-             AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
-                           'REENVIO_APOS_AJUSTE', 'APROVADO_URGENTE', 'BAIXA_MANUAL', 'VOUCHER_CRIADO',
-                           'RASCUNHO_ENVIADO', 'MASTER_APROVADO_OPERACAO')
-             ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
+            COALESCE(
+              NULLIF(v.enviado_por_user_name, ''),
+              (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
+               WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+                 AND l.user_name IS NOT NULL AND l.user_name <> ''
+               ORDER BY l.data_hora DESC LIMIT 1)
+            ) AS enviado_por_user_name
           FROM dados_dachser.t_vouchers v
           LEFT JOIN (
             SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MAX(data_emissao) as data_emissao,
