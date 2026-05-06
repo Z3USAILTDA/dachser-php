@@ -2216,6 +2216,24 @@ const EsteiraIndex = () => {
       <EditVoucherDialog open={showEditDialog} onOpenChange={setShowEditDialog} onSuccess={loadVouchers} voucher={selectedVoucher} />
       {selectedVoucher && <CancelarVoucherDialog open={showCancelDialog} onOpenChange={setShowCancelDialog} voucher={selectedVoucher} onSuccess={loadVouchers} />}
 
+      {isAdmin && user?.id && <BatchImportVoucherDialog
+        open={showBatchImportDialog}
+        onOpenChange={setShowBatchImportDialog}
+        userId={Number(user.id)}
+        onCreated={(batchId) => {
+          setActiveBatchId(batchId);
+          setShowBatchBinderDialog(true);
+          loadVouchers();
+        }}
+      />}
+      {isAdmin && user?.id && <BatchDocumentBinderDialog
+        open={showBatchBinderDialog}
+        onOpenChange={setShowBatchBinderDialog}
+        batchId={activeBatchId}
+        userId={Number(user.id)}
+        onFinalized={() => { setActiveBatchId(null); loadVouchers(); }}
+      />}
+
       {/* Read-only Users Dialog */}
       <Dialog open={showUsersDialog} onOpenChange={open => {
       setShowUsersDialog(open);
