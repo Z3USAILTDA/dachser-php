@@ -1,114 +1,89 @@
-## Relatório Técnico — Módulo Esteira do Voucher
+## Objetivo
 
-Vou produzir um documento Markdown extenso e 100% técnico em `/mnt/documents/esteira-voucher-relatorio-tecnico.md` (com versão PDF opcional), cobrindo **toda** a arquitetura, fluxo, regras de negócio, integrações e operações do módulo. Não envolve mudanças de código — é apenas geração de artefato.
+1. **Liberar edição** de vouchers tanto em `A_PROCESSAR` quanto em `OPERACAO`.
+2. **Prevenir duplicação** na sincronização vinda do RM (caso 105-293183 DIM-BY gerou 2 UUIDs com o mesmo `id_rm` 4663577).
+3. **Resolver os duplicados existentes** do processo afetado.
 
-### Escopo do relatório
+---
 
-**1. Visão geral arquitetural**
-- Stack (React+Vite+TS, Tailwind, Supabase Edge, MariaDB `dados_dachser`)
-- Diagrama de camadas: UI → Edge Functions → MariaDB / Storage / Lovable AI
-- Mapa de tabelas envolvidas: `t_vouchers`, `t_vouchers_anexos`, `t_vouchers_logs`, `t_dados_financeiro_voucher`, `t_dados_rm`, `t_dados_rm_pending`, `t_remessa_lote`, `t_remessa_item`, `t_voucher_baixas`, `t_accrual`, `t_users_esteira_role`, `t_fornecedores_sem_fiscal`, `t_voucher_rules`, `t_email_voucher_log`
+## Etapa 1 — Liberar edição em A_PROCESSAR + OPERACAO
 
-**2. Modelo de dados e estados**
-- Enum completo: `EtapaAtual`, `StatusBaixa`, `StatusFinanceiro`, `StatusComprovante`, `TipoExecucaoPagamento`, `StatusPagamento`, `StatusLoteRemessa`, `UrgenciaTipo`, `FormaPagamento`, `TipoAnexo`, `UserRole`
-- SLA por etapa (SLA_POR_ETAPA), urgência automática vs real
-- Estrutura `Voucher`, `Anexo`, `LogEntry`, `RemessaLote/Item`, `DadosBancarios`
+**Backend** — `supabase/functions/mariadb-proxy/index.ts`, action `update_voucher_esteira` (linhas ~6651-6699):
+- Trocar guard atual (`etapa_atual === 'A_PROCESSAR'`) por:
+  ```
+  if (!['A_PROCESSAR', 'OPERACAO'].includes(etapa_atual)) → 403
+  ```
+- Atualizar mensagem de erro: "Edição permitida apenas nas etapas A Processar e Operacional".
+- Manter log `VOUCHER_EDICAO_BLOQUEADA` para auditoria nos demais casos (FISCAL, FINANCEIRO, SUPERVISOR, CONCLUIDO, etc.).
 
-**3. Roles e segurança**
-- `useUserRole`: leitura via `t_users_esteira_role` + cache 60s + fallback admin
-- Matriz de permissões: criar/editar/deletar/aprovar/voltar etapa/cancelar/desmembrar
-- Visibilidade de menus e abas por role
-- Bypass de admin e regras de gestor (`GESTOR_*`)
+**Frontend** — `src/components/esteira/EditVoucherDialog.tsx` (linha ~109):
+- Trocar guard front-end:
+  ```
+  if (!['A_PROCESSAR', 'OPERACAO'].includes(voucher.etapaAtual)) → toast erro
+  ```
+- Atualizar copy do toast para refletir as duas etapas permitidas.
 
-**4. Ciclo de vida do voucher (workflow)**
-- Origens: MANUAL (Operação), RM pending (`voucher-sync-rm-pending` + Othello webhook), MASTER (consolidação)
-- Transições: A_PROCESSAR → RASCUNHO → OPERACAO → FISCAL → SUPERVISOR → FINANCEIRO → ROBO → CONCLUIDO
-- Caminhos de exceção: AJUSTE_OPERACAO / AJUSTE_FISCAL / CANCELADO
-- Bypass urgente (Auto e Real) → vai direto p/ Supervisor (memória `urgent-routing-and-logic-v2`)
-- Notificações por etapa (`esteiraNotifications.ts` + `send-voucher-notification`)
-- Rastreio de responsáveis por etapa (campos `responsavel*UserId/Name`)
-- Logs de auditoria (`t_vouchers_logs`) e bug conhecido de edição silenciosa
+**Tabela/Listagem** — verificar `VoucherTable.tsx` / `EsteiraIndex.tsx`: garantir que o botão "Editar" apareça também quando `etapaAtual === 'OPERACAO'` (hoje provavelmente já condiciona a `A_PROCESSAR`).
 
-**5. UI — Páginas e componentes**
-- `EsteiraIndex` (2.287 linhas): hub principal, abas, polling, filtros, paginação, modos (Backlog/Faturas do Dia/Pagamentos/Comprovantes/Histórico)
-- `VoucherTable`, `VoucherFilters`, `VoucherActionsMenu`
-- Dialogs: Create/Edit/Cancel/Desmembrar/RetornarPendente/InviteUser/FornecedoresSemFiscal
-- Painéis por etapa: `VoucherRascunhoActions`, `VoucherOperacaoActions`, `VoucherFiscalActions`, `VoucherSupervisorActions`, `VoucherFinanceiroActions`, `VoucherRoboActions`
-- `VoucherDetailsView`, `ProcessoOrigemCard`, `ProntidaoChecklist`, `DadosPagamentoPanel`, `VoucherDivergenceAlert`, `AccrualMatchBadge`, `StatusComprovanteBadge`
-- Páginas auxiliares: `EsteiraDashboard`, `EsteiraReports`, `EsteiraManual`, `VoucherRules`, `AccrualManagement`, `ComprovanteRobot`, `EmailPreview`, `EsteiraVoucherDetails`, `EsteiraUserManagement`
+---
 
-**6. Backend — Edge Functions (12)**
-Cada uma com: propósito, payload, ações (cases), tabelas tocadas, regras críticas:
-- `mariadb-proxy` (~18k linhas, ~150 actions): hub central — CRUD vouchers, anexos, logs, baixas, RM, master, audit, reversal
-- `voucher-mariadb-sync` — sync periódico
-- `voucher-sync-rm-pending` — espelha `t_dados_rm_pending` em `t_vouchers`
-- `voucher-integrate-rm` — leitura `t_dados_rm` por nd
-- `voucher-othello-webhook` — recepção do RM
-- `voucher-check-baixas` — reconciliação
-- `voucher-monthly-report` — relatório consolidado
-- `extract-boleto-barcode` — Lovable AI Gateway, suporta bancário (47) e arrecadação (48)
-- `parse-comprovante-pdf` — robô comprovantes
-- `fetch-fin-voucher-stats` — dashboard
-- `send-voucher-notification` — Resend
-- `supervisor-email-action` — aprovação via e-mail externa
+## Etapa 2 — Tratar duplicados existentes (105-293183 DIM-BY)
 
-**7. Pagamentos & RM**
-- `PagamentosTab` (1.654 linhas): grid de pagamento, definição de `tipoExecucaoPagamento`, geração de remessa
-- `insert_dados_rm` com fallback `linha_digitavel/chave_pix` (memória `insert-dados-rm-fallback`)
-- `check_voucher_rm_ready` — gate para vouchers vindos do RM (memória `check-rm-ready-only-blocks-manual`)
-- Numeração master (memória `master-numbering-logic-v1`)
-- Sincronização cron de status (1 min)
+- Deletar 1 dos 2 UUIDs via action `delete_voucher_esteira` (sugestão: manter `cf29d111-19fa-44cd-ae6f-d30b41bf8112`, remover `f5c0fe62-53c3-40a3-a2e2-f58212315724`).
+- Registrar log `VOUCHER_DELETADO_DUPLICADO_ADMIN` em `t_vouchers_logs` com motivo + id removido.
+- Após Etapa 1 estar no ar, o UUID restante (em `OPERACAO`) já estará editável — **não precisa** reverter etapa.
 
-**8. Comprovantes & Baixas**
-- `ComprovanteRobot`: matching ND (10–13 dígitos) por `linha_digitavel/codigo_barras/nd` (memória `comprovante-robot-matching-rules`)
-- `HistoricoBaixasTab`: filtros, mapeamento de status (memória `write-off-history-logic-v4`)
-- Resiliência de anexos (memória `anexos-fetch-resilience`)
+---
 
-**9. Regras de negócio sensíveis**
-- Urgente Auto vs Real (D-1, D-0)
-- Fornecedores sem fiscal — bypass do Fiscal
-- ADF — documento opcional
-- Voucher Master — agrupamento, numeração herdada do filho com menor `idmov`/`id_rm`
-- Voltar etapa — restrições por role + log obrigatório
-- Cancelamento — exige motivo + voucher de crédito
-- Edição administrativa (`revert_voucher_field`) — usada para correções fora do fluxo
+## Etapa 3 — Prevenir duplicação no sync RM
 
-**10. Integrações externas**
-- Lovable AI Gateway (LOVABLE_API_KEY) para extract-boleto e parse-comprovante
-- Resend para e-mails (templates HTML)
-- Supabase Storage `voucher-anexos` (público)
-- MariaDB FIN (`MARIADB_FIN_*`) — collation `utf8mb4_unicode_ci`, `NULLIF(?, '')` para datas
+No `mariadb-proxy`, actions `voucher_sync_rm_pending` e `voucher_integrate_rm`:
 
-**11. Cron jobs e automações**
-- `voucher-sync-rm-pending` (1 min)
-- `voucher-check-baixas`
-- `voucher-monthly-report`
-- Cron-manager UI
+- Antes de cada `INSERT INTO t_vouchers`, executar guarda:
+  ```sql
+  SELECT id FROM t_vouchers
+   WHERE id_rm = ? AND numero_spo = ? AND ativo = 1
+   LIMIT 1;
+  ```
+  Se já existir → pular insert e logar `VOUCHER_RM_DUPLICADO_IGNORADO` (com `id_rm`, `numero_spo`, `usuario_origem`, `id_existente`).
 
-**12. Logs, auditoria e bugs conhecidos**
-- Estrutura `t_vouchers_logs` + tipos de evento
-- Bug de edição silenciosa de vencimento (caso 105-292893 DIM-BY) — diagnóstico, reversão e ação corretiva sugerida
-- `audit_voucher_diff` e `revert_voucher_field`
+- Pre-check em produção antes de criar índice único:
+  ```sql
+  SELECT id_rm, numero_spo, COUNT(*) c
+    FROM t_vouchers
+   WHERE id_rm IS NOT NULL AND ativo = 1
+   GROUP BY id_rm, numero_spo
+   HAVING c > 1;
+  ```
 
-**13. Memórias de projeto referenciadas**
-Lista compacta das ~25 memórias `mem://vouchers/*` e seus impactos.
+- Se pre-check vier limpo (ou após limpar duplicados):
+  ```sql
+  ALTER TABLE t_vouchers
+    ADD UNIQUE KEY uq_voucher_rm_spo (id_rm, numero_spo);
+  ```
+  Aplicado via action SQL admin existente. Caso o pre-check encontre outros duplicados, **paro e reporto** antes de criar o índice.
 
-**14. Anexos técnicos**
-- Diagrama de máquina de estados (texto/ASCII)
-- Tabela completa de actions do `mariadb-proxy` agrupadas por domínio
-- Glossário (SPO, ND, RM, ADF, Accrual, Remessa, CRASS)
+---
 
-### Formato de entrega
+## Detalhes técnicos
 
-```text
-/mnt/documents/esteira-voucher-relatorio-tecnico.md   (markdown principal, ~30-50 páginas)
-/mnt/documents/esteira-voucher-relatorio-tecnico.pdf  (opcional, gerado via pandoc)
-```
+**Arquivos afetados**
+- `supabase/functions/mariadb-proxy/index.ts` — guard de edição + hardening sync RM + (opcional) action SQL admin para o ALTER TABLE
+- `src/components/esteira/EditVoucherDialog.tsx` — guard front-end + copy
+- Possível ajuste em `src/components/voucher/VoucherTable.tsx` e/ou `src/pages/esteira/EsteiraIndex.tsx` para liberar botão Editar em `OPERACAO`
 
-Sem alterações de código. Apenas exploração + geração de artefato + QA visual do PDF (se gerado).
+**Logs novos**
+- `VOUCHER_DELETADO_DUPLICADO_ADMIN`
+- `VOUCHER_RM_DUPLICADO_IGNORADO`
 
-### Confirme antes de eu executar
+**Sem mudanças** em UI fora do dialog/tabela, autenticação, RLS Supabase, schema relacional além do índice único.
 
-1. **Profundidade**: ok cobrir os 14 blocos acima (relatório longo, ~30-50 páginas), ou prefere foco em algum sub-conjunto (ex.: só backend, só workflow, só regras de negócio)?
-2. **Formato**: só Markdown, ou também PDF?
-3. **Inclusão de trechos de código**: incluir snippets-chave (SQL, TS) das funções críticas, ou manter 100% descritivo?
+**Memória a atualizar** após implementação: `mem://vouchers/workflow-logic-and-stages-v6` — registrar que edição é permitida em `A_PROCESSAR` **e** `OPERACAO`.
+
+---
+
+## Pontos de confirmação
+
+1. Confirma manter `cf29d111…` e deletar `f5c0fe62…`?
+2. Posso aplicar o `UNIQUE (id_rm, numero_spo)` em `t_vouchers` após pre-check? (Se houver outros duplicados, paro e reporto.)
+3. A liberação `A_PROCESSAR + OPERACAO` vale para todos os perfis que hoje editam (Operação, Supervisor, ADMIN), ou alguma role deve continuar restrita?
