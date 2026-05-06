@@ -1,82 +1,33 @@
-## Objetivo
+# Corrigir bloqueio excessivo no `update_voucher_esteira`
 
-Quando um voucher estiver retornando de um ajuste (`AJUSTE_OPERACAO` ou `AJUSTE_FISCAL`) e o marcador identifica a etapa solicitante, o usuário que aprova deve **escolher** entre:
+## Problema
 
-1. **Voltar para a etapa solicitante** (quem pediu o ajuste — ex.: Financeiro ou Supervisor)
-2. **Seguir o fluxo normal** (próxima etapa padrão — ex.: Fiscal → Financeiro)
+O guard `ETAPAS_EDITAVEIS = ['A_PROCESSAR', 'OPERACAO']` em `supabase/functions/mariadb-proxy/index.ts` (case `update_voucher_esteira`) está bloqueando **qualquer** chamada quando a etapa atual está fora dessa lista — inclusive operações de workflow (mudar `etapa_atual`, registrar comentários, voltar etapa, aprovar, ajustar responsáveis, marcar comprovante etc.). Como praticamente todas as transições do voucher passam por esse mesmo case, isso paralisa o fluxo.
 
-Hoje a decisão é automática (sempre volta para o solicitante).
+A intenção original (e o que o usuário quer agora) é: bloquear **somente edição de dados do voucher** (campos do `EditVoucherDialog`) quando a etapa não for `A_PROCESSAR` ou `OPERACAO`. Workflow continua livre em qualquer etapa.
 
----
+No frontend isso já está correto: o botão "Editar Dados" no menu (`VoucherTable.tsx`) e o `EditVoucherDialog` em `VoucherOperacaoActions.tsx` é o único caminho de edição manual.
 
-## Fluxos atuais (resumo técnico)
+## Mudança
 
-**`VoucherOperacaoActions.handleEnviar`** (etapa `AJUSTE_OPERACAO`):
-- Se há `requester` no marcador → vai direto para `FINANCEIRO`/`SUPERVISOR`.
-- Senão → fluxo normal: `FISCAL` (DACHSER) ou `FINANCEIRO` (CLIENTE) ou `SUPERVISOR` (URGENTE_REAL) etc.
+**Arquivo único:** `supabase/functions/mariadb-proxy/index.ts`, case `update_voucher_esteira`.
 
-**`VoucherFiscalActions.handleAprovar`** (etapa `AJUSTE_FISCAL`):
-- Se há `requester` → volta para `FINANCEIRO`/`SUPERVISOR`.
-- Senão → `FINANCEIRO`.
+1. Definir um conjunto explícito `DATA_EDIT_FIELDS` (somente os campos manipuláveis pelo `EditVoucherDialog`):
+   ```
+   numero_spo, fornecedor, cnpj_fornecedor, valor, moeda,
+   vencimento, data_emissao_documento, cobranca_em_nome_de,
+   forma_pagamento, tipo_documento, filial, urgencia_tipo,
+   cliente_email, remessa, chave_pix
+   ```
+2. Detectar se o payload contém algum desses campos (`hasDataEdit`).
+3. Aplicar o guard `ETAPAS_EDITAVEIS` **apenas** quando `hasDataEdit === true`. Se o payload trouxer somente campos de workflow (`etapa_atual`, `status_*`, `comentarios_*`, `ajuste_*`, `responsavel_*_user_id`, `aprovado_por_user_id`, `status_documento_fiscal`, `status_comprovante`), seguir sem bloquear.
+4. Manter o log de auditoria `VOUCHER_EDICAO_BLOQUEADA` apenas no caminho data-edit, e ajustar a mensagem para ficar clara: "Edição de dados permitida apenas nas etapas A Processar e Operacional".
 
-A função `parseRequesterFromAjuste` (em `src/utils/voucherAjusteRouting.ts`) extrai a etapa solicitante do texto do ajuste.
+## Frontend
 
----
+Sem alterações. O botão "Editar Dados" em `VoucherOperacaoActions.tsx` continua sempre visível na tela da Operação (faz sentido: ali a etapa é OPERACAO/AJUSTE_OPERACAO). O item "Editar" no menu da tabela já é condicionado por `voucher.etapaAtual === "A_PROCESSAR" || "OPERACAO"`.
 
-## Mudanças
+## Verificação
 
-### 1. UI — Diálogo de escolha de roteamento
-
-Em `VoucherOperacaoActions.tsx` e `VoucherFiscalActions.tsx`:
-
-- Quando o usuário clicar em **Aprovar/Enviar** e o voucher estiver em `AJUSTE_OPERACAO`/`AJUSTE_FISCAL` **com `requester` identificado**, abrir um `AlertDialog` com duas opções (RadioGroup):
-
-  ```
-  Para onde enviar este voucher?
-  ◉ Retornar para [Etapa Solicitante]   (recomendado)
-     "Voltar diretamente para quem solicitou o ajuste."
-  ◯ Seguir o fluxo normal → [Próxima Etapa]
-     "Reenviar pelo fluxo padrão da esteira."
-  ```
-
-- Default: "Retornar para a etapa solicitante" (mantém comportamento atual).
-- Botão **Confirmar** dispara a aprovação com a etapa escolhida.
-- Se **não houver requester** (ajuste sem marcador de etapa), nada muda — segue direto para o fluxo normal sem mostrar o diálogo.
-
-### 2. Lógica de roteamento
-
-Em ambos os handlers (`handleEnviar` da Operação e `handleAprovar` do Fiscal):
-
-- Calcular `proximaEtapaSolicitante` (via `parseRequesterFromAjuste`) **e** `proximaEtapaFluxoNormal` (lógica atual sem o desvio do requester).
-- Usar a opção escolhida pelo usuário no diálogo como `proximaEtapa`.
-- Atualizar o log para registrar a decisão tomada:
-  - `APROVADO_FISCAL` / `REENVIO_APOS_AJUSTE` com `detalhe` distinto:
-    - "...retornado para [Etapa Solicitante] (escolhido pelo usuário)"
-    - "...enviado pelo fluxo normal para [Etapa] (escolhido pelo usuário, ignorando solicitante)"
-
-### 3. Nada muda para vouchers sem ajuste
-
-Vouchers que não estão em `AJUSTE_*` ou que não têm marcador de requester continuam aprovando direto, sem diálogo.
-
----
-
-## Detalhes técnicos
-
-**Arquivos a alterar**
-- `src/components/esteira/VoucherOperacaoActions.tsx` — adicionar `AlertDialog` de escolha + ajuste em `handleEnviar`.
-- `src/components/esteira/VoucherFiscalActions.tsx` — adicionar `AlertDialog` de escolha + ajuste em `handleAprovar`.
-
-**Sem mudanças**
-- `voucherAjusteRouting.ts` (utilitário continua o mesmo)
-- Backend `mariadb-proxy` (a etapa final continua chegando via `update_voucher_esteira`)
-- `VoucherSupervisorActions` e `VoucherFinanceiroActions` (a devolução para ajuste continua como está; só a aprovação é que ganha a escolha)
-
-**Memória a atualizar** após implementação: `mem://vouchers/workflow-logic-and-stages-v6` — registrar que o aprovador pode escolher entre voltar ao solicitante ou seguir o fluxo normal.
-
----
-
-## Pontos de confirmação
-
-1. O diálogo de escolha deve aparecer também quando o **Supervisor/Financeiro** aprovam um voucher que veio originalmente via fluxo de ajuste? Ou apenas para Operação (saindo de AJUSTE_OPERACAO) e Fiscal (saindo de AJUSTE_FISCAL)?
-2. O default sugerido é "Retornar ao solicitante" (mantém comportamento atual). Confirma?
-3. Quando **não houver marcador** de requester (ajuste sem etapa registrada), devo **ainda assim** abrir o diálogo perguntando para qual etapa enviar, ou seguir direto pelo fluxo normal sem perguntar?
+- Aprovação/retorno em Fiscal, Supervisor, Financeiro voltam a funcionar.
+- Tentar salvar pelo `EditVoucherDialog` em voucher fora de A_PROCESSAR/OPERACAO continua retornando 403 com `EDICAO_BLOQUEADA_ETAPA`.
