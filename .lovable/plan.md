@@ -1,102 +1,114 @@
-## Regra de negócio
+## Relatório Técnico — Módulo Esteira do Voucher
 
-Vouchers só podem ser editados quando `etapa_atual = 'A_PROCESSAR'` (Operacional). Em qualquer outra etapa a edição é proibida — sem exceção, inclusive ADMIN. Edições válidas precisam aparecer no histórico com responsável e diff.
+Vou produzir um documento Markdown extenso e 100% técnico em `/mnt/documents/esteira-voucher-relatorio-tecnico.md` (com versão PDF opcional), cobrindo **toda** a arquitetura, fluxo, regras de negócio, integrações e operações do módulo. Não envolve mudanças de código — é apenas geração de artefato.
 
----
+### Escopo do relatório
 
-## Plano de correção
+**1. Visão geral arquitetural**
+- Stack (React+Vite+TS, Tailwind, Supabase Edge, MariaDB `dados_dachser`)
+- Diagrama de camadas: UI → Edge Functions → MariaDB / Storage / Lovable AI
+- Mapa de tabelas envolvidas: `t_vouchers`, `t_vouchers_anexos`, `t_vouchers_logs`, `t_dados_financeiro_voucher`, `t_dados_rm`, `t_dados_rm_pending`, `t_remessa_lote`, `t_remessa_item`, `t_voucher_baixas`, `t_accrual`, `t_users_esteira_role`, `t_fornecedores_sem_fiscal`, `t_voucher_rules`, `t_email_voucher_log`
 
-### 1. Bloqueio de edição fora da Operacional
+**2. Modelo de dados e estados**
+- Enum completo: `EtapaAtual`, `StatusBaixa`, `StatusFinanceiro`, `StatusComprovante`, `TipoExecucaoPagamento`, `StatusPagamento`, `StatusLoteRemessa`, `UrgenciaTipo`, `FormaPagamento`, `TipoAnexo`, `UserRole`
+- SLA por etapa (SLA_POR_ETAPA), urgência automática vs real
+- Estrutura `Voucher`, `Anexo`, `LogEntry`, `RemessaLote/Item`, `DadosBancarios`
 
-**Front — `src/components/esteira/VoucherTable.tsx`**
-Trocar:
-```ts
-canEdit={canEdit && voucher.etapaAtual !== "CANCELADO"}
+**3. Roles e segurança**
+- `useUserRole`: leitura via `t_users_esteira_role` + cache 60s + fallback admin
+- Matriz de permissões: criar/editar/deletar/aprovar/voltar etapa/cancelar/desmembrar
+- Visibilidade de menus e abas por role
+- Bypass de admin e regras de gestor (`GESTOR_*`)
+
+**4. Ciclo de vida do voucher (workflow)**
+- Origens: MANUAL (Operação), RM pending (`voucher-sync-rm-pending` + Othello webhook), MASTER (consolidação)
+- Transições: A_PROCESSAR → RASCUNHO → OPERACAO → FISCAL → SUPERVISOR → FINANCEIRO → ROBO → CONCLUIDO
+- Caminhos de exceção: AJUSTE_OPERACAO / AJUSTE_FISCAL / CANCELADO
+- Bypass urgente (Auto e Real) → vai direto p/ Supervisor (memória `urgent-routing-and-logic-v2`)
+- Notificações por etapa (`esteiraNotifications.ts` + `send-voucher-notification`)
+- Rastreio de responsáveis por etapa (campos `responsavel*UserId/Name`)
+- Logs de auditoria (`t_vouchers_logs`) e bug conhecido de edição silenciosa
+
+**5. UI — Páginas e componentes**
+- `EsteiraIndex` (2.287 linhas): hub principal, abas, polling, filtros, paginação, modos (Backlog/Faturas do Dia/Pagamentos/Comprovantes/Histórico)
+- `VoucherTable`, `VoucherFilters`, `VoucherActionsMenu`
+- Dialogs: Create/Edit/Cancel/Desmembrar/RetornarPendente/InviteUser/FornecedoresSemFiscal
+- Painéis por etapa: `VoucherRascunhoActions`, `VoucherOperacaoActions`, `VoucherFiscalActions`, `VoucherSupervisorActions`, `VoucherFinanceiroActions`, `VoucherRoboActions`
+- `VoucherDetailsView`, `ProcessoOrigemCard`, `ProntidaoChecklist`, `DadosPagamentoPanel`, `VoucherDivergenceAlert`, `AccrualMatchBadge`, `StatusComprovanteBadge`
+- Páginas auxiliares: `EsteiraDashboard`, `EsteiraReports`, `EsteiraManual`, `VoucherRules`, `AccrualManagement`, `ComprovanteRobot`, `EmailPreview`, `EsteiraVoucherDetails`, `EsteiraUserManagement`
+
+**6. Backend — Edge Functions (12)**
+Cada uma com: propósito, payload, ações (cases), tabelas tocadas, regras críticas:
+- `mariadb-proxy` (~18k linhas, ~150 actions): hub central — CRUD vouchers, anexos, logs, baixas, RM, master, audit, reversal
+- `voucher-mariadb-sync` — sync periódico
+- `voucher-sync-rm-pending` — espelha `t_dados_rm_pending` em `t_vouchers`
+- `voucher-integrate-rm` — leitura `t_dados_rm` por nd
+- `voucher-othello-webhook` — recepção do RM
+- `voucher-check-baixas` — reconciliação
+- `voucher-monthly-report` — relatório consolidado
+- `extract-boleto-barcode` — Lovable AI Gateway, suporta bancário (47) e arrecadação (48)
+- `parse-comprovante-pdf` — robô comprovantes
+- `fetch-fin-voucher-stats` — dashboard
+- `send-voucher-notification` — Resend
+- `supervisor-email-action` — aprovação via e-mail externa
+
+**7. Pagamentos & RM**
+- `PagamentosTab` (1.654 linhas): grid de pagamento, definição de `tipoExecucaoPagamento`, geração de remessa
+- `insert_dados_rm` com fallback `linha_digitavel/chave_pix` (memória `insert-dados-rm-fallback`)
+- `check_voucher_rm_ready` — gate para vouchers vindos do RM (memória `check-rm-ready-only-blocks-manual`)
+- Numeração master (memória `master-numbering-logic-v1`)
+- Sincronização cron de status (1 min)
+
+**8. Comprovantes & Baixas**
+- `ComprovanteRobot`: matching ND (10–13 dígitos) por `linha_digitavel/codigo_barras/nd` (memória `comprovante-robot-matching-rules`)
+- `HistoricoBaixasTab`: filtros, mapeamento de status (memória `write-off-history-logic-v4`)
+- Resiliência de anexos (memória `anexos-fetch-resilience`)
+
+**9. Regras de negócio sensíveis**
+- Urgente Auto vs Real (D-1, D-0)
+- Fornecedores sem fiscal — bypass do Fiscal
+- ADF — documento opcional
+- Voucher Master — agrupamento, numeração herdada do filho com menor `idmov`/`id_rm`
+- Voltar etapa — restrições por role + log obrigatório
+- Cancelamento — exige motivo + voucher de crédito
+- Edição administrativa (`revert_voucher_field`) — usada para correções fora do fluxo
+
+**10. Integrações externas**
+- Lovable AI Gateway (LOVABLE_API_KEY) para extract-boleto e parse-comprovante
+- Resend para e-mails (templates HTML)
+- Supabase Storage `voucher-anexos` (público)
+- MariaDB FIN (`MARIADB_FIN_*`) — collation `utf8mb4_unicode_ci`, `NULLIF(?, '')` para datas
+
+**11. Cron jobs e automações**
+- `voucher-sync-rm-pending` (1 min)
+- `voucher-check-baixas`
+- `voucher-monthly-report`
+- Cron-manager UI
+
+**12. Logs, auditoria e bugs conhecidos**
+- Estrutura `t_vouchers_logs` + tipos de evento
+- Bug de edição silenciosa de vencimento (caso 105-292893 DIM-BY) — diagnóstico, reversão e ação corretiva sugerida
+- `audit_voucher_diff` e `revert_voucher_field`
+
+**13. Memórias de projeto referenciadas**
+Lista compacta das ~25 memórias `mem://vouchers/*` e seus impactos.
+
+**14. Anexos técnicos**
+- Diagrama de máquina de estados (texto/ASCII)
+- Tabela completa de actions do `mariadb-proxy` agrupadas por domínio
+- Glossário (SPO, ND, RM, ADF, Accrual, Remessa, CRASS)
+
+### Formato de entrega
+
+```text
+/mnt/documents/esteira-voucher-relatorio-tecnico.md   (markdown principal, ~30-50 páginas)
+/mnt/documents/esteira-voucher-relatorio-tecnico.pdf  (opcional, gerado via pandoc)
 ```
-por:
-```ts
-canEdit={canEdit && voucher.etapaAtual === "A_PROCESSAR"}
-```
-O item "Editar" some do menu fora da etapa Operacional.
 
-**Front — `src/components/esteira/EditVoucherDialog.tsx`** (defesa em profundidade)
-No `handleSubmit`, antes da chamada à edge function:
-```ts
-if (voucher.etapaAtual !== "A_PROCESSAR") {
-  toast({ title: "Edição não permitida",
-          description: "Vouchers só podem ser editados na etapa Operacional.",
-          variant: "destructive" });
-  return;
-}
-```
+Sem alterações de código. Apenas exploração + geração de artefato + QA visual do PDF (se gerado).
 
-**Backend — `supabase/functions/mariadb-proxy/index.ts` › `update_voucher_esteira`**
-Antes do UPDATE:
-```sql
-SELECT etapa_atual FROM dados_dachser.t_vouchers WHERE id = ?
-```
-Se `etapa_atual <> 'A_PROCESSAR'`:
-- Retorna 403 `{ success:false, error:"EDICAO_BLOQUEADA_FORA_OPERACIONAL", message:"Vouchers só podem ser editados na etapa Operacional." }`.
-- Insere log `VOUCHER_EDICAO_BLOQUEADA` em `t_voucher_logs` registrando a tentativa (usuário, etapa, campos enviados).
+### Confirme antes de eu executar
 
-Operações internas legítimas (transições de etapa, upload de comprovante, robô etc.) usam outras actions e seguem funcionando.
-
-### 2. Captura correta do usuário no log
-
-`EditVoucherDialog.tsx` usa `supabase.auth.getUser()` (linha ~116), mas a esteira autentica via MariaDB + `localStorage("user"|"dachser_user")` → `userData.user` é `null` → `user_id`/`user_name` chegam `undefined` → no proxy o `if (user_id || user_name)` falha e **nenhum log é gravado**.
-
-Trocar pela leitura do `localStorage` (mesmo padrão do `CreateVoucherDialog`):
-```ts
-const stored = localStorage.getItem("user") || localStorage.getItem("dachser_user");
-const u = stored ? JSON.parse(stored) : null;
-// ...
-user_id:   u?.id?.toString() ?? null,
-user_name: u?.username ?? "Sistema",
-```
-
-### 3. Log sempre, com diff antes/depois
-
-No `update_voucher_esteira`:
-- Remover o `if (user_id || user_name)` — log sempre é inserido.
-- Antes do UPDATE, `SELECT` dos campos atuais; calcular diff só dos campos efetivamente alterados.
-- Gravar `t_voucher_logs.detalhe` legível, ex.:
-  ```
-  Vencimento: 2026-05-15 → 2026-05-11
-  Valor: 1500.00 → 1234.56
-  ```
-- Quando faltar `user_name`, registrar `"Sistema (sem identificação)"`.
-
-### 4. Reverter o voucher 105-292893 ao valor original
-
-Operação pontual via edge function, em duas etapas controladas:
-
-**4.1. Diagnóstico (read-only)** — nova action `audit_voucher_diff` em `mariadb-proxy`:
-- `SELECT id, numero_spo, vencimento, valor, etapa_atual` de `t_vouchers WHERE numero_spo = '105-292893'`.
-- `SELECT dt_vencimento, valor_total` de `t_dados_financeiro_voucher` (espelho RM) para o mesmo voucher.
-- `SELECT * FROM t_voucher_logs WHERE voucher_id = ? ORDER BY data_hora DESC LIMIT 20`.
-- Retorna o JSON consolidado para confirmação visual antes de reverter.
-
-**4.2. Reversão controlada** — nova action `revert_voucher_field` (ADMIN-only via header `x-user-role`):
-- Recebe `{ voucher_id, field, old_value, reason, user_id, user_name }`.
-- Whitelist de campos: `vencimento`, `valor`, `forma_pagamento`.
-- Faz o UPDATE direcionado e grava log `VOUCHER_REVERTIDO_ADMIN` com `detalhe`:
-  ```
-  Reversão administrativa — campo: vencimento
-  Valor atual: 2026-05-15 → Restaurado para: 2026-05-11
-  Justificativa: <reason>
-  ```
-- Não passa pelo bloqueio da etapa (é justamente a ferramenta de correção para vouchers fora da Operacional).
-
-**Disparo da reversão**: depois que o plano for aprovado, eu executo o passo 4.1, mostro o diff aqui no chat, você confirma o valor original (vencimento 11/05) e eu disparo o 4.2 com sua justificativa. O log da reversão fica permanente em `t_voucher_logs`.
-
----
-
-## Arquivos alterados
-
-- `src/components/esteira/VoucherTable.tsx` — `canEdit` somente em `A_PROCESSAR`.
-- `src/components/esteira/EditVoucherDialog.tsx` — guard de etapa + leitura de usuário do `localStorage`.
-- `supabase/functions/mariadb-proxy/index.ts`:
-  - `update_voucher_esteira`: bloqueio por etapa + log de tentativa + log sempre com diff.
-  - Novas actions `audit_voucher_diff`, `revert_voucher_field`.
-
-Sem alterações de design ou de outros fluxos. Aprovando, eu implemento (1–3) e em seguida rodo o passo 4 sob sua confirmação do valor original.
+1. **Profundidade**: ok cobrir os 14 blocos acima (relatório longo, ~30-50 páginas), ou prefere foco em algum sub-conjunto (ex.: só backend, só workflow, só regras de negócio)?
+2. **Formato**: só Markdown, ou também PDF?
+3. **Inclusão de trechos de código**: incluir snippets-chave (SQL, TS) das funções críticas, ou manter 100% descritivo?
