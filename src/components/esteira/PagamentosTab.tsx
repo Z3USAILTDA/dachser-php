@@ -65,7 +65,7 @@ import { TablePagination } from "@/components/layout/TablePagination";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format as fnsFormat } from "date-fns";
-import { ptBR } from "date-fns/locale";
+
 import { CalendarIcon } from "lucide-react";
 
 interface PagamentoItem {
@@ -796,7 +796,7 @@ export const PagamentosTab = () => {
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className={cn("rounded-full gap-2", filterDataInicio && "border-primary text-primary")}>
                 <CalendarIcon className="h-4 w-4" />
-                {filterDataInicio ? fnsFormat(filterDataInicio, "dd/MM/yyyy", { locale: ptBR }) : "Venc. de"}
+                {filterDataInicio ? fnsFormat(filterDataInicio, "dd/MM/yyyy") : "Venc. de"}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0 bg-card border-border" align="start">
@@ -813,7 +813,7 @@ export const PagamentosTab = () => {
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className={cn("rounded-full gap-2", filterDataFim && "border-primary text-primary")}>
                 <CalendarIcon className="h-4 w-4" />
-                {filterDataFim ? fnsFormat(filterDataFim, "dd/MM/yyyy", { locale: ptBR }) : "Venc. até"}
+                {filterDataFim ? fnsFormat(filterDataFim, "dd/MM/yyyy") : "Venc. até"}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0 bg-card border-border" align="start">
