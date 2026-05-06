@@ -85,15 +85,16 @@ export const exportVouchersToExcel = (data: Voucher[]) => {
     const baseStyle = {
       fill: { fgColor: { rgb: rowFill } },
       font: { sz: 10, bold: isUrgent, color: { rgb: "000000" } },
-      alignment: { vertical: "center", wrapText: true },
+      alignment: { vertical: "center", wrapText: false },
       border: thinBorder,
     };
 
+    const valorNum = v.valor != null && v.valor !== ('' as any) ? Number(v.valor) : 0;
     const cells: Array<{ v: any; t?: string; z?: string; align?: string }> = [
       { v: v.numeroSPO, align: "center" },
       { v: v.fornecedor || "-" },
       { v: v.cnpjFornecedor || "-", align: "center" },
-      { v: typeof v.valor === "number" ? v.valor : 0, t: "n", z: "#,##0.00", align: "right" },
+      { v: Number.isFinite(valorNum) ? valorNum : 0, t: "n", z: "#,##0.00", align: "right" },
       { v: v.moeda || "BRL", align: "center" },
       {
         v: v.vencimento ? format(new Date(v.vencimento), "dd/MM/yyyy", { locale: ptBR }) : "-",
