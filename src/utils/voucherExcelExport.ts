@@ -30,7 +30,7 @@ const HEADERS = [
   "Criado Por",
 ];
 
-const COL_WIDTHS = [18, 32, 20, 16, 8, 12, 16, 22, 10, 22, 26];
+const COL_WIDTHS = [22, 38, 22, 18, 10, 14, 18, 22, 12, 26, 30];
 
 export const exportVouchersToExcel = (data: Voucher[]) => {
   const ws: XLSX.WorkSheet = {};
