@@ -206,7 +206,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
               </div>
             </div>
             <div className="flex-1 overflow-hidden rounded-xl border border-border">
-              <BatchImportPreviewTable items={items} />
+              <BatchImportPreviewTable items={items} onChange={updateItem} />
             </div>
             <div className="flex justify-end gap-2 pt-2 border-t border-border/60">
               <Button variant="outline" onClick={reset} disabled={busy}>
