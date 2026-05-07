@@ -552,6 +552,17 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
                 </PopoverContent>
               </Popover>
 
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-red-300 border-red-500/30 hover:bg-red-500/10 hover:text-red-200"
+                disabled={selected.size === 0}
+                onClick={removeSelected}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Excluir {selected.size > 0 && `(${selected.size})`}
+              </Button>
+
               <div className="h-5 w-px bg-border" />
 
               {(["all", "errors", "valid"] as StatusFilter[]).map((f) => (
