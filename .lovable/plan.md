@@ -1,103 +1,67 @@
 ## Objetivo
 
-Alinhar o fluxo de **importação em lote** (`BatchImportVoucherDialog` + `BatchImportRowEditor` + handler `create_voucher_batch_import`) ao **formulário individual** (`CreateVoucherDialog`), em três frentes:
+Evitar o erro 500 `Duplicate entry '...' for key 'uq_voucher_rm_spo'` no `create_voucher_batch_import` detectando, **antes do envio**, linhas da planilha que repetem o par `id_rm + numero_spo` (ou `id_rm + spo` quando ainda não há `numero_spo` resolvido). Linhas duplicadas devem aparecer como **ERROR** no preview, com mensagem clara, e ficar de fora da seleção elegível para criação.
 
-1. Equivalência de campos obrigatórios.
-2. Equivalência de regras automáticas baseadas no valor selecionado em cada campo (urgência por tipo, etapa por urgência+fiscal, status de envio ao cliente).
-3. Captura da Chave PIX quando a forma de pagamento for PIX.
+## Diagnóstico
 
-## 1. Campos obrigatórios
+A planilha do usuário traz o mesmo SPO em múltiplas linhas de "Quebra" (ex.: `105-292848 DIM-BY` aparece nas Quebras 2 e 4). Como `t_vouchers` tem índice único `uq_voucher_rm_spo` em `(id_rm, numero_spo)`, a 1ª inserção passa e a 2ª aborta o batch inteiro.
 
-Regra do individual: `spo`, `fornecedor`, `vencimento`, `origem_processo`, `tipo_documento`, `forma_pagamento`, `cobranca_em_nome_de` (Fiscal). Anexos não se aplicam ao lote (são vinculados em etapa posterior).
+A validação atual em `BatchImportVoucherDialog.validate` é **por linha** — não enxerga colisões cruzadas. Precisamos de uma passada **cross-row** que conte ocorrências do par chave e marque a 2ª+ como duplicada.
 
-### `BatchImportVoucherDialog.tsx` — função `validate`
-Remover regras que o individual não exige:
-- `if (!next.processo) ...`
-- `if (!next.valor || next.valor <= 0) ...`
+## Mudanças
 
-Manter como obrigatórios: `spo`, `origem_processo`, `fornecedor`, `vencimento`, `tipo_documento`, `forma_pagamento`, `cobranca_em_nome_de`.
+### 1. `src/components/esteira/BatchImportPreviewTable.tsx`
+- Adicionar à interface `PreviewItem`:
+  ```ts
+  id_rm?: string | number | null;
+  is_duplicate?: boolean;
+  duplicate_of_row?: number | null;
+  ```
 
-Adicionar regra condicional do PIX (ver seção 3).
+### 2. `src/components/esteira/BatchImportVoucherDialog.tsx`
 
-### `BatchImportRowEditor.tsx`
-- Remover "Processo" do array `missing` e o `*` do label "Processo".
-- Adicionar `*` em "Fornecedor" (já é obrigatório no `validate`; só falta o asterisco visual). Campo continua read-only — preenchido por `nome_beneficiario` da DFV.
-- Manter `*` em: Origem Processo, Forma de Pagamento, Fiscal, Vencimento, Tipo Documento.
+**a) Nova função `markDuplicates(list)`** (helper puro):
+- Constrói um `Map<string, number[]>` indexando por `${id_rm ?? ''}|${(spo||'').trim().toUpperCase()}`.
+- Ignora chaves vazias (`!id_rm || !spo`).
+- Para cada grupo com `length > 1`: a primeira linha permanece como está; as demais recebem:
+  - `is_duplicate = true`
+  - `duplicate_of_row = <row_index da primeira>`
+  - `status = "ERROR"`
+  - `validation_message` ganha o sufixo `"SPO duplicado nesta planilha (linha #X já usa o mesmo SPO+RM)"` (preservando mensagens existentes).
+- Linhas únicas: `is_duplicate = false`, `duplicate_of_row = null` (sem alterar status).
 
-## 2. Regras automáticas por valor selecionado
+**b) Aplicar `markDuplicates` em três pontos**:
+- Após `setItems(it)` no `handleFile` (envolver: `setItems(markDuplicates(it))`).
+- No final de `applyFillAndContinue`, depois do `prev.map(... validate)`: `return markDuplicates(updated)`.
+- No final de `applyBulk` e em qualquer outro `setItems(prev => ... )` que rode `validate` (procurar todos os pontos onde `validate` é chamado — incluir o salvar do `BatchImportRowEditor` via `onSave`).
 
-Referência: `CreateVoucherDialog.handleSubmitVoucher` (linhas ~444-463).
-
+Para centralizar, criar:
 ```ts
-// Urgência
-const isUrgenteReal = !!it.urgente;
-const tipoDoc = (it.tipo_documento || '').toUpperCase();
-const autoUrgent = !isUrgenteReal && (tipoDoc === 'ICMS' || tipoDoc === 'ARMAZENAGEM');
-const urgenciaTipo = isUrgenteReal ? 'URGENTE_REAL'
-                   : autoUrgent  ? 'URGENTE_AUTOMATICO'
-                                  : 'NORMAL';
-
-// Etapa
-const etapaAtual = urgenciaTipo === 'URGENTE_REAL' ? 'SUPERVISOR'
-                  : (it.cobranca_em_nome_de === 'CLIENTE' ? 'FINANCEIRO' : 'FISCAL');
-
-// status_envio_cliente
-const statusEnvioCliente = it.cobranca_em_nome_de === 'CLIENTE' ? 'AGUARDANDO_CLIENTE' : 'NAO_APLICA';
-
-// flag urgente (booleano numérico)
-const urgenteFlag = (isUrgenteReal || autoUrgent) ? 1 : 0;
+const revalidate = (list: any[]) => markDuplicates(list.map(validate));
 ```
+e substituir os locais que hoje fazem `prev.map(it => validate(...))` por `revalidate(prev.map(...))`.
 
-### `supabase/functions/mariadb-proxy/index.ts` — handler `create_voucher_batch_import` (≈ linha 18394)
+**c) Bloquear envio de duplicatas** (defense-in-depth):
+- Onde monta o payload de `create_voucher_batch_import`, filtrar itens com `is_duplicate === true` (não devem ir mesmo se o usuário marcar). Se um selecionado for duplicado, exibir toast: "Existem SPOs duplicados na seleção. Remova-os ou edite o SPO antes de criar o lote."
 
-No `INSERT INTO dados_dachser.t_vouchers`, substituir os literais hard-coded:
-- `'OPERACAO'` → `?` (`etapaAtual`)
-- `'NAO_APLICA'` → `?` (`statusEnvioCliente`)
-- `it.urgente ? 1 : 0` → `urgenteFlag`
-- `it.urgente ? 'URGENTE_REAL' : 'NORMAL'` → `urgenciaTipo`
+### 3. `src/components/esteira/BatchImportPreviewTable.tsx` — UI de duplicata
+- Na linha do preview, quando `is_duplicate`, adicionar um pequeno badge vermelho ao lado do SPO: `Duplicado` (tooltip: "Mesma combinação SPO + RM da linha #X").
+- A linha já vai aparecer como ERROR pelo `status`; o badge só ajuda o usuário a localizar visualmente.
 
-Manter os demais valores inalterados (`status_baixa='PENDENTE'`, `status_financeiro='PENDENTE'`, `remessa='NENHUM'`, `status_documento_fiscal='PENDENTE'`, `tipo_execucao_pagamento='A_DEFINIR'`, `origem_criacao='LOTE_PLANILHA'`).
-
-## 3. Chave PIX condicional
-
-Quando `forma_pagamento = "PIX"`, exibir e exigir o campo Chave PIX no editor de linha, e gravá-lo no voucher (mesmo comportamento do individual).
-
-### `src/components/esteira/BatchImportPreviewTable.tsx`
-Adicionar à interface `PreviewItem`:
-```ts
-chave_pix?: string | null;
-```
-
-### `src/components/esteira/BatchImportRowEditor.tsx`
-Logo abaixo do bloco "Forma de Pagamento", renderizar condicionalmente:
-```tsx
-{draft.forma_pagamento === "PIX" && (
-  <div className="space-y-1.5 col-span-2">
-    <Label className="text-xs">Chave PIX <span className="text-red-400">*</span></Label>
-    <Input
-      className="h-8 text-xs"
-      placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
-      value={draft.chave_pix || ""}
-      onChange={(e) => set("chave_pix", e.target.value || null)}
-    />
-  </div>
-)}
-```
-Adicionar `"Chave PIX"` em `missing` quando `forma_pagamento === "PIX" && !chave_pix`, bloqueando "Salvar alterações".
-
-### `src/components/esteira/BatchImportVoucherDialog.tsx` — `validate`
-Acrescentar:
-```ts
-if (next.forma_pagamento === "PIX" && !next.chave_pix) errors.push("chave PIX obrigatória");
-```
-
-### `supabase/functions/mariadb-proxy/index.ts` — handler `create_voucher_batch_import`
-- Calcular: `const chavePixFinal = (it.forma_pagamento || '').toUpperCase() === 'PIX' ? (it.chave_pix || null) : null;`
-- Incluir `chave_pix` na lista de colunas/valores do `INSERT` (ao lado de `processo_id, origem_processo`).
+### 4. `src/components/esteira/BatchImportRowEditor.tsx`
+- Sem mudança funcional. O usuário pode editar o SPO; ao salvar, `revalidate` roda novamente e a duplicata se desfaz se o conflito for resolvido.
 
 ## Fora de escopo
 
-- Anexo Fatura/Boleto por linha (lote vincula em etapa posterior).
-- `pix_tipo_chave` (não é definido no `CreateVoucherDialog`; é inferido depois em `insert_dados_rm`).
-- Importar chave PIX automaticamente da planilha (campo será preenchido manualmente no editor).
-- Sem mudanças de schema — todas as colunas usadas (`chave_pix`, `urgencia_tipo`, `etapa_atual`, `status_envio_cliente`) já existem em `t_vouchers`.
+- **Sem mudanças no `mariadb-proxy`**: o handler continua intacto; a defesa é no frontend (preview).
+- Sem mudanças de schema ou no índice único.
+- Não tratar duplicidade contra o que **já existe no banco** (o handler já retornaria erro se isso ocorresse — o caso reportado é duplicidade dentro da própria planilha).
+- Sem alteração nas regras automáticas de urgência/etapa.
+
+## Critérios de aceite
+
+1. Subir a mesma planilha que disparou o erro: linhas com SPO `105-292848 DIM-BY` (Quebras 2 e 4), `105-292847 DIM-BY` (3 e 5), etc. devem aparecer como ERROR no preview com mensagem `"SPO duplicado nesta planilha"`.
+2. O contador de erros no header do preview reflete o aumento.
+3. Tentar criar o lote ignorando o aviso (selecionando uma duplicata) é bloqueado por toast — não chega a chamar o edge function.
+4. Editar o SPO de uma das duplicatas no `BatchImportRowEditor` e salvar → o badge some e o `status` volta a `VALID` (se demais campos OK).
+5. Planilhas sem duplicatas seguem fluxo normal sem regressão.
