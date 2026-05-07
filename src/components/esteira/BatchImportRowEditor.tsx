@@ -199,7 +199,7 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Classificação</h4>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs">Tipo Documento</Label>
+                <Label className="text-xs">Tipo Documento{req}</Label>
                 <Select value={draft.tipo_documento || ""} onValueChange={(v) => set("tipo_documento", v)}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="—" /></SelectTrigger>
                   <SelectContent>
