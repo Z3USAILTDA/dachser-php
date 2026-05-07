@@ -2208,7 +2208,7 @@ const EsteiraIndex = () => {
         Z3US.AI • For Logistics
       </div>
 
-      <CreateVoucherDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onSuccess={loadVouchers} />
+      <CreateVoucherDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onSuccess={loadVouchers} onOpenBatchImport={isAdmin && user?.id ? () => setShowBatchImportDialog(true) : undefined} />
       <EditVoucherDialog open={showEditDialog} onOpenChange={setShowEditDialog} onSuccess={loadVouchers} voucher={selectedVoucher} />
       {selectedVoucher && <CancelarVoucherDialog open={showCancelDialog} onOpenChange={setShowCancelDialog} voucher={selectedVoucher} onSuccess={loadVouchers} />}
 
