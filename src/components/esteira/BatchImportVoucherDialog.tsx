@@ -214,7 +214,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
 
   const updateItem = (rowIndex: number, patch: any) => {
     setItems((prev) =>
-      prev.map((it) => (it.row_index !== rowIndex ? it : validate({ ...it, ...patch, field_origin: {
+      revalidate(prev.map((it) => (it.row_index !== rowIndex ? it : { ...it, ...patch, field_origin: {
         ...(it.field_origin || {}),
         ...Object.fromEntries(Object.keys(patch).map(k => [k, "MANUAL"])),
       } })))
