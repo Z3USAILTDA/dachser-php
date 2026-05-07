@@ -321,7 +321,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
               <div className="text-xs text-muted-foreground">
                 Os campos abaixo não foram encontrados em nenhuma linha da planilha. Defina o valor para aplicar a todas as {items.length} linhas. Você poderá ajustar exceções na próxima etapa.
                 <br />
-                <span className="italic">Origem Processo e Forma de Pagamento devem ser definidos por linha — use o botão de edição ou "Editar em lote" na próxima etapa.</span>
+                <span className="italic">Origem Processo, Forma de Pagamento e Urgente devem ser definidos por linha — use o botão de edição ou "Editar em lote" na próxima etapa.</span>
               </div>
             </div>
 
@@ -349,16 +349,6 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
                 </div>
               ))}
 
-              <div className="space-y-1.5">
-                <Label className="text-xs">Urgente (opcional)</Label>
-                <div className="flex items-center gap-2 h-9">
-                  <Checkbox
-                    checked={!!fillValues.urgente}
-                    onCheckedChange={(v) => setFillValues(prev => ({ ...prev, urgente: !!v }))}
-                  />
-                  <span className="text-xs text-muted-foreground">Marcar todas como urgentes</span>
-                </div>
-              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-border/60">
