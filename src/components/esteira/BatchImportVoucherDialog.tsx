@@ -188,6 +188,15 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
   };
 
   const confirm = async () => {
+    const dupCount = items.filter((it: any) => it.is_duplicate).length;
+    if (dupCount > 0) {
+      toast({
+        title: "SPOs duplicados na planilha",
+        description: `${dupCount} linha(s) compartilham o mesmo SPO+RM. Edite ou remova as linhas marcadas como "Duplicado" antes de criar o lote.`,
+        variant: "destructive",
+      });
+      return;
+    }
     setBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
