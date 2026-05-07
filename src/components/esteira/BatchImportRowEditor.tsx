@@ -8,6 +8,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Info } from "lucide-react";
+import { FornecedoresSemFiscalDialog } from "./FornecedoresSemFiscalDialog";
 import type { PreviewItem } from "./BatchImportPreviewTable";
 
 const TIPOS_DOC = ["VOUCHER", "SPO", "ICMS", "ARMAZENAGEM", "ADF", "OUTROS"];
@@ -85,7 +87,8 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
               </div>
               <div className="space-y-1.5 col-span-2">
                 <Label className="text-xs">Fornecedor</Label>
-                <Input className="h-8 text-xs" value={draft.fornecedor || ""} onChange={(e) => set("fornecedor", e.target.value || null)} />
+                <Input className="h-8 text-xs bg-muted/40" value={draft.fornecedor || ""} readOnly />
+                <p className="text-[10px] text-muted-foreground">Preenchido automaticamente pela base RM (nome_beneficiario).</p>
               </div>
               <div className="space-y-1.5 col-span-2">
                 <Label className="text-xs">CNPJ</Label>
@@ -127,9 +130,18 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Fiscal</Label>
-                <Select value={draft.cobranca_em_nome_de || "DACHSER"} onValueChange={(v) => set("cobranca_em_nome_de", v)}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <Label className="text-xs flex items-center gap-1.5">
+                  Fiscal <span className="text-red-400">*</span>
+                  <FornecedoresSemFiscalDialog
+                    trigger={
+                      <button type="button" className="text-muted-foreground hover:text-primary inline-flex" title="Ver fornecedores sem fiscal">
+                        <Info className="h-3 w-3" />
+                      </button>
+                    }
+                  />
+                </Label>
+                <Select value={draft.cobranca_em_nome_de || ""} onValueChange={(v) => set("cobranca_em_nome_de", v)}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="DACHSER">Sim — Fiscal</SelectItem>
                     <SelectItem value="CLIENTE">Não — Cliente</SelectItem>

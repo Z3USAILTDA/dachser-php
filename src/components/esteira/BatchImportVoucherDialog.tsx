@@ -8,13 +8,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertCircle, FileText, Wand2, Search,
+  Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertCircle, FileText, Wand2, Search, Info,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { parseBatchSpreadsheet } from "@/utils/batchVoucherImport";
 import { BatchImportPreviewTable, type StatusFilter } from "./BatchImportPreviewTable";
 import { BatchImportRowEditor } from "./BatchImportRowEditor";
+import { FornecedoresSemFiscalDialog } from "./FornecedoresSemFiscalDialog";
 
 const EXPECTED_HEADERS = [
   "SPO", "Processo", "Origem Processo", "Fornecedor", "CNPJ", "Valor", "Moeda",
@@ -216,6 +217,21 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
   const errCount = items.filter((i) => i.status === "ERROR").length;
   const validPct = items.length ? (validCount / items.length) * 100 : 0;
 
+  const errorReasons = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const it of items) {
+      if (it.status !== "ERROR" || !it.validation_message) continue;
+      const seen = new Set<string>();
+      for (const raw of String(it.validation_message).split(";")) {
+        const m = raw.trim();
+        if (!m || seen.has(m)) continue;
+        seen.add(m);
+        map.set(m, (map.get(m) || 0) + 1);
+      }
+    }
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+  }, [items]);
+
   const bulkOptions = useMemo(() => {
     switch (bulkField) {
       case "origem_processo": return ORIGENS.map(v => ({ v, l: v }));
@@ -328,7 +344,18 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {missingCols.map(c => (
                 <div key={c.key} className="space-y-1.5">
-                  <Label className="text-xs">{c.label} <span className="text-red-400">*</span></Label>
+                  <Label className="text-xs flex items-center gap-1.5">
+                    {c.label} <span className="text-red-400">*</span>
+                    {c.key === "cobranca_em_nome_de" && (
+                      <FornecedoresSemFiscalDialog
+                        trigger={
+                          <button type="button" className="text-muted-foreground hover:text-primary inline-flex" title="Ver fornecedores sem fiscal">
+                            <Info className="h-3 w-3" />
+                          </button>
+                        }
+                      />
+                    )}
+                  </Label>
                   <Select
                     value={fillValues[c.key] || ""}
                     onValueChange={v => setFillValues(prev => ({ ...prev, [c.key]: v }))}
@@ -485,11 +512,28 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/60">
-              <Button variant="outline" onClick={reset} disabled={busy}>
-                Voltar
-              </Button>
-              <div className="flex items-center gap-3">
+            <div className="flex items-start justify-between gap-3 pt-2 border-t border-border/60">
+              <div className="flex items-start gap-3 flex-1 min-w-0">
+                <Button variant="outline" onClick={reset} disabled={busy}>
+                  Voltar
+                </Button>
+                {errorReasons.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 items-center">
+                    {errorReasons.map(([msg, count]) => (
+                      <button
+                        key={msg}
+                        type="button"
+                        onClick={() => { setFilter("errors"); setSearch(""); }}
+                        className="text-[11px] px-2 py-0.5 rounded-full border border-red-500/30 bg-red-500/5 text-red-300 hover:bg-red-500/10"
+                        title="Filtrar linhas com erro"
+                      >
+                        {count} {count === 1 ? "linha com" : "linhas com"} {msg}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
                 {validCount === 0 && (
                   <span className="text-xs text-muted-foreground">Corrija os erros para habilitar a importação</span>
                 )}
