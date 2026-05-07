@@ -173,6 +173,17 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
                   </SelectContent>
                 </Select>
               </div>
+              {draft.forma_pagamento === "PIX" && (
+                <div className="space-y-1.5 col-span-2">
+                  <Label className="text-xs">Chave PIX{req}</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
+                    value={(draft as any).chave_pix || ""}
+                    onChange={(e) => set("chave_pix" as any, (e.target.value || null) as any)}
+                  />
+                </div>
+              )}
             </div>
           </section>
 
