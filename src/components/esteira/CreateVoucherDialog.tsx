@@ -937,6 +937,16 @@ export const CreateVoucherDialog = ({
                       Dados carregados
                     </Badge>
                   )}
+                  {onOpenBatchImport && (
+                    <button
+                      type="button"
+                      onClick={onOpenBatchImport}
+                      className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    >
+                      <Upload className="h-3 w-3" />
+                      Importar SPO em Lote
+                    </button>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
                   SPO: Filial + "-" + número SPO<br />
