@@ -34,12 +34,23 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
   if (!draft) return null;
   const set = <K extends keyof PreviewItem>(k: K, v: PreviewItem[K]) => setDraft({ ...draft, [k]: v });
 
+  const missing: string[] = [];
+  if (!draft.processo) missing.push("Processo");
+  if (!draft.origem_processo) missing.push("Origem Processo");
+  if (!draft.vencimento) missing.push("Vencimento");
+  if (!draft.tipo_documento) missing.push("Tipo Documento");
+  if (!draft.forma_pagamento) missing.push("Forma de Pagamento");
+  if (!draft.cobranca_em_nome_de) missing.push("Fiscal");
+  const canSave = missing.length === 0;
+
   const handleSave = () => {
-    if (!draft) return;
+    if (!draft || !canSave) return;
     const { row_index, status, validation_message, dfv_found, field_origin, ...rest } = draft;
     onSave(draft.row_index, rest as Partial<PreviewItem>);
     onOpenChange(false);
   };
+
+  const req = <span className="text-red-400 ml-0.5">*</span>;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
