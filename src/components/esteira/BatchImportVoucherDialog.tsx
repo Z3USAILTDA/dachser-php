@@ -321,7 +321,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
               <div className="text-xs text-muted-foreground">
                 Os campos abaixo não foram encontrados em nenhuma linha da planilha. Defina o valor para aplicar a todas as {items.length} linhas. Você poderá ajustar exceções na próxima etapa.
                 <br />
-                <span className="italic">Origem Processo e Forma de Pagamento devem ser definidos por linha — use o botão de edição ou "Editar em lote" na próxima etapa.</span>
+                <span className="italic">Origem Processo, Forma de Pagamento e Urgente devem ser definidos por linha — use o botão de edição ou "Editar em lote" na próxima etapa.</span>
               </div>
             </div>
 
