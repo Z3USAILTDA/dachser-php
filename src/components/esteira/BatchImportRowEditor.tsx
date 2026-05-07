@@ -87,7 +87,8 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
               </div>
               <div className="space-y-1.5 col-span-2">
                 <Label className="text-xs">Fornecedor</Label>
-                <Input className="h-8 text-xs" value={draft.fornecedor || ""} onChange={(e) => set("fornecedor", e.target.value || null)} />
+                <Input className="h-8 text-xs bg-muted/40" value={draft.fornecedor || ""} readOnly />
+                <p className="text-[10px] text-muted-foreground">Preenchido automaticamente pela base RM (nome_beneficiario).</p>
               </div>
               <div className="space-y-1.5 col-span-2">
                 <Label className="text-xs">CNPJ</Label>
