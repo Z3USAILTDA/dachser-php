@@ -88,7 +88,7 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
                 <Input className="h-8 text-xs" value={draft.processo || ""} onChange={(e) => set("processo", e.target.value || null)} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Origem Processo</Label>
+                <Label className="text-xs">Origem Processo{req}</Label>
                 <div className="grid grid-cols-4 gap-1.5">
                   {ORIGENS.map((o) => {
                     const active = (draft.origem_processo || "") === o;
