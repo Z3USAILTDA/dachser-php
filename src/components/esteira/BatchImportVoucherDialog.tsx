@@ -277,7 +277,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
       }}
     >
       <DialogContent
-        className={`${step === "preview" ? "w-[90vw] max-w-[1400px]" : "max-w-2xl"} max-h-[85vh] overflow-hidden flex flex-col rounded-2xl border-border/60`}
+        className={`${step === "preview" ? "w-[90vw] max-w-[1400px] h-[90vh]" : "max-w-2xl max-h-[85vh]"} overflow-hidden flex flex-col rounded-2xl border-border/60`}
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
