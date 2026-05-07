@@ -232,6 +232,19 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
   }, [items]);
 
+  const visibleCount = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items.filter(it => {
+      if (filter === "errors" && it.status !== "ERROR") return false;
+      if (filter === "valid" && it.status !== "VALID") return false;
+      if (q) {
+        const hay = `${it.spo || ""} ${it.processo || ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    }).length;
+  }, [items, filter, search]);
+
   const bulkOptions = useMemo(() => {
     switch (bulkField) {
       case "origem_processo": return ORIGENS.map(v => ({ v, l: v }));
