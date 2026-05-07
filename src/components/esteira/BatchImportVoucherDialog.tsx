@@ -349,16 +349,6 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
                 </div>
               ))}
 
-              <div className="space-y-1.5">
-                <Label className="text-xs">Urgente (opcional)</Label>
-                <div className="flex items-center gap-2 h-9">
-                  <Checkbox
-                    checked={!!fillValues.urgente}
-                    onCheckedChange={(v) => setFillValues(prev => ({ ...prev, urgente: !!v }))}
-                  />
-                  <span className="text-xs text-muted-foreground">Marcar todas como urgentes</span>
-                </div>
-              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-border/60">
