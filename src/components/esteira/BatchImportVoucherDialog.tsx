@@ -140,7 +140,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
         return;
       }
       const it = data.items || [];
-      setItems(it);
+      setItems(markDuplicates(it));
       const missing = detectMissingColumns(it);
       setStep(missing.length ? "fill" : "preview");
     } catch (e: any) {
