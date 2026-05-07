@@ -1,10 +1,10 @@
+import { useMemo } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertCircle } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { AlertTriangle, CheckCircle2, Pencil, Trash2 } from "lucide-react";
 
 export interface PreviewItem {
   row_index: number;
@@ -31,182 +31,162 @@ export interface PreviewItem {
   field_origin?: Record<string, "DFV" | "PLANILHA" | "MANUAL" | null>;
 }
 
-const TIPOS_DOC = ["VOUCHER", "SPO", "ICMS", "ARMAZENAGEM", "ADF", "OUTROS"];
-const FORMAS = ["BOLETO", "PIX", "TRANSFERENCIA", "DEPOSITO", "DARF", "GPS", "CAMBIO", "ADF", "CARTAO", "DEBITO"];
-const ORIGENS = ["AIR", "SEA", "CHB", "ROD"];
-const MOEDAS = ["BRL", "USD", "EUR"];
+export type StatusFilter = "all" | "errors" | "valid";
 
 interface Props {
   items: PreviewItem[];
-  onChange: (rowIndex: number, patch: Partial<PreviewItem>) => void;
+  selected: Set<number>;
+  filter: StatusFilter;
+  search: string;
+  onToggleSelect: (rowIndex: number) => void;
+  onSelectAllVisible: (rowIndexes: number[], allSelected: boolean) => void;
+  onRemove: (rowIndex: number) => void;
+  onEdit: (rowIndex: number) => void;
 }
 
-const OriginBadge = ({ origin }: { origin?: string | null }) => {
-  if (!origin) return null;
-  const cls =
-    origin === "DFV"
-      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-      : origin === "MANUAL"
-      ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-      : "bg-sky-500/10 text-sky-400 border-sky-500/30";
-  return (
-    <Badge variant="outline" className={`text-[9px] px-1 py-0 ml-1 ${cls}`}>
-      {origin === "PLANILHA" ? "PL" : origin === "DFV" ? "RM" : "MN"}
-    </Badge>
-  );
+const fmtCurrency = (v: number | null, moeda?: string | null) => {
+  if (v == null) return "—";
+  try {
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: moeda || "BRL" }).format(v);
+  } catch {
+    return v.toFixed(2);
+  }
 };
 
-export function BatchImportPreviewTable({ items, onChange }: Props) {
-  const patch = (i: number, key: keyof PreviewItem, value: any) => {
-    onChange(i, { [key]: value, field_origin: { ...(items[i].field_origin || {}), [key as string]: "MANUAL" } } as any);
-  };
+const fmtDate = (v: string | null) => {
+  if (!v) return "—";
+  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  return v;
+};
+
+export function BatchImportPreviewTable({
+  items, selected, filter, search,
+  onToggleSelect, onSelectAllVisible, onRemove, onEdit,
+}: Props) {
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items.filter((it) => {
+      if (filter === "errors" && it.status !== "ERROR") return false;
+      if (filter === "valid" && it.status !== "VALID") return false;
+      if (q) {
+        const hay = `${it.spo || ""} ${it.processo || ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [items, filter, search]);
+
+  const visibleIdx = visible.map((v) => v.row_index);
+  const allVisibleSelected = visibleIdx.length > 0 && visibleIdx.every((i) => selected.has(i));
+  const someVisibleSelected = visibleIdx.some((i) => selected.has(i)) && !allVisibleSelected;
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="max-h-[520px] overflow-auto rounded-lg border border-white/10">
+      <div className="h-full overflow-auto rounded-lg border border-border/60">
         <Table className="text-xs">
           <TableHeader className="sticky top-0 bg-card z-10">
-            <TableRow>
-              <TableHead className="w-8">#</TableHead>
-              <TableHead className="w-8"></TableHead>
-              <TableHead>SPO</TableHead>
-              <TableHead>Processo</TableHead>
-              <TableHead>Origem</TableHead>
-              <TableHead>Fornecedor</TableHead>
-              <TableHead>CNPJ</TableHead>
-              <TableHead>Valor</TableHead>
-              <TableHead>Moeda</TableHead>
-              <TableHead>Vencim.</TableHead>
-              <TableHead>Emissão</TableHead>
-              <TableHead>Tipo Doc</TableHead>
-              <TableHead>Filial</TableHead>
-              <TableHead>Forma Pag.</TableHead>
-              <TableHead>Fiscal?</TableHead>
-              <TableHead>Urg.</TableHead>
-              <TableHead>Coment.</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                  onCheckedChange={() => onSelectAllVisible(visibleIdx, allVisibleSelected)}
+                />
+              </TableHead>
+              <TableHead className="w-10 text-[11px] uppercase tracking-wider text-muted-foreground">#</TableHead>
+              <TableHead className="w-10"></TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground">SPO</TableHead>
+              <TableHead className="hidden lg:table-cell text-[11px] uppercase tracking-wider text-muted-foreground">Processo</TableHead>
+              <TableHead className="hidden lg:table-cell text-[11px] uppercase tracking-wider text-muted-foreground">Fornecedor</TableHead>
+              <TableHead className="text-right text-[11px] uppercase tracking-wider text-muted-foreground">Valor</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground">Vencimento</TableHead>
+              <TableHead className="w-24 text-right text-[11px] uppercase tracking-wider text-muted-foreground">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((it, idx) => {
-              const fo = it.field_origin || {};
-              const rowCls =
-                it.status === "ERROR" ? "bg-red-500/5" : it.dfv_found ? "" : "bg-amber-500/5";
+            {visible.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                  Nenhuma linha corresponde ao filtro.
+                </TableCell>
+              </TableRow>
+            )}
+            {visible.map((it) => {
+              const isSel = selected.has(it.row_index);
+              const isErr = it.status === "ERROR";
               return (
-                <TableRow key={it.row_index} className={rowCls}>
-                  <TableCell className="text-muted-foreground">{it.row_index + 1}</TableCell>
-                  <TableCell>
-                    {it.status === "ERROR" ? (
+                <TableRow
+                  key={it.row_index}
+                  className={`group h-[52px] transition-colors even:bg-card/20 hover:bg-primary/5 ${isSel ? "!bg-amber-500/10" : ""}`}
+                >
+                  <TableCell className="py-3.5 px-3">
+                    <Checkbox checked={isSel} onCheckedChange={() => onToggleSelect(it.row_index)} />
+                  </TableCell>
+                  <TableCell className="py-3.5 px-3 text-muted-foreground font-mono">{it.row_index + 1}</TableCell>
+                  <TableCell className="py-3.5 px-3">
+                    {isErr ? (
                       <Tooltip>
-                        <TooltipTrigger>
-                          <AlertCircle className="h-3.5 w-3.5 text-red-400" />
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex">
+                            <AlertTriangle className="h-4 w-4 text-red-400 group-hover:animate-pulse" />
+                          </span>
                         </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">{it.validation_message}</TooltipContent>
+                        <TooltipContent className="max-w-xs">
+                          <div className="font-semibold mb-1">Erros</div>
+                          <ul className="list-disc list-inside space-y-0.5 text-xs">
+                            {(it.validation_message || "").split(";").map((m, i) => <li key={i}>{m.trim()}</li>)}
+                          </ul>
+                        </TooltipContent>
                       </Tooltip>
                     ) : (
-                      <span
-                        className={`text-[10px] font-semibold ${
-                          it.dfv_found ? "text-emerald-400" : "text-sky-400"
-                        }`}
-                        title={it.dfv_found ? "Encontrado no RM" : "Apenas planilha"}
-                      >
-                        {it.dfv_found ? "RM" : "PL"}
-                      </span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>{it.dfv_found ? "Válida — encontrada no RM" : "Válida — apenas planilha"}</TooltipContent>
+                      </Tooltip>
                     )}
                   </TableCell>
-                  <TableCell className="font-mono">{it.spo || "—"}</TableCell>
-                  <TableCell>
-                    <Input
-                      className="h-7 text-xs"
-                      value={it.processo || ""}
-                      onChange={(e) => patch(idx, "processo", e.target.value || null)}
-                    />
-                    <OriginBadge origin={fo.processo} />
+                  <TableCell className="py-3.5 px-3 font-mono text-foreground">{it.spo || "—"}</TableCell>
+                  <TableCell className="py-3.5 px-3 hidden lg:table-cell text-foreground/90">{it.processo || "—"}</TableCell>
+                  <TableCell className="py-3.5 px-3 hidden lg:table-cell max-w-[220px]">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="truncate text-foreground/90">{it.fornecedor || "—"}</div>
+                      </TooltipTrigger>
+                      {it.fornecedor && <TooltipContent>{it.fornecedor}</TooltipContent>}
+                    </Tooltip>
                   </TableCell>
-                  <TableCell>
-                    <Select value={it.origem_processo || ""} onValueChange={(v) => patch(idx, "origem_processo", v)}>
-                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="—" /></SelectTrigger>
-                      <SelectContent>
-                        {ORIGENS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <OriginBadge origin={fo.origem_processo} />
-                  </TableCell>
-                  <TableCell>
-                    <Input className="h-7 text-xs min-w-[140px]" value={it.fornecedor || ""}
-                      onChange={(e) => patch(idx, "fornecedor", e.target.value || null)} />
-                    <OriginBadge origin={fo.fornecedor} />
-                  </TableCell>
-                  <TableCell>
-                    <Input className="h-7 text-xs min-w-[120px]" value={it.cnpj_fornecedor || ""}
-                      onChange={(e) => patch(idx, "cnpj_fornecedor", e.target.value.replace(/\D/g, "") || null)} />
-                    <OriginBadge origin={fo.cnpj_fornecedor} />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number" step="0.01"
-                      className="h-7 text-xs w-[100px]"
-                      value={it.valor ?? ""}
-                      onChange={(e) => patch(idx, "valor", e.target.value === "" ? null : Number(e.target.value))}
-                    />
-                    <OriginBadge origin={fo.valor} />
-                  </TableCell>
-                  <TableCell>
-                    <Select value={it.moeda || "BRL"} onValueChange={(v) => patch(idx, "moeda", v)}>
-                      <SelectTrigger className="h-7 text-xs w-[72px]"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {MOEDAS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <OriginBadge origin={fo.moeda} />
-                  </TableCell>
-                  <TableCell>
-                    <Input type="date" className="h-7 text-xs"
-                      value={it.vencimento || ""} onChange={(e) => patch(idx, "vencimento", e.target.value || null)} />
-                    <OriginBadge origin={fo.vencimento} />
-                  </TableCell>
-                  <TableCell>
-                    <Input type="date" className="h-7 text-xs"
-                      value={it.data_emissao || ""} onChange={(e) => patch(idx, "data_emissao", e.target.value || null)} />
-                    <OriginBadge origin={fo.data_emissao} />
-                  </TableCell>
-                  <TableCell>
-                    <Select value={it.tipo_documento || ""} onValueChange={(v) => patch(idx, "tipo_documento", v)}>
-                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="—" /></SelectTrigger>
-                      <SelectContent>
-                        {TIPOS_DOC.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <OriginBadge origin={fo.tipo_documento} />
-                  </TableCell>
-                  <TableCell>
-                    <Input className="h-7 text-xs w-[80px]" value={it.filial || ""}
-                      onChange={(e) => patch(idx, "filial", e.target.value || null)} />
-                    <OriginBadge origin={fo.filial} />
-                  </TableCell>
-                  <TableCell>
-                    <Select value={it.forma_pagamento || ""} onValueChange={(v) => patch(idx, "forma_pagamento", v)}>
-                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="—" /></SelectTrigger>
-                      <SelectContent>
-                        {FORMAS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <OriginBadge origin={fo.forma_pagamento} />
-                  </TableCell>
-                  <TableCell>
-                    <Select value={it.cobranca_em_nome_de || "DACHSER"} onValueChange={(v) => patch(idx, "cobranca_em_nome_de", v)}>
-                      <SelectTrigger className="h-7 text-xs w-[110px]"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="DACHSER">Sim — Fiscal</SelectItem>
-                        <SelectItem value="CLIENTE">Não — Cliente</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <Checkbox checked={!!it.urgente} onCheckedChange={(v) => patch(idx, "urgente", !!v)} />
-                  </TableCell>
-                  <TableCell>
-                    <Input className="h-7 text-xs min-w-[140px]" value={it.comentarios || ""}
-                      onChange={(e) => patch(idx, "comentarios", e.target.value || null)} />
+                  <TableCell className="py-3.5 px-3 text-right font-mono text-foreground">{fmtCurrency(it.valor, it.moeda)}</TableCell>
+                  <TableCell className="py-3.5 px-3 font-mono text-foreground/90">{fmtDate(it.vencimento)}</TableCell>
+                  <TableCell className="py-3.5 px-3 text-right">
+                    <div className="inline-flex items-center gap-1">
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onEdit(it.row_index)} title="Editar linha">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-red-400" title="Remover">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-64 p-3">
+                          <div className="text-xs text-foreground mb-3">
+                            Remover esta linha? Essa ação não pode ser desfeita.
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button size="sm" variant="outline" onClick={(e) => (e.currentTarget.closest("[data-radix-popper-content-wrapper]") as HTMLElement)?.querySelector<HTMLButtonElement>("button[aria-label='Close']")?.click()}>
+                              Cancelar
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => onRemove(it.row_index)}>
+                              Confirmar remoção
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
                   </TableCell>
                 </TableRow>
               );
