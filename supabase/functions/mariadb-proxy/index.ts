@@ -18376,7 +18376,7 @@ Deno.serve(async (req) => {
           const sheetRows = rows.map((r, i) => parseSheetRow(r, i));
           const spos = sheetRows.map(s => s.spo).filter(Boolean) as string[];
           const dfvMap = await fetchDfvBySpo(spos);
-          return sheetRows.map(s => mergeWithDfv(s, s.spo ? (dfvMap[s.spo.trim()] || null) : null));
+          return sheetRows.map(s => mergeWithDfv(s, s.spo ? (dfvMap[normSpo(s.spo)] || null) : null));
         };
 
         // ===== preview =====
