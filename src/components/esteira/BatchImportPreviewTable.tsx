@@ -178,12 +178,14 @@ export function BatchImportPreviewTable({
                             Remover esta linha? Essa ação não pode ser desfeita.
                           </div>
                           <div className="flex justify-end gap-2">
-                            <Button size="sm" variant="outline" onClick={(e) => (e.currentTarget.closest("[data-radix-popper-content-wrapper]") as HTMLElement)?.querySelector<HTMLButtonElement>("button[aria-label='Close']")?.click()}>
-                              Cancelar
-                            </Button>
-                            <Button size="sm" variant="destructive" onClick={() => onRemove(it.row_index)}>
-                              Confirmar remoção
-                            </Button>
+                            <PopoverPrimitive.Close asChild>
+                              <Button size="sm" variant="outline">Cancelar</Button>
+                            </PopoverPrimitive.Close>
+                            <PopoverPrimitive.Close asChild>
+                              <Button size="sm" variant="destructive" onClick={() => onRemove(it.row_index)}>
+                                Confirmar remoção
+                              </Button>
+                            </PopoverPrimitive.Close>
                           </div>
                         </PopoverContent>
                       </Popover>
