@@ -329,7 +329,18 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {missingCols.map(c => (
                 <div key={c.key} className="space-y-1.5">
-                  <Label className="text-xs">{c.label} <span className="text-red-400">*</span></Label>
+                  <Label className="text-xs flex items-center gap-1.5">
+                    {c.label} <span className="text-red-400">*</span>
+                    {c.key === "cobranca_em_nome_de" && (
+                      <FornecedoresSemFiscalDialog
+                        trigger={
+                          <button type="button" className="text-muted-foreground hover:text-primary inline-flex" title="Ver fornecedores sem fiscal">
+                            <Info className="h-3 w-3" />
+                          </button>
+                        }
+                      />
+                    )}
+                  </Label>
                   <Select
                     value={fillValues[c.key] || ""}
                     onValueChange={v => setFillValues(prev => ({ ...prev, [c.key]: v }))}
