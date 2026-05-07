@@ -232,6 +232,19 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
   }, [items]);
 
+  const visibleCount = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items.filter(it => {
+      if (filter === "errors" && it.status !== "ERROR") return false;
+      if (filter === "valid" && it.status !== "VALID") return false;
+      if (q) {
+        const hay = `${it.spo || ""} ${it.processo || ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    }).length;
+  }, [items, filter, search]);
+
   const bulkOptions = useMemo(() => {
     switch (bulkField) {
       case "origem_processo": return ORIGENS.map(v => ({ v, l: v }));
@@ -264,7 +277,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
       }}
     >
       <DialogContent
-        className={`${step === "preview" ? "w-[90vw] max-w-[1400px]" : "max-w-2xl"} max-h-[85vh] overflow-hidden flex flex-col rounded-2xl border-border/60`}
+        className={`${step === "preview" ? "w-[90vw] max-w-[1400px] h-[90vh]" : "max-w-2xl max-h-[85vh]"} overflow-hidden flex flex-col rounded-2xl border-border/60`}
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
@@ -511,9 +524,13 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
               />
             </div>
 
+            <div className="text-[11px] text-muted-foreground px-1">
+              Mostrando {visibleCount} de {items.length} linha(s){visibleCount < items.length ? " — role a tabela para ver mais" : ""}
+            </div>
+
             {/* Footer */}
-            <div className="flex items-start justify-between gap-3 pt-2 border-t border-border/60">
-              <div className="flex items-start gap-3 flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/60">
+              <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap">
                 <Button variant="outline" onClick={reset} disabled={busy}>
                   Voltar
                 </Button>
@@ -524,7 +541,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
                         key={msg}
                         type="button"
                         onClick={() => { setFilter("errors"); setSearch(""); }}
-                        className="text-[11px] px-2 py-0.5 rounded-full border border-red-500/30 bg-red-500/5 text-red-300 hover:bg-red-500/10"
+                        className="text-xs px-2.5 py-1 rounded-full border border-red-500/30 bg-red-500/5 text-red-300 hover:bg-red-500/10"
                         title="Filtrar linhas com erro"
                       >
                         {count} {count === 1 ? "linha com" : "linhas com"} {msg}
