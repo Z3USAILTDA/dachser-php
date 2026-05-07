@@ -119,7 +119,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
         if (!v) reset();
       }}
     >
-      <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col rounded-2xl border-border/60">
+      <DialogContent className={`${step === "upload" ? "max-w-2xl" : "max-w-[95vw]"} max-h-[90vh] overflow-hidden flex flex-col rounded-2xl border-border/60`}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <FileSpreadsheet className="h-5 w-5 text-primary" />
