@@ -1913,10 +1913,6 @@ const EsteiraIndex = () => {
               Enviar Voucher/SPO
             </Button>}
 
-          {isAdmin && user?.id && <Button variant="outline" className="gap-2 rounded-full px-4 border-[#ffc800]/40 text-[#ffc800] hover:bg-[#ffc800]/10" onClick={() => setShowBatchImportDialog(true)}>
-              <FileSpreadsheet className="h-4 w-4" />
-              Importar SPO em Lote
-            </Button>}
 
           {user && <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[180px] truncate">
               @{user.username || user.email}
@@ -2212,7 +2208,7 @@ const EsteiraIndex = () => {
         Z3US.AI • For Logistics
       </div>
 
-      <CreateVoucherDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onSuccess={loadVouchers} />
+      <CreateVoucherDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onSuccess={loadVouchers} onOpenBatchImport={isAdmin && user?.id ? () => setShowBatchImportDialog(true) : undefined} />
       <EditVoucherDialog open={showEditDialog} onOpenChange={setShowEditDialog} onSuccess={loadVouchers} voucher={selectedVoucher} />
       {selectedVoucher && <CancelarVoucherDialog open={showCancelDialog} onOpenChange={setShowCancelDialog} voucher={selectedVoucher} onSuccess={loadVouchers} />}
 
