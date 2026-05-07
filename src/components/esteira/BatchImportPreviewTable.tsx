@@ -154,7 +154,23 @@ export function BatchImportPreviewTable({
                       </Tooltip>
                     )}
                   </TableCell>
-                  <TableCell className="py-3.5 px-3 font-mono text-foreground">{it.spo || "—"}</TableCell>
+                  <TableCell className="py-3.5 px-3 font-mono text-foreground">
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>{it.spo || "—"}</span>
+                      {it.is_duplicate && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center rounded-md border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400">
+                              Duplicado
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Mesma combinação SPO + RM da linha #{(it.duplicate_of_row ?? 0) + 1}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="py-3.5 px-3 hidden lg:table-cell text-foreground/90">{it.processo || "—"}</TableCell>
                   <TableCell className="py-3.5 px-3 hidden lg:table-cell max-w-[220px]">
                     <Tooltip>
