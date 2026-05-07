@@ -155,7 +155,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
 
   const applyFillAndContinue = () => {
     const patches = fillValues;
-    setItems(prev => prev.map(it => {
+    setItems(prev => revalidate(prev.map(it => {
       const next = { ...it };
       const fo = { ...(it.field_origin || {}) };
       for (const [k, v] of Object.entries(patches)) {
@@ -164,8 +164,8 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
         fo[k] = "MANUAL";
       }
       next.field_origin = fo;
-      return validate(next);
-    }));
+      return next;
+    })));
     setStep("preview");
   };
 
