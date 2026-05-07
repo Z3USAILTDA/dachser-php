@@ -8,13 +8,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertCircle, FileText, Wand2, Search,
+  Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertCircle, FileText, Wand2, Search, Info,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { parseBatchSpreadsheet } from "@/utils/batchVoucherImport";
 import { BatchImportPreviewTable, type StatusFilter } from "./BatchImportPreviewTable";
 import { BatchImportRowEditor } from "./BatchImportRowEditor";
+import { FornecedoresSemFiscalDialog } from "./FornecedoresSemFiscalDialog";
 
 const EXPECTED_HEADERS = [
   "SPO", "Processo", "Origem Processo", "Fornecedor", "CNPJ", "Valor", "Moeda",
