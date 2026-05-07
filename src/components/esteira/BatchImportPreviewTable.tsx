@@ -26,6 +26,7 @@ export interface PreviewItem {
   urgente: boolean;
   comentarios: string | null;
   fatura: string | null;
+  chave_pix?: string | null;
   status: string;
   validation_message: string | null;
   dfv_found?: boolean;
