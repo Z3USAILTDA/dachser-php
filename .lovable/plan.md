@@ -1,82 +1,103 @@
-## Ajustes no rodapé do preview (Importar SPO em Lote)
+## Objetivo
 
-### 1) Alinhamento e tamanho dos badges de erro
+Alinhar o fluxo de **importação em lote** (`BatchImportVoucherDialog` + `BatchImportRowEditor` + handler `create_voucher_batch_import`) ao **formulário individual** (`CreateVoucherDialog`), em três frentes:
 
-**Arquivo:** `src/components/esteira/BatchImportVoucherDialog.tsx` (rodapé do step `preview`)
+1. Equivalência de campos obrigatórios.
+2. Equivalência de regras automáticas baseadas no valor selecionado em cada campo (urgência por tipo, etapa por urgência+fiscal, status de envio ao cliente).
+3. Captura da Chave PIX quando a forma de pagamento for PIX.
 
-Mudanças:
-- Trocar o container do bloco esquerdo de `items-start` → `items-center` para alinhar os badges verticalmente com o botão "Voltar".
-- Trocar o classe externa do footer também para `items-center`.
-- Aumentar levemente o texto dos badges: `text-[11px]` → `text-xs`, `px-2 py-0.5` → `px-2.5 py-1`.
+## 1. Campos obrigatórios
 
+Regra do individual: `spo`, `fornecedor`, `vencimento`, `origem_processo`, `tipo_documento`, `forma_pagamento`, `cobranca_em_nome_de` (Fiscal). Anexos não se aplicam ao lote (são vinculados em etapa posterior).
+
+### `BatchImportVoucherDialog.tsx` — função `validate`
+Remover regras que o individual não exige:
+- `if (!next.processo) ...`
+- `if (!next.valor || next.valor <= 0) ...`
+
+Manter como obrigatórios: `spo`, `origem_processo`, `fornecedor`, `vencimento`, `tipo_documento`, `forma_pagamento`, `cobranca_em_nome_de`.
+
+Adicionar regra condicional do PIX (ver seção 3).
+
+### `BatchImportRowEditor.tsx`
+- Remover "Processo" do array `missing` e o `*` do label "Processo".
+- Adicionar `*` em "Fornecedor" (já é obrigatório no `validate`; só falta o asterisco visual). Campo continua read-only — preenchido por `nome_beneficiario` da DFV.
+- Manter `*` em: Origem Processo, Forma de Pagamento, Fiscal, Vencimento, Tipo Documento.
+
+## 2. Regras automáticas por valor selecionado
+
+Referência: `CreateVoucherDialog.handleSubmitVoucher` (linhas ~444-463).
+
+```ts
+// Urgência
+const isUrgenteReal = !!it.urgente;
+const tipoDoc = (it.tipo_documento || '').toUpperCase();
+const autoUrgent = !isUrgenteReal && (tipoDoc === 'ICMS' || tipoDoc === 'ARMAZENAGEM');
+const urgenciaTipo = isUrgenteReal ? 'URGENTE_REAL'
+                   : autoUrgent  ? 'URGENTE_AUTOMATICO'
+                                  : 'NORMAL';
+
+// Etapa
+const etapaAtual = urgenciaTipo === 'URGENTE_REAL' ? 'SUPERVISOR'
+                  : (it.cobranca_em_nome_de === 'CLIENTE' ? 'FINANCEIRO' : 'FISCAL');
+
+// status_envio_cliente
+const statusEnvioCliente = it.cobranca_em_nome_de === 'CLIENTE' ? 'AGUARDANDO_CLIENTE' : 'NAO_APLICA';
+
+// flag urgente (booleano numérico)
+const urgenteFlag = (isUrgenteReal || autoUrgent) ? 1 : 0;
+```
+
+### `supabase/functions/mariadb-proxy/index.ts` — handler `create_voucher_batch_import` (≈ linha 18394)
+
+No `INSERT INTO dados_dachser.t_vouchers`, substituir os literais hard-coded:
+- `'OPERACAO'` → `?` (`etapaAtual`)
+- `'NAO_APLICA'` → `?` (`statusEnvioCliente`)
+- `it.urgente ? 1 : 0` → `urgenteFlag`
+- `it.urgente ? 'URGENTE_REAL' : 'NORMAL'` → `urgenciaTipo`
+
+Manter os demais valores inalterados (`status_baixa='PENDENTE'`, `status_financeiro='PENDENTE'`, `remessa='NENHUM'`, `status_documento_fiscal='PENDENTE'`, `tipo_execucao_pagamento='A_DEFINIR'`, `origem_criacao='LOTE_PLANILHA'`).
+
+## 3. Chave PIX condicional
+
+Quando `forma_pagamento = "PIX"`, exibir e exigir o campo Chave PIX no editor de linha, e gravá-lo no voucher (mesmo comportamento do individual).
+
+### `src/components/esteira/BatchImportPreviewTable.tsx`
+Adicionar à interface `PreviewItem`:
+```ts
+chave_pix?: string | null;
+```
+
+### `src/components/esteira/BatchImportRowEditor.tsx`
+Logo abaixo do bloco "Forma de Pagamento", renderizar condicionalmente:
 ```tsx
-<div className="flex items-center justify-between gap-3 pt-2 border-t border-border/60">
-  <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap">
-    <Button variant="outline" onClick={reset} disabled={busy}>Voltar</Button>
-    {errorReasons.length > 0 && (
-      <div className="flex flex-wrap gap-1.5 items-center">
-        {errorReasons.map(([msg, count]) => (
-          <button
-            key={msg}
-            type="button"
-            onClick={() => { setFilter("errors"); setSearch(""); }}
-            className="text-xs px-2.5 py-1 rounded-full border border-red-500/30 bg-red-500/5 text-red-300 hover:bg-red-500/10"
-            title="Filtrar linhas com erro"
-          >
-            {count} {count === 1 ? "linha com" : "linhas com"} {msg}
-          </button>
-        ))}
-      </div>
-    )}
+{draft.forma_pagamento === "PIX" && (
+  <div className="space-y-1.5 col-span-2">
+    <Label className="text-xs">Chave PIX <span className="text-red-400">*</span></Label>
+    <Input
+      className="h-8 text-xs"
+      placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
+      value={draft.chave_pix || ""}
+      onChange={(e) => set("chave_pix", e.target.value || null)}
+    />
   </div>
-  ...
-</div>
+)}
+```
+Adicionar `"Chave PIX"` em `missing` quando `forma_pagamento === "PIX" && !chave_pix`, bloqueando "Salvar alterações".
+
+### `src/components/esteira/BatchImportVoucherDialog.tsx` — `validate`
+Acrescentar:
+```ts
+if (next.forma_pagamento === "PIX" && !next.chave_pix) errors.push("chave PIX obrigatória");
 ```
 
----
+### `supabase/functions/mariadb-proxy/index.ts` — handler `create_voucher_batch_import`
+- Calcular: `const chavePixFinal = (it.forma_pagamento || '').toUpperCase() === 'PIX' ? (it.chave_pix || null) : null;`
+- Incluir `chave_pix` na lista de colunas/valores do `INSERT` (ao lado de `processo_id, origem_processo`).
 
-### 2) "Só 11 linhas estão sendo mostradas" — não é bug, é scroll interno
+## Fora de escopo
 
-A tabela está dentro de `flex-1 overflow-hidden` com scroll vertical próprio (`h-full overflow-auto` em `BatchImportPreviewTable`). No viewport atual (~1205px CSS, dialog limitado a 85vh), cabem ~11 linhas visíveis — o restante das 26 está acessível via scroll dentro da tabela, mas não há nenhuma pista visual de que existem mais linhas.
-
-Duas correções complementares:
-
-**a) Indicador "Mostrando X de Y"** abaixo da tabela (ou na própria toolbar), reaproveitando a contagem que a tabela já faz internamente.
-
-Como o filtro/busca vivem no pai, basta calcular no `BatchImportVoucherDialog`:
-
-```tsx
-const visibleCount = useMemo(() => {
-  const q = search.trim().toLowerCase();
-  return items.filter(it => {
-    if (filter === "errors" && it.status !== "ERROR") return false;
-    if (filter === "valid" && it.status !== "VALID") return false;
-    if (q) {
-      const hay = `${it.spo || ""} ${it.processo || ""}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    return true;
-  }).length;
-}, [items, filter, search]);
-```
-
-Renderizar uma linha curta entre a tabela e o footer:
-```tsx
-<div className="text-[11px] text-muted-foreground px-1">
-  Mostrando {visibleCount} de {items.length} linha(s){visibleCount > 11 ? " — role a tabela para ver mais" : ""}
-</div>
-```
-
-**b) Aumentar a altura útil da tabela** (opcional, para evitar a sensação de "sumiu"): trocar `max-h-[85vh]` do `DialogContent` no step `preview` para `h-[90vh]`, garantindo que a tabela ocupe quase todo o viewport. Sem mudar o comportamento dos outros steps.
-
-```tsx
-className={`${step === "preview" ? "w-[90vw] max-w-[1400px] h-[90vh]" : "max-w-2xl"} ...`}
-```
-
----
-
-### O que NÃO muda
-
-- Lógica de filtros, validação, fornecedor da DFV, ícone de info no Fiscal.
-- Qualquer comportamento do backend.
-- Estrutura dos componentes.
+- Anexo Fatura/Boleto por linha (lote vincula em etapa posterior).
+- `pix_tipo_chave` (não é definido no `CreateVoucherDialog`; é inferido depois em `insert_dados_rm`).
+- Importar chave PIX automaticamente da planilha (campo será preenchido manualmente no editor).
+- Sem mudanças de schema — todas as colunas usadas (`chave_pix`, `urgencia_tipo`, `etapa_atual`, `status_envio_cliente`) já existem em `t_vouchers`.

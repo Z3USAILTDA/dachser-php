@@ -18418,17 +18418,32 @@ Deno.serve(async (req) => {
               try {
                 await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS origem_criacao VARCHAR(50) DEFAULT NULL`);
               } catch (_) {}
+
+              // Mirror individual form rules
+              const isUrgenteReal = !!it.urgente;
+              const tipoDocUp = String(it.tipo_documento || '').toUpperCase();
+              const autoUrgent = !isUrgenteReal && (tipoDocUp === 'ICMS' || tipoDocUp === 'ARMAZENAGEM');
+              const urgenciaTipo = isUrgenteReal ? 'URGENTE_REAL' : (autoUrgent ? 'URGENTE_AUTOMATICO' : 'NORMAL');
+              const etapaAtual = urgenciaTipo === 'URGENTE_REAL'
+                ? 'SUPERVISOR'
+                : (it.cobranca_em_nome_de === 'CLIENTE' ? 'FINANCEIRO' : 'FISCAL');
+              const statusEnvioCliente = it.cobranca_em_nome_de === 'CLIENTE' ? 'AGUARDANDO_CLIENTE' : 'NAO_APLICA';
+              const urgenteFlag = (isUrgenteReal || autoUrgent) ? 1 : 0;
+              const chavePixFinal = String(it.forma_pagamento || '').toUpperCase() === 'PIX'
+                ? (it.chave_pix || null)
+                : null;
+
               await client.execute(`
                 INSERT INTO dados_dachser.t_vouchers (
                   id, numero_spo, id_rm, fornecedor, cnpj_fornecedor, valor, moeda,
                   vencimento, data_emissao_documento, forma_pagamento, tipo_documento,
                   cobranca_em_nome_de, etapa_atual, status_baixa, status_envio_cliente, status_financeiro,
                   remessa, urgente, urgencia_tipo, processo_id, origem_processo,
-                  filial, comentarios_operacao, criado_por_user_id, status_documento_fiscal,
+                  filial, comentarios_operacao, criado_por_user_id, chave_pix, status_documento_fiscal,
                   tipo_execucao_pagamento, origem_criacao, created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                          'OPERACAO', 'PENDENTE', 'NAO_APLICA', 'PENDENTE',
-                          'NENHUM', ?, ?, ?, ?, ?, ?, ?, 'PENDENTE',
+                          ?, 'PENDENTE', ?, 'PENDENTE',
+                          'NENHUM', ?, ?, ?, ?, ?, ?, ?, ?, 'PENDENTE',
                           'A_DEFINIR', 'LOTE_PLANILHA', NOW(), NOW())
               `, [
                 voucherId, numeroSpo, it.id_rm || null,
@@ -18438,12 +18453,15 @@ Deno.serve(async (req) => {
                 it.data_emissao ? `${it.data_emissao} 00:00:00` : null,
                 it.forma_pagamento, it.tipo_documento || 'OUTROS',
                 it.cobranca_em_nome_de || 'DACHSER',
-                it.urgente ? 1 : 0,
-                it.urgente ? 'URGENTE_REAL' : 'NORMAL',
+                etapaAtual, statusEnvioCliente,
+                urgenteFlag,
+                urgenciaTipo,
                 it.processo, it.origem_processo,
                 it.filial || null, it.comentarios || null,
                 String(requesterId),
+                chavePixFinal,
               ]);
+
 
               try {
                 const logId = crypto.randomUUID();

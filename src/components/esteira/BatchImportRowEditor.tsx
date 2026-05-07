@@ -35,12 +35,13 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
   const set = <K extends keyof PreviewItem>(k: K, v: PreviewItem[K]) => setDraft({ ...draft, [k]: v });
 
   const missing: string[] = [];
-  if (!draft.processo) missing.push("Processo");
+  if (!draft.fornecedor) missing.push("Fornecedor");
   if (!draft.origem_processo) missing.push("Origem Processo");
   if (!draft.vencimento) missing.push("Vencimento");
   if (!draft.tipo_documento) missing.push("Tipo Documento");
   if (!draft.forma_pagamento) missing.push("Forma de Pagamento");
   if (!draft.cobranca_em_nome_de) missing.push("Fiscal");
+  if (draft.forma_pagamento === "PIX" && !draft.chave_pix) missing.push("Chave PIX");
   const canSave = missing.length === 0;
 
   const handleSave = () => {
@@ -84,7 +85,7 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
                 <Input value={draft.spo || ""} readOnly className="h-8 font-mono text-xs bg-muted/40" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Processo{req}</Label>
+                <Label className="text-xs">Processo</Label>
                 <Input className="h-8 text-xs" value={draft.processo || ""} onChange={(e) => set("processo", e.target.value || null)} />
               </div>
               <div className="space-y-1.5">
@@ -110,7 +111,7 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
                 </div>
               </div>
               <div className="space-y-1.5 col-span-2">
-                <Label className="text-xs">Fornecedor</Label>
+                <Label className="text-xs">Fornecedor{req}</Label>
                 <Input className="h-8 text-xs bg-muted/40" value={draft.fornecedor || ""} readOnly />
                 <p className="text-[10px] text-muted-foreground">Preenchido automaticamente pela base RM (nome_beneficiario).</p>
               </div>
@@ -172,6 +173,17 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
                   </SelectContent>
                 </Select>
               </div>
+              {draft.forma_pagamento === "PIX" && (
+                <div className="space-y-1.5 col-span-2">
+                  <Label className="text-xs">Chave PIX{req}</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
+                    value={(draft as any).chave_pix || ""}
+                    onChange={(e) => set("chave_pix" as any, (e.target.value || null) as any)}
+                  />
+                </div>
+              )}
             </div>
           </section>
 
