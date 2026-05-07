@@ -1,74 +1,82 @@
-## Ajustes no Importar SPO em Lote
+## Ajustes no rodapé do preview (Importar SPO em Lote)
 
-Três pequenos ajustes ao fluxo já existente — sem mudar funcionalidades.
+### 1) Alinhamento e tamanho dos badges de erro
 
----
+**Arquivo:** `src/components/esteira/BatchImportVoucherDialog.tsx` (rodapé do step `preview`)
 
-### 1) Mostrar motivos de erro no rodapé do preview
+Mudanças:
+- Trocar o container do bloco esquerdo de `items-start` → `items-center` para alinhar os badges verticalmente com o botão "Voltar".
+- Trocar o classe externa do footer também para `items-center`.
+- Aumentar levemente o texto dos badges: `text-[11px]` → `text-xs`, `px-2 py-0.5` → `px-2.5 py-1`.
 
-**Arquivo:** `src/components/esteira/BatchImportVoucherDialog.tsx`
-
-No rodapé do step `preview` (onde hoje aparece "Corrija os erros para habilitar a importação"), adicionar um resumo agregado dos motivos de erro encontrados nas linhas, agrupando pela mensagem e mostrando a contagem.
-
-Exemplo de exibição:
-- "26 linhas com fornecedor obrigatório"
-- "12 linhas com vencimento obrigatório"
-- "3 linhas com tipo de documento obrigatório"
-
-Implementação: derivar do `items` um `Map<motivo, count>` percorrendo `validation_message.split(";")` apenas dos itens com `status === "ERROR"`. Renderizar como lista compacta (texto pequeno, em vermelho suave) ao lado/abaixo do botão "Criar voucher(s)". Cada item pode ser clicável e aplicar o filtro `errors` + busca pelo motivo (opcional — somente leitura é suficiente).
-
----
-
-### 2) Fornecedor sempre vem da DFV (`nome_beneficiario`)
-
-**Arquivo:** `supabase/functions/mariadb-proxy/index.ts` — função `mergeWithDfv` (linha ~18341)
-
-Alterar a resolução do campo `fornecedor` para **ignorar o valor da planilha** e usar exclusivamente o que vier da `t_dados_financeiro_voucher.nome_beneficiario` (com fallback para `razao_social`, como já é hoje).
-
-```ts
-// antes:
-fornecedor: pick(sheet.fornecedor, dfvFornecedor, 'fornecedor'),
-
-// depois:
-fornecedor: dfvFornecedor,  // sempre DFV
-// origin['fornecedor'] = dfvFornecedor ? 'DFV' : null;
-```
-
-Comportamento resultante:
-- Se a SPO existe na DFV → `fornecedor` preenchido automaticamente, marcado como `DFV`.
-- Se a SPO não existe na DFV → `fornecedor` fica `null` → cai no validador existente ("fornecedor obrigatório") e a linha aparece como erro no preview.
-
-**Frontend:** no `BatchImportRowEditor.tsx`, deixar o input "Fornecedor" como `readOnly` (igual ao SPO) e adicionar uma legenda pequena: "Preenchido automaticamente pela base RM (nome_beneficiario)". Isso evita que o usuário tente sobrescrever um campo que será ignorado.
-
----
-
-### 3) Campo "Fiscal" — obrigatório + ícone de informação com modal
-
-O campo já é validado como obrigatório no frontend e backend (validador atual: "contabilização fiscal obrigatória"). Manter como está. Adicionar **ícone de informação** ao lado do label que abre o `FornecedoresSemFiscalDialog` existente — o mesmo modal já usado em `CreateVoucherDialog.tsx` (linha 1317).
-
-**Arquivos a alterar:**
-
-a) `src/components/esteira/BatchImportRowEditor.tsx` — no campo "Fiscal" da seção Financeiro:
 ```tsx
-<Label className="text-xs flex items-center gap-1.5">
-  Fiscal <span className="text-red-400">*</span>
-  <FornecedoresSemFiscalDialog trigger={
-    <button type="button" className="text-muted-foreground hover:text-primary">
-      <Info className="h-3.5 w-3.5" />
-    </button>
-  } />
-</Label>
+<div className="flex items-center justify-between gap-3 pt-2 border-t border-border/60">
+  <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap">
+    <Button variant="outline" onClick={reset} disabled={busy}>Voltar</Button>
+    {errorReasons.length > 0 && (
+      <div className="flex flex-wrap gap-1.5 items-center">
+        {errorReasons.map(([msg, count]) => (
+          <button
+            key={msg}
+            type="button"
+            onClick={() => { setFilter("errors"); setSearch(""); }}
+            className="text-xs px-2.5 py-1 rounded-full border border-red-500/30 bg-red-500/5 text-red-300 hover:bg-red-500/10"
+            title="Filtrar linhas com erro"
+          >
+            {count} {count === 1 ? "linha com" : "linhas com"} {msg}
+          </button>
+        ))}
+      </div>
+    )}
+  </div>
+  ...
+</div>
 ```
-
-b) `src/components/esteira/BatchImportVoucherDialog.tsx` — no step `fill`, quando o campo ausente é `cobranca_em_nome_de`, renderizar o mesmo ícone ao lado do label "Fiscal *".
-
-Sem alteração no componente `FornecedoresSemFiscalDialog` em si — ele já aceita `trigger` como prop.
 
 ---
 
-### Resumo do que NÃO muda
+### 2) "Só 11 linhas estão sendo mostradas" — não é bug, é scroll interno
 
-- Fluxo de upload, validação backend, criação do lote.
-- Drawer continua editável para todos os outros campos.
-- Toolbar "Editar em lote", filtros, contadores de Válidas/Com erro.
-- `origem_processo`, `forma_pagamento` e `urgente` continuam por linha.
+A tabela está dentro de `flex-1 overflow-hidden` com scroll vertical próprio (`h-full overflow-auto` em `BatchImportPreviewTable`). No viewport atual (~1205px CSS, dialog limitado a 85vh), cabem ~11 linhas visíveis — o restante das 26 está acessível via scroll dentro da tabela, mas não há nenhuma pista visual de que existem mais linhas.
+
+Duas correções complementares:
+
+**a) Indicador "Mostrando X de Y"** abaixo da tabela (ou na própria toolbar), reaproveitando a contagem que a tabela já faz internamente.
+
+Como o filtro/busca vivem no pai, basta calcular no `BatchImportVoucherDialog`:
+
+```tsx
+const visibleCount = useMemo(() => {
+  const q = search.trim().toLowerCase();
+  return items.filter(it => {
+    if (filter === "errors" && it.status !== "ERROR") return false;
+    if (filter === "valid" && it.status !== "VALID") return false;
+    if (q) {
+      const hay = `${it.spo || ""} ${it.processo || ""}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }).length;
+}, [items, filter, search]);
+```
+
+Renderizar uma linha curta entre a tabela e o footer:
+```tsx
+<div className="text-[11px] text-muted-foreground px-1">
+  Mostrando {visibleCount} de {items.length} linha(s){visibleCount > 11 ? " — role a tabela para ver mais" : ""}
+</div>
+```
+
+**b) Aumentar a altura útil da tabela** (opcional, para evitar a sensação de "sumiu"): trocar `max-h-[85vh]` do `DialogContent` no step `preview` para `h-[90vh]`, garantindo que a tabela ocupe quase todo o viewport. Sem mudar o comportamento dos outros steps.
+
+```tsx
+className={`${step === "preview" ? "w-[90vw] max-w-[1400px] h-[90vh]" : "max-w-2xl"} ...`}
+```
+
+---
+
+### O que NÃO muda
+
+- Lógica de filtros, validação, fornecedor da DFV, ícone de info no Fiscal.
+- Qualquer comportamento do backend.
+- Estrutura dos componentes.

@@ -512,8 +512,8 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
             </div>
 
             {/* Footer */}
-            <div className="flex items-start justify-between gap-3 pt-2 border-t border-border/60">
-              <div className="flex items-start gap-3 flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/60">
+              <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap">
                 <Button variant="outline" onClick={reset} disabled={busy}>
                   Voltar
                 </Button>
@@ -524,7 +524,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
                         key={msg}
                         type="button"
                         onClick={() => { setFilter("errors"); setSearch(""); }}
-                        className="text-[11px] px-2 py-0.5 rounded-full border border-red-500/30 bg-red-500/5 text-red-300 hover:bg-red-500/10"
+                        className="text-xs px-2.5 py-1 rounded-full border border-red-500/30 bg-red-500/5 text-red-300 hover:bg-red-500/10"
                         title="Filtrar linhas com erro"
                       >
                         {count} {count === 1 ? "linha com" : "linhas com"} {msg}
