@@ -31,6 +31,8 @@ export interface PreviewItem {
   validation_message: string | null;
   dfv_found?: boolean;
   field_origin?: Record<string, "DFV" | "PLANILHA" | "MANUAL" | null>;
+  is_duplicate?: boolean;
+  duplicate_of_row?: number | null;
 }
 
 export type StatusFilter = "all" | "errors" | "valid";
