@@ -524,6 +524,10 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
               />
             </div>
 
+            <div className="text-[11px] text-muted-foreground px-1">
+              Mostrando {visibleCount} de {items.length} linha(s){visibleCount < items.length ? " — role a tabela para ver mais" : ""}
+            </div>
+
             {/* Footer */}
             <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/60">
               <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap">
