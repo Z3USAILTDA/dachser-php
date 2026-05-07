@@ -93,6 +93,39 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
     return next;
   };
 
+  // Marks rows that share the same (id_rm + spo) pair — would violate uq_voucher_rm_spo.
+  const markDuplicates = (list: any[]) => {
+    const groups = new Map<string, number[]>();
+    list.forEach((it, idx) => {
+      const rm = it?.id_rm == null ? "" : String(it.id_rm).trim();
+      const spo = (it?.spo == null ? "" : String(it.spo)).trim().toUpperCase();
+      if (!rm || !spo) return;
+      const key = `${rm}|${spo}`;
+      const arr = groups.get(key) || [];
+      arr.push(idx);
+      groups.set(key, arr);
+    });
+    const dupIdx = new Map<number, number>(); // arrayIdx -> firstRowIndex
+    for (const indices of groups.values()) {
+      if (indices.length < 2) continue;
+      const firstRowIdx = list[indices[0]].row_index;
+      for (let k = 1; k < indices.length; k++) dupIdx.set(indices[k], firstRowIdx);
+    }
+    return list.map((it, idx) => {
+      if (dupIdx.has(idx)) {
+        const firstRowIdx = dupIdx.get(idx)!;
+        const dupMsg = `SPO duplicado nesta planilha (linha #${firstRowIdx + 1} já usa o mesmo SPO+RM)`;
+        const existing = String(it.validation_message || "").split(";").map(s => s.trim()).filter(Boolean);
+        if (!existing.includes(dupMsg)) existing.push(dupMsg);
+        return { ...it, is_duplicate: true, duplicate_of_row: firstRowIdx, status: "ERROR", validation_message: existing.join("; ") };
+      }
+      // not duplicate: clear flags but DO NOT clobber other validation errors
+      return { ...it, is_duplicate: false, duplicate_of_row: null };
+    });
+  };
+
+  const revalidate = (list: any[]) => markDuplicates(list.map(validate));
+
   const handleFile = async (file: File) => {
     setBusy(true);
     try {
