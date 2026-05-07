@@ -93,6 +93,39 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
     return next;
   };
 
+  // Marks rows that share the same (id_rm + spo) pair — would violate uq_voucher_rm_spo.
+  const markDuplicates = (list: any[]) => {
+    const groups = new Map<string, number[]>();
+    list.forEach((it, idx) => {
+      const rm = it?.id_rm == null ? "" : String(it.id_rm).trim();
+      const spo = (it?.spo == null ? "" : String(it.spo)).trim().toUpperCase();
+      if (!rm || !spo) return;
+      const key = `${rm}|${spo}`;
+      const arr = groups.get(key) || [];
+      arr.push(idx);
+      groups.set(key, arr);
+    });
+    const dupIdx = new Map<number, number>(); // arrayIdx -> firstRowIndex
+    for (const indices of groups.values()) {
+      if (indices.length < 2) continue;
+      const firstRowIdx = list[indices[0]].row_index;
+      for (let k = 1; k < indices.length; k++) dupIdx.set(indices[k], firstRowIdx);
+    }
+    return list.map((it, idx) => {
+      if (dupIdx.has(idx)) {
+        const firstRowIdx = dupIdx.get(idx)!;
+        const dupMsg = `SPO duplicado nesta planilha (linha #${firstRowIdx + 1} já usa o mesmo SPO+RM)`;
+        const existing = String(it.validation_message || "").split(";").map(s => s.trim()).filter(Boolean);
+        if (!existing.includes(dupMsg)) existing.push(dupMsg);
+        return { ...it, is_duplicate: true, duplicate_of_row: firstRowIdx, status: "ERROR", validation_message: existing.join("; ") };
+      }
+      // not duplicate: clear flags but DO NOT clobber other validation errors
+      return { ...it, is_duplicate: false, duplicate_of_row: null };
+    });
+  };
+
+  const revalidate = (list: any[]) => markDuplicates(list.map(validate));
+
   const handleFile = async (file: File) => {
     setBusy(true);
     try {
@@ -107,7 +140,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
         return;
       }
       const it = data.items || [];
-      setItems(it);
+      setItems(markDuplicates(it));
       const missing = detectMissingColumns(it);
       setStep(missing.length ? "fill" : "preview");
     } catch (e: any) {
@@ -122,7 +155,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
 
   const applyFillAndContinue = () => {
     const patches = fillValues;
-    setItems(prev => prev.map(it => {
+    setItems(prev => revalidate(prev.map(it => {
       const next = { ...it };
       const fo = { ...(it.field_origin || {}) };
       for (const [k, v] of Object.entries(patches)) {
@@ -131,8 +164,8 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
         fo[k] = "MANUAL";
       }
       next.field_origin = fo;
-      return validate(next);
-    }));
+      return next;
+    })));
     setStep("preview");
   };
 
@@ -143,18 +176,27 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
       return;
     }
     const v = bulkField === "urgente" ? bulkValue === "true" : bulkValue;
-    setItems(prev => prev.map(it => {
+    setItems(prev => revalidate(prev.map(it => {
       if (!selected.has(it.row_index)) return it;
       const next = { ...it, [bulkField]: v };
       next.field_origin = { ...(it.field_origin || {}), [bulkField]: "MANUAL" };
-      return validate(next);
-    }));
+      return next;
+    })));
     toast({ title: `Aplicado a ${selected.size} linha(s)` });
     setBulkOpen(false);
     setBulkField(""); setBulkValue("");
   };
 
   const confirm = async () => {
+    const dupCount = items.filter((it: any) => it.is_duplicate).length;
+    if (dupCount > 0) {
+      toast({
+        title: "SPOs duplicados na planilha",
+        description: `${dupCount} linha(s) compartilham o mesmo SPO+RM. Edite ou remova as linhas marcadas como "Duplicado" antes de criar o lote.`,
+        variant: "destructive",
+      });
+      return;
+    }
     setBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
@@ -181,7 +223,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
 
   const updateItem = (rowIndex: number, patch: any) => {
     setItems((prev) =>
-      prev.map((it) => (it.row_index !== rowIndex ? it : validate({ ...it, ...patch, field_origin: {
+      revalidate(prev.map((it) => (it.row_index !== rowIndex ? it : { ...it, ...patch, field_origin: {
         ...(it.field_origin || {}),
         ...Object.fromEntries(Object.keys(patch).map(k => [k, "MANUAL"])),
       } })))
@@ -189,7 +231,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
   };
 
   const removeRow = (rowIndex: number) => {
-    setItems((prev) => prev.filter((it) => it.row_index !== rowIndex));
+    setItems((prev) => markDuplicates(prev.filter((it) => it.row_index !== rowIndex)));
     setSelected((prev) => {
       const n = new Set(prev); n.delete(rowIndex); return n;
     });
