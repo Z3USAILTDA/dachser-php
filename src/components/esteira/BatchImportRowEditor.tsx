@@ -145,7 +145,7 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Forma de Pagamento</Label>
+                <Label className="text-xs">Forma de Pagamento{req}</Label>
                 <Select value={draft.forma_pagamento || ""} onValueChange={(v) => set("forma_pagamento", v)}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="—" /></SelectTrigger>
                   <SelectContent>
