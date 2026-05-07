@@ -129,9 +129,18 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Fiscal</Label>
-                <Select value={draft.cobranca_em_nome_de || "DACHSER"} onValueChange={(v) => set("cobranca_em_nome_de", v)}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <Label className="text-xs flex items-center gap-1.5">
+                  Fiscal <span className="text-red-400">*</span>
+                  <FornecedoresSemFiscalDialog
+                    trigger={
+                      <button type="button" className="text-muted-foreground hover:text-primary inline-flex" title="Ver fornecedores sem fiscal">
+                        <Info className="h-3 w-3" />
+                      </button>
+                    }
+                  />
+                </Label>
+                <Select value={draft.cobranca_em_nome_de || ""} onValueChange={(v) => set("cobranca_em_nome_de", v)}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="DACHSER">Sim — Fiscal</SelectItem>
                     <SelectItem value="CLIENTE">Não — Cliente</SelectItem>
