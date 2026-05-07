@@ -222,7 +222,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
   };
 
   const removeRow = (rowIndex: number) => {
-    setItems((prev) => prev.filter((it) => it.row_index !== rowIndex));
+    setItems((prev) => markDuplicates(prev.filter((it) => it.row_index !== rowIndex)));
     setSelected((prev) => {
       const n = new Set(prev); n.delete(rowIndex); return n;
     });
