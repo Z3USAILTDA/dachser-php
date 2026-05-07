@@ -6665,7 +6665,7 @@ Deno.serve(async (req) => {
         // status_*, comentarios_*, ajuste_*, responsavel_*, aprovado_*,
         // status_documento_fiscal, status_comprovante) NÃO são bloqueadas.
         // ============================================================
-        const ETAPAS_EDITAVEIS = ['A_PROCESSAR', 'OPERACAO'];
+        const ETAPAS_EDITAVEIS = ['A_PROCESSAR', 'OPERACAO', 'AJUSTE_OPERACAO'];
         const DATA_EDIT_FIELDS = new Set([
           'numero_spo', 'fornecedor', 'cnpj_fornecedor', 'valor', 'moeda',
           'vencimento', 'data_emissao_documento', 'cobranca_em_nome_de',
@@ -6706,7 +6706,7 @@ Deno.serve(async (req) => {
             JSON.stringify({
               success: false,
               error: 'EDICAO_BLOQUEADA_ETAPA',
-              message: 'Edição de dados permitida apenas nas etapas A Processar e Operacional.',
+              message: 'Edição de dados permitida apenas nas etapas A Processar, Operacional e Ajuste Operacional.',
               etapa_atual: currentEtapa,
             }),
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
