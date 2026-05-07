@@ -237,6 +237,14 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
     });
   };
 
+  const removeSelected = () => {
+    if (selected.size === 0) return;
+    const count = selected.size;
+    setItems((prev) => markDuplicates(prev.filter((it) => !selected.has(it.row_index))));
+    setSelected(new Set());
+    toast({ title: `${count} linha(s) removida(s)` });
+  };
+
   const toggleSelect = (rowIndex: number) => {
     setSelected((prev) => {
       const n = new Set(prev);
