@@ -217,6 +217,21 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
   const errCount = items.filter((i) => i.status === "ERROR").length;
   const validPct = items.length ? (validCount / items.length) * 100 : 0;
 
+  const errorReasons = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const it of items) {
+      if (it.status !== "ERROR" || !it.validation_message) continue;
+      const seen = new Set<string>();
+      for (const raw of String(it.validation_message).split(";")) {
+        const m = raw.trim();
+        if (!m || seen.has(m)) continue;
+        seen.add(m);
+        map.set(m, (map.get(m) || 0) + 1);
+      }
+    }
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+  }, [items]);
+
   const bulkOptions = useMemo(() => {
     switch (bulkField) {
       case "origem_processo": return ORIGENS.map(v => ({ v, l: v }));
