@@ -35,12 +35,13 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
   const set = <K extends keyof PreviewItem>(k: K, v: PreviewItem[K]) => setDraft({ ...draft, [k]: v });
 
   const missing: string[] = [];
-  if (!draft.processo) missing.push("Processo");
+  if (!draft.fornecedor) missing.push("Fornecedor");
   if (!draft.origem_processo) missing.push("Origem Processo");
   if (!draft.vencimento) missing.push("Vencimento");
   if (!draft.tipo_documento) missing.push("Tipo Documento");
   if (!draft.forma_pagamento) missing.push("Forma de Pagamento");
   if (!draft.cobranca_em_nome_de) missing.push("Fiscal");
+  if (draft.forma_pagamento === "PIX" && !draft.chave_pix) missing.push("Chave PIX");
   const canSave = missing.length === 0;
 
   const handleSave = () => {
