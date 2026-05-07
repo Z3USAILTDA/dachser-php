@@ -130,6 +130,7 @@ interface CreateVoucherDialogProps {
   onOpenChange?: (open: boolean) => void;
   onSuccess?: () => void;
   onVoucherCreated?: () => void;
+  onOpenBatchImport?: () => void;
 }
 
 type EntryMode = "rm" | "manual" | "master";
@@ -139,7 +140,8 @@ export const CreateVoucherDialog = ({
   open: controlledOpen, 
   onOpenChange, 
   onSuccess,
-  onVoucherCreated 
+  onVoucherCreated,
+  onOpenBatchImport,
 }: CreateVoucherDialogProps) => {
   const [internalOpen, setInternalOpen] = useState(false);
   
