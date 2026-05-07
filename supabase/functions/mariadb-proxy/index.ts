@@ -18194,12 +18194,20 @@ Deno.serve(async (req) => {
 
         // Helpers
         const FORMA_MAP: Record<string, string> = {
-          'BOLETO': 'BOLETO', 'PIX': 'PIX',
+          'BOLETO': 'BOLETO', 'BOL': 'BOLETO',
+          'PIX': 'PIX',
           'TRANSFERENCIA': 'TRANSFERENCIA', 'TRANSFERÊNCIA': 'TRANSFERENCIA',
+          'TED': 'TRANSFERENCIA', 'TRANSF': 'TRANSFERENCIA',
           'DEPOSITO': 'DEPOSITO', 'DEPÓSITO': 'DEPOSITO',
           'DARF': 'DARF', 'GPS': 'GPS',
           'CAMBIO': 'CAMBIO', 'CÂMBIO': 'CAMBIO',
           'ADF': 'ADF', 'CARTAO': 'CARTAO', 'CARTÃO': 'CARTAO',
+          'DEBITO': 'DEBITO', 'DÉBITO': 'DEBITO',
+        };
+        const ORIGEM_PROCESSO_MAP: Record<string, string> = {
+          'AIR': 'AIR', 'AÉREO': 'AIR', 'AEREO': 'AIR',
+          'SEA': 'SEA', 'MARÍTIMO': 'SEA', 'MARITIMO': 'SEA',
+          'CHB': 'CHB', 'ROD': 'ROD', 'RODOVIÁRIO': 'ROD', 'RODOVIARIO': 'ROD',
         };
         const parseBRMoney = (v: any): number | null => {
           if (v === null || v === undefined || v === '') return null;
@@ -18228,7 +18236,7 @@ Deno.serve(async (req) => {
           }
           return null;
         };
-        const normalizeRow = (raw: any, idx: number) => {
+        const parseSheetRow = (raw: any, idx: number) => {
           const get = (...keys: string[]) => {
             for (const k of keys) {
               for (const rk of Object.keys(raw || {})) {
@@ -18241,50 +18249,139 @@ Deno.serve(async (req) => {
             }
             return null;
           };
-          const fornecedor = get('Fornecedor');
-          const valor = parseBRMoney(get('Valor Solicitação', 'Valor Solicitacao', 'Valor'));
-          const vencimento = parseDate(get('Vencimento', 'Data Vencimento'));
-          const dataFatura = parseDate(get('Data fatura', 'Data Fatura'));
-          const formaRaw = get('Forma Pagto (contas pagar)', 'Forma Pagto', 'Forma Pagamento');
+          const formaRaw = get('Forma Pagto (contas pagar)', 'Forma Pagto', 'Forma Pagamento', 'Forma Pag');
           const formaKey = formaRaw ? String(formaRaw).trim().toUpperCase() : null;
-          const formaPagamento = formaKey ? FORMA_MAP[formaKey] || null : null;
-          const fatura = get('Fatura');
-          const processo = get('Processo');
-          const itemPagto = get('Item Pagto');
-          const unidade = get('Unidade Pagto');
-          const historico = get('Historico (Contas pagar)', 'Historico', 'Histórico');
-          const quebra = get('Quebra (Obrigatório)', 'Quebra');
-
-          const errors: string[] = [];
-          if (!fornecedor) errors.push('fornecedor obrigatório');
-          if (!valor || valor <= 0) errors.push('valor inválido');
-          if (!vencimento) errors.push('vencimento inválido');
-          if (!formaPagamento) errors.push(formaRaw ? `forma de pagamento desconhecida: ${formaRaw}` : 'forma de pagamento obrigatória');
-          if (!fatura) errors.push('fatura obrigatória');
-
+          const origemRaw = get('Origem Processo', 'Origem do Processo', 'Modal');
+          const origemKey = origemRaw ? String(origemRaw).trim().toUpperCase() : null;
+          const fiscalRaw = get('Fiscal', 'Contabilizacao Fiscal', 'Contabilização Fiscal', 'Cobranca em Nome de', 'Cobrança em Nome de');
+          let cobrancaEm: string | null = null;
+          if (fiscalRaw) {
+            const f = String(fiscalRaw).trim().toUpperCase();
+            if (f === 'NAO' || f === 'NÃO' || f === 'CLIENTE' || f === 'NO') cobrancaEm = 'CLIENTE';
+            else if (f === 'SIM' || f === 'DACHSER' || f === 'YES') cobrancaEm = 'DACHSER';
+          }
+          const urgenteRaw = get('Urgente', 'Pagamento Urgente');
+          const urgente = urgenteRaw ? ['SIM','S','TRUE','1','YES','Y'].includes(String(urgenteRaw).trim().toUpperCase()) : false;
           return {
             row_index: idx,
-            processo: processo ? String(processo) : null,
-            item_pagto: itemPagto ? String(itemPagto) : null,
-            fornecedor: fornecedor ? String(fornecedor) : null,
-            valor,
-            vencimento,
-            data_fatura: dataFatura,
-            forma_pagamento: formaPagamento,
-            fatura: fatura ? String(fatura) : null,
-            unidade_pagto: unidade ? String(unidade) : null,
-            historico: historico ? String(historico) : null,
-            quebra: quebra ? String(quebra) : null,
-            status: errors.length ? 'ERROR' : 'VALID',
-            validation_message: errors.length ? errors.join('; ') : null,
+            spo: get('SPO', 'Voucher', 'ND', 'Numero Voucher', 'Número Voucher') ? String(get('SPO', 'Voucher', 'ND', 'Numero Voucher', 'Número Voucher')) : null,
+            processo: get('Processo', 'Numero Processo', 'Nº Processo', 'N° Processo') ? String(get('Processo', 'Numero Processo', 'Nº Processo', 'N° Processo')) : null,
+            origem_processo: origemKey ? (ORIGEM_PROCESSO_MAP[origemKey] || null) : null,
+            fornecedor: get('Fornecedor') ? String(get('Fornecedor')) : null,
+            cnpj_fornecedor: get('CNPJ', 'CNPJ Fornecedor') ? String(get('CNPJ', 'CNPJ Fornecedor')).replace(/\D/g, '') || null : null,
+            valor: parseBRMoney(get('Valor Solicitação', 'Valor Solicitacao', 'Valor', 'Valor NF')),
+            moeda: get('Moeda') ? String(get('Moeda')).toUpperCase() : null,
+            vencimento: parseDate(get('Vencimento', 'Data Vencimento')),
+            data_emissao: parseDate(get('Data fatura', 'Data Fatura', 'Data Emissão', 'Data Emissao')),
+            tipo_documento: get('Tipo Documento', 'Tipo de Documento') ? String(get('Tipo Documento', 'Tipo de Documento')).toUpperCase() : null,
+            filial: get('Filial') ? String(get('Filial')) : null,
+            forma_pagamento: formaKey ? (FORMA_MAP[formaKey] || null) : null,
+            cobranca_em_nome_de: cobrancaEm,
+            urgente,
+            comentarios: get('Comentarios', 'Comentários', 'Observação', 'Observacao', 'Historico (Contas pagar)', 'Historico', 'Histórico') ? String(get('Comentarios', 'Comentários', 'Observação', 'Observacao', 'Historico (Contas pagar)', 'Historico', 'Histórico')) : null,
+            fatura: get('Fatura', 'Numero NF', 'Número NF') ? String(get('Fatura', 'Numero NF', 'Número NF')) : null,
             raw_json: raw,
           };
+        };
+
+        // Lookup DFV by SPO list
+        const fetchDfvBySpo = async (spos: string[]): Promise<Record<string, any>> => {
+          const map: Record<string, any> = {};
+          const filtered = spos.filter(Boolean);
+          if (filtered.length === 0) return map;
+          try {
+            const placeholders = filtered.map(() => '?').join(',');
+            const rows = await client.query(
+              `SELECT id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
+                      modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
+                      valor_nf, moeda, cnpj, razao_social
+                 FROM dados_dachser.t_dados_financeiro_voucher
+                WHERE nd IN (${placeholders})`,
+              filtered
+            );
+            for (const r of (rows || [])) {
+              if (r.nd) map[String(r.nd).trim()] = r;
+            }
+          } catch (e) {
+            console.log('fetchDfvBySpo error:', e);
+          }
+          return map;
+        };
+
+        // Merge sheet row + DFV. Returns resolved fields with origin per field.
+        const mergeWithDfv = (sheet: any, dfv: any | null) => {
+          const origin: Record<string, 'DFV' | 'PLANILHA' | null> = {};
+          const pick = (sheetVal: any, dfvVal: any, key: string): any => {
+            const sheetEmpty = sheetVal === null || sheetVal === undefined || sheetVal === '';
+            const dfvEmpty = dfvVal === null || dfvVal === undefined || dfvVal === '';
+            if (!dfvEmpty && sheetEmpty) { origin[key] = 'DFV'; return dfvVal; }
+            if (!sheetEmpty) { origin[key] = 'PLANILHA'; return sheetVal; }
+            origin[key] = null;
+            return null;
+          };
+          const dfvForma = dfv?.forma_pag ? (FORMA_MAP[String(dfv.forma_pag).toUpperCase()] || null) : null;
+          const dfvOrigem = dfv?.modal ? (ORIGEM_PROCESSO_MAP[String(dfv.modal).toUpperCase()] || null) : null;
+          const dfvVenc = dfv?.data_vencimento ? parseDate(dfv.data_vencimento) : null;
+          const dfvEmis = dfv?.data_emissao ? parseDate(dfv.data_emissao) : null;
+          const dfvCnpj = dfv?.cnpj ? String(dfv.cnpj).replace(/\D/g, '') || null : null;
+          const dfvFornecedor = dfv?.nome_beneficiario || dfv?.razao_social || null;
+          const dfvValor = dfv?.valor_nf != null ? Number(dfv.valor_nf) : null;
+          const dfvMoeda = dfv?.moeda ? String(dfv.moeda).toUpperCase() : null;
+          const dfvProcesso = dfv?.numero_processo || null;
+          const dfvFilial = dfv?.nome_cobranca || null;
+          const dfvTipoDoc = dfv?.tipo_pag ? String(dfv.tipo_pag).toUpperCase() : null;
+
+          const merged = {
+            row_index: sheet.row_index,
+            spo: sheet.spo,
+            id_rm: dfv?.id_rm ?? null,
+            processo: pick(sheet.processo, dfvProcesso, 'processo'),
+            origem_processo: pick(sheet.origem_processo, dfvOrigem, 'origem_processo'),
+            fornecedor: pick(sheet.fornecedor, dfvFornecedor, 'fornecedor'),
+            cnpj_fornecedor: pick(sheet.cnpj_fornecedor, dfvCnpj, 'cnpj_fornecedor'),
+            valor: pick(sheet.valor, dfvValor, 'valor'),
+            moeda: pick(sheet.moeda, dfvMoeda, 'moeda') || 'BRL',
+            vencimento: pick(sheet.vencimento, dfvVenc, 'vencimento'),
+            data_emissao: pick(sheet.data_emissao, dfvEmis, 'data_emissao'),
+            tipo_documento: pick(sheet.tipo_documento, dfvTipoDoc, 'tipo_documento'),
+            filial: pick(sheet.filial, dfvFilial, 'filial'),
+            forma_pagamento: pick(sheet.forma_pagamento, dfvForma, 'forma_pagamento'),
+            cobranca_em_nome_de: sheet.cobranca_em_nome_de || 'DACHSER',
+            urgente: !!sheet.urgente,
+            comentarios: sheet.comentarios,
+            fatura: sheet.fatura,
+            raw_json: sheet.raw_json,
+            field_origin: origin,
+          } as any;
+          if (!sheet.moeda && !dfvMoeda) origin['moeda'] = null;
+          merged.dfv_found = !!dfv;
+
+          const errors: string[] = [];
+          if (!merged.spo) errors.push('SPO obrigatório');
+          if (!merged.processo) errors.push('processo obrigatório');
+          if (!merged.origem_processo) errors.push('origem do processo obrigatória');
+          if (!merged.fornecedor) errors.push('fornecedor obrigatório');
+          if (!merged.valor || merged.valor <= 0) errors.push('valor inválido');
+          if (!merged.vencimento) errors.push('vencimento obrigatório');
+          if (!merged.tipo_documento) errors.push('tipo de documento obrigatório');
+          if (!merged.forma_pagamento) errors.push('forma de pagamento obrigatória');
+          if (!merged.cobranca_em_nome_de) errors.push('contabilização fiscal obrigatória');
+          merged.status = errors.length ? 'ERROR' : 'VALID';
+          merged.validation_message = errors.length ? errors.join('; ') : null;
+          return merged;
+        };
+
+        const buildPreviewItems = async (rows: any[]) => {
+          const sheetRows = rows.map((r, i) => parseSheetRow(r, i));
+          const spos = sheetRows.map(s => s.spo).filter(Boolean) as string[];
+          const dfvMap = await fetchDfvBySpo(spos);
+          return sheetRows.map(s => mergeWithDfv(s, s.spo ? (dfvMap[s.spo.trim()] || null) : null));
         };
 
         // ===== preview =====
         if (action === 'preview_voucher_batch_import') {
           const rows: any[] = (body as any).rows || [];
-          const items = rows.map((r, i) => normalizeRow(r, i));
+          const items = await buildPreviewItems(rows);
           const valid = items.filter(i => i.status === 'VALID').length;
           const errs = items.filter(i => i.status === 'ERROR').length;
           result = { success: true, items, total: items.length, valid, errors: errs };
@@ -18294,9 +18391,12 @@ Deno.serve(async (req) => {
         // ===== create =====
         if (action === 'create_voucher_batch_import') {
           const rows: any[] = (body as any).rows || [];
+          const editedItems: any[] | null = Array.isArray((body as any).items) ? (body as any).items : null;
           const fileName: string = (body as any).file_name || null;
-          const items = rows.map((r, i) => normalizeRow(r, i));
-          const valid = items.filter(i => i.status === 'VALID');
+          const items = editedItems && editedItems.length
+            ? editedItems
+            : await buildPreviewItems(rows);
+          const valid = items.filter((i: any) => i.status === 'VALID');
           const errs = items.length - valid.length;
 
           const batchId = crypto.randomUUID();
@@ -18312,31 +18412,35 @@ Deno.serve(async (req) => {
 
             if (it.status === 'VALID') {
               voucherId = crypto.randomUUID();
-              const numeroSpo = it.processo || `LOTE-${batchId.slice(0, 8)}-${it.row_index + 1}`;
+              const numeroSpo = it.spo || it.processo || `LOTE-${batchId.slice(0, 8)}-${it.row_index + 1}`;
               try {
                 await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS origem_criacao VARCHAR(50) DEFAULT NULL`);
               } catch (_) {}
               await client.execute(`
                 INSERT INTO dados_dachser.t_vouchers (
-                  id, numero_spo, vencimento, cobranca_em_nome_de,
-                  forma_pagamento, remessa, urgente, urgencia_tipo,
-                  etapa_atual, status_baixa, status_envio_cliente, status_financeiro,
-                  valor, moeda, fornecedor,
-                  data_emissao_documento, comentarios_operacao,
-                  criado_por_user_id, processo_id, status_documento_fiscal,
-                  tipo_execucao_pagamento, origem_criacao
-                ) VALUES (?, ?, ?, 'DACHSER', ?, 'NENHUM', 0, 'NORMAL',
+                  id, numero_spo, id_rm, fornecedor, cnpj_fornecedor, valor, moeda,
+                  vencimento, data_emissao_documento, forma_pagamento, tipo_documento,
+                  cobranca_em_nome_de, etapa_atual, status_baixa, status_envio_cliente, status_financeiro,
+                  remessa, urgente, urgencia_tipo, processo_id, origem_processo,
+                  filial, comentarios_operacao, criado_por_user_id, status_documento_fiscal,
+                  tipo_execucao_pagamento, origem_criacao, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                           'OPERACAO', 'PENDENTE', 'NAO_APLICA', 'PENDENTE',
-                          ?, 'BRL', ?, ?, ?, ?, ?, 'PENDENTE', 'A_DEFINIR', 'LOTE_PLANILHA')
+                          'NENHUM', ?, ?, ?, ?, ?, ?, ?, 'PENDENTE',
+                          'A_DEFINIR', 'LOTE_PLANILHA', NOW(), NOW())
               `, [
-                voucherId, numeroSpo,
+                voucherId, numeroSpo, it.id_rm || null,
+                it.fornecedor, it.cnpj_fornecedor || null,
+                it.valor, it.moeda || 'BRL',
                 it.vencimento ? `${it.vencimento} 00:00:00` : null,
-                it.forma_pagamento,
-                it.valor, it.fornecedor,
-                it.data_fatura ? `${it.data_fatura} 00:00:00` : null,
-                it.historico,
+                it.data_emissao ? `${it.data_emissao} 00:00:00` : null,
+                it.forma_pagamento, it.tipo_documento || 'OUTROS',
+                it.cobranca_em_nome_de || 'DACHSER',
+                it.urgente ? 1 : 0,
+                it.urgente ? 'URGENTE_REAL' : 'NORMAL',
+                it.processo, it.origem_processo,
+                it.filial || null, it.comentarios || null,
                 String(requesterId),
-                it.processo,
               ]);
 
               try {
@@ -18344,23 +18448,23 @@ Deno.serve(async (req) => {
                 await client.execute(`
                   INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
                   VALUES (?, ?, ?, ?, 'VOUCHER_CRIADO_LOTE', ?, NOW())
-                `, [logId, voucherId, String(requesterId), adminUserName, `batch_id=${batchId}; row=${it.row_index}; fatura=${it.fatura ?? ''}`]);
+                `, [logId, voucherId, String(requesterId), adminUserName, `batch_id=${batchId}; row=${it.row_index}; spo=${it.spo ?? ''}; id_rm=${it.id_rm ?? ''}`]);
               } catch (_) {}
             }
 
             await client.execute(`
               INSERT INTO dados_dachser.t_voucher_batch_import_item
-                (id, batch_id, row_index, voucher_id, processo, item_pagto, fornecedor, valor,
-                 vencimento, data_fatura, forma_pagamento, fatura, unidade_pagto, historico, quebra,
+                (id, batch_id, row_index, voucher_id, processo, fornecedor, valor,
+                 vencimento, data_fatura, forma_pagamento, fatura, historico,
                  status, validation_message, raw_json)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `, [
               itemId, batchId, it.row_index, voucherId,
-              it.processo, it.item_pagto, it.fornecedor, it.valor,
-              it.vencimento, it.data_fatura, it.forma_pagamento, it.fatura,
-              it.unidade_pagto, it.historico, it.quebra,
+              it.processo, it.fornecedor, it.valor,
+              it.vencimento, it.data_emissao, it.forma_pagamento, it.fatura || it.spo,
+              it.comentarios,
               voucherId ? 'VOUCHER_CRIADO' : it.status, it.validation_message,
-              JSON.stringify(it.raw_json || {}),
+              JSON.stringify(it.raw_json || it || {}),
             ]);
           }
 
