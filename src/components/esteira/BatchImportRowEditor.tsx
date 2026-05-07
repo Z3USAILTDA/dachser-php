@@ -8,6 +8,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Info } from "lucide-react";
+import { FornecedoresSemFiscalDialog } from "./FornecedoresSemFiscalDialog";
 import type { PreviewItem } from "./BatchImportPreviewTable";
 
 const TIPOS_DOC = ["VOUCHER", "SPO", "ICMS", "ARMAZENAGEM", "ADF", "OUTROS"];
