@@ -176,12 +176,12 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
       return;
     }
     const v = bulkField === "urgente" ? bulkValue === "true" : bulkValue;
-    setItems(prev => prev.map(it => {
+    setItems(prev => revalidate(prev.map(it => {
       if (!selected.has(it.row_index)) return it;
       const next = { ...it, [bulkField]: v };
       next.field_origin = { ...(it.field_origin || {}), [bulkField]: "MANUAL" };
-      return validate(next);
-    }));
+      return next;
+    })));
     toast({ title: `Aplicado a ${selected.size} linha(s)` });
     setBulkOpen(false);
     setBulkField(""); setBulkValue("");
