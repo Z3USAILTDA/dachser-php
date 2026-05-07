@@ -85,7 +85,7 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
                 <Input value={draft.spo || ""} readOnly className="h-8 font-mono text-xs bg-muted/40" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Processo{req}</Label>
+                <Label className="text-xs">Processo</Label>
                 <Input className="h-8 text-xs" value={draft.processo || ""} onChange={(e) => set("processo", e.target.value || null)} />
               </div>
               <div className="space-y-1.5">
