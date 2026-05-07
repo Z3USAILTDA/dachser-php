@@ -9,8 +9,9 @@ import { parseBatchSpreadsheet } from "@/utils/batchVoucherImport";
 import { BatchImportPreviewTable } from "./BatchImportPreviewTable";
 
 const EXPECTED_HEADERS = [
-  "Processo", "Fornecedor", "Valor Solicitação", "Vencimento",
-  "Forma Pagto", "Fatura", "Data fatura", "Histórico", "Quebra",
+  "SPO", "Processo", "Origem Processo", "Fornecedor", "CNPJ", "Valor", "Moeda",
+  "Vencimento", "Data Emissão", "Tipo Documento", "Filial", "Forma Pagto",
+  "Fiscal", "Urgente", "Comentários",
 ];
 
 interface Props {
@@ -67,6 +68,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
           action: "create_voucher_batch_import",
           userId,
           rows: rawRows,
+          items, // edited items take precedence over re-parsing
           file_name: fileName,
         },
       });
@@ -83,6 +85,29 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
     }
   };
 
+  const updateItem = (rowIndex: number, patch: any) => {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.row_index !== rowIndex) return it;
+        const next = { ...it, ...patch };
+        // re-validate
+        const errors: string[] = [];
+        if (!next.spo) errors.push("SPO obrigatório");
+        if (!next.processo) errors.push("processo obrigatório");
+        if (!next.origem_processo) errors.push("origem do processo obrigatória");
+        if (!next.fornecedor) errors.push("fornecedor obrigatório");
+        if (!next.valor || next.valor <= 0) errors.push("valor inválido");
+        if (!next.vencimento) errors.push("vencimento obrigatório");
+        if (!next.tipo_documento) errors.push("tipo de documento obrigatório");
+        if (!next.forma_pagamento) errors.push("forma de pagamento obrigatória");
+        if (!next.cobranca_em_nome_de) errors.push("contabilização fiscal obrigatória");
+        next.status = errors.length ? "ERROR" : "VALID";
+        next.validation_message = errors.length ? errors.join("; ") : null;
+        return next;
+      })
+    );
+  };
+
   const validCount = items.filter((i) => i.status === "VALID").length;
   const errCount = items.filter((i) => i.status === "ERROR").length;
 
@@ -94,7 +119,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
         if (!v) reset();
       }}
     >
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col rounded-2xl border-border/60">
+      <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col rounded-2xl border-border/60">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <FileSpreadsheet className="h-5 w-5 text-primary" />
@@ -181,7 +206,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
               </div>
             </div>
             <div className="flex-1 overflow-hidden rounded-xl border border-border">
-              <BatchImportPreviewTable items={items} />
+              <BatchImportPreviewTable items={items} onChange={updateItem} />
             </div>
             <div className="flex justify-end gap-2 pt-2 border-t border-border/60">
               <Button variant="outline" onClick={reset} disabled={busy}>
