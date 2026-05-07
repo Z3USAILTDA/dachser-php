@@ -68,6 +68,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
           action: "create_voucher_batch_import",
           userId,
           rows: rawRows,
+          items, // edited items take precedence over re-parsing
           file_name: fileName,
         },
       });
@@ -82,6 +83,29 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
     } finally {
       setBusy(false);
     }
+  };
+
+  const updateItem = (rowIndex: number, patch: any) => {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.row_index !== rowIndex) return it;
+        const next = { ...it, ...patch };
+        // re-validate
+        const errors: string[] = [];
+        if (!next.spo) errors.push("SPO obrigatório");
+        if (!next.processo) errors.push("processo obrigatório");
+        if (!next.origem_processo) errors.push("origem do processo obrigatória");
+        if (!next.fornecedor) errors.push("fornecedor obrigatório");
+        if (!next.valor || next.valor <= 0) errors.push("valor inválido");
+        if (!next.vencimento) errors.push("vencimento obrigatório");
+        if (!next.tipo_documento) errors.push("tipo de documento obrigatório");
+        if (!next.forma_pagamento) errors.push("forma de pagamento obrigatória");
+        if (!next.cobranca_em_nome_de) errors.push("contabilização fiscal obrigatória");
+        next.status = errors.length ? "ERROR" : "VALID";
+        next.validation_message = errors.length ? errors.join("; ") : null;
+        return next;
+      })
+    );
   };
 
   const validCount = items.filter((i) => i.status === "VALID").length;
