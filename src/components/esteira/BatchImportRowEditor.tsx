@@ -34,12 +34,23 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
   if (!draft) return null;
   const set = <K extends keyof PreviewItem>(k: K, v: PreviewItem[K]) => setDraft({ ...draft, [k]: v });
 
+  const missing: string[] = [];
+  if (!draft.processo) missing.push("Processo");
+  if (!draft.origem_processo) missing.push("Origem Processo");
+  if (!draft.vencimento) missing.push("Vencimento");
+  if (!draft.tipo_documento) missing.push("Tipo Documento");
+  if (!draft.forma_pagamento) missing.push("Forma de Pagamento");
+  if (!draft.cobranca_em_nome_de) missing.push("Fiscal");
+  const canSave = missing.length === 0;
+
   const handleSave = () => {
-    if (!draft) return;
+    if (!draft || !canSave) return;
     const { row_index, status, validation_message, dfv_found, field_origin, ...rest } = draft;
     onSave(draft.row_index, rest as Partial<PreviewItem>);
     onOpenChange(false);
   };
+
+  const req = <span className="text-red-400 ml-0.5">*</span>;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -73,11 +84,11 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
                 <Input value={draft.spo || ""} readOnly className="h-8 font-mono text-xs bg-muted/40" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Processo</Label>
+                <Label className="text-xs">Processo{req}</Label>
                 <Input className="h-8 text-xs" value={draft.processo || ""} onChange={(e) => set("processo", e.target.value || null)} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Origem Processo</Label>
+                <Label className="text-xs">Origem Processo{req}</Label>
                 <div className="grid grid-cols-4 gap-1.5">
                   {ORIGENS.map((o) => {
                     const active = (draft.origem_processo || "") === o;
@@ -134,7 +145,7 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Forma de Pagamento</Label>
+                <Label className="text-xs">Forma de Pagamento{req}</Label>
                 <Select value={draft.forma_pagamento || ""} onValueChange={(v) => set("forma_pagamento", v)}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="—" /></SelectTrigger>
                   <SelectContent>
@@ -171,7 +182,7 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Datas</h4>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs">Vencimento</Label>
+                <Label className="text-xs">Vencimento{req}</Label>
                 <Input type="date" className="h-8 text-xs" value={draft.vencimento || ""} onChange={(e) => set("vencimento", e.target.value || null)} />
               </div>
               <div className="space-y-1.5">
@@ -188,7 +199,7 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Classificação</h4>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs">Tipo Documento</Label>
+                <Label className="text-xs">Tipo Documento{req}</Label>
                 <Select value={draft.tipo_documento || ""} onValueChange={(v) => set("tipo_documento", v)}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="—" /></SelectTrigger>
                   <SelectContent>
@@ -225,9 +236,16 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
           )}
         </div>
 
-        <SheetFooter className="border-t border-border/60 pt-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSave}>Salvar alterações</Button>
+        <SheetFooter className="border-t border-border/60 pt-3 flex-col items-stretch gap-2 sm:flex-col sm:space-x-0">
+          {!canSave && (
+            <div className="text-[11px] text-red-400">
+              Preencha os campos obrigatórios: {missing.join(", ")}
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button onClick={handleSave} disabled={!canSave}>Salvar alterações</Button>
+          </div>
         </SheetFooter>
       </SheetContent>
     </Sheet>
