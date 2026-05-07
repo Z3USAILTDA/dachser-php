@@ -18284,23 +18284,24 @@ Deno.serve(async (req) => {
           };
         };
 
-        // Lookup DFV by SPO list
+        // Lookup DFV by SPO list (tolerant: trim + collapse whitespace)
+        const normSpo = (s: any): string => String(s ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
         const fetchDfvBySpo = async (spos: string[]): Promise<Record<string, any>> => {
           const map: Record<string, any> = {};
-          const filtered = spos.filter(Boolean);
-          if (filtered.length === 0) return map;
+          const normalized = Array.from(new Set(spos.map(normSpo).filter(Boolean)));
+          if (normalized.length === 0) return map;
           try {
-            const placeholders = filtered.map(() => '?').join(',');
+            const placeholders = normalized.map(() => '?').join(',');
             const rows = await client.query(
               `SELECT id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
                       modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
                       valor_nf, moeda, cnpj, razao_social
                  FROM dados_dachser.t_dados_financeiro_voucher
-                WHERE nd IN (${placeholders})`,
-              filtered
+                WHERE UPPER(TRIM(nd)) IN (${placeholders})`,
+              normalized
             );
             for (const r of (rows || [])) {
-              if (r.nd) map[String(r.nd).trim()] = r;
+              if (r.nd) map[normSpo(r.nd)] = r;
             }
           } catch (e) {
             console.log('fetchDfvBySpo error:', e);
