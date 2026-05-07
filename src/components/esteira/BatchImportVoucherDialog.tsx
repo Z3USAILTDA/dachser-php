@@ -26,12 +26,12 @@ const ORIGENS = ["AIR", "SEA", "CHB", "ROD"];
 const TIPOS_DOC = ["VOUCHER", "SPO", "ICMS", "ARMAZENAGEM", "ADF", "OUTROS"];
 const FORMAS = ["BOLETO", "PIX", "TRANSFERENCIA", "DEPOSITO", "DARF", "GPS", "CAMBIO", "ADF", "CARTAO", "DEBITO"];
 
+// origem_processo e forma_pagamento são SEMPRE por-linha (variam por voucher);
+// nunca aparecem no step "fill" global.
 const detectMissingColumns = (items: any[]) => {
   const checks: Array<{ key: string; label: string }> = [
-    { key: "origem_processo", label: "Origem Processo" },
     { key: "tipo_documento", label: "Tipo Documento" },
     { key: "cobranca_em_nome_de", label: "Fiscal" },
-    { key: "forma_pagamento", label: "Forma de Pagamento" },
   ];
   return checks.filter(c => items.every(i => !i[c.key]));
 };
@@ -320,6 +320,8 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
               </div>
               <div className="text-xs text-muted-foreground">
                 Os campos abaixo não foram encontrados em nenhuma linha da planilha. Defina o valor para aplicar a todas as {items.length} linhas. Você poderá ajustar exceções na próxima etapa.
+                <br />
+                <span className="italic">Origem Processo e Forma de Pagamento devem ser definidos por linha — use o botão de edição ou "Editar em lote" na próxima etapa.</span>
               </div>
             </div>
 

@@ -1,100 +1,37 @@
-## Refatoração visual: "Importar SPO em Lote" (revisado)
+## Ajuste: campos por-linha em vez de globais no step "Preencher"
 
-Reorganização da UI/UX do modal de importação em lote, **mantendo toda a lógica de leitura, validação, integração com backend e criação de vouchers**. Apenas dois arquivos de apresentação são editados, mais um novo componente de drawer.
+### Problema
 
-### Arquivos afetados
+Hoje, quando a planilha não traz `Origem Processo` ou `Forma de Pagamento`, o step `fill` força o usuário a escolher **um valor único aplicado a todas as 26 linhas**. Esses dois campos variam por voucher e essa imposição cria dados incorretos.
 
-- `src/components/esteira/BatchImportVoucherDialog.tsx` — header, toolbar, footer, **estado de seleção/filtros**
-- `src/components/esteira/BatchImportPreviewTable.tsx` — tabela limpa (somente leitura, sem inputs inline)
-- `src/components/esteira/BatchImportRowEditor.tsx` (novo) — drawer lateral de edição por linha
+### Solução
 
-`validate`, `handleFile`, `applyFillAndContinue`, `confirm`, `updateItem`, parsing e chamadas ao `mariadb-proxy` permanecem inalterados.
+Tratar `origem_processo` e `forma_pagamento` como campos **sempre por-linha**: nunca aparecem no step `fill` global. O usuário define caso a caso via drawer de edição (já existente) ou via "Editar em lote" da toolbar (já existente, opera só nas linhas selecionadas).
 
-### 1. Header Summary
+`tipo_documento` e `cobranca_em_nome_de` (Fiscal) continuam podendo ser preenchidos globalmente, pois costumam ser uniformes no lote.
 
-- Layout horizontal, ícones h-5 w-5
-- **Total**: `FileSpreadsheet`, `bg-card/50`, borda neutra
-- **Válidas**: `CheckCircle2`, `border-emerald-500/40`, número `text-emerald-400`
-- **Com Erro**: `AlertCircle`, `border-red-500/40`, número `text-red-400`, **clicável** → alterna `filter="errors"`
-- Barra de progresso fina (`h-1.5 rounded-full`) com proporção válidas/erros
-- Texto: `"{validCount} de {items.length} registros prontos para importação"`
+### Mudanças (1 arquivo)
 
-### 2. Toolbar de ações em lote
+**`src/components/esteira/BatchImportVoucherDialog.tsx`**
 
-- Checkbox "Selecionar todos" (estado: nenhum / parcial / todos) — opera sobre o conjunto visível filtrado
-- Pills: `Todos | Com Erro | Válidos` (controla `filter`)
-- Input busca por SPO/Processo (controla `search`)
-- Dropdown "Editar em lote" → popover com select de valor + botão **Aplicar** que afeta **apenas linhas selecionadas** (não mais "todas"). Campos: Moeda, Tipo Doc, Forma de Pagamento, Fiscal, Origem, Urgente
+1. Em `detectMissingColumns`, remover as duas entradas:
+   - `{ key: "origem_processo", label: "Origem Processo" }`
+   - `{ key: "forma_pagamento", label: "Forma de Pagamento" }`
+   
+   Mantém apenas `tipo_documento` e `cobranca_em_nome_de`.
 
-### 3. Estado de seleção/filtros (no PAI)
+2. Se ambos os campos restantes também já estiverem preenchidos, o step `fill` é pulado naturalmente (lógica atual já trata `missing.length ? "fill" : "preview"`).
 
-**Explícito**: `selected: Set<number>`, `filter`, `search`, `editingRow` vivem em `BatchImportVoucherDialog.tsx`. A tabela e a toolbar são irmãs e recebem props/handlers do pai. Isso garante que a toolbar enxergue a seleção corretamente.
+3. Atualizar o texto auxiliar do step `fill` para esclarecer: *"Origem Processo e Forma de Pagamento devem ser definidos por linha — use o botão de edição ou 'Editar em lote' na próxima etapa."* (apenas quando o step `fill` for exibido).
 
-Handlers no pai: `onToggleSelect(rowIndex)`, `onSelectAllVisible(rows)`, `onClearSelection()`, `onRemoveRow(rowIndex)`, `onEditRow(rowIndex)`, `applyBulkToSelected(field, value)`.
+### O que NÃO muda
 
-### 4. Tabela redesenhada (`BatchImportPreviewTable.tsx`)
+- Validação `validate()` continua exigindo `origem_processo` e `forma_pagamento` por linha → linhas sem esses campos aparecem como **ERROR** no preview, com tooltip explicando o motivo.
+- Drawer de edição (`BatchImportRowEditor`) já permite editar ambos.
+- Toolbar "Editar em lote" já permite aplicar nas linhas selecionadas.
+- Backend, parsing, criação de vouchers, lookup DFV — nada é tocado.
+- Steps `upload` e `preview` permanecem idênticos.
 
-Reescrita completa, sem inputs inline. Colunas:
+### Resultado esperado
 
-| Col | Conteúdo |
-|---|---|
-| Checkbox | controlado por `selected` (prop) |
-| # | row_index + 1 |
-| Status | ícone `AlertTriangle` vermelho (ERROR) ou `CheckCircle2` verde (VALID), com tooltip do `validation_message` |
-| SPO | font-mono |
-| PROCESSO | texto (oculto < lg) |
-| FORNECEDOR | truncate + tooltip (oculto < lg) |
-| VALOR | direita, `Intl.NumberFormat('pt-BR', {style:'currency', currency: it.moeda || 'BRL'})` |
-| VENCIMENTO | `dd/MM/yyyy` |
-| Ações | lápis (`onEdit`) + lixeira **com Popover de confirmação** |
-
-Estilo: linha `h-[52px]`, zebra `even:bg-card/20`, header sticky, `hover:bg-primary/5 transition-colors`, linhas selecionadas `bg-amber-500/10`. Em viewports < lg: esconder Processo e Fornecedor (`hidden lg:table-cell`).
-
-**Pulse de erro (corrigido)**: NÃO aplicar `animate-pulse` global. Em vez disso:
-- Ícone estático por padrão
-- `group-hover:animate-pulse` na linha (somente quando o usuário passa o mouse)
-
-**Confirmação de remoção (corrigido)**: lixeira abre `Popover` com:
-- Texto: `"Remover esta linha? Essa ação não pode ser desfeita."`
-- Botões: `Cancelar` e `Confirmar remoção` (variant `destructive`)
-- Só então chama `onRemove(rowIndex)` no pai
-
-Props: `items`, `selected`, `onToggleSelect`, `onSelectAllVisible`, `onRemove`, `onEdit`, `filter`, `search` (filtragem aplicada internamente para render).
-
-### 5. Drawer de edição (`BatchImportRowEditor.tsx`)
-
-Componente novo baseado em `Sheet` (side="right"):
-
-- Título: `Editar SPO {spo}` + badge de status
-- **Identificação (editável — corrigido)**: SPO (read-only, é a chave), **Processo, Fornecedor, CNPJ** como inputs de texto editáveis. Origem Processo como select.
-- **Financeiro**: Valor (number), Moeda (select), Forma de Pagamento (select), Fiscal (select Sim/Não)
-- **Datas**: Vencimento, Emissão (inputs date)
-- **Classificação**: Tipo Doc (select), Filial (input), Urgente (checkbox), Comentários (textarea)
-- Footer: `Cancelar` / `Salvar alterações`
-- Estado local com cópia do item; ao salvar dispara `onChange(rowIndex, patch)` no pai (que chama `updateItem` → revalida)
-
-### 6. Indicadores de erro
-
-- Tooltip do ícone exibe `validation_message` em lista (split por `;`) com texto humanizado
-- Card "Com Erro" do header alterna o filtro
-
-### 7. Footer
-
-- Esquerda: `Voltar` (inalterado)
-- Direita: `Criar X voucher(s)` — desabilitado/cinza quando `validCount===0`, âmbar quando habilitado
-- Texto auxiliar: `"Corrija os erros para habilitar a importação"` quando desabilitado; spinner inline durante `busy`
-
-### 8. Responsividade do modal
-
-`DialogContent` (step preview): `w-[90vw] max-w-[1400px] max-h-[85vh]`, `flex-col overflow-hidden`. Tabela com scroll vertical interno.
-
-### Tema
-
-Apenas tokens existentes (`bg-card`, `border-border`, `text-primary` âmbar, verde/vermelho semânticos). Sem cores hardcoded.
-
-### Fora de escopo
-
-- `validate`, `detectMissingColumns`, parsing de CSV/XLSX
-- Edge function `mariadb-proxy`
-- Steps `upload` e `fill` (preservados)
-- Comportamento de criação de vouchers
+Planilha de teste do usuário (sem essas duas colunas) → vai direto para `preview` (ou para `fill` apenas com Tipo Doc + Fiscal se faltarem). As 26 linhas aparecem com erro indicando "origem do processo obrigatória; forma de pagamento obrigatória", e o usuário corrige por linha ou em lote conforme cada caso.
