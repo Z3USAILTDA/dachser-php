@@ -265,9 +265,12 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
       const seen = new Set<string>();
       for (const raw of String(it.validation_message).split(";")) {
         const m = raw.trim();
-        if (!m || seen.has(m)) continue;
-        seen.add(m);
-        map.set(m, (map.get(m) || 0) + 1);
+        if (!m) continue;
+        // Consolida todas as mensagens de SPO duplicado em uma única entrada
+        const key = m.startsWith("SPO duplicado") ? "SPO duplicado nesta planilha (mesmo SPO+RM)" : m;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        map.set(key, (map.get(key) || 0) + 1);
       }
     }
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
