@@ -18355,6 +18355,7 @@ Deno.serve(async (req) => {
             field_origin: origin,
           } as any;
           if (!sheet.moeda && !dfvMoeda) origin['moeda'] = null;
+          origin['fornecedor'] = dfvFornecedor ? 'DFV' : null;
           merged.dfv_found = !!dfv;
 
           const errors: string[] = [];
