@@ -1,11 +1,17 @@
 import { useRef, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Upload, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertCircle, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { parseBatchSpreadsheet } from "@/utils/batchVoucherImport";
 import { BatchImportPreviewTable } from "./BatchImportPreviewTable";
+
+const EXPECTED_HEADERS = [
+  "Processo", "Fornecedor", "Valor Solicitação", "Vencimento",
+  "Forma Pagto", "Fatura", "Data fatura", "Histórico", "Quebra",
+];
 
 interface Props {
   open: boolean;
