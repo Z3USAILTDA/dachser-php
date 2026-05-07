@@ -78,12 +78,25 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Origem Processo</Label>
-                <Select value={draft.origem_processo || ""} onValueChange={(v) => set("origem_processo", v)}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="—" /></SelectTrigger>
-                  <SelectContent>
-                    {ORIGENS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {ORIGENS.map((o) => {
+                    const active = (draft.origem_processo || "") === o;
+                    return (
+                      <button
+                        key={o}
+                        type="button"
+                        onClick={() => set("origem_processo", active ? null : o)}
+                        className={`h-8 rounded-md border text-xs font-medium transition-colors ${
+                          active
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background text-foreground border-border hover:bg-muted"
+                        }`}
+                      >
+                        {o}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div className="space-y-1.5 col-span-2">
                 <Label className="text-xs">Fornecedor</Label>
