@@ -9,8 +9,9 @@ import { parseBatchSpreadsheet } from "@/utils/batchVoucherImport";
 import { BatchImportPreviewTable } from "./BatchImportPreviewTable";
 
 const EXPECTED_HEADERS = [
-  "Processo", "Fornecedor", "Valor Solicitação", "Vencimento",
-  "Forma Pagto", "Fatura", "Data fatura", "Histórico", "Quebra",
+  "SPO", "Processo", "Origem Processo", "Fornecedor", "CNPJ", "Valor", "Moeda",
+  "Vencimento", "Data Emissão", "Tipo Documento", "Filial", "Forma Pagto",
+  "Fiscal", "Urgente", "Comentários",
 ];
 
 interface Props {
