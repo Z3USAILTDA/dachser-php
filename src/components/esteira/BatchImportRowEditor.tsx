@@ -236,9 +236,16 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
           )}
         </div>
 
-        <SheetFooter className="border-t border-border/60 pt-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSave}>Salvar alterações</Button>
+        <SheetFooter className="border-t border-border/60 pt-3 flex-col items-stretch gap-2 sm:flex-col sm:space-x-0">
+          {!canSave && (
+            <div className="text-[11px] text-red-400">
+              Preencha os campos obrigatórios: {missing.join(", ")}
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button onClick={handleSave} disabled={!canSave}>Salvar alterações</Button>
+          </div>
         </SheetFooter>
       </SheetContent>
     </Sheet>
