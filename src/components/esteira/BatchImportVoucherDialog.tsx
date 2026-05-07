@@ -602,16 +602,6 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
                 </Button>
               </div>
             </div>
-              <div className="flex items-center gap-3 shrink-0">
-                {validCount === 0 && (
-                  <span className="text-xs text-muted-foreground">Corrija os erros para habilitar a importação</span>
-                )}
-                <Button onClick={confirm} disabled={busy || validCount === 0}>
-                  {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                  Criar {validCount} voucher(s)
-                </Button>
-              </div>
-            </div>
 
             <BatchImportRowEditor
               item={editingItem}
