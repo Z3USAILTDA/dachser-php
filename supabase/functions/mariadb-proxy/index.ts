@@ -18338,7 +18338,7 @@ Deno.serve(async (req) => {
             id_rm: dfv?.id_rm ?? null,
             processo: pick(sheet.processo, dfvProcesso, 'processo'),
             origem_processo: pick(sheet.origem_processo, dfvOrigem, 'origem_processo'),
-            fornecedor: pick(sheet.fornecedor, dfvFornecedor, 'fornecedor'),
+            fornecedor: dfvFornecedor,
             cnpj_fornecedor: pick(sheet.cnpj_fornecedor, dfvCnpj, 'cnpj_fornecedor'),
             valor: pick(sheet.valor, dfvValor, 'valor'),
             moeda: pick(sheet.moeda, dfvMoeda, 'moeda') || 'BRL',
