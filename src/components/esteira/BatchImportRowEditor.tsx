@@ -182,7 +182,7 @@ export function BatchImportRowEditor({ item, open, onOpenChange, onSave }: Props
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Datas</h4>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs">Vencimento</Label>
+                <Label className="text-xs">Vencimento{req}</Label>
                 <Input type="date" className="h-8 text-xs" value={draft.vencimento || ""} onChange={(e) => set("vencimento", e.target.value || null)} />
               </div>
               <div className="space-y-1.5">
