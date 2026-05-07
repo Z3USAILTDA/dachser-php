@@ -118,7 +118,8 @@ export function BatchImportPreviewTable({
               return (
                 <TableRow
                   key={it.row_index}
-                  className={`group h-[52px] transition-colors even:bg-card/20 hover:bg-primary/5 ${isSel ? "!bg-amber-500/10" : ""}`}
+                  onDoubleClick={() => onEdit(it.row_index)}
+                  className={`group h-[52px] cursor-pointer transition-colors even:bg-card/20 hover:bg-primary/5 ${isSel ? "!bg-amber-500/10" : ""}`}
                 >
                   <TableCell className="py-3.5 px-3">
                     <Checkbox checked={isSel} onCheckedChange={() => onToggleSelect(it.row_index)} />
