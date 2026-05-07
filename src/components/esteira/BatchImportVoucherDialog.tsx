@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertCircle, FileText, Wand2, Search, Info,
+  Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertCircle, FileText, Wand2, Search, Info, Trash2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -235,6 +235,14 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
     setSelected((prev) => {
       const n = new Set(prev); n.delete(rowIndex); return n;
     });
+  };
+
+  const removeSelected = () => {
+    if (selected.size === 0) return;
+    const count = selected.size;
+    setItems((prev) => markDuplicates(prev.filter((it) => !selected.has(it.row_index))));
+    setSelected(new Set());
+    toast({ title: `${count} linha(s) removida(s)` });
   };
 
   const toggleSelect = (rowIndex: number) => {
@@ -543,6 +551,17 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
                   </div>
                 </PopoverContent>
               </Popover>
+
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-red-300 border-red-500/30 hover:bg-red-500/10 hover:text-red-200"
+                disabled={selected.size === 0}
+                onClick={removeSelected}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Excluir {selected.size > 0 && `(${selected.size})`}
+              </Button>
 
               <div className="h-5 w-px bg-border" />
 
