@@ -589,26 +589,19 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
 
             {/* Footer */}
             <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/60">
-              <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap">
-                <Button variant="outline" onClick={reset} disabled={busy}>
-                  Voltar
-                </Button>
-                {errorReasons.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 items-center">
-                    {errorReasons.map(([msg, count]) => (
-                      <button
-                        key={msg}
-                        type="button"
-                        onClick={() => { setFilter("errors"); setSearch(""); }}
-                        className="text-xs px-2.5 py-1 rounded-full border border-red-500/30 bg-red-500/5 text-red-300 hover:bg-red-500/10"
-                        title="Filtrar linhas com erro"
-                      >
-                        {count} {count === 1 ? "linha com" : "linhas com"} {msg}
-                      </button>
-                    ))}
-                  </div>
+              <Button variant="outline" onClick={reset} disabled={busy}>
+                Voltar
+              </Button>
+              <div className="flex items-center gap-3 shrink-0">
+                {validCount === 0 && (
+                  <span className="text-xs text-muted-foreground">Corrija os erros para habilitar a importação</span>
                 )}
+                <Button onClick={confirm} disabled={busy || validCount === 0}>
+                  {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                  Criar {validCount} voucher(s)
+                </Button>
               </div>
+            </div>
               <div className="flex items-center gap-3 shrink-0">
                 {validCount === 0 && (
                   <span className="text-xs text-muted-foreground">Corrija os erros para habilitar a importação</span>
