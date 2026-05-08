@@ -2178,6 +2178,16 @@ const EsteiraIndex = () => {
               }} className="text-[#ffc800] hover:text-white text-[0.8rem] flex items-center gap-1">
                       ✕ Limpar Todos
                     </button>}
+
+                  {isAdmin && (
+                    <button
+                      onClick={() => setShowBulkDeleteDialog(true)}
+                      className="ml-auto text-[0.8rem] flex items-center gap-1 px-3 py-1 rounded-full border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors"
+                      title="Selecionar e excluir vouchers em lote (Admin)"
+                    >
+                      🗑 Excluir em Lote
+                    </button>
+                  )}
                 </div>
               </div>
             </div>}
