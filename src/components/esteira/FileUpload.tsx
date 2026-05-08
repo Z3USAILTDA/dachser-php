@@ -27,8 +27,8 @@ interface FileUploadProps {
 
 export const FileUpload = ({
   onFileUpload,
-  accept = ".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx,.xml",
-  maxSize = 50 * 1024 * 1024, // 50MB
+  accept = "*",
+  maxSize = 1024 * 1024 * 1024, // 1GB — sem restrição prática
   label,
   required = false,
   existingFile,
@@ -40,14 +40,7 @@ export const FileUpload = ({
   const { toast } = useToast();
 
   const uploadFile = async (file: File) => {
-    if (file.size > maxSize) {
-      toast({
-        title: "Arquivo muito grande",
-        description: `O arquivo deve ter no máximo ${maxSize / 1024 / 1024}MB`,
-        variant: "destructive",
-      });
-      return;
-    }
+    // Sem validações de tipo/tamanho — usuário pode anexar qualquer arquivo
 
     const fileId = Math.random().toString(36);
     const uploadingFile: UploadingFile = {
@@ -212,8 +205,7 @@ export const FileUpload = ({
           {isUploading ? "Enviando arquivos..." : multiple ? "Arraste arquivos ou clique para selecionar" : "Arraste o arquivo ou clique para selecionar"}
         </p>
         <p className="text-xs text-muted-foreground">
-          Formatos: PDF, JPG, PNG, Excel, Word, XML (máx. {maxSize / 1024 / 1024}MB)
-          {multiple && " • Múltiplos arquivos permitidos"}
+          Qualquer formato permitido{multiple && " • Múltiplos arquivos permitidos"}
         </p>
         <input
           id={`file-${label}`}
