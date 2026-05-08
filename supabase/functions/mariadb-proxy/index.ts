@@ -18416,8 +18416,27 @@ Deno.serve(async (req) => {
         const buildPreviewItems = async (rows: any[]) => {
           const sheetRows = rows.map((r, i) => parseSheetRow(r, i));
           const spos = sheetRows.map(s => s.spo).filter(Boolean) as string[];
-          const dfvMap = await fetchDfvBySpo(spos);
-          return sheetRows.map(s => mergeWithDfv(s, s.spo ? (dfvMap[normSpo(s.spo)] || null) : null));
+          const { byFull, byPrefix } = await fetchDfvBySpo(spos);
+          return sheetRows.map(s => {
+            if (!s.spo) return mergeWithDfv(s, null);
+            const nf = normSpo(s.spo);
+            let dfv = byFull[nf] || null;
+            if (!dfv) {
+              const pfx = spoPrefix(s.spo);
+              if (/^\d{2,4}-\d{4,}$/.test(pfx)) {
+                const cand = byPrefix[pfx];
+                if (cand) {
+                  dfv = cand;
+                  // Canonicaliza SPO usando o nd completo do DFV
+                  if (cand.nd && normSpo(cand.nd) !== nf) {
+                    console.log(`[batch] SPO matched by prefix: ${s.spo} → ${cand.nd}`);
+                    s.spo = String(cand.nd);
+                  }
+                }
+              }
+            }
+            return mergeWithDfv(s, dfv);
+          });
         };
 
         const prettyEtapa = (raw: any): string => {
