@@ -19,6 +19,7 @@ import { CreateVoucherDialog } from "@/components/esteira/CreateVoucherDialog";
 import { EditVoucherDialog } from "@/components/esteira/EditVoucherDialog";
 import { CancelarVoucherDialog } from "@/components/esteira/CancelarVoucherDialog";
 import { BatchImportVoucherDialog } from "@/components/esteira/BatchImportVoucherDialog";
+import { BulkDeleteVouchersDialog } from "@/components/esteira/BulkDeleteVouchersDialog";
 import { BatchDocumentBinderDialog } from "@/components/esteira/BatchDocumentBinderDialog";
 import { RoboTab } from "@/components/tabs/RoboTab";
 import { ReportsTab } from "@/components/tabs/ReportsTab";
