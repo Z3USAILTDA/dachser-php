@@ -239,6 +239,9 @@ export const BulkDeleteVouchersDialog = ({
                 ) : (
                   filtered.map((v) => {
                     const checked = selected.has(v.id);
+                    const horas = calcularTempoNaEtapa(v);
+                    const sla = SLA_POR_ETAPA[v.etapaAtual] || 0;
+                    const overSla = sla > 0 && horas > sla;
                     return (
                       <label
                         key={v.id}
@@ -249,8 +252,21 @@ export const BulkDeleteVouchersDialog = ({
                           onCheckedChange={() => toggleOne(v.id)}
                         />
                         <div className="flex-1 min-w-0">
-                          <div className="font-mono text-sm text-[#ffc800]">
-                            SPO {v.numeroSPO}
+                          <div className="font-mono text-sm text-[#ffc800] flex items-center gap-2 flex-wrap">
+                            <span>SPO {v.numeroSPO}</span>
+                            <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-white/5 text-muted-foreground border border-white/10">
+                              {ETAPA_LABELS[v.etapaAtual] || v.etapaAtual}
+                            </span>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
+                                overSla
+                                  ? "bg-destructive/15 text-destructive border-destructive/30"
+                                  : "bg-white/5 text-muted-foreground border-white/10"
+                              }`}
+                              title={sla > 0 ? `SLA: ${sla}h` : "Sem SLA"}
+                            >
+                              ⏱ {formatarTempoNaEtapa(horas)}
+                            </span>
                           </div>
                           <div className="text-xs text-muted-foreground truncate">
                             {v.fornecedor || "—"}
@@ -262,6 +278,9 @@ export const BulkDeleteVouchersDialog = ({
                                   maximumFractionDigits: 2,
                                 })}
                               </span>
+                            )}
+                            {v.enviadoPorUserName && (
+                              <span className="ml-2">· por {v.enviadoPorUserName}</span>
                             )}
                           </div>
                         </div>
