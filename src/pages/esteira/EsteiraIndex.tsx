@@ -616,6 +616,7 @@ const EsteiraIndex = () => {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showBatchImportDialog, setShowBatchImportDialog] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [showBatchBinderDialog, setShowBatchBinderDialog] = useState(false);
   const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
