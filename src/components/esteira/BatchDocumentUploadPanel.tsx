@@ -112,7 +112,7 @@ export function BatchDocumentUploadPanel({ batchId, userId, onUploaded }: Props)
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-foreground">
           {uploading
-            ? "Enviando…"
+            ? `Enviando ${progress.current} de ${progress.total}…`
             : dragOver
             ? "Solte os arquivos para enviar"
             : "Arraste arquivos ou clique para selecionar"}
