@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Trash2, Search, AlertTriangle, Loader2 } from "lucide-react";
-import { Voucher } from "@/types/voucher";
+import { Voucher, calcularTempoNaEtapa, formatarTempoNaEtapa, ETAPA_LABELS, SLA_POR_ETAPA } from "@/types/voucher";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
