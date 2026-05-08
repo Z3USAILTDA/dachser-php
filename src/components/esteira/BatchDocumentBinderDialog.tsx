@@ -177,12 +177,11 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                         : "border-border/60 bg-card/30 hover:border-primary/30 hover:bg-primary/5"
                     } ${isVinc ? "opacity-70" : ""}`}
                   >
-                    <input
-                      type="checkbox"
-                      className="h-3.5 w-3.5 accent-primary"
+                    <Checkbox
                       checked={isSel}
-                      onChange={() => toggleDoc(d.id)}
+                      onCheckedChange={() => toggleDoc(d.id)}
                       disabled={isVinc}
+                      className="border-border/80 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground"
                     />
                     <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <a
