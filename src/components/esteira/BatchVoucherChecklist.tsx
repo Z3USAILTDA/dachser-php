@@ -12,7 +12,14 @@ export interface ChecklistItem {
   temBoleto: boolean;
   requerBoleto: boolean;
   status: string;
+  etapa_destino?: string | null;
 }
+
+const ETAPA_LABEL: Record<string, string> = {
+  FISCAL: "Fiscal",
+  FINANCEIRO: "Financeiro",
+  SUPERVISOR: "Supervisor",
+};
 
 const STATUS_LABEL: Record<string, string> = {
   COMPLETO: "Completo",
