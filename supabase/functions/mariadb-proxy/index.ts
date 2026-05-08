@@ -18380,10 +18380,84 @@ Deno.serve(async (req) => {
           return sheetRows.map(s => mergeWithDfv(s, s.spo ? (dfvMap[normSpo(s.spo)] || null) : null));
         };
 
+        const prettyEtapa = (raw: any): string => {
+          const s = String(raw || '').trim().toUpperCase();
+          const map: Record<string, string> = {
+            FISCAL: 'Fiscal',
+            FINANCEIRO: 'Financeiro',
+            SUPERVISOR: 'Supervisor',
+            PAGAMENTOS: 'Pagamentos',
+            BAIXA: 'Baixa',
+            CONCLUIDO: 'Concluído',
+            'CONCLUÍDO': 'Concluído',
+          };
+          if (map[s]) return map[s];
+          if (!s) return 'Desconhecida';
+          return s.charAt(0) + s.slice(1).toLowerCase();
+        };
+
+        // Looks up (id_rm, numero_spo) pairs in t_vouchers and returns Map<key,etapaPretty>
+        const fetchExistingVouchers = async (items: any[]): Promise<Map<string, string>> => {
+          const found = new Map<string, string>();
+          const pairs: Array<[number, string]> = [];
+          const seen = new Set<string>();
+          for (const it of items) {
+            const idRm = it?.id_rm != null ? Number(it.id_rm) : NaN;
+            const spoRaw = it?.spo || it?.processo;
+            if (!Number.isFinite(idRm) || !spoRaw) continue;
+            const spoNorm = String(spoRaw).trim().toUpperCase();
+            if (!spoNorm) continue;
+            const key = `${idRm}|${spoNorm}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            pairs.push([idRm, spoNorm]);
+          }
+          if (pairs.length === 0) return found;
+          try {
+            const placeholders = pairs.map(() => '(?, ?)').join(', ');
+            const params: any[] = [];
+            for (const [idRm, spo] of pairs) { params.push(idRm, spo); }
+            const rows = await client.query(
+              `SELECT id_rm, numero_spo, etapa_atual
+                 FROM dados_dachser.t_vouchers
+                WHERE (id_rm, UPPER(TRIM(numero_spo))) IN (${placeholders})`,
+              params
+            );
+            for (const r of (rows || [])) {
+              const k = `${Number(r.id_rm)}|${String(r.numero_spo || '').trim().toUpperCase()}`;
+              found.set(k, prettyEtapa(r.etapa_atual));
+            }
+          } catch (e) {
+            console.log('fetchExistingVouchers error:', e);
+          }
+          return found;
+        };
+
+        const markAlreadyExisting = (items: any[], existing: Map<string, string>) => {
+          for (const it of items) {
+            const idRm = it?.id_rm != null ? Number(it.id_rm) : NaN;
+            const spoRaw = it?.spo || it?.processo;
+            if (!Number.isFinite(idRm) || !spoRaw) continue;
+            const key = `${idRm}|${String(spoRaw).trim().toUpperCase()}`;
+            const etapa = existing.get(key);
+            if (!etapa) continue;
+            it.already_exists = true;
+            it.existing_etapa = etapa;
+            it.status = 'ERROR';
+            const msg = `Já existente na etapa ${etapa}`;
+            it.validation_message = it.validation_message
+              ? (String(it.validation_message).includes(msg) ? it.validation_message : `${it.validation_message}; ${msg}`)
+              : msg;
+          }
+          return items;
+        };
+
         // ===== preview =====
         if (action === 'preview_voucher_batch_import') {
           const rows: any[] = (body as any).rows || [];
           const items = await buildPreviewItems(rows);
+          const existing = await fetchExistingVouchers(items);
+          markAlreadyExisting(items, existing);
           const valid = items.filter(i => i.status === 'VALID').length;
           const errs = items.filter(i => i.status === 'ERROR').length;
           result = { success: true, items, total: items.length, valid, errors: errs };
@@ -18398,6 +18472,11 @@ Deno.serve(async (req) => {
           const items = editedItems && editedItems.length
             ? editedItems
             : await buildPreviewItems(rows);
+
+          // Defense: re-check existing vouchers right before insert
+          const existingNow = await fetchExistingVouchers(items);
+          markAlreadyExisting(items, existingNow);
+
           const valid = items.filter((i: any) => i.status === 'VALID');
           const errs = items.length - valid.length;
 
@@ -18408,9 +18487,14 @@ Deno.serve(async (req) => {
             VALUES (?, 'PENDING_DOCUMENTS', ?, ?, ?, ?, ?, ?)
           `, [batchId, fileName, items.length, valid.length, errs, String(requesterId), adminUserName]);
 
+          let createdCount = 0;
+          let skippedExisting = 0;
+
           for (const it of items) {
             const itemId = crypto.randomUUID();
             let voucherId: string | null = null;
+            let itemStatus = it.status;
+            let itemMsg = it.validation_message;
 
             if (it.status === 'VALID') {
               voucherId = crypto.randomUUID();
@@ -18433,8 +18517,8 @@ Deno.serve(async (req) => {
                 ? (it.chave_pix || null)
                 : null;
 
-              await client.execute(`
-                INSERT INTO dados_dachser.t_vouchers (
+              const insertRes: any = await client.execute(`
+                INSERT IGNORE INTO dados_dachser.t_vouchers (
                   id, numero_spo, id_rm, fornecedor, cnpj_fornecedor, valor, moeda,
                   vencimento, data_emissao_documento, forma_pagamento, tipo_documento,
                   cobranca_em_nome_de, etapa_atual, status_baixa, status_envio_cliente, status_financeiro,
@@ -18462,14 +18546,35 @@ Deno.serve(async (req) => {
                 chavePixFinal,
               ]);
 
-
-              try {
-                const logId = crypto.randomUUID();
-                await client.execute(`
-                  INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
-                  VALUES (?, ?, ?, ?, 'VOUCHER_CRIADO_LOTE', ?, NOW())
-                `, [logId, voucherId, String(requesterId), adminUserName, `batch_id=${batchId}; row=${it.row_index}; spo=${it.spo ?? ''}; id_rm=${it.id_rm ?? ''}`]);
-              } catch (_) {}
+              const affected = Number(insertRes?.affectedRows ?? insertRes?.affected_rows ?? 1);
+              if (affected === 0) {
+                // Lookup current etapa for friendly message
+                let etapaPretty = 'desconhecida';
+                try {
+                  const exRows = await client.query(
+                    `SELECT etapa_atual FROM dados_dachser.t_vouchers
+                      WHERE id_rm = ? AND UPPER(TRIM(numero_spo)) = ? LIMIT 1`,
+                    [Number(it.id_rm) || null, String(numeroSpo).trim().toUpperCase()]
+                  );
+                  if (exRows && exRows[0]) etapaPretty = prettyEtapa(exRows[0].etapa_atual);
+                } catch (_) {}
+                voucherId = null;
+                skippedExisting++;
+                itemStatus = 'ERROR';
+                const skipMsg = `Já existente na etapa ${etapaPretty} — pulado`;
+                itemMsg = itemMsg ? `${itemMsg}; ${skipMsg}` : skipMsg;
+              } else {
+                createdCount++;
+                try {
+                  const logId = crypto.randomUUID();
+                  await client.execute(`
+                    INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+                    VALUES (?, ?, ?, ?, 'VOUCHER_CRIADO_LOTE', ?, NOW())
+                  `, [logId, voucherId, String(requesterId), adminUserName, `batch_id=${batchId}; row=${it.row_index}; spo=${it.spo ?? ''}; id_rm=${it.id_rm ?? ''}`]);
+                } catch (_) {}
+              }
+            } else if (it.already_exists) {
+              skippedExisting++;
             }
 
             await client.execute(`
@@ -18483,12 +18588,12 @@ Deno.serve(async (req) => {
               it.processo, it.fornecedor, it.valor,
               it.vencimento, it.data_emissao, it.forma_pagamento, it.fatura || it.spo,
               it.comentarios,
-              voucherId ? 'VOUCHER_CRIADO' : it.status, it.validation_message,
+              voucherId ? 'VOUCHER_CRIADO' : itemStatus, itemMsg,
               JSON.stringify(it.raw_json || it || {}),
             ]);
           }
 
-          result = { success: true, batch_id: batchId, total: items.length, created: valid.length, errors: errs };
+          result = { success: true, batch_id: batchId, total: items.length, created: createdCount, errors: errs, skipped_existing: skippedExisting };
           break;
         }
 

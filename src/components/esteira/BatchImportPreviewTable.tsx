@@ -33,6 +33,8 @@ export interface PreviewItem {
   field_origin?: Record<string, "DFV" | "PLANILHA" | "MANUAL" | null>;
   is_duplicate?: boolean;
   duplicate_of_row?: number | null;
+  already_exists?: boolean;
+  existing_etapa?: string | null;
 }
 
 export type StatusFilter = "all" | "errors" | "valid";
@@ -166,6 +168,18 @@ export function BatchImportPreviewTable({
                           </TooltipTrigger>
                           <TooltipContent>
                             Mesma combinação SPO + RM da linha #{(it.duplicate_of_row ?? 0) + 1}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      {it.already_exists && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+                              Já na etapa {it.existing_etapa || '—'}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Este SPO já existe no sistema para o mesmo RM, atualmente na etapa {it.existing_etapa || 'desconhecida'}
                           </TooltipContent>
                         </Tooltip>
                       )}

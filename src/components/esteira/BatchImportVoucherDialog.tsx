@@ -212,7 +212,11 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
         toast({ title: "Falha ao criar lote", description: data?.error || error?.message, variant: "destructive" });
         return;
       }
-      toast({ title: `Lote criado: ${data.created} voucher(s)` });
+      const skipped = Number(data.skipped_existing || 0);
+      toast({
+        title: `Lote criado: ${data.created} voucher(s)`,
+        description: skipped > 0 ? `${skipped} ignorado(s) (já existentes em outras etapas)` : undefined,
+      });
       onCreated(data.batch_id);
       reset();
       onOpenChange(false);
