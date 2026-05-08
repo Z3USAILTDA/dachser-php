@@ -18472,6 +18472,11 @@ Deno.serve(async (req) => {
           const items = editedItems && editedItems.length
             ? editedItems
             : await buildPreviewItems(rows);
+
+          // Defense: re-check existing vouchers right before insert
+          const existingNow = await fetchExistingVouchers(items);
+          markAlreadyExisting(items, existingNow);
+
           const valid = items.filter((i: any) => i.status === 'VALID');
           const errs = items.length - valid.length;
 
@@ -18482,9 +18487,14 @@ Deno.serve(async (req) => {
             VALUES (?, 'PENDING_DOCUMENTS', ?, ?, ?, ?, ?, ?)
           `, [batchId, fileName, items.length, valid.length, errs, String(requesterId), adminUserName]);
 
+          let createdCount = 0;
+          let skippedExisting = 0;
+
           for (const it of items) {
             const itemId = crypto.randomUUID();
             let voucherId: string | null = null;
+            let itemStatus = it.status;
+            let itemMsg = it.validation_message;
 
             if (it.status === 'VALID') {
               voucherId = crypto.randomUUID();
@@ -18507,8 +18517,8 @@ Deno.serve(async (req) => {
                 ? (it.chave_pix || null)
                 : null;
 
-              await client.execute(`
-                INSERT INTO dados_dachser.t_vouchers (
+              const insertRes: any = await client.execute(`
+                INSERT IGNORE INTO dados_dachser.t_vouchers (
                   id, numero_spo, id_rm, fornecedor, cnpj_fornecedor, valor, moeda,
                   vencimento, data_emissao_documento, forma_pagamento, tipo_documento,
                   cobranca_em_nome_de, etapa_atual, status_baixa, status_envio_cliente, status_financeiro,
@@ -18536,14 +18546,35 @@ Deno.serve(async (req) => {
                 chavePixFinal,
               ]);
 
-
-              try {
-                const logId = crypto.randomUUID();
-                await client.execute(`
-                  INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
-                  VALUES (?, ?, ?, ?, 'VOUCHER_CRIADO_LOTE', ?, NOW())
-                `, [logId, voucherId, String(requesterId), adminUserName, `batch_id=${batchId}; row=${it.row_index}; spo=${it.spo ?? ''}; id_rm=${it.id_rm ?? ''}`]);
-              } catch (_) {}
+              const affected = Number(insertRes?.affectedRows ?? insertRes?.affected_rows ?? 1);
+              if (affected === 0) {
+                // Lookup current etapa for friendly message
+                let etapaPretty = 'desconhecida';
+                try {
+                  const exRows = await client.query(
+                    `SELECT etapa_atual FROM dados_dachser.t_vouchers
+                      WHERE id_rm = ? AND UPPER(TRIM(numero_spo)) = ? LIMIT 1`,
+                    [Number(it.id_rm) || null, String(numeroSpo).trim().toUpperCase()]
+                  );
+                  if (exRows && exRows[0]) etapaPretty = prettyEtapa(exRows[0].etapa_atual);
+                } catch (_) {}
+                voucherId = null;
+                skippedExisting++;
+                itemStatus = 'ERROR';
+                const skipMsg = `Já existente na etapa ${etapaPretty} — pulado`;
+                itemMsg = itemMsg ? `${itemMsg}; ${skipMsg}` : skipMsg;
+              } else {
+                createdCount++;
+                try {
+                  const logId = crypto.randomUUID();
+                  await client.execute(`
+                    INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+                    VALUES (?, ?, ?, ?, 'VOUCHER_CRIADO_LOTE', ?, NOW())
+                  `, [logId, voucherId, String(requesterId), adminUserName, `batch_id=${batchId}; row=${it.row_index}; spo=${it.spo ?? ''}; id_rm=${it.id_rm ?? ''}`]);
+                } catch (_) {}
+              }
+            } else if (it.already_exists) {
+              skippedExisting++;
             }
 
             await client.execute(`
@@ -18557,12 +18588,12 @@ Deno.serve(async (req) => {
               it.processo, it.fornecedor, it.valor,
               it.vencimento, it.data_emissao, it.forma_pagamento, it.fatura || it.spo,
               it.comentarios,
-              voucherId ? 'VOUCHER_CRIADO' : it.status, it.validation_message,
+              voucherId ? 'VOUCHER_CRIADO' : itemStatus, itemMsg,
               JSON.stringify(it.raw_json || it || {}),
             ]);
           }
 
-          result = { success: true, batch_id: batchId, total: items.length, created: valid.length, errors: errs };
+          result = { success: true, batch_id: batchId, total: items.length, created: createdCount, errors: errs, skipped_existing: skippedExisting };
           break;
         }
 
