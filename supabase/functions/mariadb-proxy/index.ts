@@ -18744,7 +18744,7 @@ Deno.serve(async (req) => {
           if (!batch_id) {
             return new Response(JSON.stringify({ success: false, error: 'batch_id obrigatório' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
           }
-          const items = await client.query(`SELECT voucher_id, fornecedor, forma_pagamento FROM dados_dachser.t_voucher_batch_import_item WHERE batch_id = ? AND voucher_id IS NOT NULL`, [batch_id]);
+          const items = await client.query(`SELECT voucher_id, fornecedor, forma_pagamento, etapa_destino FROM dados_dachser.t_voucher_batch_import_item WHERE batch_id = ? AND voucher_id IS NOT NULL`, [batch_id]);
           const voucherIds = items.map((i: any) => i.voucher_id);
           const pendentes: any[] = [];
           if (voucherIds.length > 0) {
@@ -18772,6 +18772,50 @@ Deno.serve(async (req) => {
               { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
           }
+
+          // Promover cada voucher para sua etapa de destino (Fiscal/Financeiro/Supervisor).
+          // Fallback: se etapa_destino estiver vazio, recomputa a partir do voucher.
+          let promoted = 0;
+          for (const it of items) {
+            let destino = String(it.etapa_destino || '').toUpperCase();
+            if (!destino || !['FISCAL', 'FINANCEIRO', 'SUPERVISOR'].includes(destino)) {
+              try {
+                const vrows = await client.query(
+                  `SELECT urgencia_tipo, cobranca_em_nome_de FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1`,
+                  [it.voucher_id]
+                );
+                const v = vrows && vrows[0];
+                if (v) {
+                  destino = String(v.urgencia_tipo || '').toUpperCase() === 'URGENTE_REAL'
+                    ? 'SUPERVISOR'
+                    : (String(v.cobranca_em_nome_de || '').toUpperCase() === 'CLIENTE' ? 'FINANCEIRO' : 'FISCAL');
+                }
+              } catch (_) {}
+            }
+            if (!destino) destino = 'FISCAL';
+            try {
+              const upd: any = await client.execute(
+                `UPDATE dados_dachser.t_vouchers
+                    SET etapa_atual = ?, updated_at = NOW()
+                  WHERE id = ? AND etapa_atual = 'AGUARDANDO_DOCUMENTOS_LOTE'`,
+                [destino, it.voucher_id]
+              );
+              const aff = Number(upd?.affectedRows ?? upd?.affected_rows ?? 0);
+              if (aff > 0) {
+                promoted++;
+                try {
+                  const logId = crypto.randomUUID();
+                  await client.execute(`
+                    INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+                    VALUES (?, ?, ?, ?, 'VOUCHER_PROMOVIDO_LOTE', ?, NOW())
+                  `, [logId, it.voucher_id, String(requesterId), adminUserName, `batch_id=${batch_id}; etapa=${destino}`]);
+                } catch (_) {}
+              }
+            } catch (e) {
+              console.log('promote voucher failed:', it.voucher_id, e);
+            }
+          }
+
           await client.execute(`
             UPDATE dados_dachser.t_voucher_batch_import
             SET status = 'COMPLETE', finalized_at = NOW(), finalized_by_user_id = ?, finalized_by_user_name = ?
@@ -18782,7 +18826,7 @@ Deno.serve(async (req) => {
             await client.execute(`
               INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
               VALUES (?, ?, ?, ?, 'IMPORTACAO_LOTE_FINALIZADA', ?, NOW())
-            `, [logId, voucherIds[0] || batch_id, String(requesterId), adminUserName, `batch_id=${batch_id}; vouchers=${voucherIds.length}`]);
+            `, [logId, voucherIds[0] || batch_id, String(requesterId), adminUserName, `batch_id=${batch_id}; vouchers=${voucherIds.length}; promovidos=${promoted}`]);
           } catch (_) {}
           result = { success: true, batch_id, finalized: true };
           break;
