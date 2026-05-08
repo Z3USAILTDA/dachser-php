@@ -2242,6 +2242,15 @@ const EsteiraIndex = () => {
         onFinalized={() => { setActiveBatchId(null); loadVouchers(); }}
       />}
 
+      {isAdmin && (
+        <BulkDeleteVouchersDialog
+          open={showBulkDeleteDialog}
+          onOpenChange={setShowBulkDeleteDialog}
+          vouchers={filteredVouchers}
+          onDeleted={loadVouchers}
+        />
+      )}
+
       {/* Read-only Users Dialog */}
       <Dialog open={showUsersDialog} onOpenChange={open => {
       setShowUsersDialog(open);
