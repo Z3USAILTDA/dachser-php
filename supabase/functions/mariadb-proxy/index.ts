@@ -18460,16 +18460,16 @@ Deno.serve(async (req) => {
           const found = new Map<string, string>();
           const pairs: Array<[number, string]> = [];
           const seen = new Set<string>();
+          const idRmsForPrefix = new Set<number>();
           for (const it of items) {
             const idRm = it?.id_rm != null ? Number(it.id_rm) : NaN;
             const spoRaw = it?.spo || it?.processo;
             if (!Number.isFinite(idRm) || !spoRaw) continue;
-            const spoNorm = String(spoRaw).trim().toUpperCase();
+            const spoNorm = normSpo(spoRaw);
             if (!spoNorm) continue;
             const key = `${idRm}|${spoNorm}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            pairs.push([idRm, spoNorm]);
+            if (!seen.has(key)) { seen.add(key); pairs.push([idRm, spoNorm]); }
+            idRmsForPrefix.add(idRm);
           }
           if (pairs.length === 0) return found;
           try {
@@ -18483,11 +18483,48 @@ Deno.serve(async (req) => {
               params
             );
             for (const r of (rows || [])) {
-              const k = `${Number(r.id_rm)}|${String(r.numero_spo || '').trim().toUpperCase()}`;
-              found.set(k, prettyEtapa(r.etapa_atual));
+              const idRm = Number(r.id_rm);
+              const nsp = normSpo(r.numero_spo);
+              const etapa = prettyEtapa(r.etapa_atual);
+              found.set(`${idRm}|${nsp}`, etapa);
+              const pfx = spoPrefix(r.numero_spo);
+              if (/^\d{2,4}-\d{4,}$/.test(pfx)) found.set(`${idRm}|PFX|${pfx}`, etapa);
             }
           } catch (e) {
             console.log('fetchExistingVouchers error:', e);
+          }
+          // Segunda passada: para itens ainda não encontrados, tentar via prefixo numérico
+          const missing: Array<[number, string]> = [];
+          for (const it of items) {
+            const idRm = it?.id_rm != null ? Number(it.id_rm) : NaN;
+            const spoRaw = it?.spo || it?.processo;
+            if (!Number.isFinite(idRm) || !spoRaw) continue;
+            const nsp = normSpo(spoRaw);
+            if (found.has(`${idRm}|${nsp}`)) continue;
+            const pfx = spoPrefix(spoRaw);
+            if (!/^\d{2,4}-\d{4,}$/.test(pfx)) continue;
+            if (found.has(`${idRm}|PFX|${pfx}`)) continue;
+            missing.push([idRm, pfx]);
+          }
+          if (missing.length > 0) {
+            try {
+              const clauses = missing.map(() => '(id_rm = ? AND (UPPER(TRIM(numero_spo)) = ? OR UPPER(TRIM(numero_spo)) LIKE ?))').join(' OR ');
+              const params: any[] = [];
+              for (const [idRm, pfx] of missing) { params.push(idRm, pfx, `${pfx} %`); }
+              const rows = await client.query(
+                `SELECT id_rm, numero_spo, etapa_atual FROM dados_dachser.t_vouchers WHERE ${clauses}`,
+                params
+              );
+              for (const r of (rows || [])) {
+                const idRm = Number(r.id_rm);
+                const etapa = prettyEtapa(r.etapa_atual);
+                found.set(`${idRm}|${normSpo(r.numero_spo)}`, etapa);
+                const pfx = spoPrefix(r.numero_spo);
+                if (/^\d{2,4}-\d{4,}$/.test(pfx)) found.set(`${idRm}|PFX|${pfx}`, etapa);
+              }
+            } catch (e) {
+              console.log('fetchExistingVouchers (prefix) error:', e);
+            }
           }
           return found;
         };
@@ -18497,8 +18534,12 @@ Deno.serve(async (req) => {
             const idRm = it?.id_rm != null ? Number(it.id_rm) : NaN;
             const spoRaw = it?.spo || it?.processo;
             if (!Number.isFinite(idRm) || !spoRaw) continue;
-            const key = `${idRm}|${String(spoRaw).trim().toUpperCase()}`;
-            const etapa = existing.get(key);
+            const nsp = normSpo(spoRaw);
+            let etapa = existing.get(`${idRm}|${nsp}`);
+            if (!etapa) {
+              const pfx = spoPrefix(spoRaw);
+              if (/^\d{2,4}-\d{4,}$/.test(pfx)) etapa = existing.get(`${idRm}|PFX|${pfx}`);
+            }
             if (!etapa) continue;
             it.already_exists = true;
             it.existing_etapa = etapa;
