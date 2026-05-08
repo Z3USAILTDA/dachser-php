@@ -188,6 +188,48 @@ export const BulkDeleteVouchersDialog = ({
               </Button>
             </div>
 
+            <div className="flex items-center gap-2 flex-wrap">
+              <Select value={etapaFilter} onValueChange={setEtapaFilter}>
+                <SelectTrigger className="w-[200px] bg-[#0a0b10] border-white/10 rounded-full">
+                  <SelectValue placeholder="Etapa" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as Etapas</SelectItem>
+                  {uniqueEtapas.map((e) => (
+                    <SelectItem key={e} value={e}>
+                      {e}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={enviadoPorFilter} onValueChange={setEnviadoPorFilter}>
+                <SelectTrigger className="w-[220px] bg-[#0a0b10] border-white/10 rounded-full">
+                  <SelectValue placeholder="Enviado por" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos (Enviado por)</SelectItem>
+                  {uniqueEnviadoPor.map((u) => (
+                    <SelectItem key={u} value={u}>
+                      {u}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {(etapaFilter !== "all" || enviadoPorFilter !== "all") && (
+                <button
+                  onClick={() => {
+                    setEtapaFilter("all");
+                    setEnviadoPorFilter("all");
+                  }}
+                  className="text-[#ffc800] hover:text-white text-xs"
+                >
+                  ✕ Limpar filtros
+                </button>
+              )}
+            </div>
+
             <ScrollArea className="h-[50vh] border border-white/10 rounded-md">
               <div className="divide-y divide-white/5">
                 {filtered.length === 0 ? (
