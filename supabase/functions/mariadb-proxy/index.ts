@@ -18188,6 +18188,7 @@ Deno.serve(async (req) => {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
           `);
           await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS origem_criacao VARCHAR(50) DEFAULT NULL`);
+          try { await client.execute(`ALTER TABLE dados_dachser.t_voucher_batch_import_item ADD COLUMN IF NOT EXISTS etapa_destino VARCHAR(30) DEFAULT NULL`); } catch (_) {}
         } catch (ddlErr) {
           console.log('Batch DDL skipped:', ddlErr);
         }
