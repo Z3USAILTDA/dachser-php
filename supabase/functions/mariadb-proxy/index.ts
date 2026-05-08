@@ -18287,27 +18287,66 @@ Deno.serve(async (req) => {
 
         // Lookup DFV by SPO list (tolerant: trim + collapse whitespace)
         const normSpo = (s: any): string => String(s ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
-        const fetchDfvBySpo = async (spos: string[]): Promise<Record<string, any>> => {
-          const map: Record<string, any> = {};
+        // Identidade do SPO: prefixo numérico "NNN-NNNNNN" ignorando sufixos como " DIM-BY", " SAN" etc.
+        const spoPrefix = (s: any): string => {
+          const n = normSpo(s);
+          const m = n.match(/^(\d{2,4}-\d{4,})/);
+          return m ? m[1] : n;
+        };
+        // Retorna { byFull, byPrefix } indexando DFVs encontrados por nd exato e por prefixo numérico.
+        const fetchDfvBySpo = async (spos: string[]): Promise<{ byFull: Record<string, any>; byPrefix: Record<string, any> }> => {
+          const byFull: Record<string, any> = {};
+          const byPrefix: Record<string, any> = {};
           const normalized = Array.from(new Set(spos.map(normSpo).filter(Boolean)));
-          if (normalized.length === 0) return map;
+          if (normalized.length === 0) return { byFull, byPrefix };
+          const cols = `id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
+                        modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
+                        valor_nf, moeda, cnpj, razao_social`;
           try {
             const placeholders = normalized.map(() => '?').join(',');
             const rows = await client.query(
-              `SELECT id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
-                      modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
-                      valor_nf, moeda, cnpj, razao_social
-                 FROM dados_dachser.t_dados_financeiro_voucher
+              `SELECT ${cols} FROM dados_dachser.t_dados_financeiro_voucher
                 WHERE UPPER(TRIM(nd)) IN (${placeholders})`,
               normalized
             );
             for (const r of (rows || [])) {
-              if (r.nd) map[normSpo(r.nd)] = r;
+              if (r.nd) {
+                byFull[normSpo(r.nd)] = r;
+                byPrefix[spoPrefix(r.nd)] = r;
+              }
             }
           } catch (e) {
-            console.log('fetchDfvBySpo error:', e);
+            console.log('fetchDfvBySpo (exact) error:', e);
           }
-          return map;
+          // Segunda passada: para SPOs sem match exato, tentar via prefixo numérico (ambos os sentidos)
+          const missingPrefixes = Array.from(new Set(
+            normalized
+              .filter(n => !byFull[n])
+              .map(n => spoPrefix(n))
+              .filter(p => /^\d{2,4}-\d{4,}$/.test(p) && !byPrefix[p])
+          ));
+          if (missingPrefixes.length > 0) {
+            try {
+              const likeClauses = missingPrefixes.map(() => '(UPPER(TRIM(nd)) = ? OR UPPER(TRIM(nd)) LIKE ?)').join(' OR ');
+              const params: any[] = [];
+              for (const p of missingPrefixes) { params.push(p, `${p} %`); }
+              const rows = await client.query(
+                `SELECT ${cols} FROM dados_dachser.t_dados_financeiro_voucher
+                  WHERE ${likeClauses}`,
+                params
+              );
+              for (const r of (rows || [])) {
+                if (r.nd) {
+                  byFull[normSpo(r.nd)] = r;
+                  const pfx = spoPrefix(r.nd);
+                  if (!byPrefix[pfx]) byPrefix[pfx] = r;
+                }
+              }
+            } catch (e) {
+              console.log('fetchDfvBySpo (prefix) error:', e);
+            }
+          }
+          return { byFull, byPrefix };
         };
 
         // Merge sheet row + DFV. Returns resolved fields with origin per field.
