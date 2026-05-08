@@ -2,6 +2,7 @@ import { Check, AlertTriangle, X } from "lucide-react";
 
 export interface ChecklistItem {
   voucher_id: string;
+  numero_spo: string | null;
   fornecedor: string | null;
   valor: number | null;
   vencimento: string | null;
