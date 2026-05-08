@@ -11,6 +11,13 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Trash2, Search, AlertTriangle, Loader2 } from "lucide-react";
 import { Voucher } from "@/types/voucher";
 import { supabase } from "@/integrations/supabase/client";
