@@ -18719,7 +18719,7 @@ Deno.serve(async (req) => {
             if (!temFatura && requerBoleto && !temBoleto) status = 'PENDENTE_FATURA_E_BOLETO';
             else if (!temFatura) status = 'PENDENTE_FATURA';
             else if (requerBoleto && !temBoleto) status = 'PENDENTE_BOLETO';
-            return { voucher_id: i.voucher_id, fornecedor: i.fornecedor, valor: i.valor, vencimento: i.vencimento, forma_pagamento: i.forma_pagamento, fatura: i.fatura, temFatura, temBoleto, requerBoleto, status };
+            return { voucher_id: i.voucher_id, numero_spo: i.spo, fornecedor: i.fornecedor, valor: i.valor, vencimento: i.vencimento, forma_pagamento: i.forma_pagamento, fatura: i.fatura, temFatura, temBoleto, requerBoleto, status };
           });
 
           result = { success: true, batch: batchRows[0], items, documents: docs, checklist };
