@@ -13,13 +13,14 @@ interface Props {
 export function BatchDocumentUploadPanel({ batchId, userId, onUploaded }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const { toast } = useToast();
 
-  const handle = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+  const handle = async (files: FileList | File[] | null) => {
+    if (!files || (files as any).length === 0) return;
     setUploading(true);
     try {
-      for (const file of Array.from(files)) {
+      for (const file of Array.from(files as any) as File[]) {
         const ext = file.name.split(".").pop();
         const path = `batch/${batchId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
         const { error: upErr } = await supabase.storage.from("voucher-anexos").upload(path, file);
@@ -53,8 +54,40 @@ export function BatchDocumentUploadPanel({ batchId, userId, onUploaded }: Props)
     }
   };
 
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    if (uploading) return;
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) handle(files);
+  };
+
   return (
-    <div className="rounded-lg border border-dashed border-white/15 p-4 flex items-center gap-3">
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!dragOver) setDragOver(true);
+      }}
+      onDragEnter={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragOver(false);
+      }}
+      onDrop={onDrop}
+      onClick={() => !uploading && inputRef.current?.click()}
+      className={`group cursor-pointer rounded-xl border-2 border-dashed p-4 flex items-center gap-3 transition-all ${
+        dragOver
+          ? "border-primary bg-primary/10"
+          : "border-border/60 bg-card/30 hover:border-primary/40 hover:bg-primary/5"
+      }`}
+    >
       <input
         ref={inputRef}
         type="file"
@@ -62,18 +95,37 @@ export function BatchDocumentUploadPanel({ batchId, userId, onUploaded }: Props)
         className="hidden"
         onChange={(e) => handle(e.target.files)}
       />
+      <span
+        className={`inline-flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+          dragOver ? "bg-primary/20 text-primary" : "bg-primary/10 text-primary group-hover:bg-primary/20"
+        }`}
+      >
+        {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-foreground">
+          {uploading
+            ? "Enviando…"
+            : dragOver
+            ? "Solte os arquivos para enviar"
+            : "Arraste arquivos ou clique para selecionar"}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          Faça upload de múltiplos arquivos. Eles ficam pendentes até serem vinculados a um voucher.
+        </div>
+      </div>
       <Button
         type="button"
         variant="outline"
-        onClick={() => inputRef.current?.click()}
+        size="sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          inputRef.current?.click();
+        }}
         disabled={uploading}
       >
-        {uploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-        Enviar documentos
+        Selecionar
       </Button>
-      <span className="text-xs text-muted-foreground">
-        Faça upload de múltiplos arquivos. Eles ficam pendentes até serem vinculados a um voucher.
-      </span>
     </div>
   );
 }
