@@ -39,6 +39,8 @@ export const BulkDeleteVouchersDialog = ({
   const { toast } = useToast();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  const [etapaFilter, setEtapaFilter] = useState<string>("all");
+  const [enviadoPorFilter, setEnviadoPorFilter] = useState<string>("all");
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -47,21 +49,42 @@ export const BulkDeleteVouchersDialog = ({
     if (!open) {
       setSelected(new Set());
       setSearch("");
+      setEtapaFilter("all");
+      setEnviadoPorFilter("all");
       setConfirming(false);
       setDeleting(false);
       setProgress({ done: 0, total: 0 });
     }
   }, [open]);
 
+  const uniqueEtapas = useMemo(
+    () =>
+      Array.from(new Set(vouchers.map((v) => v.etapaAtual).filter(Boolean))).sort(),
+    [vouchers]
+  );
+  const uniqueEnviadoPor = useMemo(
+    () =>
+      Array.from(
+        new Set(vouchers.map((v) => v.enviadoPorUserName).filter(Boolean) as string[])
+      ).sort(),
+    [vouchers]
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return vouchers;
-    return vouchers.filter((v) =>
-      [v.numeroSPO, v.fornecedor, (v as any).processoNumero]
-        .filter(Boolean)
-        .some((s) => String(s).toLowerCase().includes(q))
-    );
-  }, [vouchers, search]);
+    return vouchers.filter((v) => {
+      if (etapaFilter !== "all" && v.etapaAtual !== etapaFilter) return false;
+      if (enviadoPorFilter !== "all" && v.enviadoPorUserName !== enviadoPorFilter)
+        return false;
+      if (q) {
+        const hit = [v.numeroSPO, v.fornecedor, (v as any).processoNumero]
+          .filter(Boolean)
+          .some((s) => String(s).toLowerCase().includes(q));
+        if (!hit) return false;
+      }
+      return true;
+    });
+  }, [vouchers, search, etapaFilter, enviadoPorFilter]);
 
   const allFilteredSelected =
     filtered.length > 0 && filtered.every((v) => selected.has(v.id));
