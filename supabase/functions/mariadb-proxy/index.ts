@@ -18699,6 +18699,7 @@ Deno.serve(async (req) => {
 
           const voucherIds = items.filter((i: any) => i.voucher_id).map((i: any) => i.voucher_id);
           let anexosByVoucher: Record<string, any[]> = {};
+          let spoByVoucher: Record<string, string> = {};
           if (voucherIds.length > 0) {
             const placeholders = voucherIds.map(() => '?').join(',');
             const allAnexos = await client.query(
@@ -18708,6 +18709,13 @@ Deno.serve(async (req) => {
             for (const a of allAnexos) {
               (anexosByVoucher[a.voucher_id] ||= []).push(a);
             }
+            try {
+              const vrows = await client.query(
+                `SELECT id, numero_spo FROM dados_dachser.t_vouchers WHERE id IN (${placeholders})`,
+                voucherIds
+              );
+              for (const v of vrows) spoByVoucher[v.id] = v.numero_spo;
+            } catch (_) {}
           }
 
           const checklist = items.filter((i: any) => i.voucher_id).map((i: any) => {
@@ -18719,7 +18727,7 @@ Deno.serve(async (req) => {
             if (!temFatura && requerBoleto && !temBoleto) status = 'PENDENTE_FATURA_E_BOLETO';
             else if (!temFatura) status = 'PENDENTE_FATURA';
             else if (requerBoleto && !temBoleto) status = 'PENDENTE_BOLETO';
-            return { voucher_id: i.voucher_id, numero_spo: i.spo, fornecedor: i.fornecedor, valor: i.valor, vencimento: i.vencimento, forma_pagamento: i.forma_pagamento, fatura: i.fatura, temFatura, temBoleto, requerBoleto, status };
+            return { voucher_id: i.voucher_id, numero_spo: spoByVoucher[i.voucher_id] || i.spo || null, fornecedor: i.fornecedor, valor: i.valor, vencimento: i.vencimento, forma_pagamento: i.forma_pagamento, fatura: i.fatura, temFatura, temBoleto, requerBoleto, status };
           });
 
           result = { success: true, batch: batchRows[0], items, documents: docs, checklist };
