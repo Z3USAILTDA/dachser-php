@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Link2, Unlink, Loader2, FileText } from "lucide-react";
+import { Link2, Unlink, Loader2, FileText, Paperclip, CheckCircle2 } from "lucide-react";
 import { TIPOS_ANEXO } from "@/utils/batchVoucherImport";
 import { BatchDocumentUploadPanel } from "./BatchDocumentUploadPanel";
 import { BatchVoucherChecklist, type ChecklistItem } from "./BatchVoucherChecklist";
