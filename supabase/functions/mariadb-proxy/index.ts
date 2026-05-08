@@ -18102,25 +18102,25 @@ Deno.serve(async (req) => {
       case 'unbind_batch_document':
       case 'get_batch_import_status':
       case 'finalize_batch_import': {
-        // Guard: somente ADMIN
+        // Guard: usuário autenticado (qualquer perfil)
         const requesterId = (body as any).userId ?? (body as any).user_id;
         if (!requesterId) {
           return new Response(
-            JSON.stringify({ success: false, error: 'Acesso negado. Funcionalidade permitida apenas para ADMIN.' }),
+            JSON.stringify({ success: false, error: 'Usuário não autenticado.' }),
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const adminCheck = await client.query(
-          'SELECT is_admin, username FROM ai_agente.t_users_dachser WHERE id = ?',
+        const userCheck = await client.query(
+          'SELECT username FROM ai_agente.t_users_dachser WHERE id = ?',
           [requesterId]
         );
-        if (!adminCheck || adminCheck.length === 0 || Number(adminCheck[0].is_admin) !== 1) {
+        if (!userCheck || userCheck.length === 0) {
           return new Response(
-            JSON.stringify({ success: false, error: 'Acesso negado. Funcionalidade permitida apenas para ADMIN.' }),
+            JSON.stringify({ success: false, error: 'Usuário não encontrado.' }),
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const adminUserName = (body as any).user_name || adminCheck[0].username || 'admin';
+        const adminUserName = (body as any).user_name || userCheck[0].username || 'user';
 
         // Garantir tabelas
         try {
