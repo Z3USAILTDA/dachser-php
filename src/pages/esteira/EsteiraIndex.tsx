@@ -19,6 +19,7 @@ import { CreateVoucherDialog } from "@/components/esteira/CreateVoucherDialog";
 import { EditVoucherDialog } from "@/components/esteira/EditVoucherDialog";
 import { CancelarVoucherDialog } from "@/components/esteira/CancelarVoucherDialog";
 import { BatchImportVoucherDialog } from "@/components/esteira/BatchImportVoucherDialog";
+import { BulkDeleteVouchersDialog } from "@/components/esteira/BulkDeleteVouchersDialog";
 import { BatchDocumentBinderDialog } from "@/components/esteira/BatchDocumentBinderDialog";
 import { RoboTab } from "@/components/tabs/RoboTab";
 import { ReportsTab } from "@/components/tabs/ReportsTab";
@@ -615,6 +616,7 @@ const EsteiraIndex = () => {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showBatchImportDialog, setShowBatchImportDialog] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [showBatchBinderDialog, setShowBatchBinderDialog] = useState(false);
   const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
@@ -2176,6 +2178,16 @@ const EsteiraIndex = () => {
               }} className="text-[#ffc800] hover:text-white text-[0.8rem] flex items-center gap-1">
                       ✕ Limpar Todos
                     </button>}
+
+                  {isAdmin && (
+                    <button
+                      onClick={() => setShowBulkDeleteDialog(true)}
+                      className="ml-auto text-[0.8rem] flex items-center gap-1 px-3 py-1 rounded-full border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors"
+                      title="Selecionar e excluir vouchers em lote (Admin)"
+                    >
+                      🗑 Excluir em Lote
+                    </button>
+                  )}
                 </div>
               </div>
             </div>}
@@ -2229,6 +2241,15 @@ const EsteiraIndex = () => {
         userId={Number(user.id)}
         onFinalized={() => { setActiveBatchId(null); loadVouchers(); }}
       />}
+
+      {isAdmin && (
+        <BulkDeleteVouchersDialog
+          open={showBulkDeleteDialog}
+          onOpenChange={setShowBulkDeleteDialog}
+          vouchers={filteredVouchers}
+          onDeleted={loadVouchers}
+        />
+      )}
 
       {/* Read-only Users Dialog */}
       <Dialog open={showUsersDialog} onOpenChange={open => {
