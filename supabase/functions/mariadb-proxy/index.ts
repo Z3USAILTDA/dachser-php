@@ -18583,8 +18583,8 @@ Deno.serve(async (req) => {
               INSERT INTO dados_dachser.t_voucher_batch_import_item
                 (id, batch_id, row_index, voucher_id, processo, fornecedor, valor,
                  vencimento, data_fatura, forma_pagamento, fatura, historico,
-                 status, validation_message, raw_json)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 status, validation_message, raw_json, etapa_destino)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `, [
               itemId, batchId, it.row_index, voucherId,
               it.processo, it.fornecedor, it.valor,
@@ -18592,6 +18592,7 @@ Deno.serve(async (req) => {
               it.comentarios,
               voucherId ? 'VOUCHER_CRIADO' : itemStatus, itemMsg,
               JSON.stringify(it.raw_json || it || {}),
+              it.__etapa_destino || null,
             ]);
           }
 
