@@ -171,6 +171,18 @@ export function BatchImportPreviewTable({
                           </TooltipContent>
                         </Tooltip>
                       )}
+                      {it.already_exists && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+                              Já na etapa {it.existing_etapa || '—'}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Este SPO já existe no sistema para o mesmo RM, atualmente na etapa {it.existing_etapa || 'desconhecida'}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="py-3.5 px-3 hidden lg:table-cell text-foreground/90">{it.processo || "—"}</TableCell>
