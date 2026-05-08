@@ -18287,27 +18287,66 @@ Deno.serve(async (req) => {
 
         // Lookup DFV by SPO list (tolerant: trim + collapse whitespace)
         const normSpo = (s: any): string => String(s ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
-        const fetchDfvBySpo = async (spos: string[]): Promise<Record<string, any>> => {
-          const map: Record<string, any> = {};
+        // Identidade do SPO: prefixo numérico "NNN-NNNNNN" ignorando sufixos como " DIM-BY", " SAN" etc.
+        const spoPrefix = (s: any): string => {
+          const n = normSpo(s);
+          const m = n.match(/^(\d{2,4}-\d{4,})/);
+          return m ? m[1] : n;
+        };
+        // Retorna { byFull, byPrefix } indexando DFVs encontrados por nd exato e por prefixo numérico.
+        const fetchDfvBySpo = async (spos: string[]): Promise<{ byFull: Record<string, any>; byPrefix: Record<string, any> }> => {
+          const byFull: Record<string, any> = {};
+          const byPrefix: Record<string, any> = {};
           const normalized = Array.from(new Set(spos.map(normSpo).filter(Boolean)));
-          if (normalized.length === 0) return map;
+          if (normalized.length === 0) return { byFull, byPrefix };
+          const cols = `id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
+                        modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
+                        valor_nf, moeda, cnpj, razao_social`;
           try {
             const placeholders = normalized.map(() => '?').join(',');
             const rows = await client.query(
-              `SELECT id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
-                      modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
-                      valor_nf, moeda, cnpj, razao_social
-                 FROM dados_dachser.t_dados_financeiro_voucher
+              `SELECT ${cols} FROM dados_dachser.t_dados_financeiro_voucher
                 WHERE UPPER(TRIM(nd)) IN (${placeholders})`,
               normalized
             );
             for (const r of (rows || [])) {
-              if (r.nd) map[normSpo(r.nd)] = r;
+              if (r.nd) {
+                byFull[normSpo(r.nd)] = r;
+                byPrefix[spoPrefix(r.nd)] = r;
+              }
             }
           } catch (e) {
-            console.log('fetchDfvBySpo error:', e);
+            console.log('fetchDfvBySpo (exact) error:', e);
           }
-          return map;
+          // Segunda passada: para SPOs sem match exato, tentar via prefixo numérico (ambos os sentidos)
+          const missingPrefixes = Array.from(new Set(
+            normalized
+              .filter(n => !byFull[n])
+              .map(n => spoPrefix(n))
+              .filter(p => /^\d{2,4}-\d{4,}$/.test(p) && !byPrefix[p])
+          ));
+          if (missingPrefixes.length > 0) {
+            try {
+              const likeClauses = missingPrefixes.map(() => '(UPPER(TRIM(nd)) = ? OR UPPER(TRIM(nd)) LIKE ?)').join(' OR ');
+              const params: any[] = [];
+              for (const p of missingPrefixes) { params.push(p, `${p} %`); }
+              const rows = await client.query(
+                `SELECT ${cols} FROM dados_dachser.t_dados_financeiro_voucher
+                  WHERE ${likeClauses}`,
+                params
+              );
+              for (const r of (rows || [])) {
+                if (r.nd) {
+                  byFull[normSpo(r.nd)] = r;
+                  const pfx = spoPrefix(r.nd);
+                  if (!byPrefix[pfx]) byPrefix[pfx] = r;
+                }
+              }
+            } catch (e) {
+              console.log('fetchDfvBySpo (prefix) error:', e);
+            }
+          }
+          return { byFull, byPrefix };
         };
 
         // Merge sheet row + DFV. Returns resolved fields with origin per field.
@@ -18377,8 +18416,27 @@ Deno.serve(async (req) => {
         const buildPreviewItems = async (rows: any[]) => {
           const sheetRows = rows.map((r, i) => parseSheetRow(r, i));
           const spos = sheetRows.map(s => s.spo).filter(Boolean) as string[];
-          const dfvMap = await fetchDfvBySpo(spos);
-          return sheetRows.map(s => mergeWithDfv(s, s.spo ? (dfvMap[normSpo(s.spo)] || null) : null));
+          const { byFull, byPrefix } = await fetchDfvBySpo(spos);
+          return sheetRows.map(s => {
+            if (!s.spo) return mergeWithDfv(s, null);
+            const nf = normSpo(s.spo);
+            let dfv = byFull[nf] || null;
+            if (!dfv) {
+              const pfx = spoPrefix(s.spo);
+              if (/^\d{2,4}-\d{4,}$/.test(pfx)) {
+                const cand = byPrefix[pfx];
+                if (cand) {
+                  dfv = cand;
+                  // Canonicaliza SPO usando o nd completo do DFV
+                  if (cand.nd && normSpo(cand.nd) !== nf) {
+                    console.log(`[batch] SPO matched by prefix: ${s.spo} → ${cand.nd}`);
+                    s.spo = String(cand.nd);
+                  }
+                }
+              }
+            }
+            return mergeWithDfv(s, dfv);
+          });
         };
 
         const prettyEtapa = (raw: any): string => {
@@ -18402,16 +18460,16 @@ Deno.serve(async (req) => {
           const found = new Map<string, string>();
           const pairs: Array<[number, string]> = [];
           const seen = new Set<string>();
+          const idRmsForPrefix = new Set<number>();
           for (const it of items) {
             const idRm = it?.id_rm != null ? Number(it.id_rm) : NaN;
             const spoRaw = it?.spo || it?.processo;
             if (!Number.isFinite(idRm) || !spoRaw) continue;
-            const spoNorm = String(spoRaw).trim().toUpperCase();
+            const spoNorm = normSpo(spoRaw);
             if (!spoNorm) continue;
             const key = `${idRm}|${spoNorm}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            pairs.push([idRm, spoNorm]);
+            if (!seen.has(key)) { seen.add(key); pairs.push([idRm, spoNorm]); }
+            idRmsForPrefix.add(idRm);
           }
           if (pairs.length === 0) return found;
           try {
@@ -18425,11 +18483,48 @@ Deno.serve(async (req) => {
               params
             );
             for (const r of (rows || [])) {
-              const k = `${Number(r.id_rm)}|${String(r.numero_spo || '').trim().toUpperCase()}`;
-              found.set(k, prettyEtapa(r.etapa_atual));
+              const idRm = Number(r.id_rm);
+              const nsp = normSpo(r.numero_spo);
+              const etapa = prettyEtapa(r.etapa_atual);
+              found.set(`${idRm}|${nsp}`, etapa);
+              const pfx = spoPrefix(r.numero_spo);
+              if (/^\d{2,4}-\d{4,}$/.test(pfx)) found.set(`${idRm}|PFX|${pfx}`, etapa);
             }
           } catch (e) {
             console.log('fetchExistingVouchers error:', e);
+          }
+          // Segunda passada: para itens ainda não encontrados, tentar via prefixo numérico
+          const missing: Array<[number, string]> = [];
+          for (const it of items) {
+            const idRm = it?.id_rm != null ? Number(it.id_rm) : NaN;
+            const spoRaw = it?.spo || it?.processo;
+            if (!Number.isFinite(idRm) || !spoRaw) continue;
+            const nsp = normSpo(spoRaw);
+            if (found.has(`${idRm}|${nsp}`)) continue;
+            const pfx = spoPrefix(spoRaw);
+            if (!/^\d{2,4}-\d{4,}$/.test(pfx)) continue;
+            if (found.has(`${idRm}|PFX|${pfx}`)) continue;
+            missing.push([idRm, pfx]);
+          }
+          if (missing.length > 0) {
+            try {
+              const clauses = missing.map(() => '(id_rm = ? AND (UPPER(TRIM(numero_spo)) = ? OR UPPER(TRIM(numero_spo)) LIKE ?))').join(' OR ');
+              const params: any[] = [];
+              for (const [idRm, pfx] of missing) { params.push(idRm, pfx, `${pfx} %`); }
+              const rows = await client.query(
+                `SELECT id_rm, numero_spo, etapa_atual FROM dados_dachser.t_vouchers WHERE ${clauses}`,
+                params
+              );
+              for (const r of (rows || [])) {
+                const idRm = Number(r.id_rm);
+                const etapa = prettyEtapa(r.etapa_atual);
+                found.set(`${idRm}|${normSpo(r.numero_spo)}`, etapa);
+                const pfx = spoPrefix(r.numero_spo);
+                if (/^\d{2,4}-\d{4,}$/.test(pfx)) found.set(`${idRm}|PFX|${pfx}`, etapa);
+              }
+            } catch (e) {
+              console.log('fetchExistingVouchers (prefix) error:', e);
+            }
           }
           return found;
         };
@@ -18439,8 +18534,12 @@ Deno.serve(async (req) => {
             const idRm = it?.id_rm != null ? Number(it.id_rm) : NaN;
             const spoRaw = it?.spo || it?.processo;
             if (!Number.isFinite(idRm) || !spoRaw) continue;
-            const key = `${idRm}|${String(spoRaw).trim().toUpperCase()}`;
-            const etapa = existing.get(key);
+            const nsp = normSpo(spoRaw);
+            let etapa = existing.get(`${idRm}|${nsp}`);
+            if (!etapa) {
+              const pfx = spoPrefix(spoRaw);
+              if (/^\d{2,4}-\d{4,}$/.test(pfx)) etapa = existing.get(`${idRm}|PFX|${pfx}`);
+            }
             if (!etapa) continue;
             it.already_exists = true;
             it.existing_etapa = etapa;

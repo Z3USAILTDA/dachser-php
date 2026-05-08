@@ -1,65 +1,67 @@
-# Vouchers em lote só avançam após todos os anexos obrigatórios
+# SPO da planilha sem sufixo: bater com o voucher/SPO completo
 
-## Regra de roteamento (mesma do voucher individual)
+## Problema
 
-Para cada voucher do lote, a etapa de destino é definida pelos campos da própria linha:
+Hoje, o lookup de SPO no lote (`fetchDfvBySpo` e `fetchExistingVouchers` em `mariadb-proxy/index.ts`) faz **match exato** após normalização (`trim` + collapse de espaços + uppercase). Se a planilha vier com `"105-293293"` mas o `t_dados_financeiro_voucher.nd` (e/ou `t_vouchers.numero_spo`) estiver gravado como `"105-293293 DIM-BY"`, o casamento falha — o item entra como sem DFV / "novo voucher".
 
-| Condição | Etapa de destino |
-|---|---|
-| `urgente = URGENTE_REAL` (urgência marcada manualmente) | **Supervisor** |
-| `cobranca_em_nome_de = CLIENTE` (sem urgência real) | **Financeiro** |
-| `cobranca_em_nome_de = DACHSER` (sem urgência real) | **Fiscal** |
-
-Urgente automático (ICMS / Armazenagem) segue a mesma classificação do voucher individual: vai para Fiscal/Financeiro normalmente, sem desviar para Supervisor — só `URGENTE_REAL` desvia.
-
-## Gate de anexos (vale para todos os destinos acima)
-
-Nenhum voucher do lote sai do estado de espera enquanto não tiver:
-- **Fatura** anexada (obrigatória para 100% dos vouchers).
-- **Boleto** anexado, **se** `forma_pagamento = BOLETO`.
-
-Sem um desses, o voucher fica retido — não vai para Fiscal, nem para Financeiro, nem para Supervisor.
+A regra desejada: o **prefixo numérico** (`"105-293293"`) é a chave de identidade. Sufixos como `" DIM-BY"`, `" SAN"`, `" CWB"` etc. são apenas anexos e devem ser ignorados na comparação. Também precisa funcionar no sentido oposto (planilha com sufixo, DB sem).
 
 ## Implementação
 
-### Backend (`supabase/functions/mariadb-proxy/index.ts`)
+Arquivo: `supabase/functions/mariadb-proxy/index.ts`, dentro do bloco `case 'preview_voucher_batch_import' / 'create_voucher_batch_import' / 'finalize_batch_import'`.
 
-**`create_voucher_batch_import`**
-- Calcular `etapaDestino` (Supervisor | Financeiro | Fiscal) pela regra acima.
-- Inserir voucher com `etapa_atual = 'AGUARDANDO_DOCUMENTOS_LOTE'` (estado de espera novo, distinto de `A_PROCESSAR`).
-- Persistir `etapaDestino` em nova coluna `etapa_destino` na `t_voucher_batch_import_item` (`ALTER TABLE ... ADD COLUMN IF NOT EXISTS etapa_destino VARCHAR(30)` no DDL do handler).
-- `status_envio_cliente` continua sendo `AGUARDANDO_CLIENTE` quando `cobranca = CLIENTE`, `NAO_APLICA` caso contrário (igual hoje).
+### 1. Nova helper `spoPrefix`
 
-**`finalize_batch_import`**
-- Validação atual de pendências (fatura para todos; boleto se `forma_pagamento = BOLETO`) continua sendo a porta de entrada — se houver pendência, retorna 422 e nada se move.
-- Quando passar, para cada item válido:
+```ts
+// Extrai a chave de identidade do SPO: "NNN-NNNNNN" (3 dígitos + hífen + 6+ dígitos).
+// Se não casar o padrão, devolve a string normalizada inteira (fallback seguro).
+const spoPrefix = (s: any): string => {
+  const n = normSpo(s);
+  const m = n.match(/^(\d{2,4}-\d{4,})/);
+  return m ? m[1] : n;
+};
+```
+
+### 2. `fetchDfvBySpo` — buscar também por prefixo
+
+- Continuar fazendo o `WHERE UPPER(TRIM(nd)) IN (...)` com os SPOs exatos da planilha.
+- **Adicionar segunda passada**: para os SPOs que não casaram exato, rodar:
   ```sql
-  UPDATE dados_dachser.t_vouchers
-     SET etapa_atual = ?,           -- etapa_destino do item
-         updated_at = NOW()
-   WHERE id = ?
-     AND etapa_atual = 'AGUARDANDO_DOCUMENTOS_LOTE'
+  SELECT id_rm, nd, ...
+    FROM dados_dachser.t_dados_financeiro_voucher
+   WHERE UPPER(TRIM(nd)) LIKE CONCAT(?, ' %')
+      OR UPPER(TRIM(nd)) = ?
   ```
-  Fallback: se `etapa_destino` estiver vazio (lotes antigos), recomputar pela regra usando `urgencia_tipo` e `cobranca_em_nome_de` do voucher.
-- Log `VOUCHER_PROMOVIDO_LOTE` por voucher promovido, com a etapa de destino.
+  para cada prefixo faltante (em batches; ou um único `WHERE (nd LIKE ? OR nd LIKE ? ...)` montado dinamicamente).
+- Indexar o resultado em **dois maps**: `byFull[normSpo(nd)]` e `byPrefix[spoPrefix(nd)]`.
+- No retorno, lookup do sheet faz: `byFull[normSpo(sheet.spo)] || byPrefix[spoPrefix(sheet.spo)] || null`.
+- Quando o match for via prefixo, **substituir `sheet.spo` (ou `merged.spo`) pelo `nd` completo do DFV** para que a criação do voucher use o SPO canônico (`"105-293293 DIM-BY"`), mantendo paridade com o sistema antigo.
 
-**Filtros das listas (Fiscal / Financeiro / Supervisor / Pagamentos)**
-- Hoje filtram por etapa específica, então vouchers em `AGUARDANDO_DOCUMENTOS_LOTE` já ficam invisíveis nessas filas. Conferir e adicionar exclusão explícita onde houver filtro genérico (`etapa_atual != 'A_PROCESSAR'`).
+### 3. `fetchExistingVouchers` — match por prefixo em `t_vouchers.numero_spo`
 
-### Frontend
+- Manter o lookup atual `(id_rm, UPPER(TRIM(numero_spo))) IN (...)`.
+- Para itens não encontrados que tenham `id_rm`, rodar segundo lookup:
+  ```sql
+  SELECT id_rm, numero_spo, etapa_atual
+    FROM dados_dachser.t_vouchers
+   WHERE id_rm IN (?,?,...)
+     AND UPPER(TRIM(numero_spo)) LIKE CONCAT(?, ' %')
+  ```
+  e indexar por `${id_rm}|${spoPrefix(numero_spo)}`.
+- Se o item bate por prefixo, marca `already_exists` exatamente como hoje (com a etapa) e a mensagem de erro informa o SPO completo encontrado: `"Já existente como '105-293293 DIM-BY' na etapa Fiscal"`.
 
-**`BatchVoucherChecklist.tsx`**
-- Mostrar a etapa de destino calculada como chip extra (ex.: "→ Fiscal", "→ Financeiro", "→ Supervisor") ao lado do badge de status, para o usuário entender para onde o voucher vai quando o lote for finalizado.
-- Manter labels de pendência atuais ("Falta fatura", "Falta boleto", etc.).
+### 4. Logs
 
-**`BatchDocumentBinderDialog.tsx`**
-- Sem mudança de fluxo. Botão "Finalizar lote" segue chamando `finalize_batch_import`; o backend agora é quem promove cada voucher para a etapa correta.
-- Texto auxiliar no header: "Os vouchers só serão enviados para Fiscal, Financeiro ou Supervisor após todos os anexos obrigatórios e a finalização do lote."
+- Adicionar `console.log` quando o casamento ocorrer via prefixo (`'[batch] SPO matched by prefix: 105-293293 → 105-293293 DIM-BY'`) para facilitar auditoria sem mudar o contrato externo.
+
+## Sem mudanças
+
+- Nenhuma migração; nenhuma alteração de schema.
+- Frontend (`BatchImportRowEditor`, `BatchVoucherChecklist`, `BatchDocumentBinderDialog`) continua igual — recebe o SPO já canônico do backend.
+- Validações, gate de anexos e promoção para Fiscal/Financeiro/Supervisor permanecem como definido no plano anterior.
 
 ## Resultado
 
-- Lote sem anexos → 100% dos vouchers ficam em `AGUARDANDO_DOCUMENTOS_LOTE`, invisíveis em Fiscal/Financeiro/Supervisor.
-- Ao finalizar com tudo anexado:
-  - DACHSER + não-urgente real → Fiscal
-  - CLIENTE + não-urgente real → Financeiro
-  - Urgência real (qualquer cobrança) → Supervisor
+- Planilha com `"105-293293"` casa com DFV/voucher gravado como `"105-293293 DIM-BY"` (e vice-versa).
+- O voucher criado/atualizado mantém o SPO completo do sistema fonte, sem perder o sufixo.
+- Itens já existentes em etapa avançada continuam sendo bloqueados, mesmo que o usuário tenha digitado só o prefixo.
