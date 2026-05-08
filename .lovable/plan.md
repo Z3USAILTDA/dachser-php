@@ -1,67 +1,41 @@
-# SPO da planilha sem sufixo: bater com o voucher/SPO completo
-
 ## Problema
 
-Hoje, o lookup de SPO no lote (`fetchDfvBySpo` e `fetchExistingVouchers` em `mariadb-proxy/index.ts`) faz **match exato** após normalização (`trim` + collapse de espaços + uppercase). Se a planilha vier com `"105-293293"` mas o `t_dados_financeiro_voucher.nd` (e/ou `t_vouchers.numero_spo`) estiver gravado como `"105-293293 DIM-BY"`, o casamento falha — o item entra como sem DFV / "novo voucher".
+O frontend já libera o botão de "Importar SPO em Lote" para todos os usuários, mas o backend (`mariadb-proxy/index.ts`) ainda bloqueia com 403 "Acesso negado. Funcionalidade permitida apenas para ADMIN.", causando o erro `Edge Function returned a non-2xx status code` exibido na planilha.
 
-A regra desejada: o **prefixo numérico** (`"105-293293"`) é a chave de identidade. Sufixos como `" DIM-BY"`, `" SAN"`, `" CWB"` etc. são apenas anexos e devem ser ignorados na comparação. Também precisa funcionar no sentido oposto (planilha com sufixo, DB sem).
+## Causa
 
-## Implementação
+Em `supabase/functions/mariadb-proxy/index.ts` (linhas ~18098-18123), o bloco que trata as actions:
+- `preview_voucher_batch_import`
+- `create_voucher_batch_import`
+- `upload_batch_document`
+- `bind_batch_document_to_voucher`
+- `unbind_batch_document`
+- `get_batch_import_status`
+- `finalize_batch_import`
 
-Arquivo: `supabase/functions/mariadb-proxy/index.ts`, dentro do bloco `case 'preview_voucher_batch_import' / 'create_voucher_batch_import' / 'finalize_batch_import'`.
+faz uma checagem `is_admin = 1` em `t_users_dachser` e retorna 403 se não for admin.
 
-### 1. Nova helper `spoPrefix`
+## Mudança
+
+Remover a checagem de `is_admin`, mantendo apenas a validação de que `requesterId` existe (usuário autenticado). O `adminUserName` passa a ser obtido do username do próprio usuário (sem exigir admin).
+
+Pseudocódigo do trecho ajustado:
 
 ```ts
-// Extrai a chave de identidade do SPO: "NNN-NNNNNN" (3 dígitos + hífen + 6+ dígitos).
-// Se não casar o padrão, devolve a string normalizada inteira (fallback seguro).
-const spoPrefix = (s: any): string => {
-  const n = normSpo(s);
-  const m = n.match(/^(\d{2,4}-\d{4,})/);
-  return m ? m[1] : n;
-};
+const requesterId = body.userId ?? body.user_id;
+if (!requesterId) return 403 "Usuário não autenticado";
+
+const userCheck = await client.query(
+  'SELECT username FROM ai_agente.t_users_dachser WHERE id = ?',
+  [requesterId]
+);
+if (!userCheck?.length) return 403 "Usuário não encontrado";
+
+const adminUserName = body.user_name || userCheck[0].username || 'user';
 ```
 
-### 2. `fetchDfvBySpo` — buscar também por prefixo
+Nenhuma outra alteração — fluxo, validações, gates de documentos e regras de promoção permanecem intactos.
 
-- Continuar fazendo o `WHERE UPPER(TRIM(nd)) IN (...)` com os SPOs exatos da planilha.
-- **Adicionar segunda passada**: para os SPOs que não casaram exato, rodar:
-  ```sql
-  SELECT id_rm, nd, ...
-    FROM dados_dachser.t_dados_financeiro_voucher
-   WHERE UPPER(TRIM(nd)) LIKE CONCAT(?, ' %')
-      OR UPPER(TRIM(nd)) = ?
-  ```
-  para cada prefixo faltante (em batches; ou um único `WHERE (nd LIKE ? OR nd LIKE ? ...)` montado dinamicamente).
-- Indexar o resultado em **dois maps**: `byFull[normSpo(nd)]` e `byPrefix[spoPrefix(nd)]`.
-- No retorno, lookup do sheet faz: `byFull[normSpo(sheet.spo)] || byPrefix[spoPrefix(sheet.spo)] || null`.
-- Quando o match for via prefixo, **substituir `sheet.spo` (ou `merged.spo`) pelo `nd` completo do DFV** para que a criação do voucher use o SPO canônico (`"105-293293 DIM-BY"`), mantendo paridade com o sistema antigo.
+## Arquivos
 
-### 3. `fetchExistingVouchers` — match por prefixo em `t_vouchers.numero_spo`
-
-- Manter o lookup atual `(id_rm, UPPER(TRIM(numero_spo))) IN (...)`.
-- Para itens não encontrados que tenham `id_rm`, rodar segundo lookup:
-  ```sql
-  SELECT id_rm, numero_spo, etapa_atual
-    FROM dados_dachser.t_vouchers
-   WHERE id_rm IN (?,?,...)
-     AND UPPER(TRIM(numero_spo)) LIKE CONCAT(?, ' %')
-  ```
-  e indexar por `${id_rm}|${spoPrefix(numero_spo)}`.
-- Se o item bate por prefixo, marca `already_exists` exatamente como hoje (com a etapa) e a mensagem de erro informa o SPO completo encontrado: `"Já existente como '105-293293 DIM-BY' na etapa Fiscal"`.
-
-### 4. Logs
-
-- Adicionar `console.log` quando o casamento ocorrer via prefixo (`'[batch] SPO matched by prefix: 105-293293 → 105-293293 DIM-BY'`) para facilitar auditoria sem mudar o contrato externo.
-
-## Sem mudanças
-
-- Nenhuma migração; nenhuma alteração de schema.
-- Frontend (`BatchImportRowEditor`, `BatchVoucherChecklist`, `BatchDocumentBinderDialog`) continua igual — recebe o SPO já canônico do backend.
-- Validações, gate de anexos e promoção para Fiscal/Financeiro/Supervisor permanecem como definido no plano anterior.
-
-## Resultado
-
-- Planilha com `"105-293293"` casa com DFV/voucher gravado como `"105-293293 DIM-BY"` (e vice-versa).
-- O voucher criado/atualizado mantém o SPO completo do sistema fonte, sem perder o sufixo.
-- Itens já existentes em etapa avançada continuam sendo bloqueados, mesmo que o usuário tenha digitado só o prefixo.
+- `supabase/functions/mariadb-proxy/index.ts` (apenas o bloco de guard ADMIN, ~18105-18123)
