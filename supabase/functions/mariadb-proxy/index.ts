@@ -18380,10 +18380,84 @@ Deno.serve(async (req) => {
           return sheetRows.map(s => mergeWithDfv(s, s.spo ? (dfvMap[normSpo(s.spo)] || null) : null));
         };
 
+        const prettyEtapa = (raw: any): string => {
+          const s = String(raw || '').trim().toUpperCase();
+          const map: Record<string, string> = {
+            FISCAL: 'Fiscal',
+            FINANCEIRO: 'Financeiro',
+            SUPERVISOR: 'Supervisor',
+            PAGAMENTOS: 'Pagamentos',
+            BAIXA: 'Baixa',
+            CONCLUIDO: 'Concluído',
+            'CONCLUÍDO': 'Concluído',
+          };
+          if (map[s]) return map[s];
+          if (!s) return 'Desconhecida';
+          return s.charAt(0) + s.slice(1).toLowerCase();
+        };
+
+        // Looks up (id_rm, numero_spo) pairs in t_vouchers and returns Map<key,etapaPretty>
+        const fetchExistingVouchers = async (items: any[]): Promise<Map<string, string>> => {
+          const found = new Map<string, string>();
+          const pairs: Array<[number, string]> = [];
+          const seen = new Set<string>();
+          for (const it of items) {
+            const idRm = it?.id_rm != null ? Number(it.id_rm) : NaN;
+            const spoRaw = it?.spo || it?.processo;
+            if (!Number.isFinite(idRm) || !spoRaw) continue;
+            const spoNorm = String(spoRaw).trim().toUpperCase();
+            if (!spoNorm) continue;
+            const key = `${idRm}|${spoNorm}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            pairs.push([idRm, spoNorm]);
+          }
+          if (pairs.length === 0) return found;
+          try {
+            const placeholders = pairs.map(() => '(?, ?)').join(', ');
+            const params: any[] = [];
+            for (const [idRm, spo] of pairs) { params.push(idRm, spo); }
+            const rows = await client.query(
+              `SELECT id_rm, numero_spo, etapa_atual
+                 FROM dados_dachser.t_vouchers
+                WHERE (id_rm, UPPER(TRIM(numero_spo))) IN (${placeholders})`,
+              params
+            );
+            for (const r of (rows || [])) {
+              const k = `${Number(r.id_rm)}|${String(r.numero_spo || '').trim().toUpperCase()}`;
+              found.set(k, prettyEtapa(r.etapa_atual));
+            }
+          } catch (e) {
+            console.log('fetchExistingVouchers error:', e);
+          }
+          return found;
+        };
+
+        const markAlreadyExisting = (items: any[], existing: Map<string, string>) => {
+          for (const it of items) {
+            const idRm = it?.id_rm != null ? Number(it.id_rm) : NaN;
+            const spoRaw = it?.spo || it?.processo;
+            if (!Number.isFinite(idRm) || !spoRaw) continue;
+            const key = `${idRm}|${String(spoRaw).trim().toUpperCase()}`;
+            const etapa = existing.get(key);
+            if (!etapa) continue;
+            it.already_exists = true;
+            it.existing_etapa = etapa;
+            it.status = 'ERROR';
+            const msg = `Já existente na etapa ${etapa}`;
+            it.validation_message = it.validation_message
+              ? (String(it.validation_message).includes(msg) ? it.validation_message : `${it.validation_message}; ${msg}`)
+              : msg;
+          }
+          return items;
+        };
+
         // ===== preview =====
         if (action === 'preview_voucher_batch_import') {
           const rows: any[] = (body as any).rows || [];
           const items = await buildPreviewItems(rows);
+          const existing = await fetchExistingVouchers(items);
+          markAlreadyExisting(items, existing);
           const valid = items.filter(i => i.status === 'VALID').length;
           const errs = items.filter(i => i.status === 'ERROR').length;
           result = { success: true, items, total: items.length, valid, errors: errs };
