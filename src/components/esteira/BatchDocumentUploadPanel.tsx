@@ -14,13 +14,19 @@ export function BatchDocumentUploadPanel({ batchId, userId, onUploaded }: Props)
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
   const { toast } = useToast();
 
   const handle = async (files: FileList | File[] | null) => {
     if (!files || (files as any).length === 0) return;
+    const list = Array.from(files as any) as File[];
     setUploading(true);
+    setProgress({ current: 0, total: list.length });
     try {
-      for (const file of Array.from(files as any) as File[]) {
+      let i = 0;
+      for (const file of list) {
+        i++;
+        setProgress({ current: i, total: list.length });
         const ext = file.name.split(".").pop();
         const path = `batch/${batchId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
         const { error: upErr } = await supabase.storage.from("voucher-anexos").upload(path, file);
@@ -47,9 +53,10 @@ export function BatchDocumentUploadPanel({ batchId, userId, onUploaded }: Props)
         }
       }
       onUploaded();
-      toast({ title: "Upload concluído" });
+      toast({ title: `Upload concluído (${list.length} arquivo${list.length > 1 ? "s" : ""})` });
     } finally {
       setUploading(false);
+      setProgress({ current: 0, total: 0 });
       if (inputRef.current) inputRef.current.value = "";
     }
   };
@@ -105,7 +112,7 @@ export function BatchDocumentUploadPanel({ batchId, userId, onUploaded }: Props)
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-foreground">
           {uploading
-            ? "Enviando…"
+            ? `Enviando ${progress.current} de ${progress.total}…`
             : dragOver
             ? "Solte os arquivos para enviar"
             : "Arraste arquivos ou clique para selecionar"}
