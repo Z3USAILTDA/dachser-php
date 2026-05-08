@@ -182,10 +182,10 @@ export const BulkDeleteVouchersDialog = ({
                           </div>
                           <div className="text-xs text-muted-foreground truncate">
                             {v.fornecedor || "—"}
-                            {v.valorTotal != null && (
+                            {v.valor != null && (
                               <span className="ml-2">
-                                · R${" "}
-                                {Number(v.valorTotal).toLocaleString("pt-BR", {
+                                · {v.moeda || "BRL"}{" "}
+                                {Number(v.valor).toLocaleString("pt-BR", {
                                   minimumFractionDigits: 2,
                                   maximumFractionDigits: 2,
                                 })}
