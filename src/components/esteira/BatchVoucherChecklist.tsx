@@ -12,7 +12,14 @@ export interface ChecklistItem {
   temBoleto: boolean;
   requerBoleto: boolean;
   status: string;
+  etapa_destino?: string | null;
 }
+
+const ETAPA_LABEL: Record<string, string> = {
+  FISCAL: "Fiscal",
+  FINANCEIRO: "Financeiro",
+  SUPERVISOR: "Supervisor",
+};
 
 const STATUS_LABEL: Record<string, string> = {
   COMPLETO: "Completo",
@@ -111,11 +118,18 @@ export function BatchVoucherChecklist({
             Boleto {item.requerBoleto ? "" : "n/a"}
           </span>
         </div>
-        <span
-          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badgeCls}`}
-        >
-          {label}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {item.etapa_destino && ETAPA_LABEL[item.etapa_destino] && (
+            <span className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+              → {ETAPA_LABEL[item.etapa_destino]}
+            </span>
+          )}
+          <span
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badgeCls}`}
+          >
+            {label}
+          </span>
+        </div>
       </div>
     </button>
   );

@@ -137,7 +137,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
             Vincular documentos ao lote
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Faça upload das faturas e boletos e associe cada arquivo ao voucher correspondente. Finalize o lote quando todos estiverem completos.
+            Faça upload das faturas e boletos e associe cada arquivo ao voucher correspondente. Os vouchers só serão enviados para Fiscal, Financeiro ou Supervisor após todos os anexos obrigatórios e a finalização do lote.
           </DialogDescription>
         </DialogHeader>
 
