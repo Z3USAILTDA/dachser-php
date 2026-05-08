@@ -2,6 +2,7 @@ import { Check, AlertTriangle, X } from "lucide-react";
 
 export interface ChecklistItem {
   voucher_id: string;
+  numero_spo: string | null;
   fornecedor: string | null;
   valor: number | null;
   vencimento: string | null;
@@ -40,13 +41,14 @@ export function BatchVoucherChecklist({
       }${cls}`}
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="font-medium truncate">{item.fornecedor || "—"}</div>
+        <span className="font-mono text-xs font-semibold text-primary">SPO {item.numero_spo || "—"}</span>
         <div className="text-xs whitespace-nowrap">
           {item.valor != null
             ? item.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
             : "—"}
         </div>
       </div>
+      <div className="font-medium truncate mt-0.5">{item.fornecedor || "—"}</div>
       <div className="text-xs text-muted-foreground mt-1">
         {item.forma_pagamento || "—"} • venc. {item.vencimento || "—"}
       </div>
