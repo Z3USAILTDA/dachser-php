@@ -18204,6 +18204,50 @@ Deno.serve(async (req) => {
         // varrer todos os lotes abandonados.
         const runAbandonedCleanup = async (opts: { scope?: 'USER' | 'ALL'; userId?: string | number }) => {
           const scope = opts.scope || 'USER';
+          const userScopeSql = scope === 'ALL' ? '' : ' AND criado_por_user_id = ?';
+          const userScopeParams: any[] = scope === 'ALL' ? [] : [String(opts.userId ?? '')];
+
+          // 1) Apaga TODOS os vouchers órfãos parados em AGUARDANDO_DOCUMENTOS_LOTE
+          //    (independente do estado do lote, ou de o lote ainda existir).
+          let deletedVouchers = 0;
+          let voucherIds: string[] = [];
+          try {
+            const vRows = await client.query(
+              `SELECT id FROM dados_dachser.t_vouchers
+                WHERE etapa_atual = 'AGUARDANDO_DOCUMENTOS_LOTE'${userScopeSql}`,
+              userScopeParams,
+            );
+            voucherIds = (vRows || []).map((r: any) => r.id).filter(Boolean);
+          } catch (_) {}
+          if (voucherIds.length > 0) {
+            const vph = voucherIds.map(() => '?').join(',');
+            try {
+              await client.execute(
+                `DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id IN (${vph})`,
+                voucherIds,
+              );
+            } catch (_) {}
+            try {
+              await client.execute(
+                `DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${vph})`,
+                voucherIds,
+              );
+            } catch (_) {}
+            try {
+              await client.execute(
+                `DELETE FROM dados_dachser.t_voucher_batch_import_item WHERE voucher_id IN (${vph})`,
+                voucherIds,
+              );
+            } catch (_) {}
+            const delV: any = await client.execute(
+              `DELETE FROM dados_dachser.t_vouchers
+                WHERE id IN (${vph}) AND etapa_atual = 'AGUARDANDO_DOCUMENTOS_LOTE'`,
+              voucherIds,
+            );
+            deletedVouchers = Number(delV?.affectedRows ?? delV?.affected_rows ?? 0);
+          }
+
+          // 2) Apaga lotes ainda em PENDING_DOCUMENTS (e seus restos)
           const where = scope === 'ALL'
             ? `status = 'PENDING_DOCUMENTS'`
             : `status = 'PENDING_DOCUMENTS' AND created_by_user_id = ?`;
@@ -18213,62 +18257,29 @@ Deno.serve(async (req) => {
             params,
           );
           const batchIds: string[] = (batches || []).map((b: any) => b.id);
-          if (batchIds.length === 0) {
-            return { batches: 0, vouchers: 0, documents: 0 };
-          }
-          const ph = batchIds.map(() => '?').join(',');
-          const itemRows = await client.query(
-            `SELECT voucher_id FROM dados_dachser.t_voucher_batch_import_item
-             WHERE batch_id IN (${ph}) AND voucher_id IS NOT NULL`,
-            batchIds,
-          );
-          const voucherIds: string[] = (itemRows || [])
-            .map((r: any) => r.voucher_id)
-            .filter((v: any) => !!v);
-          let deletedVouchers = 0;
-          if (voucherIds.length > 0) {
-            const vph = voucherIds.map(() => '?').join(',');
-            // Só remove vouchers que ainda estão na etapa de aguardando documentos do lote.
-            // Vouchers que avançaram (improvável, mas seguro) ficam intactos.
-            const delV: any = await client.execute(
-              `DELETE FROM dados_dachser.t_vouchers
-                WHERE id IN (${vph}) AND etapa_atual = 'AGUARDANDO_DOCUMENTOS_LOTE'`,
-              voucherIds,
-            );
-            deletedVouchers = Number(delV?.affectedRows ?? delV?.affected_rows ?? 0);
+          let deletedDocs = 0;
+          if (batchIds.length > 0) {
+            const ph = batchIds.map(() => '?').join(',');
             try {
-              await client.execute(
-                `DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id IN (${vph})`,
-                voucherIds,
+              const delD: any = await client.execute(
+                `DELETE FROM dados_dachser.t_voucher_batch_documents WHERE batch_id IN (${ph})`,
+                batchIds,
               );
-            } catch (_) { /* logs podem não existir */ }
+              deletedDocs = Number(delD?.affectedRows ?? delD?.affected_rows ?? 0);
+            } catch (_) {}
             try {
               await client.execute(
-                `DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${vph})`,
-                voucherIds,
+                `DELETE FROM dados_dachser.t_voucher_batch_import_item WHERE batch_id IN (${ph})`,
+                batchIds,
+              );
+            } catch (_) {}
+            try {
+              await client.execute(
+                `DELETE FROM dados_dachser.t_voucher_batch_import WHERE id IN (${ph})`,
+                batchIds,
               );
             } catch (_) {}
           }
-          let deletedDocs = 0;
-          try {
-            const delD: any = await client.execute(
-              `DELETE FROM dados_dachser.t_voucher_batch_documents WHERE batch_id IN (${ph})`,
-              batchIds,
-            );
-            deletedDocs = Number(delD?.affectedRows ?? delD?.affected_rows ?? 0);
-          } catch (_) {}
-          try {
-            await client.execute(
-              `DELETE FROM dados_dachser.t_voucher_batch_import_item WHERE batch_id IN (${ph})`,
-              batchIds,
-            );
-          } catch (_) {}
-          try {
-            await client.execute(
-              `DELETE FROM dados_dachser.t_voucher_batch_import WHERE id IN (${ph})`,
-              batchIds,
-            );
-          } catch (_) {}
           return { batches: batchIds.length, vouchers: deletedVouchers, documents: deletedDocs };
         };
 
@@ -18642,6 +18653,16 @@ Deno.serve(async (req) => {
 
         // ===== preview =====
         if (action === 'preview_voucher_batch_import') {
+          // Auto-limpa qualquer voucher órfão em AGUARDANDO_DOCUMENTOS_LOTE deste usuário
+          // antes de comparar com a planilha — evita falsos "Já na etapa…".
+          try {
+            const cleanup = await runAbandonedCleanup({ scope: 'ALL', userId: requesterId });
+            if (cleanup.vouchers > 0 || cleanup.batches > 0) {
+              console.log(`[preview_voucher_batch_import] Auto-cleanup user=${requesterId}:`, cleanup);
+            }
+          } catch (e) {
+            console.log('[preview_voucher_batch_import] auto-cleanup failed:', e);
+          }
           const rows: any[] = (body as any).rows || [];
           const items = await buildPreviewItems(rows);
           const existing = await fetchExistingVouchers(items);
@@ -18657,7 +18678,7 @@ Deno.serve(async (req) => {
           // Auto-limpeza: ao iniciar um novo lote, descarta qualquer lote anterior
           // deste usuário que ficou em PENDING_DOCUMENTS (abandonado).
           try {
-            const cleanup = await runAbandonedCleanup({ scope: 'USER', userId: requesterId });
+            const cleanup = await runAbandonedCleanup({ scope: 'ALL', userId: requesterId });
             if (cleanup.batches > 0) {
               console.log(`[create_voucher_batch_import] Auto-cleanup user=${requesterId}:`, cleanup);
             }
