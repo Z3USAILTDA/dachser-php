@@ -121,7 +121,11 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
       toast({ title: "Selecione documento(s), voucher(s) e tipo", variant: "destructive" });
       return;
     }
-    setConfirmOpen(true);
+    if (isMaster) {
+      setConfirmOpen(true);
+    } else {
+      doBind();
+    }
   };
 
   const doBind = async () => {
