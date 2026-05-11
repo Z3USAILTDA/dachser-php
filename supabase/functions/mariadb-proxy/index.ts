@@ -18758,6 +18758,46 @@ Deno.serve(async (req) => {
           break;
         }
 
+        // ===== bind master group (1 doc -> N vouchers; master criado no finalize) =====
+        if (action === 'bind_batch_document_to_master_group') {
+          const { batch_document_id, voucher_ids, tipo_anexo } = body as any;
+          if (!batch_document_id || !Array.isArray(voucher_ids) || voucher_ids.length < 2 || !tipo_anexo) {
+            return new Response(JSON.stringify({ success: false, error: 'batch_document_id, voucher_ids[>=2], tipo_anexo obrigatórios' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const docs = await client.query(`SELECT * FROM dados_dachser.t_voucher_batch_documents WHERE id = ?`, [batch_document_id]);
+          if (!docs || docs.length === 0) {
+            return new Response(JSON.stringify({ success: false, error: 'Documento não encontrado' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const doc = docs[0];
+          const placeholders = voucher_ids.map(() => '?').join(',');
+          const items = await client.query(
+            `SELECT voucher_id FROM dados_dachser.t_voucher_batch_import_item WHERE batch_id = ? AND voucher_id IN (${placeholders})`,
+            [doc.batch_id, ...voucher_ids],
+          );
+          if (!items || items.length !== voucher_ids.length) {
+            return new Response(JSON.stringify({ success: false, error: 'Um ou mais vouchers não pertencem a este lote' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          await client.execute(`
+            UPDATE dados_dachser.t_voucher_batch_documents
+            SET voucher_id = NULL, anexo_id = NULL,
+                is_master_group = 1, master_voucher_ids = ?,
+                tipo_anexo = ?, status = 'VINCULADO',
+                bound_by_user_id = ?, bound_by_user_name = ?, bound_at = NOW()
+            WHERE id = ?
+          `, [JSON.stringify(voucher_ids), tipo_anexo, String(requesterId), adminUserName, batch_document_id]);
+          for (const vid of voucher_ids) {
+            try {
+              const logId = crypto.randomUUID();
+              await client.execute(`
+                INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+                VALUES (?, ?, ?, ?, 'ANEXO_VINCULADO_LOTE_MASTER', ?, NOW())
+              `, [logId, vid, String(requesterId), adminUserName, `batch_id=${doc.batch_id}; tipo=${tipo_anexo}; file=${doc.file_name}; group_size=${voucher_ids.length}`]);
+            } catch (_) {}
+          }
+          result = { success: true, master_pending: true, group_size: voucher_ids.length };
+          break;
+        }
+
         // ===== unbind =====
         if (action === 'unbind_batch_document') {
           const { batch_document_id } = body as any;
@@ -18772,19 +18812,30 @@ Deno.serve(async (req) => {
           if (doc.anexo_id) {
             try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE id = ?`, [doc.anexo_id]); } catch (_) {}
           }
+          // Capture voucher list for logging (individual or master group)
+          let masterGroup: string[] = [];
+          if (Number(doc.is_master_group) === 1 && doc.master_voucher_ids) {
+            try {
+              masterGroup = typeof doc.master_voucher_ids === 'string'
+                ? JSON.parse(doc.master_voucher_ids)
+                : doc.master_voucher_ids;
+            } catch (_) { masterGroup = []; }
+          }
           await client.execute(`
             UPDATE dados_dachser.t_voucher_batch_documents
             SET voucher_id = NULL, anexo_id = NULL, status = 'PENDENTE',
+                is_master_group = 0, master_voucher_ids = NULL,
                 bound_by_user_id = NULL, bound_by_user_name = NULL, bound_at = NULL
             WHERE id = ?
           `, [batch_document_id]);
-          if (doc.voucher_id) {
+          const logTargets: string[] = doc.voucher_id ? [doc.voucher_id] : masterGroup;
+          for (const vid of logTargets) {
             try {
               const logId = crypto.randomUUID();
               await client.execute(`
                 INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
                 VALUES (?, ?, ?, ?, 'ANEXO_DESVINCULADO_LOTE', ?, NOW())
-              `, [logId, doc.voucher_id, String(requesterId), adminUserName, `batch_id=${doc.batch_id}; file=${doc.file_name}`]);
+              `, [logId, vid, String(requesterId), adminUserName, `batch_id=${doc.batch_id}; file=${doc.file_name}`]);
             } catch (_) {}
           }
           result = { success: true };
