@@ -1,41 +1,41 @@
-## Problema
+## Ajuste no parser e no merge da importação em lote (SPO)
 
-O frontend já libera o botão de "Importar SPO em Lote" para todos os usuários, mas o backend (`mariadb-proxy/index.ts`) ainda bloqueia com 403 "Acesso negado. Funcionalidade permitida apenas para ADMIN.", causando o erro `Edge Function returned a non-2xx status code` exibido na planilha.
+Atualizar `supabase/functions/mariadb-proxy/index.ts` (bloco do `preview_voucher_batch_import`) para refletir o de‑para da planilha do CHB e dar **prioridade absoluta à planilha** nos campos abaixo, ignorando o que existir em `t_dados_financeiro_voucher` (DFV).
 
-## Causa
+### 1) `parseSheetRow` (linhas ~18240-18286)
 
-Em `supabase/functions/mariadb-proxy/index.ts` (linhas ~18098-18123), o bloco que trata as actions:
-- `preview_voucher_batch_import`
-- `create_voucher_batch_import`
-- `upload_batch_document`
-- `bind_batch_document_to_voucher`
-- `unbind_batch_document`
-- `get_batch_import_status`
-- `finalize_batch_import`
+- **Valor** → ler de `Valor solicitado` (manter aliases atuais: `Valor Solicitação`/`Valor`/`Valor NF`).
+- **Vencimento** → ler de `Data vencimento` (manter `Vencimento`).
+- **Tipo de documento** → ler de `Tipo de documento` (já suportado).
+- **Forma de pagamento** → ler de `Forma pagto` e mapear códigos curtos:
+  - `B` → `BOLETO`
+  - `T` → `TRANSFERENCIA`
+  - manter os atuais (`BOLETO`, `PIX`, `TRANSFERENCIA`, etc.) para retrocompatibilidade.
+- **Necessita fiscal** → ler de `Fiscal` e aceitar:
+  - `S` → `DACHSER` (Sim — Fiscal)
+  - `N` → `CLIENTE` (Não — Cliente)
+  - manter os atuais (`SIM`/`NAO`/`DACHSER`/`CLIENTE`).
+- **Origem do processo** → forçar sempre `CHB`, ignorando o que vier (ou ausência) na planilha.
 
-faz uma checagem `is_admin = 1` em `t_users_dachser` e retorna 403 se não for admin.
+### 2) `mergeWithDfv` (linhas ~18353-18414) — prioridade da planilha
 
-## Mudança
+Para os campos abaixo, **NÃO** aplicar o `pick(sheet, dfv)` atual: usar diretamente o valor da planilha (mesmo que o DFV tenha valor diferente) e marcar `field_origin` como `PLANILHA`:
 
-Remover a checagem de `is_admin`, mantendo apenas a validação de que `requesterId` existe (usuário autenticado). O `adminUserName` passa a ser obtido do username do próprio usuário (sem exigir admin).
+- `valor`
+- `vencimento`
+- `tipo_documento`
+- `forma_pagamento`
+- `cobranca_em_nome_de` (já é só da planilha; mantém)
+- `origem_processo` (sempre `CHB` da planilha)
 
-Pseudocódigo do trecho ajustado:
+Demais campos (`processo`, `cnpj_fornecedor`, `data_emissao`, `filial`, `moeda`, `fornecedor`) mantêm o comportamento atual (DFV preenche quando planilha está vazia; `fornecedor` continua vindo do DFV).
 
-```ts
-const requesterId = body.userId ?? body.user_id;
-if (!requesterId) return 403 "Usuário não autenticado";
+### Escopo / não escopo
 
-const userCheck = await client.query(
-  'SELECT username FROM ai_agente.t_users_dachser WHERE id = ?',
-  [requesterId]
-);
-if (!userCheck?.length) return 403 "Usuário não encontrado";
+- Apenas o bloco do batch import em `mariadb-proxy/index.ts` (`parseSheetRow`, `FORMA_MAP`/aliases e `mergeWithDfv`).
+- Sem mudanças no frontend, no schema ou em outras rotas.
+- Validações posteriores e promoção de etapa permanecem iguais.
 
-const adminUserName = body.user_name || userCheck[0].username || 'user';
-```
+### Arquivos
 
-Nenhuma outra alteração — fluxo, validações, gates de documentos e regras de promoção permanecem intactos.
-
-## Arquivos
-
-- `supabase/functions/mariadb-proxy/index.ts` (apenas o bloco de guard ADMIN, ~18105-18123)
+- `supabase/functions/mariadb-proxy/index.ts` (linhas ~18197-18414).

@@ -18195,8 +18195,10 @@ Deno.serve(async (req) => {
 
         // Helpers
         const FORMA_MAP: Record<string, string> = {
+          'B': 'BOLETO',
           'BOLETO': 'BOLETO', 'BOL': 'BOLETO',
           'PIX': 'PIX',
+          'T': 'TRANSFERENCIA',
           'TRANSFERENCIA': 'TRANSFERENCIA', 'TRANSFERÊNCIA': 'TRANSFERENCIA',
           'TED': 'TRANSFERENCIA', 'TRANSF': 'TRANSFERENCIA',
           'DEPOSITO': 'DEPOSITO', 'DEPÓSITO': 'DEPOSITO',
