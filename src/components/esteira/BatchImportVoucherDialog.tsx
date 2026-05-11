@@ -169,21 +169,26 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
   };
 
   const applyBulk = () => {
-    if (!bulkField || !bulkValue) return;
+    const filled = Object.entries(bulkValues).filter(([, v]) => v !== undefined && v !== "");
+    if (filled.length === 0) return;
     if (selected.size === 0) {
       toast({ title: "Selecione ao menos uma linha", variant: "destructive" });
       return;
     }
-    const v = bulkField === "urgente" ? bulkValue === "true" : bulkValue;
     setItems(prev => revalidate(prev.map(it => {
       if (!selected.has(it.row_index)) return it;
-      const next = { ...it, [bulkField]: v };
-      next.field_origin = { ...(it.field_origin || {}), [bulkField]: "MANUAL" };
+      const next: any = { ...it };
+      const fo = { ...(it.field_origin || {}) };
+      for (const [k, v] of filled) {
+        next[k] = v;
+        fo[k] = "MANUAL";
+      }
+      next.field_origin = fo;
       return next;
     })));
     toast({ title: `Aplicado a ${selected.size} linha(s)` });
     setBulkOpen(false);
-    setBulkField(""); setBulkValue("");
+    setBulkValues({});
   };
 
   const confirm = async () => {
