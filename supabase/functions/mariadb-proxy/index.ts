@@ -18653,6 +18653,16 @@ Deno.serve(async (req) => {
 
         // ===== preview =====
         if (action === 'preview_voucher_batch_import') {
+          // Auto-limpa qualquer voucher órfão em AGUARDANDO_DOCUMENTOS_LOTE deste usuário
+          // antes de comparar com a planilha — evita falsos "Já na etapa…".
+          try {
+            const cleanup = await runAbandonedCleanup({ scope: 'USER', userId: requesterId });
+            if (cleanup.vouchers > 0 || cleanup.batches > 0) {
+              console.log(`[preview_voucher_batch_import] Auto-cleanup user=${requesterId}:`, cleanup);
+            }
+          } catch (e) {
+            console.log('[preview_voucher_batch_import] auto-cleanup failed:', e);
+          }
           const rows: any[] = (body as any).rows || [];
           const items = await buildPreviewItems(rows);
           const existing = await fetchExistingVouchers(items);
