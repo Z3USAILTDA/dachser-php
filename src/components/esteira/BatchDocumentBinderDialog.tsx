@@ -371,6 +371,28 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                 {checklist.filter((c) => c.status === "COMPLETO").length}/{checklist.length}
               </span>
             </div>
+            {lockedMaster && (
+              <div className="flex items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                <div className="flex items-center gap-2 text-[11px] text-amber-200">
+                  <Lock className="h-3.5 w-3.5" />
+                  <span className="font-semibold uppercase tracking-wider">Master travado</span>
+                  <span className="text-amber-100/80">
+                    · {lockedMaster.voucherIds.length} vouchers · SPO {lockedMaster.previewSpo} ·{" "}
+                    {fmtBRL(lockedMaster.total)}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-[11px] text-amber-200 hover:text-amber-100 hover:bg-amber-500/20"
+                  onClick={unlockMaster}
+                  disabled={busy}
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Encerrar master
+                </Button>
+              </div>
+            )}
             <div className="border-b border-border/60 px-3 py-2">
               <div className="relative">
                 <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
