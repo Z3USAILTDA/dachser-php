@@ -44,6 +44,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
   const [busy, setBusy] = useState(false);
   const [voucherSearch, setVoucherSearch] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [lockedMaster, setLockedMaster] = useState<{ voucherIds: string[]; previewSpo: string; total: number } | null>(null);
 
   const refresh = useCallback(async () => {
     if (!batchId) return;
