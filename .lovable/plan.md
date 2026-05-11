@@ -1,22 +1,39 @@
-## Plano de correção
+## Objetivo
 
-1. **Corrigir a criação real do master no backend**
-   - Ajustar o fluxo `finalize_batch_import` para criar o voucher master usando os campos corretos da tabela de vouchers.
-   - Garantir que falha na criação do master não seja engolida silenciosamente; se o master não puder ser criado, a finalização do lote deve retornar erro claro e não promover vouchers individuais como se tudo tivesse dado certo.
+Após confirmar a criação de um voucher master, "travar" o agrupamento de vouchers para que documentos adicionais (ex: boleto vindo depois da fatura) possam ser vinculados ao mesmo master sem precisar reselecionar todos os vouchers nem reconfirmar.
 
-2. **Garantir anexos no master**
-   - Manter os documentos vinculados como “grupo master” durante a etapa de vínculo.
-   - Ao finalizar o lote, inserir esses anexos no voucher master criado e atualizar o documento do lote apontando para o `masterId` e `anexoId`.
+## Comportamento atual
 
-3. **Evitar promoção indevida dos vouchers filhos**
-   - Depois que o master for criado, marcar os vouchers individuais como `CONSOLIDADO_NO_MASTER` e vinculá-los via `voucher_master_id`.
-   - Promover apenas o master para a etapa destino correta (`FISCAL`, `FINANCEIRO` ou `SUPERVISOR`), não os filhos individualmente.
+- A cada clique em "Vincular", o usuário precisa selecionar os vouchers + documento + tipo.
+- Se selecionar 2+ vouchers, abre o `AlertDialog` de confirmação do master.
+- Após vincular, `selectedVouchers` e `selectedDocs` são limpos.
+- Ao subir um segundo documento (boleto), o usuário tem que reselecionar os mesmos vouchers e reconfirma o master de novo.
 
-4. **Retornar contagem correta para a UI**
-   - Ajustar a resposta da finalização para devolver `masters_created`, `promoted` e erros quando houver, para que o toast mostre o resultado real.
+## Comportamento desejado
 
-## Detalhes técnicos
+1. Ao confirmar a criação do master pela primeira vez:
+   - Vincular o documento atual ao grupo master (fluxo atual já faz isso via `bind_batch_document_to_master_group`).
+   - **Travar** a seleção de vouchers como "master ativo" — exibir um cartão fixo no topo da seção de vouchers ("Master em montagem: N vouchers · SPO previsto: X · total Y") com botão "Encerrar master".
+   - Limpar apenas `selectedDocs` (não `selectedVouchers`), mantendo o grupo travado visualmente.
+2. Próximos vínculos enquanto o master estiver ativo:
+   - Basta selecionar o(s) documento(s) novo(s) e o tipo; clicar em "Vincular ao master" usa o grupo travado e **não** reabre o `AlertDialog`.
+   - O backend continua chamando `bind_batch_document_to_master_group` com os mesmos `voucher_ids`.
+3. Encerrar master:
+   - Botão "Encerrar master" (ou ao fechar o dialog/finalizar lote) limpa o estado travado, devolvendo o seletor ao modo livre.
+4. Se o usuário desmarcar/alterar vouchers manualmente enquanto o master está travado, oferecemos "Encerrar master" automaticamente (a edição implica novo grupo) — mais simples: enquanto travado, os checkboxes de vouchers ficam desabilitados (somente leitura), com tooltip "Encerre o master para alterar a seleção".
 
-- Arquivo principal: `supabase/functions/mariadb-proxy/index.ts`.
-- Causa provável encontrada: no bloco de criação do master em lote, o código usa `v.data_emissao` e insere em `data_emissao`, mas o restante da esteira usa `data_emissao_documento`. Isso pode fazer a criação do master falhar e, como o `catch` atual apenas loga e continua, os vouchers acabam seguindo individualmente e o master/anexos não são criados.
-- A correção será cirúrgica e limitada ao fluxo de finalização do lote/master.
+## Mudanças
+
+Arquivo único: `src/components/esteira/BatchDocumentBinderDialog.tsx`
+
+- Novo estado `lockedMaster: { voucherIds: string[]; previewSpo: string; total: number } | null`.
+- Em `doBind`, quando `voucherIds.length >= 2` e `!lockedMaster`, após sucesso definir `lockedMaster` com a seleção atual.
+- Em `requestBind`, se `lockedMaster` existir, ignorar `selectedVouchers` e usar `lockedMaster.voucherIds`; pular o `AlertDialog`.
+- Após bind bem-sucedido, limpar somente `selectedDocs` (manter `selectedVouchers` igual a `lockedMaster.voucherIds` para feedback visual).
+- Renderizar banner do master travado acima da grid de vouchers com botões "Encerrar master".
+- Desabilitar `BatchVoucherChecklist` (prop `multi` + novo `disabled`) enquanto `lockedMaster` ativo, exceto para os vouchers do grupo (que aparecem como "fixados").
+- Resetar `lockedMaster` no `useEffect` de fechamento do dialog e após `finalize` bem-sucedido.
+
+## Fora de escopo
+
+- Sem mudanças no edge function `mariadb-proxy` — o backend já aceita múltiplas chamadas `bind_batch_document_to_master_group` com o mesmo `voucher_ids` e o `finalize_batch_import` consolida em um único master ao final.

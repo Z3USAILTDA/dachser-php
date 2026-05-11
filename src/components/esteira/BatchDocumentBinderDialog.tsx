@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Link2, Unlink, Loader2, FileText, Paperclip, CheckCircle2, Search, Layers } from "lucide-react";
+import { Link2, Unlink, Loader2, FileText, Paperclip, CheckCircle2, Search, Layers, Lock, X } from "lucide-react";
 import { TIPOS_ANEXO } from "@/utils/batchVoucherImport";
 import { BatchDocumentUploadPanel } from "./BatchDocumentUploadPanel";
 import { BatchVoucherChecklist, type ChecklistItem } from "./BatchVoucherChecklist";
@@ -44,6 +44,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
   const [busy, setBusy] = useState(false);
   const [voucherSearch, setVoucherSearch] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [lockedMaster, setLockedMaster] = useState<{ voucherIds: string[]; previewSpo: string; total: number } | null>(null);
 
   const refresh = useCallback(async () => {
     if (!batchId) return;
@@ -67,6 +68,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
       setSelectedDocs(new Set());
       setSelectedVouchers(new Set());
       setVoucherSearch("");
+      setLockedMaster(null);
     }
   }, [open, batchId, refresh]);
 
@@ -79,6 +81,13 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
   };
 
   const toggleVoucher = (id: string) => {
+    if (lockedMaster) {
+      toast({
+        title: "Master travado",
+        description: "Encerre o master atual para alterar a seleção de vouchers.",
+      });
+      return;
+    }
     setSelectedVouchers((prev) => {
       const n = new Set(prev);
       n.has(id) ? n.delete(id) : n.add(id);
@@ -117,11 +126,14 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
   }, [isMaster, selectedItems]);
 
   const requestBind = () => {
-    if (selectedDocs.size === 0 || selectedVouchers.size === 0 || !tipoAnexo) {
+    const hasVouchers = lockedMaster ? lockedMaster.voucherIds.length > 0 : selectedVouchers.size > 0;
+    if (selectedDocs.size === 0 || !hasVouchers || !tipoAnexo) {
       toast({ title: "Selecione documento(s), voucher(s) e tipo", variant: "destructive" });
       return;
     }
-    if (isMaster) {
+    if (lockedMaster) {
+      doBind();
+    } else if (isMaster) {
       setConfirmOpen(true);
     } else {
       doBind();
@@ -131,10 +143,12 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
   const doBind = async () => {
     setConfirmOpen(false);
     setBusy(true);
+    const voucherIds = lockedMaster ? lockedMaster.voucherIds : Array.from(selectedVouchers);
+    const isMasterBind = voucherIds.length >= 2;
+    let allOk = true;
     try {
-      const voucherIds = Array.from(selectedVouchers);
       for (const docId of selectedDocs) {
-        if (voucherIds.length >= 2) {
+        if (isMasterBind) {
           const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
             body: {
               action: "bind_batch_document_to_master_group",
@@ -145,6 +159,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
             },
           });
           if (error || !data?.success) {
+            allOk = false;
             toast({ title: "Falha ao vincular master", description: data?.error || error?.message, variant: "destructive" });
           }
         } else {
@@ -158,16 +173,36 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
             },
           });
           if (error || !data?.success) {
+            allOk = false;
             toast({ title: "Falha ao vincular", description: data?.error || error?.message, variant: "destructive" });
           }
         }
       }
-      setSelectedDocs(new Set());
-      setSelectedVouchers(new Set());
+      // Travar master após primeira vinculação bem-sucedida
+      if (allOk && isMasterBind && !lockedMaster) {
+        setLockedMaster({
+          voucherIds,
+          previewSpo: previewMasterSpo || "—",
+          total: totalSelecionado,
+        });
+        setSelectedDocs(new Set());
+        // mantém selectedVouchers como feedback visual
+      } else if (lockedMaster) {
+        // master já travado: limpa apenas docs
+        setSelectedDocs(new Set());
+      } else {
+        setSelectedDocs(new Set());
+        setSelectedVouchers(new Set());
+      }
       await refresh();
     } finally {
       setBusy(false);
     }
+  };
+
+  const unlockMaster = () => {
+    setLockedMaster(null);
+    setSelectedVouchers(new Set());
   };
 
   const unbind = async (docId: string) => {
@@ -336,6 +371,28 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                 {checklist.filter((c) => c.status === "COMPLETO").length}/{checklist.length}
               </span>
             </div>
+            {lockedMaster && (
+              <div className="flex items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                <div className="flex items-center gap-2 text-[11px] text-amber-200">
+                  <Lock className="h-3.5 w-3.5" />
+                  <span className="font-semibold uppercase tracking-wider">Master travado</span>
+                  <span className="text-amber-100/80">
+                    · {lockedMaster.voucherIds.length} vouchers · SPO {lockedMaster.previewSpo} ·{" "}
+                    {fmtBRL(lockedMaster.total)}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-[11px] text-amber-200 hover:text-amber-100 hover:bg-amber-500/20"
+                  onClick={unlockMaster}
+                  disabled={busy}
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Encerrar master
+                </Button>
+              </div>
+            )}
             <div className="border-b border-border/60 px-3 py-2">
               <div className="relative">
                 <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -414,10 +471,15 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
           <Button
             variant="secondary"
             onClick={requestBind}
-            disabled={busy || selectedDocs.size === 0 || selectedVouchers.size === 0}
+            disabled={
+              busy ||
+              selectedDocs.size === 0 ||
+              (lockedMaster ? lockedMaster.voucherIds.length === 0 : selectedVouchers.size === 0)
+            }
           >
             <Link2 className="h-4 w-4 mr-2" />
-            Vincular {selectedDocs.size > 0 ? `(${selectedDocs.size})` : ""} {isMaster ? "ao master" : "ao voucher"}
+            Vincular {selectedDocs.size > 0 ? `(${selectedDocs.size})` : ""}{" "}
+            {lockedMaster || isMaster ? "ao master" : "ao voucher"}
           </Button>
           <div className="flex-1" />
           <Button
