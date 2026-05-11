@@ -19091,12 +19091,13 @@ Deno.serve(async (req) => {
           }
           const childrenPromoted = new Set<string>();
           const extraMasterItems: any[] = []; // mastersIds para promover no loop principal
+          const masterErrors: string[] = [];
           for (const grp of groupsByKey.values()) {
             try {
               const ph = grp.vids.map(() => '?').join(',');
               const childRows: any[] = await client.query(`
                 SELECT v.id, v.numero_spo, v.fornecedor, v.cnpj_fornecedor, v.valor, v.moeda,
-                       v.vencimento, v.data_emissao, v.tipo_documento, v.forma_pagamento,
+                       v.vencimento, v.data_emissao_documento, v.tipo_documento, v.forma_pagamento,
                        v.cobranca_em_nome_de, v.filial, v.urgencia_tipo, v.id_rm,
                        v.processo_id, v.origem_processo, v.comentarios_operacao,
                        dfv.idmov AS dfv_idmov,
@@ -19106,7 +19107,10 @@ Deno.serve(async (req) => {
                   ON v.numero_spo COLLATE utf8mb4_unicode_ci = dfv.nd COLLATE utf8mb4_unicode_ci
                 WHERE v.id IN (${ph})
               `, grp.vids);
-              if (!childRows || childRows.length === 0) continue;
+              if (!childRows || childRows.length === 0) {
+                masterErrors.push(`Master vazio (vids=${grp.vids.join(',')})`);
+                continue;
+              }
 
               // numero_spo do master = menor sort_key
               const withKey = childRows.filter((c: any) => c.sort_key != null);
@@ -19117,6 +19121,19 @@ Deno.serve(async (req) => {
               } else {
                 masterSpo = childRows[0].numero_spo || `MASTER-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
               }
+              // Garantir SPO único do master (a UNIQUE KEY é (id_rm, numero_spo); como o master
+              // tem id_rm NULL, usar o mesmo numero_spo de um filho é OK, mas ainda assim
+              // adicionamos sufixo se já existir outro master com o mesmo numero_spo e id_rm NULL.
+              try {
+                const dup = await client.query(
+                  `SELECT 1 FROM dados_dachser.t_vouchers
+                    WHERE numero_spo = ? AND id_rm IS NULL AND is_master = 1 LIMIT 1`,
+                  [masterSpo]
+                );
+                if (dup && dup.length > 0) {
+                  masterSpo = `${masterSpo}-M${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+                }
+              } catch (_) {}
 
               const totalValor = childRows.reduce((acc: number, c: any) => acc + (Number(c.valor) || 0), 0);
               const ref = childRows[0];
@@ -19128,14 +19145,15 @@ Deno.serve(async (req) => {
               await client.execute(`
                 INSERT INTO dados_dachser.t_vouchers
                   (id, numero_spo, processo_id, origem_processo, fornecedor, cnpj_fornecedor,
-                   valor, moeda, vencimento, data_emissao, tipo_documento, filial,
+                   valor, moeda, vencimento, data_emissao_documento, tipo_documento, filial,
                    forma_pagamento, cobranca_em_nome_de, urgencia_tipo, comentarios_operacao,
-                   etapa_atual, is_master, nome_master, origem_criacao, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'IMPORT_LOTE', NOW(), NOW())
+                   etapa_atual, status_baixa, status_financeiro, is_master, nome_master,
+                   origem_criacao, tipo_execucao_pagamento, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDENTE', 'PENDENTE', 1, ?, 'IMPORT_LOTE', 'A_DEFINIR', NOW(), NOW())
               `, [
                 masterId, masterSpo, ref.processo_id || null, ref.origem_processo || 'CHB',
                 ref.fornecedor, ref.cnpj_fornecedor, totalValor, ref.moeda || 'BRL',
-                ref.vencimento, ref.data_emissao, ref.tipo_documento, ref.filial,
+                ref.vencimento, ref.data_emissao_documento, ref.tipo_documento, ref.filial,
                 ref.forma_pagamento, ref.cobranca_em_nome_de, ref.urgencia_tipo, ref.comentarios_operacao || null,
                 destinoMaster, `MASTER ${masterSpo} (${childRows.length})`,
               ]);
@@ -19172,9 +19190,24 @@ Deno.serve(async (req) => {
 
               extraMasterItems.push({ voucher_id: masterId, etapa_destino: destinoMaster, fornecedor: ref.fornecedor, forma_pagamento: ref.forma_pagamento });
               mastersCreated++;
-            } catch (e) {
-              console.log('master creation failed:', e);
+            } catch (e: any) {
+              const msg = e?.message || String(e);
+              console.error('[finalize_batch_import] master creation failed:', msg, 'vids=', grp.vids);
+              masterErrors.push(`vids=${grp.vids.join(',')}: ${msg}`);
             }
+          }
+
+          // Se havia grupos master mas NENHUM foi criado com sucesso, abortar a finalização
+          // para não promover filhos individualmente sem o master.
+          if (groupsByKey.size > 0 && mastersCreated === 0) {
+            return new Response(
+              JSON.stringify({
+                success: false,
+                error: 'Falha ao criar voucher master. Nenhum voucher foi promovido.',
+                master_errors: masterErrors,
+              }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
           }
 
           // Lista final para promoção: itens individuais (não consolidados) + masters criados
