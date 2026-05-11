@@ -305,15 +305,6 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
     }).length;
   }, [items, filter, search]);
 
-  const fieldLabel = (k: string) => ({
-    origem_processo: "Origem Processo",
-    tipo_documento: "Tipo Documento",
-    cobranca_em_nome_de: "Fiscal",
-    forma_pagamento: "Forma de Pagamento",
-    moeda: "Moeda",
-    urgente: "Urgente",
-  } as Record<string, string>)[k] || k;
-
   const editingItem = editingRow != null ? items.find(i => i.row_index === editingRow) ?? null : null;
 
   return (
