@@ -145,7 +145,7 @@ export default function ComprovanteRobot() {
 
     const totalFiles = files.length;
     let identified = 0;
-    const CONCURRENCY = 5;
+    const CONCURRENCY = 8;
     const MAX_CANDIDATES_PER_KIND = 6;
 
     const identifyOne = async (fileMatch: typeof files[number], i: number) => {
@@ -162,54 +162,30 @@ export default function ComprovanteRobot() {
         if (error) throw error;
 
         const extractedData = data?.data;
-        let foundVoucher: VoucherMatch | null = null;
-        const tried: string[] = [];
-        let matchedCandidate: string | undefined;
 
-        const tryCandidate = async (candidate: string, kind: "spo" | "nd"): Promise<VoucherMatch | null> => {
-          tried.push(`${kind.toUpperCase()}:${candidate}`);
-          const action = kind === "spo" ? "find_voucher_by_spo" : "find_voucher_by_nd";
-          const payloadKey = kind === "spo" ? "numero_spo" : "numero_nd";
-          const { data: r } = await supabase.functions.invoke("mariadb-proxy", {
-            body: { action, [payloadKey]: candidate },
-          });
-          if (r?.vouchers?.length > 0) {
-            return r.vouchers.find((v: any) => v.is_master) || r.vouchers[0];
-          }
-          return null;
-        };
-
-        if (!foundVoucher && extractedData?.numeroSPO) {
-          foundVoucher = await tryCandidate(extractedData.numeroSPO, "spo");
-          if (foundVoucher) matchedCandidate = `SPO:${extractedData.numeroSPO}`;
-        }
-        if (!foundVoucher && extractedData?.numeroND) {
-          foundVoucher = await tryCandidate(extractedData.numeroND, "nd");
-          if (foundVoucher) matchedCandidate = `ND:${extractedData.numeroND}`;
-        }
-        if (!foundVoucher && extractedData?.linhaDigitavel) {
-          foundVoucher = await tryCandidate(extractedData.linhaDigitavel, "nd");
-          if (foundVoucher) matchedCandidate = `LINHA:${extractedData.linhaDigitavel}`;
-        }
-
-        // Limitar a top N candidatos (parser já ordena por score)
         const ndCandidates: string[] = ((extractedData?.candidatosND || []) as string[])
           .filter((c) => c && c !== extractedData?.numeroND)
           .slice(0, MAX_CANDIDATES_PER_KIND);
-        for (const cand of ndCandidates) {
-          if (foundVoucher) break;
-          foundVoucher = await tryCandidate(cand, "nd");
-          if (foundVoucher) matchedCandidate = `ND:${cand}`;
-        }
-
         const spoCandidates: string[] = ((extractedData?.candidatosSPO || []) as string[])
           .filter((c) => c && c !== extractedData?.numeroSPO)
           .slice(0, MAX_CANDIDATES_PER_KIND);
-        for (const cand of spoCandidates) {
-          if (foundVoucher) break;
-          foundVoucher = await tryCandidate(cand, "spo");
-          if (foundVoucher) matchedCandidate = `SPO:${cand}`;
-        }
+
+        // Single round-trip: tries all candidates server-side in one MariaDB connection
+        const { data: matchRes, error: matchErr } = await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "find_voucher_multi",
+            spoPrimary: extractedData?.numeroSPO || undefined,
+            ndPrimary: extractedData?.numeroND || undefined,
+            linhaDigitavel: extractedData?.linhaDigitavel || undefined,
+            ndCandidates,
+            spoCandidates,
+          },
+        });
+        if (matchErr) throw matchErr;
+
+        const foundVoucher: VoucherMatch | null = matchRes?.voucher || null;
+        const matchedCandidate: string | undefined = matchRes?.matchedCandidate;
+        const tried: string[] = matchRes?.tried || [];
 
         if (!foundVoucher) {
           console.warn(`[ComprovanteRobot] Nenhum match para "${fileMatch.fileName}". Tentativas:`, tried);
