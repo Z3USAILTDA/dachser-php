@@ -47,10 +47,12 @@ export function BatchVoucherChecklist({
   item,
   selected,
   onSelect,
+  multi = false,
 }: {
   item: ChecklistItem;
   selected: boolean;
   onSelect: () => void;
+  multi?: boolean;
 }) {
   const badgeCls = STATUS_BADGE[item.status] || "bg-muted/40 text-muted-foreground border-border/60";
   const label = STATUS_LABEL[item.status] || item.status;
@@ -64,9 +66,16 @@ export function BatchVoucherChecklist({
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary">
-          SPO {item.numero_spo || "—"}
-        </span>
+        <div className="flex items-center gap-2 min-w-0">
+          {multi && (
+            selected
+              ? <CheckSquare className="h-4 w-4 text-primary shrink-0" />
+              : <Square className="h-4 w-4 text-muted-foreground shrink-0" />
+          )}
+          <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary">
+            SPO {item.numero_spo || "—"}
+          </span>
+        </div>
         <span className="font-mono text-sm font-semibold text-foreground">
           {item.valor != null
             ? item.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
