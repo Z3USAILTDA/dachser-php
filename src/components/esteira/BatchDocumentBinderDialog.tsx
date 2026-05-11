@@ -68,6 +68,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
       setSelectedDocs(new Set());
       setSelectedVouchers(new Set());
       setVoucherSearch("");
+      setLockedMaster(null);
     }
   }, [open, batchId, refresh]);
 
