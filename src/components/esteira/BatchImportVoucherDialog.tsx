@@ -60,9 +60,8 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
   const [search, setSearch] = useState("");
   const [editingRow, setEditingRow] = useState<number | null>(null);
 
-  // Bulk
-  const [bulkField, setBulkField] = useState<string>("");
-  const [bulkValue, setBulkValue] = useState<string>("");
+  // Bulk — 3 campos fixos
+  const [bulkValues, setBulkValues] = useState<Record<string, string>>({});
   const [bulkOpen, setBulkOpen] = useState(false);
 
   const reset = () => {
@@ -75,7 +74,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
     setFilter("all");
     setSearch("");
     setEditingRow(null);
-    setBulkField(""); setBulkValue(""); setBulkOpen(false);
+    setBulkValues({}); setBulkOpen(false);
   };
 
   const validate = (next: any) => {
