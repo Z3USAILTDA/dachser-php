@@ -495,7 +495,8 @@ Deno.serve(async (req) => {
       'get_vouchers_for_comprovante','attach_comprovante_batch',
       // Importação em lote (admin only)
       'preview_voucher_batch_import','create_voucher_batch_import','upload_batch_document',
-      'bind_batch_document_to_voucher','unbind_batch_document','get_batch_import_status',
+      'bind_batch_document_to_voucher','bind_batch_document_to_master_group',
+      'unbind_batch_document','get_batch_import_status',
       'finalize_batch_import',
       // Régua / Cobrança / Aging / Disputas
       'get_regua_counts','get_aging_overview','get_aging_by_client','get_client_cnpj_detail',
