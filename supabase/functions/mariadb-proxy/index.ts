@@ -18297,7 +18297,33 @@ Deno.serve(async (req) => {
               );
             } catch (_) {}
           }
-          return { batches: batchIds.length, vouchers: deletedVouchers, documents: deletedDocs };
+
+          // 3) Apaga filhos órfãos em CONSOLIDADO_NO_MASTER (master deletado/inexistente)
+          let deletedOrphans = 0;
+          try {
+            const orphanRows = await client.query(
+              `SELECT v.id FROM dados_dachser.t_vouchers v
+                 LEFT JOIN dados_dachser.t_vouchers m ON m.id = v.voucher_master_id
+                WHERE v.etapa_atual = 'CONSOLIDADO_NO_MASTER'
+                  AND (v.voucher_master_id IS NULL OR v.voucher_master_id = '' OR m.id IS NULL)
+                  ${userScopeSql.replace(/criado_por_user_id/g, 'v.criado_por_user_id')}`,
+              userScopeParams,
+            );
+            const orphanIds: string[] = (orphanRows || []).map((r: any) => r.id).filter(Boolean);
+            if (orphanIds.length > 0) {
+              const oph = orphanIds.map(() => '?').join(',');
+              try { await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id IN (${oph})`, orphanIds); } catch (_) {}
+              try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${oph})`, orphanIds); } catch (_) {}
+              try { await client.execute(`DELETE FROM dados_dachser.t_voucher_batch_import_item WHERE voucher_id IN (${oph})`, orphanIds); } catch (_) {}
+              const delO: any = await client.execute(
+                `DELETE FROM dados_dachser.t_vouchers WHERE id IN (${oph}) AND etapa_atual = 'CONSOLIDADO_NO_MASTER'`,
+                orphanIds,
+              );
+              deletedOrphans = Number(delO?.affectedRows ?? delO?.affected_rows ?? 0);
+            }
+          } catch (e) { console.log('orphan cleanup error:', e); }
+
+          return { batches: batchIds.length, vouchers: deletedVouchers + deletedOrphans, documents: deletedDocs };
         };
 
         // ===== cleanup action (one-shot ou periódico) =====
