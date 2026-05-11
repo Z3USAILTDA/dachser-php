@@ -13146,26 +13146,39 @@ Deno.serve(async (req) => {
 
         let childrenRestored = 0;
 
-        if (child_ids && child_ids.length > 0) {
-          // Desmembrar apenas os filhos selecionados
-          await client.execute(`
-            UPDATE dados_dachser.t_vouchers 
-            SET voucher_master_id = NULL, updated_at = NOW()
-            WHERE id IN (${child_ids.map(() => '?').join(',')})
-          `, child_ids);
-          childrenRestored = child_ids.length;
-        } else {
-          // Desmembrar todos (comportamento original)
-          const childCount = await client.query(`
-            SELECT COUNT(*) as count FROM dados_dachser.t_vouchers WHERE voucher_master_id = ?
-          `, [master_id]);
-          childrenRestored = childCount?.[0]?.count || 0;
+        // Helper: compute destination stage based on urgency + cobranca
+        const computeDestino = (urgenciaTipo: any, cobranca: any): string => {
+          if (String(urgenciaTipo || '').toUpperCase() === 'URGENTE_REAL') return 'SUPERVISOR';
+          if (String(cobranca || '').toUpperCase() === 'CLIENTE') return 'FINANCEIRO';
+          return 'FISCAL';
+        };
 
-          await client.execute(`
-            UPDATE dados_dachser.t_vouchers 
-            SET voucher_master_id = NULL, updated_at = NOW()
-            WHERE voucher_master_id = ?
-          `, [master_id]);
+        // Determine which children to restore
+        const targetChildIds: string[] = (child_ids && child_ids.length > 0)
+          ? child_ids
+          : ((await client.query(
+              `SELECT id FROM dados_dachser.t_vouchers WHERE voucher_master_id = ?`,
+              [master_id]
+            )) || []).map((r: any) => r.id).filter(Boolean);
+
+        if (targetChildIds.length > 0) {
+          const ph = targetChildIds.map(() => '?').join(',');
+          const childRows: any[] = await client.query(
+            `SELECT id, urgencia_tipo, cobranca_em_nome_de FROM dados_dachser.t_vouchers WHERE id IN (${ph})`,
+            targetChildIds
+          );
+          for (const c of childRows) {
+            const destino = computeDestino(c.urgencia_tipo, c.cobranca_em_nome_de);
+            await client.execute(
+              `UPDATE dados_dachser.t_vouchers
+                  SET voucher_master_id = NULL,
+                      etapa_atual = ?,
+                      updated_at = NOW()
+                WHERE id = ?`,
+              [destino, c.id]
+            );
+          }
+          childrenRestored = childRows.length;
         }
 
         // Verificar se o master deve ser excluído
