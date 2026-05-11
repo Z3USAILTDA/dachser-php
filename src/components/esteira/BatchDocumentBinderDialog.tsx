@@ -126,11 +126,14 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
   }, [isMaster, selectedItems]);
 
   const requestBind = () => {
-    if (selectedDocs.size === 0 || selectedVouchers.size === 0 || !tipoAnexo) {
+    const hasVouchers = lockedMaster ? lockedMaster.voucherIds.length > 0 : selectedVouchers.size > 0;
+    if (selectedDocs.size === 0 || !hasVouchers || !tipoAnexo) {
       toast({ title: "Selecione documento(s), voucher(s) e tipo", variant: "destructive" });
       return;
     }
-    if (isMaster) {
+    if (lockedMaster) {
+      doBind();
+    } else if (isMaster) {
       setConfirmOpen(true);
     } else {
       doBind();
@@ -140,10 +143,12 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
   const doBind = async () => {
     setConfirmOpen(false);
     setBusy(true);
+    const voucherIds = lockedMaster ? lockedMaster.voucherIds : Array.from(selectedVouchers);
+    const isMasterBind = voucherIds.length >= 2;
+    let allOk = true;
     try {
-      const voucherIds = Array.from(selectedVouchers);
       for (const docId of selectedDocs) {
-        if (voucherIds.length >= 2) {
+        if (isMasterBind) {
           const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
             body: {
               action: "bind_batch_document_to_master_group",
@@ -154,6 +159,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
             },
           });
           if (error || !data?.success) {
+            allOk = false;
             toast({ title: "Falha ao vincular master", description: data?.error || error?.message, variant: "destructive" });
           }
         } else {
@@ -167,16 +173,36 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
             },
           });
           if (error || !data?.success) {
+            allOk = false;
             toast({ title: "Falha ao vincular", description: data?.error || error?.message, variant: "destructive" });
           }
         }
       }
-      setSelectedDocs(new Set());
-      setSelectedVouchers(new Set());
+      // Travar master após primeira vinculação bem-sucedida
+      if (allOk && isMasterBind && !lockedMaster) {
+        setLockedMaster({
+          voucherIds,
+          previewSpo: previewMasterSpo || "—",
+          total: totalSelecionado,
+        });
+        setSelectedDocs(new Set());
+        // mantém selectedVouchers como feedback visual
+      } else if (lockedMaster) {
+        // master já travado: limpa apenas docs
+        setSelectedDocs(new Set());
+      } else {
+        setSelectedDocs(new Set());
+        setSelectedVouchers(new Set());
+      }
       await refresh();
     } finally {
       setBusy(false);
     }
+  };
+
+  const unlockMaster = () => {
+    setLockedMaster(null);
+    setSelectedVouchers(new Set());
   };
 
   const unbind = async (docId: string) => {
