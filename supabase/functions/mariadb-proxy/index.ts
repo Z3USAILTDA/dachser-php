@@ -18191,6 +18191,8 @@ Deno.serve(async (req) => {
           `);
           await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS origem_criacao VARCHAR(50) DEFAULT NULL`);
           try { await client.execute(`ALTER TABLE dados_dachser.t_voucher_batch_import_item ADD COLUMN IF NOT EXISTS etapa_destino VARCHAR(30) DEFAULT NULL`); } catch (_) {}
+          try { await client.execute(`ALTER TABLE dados_dachser.t_voucher_batch_documents ADD COLUMN IF NOT EXISTS is_master_group TINYINT(1) NOT NULL DEFAULT 0`); } catch (_) {}
+          try { await client.execute(`ALTER TABLE dados_dachser.t_voucher_batch_documents ADD COLUMN IF NOT EXISTS master_voucher_ids JSON DEFAULT NULL`); } catch (_) {}
         } catch (ddlErr) {
           console.log('Batch DDL skipped:', ddlErr);
         }
