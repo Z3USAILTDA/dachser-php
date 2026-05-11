@@ -18252,16 +18252,14 @@ Deno.serve(async (req) => {
             }
             return null;
           };
-          const formaRaw = get('Forma Pagto (contas pagar)', 'Forma Pagto', 'Forma Pagamento', 'Forma Pag');
+          const formaRaw = get('Forma pagto', 'Forma Pagto (contas pagar)', 'Forma Pagto', 'Forma Pagamento', 'Forma Pag');
           const formaKey = formaRaw ? String(formaRaw).trim().toUpperCase() : null;
-          const origemRaw = get('Origem Processo', 'Origem do Processo', 'Modal');
-          const origemKey = origemRaw ? String(origemRaw).trim().toUpperCase() : null;
           const fiscalRaw = get('Fiscal', 'Contabilizacao Fiscal', 'Contabilização Fiscal', 'Cobranca em Nome de', 'Cobrança em Nome de');
           let cobrancaEm: string | null = null;
           if (fiscalRaw) {
             const f = String(fiscalRaw).trim().toUpperCase();
-            if (f === 'NAO' || f === 'NÃO' || f === 'CLIENTE' || f === 'NO') cobrancaEm = 'CLIENTE';
-            else if (f === 'SIM' || f === 'DACHSER' || f === 'YES') cobrancaEm = 'DACHSER';
+            if (f === 'N' || f === 'NAO' || f === 'NÃO' || f === 'CLIENTE' || f === 'NO') cobrancaEm = 'CLIENTE';
+            else if (f === 'S' || f === 'SIM' || f === 'DACHSER' || f === 'YES') cobrancaEm = 'DACHSER';
           }
           const urgenteRaw = get('Urgente', 'Pagamento Urgente');
           const urgente = urgenteRaw ? ['SIM','S','TRUE','1','YES','Y'].includes(String(urgenteRaw).trim().toUpperCase()) : false;
@@ -18269,14 +18267,14 @@ Deno.serve(async (req) => {
             row_index: idx,
             spo: get('SPO', 'Voucher', 'ND', 'Numero Voucher', 'Número Voucher') ? String(get('SPO', 'Voucher', 'ND', 'Numero Voucher', 'Número Voucher')) : null,
             processo: get('Processo', 'Numero Processo', 'Nº Processo', 'N° Processo') ? String(get('Processo', 'Numero Processo', 'Nº Processo', 'N° Processo')) : null,
-            origem_processo: origemKey ? (ORIGEM_PROCESSO_MAP[origemKey] || null) : null,
+            origem_processo: 'CHB',
             fornecedor: get('Fornecedor') ? String(get('Fornecedor')) : null,
             cnpj_fornecedor: get('CNPJ', 'CNPJ Fornecedor') ? String(get('CNPJ', 'CNPJ Fornecedor')).replace(/\D/g, '') || null : null,
-            valor: parseBRMoney(get('Valor Solicitação', 'Valor Solicitacao', 'Valor', 'Valor NF')),
+            valor: parseBRMoney(get('Valor solicitado', 'Valor Solicitação', 'Valor Solicitacao', 'Valor', 'Valor NF')),
             moeda: get('Moeda') ? String(get('Moeda')).toUpperCase() : null,
-            vencimento: parseDate(get('Vencimento', 'Data Vencimento')),
+            vencimento: parseDate(get('Data vencimento', 'Vencimento', 'Data Vencimento')),
             data_emissao: parseDate(get('Data fatura', 'Data Fatura', 'Data Emissão', 'Data Emissao')),
-            tipo_documento: get('Tipo Documento', 'Tipo de Documento') ? String(get('Tipo Documento', 'Tipo de Documento')).toUpperCase() : null,
+            tipo_documento: get('Tipo de documento', 'Tipo Documento', 'Tipo de Documento') ? String(get('Tipo de documento', 'Tipo Documento', 'Tipo de Documento')).toUpperCase() : null,
             filial: get('Filial') ? String(get('Filial')) : null,
             forma_pagamento: formaKey ? (FORMA_MAP[formaKey] || null) : null,
             cobranca_em_nome_de: cobrancaEm,
