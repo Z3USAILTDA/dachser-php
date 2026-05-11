@@ -11638,6 +11638,212 @@ Deno.serve(async (req) => {
       }
 
       // ==================== ROBO COMPROVANTES ====================
+      case 'find_voucher_multi': {
+        const {
+          spoPrimary,
+          ndPrimary,
+          linhaDigitavel,
+          spoCandidates = [],
+          ndCandidates = [],
+        } = body as {
+          spoPrimary?: string;
+          ndPrimary?: string;
+          linhaDigitavel?: string;
+          spoCandidates?: string[];
+          ndCandidates?: string[];
+        };
+
+        const tried: string[] = [];
+        let voucher: any = null;
+        let matchedCandidate: string | undefined;
+
+        const tryBySpo = async (spo: string): Promise<any | null> => {
+          // 1. Exact
+          let vs = await client.query(`
+            SELECT id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
+                   cobranca_em_nome_de, moeda, is_master, id_rm, nome_master, voucher_master_id
+            FROM dados_dachser.t_vouchers
+            WHERE numero_spo = ?
+            ORDER BY created_at DESC LIMIT 5
+          `, [spo]);
+          // 2a. Prefix + space
+          if (!vs || vs.length === 0) {
+            vs = await client.query(`
+              SELECT id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
+                     cobranca_em_nome_de, moeda, is_master, id_rm, nome_master, voucher_master_id
+              FROM dados_dachser.t_vouchers
+              WHERE numero_spo COLLATE utf8mb4_unicode_ci = ?
+                 OR numero_spo COLLATE utf8mb4_unicode_ci LIKE CONCAT(?, ' %')
+              ORDER BY CHAR_LENGTH(numero_spo) ASC, created_at DESC LIMIT 5
+            `, [spo, spo]);
+          }
+          // 2b. LIKE
+          if (!vs || vs.length === 0) {
+            vs = await client.query(`
+              SELECT id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
+                     cobranca_em_nome_de, moeda, is_master, id_rm, nome_master, voucher_master_id
+              FROM dados_dachser.t_vouchers
+              WHERE numero_spo LIKE ?
+              ORDER BY created_at DESC LIMIT 5
+            `, [`%${spo}%`]);
+          }
+          // 3. Progressive prefix
+          if (!vs || vs.length === 0) {
+            vs = await client.query(`
+              SELECT id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
+                     cobranca_em_nome_de, moeda, is_master, id_rm, nome_master, voucher_master_id
+              FROM dados_dachser.t_vouchers
+              WHERE ? LIKE CONCAT(numero_spo, '%') AND CHAR_LENGTH(numero_spo) >= 5
+              ORDER BY CHAR_LENGTH(numero_spo) DESC, created_at DESC LIMIT 5
+            `, [spo]);
+          }
+          // 4. Child-to-master
+          const masters = await client.query(`
+            SELECT m.id, m.numero_spo, m.fornecedor, m.valor, m.vencimento, m.etapa_atual,
+                   m.cobranca_em_nome_de, m.moeda, m.is_master, m.nome_master,
+                   c.numero_spo as child_spo
+            FROM dados_dachser.t_vouchers c
+            JOIN dados_dachser.t_vouchers m ON m.id = c.voucher_master_id
+            WHERE (c.numero_spo = ? OR ? LIKE CONCAT(c.numero_spo, '%'))
+              AND c.voucher_master_id IS NOT NULL AND c.voucher_master_id != ''
+            LIMIT 5
+          `, [spo, spo]);
+          if (masters && masters.length > 0) {
+            const mr = masters.map((mv: any) => ({ ...mv, is_master: true, matched_via_child: true, child_spo: mv.child_spo }));
+            const existingIds = new Set((vs || []).map((v: any) => v.id));
+            for (const m of mr) if (!existingIds.has(m.id)) { vs = vs || []; vs.push(m); }
+          }
+          if (vs && vs.length > 1) {
+            vs.sort((a: any, b: any) => {
+              if (a.is_master && !b.is_master) return -1;
+              if (!a.is_master && b.is_master) return 1;
+              if (a.matched_via_child && !b.matched_via_child) return -1;
+              if (!a.matched_via_child && b.matched_via_child) return 1;
+              return 0;
+            });
+          }
+          if (!vs || vs.length === 0) return null;
+          return vs.find((v: any) => v.is_master) || vs[0];
+        };
+
+        const tryByNd = async (nd: string): Promise<any | null> => {
+          let vs = await client.query(`
+            SELECT id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
+                   cobranca_em_nome_de, moeda, id_rm, processo_id
+            FROM dados_dachser.t_vouchers
+            WHERE id_rm = ? ORDER BY created_at DESC LIMIT 5
+          `, [nd]);
+          if (!vs || vs.length === 0) {
+            vs = await client.query(`
+              SELECT id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
+                     cobranca_em_nome_de, moeda, id_rm, processo_id
+              FROM dados_dachser.t_vouchers
+              WHERE id_rm LIKE ? OR processo_id LIKE ?
+              ORDER BY created_at DESC LIMIT 5
+            `, [`%${nd}%`, `%${nd}%`]);
+          }
+          if (!vs || vs.length === 0) {
+            vs = await client.query(`
+              SELECT id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
+                     cobranca_em_nome_de, moeda, id_rm, processo_id
+              FROM dados_dachser.t_vouchers
+              WHERE ? LIKE CONCAT(id_rm, '%') AND CHAR_LENGTH(id_rm) >= 5
+              ORDER BY CHAR_LENGTH(id_rm) DESC, created_at DESC LIMIT 5
+            `, [nd]);
+          }
+          if (!vs || vs.length === 0) {
+            vs = await client.query(`
+              SELECT id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
+                     cobranca_em_nome_de, moeda, id_rm, processo_id
+              FROM dados_dachser.t_vouchers
+              WHERE ? LIKE CONCAT(numero_spo, '%') AND CHAR_LENGTH(numero_spo) >= 5
+              ORDER BY CHAR_LENGTH(numero_spo) DESC, created_at DESC LIMIT 5
+            `, [nd]);
+          }
+          // Child-to-master
+          const masters = await client.query(`
+            SELECT m.id, m.numero_spo, m.fornecedor, m.valor, m.vencimento, m.etapa_atual,
+                   m.cobranca_em_nome_de, m.moeda, m.is_master, m.nome_master, m.id_rm, m.processo_id,
+                   c.numero_spo as child_spo
+            FROM dados_dachser.t_vouchers c
+            JOIN dados_dachser.t_vouchers m ON m.id = c.voucher_master_id
+            WHERE (c.id_rm = ? OR c.processo_id = ?) AND c.voucher_master_id IS NOT NULL AND c.voucher_master_id != ''
+            LIMIT 5
+          `, [nd, nd]);
+          if (masters && masters.length > 0) {
+            const mr = masters.map((mv: any) => ({ ...mv, is_master: true, matched_via_child: true, child_spo: mv.child_spo }));
+            const existingIds = new Set((vs || []).map((v: any) => v.id));
+            for (const m of mr) if (!existingIds.has(m.id)) { vs = vs || []; vs.push(m); }
+          }
+          // linha_digitavel/codigo_barras
+          if (!vs || vs.length === 0) {
+            const digitsOnly = String(nd).replace(/\D/g, '');
+            if (digitsOnly.length >= 5) {
+              vs = await client.query(`
+                SELECT id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
+                       cobranca_em_nome_de, moeda, id_rm, processo_id
+                FROM dados_dachser.t_vouchers
+                WHERE REPLACE(REPLACE(REPLACE(IFNULL(linha_digitavel,''),' ',''),'.',''),'-','') LIKE CONCAT('%', ?, '%')
+                   OR REPLACE(REPLACE(REPLACE(IFNULL(codigo_barras,''),' ',''),'.',''),'-','') LIKE CONCAT('%', ?, '%')
+                ORDER BY created_at DESC LIMIT 5
+              `, [digitsOnly, digitsOnly]);
+            }
+          }
+          // t_dados_financeiro_voucher.nd
+          if (!vs || vs.length === 0) {
+            try {
+              vs = await client.query(`
+                SELECT v.id, v.numero_spo, v.fornecedor, v.valor, v.vencimento, v.etapa_atual,
+                       v.cobranca_em_nome_de, v.moeda, v.id_rm, v.processo_id
+                FROM dados_dachser.t_vouchers v
+                INNER JOIN dados_dachser.t_dados_financeiro_voucher dfv
+                  ON TRIM(dfv.nd) COLLATE utf8mb4_unicode_ci = TRIM(v.numero_spo) COLLATE utf8mb4_unicode_ci
+                WHERE TRIM(dfv.nd) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                   OR ? LIKE CONCAT(TRIM(dfv.nd), '%')
+                ORDER BY v.created_at DESC LIMIT 5
+              `, [nd, nd]);
+            } catch (e) {
+              console.warn('[find_voucher_multi] t_dados_financeiro_voucher indisponível:', (e as Error).message);
+            }
+          }
+          if (!vs || vs.length === 0) return null;
+          return vs.find((v: any) => v.is_master) || vs[0];
+        };
+
+        // Priority order matching ComprovanteRobot.tsx logic
+        if (!voucher && spoPrimary) {
+          tried.push(`SPO:${spoPrimary}`);
+          voucher = await tryBySpo(spoPrimary);
+          if (voucher) matchedCandidate = `SPO:${spoPrimary}`;
+        }
+        if (!voucher && ndPrimary) {
+          tried.push(`ND:${ndPrimary}`);
+          voucher = await tryByNd(ndPrimary);
+          if (voucher) matchedCandidate = `ND:${ndPrimary}`;
+        }
+        if (!voucher && linhaDigitavel) {
+          tried.push(`ND:${linhaDigitavel}`);
+          voucher = await tryByNd(linhaDigitavel);
+          if (voucher) matchedCandidate = `LINHA:${linhaDigitavel}`;
+        }
+        for (const cand of (ndCandidates || [])) {
+          if (voucher || !cand || cand === ndPrimary) continue;
+          tried.push(`ND:${cand}`);
+          voucher = await tryByNd(cand);
+          if (voucher) { matchedCandidate = `ND:${cand}`; break; }
+        }
+        for (const cand of (spoCandidates || [])) {
+          if (voucher || !cand || cand === spoPrimary) continue;
+          tried.push(`SPO:${cand}`);
+          voucher = await tryBySpo(cand);
+          if (voucher) { matchedCandidate = `SPO:${cand}`; break; }
+        }
+
+        result = { success: true, voucher, matchedCandidate, tried };
+        console.log(`[find_voucher_multi] tried=${tried.length} matched=${matchedCandidate || 'none'}`);
+        break;
+      }
+
       case 'find_voucher_by_spo': {
         const { numero_spo } = body as { numero_spo: string };
         console.log('Finding voucher by SPO:', numero_spo);
