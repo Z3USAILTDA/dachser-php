@@ -95,6 +95,27 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
     });
   };
 
+  const toggleAllVisible = () => {
+    if (lockedMaster) {
+      toast({
+        title: "Master travado",
+        description: "Encerre o master atual para alterar a seleção de vouchers.",
+      });
+      return;
+    }
+    const visibleIds = filteredChecklist.map((c) => c.voucher_id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedVouchers.has(id));
+    setSelectedVouchers((prev) => {
+      const n = new Set(prev);
+      if (allSelected) {
+        visibleIds.forEach((id) => n.delete(id));
+      } else {
+        visibleIds.forEach((id) => n.add(id));
+      }
+      return n;
+    });
+  };
+
   const filteredChecklist = useMemo(() => {
     const q = voucherSearch.trim().toLowerCase();
     if (!q) return checklist;
