@@ -18654,6 +18654,16 @@ Deno.serve(async (req) => {
 
         // ===== create =====
         if (action === 'create_voucher_batch_import') {
+          // Auto-limpeza: ao iniciar um novo lote, descarta qualquer lote anterior
+          // deste usuário que ficou em PENDING_DOCUMENTS (abandonado).
+          try {
+            const cleanup = await runAbandonedCleanup({ scope: 'USER', userId: requesterId });
+            if (cleanup.batches > 0) {
+              console.log(`[create_voucher_batch_import] Auto-cleanup user=${requesterId}:`, cleanup);
+            }
+          } catch (e) {
+            console.log('[create_voucher_batch_import] auto-cleanup failed:', e);
+          }
           const rows: any[] = (body as any).rows || [];
           const editedItems: any[] | null = Array.isArray((body as any).items) ? (body as any).items : null;
           const fileName: string = (body as any).file_name || null;
