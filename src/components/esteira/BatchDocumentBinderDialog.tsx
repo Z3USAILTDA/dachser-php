@@ -81,6 +81,13 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
   };
 
   const toggleVoucher = (id: string) => {
+    if (lockedMaster) {
+      toast({
+        title: "Master travado",
+        description: "Encerre o master atual para alterar a seleção de vouchers.",
+      });
+      return;
+    }
     setSelectedVouchers((prev) => {
       const n = new Set(prev);
       n.has(id) ? n.delete(id) : n.add(id);
