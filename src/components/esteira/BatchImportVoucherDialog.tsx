@@ -525,25 +525,57 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
                     Editar em lote {selected.size > 0 && `(${selected.size})`}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="start" className="w-72 p-3 space-y-2">
+                <PopoverContent align="start" className="w-80 p-3 space-y-3">
                   <div className="text-xs font-medium">Aplicar a {selected.size} linha(s) selecionada(s)</div>
-                  <Select value={bulkField} onValueChange={(v) => { setBulkField(v); setBulkValue(""); }}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Campo" /></SelectTrigger>
-                    <SelectContent>
-                      {["origem_processo","tipo_documento","forma_pagamento","cobranca_em_nome_de","moeda","urgente"].map(k => (
-                        <SelectItem key={k} value={k}>{fieldLabel(k)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={bulkValue} onValueChange={setBulkValue} disabled={!bulkField}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Valor" /></SelectTrigger>
-                    <SelectContent>
-                      {bulkOptions.map(o => <SelectItem key={o.v} value={o.v}>{o.l}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">Tipo de Documento</Label>
+                      <Select
+                        value={bulkValues.tipo_documento || ""}
+                        onValueChange={(v) => setBulkValues(prev => ({ ...prev, tipo_documento: v }))}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                        <SelectContent>
+                          {TIPOS_DOC.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">Forma de Pagamento</Label>
+                      <Select
+                        value={bulkValues.forma_pagamento || ""}
+                        onValueChange={(v) => setBulkValues(prev => ({ ...prev, forma_pagamento: v }))}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                        <SelectContent>
+                          {FORMAS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">Fiscal</Label>
+                      <Select
+                        value={bulkValues.cobranca_em_nome_de || ""}
+                        onValueChange={(v) => setBulkValues(prev => ({ ...prev, cobranca_em_nome_de: v }))}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="DACHSER">Sim — Fiscal</SelectItem>
+                          <SelectItem value="CLIENTE">Não — Cliente</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                   <div className="flex justify-end gap-2 pt-1">
                     <Button size="sm" variant="ghost" onClick={() => setBulkOpen(false)} className="h-7">Cancelar</Button>
-                    <Button size="sm" onClick={applyBulk} disabled={!bulkField || !bulkValue} className="h-7">Aplicar</Button>
+                    <Button
+                      size="sm"
+                      onClick={applyBulk}
+                      disabled={Object.values(bulkValues).every(v => !v)}
+                      className="h-7"
+                    >
+                      Aplicar
+                    </Button>
                   </div>
                 </PopoverContent>
               </Popover>
