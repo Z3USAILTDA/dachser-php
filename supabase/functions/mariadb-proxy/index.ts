@@ -18876,19 +18876,38 @@ Deno.serve(async (req) => {
             } catch (_) {}
           }
 
+          // Parse master groups e mapear anexos virtuais por voucher
+          const parsedDocs = (docs || []).map((d: any) => {
+            let mids: string[] = [];
+            if (Number(d.is_master_group) === 1 && d.master_voucher_ids) {
+              try { mids = typeof d.master_voucher_ids === 'string' ? JSON.parse(d.master_voucher_ids) : d.master_voucher_ids; } catch (_) {}
+            }
+            return { ...d, is_master_group: Number(d.is_master_group) === 1, master_voucher_ids: mids };
+          });
+          const masterAnexosByVoucher: Record<string, string[]> = {};
+          for (const d of parsedDocs) {
+            if (!d.is_master_group || !d.tipo_anexo) continue;
+            for (const vid of d.master_voucher_ids) {
+              (masterAnexosByVoucher[vid] ||= []).push(d.tipo_anexo);
+            }
+          }
+
           const checklist = items.filter((i: any) => i.voucher_id).map((i: any) => {
             const ax = anexosByVoucher[i.voucher_id] || [];
-            const temFatura = ax.some(a => a.tipo === 'FATURA' || a.tipo === 'FATURA_DEMONSTRATIVO');
-            const temBoleto = ax.some(a => a.tipo === 'BOLETO' || a.tipo === 'BOLETO_INSTRUCOES');
+            const tiposReais = ax.map((a: any) => a.tipo);
+            const tiposGrupo = masterAnexosByVoucher[i.voucher_id] || [];
+            const tiposAll = [...tiposReais, ...tiposGrupo];
+            const temFatura = tiposAll.some(t => t === 'FATURA' || t === 'FATURA_DEMONSTRATIVO');
+            const temBoleto = tiposAll.some(t => t === 'BOLETO' || t === 'BOLETO_INSTRUCOES');
             const requerBoleto = i.forma_pagamento === 'BOLETO';
             let status = 'COMPLETO';
             if (!temFatura && requerBoleto && !temBoleto) status = 'PENDENTE_FATURA_E_BOLETO';
             else if (!temFatura) status = 'PENDENTE_FATURA';
             else if (requerBoleto && !temBoleto) status = 'PENDENTE_BOLETO';
-            return { voucher_id: i.voucher_id, numero_spo: spoByVoucher[i.voucher_id] || i.spo || null, fornecedor: i.fornecedor, valor: i.valor, vencimento: i.vencimento, forma_pagamento: i.forma_pagamento, fatura: i.fatura, temFatura, temBoleto, requerBoleto, status, etapa_destino: i.etapa_destino || null };
+            return { voucher_id: i.voucher_id, numero_spo: spoByVoucher[i.voucher_id] || i.spo || null, fornecedor: i.fornecedor, valor: i.valor, vencimento: i.vencimento, forma_pagamento: i.forma_pagamento, fatura: i.fatura, id_rm: i.id_rm ?? null, temFatura, temBoleto, requerBoleto, status, etapa_destino: i.etapa_destino || null };
           });
 
-          result = { success: true, batch: batchRows[0], items, documents: docs, checklist };
+          result = { success: true, batch: batchRows[0], items, documents: parsedDocs, checklist };
           break;
         }
 
