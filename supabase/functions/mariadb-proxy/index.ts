@@ -18103,7 +18103,8 @@ Deno.serve(async (req) => {
       case 'bind_batch_document_to_master_group':
       case 'unbind_batch_document':
       case 'get_batch_import_status':
-      case 'finalize_batch_import': {
+      case 'finalize_batch_import':
+      case 'cleanup_abandoned_batch_imports': {
         // Guard: usuário autenticado (qualquer perfil)
         const requesterId = (body as any).userId ?? (body as any).user_id;
         if (!requesterId) {
