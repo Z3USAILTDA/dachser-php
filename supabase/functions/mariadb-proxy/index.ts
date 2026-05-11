@@ -7414,6 +7414,9 @@ Deno.serve(async (req) => {
         
         // CRITICAL: Exclude child vouchers (consolidated into a master) from main grid
         whereConditions.push('(v.voucher_master_id IS NULL OR v.voucher_master_id = "")');
+
+        // Hide transitional stages (batch import limbo and consolidated children)
+        whereConditions.push(`v.etapa_atual NOT IN ('AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER')`);
         
         // CRITICAL: Exclude ADM modal vouchers via JOIN with t_dados_financeiro_voucher
         whereConditions.push('(dfv.modal IS NULL OR dfv.modal <> "ADM")');
@@ -13143,26 +13146,39 @@ Deno.serve(async (req) => {
 
         let childrenRestored = 0;
 
-        if (child_ids && child_ids.length > 0) {
-          // Desmembrar apenas os filhos selecionados
-          await client.execute(`
-            UPDATE dados_dachser.t_vouchers 
-            SET voucher_master_id = NULL, updated_at = NOW()
-            WHERE id IN (${child_ids.map(() => '?').join(',')})
-          `, child_ids);
-          childrenRestored = child_ids.length;
-        } else {
-          // Desmembrar todos (comportamento original)
-          const childCount = await client.query(`
-            SELECT COUNT(*) as count FROM dados_dachser.t_vouchers WHERE voucher_master_id = ?
-          `, [master_id]);
-          childrenRestored = childCount?.[0]?.count || 0;
+        // Helper: compute destination stage based on urgency + cobranca
+        const computeDestino = (urgenciaTipo: any, cobranca: any): string => {
+          if (String(urgenciaTipo || '').toUpperCase() === 'URGENTE_REAL') return 'SUPERVISOR';
+          if (String(cobranca || '').toUpperCase() === 'CLIENTE') return 'FINANCEIRO';
+          return 'FISCAL';
+        };
 
-          await client.execute(`
-            UPDATE dados_dachser.t_vouchers 
-            SET voucher_master_id = NULL, updated_at = NOW()
-            WHERE voucher_master_id = ?
-          `, [master_id]);
+        // Determine which children to restore
+        const targetChildIds: string[] = (child_ids && child_ids.length > 0)
+          ? child_ids
+          : ((await client.query(
+              `SELECT id FROM dados_dachser.t_vouchers WHERE voucher_master_id = ?`,
+              [master_id]
+            )) || []).map((r: any) => r.id).filter(Boolean);
+
+        if (targetChildIds.length > 0) {
+          const ph = targetChildIds.map(() => '?').join(',');
+          const childRows: any[] = await client.query(
+            `SELECT id, urgencia_tipo, cobranca_em_nome_de FROM dados_dachser.t_vouchers WHERE id IN (${ph})`,
+            targetChildIds
+          );
+          for (const c of childRows) {
+            const destino = computeDestino(c.urgencia_tipo, c.cobranca_em_nome_de);
+            await client.execute(
+              `UPDATE dados_dachser.t_vouchers
+                  SET voucher_master_id = NULL,
+                      etapa_atual = ?,
+                      updated_at = NOW()
+                WHERE id = ?`,
+              [destino, c.id]
+            );
+          }
+          childrenRestored = childRows.length;
         }
 
         // Verificar se o master deve ser excluído
@@ -15875,6 +15891,7 @@ Deno.serve(async (req) => {
           ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
           WHERE sync_status = "ATIVO"
             AND (voucher_master_id IS NULL OR voucher_master_id = "")
+            AND etapa_atual NOT IN ('AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER')
             AND (etapa_atual NOT IN ("CONCLUIDO","CANCELADO") OR (etapa_atual IN ("CONCLUIDO","CANCELADO") AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)))
             ${ativosMonthClause}
           ORDER BY v.created_at DESC
@@ -18280,7 +18297,33 @@ Deno.serve(async (req) => {
               );
             } catch (_) {}
           }
-          return { batches: batchIds.length, vouchers: deletedVouchers, documents: deletedDocs };
+
+          // 3) Apaga filhos órfãos em CONSOLIDADO_NO_MASTER (master deletado/inexistente)
+          let deletedOrphans = 0;
+          try {
+            const orphanRows = await client.query(
+              `SELECT v.id FROM dados_dachser.t_vouchers v
+                 LEFT JOIN dados_dachser.t_vouchers m ON m.id = v.voucher_master_id
+                WHERE v.etapa_atual = 'CONSOLIDADO_NO_MASTER'
+                  AND (v.voucher_master_id IS NULL OR v.voucher_master_id = '' OR m.id IS NULL)
+                  ${userScopeSql.replace(/criado_por_user_id/g, 'v.criado_por_user_id')}`,
+              userScopeParams,
+            );
+            const orphanIds: string[] = (orphanRows || []).map((r: any) => r.id).filter(Boolean);
+            if (orphanIds.length > 0) {
+              const oph = orphanIds.map(() => '?').join(',');
+              try { await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id IN (${oph})`, orphanIds); } catch (_) {}
+              try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${oph})`, orphanIds); } catch (_) {}
+              try { await client.execute(`DELETE FROM dados_dachser.t_voucher_batch_import_item WHERE voucher_id IN (${oph})`, orphanIds); } catch (_) {}
+              const delO: any = await client.execute(
+                `DELETE FROM dados_dachser.t_vouchers WHERE id IN (${oph}) AND etapa_atual = 'CONSOLIDADO_NO_MASTER'`,
+                orphanIds,
+              );
+              deletedOrphans = Number(delO?.affectedRows ?? delO?.affected_rows ?? 0);
+            }
+          } catch (e) { console.log('orphan cleanup error:', e); }
+
+          return { batches: batchIds.length, vouchers: deletedVouchers + deletedOrphans, documents: deletedDocs };
         };
 
         // ===== cleanup action (one-shot ou periódico) =====
