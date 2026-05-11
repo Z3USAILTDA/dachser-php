@@ -471,10 +471,15 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
           <Button
             variant="secondary"
             onClick={requestBind}
-            disabled={busy || selectedDocs.size === 0 || selectedVouchers.size === 0}
+            disabled={
+              busy ||
+              selectedDocs.size === 0 ||
+              (lockedMaster ? lockedMaster.voucherIds.length === 0 : selectedVouchers.size === 0)
+            }
           >
             <Link2 className="h-4 w-4 mr-2" />
-            Vincular {selectedDocs.size > 0 ? `(${selectedDocs.size})` : ""} {isMaster ? "ao master" : "ao voucher"}
+            Vincular {selectedDocs.size > 0 ? `(${selectedDocs.size})` : ""}{" "}
+            {lockedMaster || isMaster ? "ao master" : "ao voucher"}
           </Button>
           <div className="flex-1" />
           <Button
