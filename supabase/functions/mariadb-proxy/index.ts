@@ -19071,7 +19071,7 @@ Deno.serve(async (req) => {
           // Promover cada voucher para sua etapa de destino (Fiscal/Financeiro/Supervisor).
           // Fallback: se etapa_destino estiver vazio, recomputa a partir do voucher.
           let promoted = 0;
-          for (const it of items) {
+          for (const it of itemsToPromote) {
             let destino = String(it.etapa_destino || '').toUpperCase();
             if (!destino || !['FISCAL', 'FINANCEIRO', 'SUPERVISOR'].includes(destino)) {
               try {
