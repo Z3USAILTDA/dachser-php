@@ -497,7 +497,7 @@ Deno.serve(async (req) => {
       'preview_voucher_batch_import','create_voucher_batch_import','upload_batch_document',
       'bind_batch_document_to_voucher','bind_batch_document_to_master_group',
       'unbind_batch_document','get_batch_import_status',
-      'finalize_batch_import',
+      'finalize_batch_import','cleanup_abandoned_batch_imports',
       // Régua / Cobrança / Aging / Disputas
       'get_regua_counts','get_aging_overview','get_aging_by_client','get_client_cnpj_detail',
       'get_client_faturas','save_cobranca_observacao','get_budget_forecast_auto',
@@ -18103,7 +18103,8 @@ Deno.serve(async (req) => {
       case 'bind_batch_document_to_master_group':
       case 'unbind_batch_document':
       case 'get_batch_import_status':
-      case 'finalize_batch_import': {
+      case 'finalize_batch_import':
+      case 'cleanup_abandoned_batch_imports': {
         // Guard: usuário autenticado (qualquer perfil)
         const requesterId = (body as any).userId ?? (body as any).user_id;
         if (!requesterId) {
@@ -18197,7 +18198,90 @@ Deno.serve(async (req) => {
           console.log('Batch DDL skipped:', ddlErr);
         }
 
+        // ===== helper: limpa lotes abandonados (PENDING_DOCUMENTS) =====
+        // Apaga vouchers ainda parados em AGUARDANDO_DOCUMENTOS_LOTE, anexos pendentes,
+        // itens, logs e o próprio lote. Por padrão limita ao usuário; passe scope='ALL' para
+        // varrer todos os lotes abandonados.
+        const runAbandonedCleanup = async (opts: { scope?: 'USER' | 'ALL'; userId?: string | number }) => {
+          const scope = opts.scope || 'USER';
+          const where = scope === 'ALL'
+            ? `status = 'PENDING_DOCUMENTS'`
+            : `status = 'PENDING_DOCUMENTS' AND created_by_user_id = ?`;
+          const params = scope === 'ALL' ? [] : [String(opts.userId ?? '')];
+          const batches = await client.query(
+            `SELECT id FROM dados_dachser.t_voucher_batch_import WHERE ${where}`,
+            params,
+          );
+          const batchIds: string[] = (batches || []).map((b: any) => b.id);
+          if (batchIds.length === 0) {
+            return { batches: 0, vouchers: 0, documents: 0 };
+          }
+          const ph = batchIds.map(() => '?').join(',');
+          const itemRows = await client.query(
+            `SELECT voucher_id FROM dados_dachser.t_voucher_batch_import_item
+             WHERE batch_id IN (${ph}) AND voucher_id IS NOT NULL`,
+            batchIds,
+          );
+          const voucherIds: string[] = (itemRows || [])
+            .map((r: any) => r.voucher_id)
+            .filter((v: any) => !!v);
+          let deletedVouchers = 0;
+          if (voucherIds.length > 0) {
+            const vph = voucherIds.map(() => '?').join(',');
+            // Só remove vouchers que ainda estão na etapa de aguardando documentos do lote.
+            // Vouchers que avançaram (improvável, mas seguro) ficam intactos.
+            const delV: any = await client.execute(
+              `DELETE FROM dados_dachser.t_vouchers
+                WHERE id IN (${vph}) AND etapa_atual = 'AGUARDANDO_DOCUMENTOS_LOTE'`,
+              voucherIds,
+            );
+            deletedVouchers = Number(delV?.affectedRows ?? delV?.affected_rows ?? 0);
+            try {
+              await client.execute(
+                `DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id IN (${vph})`,
+                voucherIds,
+              );
+            } catch (_) { /* logs podem não existir */ }
+            try {
+              await client.execute(
+                `DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${vph})`,
+                voucherIds,
+              );
+            } catch (_) {}
+          }
+          let deletedDocs = 0;
+          try {
+            const delD: any = await client.execute(
+              `DELETE FROM dados_dachser.t_voucher_batch_documents WHERE batch_id IN (${ph})`,
+              batchIds,
+            );
+            deletedDocs = Number(delD?.affectedRows ?? delD?.affected_rows ?? 0);
+          } catch (_) {}
+          try {
+            await client.execute(
+              `DELETE FROM dados_dachser.t_voucher_batch_import_item WHERE batch_id IN (${ph})`,
+              batchIds,
+            );
+          } catch (_) {}
+          try {
+            await client.execute(
+              `DELETE FROM dados_dachser.t_voucher_batch_import WHERE id IN (${ph})`,
+              batchIds,
+            );
+          } catch (_) {}
+          return { batches: batchIds.length, vouchers: deletedVouchers, documents: deletedDocs };
+        };
+
+        // ===== cleanup action (one-shot ou periódico) =====
+        if (action === 'cleanup_abandoned_batch_imports') {
+          const scope = ((body as any).scope || 'ALL').toUpperCase() === 'USER' ? 'USER' : 'ALL';
+          const stats = await runAbandonedCleanup({ scope, userId: requesterId });
+          result = { success: true, ...stats };
+          break;
+        }
+
         // Helpers
+
         const FORMA_MAP: Record<string, string> = {
           'B': 'BOLETO',
           'BOLETO': 'BOLETO', 'BOL': 'BOLETO',
@@ -18570,6 +18654,16 @@ Deno.serve(async (req) => {
 
         // ===== create =====
         if (action === 'create_voucher_batch_import') {
+          // Auto-limpeza: ao iniciar um novo lote, descarta qualquer lote anterior
+          // deste usuário que ficou em PENDING_DOCUMENTS (abandonado).
+          try {
+            const cleanup = await runAbandonedCleanup({ scope: 'USER', userId: requesterId });
+            if (cleanup.batches > 0) {
+              console.log(`[create_voucher_batch_import] Auto-cleanup user=${requesterId}:`, cleanup);
+            }
+          } catch (e) {
+            console.log('[create_voucher_batch_import] auto-cleanup failed:', e);
+          }
           const rows: any[] = (body as any).rows || [];
           const editedItems: any[] | null = Array.isArray((body as any).items) ? (body as any).items : null;
           const fileName: string = (body as any).file_name || null;
