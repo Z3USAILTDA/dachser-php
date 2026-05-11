@@ -495,7 +495,8 @@ Deno.serve(async (req) => {
       'get_vouchers_for_comprovante','attach_comprovante_batch',
       // Importação em lote (admin only)
       'preview_voucher_batch_import','create_voucher_batch_import','upload_batch_document',
-      'bind_batch_document_to_voucher','unbind_batch_document','get_batch_import_status',
+      'bind_batch_document_to_voucher','bind_batch_document_to_master_group',
+      'unbind_batch_document','get_batch_import_status',
       'finalize_batch_import',
       // Régua / Cobrança / Aging / Disputas
       'get_regua_counts','get_aging_overview','get_aging_by_client','get_client_cnpj_detail',
@@ -18099,6 +18100,7 @@ Deno.serve(async (req) => {
       case 'create_voucher_batch_import':
       case 'upload_batch_document':
       case 'bind_batch_document_to_voucher':
+      case 'bind_batch_document_to_master_group':
       case 'unbind_batch_document':
       case 'get_batch_import_status':
       case 'finalize_batch_import': {
@@ -18189,6 +18191,8 @@ Deno.serve(async (req) => {
           `);
           await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS origem_criacao VARCHAR(50) DEFAULT NULL`);
           try { await client.execute(`ALTER TABLE dados_dachser.t_voucher_batch_import_item ADD COLUMN IF NOT EXISTS etapa_destino VARCHAR(30) DEFAULT NULL`); } catch (_) {}
+          try { await client.execute(`ALTER TABLE dados_dachser.t_voucher_batch_documents ADD COLUMN IF NOT EXISTS is_master_group TINYINT(1) NOT NULL DEFAULT 0`); } catch (_) {}
+          try { await client.execute(`ALTER TABLE dados_dachser.t_voucher_batch_documents ADD COLUMN IF NOT EXISTS master_voucher_ids JSON DEFAULT NULL`); } catch (_) {}
         } catch (ddlErr) {
           console.log('Batch DDL skipped:', ddlErr);
         }
@@ -18754,6 +18758,46 @@ Deno.serve(async (req) => {
           break;
         }
 
+        // ===== bind master group (1 doc -> N vouchers; master criado no finalize) =====
+        if (action === 'bind_batch_document_to_master_group') {
+          const { batch_document_id, voucher_ids, tipo_anexo } = body as any;
+          if (!batch_document_id || !Array.isArray(voucher_ids) || voucher_ids.length < 2 || !tipo_anexo) {
+            return new Response(JSON.stringify({ success: false, error: 'batch_document_id, voucher_ids[>=2], tipo_anexo obrigatórios' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const docs = await client.query(`SELECT * FROM dados_dachser.t_voucher_batch_documents WHERE id = ?`, [batch_document_id]);
+          if (!docs || docs.length === 0) {
+            return new Response(JSON.stringify({ success: false, error: 'Documento não encontrado' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const doc = docs[0];
+          const placeholders = voucher_ids.map(() => '?').join(',');
+          const items = await client.query(
+            `SELECT voucher_id FROM dados_dachser.t_voucher_batch_import_item WHERE batch_id = ? AND voucher_id IN (${placeholders})`,
+            [doc.batch_id, ...voucher_ids],
+          );
+          if (!items || items.length !== voucher_ids.length) {
+            return new Response(JSON.stringify({ success: false, error: 'Um ou mais vouchers não pertencem a este lote' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          await client.execute(`
+            UPDATE dados_dachser.t_voucher_batch_documents
+            SET voucher_id = NULL, anexo_id = NULL,
+                is_master_group = 1, master_voucher_ids = ?,
+                tipo_anexo = ?, status = 'VINCULADO',
+                bound_by_user_id = ?, bound_by_user_name = ?, bound_at = NOW()
+            WHERE id = ?
+          `, [JSON.stringify(voucher_ids), tipo_anexo, String(requesterId), adminUserName, batch_document_id]);
+          for (const vid of voucher_ids) {
+            try {
+              const logId = crypto.randomUUID();
+              await client.execute(`
+                INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+                VALUES (?, ?, ?, ?, 'ANEXO_VINCULADO_LOTE_MASTER', ?, NOW())
+              `, [logId, vid, String(requesterId), adminUserName, `batch_id=${doc.batch_id}; tipo=${tipo_anexo}; file=${doc.file_name}; group_size=${voucher_ids.length}`]);
+            } catch (_) {}
+          }
+          result = { success: true, master_pending: true, group_size: voucher_ids.length };
+          break;
+        }
+
         // ===== unbind =====
         if (action === 'unbind_batch_document') {
           const { batch_document_id } = body as any;
@@ -18768,19 +18812,30 @@ Deno.serve(async (req) => {
           if (doc.anexo_id) {
             try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE id = ?`, [doc.anexo_id]); } catch (_) {}
           }
+          // Capture voucher list for logging (individual or master group)
+          let masterGroup: string[] = [];
+          if (Number(doc.is_master_group) === 1 && doc.master_voucher_ids) {
+            try {
+              masterGroup = typeof doc.master_voucher_ids === 'string'
+                ? JSON.parse(doc.master_voucher_ids)
+                : doc.master_voucher_ids;
+            } catch (_) { masterGroup = []; }
+          }
           await client.execute(`
             UPDATE dados_dachser.t_voucher_batch_documents
             SET voucher_id = NULL, anexo_id = NULL, status = 'PENDENTE',
+                is_master_group = 0, master_voucher_ids = NULL,
                 bound_by_user_id = NULL, bound_by_user_name = NULL, bound_at = NULL
             WHERE id = ?
           `, [batch_document_id]);
-          if (doc.voucher_id) {
+          const logTargets: string[] = doc.voucher_id ? [doc.voucher_id] : masterGroup;
+          for (const vid of logTargets) {
             try {
               const logId = crypto.randomUUID();
               await client.execute(`
                 INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
                 VALUES (?, ?, ?, ?, 'ANEXO_DESVINCULADO_LOTE', ?, NOW())
-              `, [logId, doc.voucher_id, String(requesterId), adminUserName, `batch_id=${doc.batch_id}; file=${doc.file_name}`]);
+              `, [logId, vid, String(requesterId), adminUserName, `batch_id=${doc.batch_id}; file=${doc.file_name}`]);
             } catch (_) {}
           }
           result = { success: true };
@@ -18821,19 +18876,38 @@ Deno.serve(async (req) => {
             } catch (_) {}
           }
 
+          // Parse master groups e mapear anexos virtuais por voucher
+          const parsedDocs = (docs || []).map((d: any) => {
+            let mids: string[] = [];
+            if (Number(d.is_master_group) === 1 && d.master_voucher_ids) {
+              try { mids = typeof d.master_voucher_ids === 'string' ? JSON.parse(d.master_voucher_ids) : d.master_voucher_ids; } catch (_) {}
+            }
+            return { ...d, is_master_group: Number(d.is_master_group) === 1, master_voucher_ids: mids };
+          });
+          const masterAnexosByVoucher: Record<string, string[]> = {};
+          for (const d of parsedDocs) {
+            if (!d.is_master_group || !d.tipo_anexo) continue;
+            for (const vid of d.master_voucher_ids) {
+              (masterAnexosByVoucher[vid] ||= []).push(d.tipo_anexo);
+            }
+          }
+
           const checklist = items.filter((i: any) => i.voucher_id).map((i: any) => {
             const ax = anexosByVoucher[i.voucher_id] || [];
-            const temFatura = ax.some(a => a.tipo === 'FATURA' || a.tipo === 'FATURA_DEMONSTRATIVO');
-            const temBoleto = ax.some(a => a.tipo === 'BOLETO' || a.tipo === 'BOLETO_INSTRUCOES');
+            const tiposReais = ax.map((a: any) => a.tipo);
+            const tiposGrupo = masterAnexosByVoucher[i.voucher_id] || [];
+            const tiposAll = [...tiposReais, ...tiposGrupo];
+            const temFatura = tiposAll.some(t => t === 'FATURA' || t === 'FATURA_DEMONSTRATIVO');
+            const temBoleto = tiposAll.some(t => t === 'BOLETO' || t === 'BOLETO_INSTRUCOES');
             const requerBoleto = i.forma_pagamento === 'BOLETO';
             let status = 'COMPLETO';
             if (!temFatura && requerBoleto && !temBoleto) status = 'PENDENTE_FATURA_E_BOLETO';
             else if (!temFatura) status = 'PENDENTE_FATURA';
             else if (requerBoleto && !temBoleto) status = 'PENDENTE_BOLETO';
-            return { voucher_id: i.voucher_id, numero_spo: spoByVoucher[i.voucher_id] || i.spo || null, fornecedor: i.fornecedor, valor: i.valor, vencimento: i.vencimento, forma_pagamento: i.forma_pagamento, fatura: i.fatura, temFatura, temBoleto, requerBoleto, status, etapa_destino: i.etapa_destino || null };
+            return { voucher_id: i.voucher_id, numero_spo: spoByVoucher[i.voucher_id] || i.spo || null, fornecedor: i.fornecedor, valor: i.valor, vencimento: i.vencimento, forma_pagamento: i.forma_pagamento, fatura: i.fatura, id_rm: i.id_rm ?? null, temFatura, temBoleto, requerBoleto, status, etapa_destino: i.etapa_destino || null };
           });
 
-          result = { success: true, batch: batchRows[0], items, documents: docs, checklist };
+          result = { success: true, batch: batchRows[0], items, documents: parsedDocs, checklist };
           break;
         }
 
@@ -18845,6 +18919,24 @@ Deno.serve(async (req) => {
           }
           const items = await client.query(`SELECT voucher_id, fornecedor, forma_pagamento, etapa_destino FROM dados_dachser.t_voucher_batch_import_item WHERE batch_id = ? AND voucher_id IS NOT NULL`, [batch_id]);
           const voucherIds = items.map((i: any) => i.voucher_id);
+
+          // Buscar docs do lote (incluindo grupos master pendentes)
+          const allDocs = await client.query(`SELECT * FROM dados_dachser.t_voucher_batch_documents WHERE batch_id = ?`, [batch_id]);
+          const masterDocs = (allDocs || []).filter((d: any) => Number(d.is_master_group) === 1 && d.master_voucher_ids);
+          const groupDocs: { doc: any; vids: string[] }[] = [];
+          for (const d of masterDocs) {
+            let vids: string[] = [];
+            try { vids = typeof d.master_voucher_ids === 'string' ? JSON.parse(d.master_voucher_ids) : d.master_voucher_ids; } catch (_) {}
+            if (Array.isArray(vids) && vids.length >= 2) groupDocs.push({ doc: d, vids });
+          }
+          // Anexos virtuais por voucher (via grupos master)
+          const masterTiposByVoucher: Record<string, string[]> = {};
+          for (const g of groupDocs) {
+            for (const vid of g.vids) {
+              if (g.doc.tipo_anexo) (masterTiposByVoucher[vid] ||= []).push(g.doc.tipo_anexo);
+            }
+          }
+
           const pendentes: any[] = [];
           if (voucherIds.length > 0) {
             const placeholders = voucherIds.map(() => '?').join(',');
@@ -18855,7 +18947,7 @@ Deno.serve(async (req) => {
             const byV: Record<string, string[]> = {};
             for (const a of allAnexos) (byV[a.voucher_id] ||= []).push(a.tipo);
             for (const it of items) {
-              const tipos = byV[it.voucher_id] || [];
+              const tipos = [...(byV[it.voucher_id] || []), ...(masterTiposByVoucher[it.voucher_id] || [])];
               const temFatura = tipos.some(t => t === 'FATURA' || t === 'FATURA_DEMONSTRATIVO');
               const temBoleto = tipos.some(t => t === 'BOLETO' || t === 'BOLETO_INSTRUCOES');
               const requerBoleto = it.forma_pagamento === 'BOLETO';
@@ -18872,10 +18964,114 @@ Deno.serve(async (req) => {
             );
           }
 
+          // Criar masters a partir dos grupos (uma vez por conjunto único de vouchers)
+          let mastersCreated = 0;
+          const groupKey = (vids: string[]) => [...vids].sort().join('|');
+          const groupsByKey = new Map<string, { vids: string[]; docs: any[] }>();
+          for (const g of groupDocs) {
+            const k = groupKey(g.vids);
+            const existing = groupsByKey.get(k);
+            if (existing) existing.docs.push(g.doc);
+            else groupsByKey.set(k, { vids: g.vids, docs: [g.doc] });
+          }
+          const childrenPromoted = new Set<string>();
+          const extraMasterItems: any[] = []; // mastersIds para promover no loop principal
+          for (const grp of groupsByKey.values()) {
+            try {
+              const ph = grp.vids.map(() => '?').join(',');
+              const childRows: any[] = await client.query(`
+                SELECT v.id, v.numero_spo, v.fornecedor, v.cnpj_fornecedor, v.valor, v.moeda,
+                       v.vencimento, v.data_emissao, v.tipo_documento, v.forma_pagamento,
+                       v.cobranca_em_nome_de, v.filial, v.urgencia_tipo, v.id_rm,
+                       v.processo_id, v.origem_processo, v.comentarios_operacao,
+                       dfv.idmov AS dfv_idmov,
+                       COALESCE(dfv.idmov, v.id_rm) AS sort_key
+                FROM dados_dachser.t_vouchers v
+                LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv
+                  ON v.numero_spo COLLATE utf8mb4_unicode_ci = dfv.nd COLLATE utf8mb4_unicode_ci
+                WHERE v.id IN (${ph})
+              `, grp.vids);
+              if (!childRows || childRows.length === 0) continue;
+
+              // numero_spo do master = menor sort_key
+              const withKey = childRows.filter((c: any) => c.sort_key != null);
+              let masterSpo: string;
+              if (withKey.length > 0) {
+                withKey.sort((a: any, b: any) => (parseInt(a.sort_key) || Infinity) - (parseInt(b.sort_key) || Infinity));
+                masterSpo = withKey[0].numero_spo;
+              } else {
+                masterSpo = childRows[0].numero_spo || `MASTER-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+              }
+
+              const totalValor = childRows.reduce((acc: number, c: any) => acc + (Number(c.valor) || 0), 0);
+              const ref = childRows[0];
+              const masterId = crypto.randomUUID();
+              const destinoMaster = String(ref.urgencia_tipo || '').toUpperCase() === 'URGENTE_REAL'
+                ? 'SUPERVISOR'
+                : (String(ref.cobranca_em_nome_de || '').toUpperCase() === 'CLIENTE' ? 'FINANCEIRO' : 'FISCAL');
+
+              await client.execute(`
+                INSERT INTO dados_dachser.t_vouchers
+                  (id, numero_spo, processo_id, origem_processo, fornecedor, cnpj_fornecedor,
+                   valor, moeda, vencimento, data_emissao, tipo_documento, filial,
+                   forma_pagamento, cobranca_em_nome_de, urgencia_tipo, comentarios_operacao,
+                   etapa_atual, is_master, nome_master, origem_criacao, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'IMPORT_LOTE', NOW(), NOW())
+              `, [
+                masterId, masterSpo, ref.processo_id || null, ref.origem_processo || 'CHB',
+                ref.fornecedor, ref.cnpj_fornecedor, totalValor, ref.moeda || 'BRL',
+                ref.vencimento, ref.data_emissao, ref.tipo_documento, ref.filial,
+                ref.forma_pagamento, ref.cobranca_em_nome_de, ref.urgencia_tipo, ref.comentarios_operacao || null,
+                destinoMaster, `MASTER ${masterSpo} (${childRows.length})`,
+              ]);
+
+              // Marcar children como consolidados
+              await client.execute(`
+                UPDATE dados_dachser.t_vouchers
+                SET voucher_master_id = ?, etapa_atual = 'CONSOLIDADO_NO_MASTER', updated_at = NOW()
+                WHERE id IN (${ph})
+              `, [masterId, ...grp.vids]);
+              for (const vid of grp.vids) childrenPromoted.add(vid);
+
+              // Criar anexos no master e atualizar docs
+              for (const d of grp.docs) {
+                const anexoId = crypto.randomUUID();
+                await client.execute(`
+                  INSERT INTO dados_dachser.t_voucher_anexos (id, voucher_id, tipo, file_name, file_url, file_size, created_at)
+                  VALUES (?, ?, ?, ?, ?, ?, NOW())
+                `, [anexoId, masterId, d.tipo_anexo, d.file_name, d.file_url, d.size_bytes || 0]);
+                await client.execute(`
+                  UPDATE dados_dachser.t_voucher_batch_documents
+                  SET voucher_id = ?, anexo_id = ?
+                  WHERE id = ?
+                `, [masterId, anexoId, d.id]);
+              }
+
+              try {
+                const logId = crypto.randomUUID();
+                await client.execute(`
+                  INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+                  VALUES (?, ?, ?, ?, 'MASTER_CRIADO_LOTE', ?, NOW())
+                `, [logId, masterId, String(requesterId), adminUserName, `batch_id=${batch_id}; spo=${masterSpo}; children=${grp.vids.length}; total=${totalValor}`]);
+              } catch (_) {}
+
+              extraMasterItems.push({ voucher_id: masterId, etapa_destino: destinoMaster, fornecedor: ref.fornecedor, forma_pagamento: ref.forma_pagamento });
+              mastersCreated++;
+            } catch (e) {
+              console.log('master creation failed:', e);
+            }
+          }
+
+          // Lista final para promoção: itens individuais (não consolidados) + masters criados
+          const itemsToPromote = [
+            ...items.filter((it: any) => !childrenPromoted.has(it.voucher_id)),
+            ...extraMasterItems,
+          ];
+
           // Promover cada voucher para sua etapa de destino (Fiscal/Financeiro/Supervisor).
           // Fallback: se etapa_destino estiver vazio, recomputa a partir do voucher.
           let promoted = 0;
-          for (const it of items) {
+          for (const it of itemsToPromote) {
             let destino = String(it.etapa_destino || '').toUpperCase();
             if (!destino || !['FISCAL', 'FINANCEIRO', 'SUPERVISOR'].includes(destino)) {
               try {

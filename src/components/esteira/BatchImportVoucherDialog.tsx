@@ -60,9 +60,8 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
   const [search, setSearch] = useState("");
   const [editingRow, setEditingRow] = useState<number | null>(null);
 
-  // Bulk
-  const [bulkField, setBulkField] = useState<string>("");
-  const [bulkValue, setBulkValue] = useState<string>("");
+  // Bulk — 3 campos fixos
+  const [bulkValues, setBulkValues] = useState<Record<string, string>>({});
   const [bulkOpen, setBulkOpen] = useState(false);
 
   const reset = () => {
@@ -75,7 +74,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
     setFilter("all");
     setSearch("");
     setEditingRow(null);
-    setBulkField(""); setBulkValue(""); setBulkOpen(false);
+    setBulkValues({}); setBulkOpen(false);
   };
 
   const validate = (next: any) => {
@@ -170,21 +169,26 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
   };
 
   const applyBulk = () => {
-    if (!bulkField || !bulkValue) return;
+    const filled = Object.entries(bulkValues).filter(([, v]) => v !== undefined && v !== "");
+    if (filled.length === 0) return;
     if (selected.size === 0) {
       toast({ title: "Selecione ao menos uma linha", variant: "destructive" });
       return;
     }
-    const v = bulkField === "urgente" ? bulkValue === "true" : bulkValue;
     setItems(prev => revalidate(prev.map(it => {
       if (!selected.has(it.row_index)) return it;
-      const next = { ...it, [bulkField]: v };
-      next.field_origin = { ...(it.field_origin || {}), [bulkField]: "MANUAL" };
+      const next: any = { ...it };
+      const fo = { ...(it.field_origin || {}) };
+      for (const [k, v] of filled) {
+        next[k] = v;
+        fo[k] = "MANUAL";
+      }
+      next.field_origin = fo;
       return next;
     })));
     toast({ title: `Aplicado a ${selected.size} linha(s)` });
     setBulkOpen(false);
-    setBulkField(""); setBulkValue("");
+    setBulkValues({});
   };
 
   const confirm = async () => {
@@ -294,33 +298,12 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
       if (filter === "errors" && it.status !== "ERROR") return false;
       if (filter === "valid" && it.status !== "VALID") return false;
       if (q) {
-        const hay = `${it.spo || ""} ${it.processo || ""}`.toLowerCase();
+        const hay = `${it.spo || ""} ${it.processo || ""} ${it.fornecedor || ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     }).length;
   }, [items, filter, search]);
-
-  const bulkOptions = useMemo(() => {
-    switch (bulkField) {
-      case "origem_processo": return ORIGENS.map(v => ({ v, l: v }));
-      case "tipo_documento": return TIPOS_DOC.map(v => ({ v, l: v }));
-      case "forma_pagamento": return FORMAS.map(v => ({ v, l: v }));
-      case "cobranca_em_nome_de": return [{ v: "DACHSER", l: "Sim — Fiscal" }, { v: "CLIENTE", l: "Não — Cliente" }];
-      case "moeda": return [{ v: "BRL", l: "BRL" }, { v: "USD", l: "USD" }, { v: "EUR", l: "EUR" }];
-      case "urgente": return [{ v: "true", l: "Sim" }, { v: "false", l: "Não" }];
-      default: return [];
-    }
-  }, [bulkField]);
-
-  const fieldLabel = (k: string) => ({
-    origem_processo: "Origem Processo",
-    tipo_documento: "Tipo Documento",
-    cobranca_em_nome_de: "Fiscal",
-    forma_pagamento: "Forma de Pagamento",
-    moeda: "Moeda",
-    urgente: "Urgente",
-  } as Record<string, string>)[k] || k;
 
   const editingItem = editingRow != null ? items.find(i => i.row_index === editingRow) ?? null : null;
 
@@ -533,25 +516,57 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
                     Editar em lote {selected.size > 0 && `(${selected.size})`}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="start" className="w-72 p-3 space-y-2">
+                <PopoverContent align="start" className="w-80 p-3 space-y-3">
                   <div className="text-xs font-medium">Aplicar a {selected.size} linha(s) selecionada(s)</div>
-                  <Select value={bulkField} onValueChange={(v) => { setBulkField(v); setBulkValue(""); }}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Campo" /></SelectTrigger>
-                    <SelectContent>
-                      {["origem_processo","tipo_documento","forma_pagamento","cobranca_em_nome_de","moeda","urgente"].map(k => (
-                        <SelectItem key={k} value={k}>{fieldLabel(k)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={bulkValue} onValueChange={setBulkValue} disabled={!bulkField}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Valor" /></SelectTrigger>
-                    <SelectContent>
-                      {bulkOptions.map(o => <SelectItem key={o.v} value={o.v}>{o.l}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">Tipo de Documento</Label>
+                      <Select
+                        value={bulkValues.tipo_documento || ""}
+                        onValueChange={(v) => setBulkValues(prev => ({ ...prev, tipo_documento: v }))}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                        <SelectContent>
+                          {TIPOS_DOC.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">Forma de Pagamento</Label>
+                      <Select
+                        value={bulkValues.forma_pagamento || ""}
+                        onValueChange={(v) => setBulkValues(prev => ({ ...prev, forma_pagamento: v }))}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                        <SelectContent>
+                          {FORMAS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">Fiscal</Label>
+                      <Select
+                        value={bulkValues.cobranca_em_nome_de || ""}
+                        onValueChange={(v) => setBulkValues(prev => ({ ...prev, cobranca_em_nome_de: v }))}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="DACHSER">Sim — Fiscal</SelectItem>
+                          <SelectItem value="CLIENTE">Não — Cliente</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                   <div className="flex justify-end gap-2 pt-1">
                     <Button size="sm" variant="ghost" onClick={() => setBulkOpen(false)} className="h-7">Cancelar</Button>
-                    <Button size="sm" onClick={applyBulk} disabled={!bulkField || !bulkValue} className="h-7">Aplicar</Button>
+                    <Button
+                      size="sm"
+                      onClick={applyBulk}
+                      disabled={Object.values(bulkValues).every(v => !v)}
+                      className="h-7"
+                    >
+                      Aplicar
+                    </Button>
                   </div>
                 </PopoverContent>
               </Popover>
@@ -584,7 +599,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
               <div className="ml-auto relative">
                 <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar SPO ou processo..."
+                  placeholder="Buscar SPO, processo ou fornecedor..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="h-8 text-xs pl-8 w-64"

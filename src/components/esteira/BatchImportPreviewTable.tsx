@@ -76,7 +76,7 @@ export function BatchImportPreviewTable({
       if (filter === "errors" && it.status !== "ERROR") return false;
       if (filter === "valid" && it.status !== "VALID") return false;
       if (q) {
-        const hay = `${it.spo || ""} ${it.processo || ""}`.toLowerCase();
+        const hay = `${it.spo || ""} ${it.processo || ""} ${it.fornecedor || ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
