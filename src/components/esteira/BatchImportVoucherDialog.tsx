@@ -298,24 +298,12 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
       if (filter === "errors" && it.status !== "ERROR") return false;
       if (filter === "valid" && it.status !== "VALID") return false;
       if (q) {
-        const hay = `${it.spo || ""} ${it.processo || ""}`.toLowerCase();
+        const hay = `${it.spo || ""} ${it.processo || ""} ${it.fornecedor || ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     }).length;
   }, [items, filter, search]);
-
-  const bulkOptions = useMemo(() => {
-    switch (bulkField) {
-      case "origem_processo": return ORIGENS.map(v => ({ v, l: v }));
-      case "tipo_documento": return TIPOS_DOC.map(v => ({ v, l: v }));
-      case "forma_pagamento": return FORMAS.map(v => ({ v, l: v }));
-      case "cobranca_em_nome_de": return [{ v: "DACHSER", l: "Sim — Fiscal" }, { v: "CLIENTE", l: "Não — Cliente" }];
-      case "moeda": return [{ v: "BRL", l: "BRL" }, { v: "USD", l: "USD" }, { v: "EUR", l: "EUR" }];
-      case "urgente": return [{ v: "true", l: "Sim" }, { v: "false", l: "Não" }];
-      default: return [];
-    }
-  }, [bulkField]);
 
   const fieldLabel = (k: string) => ({
     origem_processo: "Origem Processo",
