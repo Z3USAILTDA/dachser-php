@@ -19148,14 +19148,15 @@ Deno.serve(async (req) => {
                    valor, moeda, vencimento, data_emissao_documento, tipo_documento, filial,
                    forma_pagamento, cobranca_em_nome_de, urgencia_tipo, comentarios_operacao,
                    etapa_atual, status_baixa, status_financeiro, is_master, nome_master,
-                   origem_criacao, tipo_execucao_pagamento, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDENTE', 'PENDENTE', 1, ?, 'IMPORT_LOTE', 'A_DEFINIR', NOW(), NOW())
+                   origem_criacao, tipo_execucao_pagamento, criado_por_user_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDENTE', 'PENDENTE', 1, ?, 'IMPORT_LOTE', 'A_DEFINIR', ?, NOW(), NOW())
               `, [
                 masterId, masterSpo, ref.processo_id || null, ref.origem_processo || 'CHB',
                 ref.fornecedor, ref.cnpj_fornecedor, totalValor, ref.moeda || 'BRL',
                 ref.vencimento, ref.data_emissao_documento, ref.tipo_documento, ref.filial,
                 ref.forma_pagamento, ref.cobranca_em_nome_de, ref.urgencia_tipo, ref.comentarios_operacao || null,
                 destinoMaster, `MASTER ${masterSpo} (${childRows.length})`,
+                String(requesterId || 'SISTEMA_LOTE'),
               ]);
 
               // Marcar children como consolidados
