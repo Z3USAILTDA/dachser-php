@@ -599,7 +599,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
               <div className="ml-auto relative">
                 <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar SPO ou processo..."
+                  placeholder="Buscar SPO, processo ou fornecedor..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="h-8 text-xs pl-8 w-64"
