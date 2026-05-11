@@ -388,9 +388,28 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                   Vouchers do lote
                 </span>
               </div>
-              <span className="rounded-full bg-muted/40 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                {checklist.filter((c) => c.status === "COMPLETO").length}/{checklist.length}
-              </span>
+              <div className="flex items-center gap-3">
+                {filteredChecklist.length > 0 && (() => {
+                  const visibleIds = filteredChecklist.map((c) => c.voucher_id);
+                  const selectedCount = visibleIds.filter((id) => selectedVouchers.has(id)).length;
+                  const allSelected = selectedCount === visibleIds.length;
+                  const someSelected = selectedCount > 0 && !allSelected;
+                  return (
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
+                      <Checkbox
+                        checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                        onCheckedChange={toggleAllVisible}
+                        disabled={!!lockedMaster}
+                        className="border-border/80 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground"
+                      />
+                      Selecionar todos ({visibleIds.length})
+                    </label>
+                  );
+                })()}
+                <span className="rounded-full bg-muted/40 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                  {checklist.filter((c) => c.status === "COMPLETO").length}/{checklist.length}
+                </span>
+              </div>
             </div>
             {lockedMaster && (
               <div className="flex items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2">
