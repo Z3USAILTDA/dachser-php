@@ -19271,7 +19271,7 @@ Deno.serve(async (req) => {
               VALUES (?, ?, ?, ?, 'IMPORTACAO_LOTE_FINALIZADA', ?, NOW())
             `, [logId, voucherIds[0] || batch_id, String(requesterId), adminUserName, `batch_id=${batch_id}; vouchers=${voucherIds.length}; promovidos=${promoted}`]);
           } catch (_) {}
-          result = { success: true, batch_id, finalized: true };
+          result = { success: true, batch_id, finalized: true, masters_created: mastersCreated, promoted };
           break;
         }
 
