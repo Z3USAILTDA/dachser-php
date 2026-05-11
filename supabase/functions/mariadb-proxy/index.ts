@@ -18656,7 +18656,7 @@ Deno.serve(async (req) => {
           // Auto-limpa qualquer voucher órfão em AGUARDANDO_DOCUMENTOS_LOTE deste usuário
           // antes de comparar com a planilha — evita falsos "Já na etapa…".
           try {
-            const cleanup = await runAbandonedCleanup({ scope: 'USER', userId: requesterId });
+            const cleanup = await runAbandonedCleanup({ scope: 'ALL', userId: requesterId });
             if (cleanup.vouchers > 0 || cleanup.batches > 0) {
               console.log(`[preview_voucher_batch_import] Auto-cleanup user=${requesterId}:`, cleanup);
             }
@@ -18678,7 +18678,7 @@ Deno.serve(async (req) => {
           // Auto-limpeza: ao iniciar um novo lote, descarta qualquer lote anterior
           // deste usuário que ficou em PENDING_DOCUMENTS (abandonado).
           try {
-            const cleanup = await runAbandonedCleanup({ scope: 'USER', userId: requesterId });
+            const cleanup = await runAbandonedCleanup({ scope: 'ALL', userId: requesterId });
             if (cleanup.batches > 0) {
               console.log(`[create_voucher_batch_import] Auto-cleanup user=${requesterId}:`, cleanup);
             }
