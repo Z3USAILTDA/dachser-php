@@ -1,4 +1,4 @@
-import { Check, AlertTriangle, Minus } from "lucide-react";
+import { Check, AlertTriangle, Minus, CheckSquare, Square } from "lucide-react";
 
 export interface ChecklistItem {
   voucher_id: string;
