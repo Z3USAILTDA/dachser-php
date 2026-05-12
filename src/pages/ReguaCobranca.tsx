@@ -139,7 +139,12 @@ function ReguaCobrancaContent() {
   const [selectedRow, setSelectedRow] = useState<StageRow | null>(null);
   const [sendingAging, setSendingAging] = useState(false);
   const [agingEmailText, setAgingEmailText] = useState("");
-  const [agingRecipients, setAgingRecipients] = useState("devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com");
+  const [agingRecipients, setAgingRecipients] = useState("");
+  const [agingDefaults, setAgingDefaults] = useState<{
+    recipients: string;
+    contato_email: string;
+    contato_telefone: string;
+  }>({ recipients: "", contato_email: "", contato_telefone: "" });
 
   // Bulk send state (admin only)
   const [bulkSendModalOpen, setBulkSendModalOpen] = useState(false);
@@ -207,6 +212,29 @@ function ReguaCobrancaContent() {
     } finally {
       setIsLoadingDbStats(false);
     }
+  }, []);
+
+  // Carrega defaults de destinatários/contato a partir do servidor (sem expor no bundle)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "get_regua_aging_defaults" },
+        });
+        if (!cancelled && data?.success) {
+          setAgingDefaults({
+            recipients: data.recipients || "",
+            contato_email: data.contato_email || "",
+            contato_telefone: data.contato_telefone || "",
+          });
+          setAgingRecipients(data.recipients || "");
+        }
+      } catch (err) {
+        console.warn("Falha ao carregar defaults da régua:", err);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const isVisible = usePageVisibility();
@@ -297,6 +325,13 @@ function ReguaCobrancaContent() {
 
   const getDefaultAgingText = (cnpj: string) => {
     const cnpjFormatted = cnpj ? formatCnpj(cnpj) : "xx.xxx.xxx/xxxx-xx";
+    const contato = [
+      agingDefaults.contato_email && `e-mail ${agingDefaults.contato_email}`,
+      agingDefaults.contato_telefone && `telefone ${agingDefaults.contato_telefone}`,
+    ].filter(Boolean).join(" ou ");
+    const linhaContato = contato
+      ? `Em caso de dúvidas ou eventuais divergências, nossa equipe está à disposição através do ${contato}.`
+      : `Em caso de dúvidas ou eventuais divergências, nossa equipe está à disposição.`;
     return `Boa tarde!
 Tudo bem?
 
@@ -306,7 +341,7 @@ ${cnpjFormatted}
 
 Por gentileza, poderia verificar e nos retornar com a programação de pagamento para essa semana?
 
-Em caso de dúvidas ou eventuais divergências, nossa equipe está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+${linhaContato}
 
 Agradecemos a sua atenção e colaboração.
 
@@ -328,7 +363,7 @@ Financeiro Dachser`;
     };
     setSelectedRow(row);
     setAgingEmailText(getDefaultAgingText(cliente.cnpj));
-    setAgingRecipients("devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com");
+    setAgingRecipients(agingDefaults.recipients);
     setAgingModalOpen(true);
   };
 
@@ -364,10 +399,17 @@ Financeiro Dachser`;
 
     // Build default text with all CNPJs
     const cnpjsFormatted = cnpjsList.map(c => formatCnpj(c)).join("\n");
-    const defaultText = `Boa tarde!\nTudo bem?\n\nSegue anexo, aging list para os CNPJ's:\n${cnpjsFormatted}\n\nPor gentileza, poderia verificar e nos retornar com a programação de pagamento para essa semana?\n\nEm caso de dúvidas ou eventuais divergências, nossa equipe está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.\n\nAgradecemos a sua atenção e colaboração.\n\nAtenciosamente,\nFinanceiro Dachser`;
+    const contato = [
+      agingDefaults.contato_email && `e-mail ${agingDefaults.contato_email}`,
+      agingDefaults.contato_telefone && `telefone ${agingDefaults.contato_telefone}`,
+    ].filter(Boolean).join(" ou ");
+    const linhaContato = contato
+      ? `Em caso de dúvidas ou eventuais divergências, nossa equipe está à disposição através do ${contato}.`
+      : `Em caso de dúvidas ou eventuais divergências, nossa equipe está à disposição.`;
+    const defaultText = `Boa tarde!\nTudo bem?\n\nSegue anexo, aging list para os CNPJ's:\n${cnpjsFormatted}\n\nPor gentileza, poderia verificar e nos retornar com a programação de pagamento para essa semana?\n\n${linhaContato}\n\nAgradecemos a sua atenção e colaboração.\n\nAtenciosamente,\nFinanceiro Dachser`;
     
     setAgingEmailText(defaultText);
-    setAgingRecipients("devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com");
+    setAgingRecipients(agingDefaults.recipients);
     // Store razao_bases in a ref or state for sending
     (window as any).__agrupamentoRazaoBases = selectedRazaoBases;
     setAgrupamentoModalOpen(true);
@@ -458,7 +500,7 @@ Financeiro Dachser`;
   const handleSendAging = (row: StageRow) => {
     setSelectedRow(row);
     setAgingEmailText(getDefaultAgingText(row.cnpj));
-    setAgingRecipients("devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com");
+    setAgingRecipients(agingDefaults.recipients);
     setAgingModalOpen(true);
   };
 
