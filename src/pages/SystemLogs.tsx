@@ -29,14 +29,11 @@ export default function SystemLogs() {
   const [isDevUser, setIsDevUser] = useState(false);
   const [activeLogTab, setActiveLogTab] = useState("live");
 
-  // Check if user is devs@z3us.ai
+  // Check if user has dev privileges (admin flag)
   useEffect(() => {
-    console.log('[SystemLogs] User email:', user?.email);
-    if (user?.email === 'devs@z3us.ai') {
-      setIsDevUser(true);
-    } else {
-      setIsDevUser(false);
-    }
+    const u = user as any;
+    const isAdmin = u?.is_admin === 1 || u?.is_admin === "1" || u?.is_admin === true;
+    setIsDevUser(!!isAdmin);
   }, [user]);
 
   // Redirect if not dev/admin

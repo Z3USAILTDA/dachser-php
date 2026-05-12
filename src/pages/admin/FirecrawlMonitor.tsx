@@ -231,7 +231,7 @@ export default function FirecrawlMonitor() {
 
             {/* Alert Info */}
             <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs text-amber-300/80">
-              <strong>Alerta automático:</strong> E-mail enviado para devs@z3us.ai, rodrigo@z3us.ai e larissa@z3us.ai quando
+              <strong>Alerta automático:</strong> E-mail enviado para a equipe de desenvolvimento quando
               não houver dados <strong>válidos</strong> (com origin e destination preenchidos) há mais de <strong>2 horas</strong>.
             </div>
           </PageCard>
