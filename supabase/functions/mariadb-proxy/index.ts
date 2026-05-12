@@ -2635,6 +2635,17 @@ Deno.serve(async (req) => {
       }
 
       // ==================== RÉGUA DE COBRANÇA ====================
+      case 'get_regua_aging_defaults': {
+        // Defaults mantidos no servidor (edge function) para não vazarem no bundle do cliente.
+        result = {
+          success: true,
+          recipients: 'devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com',
+          contato_email: 'jessica.costa@dachser.com',
+          contato_telefone: '+55 (19) 3312-6185',
+        };
+        break;
+      }
+
       case 'get_regua_counts': {
         const MAX_DIAS_ATRASO = 120;
         
