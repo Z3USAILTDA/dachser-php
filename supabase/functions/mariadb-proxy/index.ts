@@ -19542,27 +19542,33 @@ Deno.serve(async (req) => {
           let promoted = 0;
           for (const it of itemsToPromote) {
             let destino = String(it.etapa_destino || '').toUpperCase();
-            if (!destino || !['FISCAL', 'FINANCEIRO', 'SUPERVISOR'].includes(destino)) {
+            if (!destino || !['FISCAL', 'FINANCEIRO', 'SUPERVISOR', 'PRE_LANCAMENTO'].includes(destino)) {
               try {
                 const vrows = await client.query(
-                  `SELECT urgencia_tipo, cobranca_em_nome_de FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1`,
+                  `SELECT urgencia_tipo, cobranca_em_nome_de, etapa_atual FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1`,
                   [it.voucher_id]
                 );
                 const v = vrows && vrows[0];
                 if (v) {
-                  destino = String(v.urgencia_tipo || '').toUpperCase() === 'URGENTE_REAL'
-                    ? 'SUPERVISOR'
-                    : (String(v.cobranca_em_nome_de || '').toUpperCase() === 'CLIENTE' ? 'FINANCEIRO' : 'FISCAL');
+                  if (String(v.etapa_atual || '').toUpperCase() === 'PRE_LANCAMENTO') {
+                    destino = 'PRE_LANCAMENTO';
+                  } else {
+                    destino = String(v.urgencia_tipo || '').toUpperCase() === 'URGENTE_REAL'
+                      ? 'SUPERVISOR'
+                      : (String(v.cobranca_em_nome_de || '').toUpperCase() === 'CLIENTE' ? 'FINANCEIRO' : 'FISCAL');
+                  }
                 }
               } catch (_) {}
             }
             if (!destino) destino = 'FISCAL';
             try {
+              // Pré-lançamento: voucher já está em PRE_LANCAMENTO; só conta como promovido.
+              const fromEtapa = destino === 'PRE_LANCAMENTO' ? 'PRE_LANCAMENTO' : 'AGUARDANDO_DOCUMENTOS_LOTE';
               const upd: any = await client.execute(
                 `UPDATE dados_dachser.t_vouchers
                     SET etapa_atual = ?, updated_at = NOW()
-                  WHERE id = ? AND etapa_atual = 'AGUARDANDO_DOCUMENTOS_LOTE'`,
-                [destino, it.voucher_id]
+                  WHERE id = ? AND etapa_atual = ?`,
+                [destino, it.voucher_id, fromEtapa]
               );
               const aff = Number(upd?.affectedRows ?? upd?.affected_rows ?? 0);
               if (aff > 0) {
