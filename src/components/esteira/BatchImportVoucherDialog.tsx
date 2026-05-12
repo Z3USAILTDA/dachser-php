@@ -643,7 +643,11 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
                 {validCount === 0 && (
                   <span className="text-xs text-muted-foreground">Corrija os erros para habilitar a importação</span>
                 )}
-                <Button onClick={confirm} disabled={busy || validCount === 0}>
+                <Button variant="outline" onClick={() => confirm(true)} disabled={busy || validCount === 0}>
+                  {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                  Pré-Lançamento
+                </Button>
+                <Button onClick={() => confirm(false)} disabled={busy || validCount === 0}>
                   {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                   Criar {validCount} voucher(s)
                 </Button>
