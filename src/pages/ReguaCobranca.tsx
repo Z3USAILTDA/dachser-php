@@ -214,6 +214,29 @@ function ReguaCobrancaContent() {
     }
   }, []);
 
+  // Carrega defaults de destinatários/contato a partir do servidor (sem expor no bundle)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "get_regua_aging_defaults" },
+        });
+        if (!cancelled && data?.success) {
+          setAgingDefaults({
+            recipients: data.recipients || "",
+            contato_email: data.contato_email || "",
+            contato_telefone: data.contato_telefone || "",
+          });
+          setAgingRecipients(data.recipients || "");
+        }
+      } catch (err) {
+        console.warn("Falha ao carregar defaults da régua:", err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const isVisible = usePageVisibility();
   useEffect(() => {
     if (!isVisible) return;
