@@ -272,17 +272,17 @@ export default function ComprovanteRobot() {
     setProgress(0);
 
     let processed = 0;
-    const comprovantesToUpload: Array<{
+    const UPLOAD_CONCURRENCY = 6;
+    type UploadPayload = {
       voucher_id: string;
       file_name: string;
       file_url: string;
       file_size: number;
       user_id: string;
       user_name: string;
-    }> = [];
+    };
 
-    // First, upload all files to storage
-    for (const fileMatch of identifiedFiles) {
+    const uploadOne = async (fileMatch: typeof identifiedFiles[number]): Promise<UploadPayload | null> => {
       setFiles((prev) =>
         prev.map((f) =>
           f.fileName === fileMatch.fileName ? { ...f, status: "processing" } : f
@@ -304,20 +304,20 @@ export default function ComprovanteRobot() {
           .from("voucher-anexos")
           .getPublicUrl(filePath);
 
-        comprovantesToUpload.push({
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.fileName === fileMatch.fileName ? { ...f, status: "success" } : f
+          )
+        );
+
+        return {
           voucher_id: fileMatch.voucherId!,
           file_name: fileMatch.file.name,
           file_url: publicUrl,
           file_size: fileMatch.file.size,
           user_id: user?.id?.toString() || "",
           user_name: (user as any)?.username || (user as any)?.email || "Sistema Robô",
-        });
-
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.fileName === fileMatch.fileName ? { ...f, status: "success" } : f
-          )
-        );
+        };
       } catch (error: any) {
         console.error("Upload error:", error);
         setFiles((prev) =>
@@ -327,10 +327,19 @@ export default function ComprovanteRobot() {
               : f
           )
         );
+        return null;
+      } finally {
+        processed++;
+        setProgress((processed / identifiedFiles.length) * 100);
       }
+    };
 
-      processed++;
-      setProgress((processed / identifiedFiles.length) * 100);
+    // Upload em paralelo com concorrência limitada
+    const comprovantesToUpload: UploadPayload[] = [];
+    for (let start = 0; start < identifiedFiles.length; start += UPLOAD_CONCURRENCY) {
+      const batch = identifiedFiles.slice(start, start + UPLOAD_CONCURRENCY).map(uploadOne);
+      const results = await Promise.all(batch);
+      results.forEach((r) => { if (r) comprovantesToUpload.push(r); });
     }
 
     // Now attach all comprovantes in batch
