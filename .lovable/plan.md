@@ -1,35 +1,40 @@
-## Objetivo
+## Ajustes no Pré-Lançamento
 
-Permitir importar SPOs em modo **"Pré-Lançamento"** (sem documentos), e depois, no diálogo **"Vincular documentos ao lote"**, buscar SPOs pré-lançados de um fornecedor para anexar fatura/boleto junto com os SPOs do lote atual.
+### Problemas a corrigir
+1. SPOs em **Pré-Lançamento somem** após importação — hoje são gravados em `PRE_LANCAMENTO` e essa etapa está excluída de todos os filtros principais.
+2. **Pré-Lançamento não anexa documentos** — o fluxo pula direto para fechar o lote, mas o usuário precisa anexar a fatura/boleto agora (eles já têm documento).
 
-## Fluxo do usuário
+### Mudanças
 
-1. Em **Esteira → Importar SPOs em lote**: além do botão "Importar", surge **"Pré-Lançamento"**. Mesmo parser/validação, mas os vouchers são gravados marcados como pré-lançados e **não exigem documentos** — o lote é encerrado já no upload.
-2. Em **Vincular documentos ao lote** (após uma importação normal): novo bloco **"Buscar SPOs do fornecedor"** lista vouchers pré-lançados dos mesmos fornecedores presentes no lote atual. O usuário marca quais quer trazer; ao confirmar, eles entram no checklist do lote vigente, podendo receber a mesma fatura/boleto (master) junto com os SPOs já listados.
-3. Ao finalizar o lote, vouchers que receberam documento perdem o flag de pré-lançamento e seguem o fluxo normal (FISCAL/OPERACAO conforme regras existentes).
+**Backend (`supabase/functions/mariadb-proxy/index.ts`)**
+- `create_voucher_batch_import` (com `pre_lancamento: true`):
+  - Continua marcando os vouchers em `etapa_atual = 'PRE_LANCAMENTO'`.
+  - **Não** fecha o batch automaticamente — mantém o batch ativo para que o `BatchDocumentBinderDialog` rode normal e o usuário anexe os documentos.
+- `bind_batch_document_to_master_group` / `bind_batch_document_to_voucher`:
+  - Quando o voucher está em `PRE_LANCAMENTO`, **mantém a etapa em `PRE_LANCAMENTO`** após anexar o documento (não promove para FISCAL/FINANCEIRO/SUPERVISOR). O documento fica ligado ao voucher pré-lançado, pronto para ser "ativado" depois via "Buscar SPOs do fornecedor".
+- `finalize_batch_import`:
+  - Para vouchers em `PRE_LANCAMENTO`, exige documento anexado (mesma regra dos demais), mas após finalizar eles continuam em `PRE_LANCAMENTO`.
+- `attach_pre_lancamento_to_batch`:
+  - Já existe; ao trazer um pré-lançado para um lote vigente, segue o caminho normal (anexa documento → promove para etapa de destino, limpando `PRE_LANCAMENTO`).
+- **Visibilidade — adicionar `PRE_LANCAMENTO` aos filtros de etapa**:
+  - Remover a exclusão hard-coded de `PRE_LANCAMENTO` em:
+    - linha ~7431 (lista de vouchers da Esteira)
+    - linha ~16164 (contadores/dashboard)
+  - Manter exclusão apenas em listas de "trabalho ativo" onde fizer sentido (será mantida em `AGUARDANDO_DOCUMENTOS_LOTE` e `CONSOLIDADO_NO_MASTER`, conforme já está).
+  - Resultado: vouchers em `PRE_LANCAMENTO` aparecem nas listas e podem ser filtrados pela etapa "Pré-Lançamento" no filtro de etapa atual.
 
-## Onde fica armazenado
+**Frontend**
+- `BatchImportVoucherDialog.tsx`:
+  - Botão "Pré-Lançamento" passa a abrir o `BatchDocumentBinderDialog` (igual ao botão "Confirmar importação"), apenas propagando a flag para o backend.
+- `src/types/voucher.ts`:
+  - Adicionar `PRE_LANCAMENTO` ao tipo `EtapaAtual` e ao `ETAPA_LABELS` (label: "Pré-Lançamento"), `SLA_POR_ETAPA: 0`.
+- Filtros de etapa (Esteira / dashboards): se houver lista whitelist de etapas no front, incluir `PRE_LANCAMENTO` para aparecer no dropdown de filtro.
 
-Adicionar a coluna `is_pre_lancamento BOOLEAN DEFAULT FALSE` em `t_vouchers` (MariaDB). Mantém etapa `RASCUNHO`, sem novos enums — coerente com a memória "Surgical Implementation Preference". Vouchers pré-lançados ficam ocultos do fluxo normal por filtros e só aparecem quando explicitamente buscados via fornecedor.
+### Fluxo final
+1. Usuário importa em "Pré-Lançamento" → abre o binder → anexa documentos normalmente → finaliza.
+2. Vouchers ficam visíveis na Esteira com etapa "Pré-Lançamento" (filtrável).
+3. Em uma importação futura, o bloco "Buscar SPOs do fornecedor" no binder traz esses pré-lançados (já com documento) para o novo lote, onde, ao serem incluídos, são promovidos para a etapa de destino normal.
 
-## Mudanças
-
-### Backend (edge function `mariadb-proxy`)
-- `create_batch_import` / `insert_batch_voucher`: aceita flag `pre_lancamento: boolean`. Quando true, grava `is_pre_lancamento = 1` e marca o lote já como finalizado (sem exigir anexos).
-- Novo action `search_pre_lancamento_by_fornecedores`: recebe `{ batch_id }` ou `{ fornecedores: string[] }` e retorna vouchers com `is_pre_lancamento = 1` daqueles fornecedores (id, numero_spo, fornecedor, valor, vencimento, forma_pagamento, id_rm).
-- Novo action `attach_pre_lancamento_to_batch`: recebe `{ batch_id, voucher_ids }`. Vincula esses vouchers ao lote (mesma tabela do checklist usada em `get_batch_import_status`) sem alterar etapa ainda.
-- `bind_batch_document_to_master_group` / `bind_batch_document_to_voucher`: quando o voucher vinculado tinha `is_pre_lancamento = 1`, limpa o flag.
-- `finalize_batch_import`: ignora pendência de documento para vouchers que continuam `is_pre_lancamento = 1` (eles permanecem pré-lançados, sem promoção).
-
-### Frontend
-- **`BatchImportVoucherDialog.tsx`**: no rodapé do step `preview`, adicionar botão secundário **"Pré-Lançamento"** ao lado do "Confirmar importação". Mesma chamada de criação, com `pre_lancamento: true`. Após sucesso, exibe toast e fecha — não abre o `BatchDocumentBinderDialog`.
-- **`BatchDocumentBinderDialog.tsx`**:
-  - Novo bloco compacto acima do grid (ou colapsável dentro da coluna "Vouchers do lote") com título **"Buscar SPOs do fornecedor"**, mostrando os fornecedores únicos do lote atual e um botão "Buscar pré-lançados".
-  - Ao clicar: chama `search_pre_lancamento_by_fornecedores`, abre um sub-painel listando os SPOs encontrados (checkbox + SPO + fornecedor + valor + vencimento).
-  - Botão **"Adicionar ao lote"** chama `attach_pre_lancamento_to_batch` e recarrega o checklist; novos vouchers aparecem na lista normal e podem ser selecionados como qualquer outro (inclusive em master).
-  - Badge discreto "Pré-lançado" nos itens recém adicionados.
-
-## Fora de escopo
-- Cadastro manual em `EsteiraManual` (somente importação em lote, conforme exemplo na tela atual).
-- Mudar etapas/enums.
-- Notificações para SPOs pré-lançados.
+### Fora de escopo
+- Notificações específicas para PRE_LANCAMENTO.
+- Mudanças no `EsteiraManual`.
