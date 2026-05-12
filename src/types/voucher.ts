@@ -3,6 +3,7 @@
 export type EtapaAtual = 
   | "A_PROCESSAR"
   | "RASCUNHO"
+  | "PRE_LANCAMENTO"
   | "OPERACAO" 
   | "FISCAL" 
   | "SUPERVISOR" 
