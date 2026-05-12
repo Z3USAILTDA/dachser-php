@@ -12152,32 +12152,44 @@ Deno.serve(async (req) => {
         for (const comp of comprovantes) {
           try {
             const anexoId = crypto.randomUUID();
-            
-            // Insert attachment
+
+            // Detect if voucher is already CONCLUIDO — preserve final state
+            const vRows = await client.query(
+              `SELECT etapa_atual FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1`,
+              [comp.voucher_id]
+            );
+            const isConcluido = String(vRows?.[0]?.etapa_atual || '').toUpperCase() === 'CONCLUIDO';
+
+            // Insert attachment (always)
             await client.execute(`
               INSERT INTO dados_dachser.t_voucher_anexos (
                 id, voucher_id, tipo, file_name, file_url, file_size, created_at
               ) VALUES (?, ?, 'COMPROVANTE', ?, ?, ?, NOW())
             `, [anexoId, comp.voucher_id, comp.file_name, comp.file_url, comp.file_size || 0]);
 
-            // Update voucher status_comprovante - já entra como VALIDADO
-            await client.execute(`
-              UPDATE dados_dachser.t_vouchers 
-              SET status_comprovante = 'VALIDADO', updated_at = NOW()
-              WHERE id = ?
-            `, [comp.voucher_id]);
+            if (!isConcluido) {
+              // Update voucher status_comprovante - já entra como VALIDADO
+              await client.execute(`
+                UPDATE dados_dachser.t_vouchers 
+                SET status_comprovante = 'VALIDADO', updated_at = NOW()
+                WHERE id = ?
+              `, [comp.voucher_id]);
+            }
 
             // Add log entry
             await client.execute(`
               INSERT INTO dados_dachser.t_voucher_logs (
                 id, voucher_id, user_id, user_name, acao, detalhe, data_hora
-              ) VALUES (?, ?, ?, ?, 'COMPROVANTE_ANEXADO', ?, NOW())
+              ) VALUES (?, ?, ?, ?, ?, ?, NOW())
             `, [
               crypto.randomUUID(),
               comp.voucher_id,
               comp.user_id || null,
               comp.user_name || 'Sistema Robô',
-              `Comprovante ${comp.file_name} anexado automaticamente pelo robô`
+              isConcluido ? 'COMPROVANTE_ADICIONAL_ANEXADO' : 'COMPROVANTE_ANEXADO',
+              isConcluido
+                ? `Comprovante adicional ${comp.file_name} anexado a voucher concluído`
+                : `Comprovante ${comp.file_name} anexado automaticamente pelo robô`
             ]);
 
             results.push({ voucher_id: comp.voucher_id, success: true });
