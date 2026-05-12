@@ -7428,7 +7428,7 @@ Deno.serve(async (req) => {
         whereConditions.push('(v.voucher_master_id IS NULL OR v.voucher_master_id = "")');
 
         // Hide transitional stages (batch import limbo and consolidated children)
-        whereConditions.push(`v.etapa_atual NOT IN ('AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER','PRE_LANCAMENTO')`);
+        whereConditions.push(`v.etapa_atual NOT IN ('AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER')`);
         
         // CRITICAL: Exclude ADM modal vouchers via JOIN with t_dados_financeiro_voucher
         whereConditions.push('(dfv.modal IS NULL OR dfv.modal <> "ADM")');
@@ -16161,7 +16161,7 @@ Deno.serve(async (req) => {
           ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
           WHERE sync_status = "ATIVO"
             AND (voucher_master_id IS NULL OR voucher_master_id = "")
-            AND etapa_atual NOT IN ('AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER','PRE_LANCAMENTO')
+            AND etapa_atual NOT IN ('AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER')
             AND (etapa_atual NOT IN ("CONCLUIDO","CANCELADO") OR (etapa_atual IN ("CONCLUIDO","CANCELADO") AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)))
             ${ativosMonthClause}
           ORDER BY v.created_at DESC
@@ -19016,9 +19016,10 @@ Deno.serve(async (req) => {
           const errs = items.length - valid.length;
 
           const batchId = crypto.randomUUID();
-          // Pré-lançamento: lote nasce já COMPLETE (não exige documentos);
-          // anexos podem ser vinculados depois via outro lote (search_pre_lancamento_by_fornecedores).
-          const initialBatchStatus = preLancamento ? 'COMPLETE' : 'PENDING_DOCUMENTS';
+          // Pré-lançamento: vouchers entram em PRE_LANCAMENTO, mas o lote segue o fluxo
+          // normal de anexar documentos via BatchDocumentBinderDialog. Após o finalize,
+          // os vouchers permanecem em PRE_LANCAMENTO (etapa_destino = PRE_LANCAMENTO).
+          const initialBatchStatus = 'PENDING_DOCUMENTS';
           await client.execute(`
             INSERT INTO dados_dachser.t_voucher_batch_import
               (id, status, original_file_name, total_rows, valid_rows, error_rows, created_by_user_id, created_by_user_name)
@@ -19050,7 +19051,7 @@ Deno.serve(async (req) => {
                 ? 'SUPERVISOR'
                 : (it.cobranca_em_nome_de === 'CLIENTE' ? 'FINANCEIRO' : 'FISCAL');
               const etapaAtual = preLancamento ? 'PRE_LANCAMENTO' : 'AGUARDANDO_DOCUMENTOS_LOTE';
-              it.__etapa_destino = preLancamento ? null : etapaDestino;
+              it.__etapa_destino = preLancamento ? 'PRE_LANCAMENTO' : etapaDestino;
               const statusEnvioCliente = it.cobranca_em_nome_de === 'CLIENTE' ? 'AGUARDANDO_CLIENTE' : 'NAO_APLICA';
               const urgenteFlag = (isUrgenteReal || autoUrgent) ? 1 : 0;
               const chavePixFinal = String(it.forma_pagamento || '').toUpperCase() === 'PIX'
@@ -19541,27 +19542,33 @@ Deno.serve(async (req) => {
           let promoted = 0;
           for (const it of itemsToPromote) {
             let destino = String(it.etapa_destino || '').toUpperCase();
-            if (!destino || !['FISCAL', 'FINANCEIRO', 'SUPERVISOR'].includes(destino)) {
+            if (!destino || !['FISCAL', 'FINANCEIRO', 'SUPERVISOR', 'PRE_LANCAMENTO'].includes(destino)) {
               try {
                 const vrows = await client.query(
-                  `SELECT urgencia_tipo, cobranca_em_nome_de FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1`,
+                  `SELECT urgencia_tipo, cobranca_em_nome_de, etapa_atual FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1`,
                   [it.voucher_id]
                 );
                 const v = vrows && vrows[0];
                 if (v) {
-                  destino = String(v.urgencia_tipo || '').toUpperCase() === 'URGENTE_REAL'
-                    ? 'SUPERVISOR'
-                    : (String(v.cobranca_em_nome_de || '').toUpperCase() === 'CLIENTE' ? 'FINANCEIRO' : 'FISCAL');
+                  if (String(v.etapa_atual || '').toUpperCase() === 'PRE_LANCAMENTO') {
+                    destino = 'PRE_LANCAMENTO';
+                  } else {
+                    destino = String(v.urgencia_tipo || '').toUpperCase() === 'URGENTE_REAL'
+                      ? 'SUPERVISOR'
+                      : (String(v.cobranca_em_nome_de || '').toUpperCase() === 'CLIENTE' ? 'FINANCEIRO' : 'FISCAL');
+                  }
                 }
               } catch (_) {}
             }
             if (!destino) destino = 'FISCAL';
             try {
+              // Pré-lançamento: voucher já está em PRE_LANCAMENTO; só conta como promovido.
+              const fromEtapa = destino === 'PRE_LANCAMENTO' ? 'PRE_LANCAMENTO' : 'AGUARDANDO_DOCUMENTOS_LOTE';
               const upd: any = await client.execute(
                 `UPDATE dados_dachser.t_vouchers
                     SET etapa_atual = ?, updated_at = NOW()
-                  WHERE id = ? AND etapa_atual = 'AGUARDANDO_DOCUMENTOS_LOTE'`,
-                [destino, it.voucher_id]
+                  WHERE id = ? AND etapa_atual = ?`,
+                [destino, it.voucher_id, fromEtapa]
               );
               const aff = Number(upd?.affectedRows ?? upd?.affected_rows ?? 0);
               if (aff > 0) {
