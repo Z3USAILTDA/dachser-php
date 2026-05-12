@@ -498,6 +498,7 @@ Deno.serve(async (req) => {
       'bind_batch_document_to_voucher','bind_batch_document_to_master_group',
       'unbind_batch_document','get_batch_import_status',
       'finalize_batch_import','cleanup_abandoned_batch_imports',
+      'search_pre_lancamento_by_fornecedores','attach_pre_lancamento_to_batch',
       // Régua / Cobrança / Aging / Disputas
       'get_regua_counts','get_aging_overview','get_aging_by_client','get_client_cnpj_detail',
       'get_client_faturas','save_cobranca_observacao','get_budget_forecast_auto',
