@@ -18595,7 +18595,34 @@ Deno.serve(async (req) => {
             }
           } catch (e) { console.log('orphan cleanup error:', e); }
 
-          return { batches: batchIds.length, vouchers: deletedVouchers + deletedOrphans, documents: deletedDocs };
+          // 4) Apaga vouchers órfãos em PRE_LANCAMENTO sem nenhum anexo
+          //    (lote abandonado antes de anexar documentos).
+          let deletedPreLanc = 0;
+          try {
+            const preRows = await client.query(
+              `SELECT v.id FROM dados_dachser.t_vouchers v
+                WHERE v.etapa_atual = 'PRE_LANCAMENTO'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM dados_dachser.t_voucher_anexos a
+                    WHERE a.voucher_id COLLATE utf8mb4_unicode_ci = v.id COLLATE utf8mb4_unicode_ci
+                  )
+                  ${userScopeSql.replace(/criado_por_user_id/g, 'v.criado_por_user_id')}`,
+              userScopeParams,
+            );
+            const preIds: string[] = (preRows || []).map((r: any) => r.id).filter(Boolean);
+            if (preIds.length > 0) {
+              const pph = preIds.map(() => '?').join(',');
+              try { await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id IN (${pph})`, preIds); } catch (_) {}
+              try { await client.execute(`DELETE FROM dados_dachser.t_voucher_batch_import_item WHERE voucher_id IN (${pph})`, preIds); } catch (_) {}
+              const delP: any = await client.execute(
+                `DELETE FROM dados_dachser.t_vouchers WHERE id IN (${pph}) AND etapa_atual = 'PRE_LANCAMENTO'`,
+                preIds,
+              );
+              deletedPreLanc = Number(delP?.affectedRows ?? delP?.affected_rows ?? 0);
+            }
+          } catch (e) { console.log('pre_lancamento cleanup error:', e); }
+
+          return { batches: batchIds.length, vouchers: deletedVouchers + deletedOrphans + deletedPreLanc, documents: deletedDocs };
         };
 
         // ===== cleanup action (one-shot ou periódico) =====
