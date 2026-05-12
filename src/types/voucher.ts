@@ -116,6 +116,7 @@ export const ETAPA_LABELS: Record<EtapaAtual, string> = {
 export const SLA_POR_ETAPA: Record<EtapaAtual, number> = {
   A_PROCESSAR: 0,
   RASCUNHO: 0,
+  PRE_LANCAMENTO: 0,
   OPERACAO: 24,
   FISCAL: 48,
   SUPERVISOR: 24,
