@@ -363,7 +363,7 @@ Financeiro Dachser`;
     };
     setSelectedRow(row);
     setAgingEmailText(getDefaultAgingText(cliente.cnpj));
-    setAgingRecipients("devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com");
+    setAgingRecipients(agingDefaults.recipients);
     setAgingModalOpen(true);
   };
 
