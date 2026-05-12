@@ -1,62 +1,74 @@
-## Diagnóstico
+## Cenário 1 — Múltiplos comprovantes para a mesma SPO (mesmo concluída)
 
-A otimização anterior (`find_voucher_multi`) cobriu **apenas a fase de identificação**. A fase **"Processar"** (`processFiles` em `src/pages/esteira/ComprovanteRobot.tsx`, linhas 259–363) ainda é lenta porque:
+**Causa raiz:** após o 1º comprovante, o voucher recebe `status_comprovante='VALIDADO'` e (quando o financeiro conclui) `etapa_atual='CONCLUIDO'`. Hoje:
+- `get_vouchers_for_comprovante` (lista do dropdown manual) filtra apenas `etapa_atual IN ('FINANCEIRO','ROBO')` → SPO concluída desaparece.
+- `find_voucher_multi` (identificação automática do robô) **encontra** a SPO em qualquer etapa, mas `attach_comprovante_batch` faz `UPDATE status_comprovante='VALIDADO'` sem mexer em `etapa_atual` — porém, se a etapa for `CONCLUIDO`, o robô deve continuar permitindo o anexo (regra do usuário: associação automática deve funcionar mesmo concluído).
 
-1. **Upload sequencial ao storage** — loop `for (const fileMatch of identifiedFiles)` com `await supabase.storage.from("voucher-anexos").upload(...)` um arquivo por vez. Com 30 PDFs de ~200KB-2MB, cada upload leva 0.5–2s → **15–60s só de upload**.
-2. O `attach_comprovante_batch` final já é **1 única chamada** ao MariaDB — não é o gargalo.
+### Correção (cirúrgica)
 
-## Correção (cirúrgica, mesmo padrão da identificação)
+**Arquivo:** `supabase/functions/mariadb-proxy/index.ts`
 
-### Arquivo único: `src/pages/esteira/ComprovanteRobot.tsx`
+1. **`get_vouchers_for_comprovante` (linha ~12095):** ampliar o filtro para incluir SPOs concluídas ativas:
+   ```sql
+   WHERE etapa_atual IN ('FINANCEIRO','ROBO','CONCLUIDO')
+     AND (sync_status IS NULL OR sync_status = 'ATIVO')
+     AND etapa_atual NOT IN ('CANCELADO','AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER')
+   ```
+   Adicionar no SELECT um campo `already_has_comprovante = (status_comprovante IN ('ANEXADO','VALIDADO'))` para o front exibir badge "já possui comprovante".
 
-**Em `processFiles` (linhas 284–334):** substituir o loop `for...of` sequencial por um pool de uploads concorrentes, reusando o helper `runWithConcurrency` que já existe na fase de identificação.
+2. **`attach_comprovante_batch` (linha ~12125):** ajustar para preservar a etapa quando o voucher já estiver `CONCLUIDO`:
+   - Antes do UPDATE, ler `etapa_atual` do voucher.
+   - Se `etapa_atual = 'CONCLUIDO'`: **apenas** inserir o novo registro em `t_voucher_anexos` e gravar log `COMPROVANTE_ADICIONAL_ANEXADO`. Não tocar em `status_comprovante`/`etapa_atual` (preserva a conclusão).
+   - Caso contrário: comportamento atual (INSERT anexo + UPDATE `status_comprovante='VALIDADO'` + log `COMPROVANTE_ANEXADO`).
 
-```ts
-const UPLOAD_CONCURRENCY = 6; // storage aguenta bem; mantém UI responsiva
+3. **`find_voucher_multi` (linha ~11641):** **sem mudanças** — já encontra vouchers em qualquer etapa, garantindo a associação automática mesmo para SPOs concluídas.
 
-const uploadOne = async (fileMatch: FileMatch) => {
-  setFiles(prev => prev.map(f =>
-    f.fileName === fileMatch.fileName ? { ...f, status: "processing" } : f
-  ));
-  try {
-    const fileExt = fileMatch.file.name.split(".").pop();
-    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const filePath = `comprovantes/${fileName}`;
-    const { error: uploadError } = await supabase.storage
-      .from("voucher-anexos").upload(filePath, fileMatch.file);
-    if (uploadError) throw uploadError;
-    const { data: { publicUrl } } = supabase.storage
-      .from("voucher-anexos").getPublicUrl(filePath);
+### UI (frontend)
 
-    setFiles(prev => prev.map(f =>
-      f.fileName === fileMatch.fileName ? { ...f, status: "success" } : f
-    ));
-    return { ok: true, payload: { voucher_id: fileMatch.voucherId!, file_name: ..., file_url: publicUrl, ... } };
-  } catch (error: any) {
-    setFiles(prev => prev.map(f =>
-      f.fileName === fileMatch.fileName ? { ...f, status: "error", error: error.message } : f
-    ));
-    return { ok: false };
-  } finally {
-    processed++;
-    setProgress((processed / identifiedFiles.length) * 100);
-  }
-};
+**Arquivo:** `src/pages/esteira/ComprovanteRobot.tsx`
+- No dropdown de associação manual (`availableVouchers`), exibir sufixo `(já possui comprovante)` quando `already_has_comprovante` for true. Sem outras mudanças no fluxo.
+- Nenhuma mudança no fluxo de identificação automática — voucher concluído já é identificado pelo `find_voucher_multi` e processado normalmente.
 
-const results = await runWithConcurrency(identifiedFiles, UPLOAD_CONCURRENCY, uploadOne);
-const comprovantesToUpload = results.filter(r => r.ok).map(r => r.payload);
-```
+---
 
-A chamada final `attach_comprovante_batch` permanece intacta.
+## Cenário 2 — Forma "Débito": concluir SPO ao "Marcar como Pronto"
 
-### Sem mudanças
-- Sem alteração no backend (`mariadb-proxy`).
-- Sem alteração em `attach_comprovante_batch`.
-- Sem alteração na lógica de identificação, RLS, layout, badges ou UI.
-- Mesmas mensagens de toast e mesmos estados visuais por arquivo.
+**Causa raiz:** em `forma_pagamento='DEBITO'` não há comprovante físico (baixa direto no extrato). Hoje "Marcar como Pronto" move o voucher para `etapa_atual='ROBO'` e ele fica preso aguardando comprovante.
 
-## Ganho esperado
+### Correção (cirúrgica)
 
-- Upload: de **sequencial** para **6 em paralelo** → **~5× mais rápido** na fase de processar.
-- 30 arquivos: de ~30–60s → **~6–12s** na fase de upload.
-- Combinado com a otimização anterior de identificação, o ciclo completo de 30 comprovantes deve cair de ~13min para **~2–3min**.
+**Arquivo:** `supabase/functions/mariadb-proxy/index.ts` — action `set_ready_for_robo` (linha ~10857):
+
+1. Ler também `forma_pagamento` no SELECT inicial.
+2. Se `forma_pagamento = 'DEBITO'` e `is_pronto = true`: pular `ROBO` e ir direto para conclusão:
+   ```sql
+   UPDATE t_vouchers SET
+     is_pronto_para_robo = 1,
+     status_pagamento = 'PAGO',
+     status_baixa = 'BAIXA_DEBITO',
+     status_financeiro = 'CONCLUIDO',
+     status_comprovante = 'NAO_APLICA',
+     etapa_atual = 'CONCLUIDO',
+     updated_at = NOW()
+   WHERE id = ?
+   ```
+3. Inserir log `BAIXA_DEBITO_AUTOMATICA` em `t_voucher_logs`: "Voucher concluído via débito automático — sem comprovante necessário".
+4. Para qualquer outra forma de pagamento, **manter exatamente** o comportamento atual (vai para `ROBO` + `BAIXA_MANUAL`/`BAIXA_REMESSA`).
+
+### UI (frontend)
+
+**Arquivo:** `src/components/esteira/PagamentosTab.tsx` — `handleSetReady` (linha ~496):
+- No toast de sucesso, quando `forma_pagamento === 'DEBITO'` e `isReady`, exibir "Voucher concluído (Débito automático)".
+
+**Tipo:** `src/types/voucher.ts` — adicionar `'BAIXA_DEBITO'` em `StatusBaixa` e `'NAO_APLICA'` em `StatusComprovante` (verificar antes para não duplicar).
+
+---
+
+## Sem mudanças
+- Sem alteração na lógica de matching do `find_voucher_multi` — voucher concluído continua sendo encontrado pelo robô.
+- Sem alteração em RLS, layout, badges existentes ou outras formas de pagamento.
+- Sem migrações de schema (todas as colunas já existem).
+
+## Resultado
+- **Cenário 1:** robô **identifica e anexa automaticamente** comprovantes adicionais em SPOs já concluídas, sem reverter a conclusão. Lista manual também passa a mostrar SPOs concluídas marcadas com badge.
+- **Cenário 2:** vouchers com forma "Débito" são concluídos automaticamente ao "Marcar como Pronto", sem necessidade de anexar comprovante.
