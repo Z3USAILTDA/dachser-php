@@ -46,6 +46,10 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
   const [voucherSearch, setVoucherSearch] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [lockedMaster, setLockedMaster] = useState<{ voucherIds: string[]; previewSpo: string; total: number } | null>(null);
+  const [preSearchOpen, setPreSearchOpen] = useState(false);
+  const [preSearchLoading, setPreSearchLoading] = useState(false);
+  const [preLancVouchers, setPreLancVouchers] = useState<any[]>([]);
+  const [selectedPreLanc, setSelectedPreLanc] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     if (!batchId) return;
