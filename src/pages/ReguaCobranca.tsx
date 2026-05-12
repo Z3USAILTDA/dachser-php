@@ -399,10 +399,17 @@ Financeiro Dachser`;
 
     // Build default text with all CNPJs
     const cnpjsFormatted = cnpjsList.map(c => formatCnpj(c)).join("\n");
-    const defaultText = `Boa tarde!\nTudo bem?\n\nSegue anexo, aging list para os CNPJ's:\n${cnpjsFormatted}\n\nPor gentileza, poderia verificar e nos retornar com a programação de pagamento para essa semana?\n\nEm caso de dúvidas ou eventuais divergências, nossa equipe está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.\n\nAgradecemos a sua atenção e colaboração.\n\nAtenciosamente,\nFinanceiro Dachser`;
+    const contato = [
+      agingDefaults.contato_email && `e-mail ${agingDefaults.contato_email}`,
+      agingDefaults.contato_telefone && `telefone ${agingDefaults.contato_telefone}`,
+    ].filter(Boolean).join(" ou ");
+    const linhaContato = contato
+      ? `Em caso de dúvidas ou eventuais divergências, nossa equipe está à disposição através do ${contato}.`
+      : `Em caso de dúvidas ou eventuais divergências, nossa equipe está à disposição.`;
+    const defaultText = `Boa tarde!\nTudo bem?\n\nSegue anexo, aging list para os CNPJ's:\n${cnpjsFormatted}\n\nPor gentileza, poderia verificar e nos retornar com a programação de pagamento para essa semana?\n\n${linhaContato}\n\nAgradecemos a sua atenção e colaboração.\n\nAtenciosamente,\nFinanceiro Dachser`;
     
     setAgingEmailText(defaultText);
-    setAgingRecipients("devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com");
+    setAgingRecipients(agingDefaults.recipients);
     // Store razao_bases in a ref or state for sending
     (window as any).__agrupamentoRazaoBases = selectedRazaoBases;
     setAgrupamentoModalOpen(true);
