@@ -614,6 +614,7 @@ export default function ComprovanteRobot() {
                               {availableVouchers.map((v) => (
                                 <SelectItem key={v.id} value={v.id} className="text-xs">
                                   SPO {v.numero_spo} - {v.fornecedor?.substring(0, 20)}
+                                  {(v as any).already_has_comprovante ? " (já possui comprovante)" : ""}
                                 </SelectItem>
                               ))}
                             </SelectContent>
