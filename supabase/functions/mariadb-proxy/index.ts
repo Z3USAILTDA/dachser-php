@@ -10867,13 +10867,49 @@ Deno.serve(async (req) => {
           );
         }
 
-        // First get the voucher to check tipo_execucao_pagamento
+        // First get the voucher to check tipo_execucao_pagamento and forma_pagamento
         const voucherData = await client.query(
-          `SELECT tipo_execucao_pagamento FROM dados_dachser.t_vouchers WHERE id = ?`,
+          `SELECT tipo_execucao_pagamento, forma_pagamento FROM dados_dachser.t_vouchers WHERE id = ?`,
           [voucherId]
         );
         
         const tipoExec = voucherData?.[0]?.tipo_execucao_pagamento;
+        const formaPag = String(voucherData?.[0]?.forma_pagamento || '').toUpperCase();
+        const isDebito = formaPag === 'DEBITO';
+
+        if (is_pronto && isDebito) {
+          // DEBITO: pular ROBO e concluir direto (sem comprovante necessário)
+          await client.execute(
+            `UPDATE dados_dachser.t_vouchers 
+             SET is_pronto_para_robo = 1,
+                 status_pagamento = 'PAGO',
+                 status_baixa = 'BAIXA_DEBITO',
+                 status_financeiro = 'CONCLUIDO',
+                 status_comprovante = 'NAO_APLICA',
+                 etapa_atual = 'CONCLUIDO',
+                 updated_at = NOW()
+             WHERE id = ?`,
+            [voucherId]
+          );
+
+          await client.execute(
+            `INSERT INTO dados_dachser.t_voucher_logs (
+              id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+            ) VALUES (?, ?, ?, ?, 'BAIXA_DEBITO_AUTOMATICA', ?, NOW())`,
+            [
+              crypto.randomUUID(),
+              voucherId,
+              null,
+              'Sistema',
+              'Voucher concluído via débito automático — sem comprovante necessário'
+            ]
+          );
+
+          console.log(`[set_ready_for_robo] Voucher ${voucherId} concluído (DEBITO automático)`);
+          result = { success: true, auto_concluded: true, reason: 'DEBITO' };
+          break;
+        }
+
         const statusBaixa = tipoExec === 'REMESSA' ? 'BAIXA_REMESSA' : 'BAIXA_MANUAL';
 
         // Update voucher - if marking as ready, also update status_baixa and etapa_atual to ROBO
