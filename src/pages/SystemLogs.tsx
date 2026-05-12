@@ -31,7 +31,8 @@ export default function SystemLogs() {
 
   // Check if user has dev privileges (admin flag)
   useEffect(() => {
-    const isAdmin = user?.is_admin === 1 || user?.is_admin === "1" || user?.is_admin === true;
+    const u = user as any;
+    const isAdmin = u?.is_admin === 1 || u?.is_admin === "1" || u?.is_admin === true;
     setIsDevUser(!!isAdmin);
   }, [user]);
 
