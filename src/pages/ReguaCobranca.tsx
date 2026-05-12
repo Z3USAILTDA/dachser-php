@@ -500,7 +500,7 @@ Financeiro Dachser`;
   const handleSendAging = (row: StageRow) => {
     setSelectedRow(row);
     setAgingEmailText(getDefaultAgingText(row.cnpj));
-    setAgingRecipients("devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com");
+    setAgingRecipients(agingDefaults.recipients);
     setAgingModalOpen(true);
   };
 
