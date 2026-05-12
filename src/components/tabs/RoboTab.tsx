@@ -71,7 +71,28 @@ export function RoboTab() {
     }
   };
 
-  const searchVoucherBySPO = async (spo: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null> => {
+  const pickVoucher = (vouchers: any[]) => {
+    if (!vouchers || vouchers.length === 0) return null;
+    return (
+      vouchers.find((v: any) => v.etapa_atual === 'ROBO' && v.is_master) ||
+      vouchers.find((v: any) => v.etapa_atual === 'ROBO') ||
+      vouchers.find((v: any) => v.is_master) ||
+      vouchers[0]
+    );
+  };
+
+  const buildMatch = (chosen: any) => ({
+    id: chosen.id,
+    isMaster: !!chosen.is_master,
+    matchedViaChild: !!chosen.matched_via_child,
+    masterName: (chosen.is_master || chosen.matched_via_child)
+      ? (chosen.nome_master || chosen.numero_spo)
+      : undefined,
+    childSpo: chosen.child_spo,
+    etapaAtual: chosen.etapa_atual as string | undefined,
+  });
+
+  const searchVoucherBySPO = async (spo: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean; etapaAtual?: string } | null> => {
     try {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: {
@@ -81,19 +102,8 @@ export function RoboTab() {
       });
 
       if (!error && data?.vouchers?.length > 0) {
-        const roboVoucher = data.vouchers.find((v: any) => v.etapa_atual === 'ROBO' && v.is_master)
-          || data.vouchers.find((v: any) => v.etapa_atual === 'ROBO');
-        if (roboVoucher) {
-          return {
-            id: roboVoucher.id,
-            isMaster: !!roboVoucher.is_master,
-            matchedViaChild: !!roboVoucher.matched_via_child,
-            masterName: (roboVoucher.is_master || roboVoucher.matched_via_child) 
-              ? (roboVoucher.nome_master || roboVoucher.numero_spo) 
-              : undefined,
-            childSpo: roboVoucher.child_spo,
-          };
-        }
+        const chosen = pickVoucher(data.vouchers);
+        if (chosen) return buildMatch(chosen);
       }
     } catch (e) {
       console.error('Error fetching voucher by SPO:', e);
@@ -101,7 +111,7 @@ export function RoboTab() {
     return null;
   };
 
-  const searchVoucherByND = async (nd: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null> => {
+  const searchVoucherByND = async (nd: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean; etapaAtual?: string } | null> => {
     try {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: {
@@ -111,19 +121,8 @@ export function RoboTab() {
       });
 
       if (!error && data?.vouchers?.length > 0) {
-        const roboVoucher = data.vouchers.find((v: any) => v.etapa_atual === 'ROBO' && v.is_master)
-          || data.vouchers.find((v: any) => v.etapa_atual === 'ROBO');
-        if (roboVoucher) {
-          return {
-            id: roboVoucher.id,
-            isMaster: !!roboVoucher.is_master,
-            matchedViaChild: !!roboVoucher.matched_via_child,
-            masterName: (roboVoucher.is_master || roboVoucher.matched_via_child) 
-              ? (roboVoucher.nome_master || roboVoucher.numero_spo) 
-              : undefined,
-            childSpo: roboVoucher.child_spo,
-          };
-        }
+        const chosen = pickVoucher(data.vouchers);
+        if (chosen) return buildMatch(chosen);
       }
     } catch (e) {
       console.error('Error fetching voucher by ND:', e);
@@ -132,7 +131,7 @@ export function RoboTab() {
   };
 
   // Unified search: tries SPO first, then ND as fallback
-  const searchVoucher = async (numero: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null> => {
+  const searchVoucher = async (numero: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean; etapaAtual?: string } | null> => {
     let result = await searchVoucherBySPO(numero);
     if (result) return result;
     result = await searchVoucherByND(numero);
