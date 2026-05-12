@@ -231,6 +231,65 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
     setSelectedVouchers(new Set());
   };
 
+  const fornecedoresDoLote = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of checklist) if (c.fornecedor) set.add(String(c.fornecedor));
+    return Array.from(set);
+  }, [checklist]);
+
+  const searchPreLancamento = async () => {
+    if (!batchId) return;
+    setPreSearchLoading(true);
+    setSelectedPreLanc(new Set());
+    try {
+      const { data } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "search_pre_lancamento_by_fornecedores", userId, batch_id: batchId },
+      });
+      if (data?.success) {
+        const idsNoLote = new Set(checklist.map((c) => c.voucher_id));
+        setPreLancVouchers((data.vouchers || []).filter((v: any) => !idsNoLote.has(v.id)));
+      } else {
+        toast({ title: "Falha ao buscar pré-lançados", description: data?.error, variant: "destructive" });
+      }
+    } finally {
+      setPreSearchLoading(false);
+    }
+  };
+
+  const togglePreLanc = (id: string) => {
+    setSelectedPreLanc((prev) => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  };
+
+  const attachPreLanc = async () => {
+    if (!batchId || selectedPreLanc.size === 0) return;
+    setBusy(true);
+    try {
+      const { data } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "attach_pre_lancamento_to_batch",
+          userId,
+          batch_id: batchId,
+          voucher_ids: Array.from(selectedPreLanc),
+        },
+      });
+      if (data?.success) {
+        toast({ title: `${data.attached} pré-lançado(s) adicionado(s) ao lote` });
+        setSelectedPreLanc(new Set());
+        setPreLancVouchers([]);
+        setPreSearchOpen(false);
+        await refresh();
+      } else {
+        toast({ title: "Falha ao anexar pré-lançados", description: data?.error, variant: "destructive" });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const unbind = async (docId: string) => {
     setBusy(true);
     try {
