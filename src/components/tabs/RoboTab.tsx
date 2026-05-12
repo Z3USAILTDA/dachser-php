@@ -443,18 +443,27 @@ export function RoboTab() {
         </div>
       );
     }
+    const etapaChip = fileMatch.etapaAtual && fileMatch.etapaAtual !== 'ROBO' ? (
+      <Badge variant="outline" className="font-mono text-[10px]">{fileMatch.etapaAtual}</Badge>
+    ) : null;
     if (fileMatch.isMaster || fileMatch.matchedViaChild) {
       return (
         <div className="flex items-center gap-1 flex-wrap">
           <Badge variant="info">Master</Badge>
           <Badge className="bg-primary text-primary-foreground">{fileMatch.masterName}</Badge>
+          {etapaChip}
           {fileMatch.matchedViaChild && fileMatch.childSpo && (
             <span className="text-xs text-muted-foreground">via filho {fileMatch.childSpo}</span>
           )}
         </div>
       );
     }
-    return <Badge className="bg-primary text-primary-foreground">{fileMatch.numeroSPO}</Badge>;
+    return (
+      <div className="flex items-center gap-1 flex-wrap">
+        <Badge className="bg-primary text-primary-foreground">{fileMatch.numeroSPO}</Badge>
+        {etapaChip}
+      </div>
+    );
   };
 
   const canProcess = files.length > 0 && files.some((f) => f.voucherId && f.status === "pending");
