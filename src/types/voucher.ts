@@ -101,6 +101,7 @@ export type StatusIntegracaoRM = "PENDENTE" | "ENVIADO_T_DADOS_RM" | "PROCESSADO
 export const ETAPA_LABELS: Record<EtapaAtual, string> = {
   A_PROCESSAR: "A Processar",
   RASCUNHO: "Rascunho",
+  PRE_LANCAMENTO: "Pré-Lançamento",
   OPERACAO: "Operacional",
   FISCAL: "Fiscal",
   SUPERVISOR: "Supervisor",
