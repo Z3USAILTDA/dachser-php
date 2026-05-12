@@ -81,6 +81,11 @@ export function DateInputField<T extends FieldValues>({
                   return;
                 }
               }
+              if (businessDaysOnly && !isBusinessDay(parsed)) {
+                // Não aceitar fim de semana ou feriado - reverter
+                setInputValue(field.value ? format(field.value, "dd/MM/yyyy") : "");
+                return;
+              }
               field.onChange(parsed);
             }
           } else if (digits.length === 0) {
