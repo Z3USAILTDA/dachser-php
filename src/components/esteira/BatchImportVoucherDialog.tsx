@@ -191,7 +191,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
     setBulkValues({});
   };
 
-  const confirm = async () => {
+  const confirm = async (preLancamento = false) => {
     const dupCount = items.filter((it: any) => it.is_duplicate).length;
     if (dupCount > 0) {
       toast({
@@ -210,6 +210,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
           rows: rawRows,
           items,
           file_name: fileName,
+          pre_lancamento: preLancamento,
         },
       });
       if (error || !data?.success) {
@@ -218,12 +219,20 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
       }
       const skipped = Number(data.skipped_existing || 0);
       toast({
-        title: `Lote criado: ${data.created} voucher(s)`,
+        title: preLancamento
+          ? `Pré-lançamento criado: ${data.created} voucher(s)`
+          : `Lote criado: ${data.created} voucher(s)`,
         description: skipped > 0 ? `${skipped} ignorado(s) (já existentes em outras etapas)` : undefined,
       });
-      onCreated(data.batch_id);
-      reset();
-      onOpenChange(false);
+      if (preLancamento) {
+        // Pré-lançamento não abre o binder — vouchers ficam aguardando documentos via outro lote.
+        reset();
+        onOpenChange(false);
+      } else {
+        onCreated(data.batch_id);
+        reset();
+        onOpenChange(false);
+      }
     } finally {
       setBusy(false);
     }
@@ -634,7 +643,11 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
                 {validCount === 0 && (
                   <span className="text-xs text-muted-foreground">Corrija os erros para habilitar a importação</span>
                 )}
-                <Button onClick={confirm} disabled={busy || validCount === 0}>
+                <Button variant="outline" onClick={() => confirm(true)} disabled={busy || validCount === 0}>
+                  {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                  Pré-Lançamento
+                </Button>
+                <Button onClick={() => confirm(false)} disabled={busy || validCount === 0}>
                   {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                   Criar {validCount} voucher(s)
                 </Button>
