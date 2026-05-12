@@ -19016,9 +19016,10 @@ Deno.serve(async (req) => {
           const errs = items.length - valid.length;
 
           const batchId = crypto.randomUUID();
-          // Pré-lançamento: lote nasce já COMPLETE (não exige documentos);
-          // anexos podem ser vinculados depois via outro lote (search_pre_lancamento_by_fornecedores).
-          const initialBatchStatus = preLancamento ? 'COMPLETE' : 'PENDING_DOCUMENTS';
+          // Pré-lançamento: vouchers entram em PRE_LANCAMENTO, mas o lote segue o fluxo
+          // normal de anexar documentos via BatchDocumentBinderDialog. Após o finalize,
+          // os vouchers permanecem em PRE_LANCAMENTO (etapa_destino = PRE_LANCAMENTO).
+          const initialBatchStatus = 'PENDING_DOCUMENTS';
           await client.execute(`
             INSERT INTO dados_dachser.t_voucher_batch_import
               (id, status, original_file_name, total_rows, valid_rows, error_rows, created_by_user_id, created_by_user_name)
