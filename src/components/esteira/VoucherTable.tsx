@@ -445,6 +445,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                 <TableHead className="py-2">
                   {(() => {
                     const ETAPA_OPTIONS: { value: string; label: string }[] = [
+                      { value: "PRE_LANCAMENTO", label: "Pré-Lançamento" },
                       { value: "OPERACAO", label: "Operacional" },
                       { value: "FISCAL", label: "Fiscal" },
                       { value: "SUPERVISOR", label: "Supervisor" },
