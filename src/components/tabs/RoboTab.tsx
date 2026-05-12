@@ -235,6 +235,7 @@ export function RoboTab() {
               childSpo: match?.childSpo,
               isMaster: match?.isMaster,
               matchedViaChild: match?.matchedViaChild,
+              etapaAtual: match?.etapaAtual,
               isEditingSpo: false,
             }
           : f
@@ -244,18 +245,21 @@ export function RoboTab() {
     if (match) {
       const isMasterDirect = match.isMaster && !match.matchedViaChild;
       const isViaChild = !!match.matchedViaChild;
+      const etapaSuffix = match.etapaAtual && match.etapaAtual !== 'ROBO'
+        ? ` (etapa atual: ${match.etapaAtual})`
+        : '';
       toast({
         title: (isMasterDirect || isViaChild) ? "Master encontrado" : "Voucher encontrado",
-        description: isViaChild
+        description: (isViaChild
           ? `Vinculado ao Master "${match.masterName}" via filho SPO ${match.childSpo}`
           : isMasterDirect
             ? `Master "${match.masterName}" vinculado com sucesso`
-            : `SPO ${file.manualSpoInput} vinculado com sucesso`,
+            : `SPO ${file.manualSpoInput} vinculado com sucesso`) + etapaSuffix,
       });
     } else {
       toast({
         title: "Voucher não encontrado",
-        description: `Nenhum voucher com SPO ${file.manualSpoInput} na etapa ROBO`,
+        description: `Nenhum voucher localizado para ${file.manualSpoInput}`,
         variant: "destructive",
       });
     }
