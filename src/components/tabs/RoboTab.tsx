@@ -305,8 +305,10 @@ export function RoboTab() {
 
       try {
         if (!fileMatch.voucherId) {
-          throw new Error("Voucher não encontrado ou não está na etapa ROBO");
+          throw new Error("Voucher não encontrado");
         }
+
+        const wasConcluded = fileMatch.etapaAtual === 'CONCLUIDO';
 
         const fileExt = fileMatch.file.name.split(".").pop();
         const fileName = `${Math.random()}.${fileExt}`;
@@ -337,17 +339,22 @@ export function RoboTab() {
 
         if (attachmentError) throw attachmentError;
 
-        // Update voucher status_comprovante to VALIDADO and etapa to CONCLUIDO
-        await supabase.functions.invoke('mariadb-proxy', {
-          body: {
-            action: 'update_voucher_esteira',
-            voucher_id: fileMatch.voucherId,
-            updates: {
+        // Update voucher: se já estava CONCLUIDO, apenas marca o comprovante como validado;
+        // caso contrário, segue o fluxo normal do robô (move para CONCLUIDO).
+        const updates = wasConcluded
+          ? { status_comprovante: 'VALIDADO' }
+          : {
               status_comprovante: 'VALIDADO',
               etapa_atual: 'CONCLUIDO',
               status_baixa: 'BAIXA_SOLICITADA',
               status_financeiro: 'CONCLUIDO',
-            },
+            };
+
+        await supabase.functions.invoke('mariadb-proxy', {
+          body: {
+            action: 'update_voucher_esteira',
+            voucher_id: fileMatch.voucherId,
+            updates,
           },
         });
 
@@ -359,21 +366,23 @@ export function RoboTab() {
             user_id: userData.user?.id || null,
             user_name: userData.user?.email || 'Sistema',
             acao: "COMPROVANTE_ANEXADO",
-            detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô${fileMatch.childSpo ? ` (filho SPO ${fileMatch.childSpo})` : ''}`,
+            detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô${fileMatch.childSpo ? ` (filho SPO ${fileMatch.childSpo})` : ''}${wasConcluded ? ' (revínculo em voucher já concluído)' : ''}`,
           },
         });
 
-        // Log conclusão automática
-        await supabase.functions.invoke('mariadb-proxy', {
-          body: {
-            action: 'save_voucher_log',
-            voucher_id: fileMatch.voucherId,
-            user_id: userData.user?.id || null,
-            user_name: userData.user?.email || 'Sistema',
-            acao: "CONCLUIDO_ROBO",
-            detalhe: `Voucher concluído automaticamente após processamento do comprovante`,
-          },
-        });
+        // Log conclusão automática (apenas quando o robô efetivamente concluiu o voucher)
+        if (!wasConcluded) {
+          await supabase.functions.invoke('mariadb-proxy', {
+            body: {
+              action: 'save_voucher_log',
+              voucher_id: fileMatch.voucherId,
+              user_id: userData.user?.id || null,
+              user_name: userData.user?.email || 'Sistema',
+              acao: "CONCLUIDO_ROBO",
+              detalhe: `Voucher concluído automaticamente após processamento do comprovante`,
+            },
+          });
+        }
 
         successCount++;
         setFiles((prev) =>
