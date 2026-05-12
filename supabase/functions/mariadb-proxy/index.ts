@@ -19003,6 +19003,7 @@ Deno.serve(async (req) => {
           const rows: any[] = (body as any).rows || [];
           const editedItems: any[] | null = Array.isArray((body as any).items) ? (body as any).items : null;
           const fileName: string = (body as any).file_name || null;
+          const preLancamento: boolean = !!(body as any).pre_lancamento;
           const items = editedItems && editedItems.length
             ? editedItems
             : await buildPreviewItems(rows);
@@ -19015,11 +19016,14 @@ Deno.serve(async (req) => {
           const errs = items.length - valid.length;
 
           const batchId = crypto.randomUUID();
+          // Pré-lançamento: lote nasce já COMPLETE (não exige documentos);
+          // anexos podem ser vinculados depois via outro lote (search_pre_lancamento_by_fornecedores).
+          const initialBatchStatus = preLancamento ? 'COMPLETE' : 'PENDING_DOCUMENTS';
           await client.execute(`
             INSERT INTO dados_dachser.t_voucher_batch_import
               (id, status, original_file_name, total_rows, valid_rows, error_rows, created_by_user_id, created_by_user_name)
-            VALUES (?, 'PENDING_DOCUMENTS', ?, ?, ?, ?, ?, ?)
-          `, [batchId, fileName, items.length, valid.length, errs, String(requesterId), adminUserName]);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `, [batchId, initialBatchStatus, fileName, items.length, valid.length, errs, String(requesterId), adminUserName]);
 
           let createdCount = 0;
           let skippedExisting = 0;
