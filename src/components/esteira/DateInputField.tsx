@@ -18,6 +18,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { isBusinessDay } from "@/utils/businessDays";
 
 interface DateInputFieldProps<T extends FieldValues> {
   control: Control<T>;
@@ -27,6 +28,7 @@ interface DateInputFieldProps<T extends FieldValues> {
   disabled?: boolean;
   showSyncIcon?: boolean;
   disablePastDates?: boolean;
+  businessDaysOnly?: boolean;
 }
 
 export function DateInputField<T extends FieldValues>({
@@ -37,6 +39,7 @@ export function DateInputField<T extends FieldValues>({
   disabled = false,
   showSyncIcon = false,
   disablePastDates = false,
+  businessDaysOnly = false,
 }: DateInputFieldProps<T>) {
   return (
     <FormField
@@ -77,6 +80,11 @@ export function DateInputField<T extends FieldValues>({
                   setInputValue(field.value ? format(field.value, "dd/MM/yyyy") : "");
                   return;
                 }
+              }
+              if (businessDaysOnly && !isBusinessDay(parsed)) {
+                // Não aceitar fim de semana ou feriado - reverter
+                setInputValue(field.value ? format(field.value, "dd/MM/yyyy") : "");
+                return;
               }
               field.onChange(parsed);
             }
@@ -139,11 +147,15 @@ export function DateInputField<T extends FieldValues>({
                     onSelect={handleCalendarSelect}
                     locale={ptBR}
                     className="pointer-events-auto"
-                    disabled={disablePastDates ? (date) => {
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      return date < today;
-                    } : undefined}
+                    disabled={(date) => {
+                      if (disablePastDates) {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        if (date < today) return true;
+                      }
+                      if (businessDaysOnly && !isBusinessDay(date)) return true;
+                      return false;
+                    }}
                   />
                 </PopoverContent>
               </Popover>
