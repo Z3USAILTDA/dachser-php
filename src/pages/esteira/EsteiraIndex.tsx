@@ -1266,13 +1266,16 @@ const EsteiraIndex = () => {
     if (isOperacao) {
       etapasPermitidas.add("OPERACAO");
       etapasPermitidas.add("A_PROCESSAR");
+      etapasPermitidas.add("PRE_LANCAMENTO");
     }
     if (isFiscal) {
       etapasPermitidas.add("FISCAL");
       etapasPermitidas.add("AJUSTE_FISCAL");
+      etapasPermitidas.add("PRE_LANCAMENTO");
     }
     if (isSupervisor) {
       etapasPermitidas.add("SUPERVISOR");
+      etapasPermitidas.add("PRE_LANCAMENTO");
     }
 
     // Sem nenhum role conhecido → view-only de tudo

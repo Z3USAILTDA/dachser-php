@@ -1,40 +1,15 @@
-## Ajustes no Pré-Lançamento
+## Adicionar "Pré-Lançamento" ao filtro de etapa
 
-### Problemas a corrigir
-1. SPOs em **Pré-Lançamento somem** após importação — hoje são gravados em `PRE_LANCAMENTO` e essa etapa está excluída de todos os filtros principais.
-2. **Pré-Lançamento não anexa documentos** — o fluxo pula direto para fechar o lote, mas o usuário precisa anexar a fatura/boleto agora (eles já têm documento).
+**`src/components/esteira/VoucherTable.tsx`** (filtro multi-select da coluna Etapa, ~linha 446)
+- Adicionar `{ value: "PRE_LANCAMENTO", label: "Pré-Lançamento" }` em `ETAPA_OPTIONS`, logo após `OPERACAO` (mantendo a ordem do pipeline).
+- Adicionar a cor do badge em `ETAPA_COLORS` (~linha 83): `PRE_LANCAMENTO: "bg-amber-500/10 text-amber-400 border-amber-500/20"`.
 
-### Mudanças
+**`src/components/esteira/VoucherFilters.tsx`** (Select de Etapa)
+- Adicionar `<SelectItem value="PRE_LANCAMENTO">Pré-Lançamento</SelectItem>` após Rascunho.
 
-**Backend (`supabase/functions/mariadb-proxy/index.ts`)**
-- `create_voucher_batch_import` (com `pre_lancamento: true`):
-  - Continua marcando os vouchers em `etapa_atual = 'PRE_LANCAMENTO'`.
-  - **Não** fecha o batch automaticamente — mantém o batch ativo para que o `BatchDocumentBinderDialog` rode normal e o usuário anexe os documentos.
-- `bind_batch_document_to_master_group` / `bind_batch_document_to_voucher`:
-  - Quando o voucher está em `PRE_LANCAMENTO`, **mantém a etapa em `PRE_LANCAMENTO`** após anexar o documento (não promove para FISCAL/FINANCEIRO/SUPERVISOR). O documento fica ligado ao voucher pré-lançado, pronto para ser "ativado" depois via "Buscar SPOs do fornecedor".
-- `finalize_batch_import`:
-  - Para vouchers em `PRE_LANCAMENTO`, exige documento anexado (mesma regra dos demais), mas após finalizar eles continuam em `PRE_LANCAMENTO`.
-- `attach_pre_lancamento_to_batch`:
-  - Já existe; ao trazer um pré-lançado para um lote vigente, segue o caminho normal (anexa documento → promove para etapa de destino, limpando `PRE_LANCAMENTO`).
-- **Visibilidade — adicionar `PRE_LANCAMENTO` aos filtros de etapa**:
-  - Remover a exclusão hard-coded de `PRE_LANCAMENTO` em:
-    - linha ~7431 (lista de vouchers da Esteira)
-    - linha ~16164 (contadores/dashboard)
-  - Manter exclusão apenas em listas de "trabalho ativo" onde fizer sentido (será mantida em `AGUARDANDO_DOCUMENTOS_LOTE` e `CONSOLIDADO_NO_MASTER`, conforme já está).
-  - Resultado: vouchers em `PRE_LANCAMENTO` aparecem nas listas e podem ser filtrados pela etapa "Pré-Lançamento" no filtro de etapa atual.
-
-**Frontend**
-- `BatchImportVoucherDialog.tsx`:
-  - Botão "Pré-Lançamento" passa a abrir o `BatchDocumentBinderDialog` (igual ao botão "Confirmar importação"), apenas propagando a flag para o backend.
-- `src/types/voucher.ts`:
-  - Adicionar `PRE_LANCAMENTO` ao tipo `EtapaAtual` e ao `ETAPA_LABELS` (label: "Pré-Lançamento"), `SLA_POR_ETAPA: 0`.
-- Filtros de etapa (Esteira / dashboards): se houver lista whitelist de etapas no front, incluir `PRE_LANCAMENTO` para aparecer no dropdown de filtro.
-
-### Fluxo final
-1. Usuário importa em "Pré-Lançamento" → abre o binder → anexa documentos normalmente → finaliza.
-2. Vouchers ficam visíveis na Esteira com etapa "Pré-Lançamento" (filtrável).
-3. Em uma importação futura, o bloco "Buscar SPOs do fornecedor" no binder traz esses pré-lançados (já com documento) para o novo lote, onde, ao serem incluídos, são promovidos para a etapa de destino normal.
+**`src/pages/esteira/EsteiraIndex.tsx`** (filtro por role)
+- Não restringir `PRE_LANCAMENTO` por role: quando o usuário escolher essa etapa no filtro, todos podem ver. Adicionar `etapasPermitidas.add("PRE_LANCAMENTO")` para todos os roles relevantes (Operação, Fiscal, Supervisor) para garantir que o filtro funcione.
 
 ### Fora de escopo
-- Notificações específicas para PRE_LANCAMENTO.
-- Mudanças no `EsteiraManual`.
+- Lógica de backend (já entregue na rodada anterior).
+- Outros filtros/dashboards.

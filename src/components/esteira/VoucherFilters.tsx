@@ -76,6 +76,7 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
             <SelectContent>
               <SelectItem value="all">Todas</SelectItem>
               <SelectItem value="RASCUNHO">Rascunho</SelectItem>
+              <SelectItem value="PRE_LANCAMENTO">Pré-Lançamento</SelectItem>
               <SelectItem value="OPERACAO">Voucher/SPO</SelectItem>
               <SelectItem value="FISCAL">Fiscal</SelectItem>
               <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
