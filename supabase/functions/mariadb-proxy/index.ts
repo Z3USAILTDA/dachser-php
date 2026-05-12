@@ -7428,7 +7428,7 @@ Deno.serve(async (req) => {
         whereConditions.push('(v.voucher_master_id IS NULL OR v.voucher_master_id = "")');
 
         // Hide transitional stages (batch import limbo and consolidated children)
-        whereConditions.push(`v.etapa_atual NOT IN ('AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER')`);
+        whereConditions.push(`v.etapa_atual NOT IN ('AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER','PRE_LANCAMENTO')`);
         
         // CRITICAL: Exclude ADM modal vouchers via JOIN with t_dados_financeiro_voucher
         whereConditions.push('(dfv.modal IS NULL OR dfv.modal <> "ADM")');
@@ -16161,7 +16161,7 @@ Deno.serve(async (req) => {
           ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
           WHERE sync_status = "ATIVO"
             AND (voucher_master_id IS NULL OR voucher_master_id = "")
-            AND etapa_atual NOT IN ('AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER')
+            AND etapa_atual NOT IN ('AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER','PRE_LANCAMENTO')
             AND (etapa_atual NOT IN ("CONCLUIDO","CANCELADO") OR (etapa_atual IN ("CONCLUIDO","CANCELADO") AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)))
             ${ativosMonthClause}
           ORDER BY v.created_at DESC
