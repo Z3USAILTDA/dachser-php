@@ -17,7 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Link2, Unlink, Loader2, FileText, Paperclip, CheckCircle2, Search, Layers, Lock, X } from "lucide-react";
+import { Link2, Unlink, Loader2, FileText, Paperclip, CheckCircle2, Search, Layers, Lock, X, PackageSearch } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TIPOS_ANEXO } from "@/utils/batchVoucherImport";
 import { BatchDocumentUploadPanel } from "./BatchDocumentUploadPanel";
 import { BatchVoucherChecklist, type ChecklistItem } from "./BatchVoucherChecklist";
