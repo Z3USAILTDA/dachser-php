@@ -24,6 +24,7 @@ interface FileMatch {
   childSpo?: string;
   isMaster?: boolean;
   matchedViaChild?: boolean;
+  etapaAtual?: string;
 }
 
 export function RoboTab() {
