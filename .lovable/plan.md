@@ -1,59 +1,62 @@
-## Problema
+## Diagnóstico
 
-30 comprovantes levaram 13+ minutos para processar 71%. Causa raiz: na fase de **identificação**, cada arquivo dispara **até 14 invocações sequenciais** da edge function `mariadb-proxy` (uma para cada candidato SPO/ND). Cada invocação faz cold-start + nova conexão MariaDB (~1–3s só para conectar, conforme logs). Com `CONCURRENCY=5`, isso vira gargalo dominante.
+A otimização anterior (`find_voucher_multi`) cobriu **apenas a fase de identificação**. A fase **"Processar"** (`processFiles` em `src/pages/esteira/ComprovanteRobot.tsx`, linhas 259–363) ainda é lenta porque:
 
-Hoje em `ComprovanteRobot.tsx > identifyOne`:
-- 1× `parse-comprovante-pdf` (LLM, OK)
-- 1× `find_voucher_by_spo` (numeroSPO)
-- 1× `find_voucher_by_nd` (numeroND)
-- 1× `find_voucher_by_nd` (linhaDigitavel)
-- até 6× `find_voucher_by_nd` (candidatosND)
-- até 6× `find_voucher_by_spo` (candidatosSPO)
+1. **Upload sequencial ao storage** — loop `for (const fileMatch of identifiedFiles)` com `await supabase.storage.from("voucher-anexos").upload(...)` um arquivo por vez. Com 30 PDFs de ~200KB-2MB, cada upload leva 0.5–2s → **15–60s só de upload**.
+2. O `attach_comprovante_batch` final já é **1 única chamada** ao MariaDB — não é o gargalo.
 
-Cada `find_voucher_*` ainda roda 4–7 sub-queries internas. Pior caso ≈ 15 invocações × ~3s = **~45s por arquivo**.
+## Correção (cirúrgica, mesmo padrão da identificação)
 
-## Correção (cirúrgica, mantém regras de match)
+### Arquivo único: `src/pages/esteira/ComprovanteRobot.tsx`
 
-### A. Nova action `find_voucher_multi` em `mariadb-proxy/index.ts`
-
-Recebe **todos** os candidatos de UM arquivo em uma única chamada e retorna o primeiro match seguindo a mesma ordem de prioridade do front:
+**Em `processFiles` (linhas 284–334):** substituir o loop `for...of` sequencial por um pool de uploads concorrentes, reusando o helper `runWithConcurrency` que já existe na fase de identificação.
 
 ```ts
-body: {
-  action: "find_voucher_multi",
-  spoPrimary?: string,
-  ndPrimary?: string,
-  linhaDigitavel?: string,
-  spoCandidates?: string[],   // já top-N do front
-  ndCandidates?: string[],
-}
+const UPLOAD_CONCURRENCY = 6; // storage aguenta bem; mantém UI responsiva
+
+const uploadOne = async (fileMatch: FileMatch) => {
+  setFiles(prev => prev.map(f =>
+    f.fileName === fileMatch.fileName ? { ...f, status: "processing" } : f
+  ));
+  try {
+    const fileExt = fileMatch.file.name.split(".").pop();
+    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const filePath = `comprovantes/${fileName}`;
+    const { error: uploadError } = await supabase.storage
+      .from("voucher-anexos").upload(filePath, fileMatch.file);
+    if (uploadError) throw uploadError;
+    const { data: { publicUrl } } = supabase.storage
+      .from("voucher-anexos").getPublicUrl(filePath);
+
+    setFiles(prev => prev.map(f =>
+      f.fileName === fileMatch.fileName ? { ...f, status: "success" } : f
+    ));
+    return { ok: true, payload: { voucher_id: fileMatch.voucherId!, file_name: ..., file_url: publicUrl, ... } };
+  } catch (error: any) {
+    setFiles(prev => prev.map(f =>
+      f.fileName === fileMatch.fileName ? { ...f, status: "error", error: error.message } : f
+    ));
+    return { ok: false };
+  } finally {
+    processed++;
+    setProgress((processed / identifiedFiles.length) * 100);
+  }
+};
+
+const results = await runWithConcurrency(identifiedFiles, UPLOAD_CONCURRENCY, uploadOne);
+const comprovantesToUpload = results.filter(r => r.ok).map(r => r.payload);
 ```
 
-Internamente, em uma única conexão MariaDB:
-1. Tenta `spoPrimary` reusando exatamente a lógica de `find_voucher_by_spo`.
-2. Se nada, `ndPrimary` reusando `find_voucher_by_nd`.
-3. Se nada, `linhaDigitavel` (mesmo handler de ND).
-4. Loop sequencial pelos `ndCandidates` (curto-circuito ao primeiro match).
-5. Loop sequencial pelos `spoCandidates`.
-
-Retorna `{ success, voucher | null, matchedCandidate, tried[] }`.
-
-Implementação refatora os blocos de `find_voucher_by_spo` e `find_voucher_by_nd` para funções helpers internas (`tryFindBySpo(client, spo)` / `tryFindByNd(client, nd)`) e mantém os handlers existentes chamando essas helpers — sem mudar contrato público.
-
-### B. Atualizar `src/pages/esteira/ComprovanteRobot.tsx`
-
-- Substituir o bloco `tryCandidate` + 6 loops sequenciais por **uma única invocação** `mariadb-proxy { action: "find_voucher_multi", ... }`.
-- Aumentar `CONCURRENCY` de **5 → 8** (parsing PDF é o limite real do Lovable AI Gateway; mariadb-proxy passa a ser 1 chamada/arquivo).
-- Manter `MAX_CANDIDATES_PER_KIND = 6` para não inflar o payload.
-- Exibir `matchedCandidate` e `tried` exatamente como hoje.
+A chamada final `attach_comprovante_batch` permanece intacta.
 
 ### Sem mudanças
-- Lógica de extração do parser (`parse-comprovante-pdf`) permanece intacta.
-- Regras SQL de match permanecem idênticas (apenas movidas para helpers).
-- Upload e `attach_comprovante_batch` permanecem.
-- Layout, badges, fluxo manual, RLS — tudo intacto.
+- Sem alteração no backend (`mariadb-proxy`).
+- Sem alteração em `attach_comprovante_batch`.
+- Sem alteração na lógica de identificação, RLS, layout, badges ou UI.
+- Mesmas mensagens de toast e mesmos estados visuais por arquivo.
 
 ## Ganho esperado
 
-- Identificação: de ~14 round-trips/arquivo para **1 round-trip/arquivo** → estimativa **5–8× mais rápido** (30 arquivos: de ~10 min para ~1.5–2 min).
-- Sem alterar precisão do match (mesma ordem de prioridade).
+- Upload: de **sequencial** para **6 em paralelo** → **~5× mais rápido** na fase de processar.
+- 30 arquivos: de ~30–60s → **~6–12s** na fase de upload.
+- Combinado com a otimização anterior de identificação, o ciclo completo de 30 comprovantes deve cair de ~13min para **~2–3min**.
