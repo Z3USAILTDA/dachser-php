@@ -147,11 +147,15 @@ export function DateInputField<T extends FieldValues>({
                     onSelect={handleCalendarSelect}
                     locale={ptBR}
                     className="pointer-events-auto"
-                    disabled={disablePastDates ? (date) => {
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      return date < today;
-                    } : undefined}
+                    disabled={(date) => {
+                      if (disablePastDates) {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        if (date < today) return true;
+                      }
+                      if (businessDaysOnly && !isBusinessDay(date)) return true;
+                      return false;
+                    }}
                   />
                 </PopoverContent>
               </Popover>
