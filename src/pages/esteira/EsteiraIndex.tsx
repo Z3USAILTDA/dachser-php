@@ -601,6 +601,27 @@ const EsteiraIndex = () => {
 
   // Quick filters
   const [quickFilterFornecedor, setQuickFilterFornecedor] = useState<string>("all");
+  const fornecedorStorageKey = currentUserId ? `esteira:quickFilterFornecedor:${currentUserId}` : null;
+
+  // Hydrate fornecedor filter from sessionStorage (per-user) once userId is available
+  useEffect(() => {
+    if (!fornecedorStorageKey) return;
+    try {
+      const saved = sessionStorage.getItem(fornecedorStorageKey);
+      if (saved && saved !== quickFilterFornecedor) setQuickFilterFornecedor(saved);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fornecedorStorageKey]);
+
+  const handleQuickFilterFornecedorChange = (value: string) => {
+    setQuickFilterFornecedor(value);
+    if (fornecedorStorageKey) {
+      try {
+        if (value === "all") sessionStorage.removeItem(fornecedorStorageKey);
+        else sessionStorage.setItem(fornecedorStorageKey, value);
+      } catch {}
+    }
+  };
   const [quickFilterMesEmissao, setQuickFilterMesEmissao] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -2025,7 +2046,7 @@ const EsteiraIndex = () => {
 
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-[#888888]" />
-                    <Select value={quickFilterFornecedor} onValueChange={setQuickFilterFornecedor}>
+                    <Select value={quickFilterFornecedor} onValueChange={handleQuickFilterFornecedorChange}>
                       <SelectTrigger className="w-[180px] bg-[#0a0b10] border-white/10 rounded-full">
                         <SelectValue placeholder="Fornecedor" />
                       </SelectTrigger>
@@ -2148,6 +2169,9 @@ const EsteiraIndex = () => {
                   {/* Clear All Filters */}
                   {(quickFilterFornecedor !== "all" || filters.formaPagamento !== "all" || filters.origemCriacao !== "all" || filters.vencimentoFim !== "" || filters.isMaster !== "all" || filters.search !== "" || filters.etapa !== "all" || filters.processo !== "" || filters.fornecedor !== "" || filters.faixaValor !== "all" || filters.slaStatus !== "all" || filters.vencimentoInicio !== "" || filters.urgente !== "all" || filters.statusComprovante !== "all") && <button onClick={() => {
                 setQuickFilterFornecedor("all");
+                if (fornecedorStorageKey) {
+                  try { sessionStorage.removeItem(fornecedorStorageKey); } catch {}
+                }
                 {
                   const d = new Date();
                   setQuickFilterMesEmissao(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
