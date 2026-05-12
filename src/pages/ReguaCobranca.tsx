@@ -325,6 +325,13 @@ function ReguaCobrancaContent() {
 
   const getDefaultAgingText = (cnpj: string) => {
     const cnpjFormatted = cnpj ? formatCnpj(cnpj) : "xx.xxx.xxx/xxxx-xx";
+    const contato = [
+      agingDefaults.contato_email && `e-mail ${agingDefaults.contato_email}`,
+      agingDefaults.contato_telefone && `telefone ${agingDefaults.contato_telefone}`,
+    ].filter(Boolean).join(" ou ");
+    const linhaContato = contato
+      ? `Em caso de dúvidas ou eventuais divergências, nossa equipe está à disposição através do ${contato}.`
+      : `Em caso de dúvidas ou eventuais divergências, nossa equipe está à disposição.`;
     return `Boa tarde!
 Tudo bem?
 
@@ -334,7 +341,7 @@ ${cnpjFormatted}
 
 Por gentileza, poderia verificar e nos retornar com a programação de pagamento para essa semana?
 
-Em caso de dúvidas ou eventuais divergências, nossa equipe está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+${linhaContato}
 
 Agradecemos a sua atenção e colaboração.
 
