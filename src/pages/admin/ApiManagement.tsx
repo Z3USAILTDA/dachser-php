@@ -1349,7 +1349,7 @@ export default function ApiManagement() {
             
             toast.warning(`Alerta enviado: ${api.api_name} em ${((currentUsage / limitConfig.monthlyLimit) * 100).toFixed(0)}% do limite`, {
               duration: 8000,
-              description: `Notificação enviada para herbert@z3us.ai, rodrigo@z3us.ai e devs@z3us.ai`
+              description: `Notificação enviada para a equipe de desenvolvimento`
             });
           }
         } catch (err) {
