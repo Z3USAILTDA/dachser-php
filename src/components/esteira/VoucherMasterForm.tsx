@@ -504,6 +504,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                 name="vencimento"
                 label="Vencimento"
                 required
+                businessDaysOnly
               />
             </div>
 

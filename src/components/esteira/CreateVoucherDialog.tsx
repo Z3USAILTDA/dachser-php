@@ -1213,6 +1213,7 @@ export const CreateVoucherDialog = ({
                     label="Data de Vencimento"
                     required
                     disablePastDates
+                    businessDaysOnly
                   />
                   <DateInputField
                     control={form.control}
