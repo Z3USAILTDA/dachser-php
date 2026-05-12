@@ -165,7 +165,7 @@ export function RoboTab() {
       push("spo", extracted.numeroSPO);
       for (const c of extracted.candidatosSPO.slice(0, MAX_CANDIDATES_PER_KIND)) push("spo", c);
 
-      let match: { id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null = null;
+      let match: { id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean; etapaAtual?: string } | null = null;
       let displayNumero: string | null = null;
 
       for (const t of tries) {
@@ -189,6 +189,7 @@ export function RoboTab() {
         childSpo: match?.childSpo,
         isMaster: match?.isMaster,
         matchedViaChild: match?.matchedViaChild,
+        etapaAtual: match?.etapaAtual,
         status: "pending" as const,
         manualSpoInput: "",
         isEditingSpo: !displayNumero,
