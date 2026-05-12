@@ -10867,13 +10867,49 @@ Deno.serve(async (req) => {
           );
         }
 
-        // First get the voucher to check tipo_execucao_pagamento
+        // First get the voucher to check tipo_execucao_pagamento and forma_pagamento
         const voucherData = await client.query(
-          `SELECT tipo_execucao_pagamento FROM dados_dachser.t_vouchers WHERE id = ?`,
+          `SELECT tipo_execucao_pagamento, forma_pagamento FROM dados_dachser.t_vouchers WHERE id = ?`,
           [voucherId]
         );
         
         const tipoExec = voucherData?.[0]?.tipo_execucao_pagamento;
+        const formaPag = String(voucherData?.[0]?.forma_pagamento || '').toUpperCase();
+        const isDebito = formaPag === 'DEBITO';
+
+        if (is_pronto && isDebito) {
+          // DEBITO: pular ROBO e concluir direto (sem comprovante necessário)
+          await client.execute(
+            `UPDATE dados_dachser.t_vouchers 
+             SET is_pronto_para_robo = 1,
+                 status_pagamento = 'PAGO',
+                 status_baixa = 'BAIXA_DEBITO',
+                 status_financeiro = 'CONCLUIDO',
+                 status_comprovante = 'NAO_APLICA',
+                 etapa_atual = 'CONCLUIDO',
+                 updated_at = NOW()
+             WHERE id = ?`,
+            [voucherId]
+          );
+
+          await client.execute(
+            `INSERT INTO dados_dachser.t_voucher_logs (
+              id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+            ) VALUES (?, ?, ?, ?, 'BAIXA_DEBITO_AUTOMATICA', ?, NOW())`,
+            [
+              crypto.randomUUID(),
+              voucherId,
+              null,
+              'Sistema',
+              'Voucher concluído via débito automático — sem comprovante necessário'
+            ]
+          );
+
+          console.log(`[set_ready_for_robo] Voucher ${voucherId} concluído (DEBITO automático)`);
+          result = { success: true, auto_concluded: true, reason: 'DEBITO' };
+          break;
+        }
+
         const statusBaixa = tipoExec === 'REMESSA' ? 'BAIXA_REMESSA' : 'BAIXA_MANUAL';
 
         // Update voucher - if marking as ready, also update status_baixa and etapa_atual to ROBO
@@ -12093,11 +12129,14 @@ Deno.serve(async (req) => {
       }
 
       case 'get_vouchers_for_comprovante': {
-        // Get vouchers that are in FINANCEIRO or ROBO stage and need comprovantes
+        // Get vouchers that can receive comprovantes (FINANCEIRO, ROBO ou CONCLUIDO ativos)
         const { search, limit = 50 } = body as { search?: string; limit?: number };
-        console.log('Fetching vouchers for comprovante attachment (FINANCEIRO + ROBO stages)');
+        console.log('Fetching vouchers for comprovante attachment (FINANCEIRO + ROBO + CONCLUIDO stages)');
         
-        let whereConditions = [`etapa_atual IN ('FINANCEIRO', 'ROBO')`];
+        let whereConditions = [
+          `etapa_atual IN ('FINANCEIRO','ROBO','CONCLUIDO')`,
+          `(sync_status IS NULL OR sync_status = 'ATIVO')`,
+        ];
         let params: any[] = [];
         
         if (search) {
@@ -12110,7 +12149,8 @@ Deno.serve(async (req) => {
         const vouchers = await client.query(`
           SELECT 
             id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
-            status_comprovante, cobranca_em_nome_de, moeda, id_rm
+            status_comprovante, cobranca_em_nome_de, moeda, id_rm,
+            CASE WHEN status_comprovante IN ('ANEXADO','VALIDADO') THEN 1 ELSE 0 END AS already_has_comprovante
           FROM dados_dachser.t_vouchers
           WHERE ${whereClause}
           ORDER BY vencimento ASC
@@ -12148,32 +12188,44 @@ Deno.serve(async (req) => {
         for (const comp of comprovantes) {
           try {
             const anexoId = crypto.randomUUID();
-            
-            // Insert attachment
+
+            // Detect if voucher is already CONCLUIDO — preserve final state
+            const vRows = await client.query(
+              `SELECT etapa_atual FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1`,
+              [comp.voucher_id]
+            );
+            const isConcluido = String(vRows?.[0]?.etapa_atual || '').toUpperCase() === 'CONCLUIDO';
+
+            // Insert attachment (always)
             await client.execute(`
               INSERT INTO dados_dachser.t_voucher_anexos (
                 id, voucher_id, tipo, file_name, file_url, file_size, created_at
               ) VALUES (?, ?, 'COMPROVANTE', ?, ?, ?, NOW())
             `, [anexoId, comp.voucher_id, comp.file_name, comp.file_url, comp.file_size || 0]);
 
-            // Update voucher status_comprovante - já entra como VALIDADO
-            await client.execute(`
-              UPDATE dados_dachser.t_vouchers 
-              SET status_comprovante = 'VALIDADO', updated_at = NOW()
-              WHERE id = ?
-            `, [comp.voucher_id]);
+            if (!isConcluido) {
+              // Update voucher status_comprovante - já entra como VALIDADO
+              await client.execute(`
+                UPDATE dados_dachser.t_vouchers 
+                SET status_comprovante = 'VALIDADO', updated_at = NOW()
+                WHERE id = ?
+              `, [comp.voucher_id]);
+            }
 
             // Add log entry
             await client.execute(`
               INSERT INTO dados_dachser.t_voucher_logs (
                 id, voucher_id, user_id, user_name, acao, detalhe, data_hora
-              ) VALUES (?, ?, ?, ?, 'COMPROVANTE_ANEXADO', ?, NOW())
+              ) VALUES (?, ?, ?, ?, ?, ?, NOW())
             `, [
               crypto.randomUUID(),
               comp.voucher_id,
               comp.user_id || null,
               comp.user_name || 'Sistema Robô',
-              `Comprovante ${comp.file_name} anexado automaticamente pelo robô`
+              isConcluido ? 'COMPROVANTE_ADICIONAL_ANEXADO' : 'COMPROVANTE_ANEXADO',
+              isConcluido
+                ? `Comprovante adicional ${comp.file_name} anexado a voucher concluído`
+                : `Comprovante ${comp.file_name} anexado automaticamente pelo robô`
             ]);
 
             results.push({ voucher_id: comp.voucher_id, success: true });

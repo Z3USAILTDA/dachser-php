@@ -542,7 +542,13 @@ export const PagamentosTab = () => {
         console.error("Erro ao atualizar tipo_exec em t_dados_rm:", (rmRes as any).error);
       }
 
-      toast({ title: isReady ? "Marcado como pronto" : "Desmarcado" });
+      const isDebito = String((pagamento as any)?.forma_pagamento || "").toUpperCase() === "DEBITO";
+      const autoConcluded = isReady && (isDebito || (readyRes as any)?.data?.auto_concluded);
+      toast({ 
+        title: autoConcluded
+          ? "Voucher concluído (Débito automático)"
+          : (isReady ? "Marcado como pronto" : "Desmarcado")
+      });
     } catch (error: unknown) {
       // Rollback do update otimista em caso de erro
       setPagamentos(prev => prev.map(p => p.id === id ? { ...p, is_pronto_para_robo: !isReady } : p));
