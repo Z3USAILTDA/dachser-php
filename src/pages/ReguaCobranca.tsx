@@ -139,7 +139,12 @@ function ReguaCobrancaContent() {
   const [selectedRow, setSelectedRow] = useState<StageRow | null>(null);
   const [sendingAging, setSendingAging] = useState(false);
   const [agingEmailText, setAgingEmailText] = useState("");
-  const [agingRecipients, setAgingRecipients] = useState("devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com");
+  const [agingRecipients, setAgingRecipients] = useState("");
+  const [agingDefaults, setAgingDefaults] = useState<{
+    recipients: string;
+    contato_email: string;
+    contato_telefone: string;
+  }>({ recipients: "", contato_email: "", contato_telefone: "" });
 
   // Bulk send state (admin only)
   const [bulkSendModalOpen, setBulkSendModalOpen] = useState(false);
