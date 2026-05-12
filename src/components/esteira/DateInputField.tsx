@@ -18,6 +18,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { isBusinessDay } from "@/utils/businessDays";
 
 interface DateInputFieldProps<T extends FieldValues> {
   control: Control<T>;
@@ -27,6 +28,7 @@ interface DateInputFieldProps<T extends FieldValues> {
   disabled?: boolean;
   showSyncIcon?: boolean;
   disablePastDates?: boolean;
+  businessDaysOnly?: boolean;
 }
 
 export function DateInputField<T extends FieldValues>({
@@ -37,6 +39,7 @@ export function DateInputField<T extends FieldValues>({
   disabled = false,
   showSyncIcon = false,
   disablePastDates = false,
+  businessDaysOnly = false,
 }: DateInputFieldProps<T>) {
   return (
     <FormField
