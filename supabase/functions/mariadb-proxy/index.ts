@@ -12093,11 +12093,14 @@ Deno.serve(async (req) => {
       }
 
       case 'get_vouchers_for_comprovante': {
-        // Get vouchers that are in FINANCEIRO or ROBO stage and need comprovantes
+        // Get vouchers that can receive comprovantes (FINANCEIRO, ROBO ou CONCLUIDO ativos)
         const { search, limit = 50 } = body as { search?: string; limit?: number };
-        console.log('Fetching vouchers for comprovante attachment (FINANCEIRO + ROBO stages)');
+        console.log('Fetching vouchers for comprovante attachment (FINANCEIRO + ROBO + CONCLUIDO stages)');
         
-        let whereConditions = [`etapa_atual IN ('FINANCEIRO', 'ROBO')`];
+        let whereConditions = [
+          `etapa_atual IN ('FINANCEIRO','ROBO','CONCLUIDO')`,
+          `(sync_status IS NULL OR sync_status = 'ATIVO')`,
+        ];
         let params: any[] = [];
         
         if (search) {
@@ -12110,7 +12113,8 @@ Deno.serve(async (req) => {
         const vouchers = await client.query(`
           SELECT 
             id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
-            status_comprovante, cobranca_em_nome_de, moeda, id_rm
+            status_comprovante, cobranca_em_nome_de, moeda, id_rm,
+            CASE WHEN status_comprovante IN ('ANEXADO','VALIDADO') THEN 1 ELSE 0 END AS already_has_comprovante
           FROM dados_dachser.t_vouchers
           WHERE ${whereClause}
           ORDER BY vencimento ASC
