@@ -224,15 +224,9 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
           : `Lote criado: ${data.created} voucher(s)`,
         description: skipped > 0 ? `${skipped} ignorado(s) (já existentes em outras etapas)` : undefined,
       });
-      if (preLancamento) {
-        // Pré-lançamento não abre o binder — vouchers ficam aguardando documentos via outro lote.
-        reset();
-        onOpenChange(false);
-      } else {
-        onCreated(data.batch_id);
-        reset();
-        onOpenChange(false);
-      }
+      onCreated(data.batch_id);
+      reset();
+      onOpenChange(false);
     } finally {
       setBusy(false);
     }
