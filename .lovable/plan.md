@@ -1,74 +1,32 @@
-## Cenário 1 — Múltiplos comprovantes para a mesma SPO (mesmo concluída)
+## Problemas e soluções
 
-**Causa raiz:** após o 1º comprovante, o voucher recebe `status_comprovante='VALIDADO'` e (quando o financeiro conclui) `etapa_atual='CONCLUIDO'`. Hoje:
-- `get_vouchers_for_comprovante` (lista do dropdown manual) filtra apenas `etapa_atual IN ('FINANCEIRO','ROBO')` → SPO concluída desaparece.
-- `find_voucher_multi` (identificação automática do robô) **encontra** a SPO em qualquer etapa, mas `attach_comprovante_batch` faz `UPDATE status_comprovante='VALIDADO'` sem mexer em `etapa_atual` — porém, se a etapa for `CONCLUIDO`, o robô deve continuar permitindo o anexo (regra do usuário: associação automática deve funcionar mesmo concluído).
+### 1. Filtro de Fornecedor — manter ao abrir um voucher e voltar (por usuário)
+Hoje o `quickFilterFornecedor` em `EsteiraIndex.tsx` vive só na memória do componente: ao navegar para a tela do voucher e voltar, o componente é remontado e o filtro volta para "all". Precisa persistir apenas dentro da navegação do próprio usuário, sem afetar outros.
 
-### Correção (cirúrgica)
+**Como fica:**
+- Persistir em `sessionStorage` com chave por usuário: `esteira:quickFilterFornecedor:<userId>`.
+- `userId` vem do `useAuth()` (já presente). `sessionStorage` é por aba/navegador, e a chave por `userId` garante que outro usuário (mesma máquina ou outra) não herda nada.
+- Inicializar `quickFilterFornecedor` lendo essa chave (`?? "all"`).
+- Gravar a chave no `onValueChange` do `Select` de fornecedor.
+- Remover a chave no botão "Limpar filtros".
+- No logout, a sessão termina; mesmo que não termine, a chave por `userId` impede vazamento entre usuários.
 
-**Arquivo:** `supabase/functions/mariadb-proxy/index.ts`
+Resultado: o usuário filtra Fornecedor na tela inicial, abre um voucher, volta — o filtro continua aplicado. Para outros usuários, nada muda.
 
-1. **`get_vouchers_for_comprovante` (linha ~12095):** ampliar o filtro para incluir SPOs concluídas ativas:
-   ```sql
-   WHERE etapa_atual IN ('FINANCEIRO','ROBO','CONCLUIDO')
-     AND (sync_status IS NULL OR sync_status = 'ATIVO')
-     AND etapa_atual NOT IN ('CANCELADO','AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER')
-   ```
-   Adicionar no SELECT um campo `already_has_comprovante = (status_comprovante IN ('ANEXADO','VALIDADO'))` para o front exibir badge "já possui comprovante".
+### 2. Coluna "Data Vencimento" — ordenação crescente por padrão
+Em `src/components/esteira/VoucherTable.tsx` (linhas 146–147), os defaults atuais são `sortField="createdAt"` e `sortDirection="desc"`. Trocar para:
 
-2. **`attach_comprovante_batch` (linha ~12125):** ajustar para preservar a etapa quando o voucher já estiver `CONCLUIDO`:
-   - Antes do UPDATE, ler `etapa_atual` do voucher.
-   - Se `etapa_atual = 'CONCLUIDO'`: **apenas** inserir o novo registro em `t_voucher_anexos` e gravar log `COMPROVANTE_ADICIONAL_ANEXADO`. Não tocar em `status_comprovante`/`etapa_atual` (preserva a conclusão).
-   - Caso contrário: comportamento atual (INSERT anexo + UPDATE `status_comprovante='VALIDADO'` + log `COMPROVANTE_ANEXADO`).
+```ts
+const [sortField, setSortField] = useState<SortField>("vencimento");
+const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+```
 
-3. **`find_voucher_multi` (linha ~11641):** **sem mudanças** — já encontra vouchers em qualquer etapa, garantindo a associação automática mesmo para SPOs concluídas.
+A regra de "A_PROCESSAR sempre no fim" e o restante do `sortedVouchers` continuam intactos.
 
-### UI (frontend)
+### Fora de escopo
+- Outros filtros (Etapa, Forma de Pagamento, Urgente, datas) não serão persistidos.
+- Sem mudanças em backend, edge functions ou schema.
 
-**Arquivo:** `src/pages/esteira/ComprovanteRobot.tsx`
-- No dropdown de associação manual (`availableVouchers`), exibir sufixo `(já possui comprovante)` quando `already_has_comprovante` for true. Sem outras mudanças no fluxo.
-- Nenhuma mudança no fluxo de identificação automática — voucher concluído já é identificado pelo `find_voucher_multi` e processado normalmente.
-
----
-
-## Cenário 2 — Forma "Débito": concluir SPO ao "Marcar como Pronto"
-
-**Causa raiz:** em `forma_pagamento='DEBITO'` não há comprovante físico (baixa direto no extrato). Hoje "Marcar como Pronto" move o voucher para `etapa_atual='ROBO'` e ele fica preso aguardando comprovante.
-
-### Correção (cirúrgica)
-
-**Arquivo:** `supabase/functions/mariadb-proxy/index.ts` — action `set_ready_for_robo` (linha ~10857):
-
-1. Ler também `forma_pagamento` no SELECT inicial.
-2. Se `forma_pagamento = 'DEBITO'` e `is_pronto = true`: pular `ROBO` e ir direto para conclusão:
-   ```sql
-   UPDATE t_vouchers SET
-     is_pronto_para_robo = 1,
-     status_pagamento = 'PAGO',
-     status_baixa = 'BAIXA_DEBITO',
-     status_financeiro = 'CONCLUIDO',
-     status_comprovante = 'NAO_APLICA',
-     etapa_atual = 'CONCLUIDO',
-     updated_at = NOW()
-   WHERE id = ?
-   ```
-3. Inserir log `BAIXA_DEBITO_AUTOMATICA` em `t_voucher_logs`: "Voucher concluído via débito automático — sem comprovante necessário".
-4. Para qualquer outra forma de pagamento, **manter exatamente** o comportamento atual (vai para `ROBO` + `BAIXA_MANUAL`/`BAIXA_REMESSA`).
-
-### UI (frontend)
-
-**Arquivo:** `src/components/esteira/PagamentosTab.tsx` — `handleSetReady` (linha ~496):
-- No toast de sucesso, quando `forma_pagamento === 'DEBITO'` e `isReady`, exibir "Voucher concluído (Débito automático)".
-
-**Tipo:** `src/types/voucher.ts` — adicionar `'BAIXA_DEBITO'` em `StatusBaixa` e `'NAO_APLICA'` em `StatusComprovante` (verificar antes para não duplicar).
-
----
-
-## Sem mudanças
-- Sem alteração na lógica de matching do `find_voucher_multi` — voucher concluído continua sendo encontrado pelo robô.
-- Sem alteração em RLS, layout, badges existentes ou outras formas de pagamento.
-- Sem migrações de schema (todas as colunas já existem).
-
-## Resultado
-- **Cenário 1:** robô **identifica e anexa automaticamente** comprovantes adicionais em SPOs já concluídas, sem reverter a conclusão. Lista manual também passa a mostrar SPOs concluídas marcadas com badge.
-- **Cenário 2:** vouchers com forma "Débito" são concluídos automaticamente ao "Marcar como Pronto", sem necessidade de anexar comprovante.
+### Arquivos
+- `src/pages/esteira/EsteiraIndex.tsx`
+- `src/components/esteira/VoucherTable.tsx`
