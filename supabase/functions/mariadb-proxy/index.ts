@@ -19049,8 +19049,8 @@ Deno.serve(async (req) => {
               const etapaDestino = urgenciaTipo === 'URGENTE_REAL'
                 ? 'SUPERVISOR'
                 : (it.cobranca_em_nome_de === 'CLIENTE' ? 'FINANCEIRO' : 'FISCAL');
-              const etapaAtual = 'AGUARDANDO_DOCUMENTOS_LOTE';
-              it.__etapa_destino = etapaDestino;
+              const etapaAtual = preLancamento ? 'PRE_LANCAMENTO' : 'AGUARDANDO_DOCUMENTOS_LOTE';
+              it.__etapa_destino = preLancamento ? null : etapaDestino;
               const statusEnvioCliente = it.cobranca_em_nome_de === 'CLIENTE' ? 'AGUARDANDO_CLIENTE' : 'NAO_APLICA';
               const urgenteFlag = (isUrgenteReal || autoUrgent) ? 1 : 0;
               const chavePixFinal = String(it.forma_pagamento || '').toUpperCase() === 'PIX'
