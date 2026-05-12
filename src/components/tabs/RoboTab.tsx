@@ -24,6 +24,7 @@ interface FileMatch {
   childSpo?: string;
   isMaster?: boolean;
   matchedViaChild?: boolean;
+  etapaAtual?: string;
 }
 
 export function RoboTab() {
@@ -70,7 +71,28 @@ export function RoboTab() {
     }
   };
 
-  const searchVoucherBySPO = async (spo: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null> => {
+  const pickVoucher = (vouchers: any[]) => {
+    if (!vouchers || vouchers.length === 0) return null;
+    return (
+      vouchers.find((v: any) => v.etapa_atual === 'ROBO' && v.is_master) ||
+      vouchers.find((v: any) => v.etapa_atual === 'ROBO') ||
+      vouchers.find((v: any) => v.is_master) ||
+      vouchers[0]
+    );
+  };
+
+  const buildMatch = (chosen: any) => ({
+    id: chosen.id,
+    isMaster: !!chosen.is_master,
+    matchedViaChild: !!chosen.matched_via_child,
+    masterName: (chosen.is_master || chosen.matched_via_child)
+      ? (chosen.nome_master || chosen.numero_spo)
+      : undefined,
+    childSpo: chosen.child_spo,
+    etapaAtual: chosen.etapa_atual as string | undefined,
+  });
+
+  const searchVoucherBySPO = async (spo: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean; etapaAtual?: string } | null> => {
     try {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: {
@@ -80,19 +102,8 @@ export function RoboTab() {
       });
 
       if (!error && data?.vouchers?.length > 0) {
-        const roboVoucher = data.vouchers.find((v: any) => v.etapa_atual === 'ROBO' && v.is_master)
-          || data.vouchers.find((v: any) => v.etapa_atual === 'ROBO');
-        if (roboVoucher) {
-          return {
-            id: roboVoucher.id,
-            isMaster: !!roboVoucher.is_master,
-            matchedViaChild: !!roboVoucher.matched_via_child,
-            masterName: (roboVoucher.is_master || roboVoucher.matched_via_child) 
-              ? (roboVoucher.nome_master || roboVoucher.numero_spo) 
-              : undefined,
-            childSpo: roboVoucher.child_spo,
-          };
-        }
+        const chosen = pickVoucher(data.vouchers);
+        if (chosen) return buildMatch(chosen);
       }
     } catch (e) {
       console.error('Error fetching voucher by SPO:', e);
@@ -100,7 +111,7 @@ export function RoboTab() {
     return null;
   };
 
-  const searchVoucherByND = async (nd: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null> => {
+  const searchVoucherByND = async (nd: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean; etapaAtual?: string } | null> => {
     try {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: {
@@ -110,19 +121,8 @@ export function RoboTab() {
       });
 
       if (!error && data?.vouchers?.length > 0) {
-        const roboVoucher = data.vouchers.find((v: any) => v.etapa_atual === 'ROBO' && v.is_master)
-          || data.vouchers.find((v: any) => v.etapa_atual === 'ROBO');
-        if (roboVoucher) {
-          return {
-            id: roboVoucher.id,
-            isMaster: !!roboVoucher.is_master,
-            matchedViaChild: !!roboVoucher.matched_via_child,
-            masterName: (roboVoucher.is_master || roboVoucher.matched_via_child) 
-              ? (roboVoucher.nome_master || roboVoucher.numero_spo) 
-              : undefined,
-            childSpo: roboVoucher.child_spo,
-          };
-        }
+        const chosen = pickVoucher(data.vouchers);
+        if (chosen) return buildMatch(chosen);
       }
     } catch (e) {
       console.error('Error fetching voucher by ND:', e);
@@ -131,7 +131,7 @@ export function RoboTab() {
   };
 
   // Unified search: tries SPO first, then ND as fallback
-  const searchVoucher = async (numero: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null> => {
+  const searchVoucher = async (numero: string): Promise<{ id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean; etapaAtual?: string } | null> => {
     let result = await searchVoucherBySPO(numero);
     if (result) return result;
     result = await searchVoucherByND(numero);
@@ -165,7 +165,7 @@ export function RoboTab() {
       push("spo", extracted.numeroSPO);
       for (const c of extracted.candidatosSPO.slice(0, MAX_CANDIDATES_PER_KIND)) push("spo", c);
 
-      let match: { id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean } | null = null;
+      let match: { id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean; etapaAtual?: string } | null = null;
       let displayNumero: string | null = null;
 
       for (const t of tries) {
@@ -189,6 +189,7 @@ export function RoboTab() {
         childSpo: match?.childSpo,
         isMaster: match?.isMaster,
         matchedViaChild: match?.matchedViaChild,
+        etapaAtual: match?.etapaAtual,
         status: "pending" as const,
         manualSpoInput: "",
         isEditingSpo: !displayNumero,
@@ -234,6 +235,7 @@ export function RoboTab() {
               childSpo: match?.childSpo,
               isMaster: match?.isMaster,
               matchedViaChild: match?.matchedViaChild,
+              etapaAtual: match?.etapaAtual,
               isEditingSpo: false,
             }
           : f
@@ -243,18 +245,21 @@ export function RoboTab() {
     if (match) {
       const isMasterDirect = match.isMaster && !match.matchedViaChild;
       const isViaChild = !!match.matchedViaChild;
+      const etapaSuffix = match.etapaAtual && match.etapaAtual !== 'ROBO'
+        ? ` (etapa atual: ${match.etapaAtual})`
+        : '';
       toast({
         title: (isMasterDirect || isViaChild) ? "Master encontrado" : "Voucher encontrado",
-        description: isViaChild
+        description: (isViaChild
           ? `Vinculado ao Master "${match.masterName}" via filho SPO ${match.childSpo}`
           : isMasterDirect
             ? `Master "${match.masterName}" vinculado com sucesso`
-            : `SPO ${file.manualSpoInput} vinculado com sucesso`,
+            : `SPO ${file.manualSpoInput} vinculado com sucesso`) + etapaSuffix,
       });
     } else {
       toast({
         title: "Voucher não encontrado",
-        description: `Nenhum voucher com SPO ${file.manualSpoInput} na etapa ROBO`,
+        description: `Nenhum voucher localizado para ${file.manualSpoInput}`,
         variant: "destructive",
       });
     }
@@ -300,8 +305,10 @@ export function RoboTab() {
 
       try {
         if (!fileMatch.voucherId) {
-          throw new Error("Voucher não encontrado ou não está na etapa ROBO");
+          throw new Error("Voucher não encontrado");
         }
+
+        const wasConcluded = fileMatch.etapaAtual === 'CONCLUIDO';
 
         const fileExt = fileMatch.file.name.split(".").pop();
         const fileName = `${Math.random()}.${fileExt}`;
@@ -332,17 +339,22 @@ export function RoboTab() {
 
         if (attachmentError) throw attachmentError;
 
-        // Update voucher status_comprovante to VALIDADO and etapa to CONCLUIDO
-        await supabase.functions.invoke('mariadb-proxy', {
-          body: {
-            action: 'update_voucher_esteira',
-            voucher_id: fileMatch.voucherId,
-            updates: {
+        // Update voucher: se já estava CONCLUIDO, apenas marca o comprovante como validado;
+        // caso contrário, segue o fluxo normal do robô (move para CONCLUIDO).
+        const updates = wasConcluded
+          ? { status_comprovante: 'VALIDADO' }
+          : {
               status_comprovante: 'VALIDADO',
               etapa_atual: 'CONCLUIDO',
               status_baixa: 'BAIXA_SOLICITADA',
               status_financeiro: 'CONCLUIDO',
-            },
+            };
+
+        await supabase.functions.invoke('mariadb-proxy', {
+          body: {
+            action: 'update_voucher_esteira',
+            voucher_id: fileMatch.voucherId,
+            updates,
           },
         });
 
@@ -354,21 +366,23 @@ export function RoboTab() {
             user_id: userData.user?.id || null,
             user_name: userData.user?.email || 'Sistema',
             acao: "COMPROVANTE_ANEXADO",
-            detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô${fileMatch.childSpo ? ` (filho SPO ${fileMatch.childSpo})` : ''}`,
+            detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô${fileMatch.childSpo ? ` (filho SPO ${fileMatch.childSpo})` : ''}${wasConcluded ? ' (revínculo em voucher já concluído)' : ''}`,
           },
         });
 
-        // Log conclusão automática
-        await supabase.functions.invoke('mariadb-proxy', {
-          body: {
-            action: 'save_voucher_log',
-            voucher_id: fileMatch.voucherId,
-            user_id: userData.user?.id || null,
-            user_name: userData.user?.email || 'Sistema',
-            acao: "CONCLUIDO_ROBO",
-            detalhe: `Voucher concluído automaticamente após processamento do comprovante`,
-          },
-        });
+        // Log conclusão automática (apenas quando o robô efetivamente concluiu o voucher)
+        if (!wasConcluded) {
+          await supabase.functions.invoke('mariadb-proxy', {
+            body: {
+              action: 'save_voucher_log',
+              voucher_id: fileMatch.voucherId,
+              user_id: userData.user?.id || null,
+              user_name: userData.user?.email || 'Sistema',
+              acao: "CONCLUIDO_ROBO",
+              detalhe: `Voucher concluído automaticamente após processamento do comprovante`,
+            },
+          });
+        }
 
         successCount++;
         setFiles((prev) =>
@@ -429,18 +443,27 @@ export function RoboTab() {
         </div>
       );
     }
+    const etapaChip = fileMatch.etapaAtual && fileMatch.etapaAtual !== 'ROBO' ? (
+      <Badge variant="outline" className="font-mono text-[10px]">{fileMatch.etapaAtual}</Badge>
+    ) : null;
     if (fileMatch.isMaster || fileMatch.matchedViaChild) {
       return (
         <div className="flex items-center gap-1 flex-wrap">
           <Badge variant="info">Master</Badge>
           <Badge className="bg-primary text-primary-foreground">{fileMatch.masterName}</Badge>
+          {etapaChip}
           {fileMatch.matchedViaChild && fileMatch.childSpo && (
             <span className="text-xs text-muted-foreground">via filho {fileMatch.childSpo}</span>
           )}
         </div>
       );
     }
-    return <Badge className="bg-primary text-primary-foreground">{fileMatch.numeroSPO}</Badge>;
+    return (
+      <div className="flex items-center gap-1 flex-wrap">
+        <Badge className="bg-primary text-primary-foreground">{fileMatch.numeroSPO}</Badge>
+        {etapaChip}
+      </div>
+    );
   };
 
   const canProcess = files.length > 0 && files.some((f) => f.voucherId && f.status === "pending");

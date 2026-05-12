@@ -1,54 +1,62 @@
-## Objetivo
+# Plano: Permitir vincular comprovante mesmo com SPO em qualquer etapa
 
-No campo **Vencimento** (criação e edição de vouchers/SPO), bloquear seleção de:
-- Sábados e domingos
-- Feriados nacionais brasileiros (fixos + móveis: Carnaval, Sexta-feira Santa, Páscoa, Corpus Christi)
+## Diagnóstico
 
-Demais campos de data (emissão etc.) permanecem inalterados.
-
-## Mudanças
-
-### 1. Novo utilitário `src/utils/businessDays.ts`
-- `getBrazilianHolidays(year)`: retorna `Set<string>` com datas `YYYY-MM-DD` de feriados nacionais. Fixos: 01/01, 21/04, 01/05, 07/09, 12/10, 02/11, 15/11, 20/11, 25/12. Móveis calculados via algoritmo de Páscoa (Meeus/Jones/Butcher): Sexta-feira Santa (Páscoa-2), Carnaval (Páscoa-47), Corpus Christi (Páscoa+60).
-- `isBusinessDay(date)`: retorna `false` para sábado/domingo ou se está no set de feriados do ano.
-- Cache de feriados por ano em `Map<number, Set<string>>`.
-
-### 2. `src/components/esteira/DateInputField.tsx`
-- Adicionar prop opcional `businessDaysOnly?: boolean`.
-- Quando `true`:
-  - No `handleInputChange` (após validar `parsed`): se `!isBusinessDay(parsed)`, reverter o input e não chamar `field.onChange` (mesmo padrão usado hoje para `disablePastDates`).
-  - No `<Calendar disabled>`: combinar com a regra existente — desabilitar dias que sejam passados (se `disablePastDates`) **ou** que não sejam dia útil.
-- Sem mudança visual além do dia ficar desabilitado no calendário.
-
-### 3. Aplicar a prop apenas nos campos `vencimento`
-- `src/components/esteira/CreateVoucherDialog.tsx` (linha ~1210): `<DateInputField name="vencimento" businessDaysOnly />`
-- `src/components/esteira/VoucherMasterForm.tsx` (linha ~502): idem.
-- O outro `DateInputField` em `CreateVoucherDialog.tsx` (linha 1217, emissão) **não** recebe a prop.
-
-## Detalhes técnicos
+Arquivo `101-292954.PDF` falhou porque o handler `find_voucher_by_spo` (em `supabase/functions/mariadb-proxy/index.ts`) retorna o voucher correto (`101-292954 DIM-BY`, etapa `CONCLUIDO`), mas em `src/components/tabs/RoboTab.tsx` há filtro restrito:
 
 ```ts
-// businessDays.ts (esboço)
-function easterSunday(year: number): Date {
-  const a = year % 19;
-  const b = Math.floor(year / 100);
-  const c = year % 100;
-  const d = Math.floor(b / 4);
-  const e = b % 4;
-  const f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3);
-  const h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4);
-  const k = c % 4;
-  const l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const month = Math.floor((h + l - 7 * m + 114) / 31);
-  const day = ((h + l - 7 * m + 114) % 31) + 1;
-  return new Date(year, month - 1, day);
-}
+const roboVoucher = data.vouchers.find(v => v.etapa_atual === 'ROBO' && v.is_master)
+                 || data.vouchers.find(v => v.etapa_atual === 'ROBO');
 ```
 
-## Não-escopo
-- Não altera datas já gravadas no banco.
-- Não altera outros pickers (emissão, filtros, demurrage, SEA, CCT, air etc.).
-- Não adiciona configuração de feriados regionais/municipais.
+Vouchers fora de `ROBO` são descartados → badge "Voucher não encontrado".
+
+O usuário quer que o vínculo ocorra mesmo se o voucher já estiver em `CONCLUIDO` (ou outra etapa).
+
+## Mudanças (escopo cirúrgico, só frontend)
+
+Arquivo único: `src/components/tabs/RoboTab.tsx`.
+
+### 1. Remover restrição de etapa em `searchVoucherBySPO` e `searchVoucherByND`
+Trocar o filtro por uma seleção que prioriza ROBO mas aceita qualquer etapa:
+
+```ts
+const roboMaster   = data.vouchers.find(v => v.etapa_atual === 'ROBO' && v.is_master);
+const roboAny      = data.vouchers.find(v => v.etapa_atual === 'ROBO');
+const anyMaster    = data.vouchers.find(v => v.is_master);
+const fallback     = data.vouchers[0];
+const chosen = roboMaster || roboAny || anyMaster || fallback;
+```
+
+Adicionar `etapaAtual: chosen.etapa_atual` no objeto retornado.
+
+### 2. Estender `FileMatch`
+Novo campo `etapaAtual?: string` para refletir a etapa do voucher encontrado e usar em badges/avisos.
+
+### 3. Badge informativo em `getStatusBadge`
+Quando `voucherId` existir e `etapaAtual !== 'ROBO'`, exibir um badge adicional `outline` com a etapa (ex.: "CONCLUIDO") ao lado do SPO/Master, para o operador saber que está revinculando algo já processado. Sem bloquear.
+
+### 4. Toast em `handleManualSpoSearch`
+Quando match for de etapa diferente de ROBO, manter o toast de "Voucher encontrado" e acrescentar `(etapa atual: X)` na descrição.
+
+### 5. `processFiles` — comportamento ao processar voucher fora de ROBO
+Manter o fluxo atual de upload + `save_voucher_anexo` + `save_voucher_log` (`COMPROVANTE_ANEXADO`).
+
+Ajustar a chamada `update_voucher_esteira`:
+- Se `etapaAtual === 'CONCLUIDO'`: **não** sobrescrever `etapa_atual`, `status_baixa` ou `status_financeiro`. Atualizar somente `status_comprovante: 'VALIDADO'` para registrar o anexo.
+- Caso contrário (qualquer etapa anterior, incluindo `ROBO`): manter o update completo atual (move para `CONCLUIDO`).
+- Pular o log `CONCLUIDO_ROBO` quando o voucher já estava concluído; manter apenas o log `COMPROVANTE_ANEXADO` com detalhe `"... (revínculo em voucher já concluído)"` quando for o caso.
+
+### 6. `canProcess` e botão "Processar"
+Sem mudança — depende apenas de `voucherId`, que agora é populado mesmo fora de ROBO.
+
+## Fora de escopo
+
+- Nenhuma mudança em edge functions, parser de PDF ou `mariadb-proxy`.
+- Nenhuma mudança em outras telas, regras de etapa do robô em outros pontos do sistema, ou regras de RM/financeiro.
+
+## Validação
+
+- `101-292954.PDF`: badge passa a mostrar SPO `101-292954 DIM-BY` + chip "CONCLUIDO"; botão Processar habilita; após processar, anexo é salvo, log `COMPROVANTE_ANEXADO` é gerado e a etapa do voucher permanece `CONCLUIDO`.
+- Comprovante de SPO em ROBO: comportamento atual preservado (move para CONCLUIDO).
+- Comprovante de SPO inexistente: continua "Voucher não encontrado" + opção "Editar SPO".
