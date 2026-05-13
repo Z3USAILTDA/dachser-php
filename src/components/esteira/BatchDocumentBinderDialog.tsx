@@ -66,14 +66,20 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
   }, [batchId, userId]);
 
   useEffect(() => {
-    if (open && batchId) refresh();
+    if (open && batchId) {
+      refresh();
+      searchPreLancamento();
+    }
     if (!open) {
       setSelectedDocs(new Set());
       setSelectedVouchers(new Set());
+      setSelectedPreLanc(new Set());
+      setPreLancVouchers([]);
       setVoucherSearch("");
       setLockedMaster(null);
     }
-  }, [open, batchId, refresh]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, batchId]);
 
   const toggleDoc = (id: string) => {
     setSelectedDocs((prev) => {
