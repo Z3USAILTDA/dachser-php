@@ -68,7 +68,7 @@ export default function ComprovanteRobot() {
         body: {
           action: "get_vouchers_for_comprovante",
           search: search || undefined,
-          limit: 100,
+          limit: search ? 100 : 500,
         },
       });
 
@@ -142,11 +142,28 @@ export default function ComprovanteRobot() {
   const identifyFiles = async () => {
     setIdentifying(true);
     setProgress(0);
+    const t0 = performance.now();
 
     const totalFiles = files.length;
     let identified = 0;
-    const CONCURRENCY = 8;
+    const CONCURRENCY = 12;
     const MAX_CANDIDATES_PER_KIND = 6;
+
+    // Pré-match local por nome de arquivo: se já temos esse SPO/ND no cache, pula o LLM.
+    const SPO_REGEX = /\b(SPO[-_ ]?\d{4,}|\d{6,})\b/i;
+    const tryLocalMatch = (fileName: string): VoucherMatch | null => {
+      if (!availableVouchers || availableVouchers.length === 0) return null;
+      const upper = fileName.toUpperCase();
+      // Tenta SPO completo
+      for (const v of availableVouchers) {
+        if (v.numero_spo && upper.includes(String(v.numero_spo).toUpperCase())) return v;
+      }
+      // Tenta ND (id_rm)
+      for (const v of availableVouchers) {
+        if (v.id_rm && upper.includes(String(v.id_rm).toUpperCase())) return v;
+      }
+      return null;
+    };
 
     const identifyOne = async (fileMatch: typeof files[number], i: number) => {
       setFiles((prev) =>
@@ -154,6 +171,28 @@ export default function ComprovanteRobot() {
       );
 
       try {
+        // Fast-path: match local por filename (sem LLM, sem MariaDB)
+        const local = tryLocalMatch(fileMatch.fileName);
+        if (local) {
+          setFiles((prev) =>
+            prev.map((f, idx) =>
+              idx === i
+                ? {
+                    ...f,
+                    extractedSPO: local.numero_spo || null,
+                    extractedND: local.id_rm || null,
+                    voucherId: local.id,
+                    voucherInfo: local,
+                    status: "identified",
+                    confidence: 1,
+                    source: "filename",
+                  }
+                : f
+            )
+          );
+          return;
+        }
+
         const base64 = await fileToBase64(fileMatch.file);
 
         const { data, error } = await supabase.functions.invoke("parse-comprovante-pdf", {
@@ -224,18 +263,24 @@ export default function ComprovanteRobot() {
       }
     };
 
-    // Processar em batches paralelos com concorrência limitada
-    for (let start = 0; start < files.length; start += CONCURRENCY) {
-      const batch = files.slice(start, start + CONCURRENCY).map((fm, k) => identifyOne(fm, start + k));
-      await Promise.all(batch);
-    }
+    // Pool de concorrência (não em "ondas" — workers consomem fila contínua)
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(CONCURRENCY, files.length) }, async () => {
+      while (true) {
+        const i = cursor++;
+        if (i >= files.length) return;
+        await identifyOne(files[i], i);
+      }
+    });
+    await Promise.all(workers);
 
+    const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
     setIdentifying(false);
 
     const identifiedCount = files.filter(f => f.status === "identified").length;
     toast({
       title: "Identificação concluída",
-      description: `${identifiedCount} de ${totalFiles} arquivo(s) identificado(s)`,
+      description: `${identifiedCount} de ${totalFiles} arquivo(s) identificado(s) em ${elapsed}s`,
     });
   };
 
@@ -272,7 +317,8 @@ export default function ComprovanteRobot() {
     setProgress(0);
 
     let processed = 0;
-    const UPLOAD_CONCURRENCY = 6;
+    const UPLOAD_CONCURRENCY = 10;
+    const t0 = performance.now();
     type UploadPayload = {
       voucher_id: string;
       file_name: string;
@@ -334,13 +380,18 @@ export default function ComprovanteRobot() {
       }
     };
 
-    // Upload em paralelo com concorrência limitada
+    // Upload em paralelo com pool contínuo de concorrência
     const comprovantesToUpload: UploadPayload[] = [];
-    for (let start = 0; start < identifiedFiles.length; start += UPLOAD_CONCURRENCY) {
-      const batch = identifiedFiles.slice(start, start + UPLOAD_CONCURRENCY).map(uploadOne);
-      const results = await Promise.all(batch);
-      results.forEach((r) => { if (r) comprovantesToUpload.push(r); });
-    }
+    let upCursor = 0;
+    const upWorkers = Array.from({ length: Math.min(UPLOAD_CONCURRENCY, identifiedFiles.length) }, async () => {
+      while (true) {
+        const i = upCursor++;
+        if (i >= identifiedFiles.length) return;
+        const r = await uploadOne(identifiedFiles[i]);
+        if (r) comprovantesToUpload.push(r);
+      }
+    });
+    await Promise.all(upWorkers);
 
     // Now attach all comprovantes in batch
     if (comprovantesToUpload.length > 0) {
@@ -354,9 +405,10 @@ export default function ComprovanteRobot() {
 
         if (error) throw error;
 
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
         toast({
           title: "Processamento concluído",
-          description: `${data?.successCount || 0} comprovante(s) anexado(s) com sucesso`,
+          description: `${data?.successCount || 0} comprovante(s) anexado(s) em ${elapsed}s`,
         });
       } catch (err) {
         console.error("Batch attach error:", err);

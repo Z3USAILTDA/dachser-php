@@ -1,61 +1,93 @@
-## Objetivo
 
-Permitir o tipo de anexo **DAI** no lote e, especificamente para vouchers em **pré-lançamento**, considerar o voucher pronto mesmo que tenha **somente o DAI** anexado (sem FATURA e/ou BOLETO).
+## Diagnóstico atual
 
-## Mudanças
+Mapeei os principais gargalos olhando o código existente:
 
-### 1. Frontend — adicionar opção "DAI"
-Arquivo: `src/utils/batchVoucherImport.ts`
+**1. Robô de Comprovantes (`src/pages/esteira/ComprovanteRobot.tsx`)**
+Por arquivo, hoje rodam **3 chamadas sequenciais** + storage:
+- `parse-comprovante-pdf` (LLM, 5–15 s)
+- `mariadb-proxy.find_voucher_multi` (nova conexão MariaDB, ~1–2 s de cold start)
+- `storage.upload` + `mariadb-proxy.attach_comprovante_batch`
+Concorrência atual: identificação=8, upload=6. Cada call de edge function abre **uma conexão MariaDB nova** (logs mostram “connecting / connected” a cada request).
 
-```ts
-export const TIPOS_ANEXO = [
-  "FATURA",
-  "BOLETO",
-  "DAI",
-  "OUTROS",
-];
+**2. Anexo em lote (`BatchDocumentUploadPanel.tsx`)**
+Loop `for…of` **estritamente sequencial**: 1 upload + 1 invoke por arquivo. Subir 25 arquivos = 25 round-trips em série.
+
+**3. `attach_comprovante_batch` (edge function)**
+Backend itera serialmente; por voucher executa 4 queries (`SELECT etapa_atual` → `INSERT anexo` → `UPDATE voucher` → `INSERT log`). Para 25 comprovantes = 100 queries em série numa única conexão.
+
+**4. Avançar de etapa / anexar documento avulso**
+Cada ação dispara invoke próprio + reload completo (`loadVouchers` recarrega 650 vouchers — log `Fast mode loaded 650 vouchers`). UI espera o reload antes de liberar interação.
+
+---
+
+## Metas
+
+- 25 comprovantes ≤ 2 min  → orçamento ~4,8 s/arquivo wall-clock.
+- 50 comprovantes ≤ 4 min → mesmo orçamento, escalando linearmente.
+- Anexar documentos / aprovar etapa: feedback < 500 ms (otimista) e conclusão de fato < 2 s.
+
+---
+
+## Plano de mudanças
+
+### A. Robô de Comprovantes — pipeline paralelo de ponta a ponta
+
+1. **Aumentar concorrência** de identificação (8 → 12) e de upload (6 → 10). Limite real é o pool MariaDB e o LLM; testarei com 25 arquivos.
+2. **Pipeline (não sequencial por etapa)**: assim que um arquivo é identificado, já entra na fila de upload — em vez de esperar todos identificarem para depois subir tudo.
+3. **Eliminar round-trip duplicado**: criar nova action `parse_and_match_comprovante` em `mariadb-proxy` que recebe `pdfBase64`, chama o parser internamente (ou recebe o resultado do parser via fan-out), e já roda o `find_voucher_multi` na mesma conexão. Reduz 2 invokes → 1 por arquivo.
+4. **Cache de SPO/ND no cliente**: pré-carregar `get_vouchers_for_comprovante` (já existe) e tentar match local por SPO/ND **antes** de chamar o LLM. Comprovantes cujo nome do arquivo contém SPO/ND válido pulam o LLM totalmente (ganho enorme em lotes nomeados pelo cliente).
+
+### B. `attach_comprovante_batch` — backend em bulk
+
+1. **Multi-row INSERT** para `t_voucher_anexos` (N linhas em uma query).
+2. **Multi-row INSERT** para `t_voucher_logs`.
+3. Substituir o `SELECT etapa_atual` por arquivo por **um único** `SELECT id, etapa_atual FROM t_vouchers WHERE id IN (...)` no início e atualizar em lote com `UPDATE … WHERE id IN (...)` apenas para os não-CONCLUIDO.
+4. Resultado esperado: 100 queries → ~4 queries por lote.
+
+### C. `BatchDocumentUploadPanel` — upload paralelo
+
+1. Trocar `for…of` por `Promise.all` com **pool de concorrência 8** (mesmo padrão do Robô).
+2. Após todos uploads de storage terminarem, **um único invoke** `upload_batch_document_bulk` com array — nova action no proxy fazendo INSERT multi-row em `t_voucher_batch_documents`.
+
+### D. Ações “rápidas” (anexar avulso, aprovar etapa, enviar voucher)
+
+1. **Optimistic UI**: aplicar a mudança no estado local imediatamente; reverter só em caso de erro do invoke.
+2. **Reload incremental**: após uma ação, atualizar **apenas o(s) voucher(s) afetado(s)** (`get_voucher_by_id`) em vez do `loadVouchers` completo. O console mostra `loadVouchers Fast mode loaded 650 vouchers` rodando 5–6 vezes em poucos segundos — isso some.
+3. **Debounce de re-fetch**: se múltiplas ações dispararem em < 800 ms, coalescer num só refresh.
+
+### E. Conexão MariaDB — reduzir cold start
+
+1. Onde o frontend dispara N invokes em sequência (ex.: legacy paths), consolidar em **1 invoke com payload-array**. Cada invoke do `mariadb-proxy` cria uma conexão nova; agrupar amortiza o custo.
+2. Verificar e padronizar o uso de `keep-alive` interno do edge function (já aparece no código — confirmar se não há `client.close()` desnecessário no meio de loops).
+
+### F. Métricas
+
+Adicionar `console.time/console.timeEnd` em pontos-chave (parse, match, upload, attach) e logar duração média por arquivo no toast final do robô. Permite validar a meta de 2 min / 25 arquivos sem chutômetro.
+
+---
+
+## Detalhes técnicos (resumo de arquivos)
+
+```
+src/pages/esteira/ComprovanteRobot.tsx        Pipeline + concorrência + pré-match local
+src/components/esteira/BatchDocumentUploadPanel.tsx   Upload paralelo + bulk invoke
+src/components/esteira/PagamentosTab.tsx       Optimistic UI + refresh incremental
+src/components/esteira/RetornarPendenteDialog.tsx     idem
+src/components/esteira/Voucher*Actions.tsx     Refresh incremental ao aprovar etapa
+supabase/functions/mariadb-proxy/index.ts
+  - novo case 'parse_and_match_comprovante' (opcional, ver A.3)
+  - novo case 'upload_batch_document_bulk'
+  - reescrever 'attach_comprovante_batch' com multi-row INSERT/UPDATE
+  - novo helper 'get_voucher_by_id_light' p/ refresh incremental
 ```
 
-Isso já faz o `Select` em `BatchDocumentBinderDialog.tsx` (linha 696) listar **DAI** como tipo selecionável no upload/vinculação.
+---
 
-Nenhuma outra mudança de UI necessária — o badge/coluna "Vinculado" já mostra `tipo_anexo` dinamicamente (linha 452).
+## Fora de escopo
 
-### 2. Backend — flexibilizar checklist e finalize para PRE_LANCAMENTO
-Arquivo: `supabase/functions/mariadb-proxy/index.ts`
+- Não vou refatorar `loadVouchers` por completo nem mudar layout/UX visual.
+- Não mudo o LLM usado pelo `parse-comprovante-pdf` (latência dele é dominante; tratamos com paralelismo + bypass via filename).
+- Mantenho contratos das edge functions existentes; só adiciono novas actions.
 
-**a) Checklist (linhas ~19357–19370)** — usar `etapa_destino` do item para decidir a regra:
-
-- Se `etapa_destino === 'PRE_LANCAMENTO'`: o voucher é considerado **COMPLETO** se tiver **qualquer um**: `FATURA` (ou `FATURA_DEMONSTRATIVO`), `BOLETO` (ou `BOLETO_INSTRUCOES`), **ou `DAI`**. Sem nenhum desses, fica `PENDENTE_DOCUMENTO`.
-- Caso contrário: mantém a regra atual (exige FATURA, e BOLETO quando `forma_pagamento = 'BOLETO'`). DAI sozinho **não** satisfaz vouchers que vão para FISCAL/FINANCEIRO/SUPERVISOR.
-
-**b) Finalize (linhas ~19402–19421)** — espelhar a mesma lógica:
-
-```ts
-// dentro do loop por item:
-const isPreLanc = String(it.etapa_destino || '').toUpperCase() === 'PRE_LANCAMENTO';
-const temDai = tipos.some(t => t === 'DAI');
-
-if (isPreLanc) {
-  if (!temFatura && !temBoleto && !temDai) {
-    motivos.push('PENDENTE_DOCUMENTO');
-  }
-} else {
-  if (!temFatura) motivos.push('PENDENTE_FATURA');
-  if (requerBoleto && !temBoleto) motivos.push('PENDENTE_BOLETO');
-}
-```
-
-A query de `items` em `finalize_batch_import` (linha 19382) já seleciona `etapa_destino`, então não precisa alterar SQL.
-
-## O que NÃO muda
-
-- Lógica de criação de master, promoção de etapas, anexação `attach_pre_lancamento_to_batch`, e cópia de anexos filhos para o master permanecem iguais.
-- Vouchers que **não** são pré-lançamento continuam exigindo FATURA (e BOLETO quando aplicável); DAI sozinho não os libera.
-- Sem mudança de schema MariaDB — `tipo` em `t_voucher_anexos` é texto livre.
-
-## Validação
-
-1. Criar lote em modo **Pré-lançamento**, anexar **apenas DAI** a um voucher → checklist mostra **COMPLETO**, finalize passa.
-2. Mesmo lote sem nenhum anexo → continua **PENDENTE_DOCUMENTO**.
-3. Lote normal (destino FISCAL), anexar apenas DAI → continua **PENDENTE_FATURA** (comportamento atual preservado).
-4. Selecionar **DAI** no dropdown de "Tipo do anexo" e vincular um documento → registro com `tipo_anexo = 'DAI'` aparece corretamente.
+Quer que eu comece pela parte A+B (robô de comprovantes + batch attach), que é onde está a meta dura de tempo, e depois siga para C/D/E?
