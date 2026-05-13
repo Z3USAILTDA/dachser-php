@@ -405,9 +405,10 @@ export default function ComprovanteRobot() {
 
         if (error) throw error;
 
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
         toast({
           title: "Processamento concluído",
-          description: `${data?.successCount || 0} comprovante(s) anexado(s) com sucesso`,
+          description: `${data?.successCount || 0} comprovante(s) anexado(s) em ${elapsed}s`,
         });
       } catch (err) {
         console.error("Batch attach error:", err);
