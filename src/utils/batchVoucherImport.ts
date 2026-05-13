@@ -18,5 +18,6 @@ export const FORMA_PAGAMENTO_OPTIONS = [
 export const TIPOS_ANEXO = [
   "FATURA",
   "BOLETO",
+  "DAI",
   "OUTROS",
 ];
