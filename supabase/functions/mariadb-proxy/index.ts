@@ -19673,6 +19673,25 @@ Deno.serve(async (req) => {
           const orderPriority = hasForn
             ? `CASE WHEN UPPER(TRIM(fornecedor)) COLLATE utf8mb4_unicode_ci IN (${ph}) THEN 0 ELSE 1 END,`
             : '';
+          // Excluir vouchers já vinculados ao lote atual ou a qualquer outro lote em aberto (PENDING_DOCUMENTS)
+          const exclusionClause = batchIdArg
+            ? `AND id NOT IN (
+                 SELECT bi.voucher_id
+                   FROM dados_dachser.t_voucher_batch_import_item bi
+                   JOIN dados_dachser.t_voucher_batch_import b ON b.id = bi.batch_id
+                  WHERE bi.voucher_id IS NOT NULL
+                    AND (bi.batch_id = ? OR b.status = 'PENDING_DOCUMENTS')
+               )`
+            : `AND id NOT IN (
+                 SELECT bi.voucher_id
+                   FROM dados_dachser.t_voucher_batch_import_item bi
+                   JOIN dados_dachser.t_voucher_batch_import b ON b.id = bi.batch_id
+                  WHERE bi.voucher_id IS NOT NULL
+                    AND b.status = 'PENDING_DOCUMENTS'
+               )`;
+          const queryParams: any[] = [];
+          if (hasForn) queryParams.push(...fornecedoresNorm);
+          if (batchIdArg) queryParams.push(batchIdArg);
           const vouchers = await client.query(
             `SELECT id, numero_spo, id_rm, fornecedor, cnpj_fornecedor, valor, moeda,
                     vencimento, forma_pagamento, tipo_documento, cobranca_em_nome_de,
@@ -19681,9 +19700,10 @@ Deno.serve(async (req) => {
                FROM dados_dachser.t_vouchers
               WHERE etapa_atual = 'PRE_LANCAMENTO'
                 AND voucher_master_id IS NULL
+                ${exclusionClause}
               ORDER BY ${orderPriority} vencimento ASC, fornecedor ASC, numero_spo ASC
               LIMIT 500`,
-            hasForn ? fornecedoresNorm : []
+            queryParams
           );
           result = { success: true, vouchers: vouchers || [] };
           break;
