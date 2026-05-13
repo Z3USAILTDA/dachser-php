@@ -142,7 +142,7 @@ function buildHtml(monthLabel: string, kpis: Kpis, segmentLabel: string | null):
           <p style="margin:0;font-size:14px;color:#374151;font-family:Arial,Helvetica,sans-serif;">Detalhamento completo no anexo Excel.</p>
         </td></tr>
         <tr><td style="padding:20px 32px 8px;text-align:center;">
-          <a href="https://dachser.z3us.app/" style="display:inline-block;background:#F5B843;color:#050608;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:700;font-size:14px;font-family:Arial,Helvetica,sans-serif;">Acessar Esteira</a>
+          <a href="https://dachser.z3us.ai/" style="display:inline-block;background:#F5B843;color:#050608;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:700;font-size:14px;font-family:Arial,Helvetica,sans-serif;">Acessar Esteira</a>
         </td></tr>
         <tr><td style="padding:28px 32px 24px;text-align:center;border-top:1px solid #F1F2F4;margin-top:20px;">
           <p style="margin:16px 0 0;font-size:12px;color:#9CA3AF;font-family:Arial,Helvetica,sans-serif;">Relatório automático · gerado em ${generatedAt}</p>

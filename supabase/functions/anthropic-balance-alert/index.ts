@@ -17,7 +17,7 @@ const TEST_EMAIL = "devs@z3us.ai"; // Email para testes manuais
 const generateAlertEmailHtml = (estimatedBalance: number): string => {
   const logoLight = "https://i.ibb.co/TgXzCqz/logo-preto.png";
   const logoDark = "https://i.ibb.co/sJkY7y5/logo-branco.png";
-  const dashboardUrl = "https://dachser.z3us.app/admin/apis";
+  const dashboardUrl = "https://dachser.z3us.ai/admin/apis";
   const brand = "Z3US";
   const brandPlain = "Z3US&#8203;.AI";
   const consoleUrl = "https://console.anthropic.com";
