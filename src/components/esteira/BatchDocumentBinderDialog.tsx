@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Link2, Unlink, Loader2, FileText, Paperclip, CheckCircle2, Search, Layers, Lock, X, PackageSearch } from "lucide-react";
+import { Link2, Unlink, Loader2, FileText, Paperclip, CheckCircle2, Search, Layers, Lock, X, PackageSearch, Trash2 } from "lucide-react";
 import { TIPOS_ANEXO } from "@/utils/batchVoucherImport";
 import { BatchDocumentUploadPanel } from "./BatchDocumentUploadPanel";
 import { BatchVoucherChecklist, type ChecklistItem } from "./BatchVoucherChecklist";
@@ -340,6 +340,29 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
     }
   };
 
+  const deleteDoc = async (docId: string, fileName: string) => {
+    if (!confirm(`Excluir definitivamente "${fileName}"? Esta ação não pode ser desfeita.`)) return;
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "delete_batch_document", userId, batch_document_id: docId },
+      });
+      if (error || !data?.success) {
+        toast({ title: "Falha ao excluir", description: data?.error || error?.message, variant: "destructive" });
+      } else {
+        toast({ title: "Documento excluído" });
+        setSelectedDocs((prev) => {
+          const n = new Set(prev);
+          n.delete(docId);
+          return n;
+        });
+      }
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const finalize = async () => {
     if (!batchId) return;
     setBusy(true);
@@ -469,6 +492,16 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                           <Unlink className="h-3 w-3" />
                         </Button>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                        onClick={() => deleteDoc(d.id, d.file_name)}
+                        disabled={busy}
+                        title="Excluir documento"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
                     </div>
                   </div>
                 );
