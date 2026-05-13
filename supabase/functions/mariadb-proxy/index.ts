@@ -12193,43 +12193,40 @@ Deno.serve(async (req) => {
           );
         }
 
-        console.log(`Attaching ${comprovantes.length} comprovantes in batch`);
-        
+        console.log(`Attaching ${comprovantes.length} comprovantes in BULK`);
+
         const results: Array<{ voucher_id: string; success: boolean; error?: string }> = [];
-        
-        for (const comp of comprovantes) {
-          try {
+
+        try {
+          // 1) One SELECT for all voucher etapa_atual
+          const voucherIds = Array.from(new Set(comprovantes.map(c => c.voucher_id).filter(Boolean)));
+          const placeholders = voucherIds.map(() => '?').join(',');
+          const etapaRows: any[] = voucherIds.length > 0
+            ? await client.query(
+                `SELECT id, etapa_atual FROM dados_dachser.t_vouchers WHERE id IN (${placeholders})`,
+                voucherIds
+              )
+            : [];
+          const etapaMap = new Map<string, string>();
+          for (const r of etapaRows) etapaMap.set(String(r.id), String(r.etapa_atual || '').toUpperCase());
+
+          // 2) Multi-row INSERT into t_voucher_anexos
+          const anexoValues: any[] = [];
+          const anexoPlaceholders: string[] = [];
+          const logValues: any[] = [];
+          const logPlaceholders: string[] = [];
+          const idsToValidar: string[] = [];
+
+          for (const comp of comprovantes) {
+            const isConcluido = etapaMap.get(comp.voucher_id) === 'CONCLUIDO';
             const anexoId = crypto.randomUUID();
+            anexoPlaceholders.push('(?, ?, "COMPROVANTE", ?, ?, ?, NOW())');
+            anexoValues.push(anexoId, comp.voucher_id, comp.file_name, comp.file_url, comp.file_size || 0);
 
-            // Detect if voucher is already CONCLUIDO — preserve final state
-            const vRows = await client.query(
-              `SELECT etapa_atual FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1`,
-              [comp.voucher_id]
-            );
-            const isConcluido = String(vRows?.[0]?.etapa_atual || '').toUpperCase() === 'CONCLUIDO';
+            if (!isConcluido) idsToValidar.push(comp.voucher_id);
 
-            // Insert attachment (always)
-            await client.execute(`
-              INSERT INTO dados_dachser.t_voucher_anexos (
-                id, voucher_id, tipo, file_name, file_url, file_size, created_at
-              ) VALUES (?, ?, 'COMPROVANTE', ?, ?, ?, NOW())
-            `, [anexoId, comp.voucher_id, comp.file_name, comp.file_url, comp.file_size || 0]);
-
-            if (!isConcluido) {
-              // Update voucher status_comprovante - já entra como VALIDADO
-              await client.execute(`
-                UPDATE dados_dachser.t_vouchers 
-                SET status_comprovante = 'VALIDADO', updated_at = NOW()
-                WHERE id = ?
-              `, [comp.voucher_id]);
-            }
-
-            // Add log entry
-            await client.execute(`
-              INSERT INTO dados_dachser.t_voucher_logs (
-                id, voucher_id, user_id, user_name, acao, detalhe, data_hora
-              ) VALUES (?, ?, ?, ?, ?, ?, NOW())
-            `, [
+            logPlaceholders.push('(?, ?, ?, ?, ?, ?, NOW())');
+            logValues.push(
               crypto.randomUUID(),
               comp.voucher_id,
               comp.user_id || null,
@@ -12238,22 +12235,50 @@ Deno.serve(async (req) => {
               isConcluido
                 ? `Comprovante adicional ${comp.file_name} anexado a voucher concluído`
                 : `Comprovante ${comp.file_name} anexado automaticamente pelo robô`
-            ]);
-
+            );
             results.push({ voucher_id: comp.voucher_id, success: true });
-          } catch (err) {
-            console.error(`Error attaching comprovante to ${comp.voucher_id}:`, err);
-            results.push({ 
-              voucher_id: comp.voucher_id, 
-              success: false, 
-              error: err instanceof Error ? err.message : 'Unknown error' 
-            });
+          }
+
+          if (anexoPlaceholders.length > 0) {
+            await client.execute(
+              `INSERT INTO dados_dachser.t_voucher_anexos
+                (id, voucher_id, tipo, file_name, file_url, file_size, created_at)
+               VALUES ${anexoPlaceholders.join(',')}`,
+              anexoValues
+            );
+          }
+
+          // 3) Bulk UPDATE for non-CONCLUIDO vouchers
+          if (idsToValidar.length > 0) {
+            const ph = idsToValidar.map(() => '?').join(',');
+            await client.execute(
+              `UPDATE dados_dachser.t_vouchers
+                 SET status_comprovante = 'VALIDADO', updated_at = NOW()
+               WHERE id IN (${ph})`,
+              idsToValidar
+            );
+          }
+
+          // 4) Multi-row INSERT into t_voucher_logs
+          if (logPlaceholders.length > 0) {
+            await client.execute(
+              `INSERT INTO dados_dachser.t_voucher_logs
+                (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+               VALUES ${logPlaceholders.join(',')}`,
+              logValues
+            );
+          }
+        } catch (err) {
+          console.error('Bulk attach_comprovante_batch error:', err);
+          // Mark all as failed if bulk failed
+          for (let i = 0; i < results.length; i++) {
+            results[i] = { voucher_id: results[i].voucher_id, success: false, error: err instanceof Error ? err.message : 'Bulk error' };
           }
         }
 
         const successCount = results.filter(r => r.success).length;
-        console.log(`Batch attach completed: ${successCount}/${comprovantes.length} successful`);
-        
+        console.log(`Bulk attach completed: ${successCount}/${comprovantes.length} successful`);
+
         result = { success: true, results, successCount, totalCount: comprovantes.length };
         break;
       }
