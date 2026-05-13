@@ -201,38 +201,64 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
   const doBind = async () => {
     setConfirmOpen(false);
     setBusy(true);
-    const voucherIds = lockedMaster ? lockedMaster.voucherIds : Array.from(selectedVouchers);
-    const isMasterBind = voucherIds.length >= 2;
     let allOk = true;
     try {
-      for (const docId of selectedDocs) {
-        if (isMasterBind) {
-          const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-            body: {
-              action: "bind_batch_document_to_master_group",
-              userId,
-              batch_document_id: docId,
-              voucher_ids: voucherIds,
-              tipo_anexo: tipoAnexo,
-            },
-          });
-          if (error || !data?.success) {
-            allOk = false;
-            toast({ title: "Falha ao vincular master", description: data?.error || error?.message, variant: "destructive" });
-          }
+      // 1) Anexar pré-lançados selecionados ao lote (se houver)
+      let extraIds: string[] = [];
+      if (!lockedMaster && selectedPreLanc.size > 0) {
+        const preIds = Array.from(selectedPreLanc);
+        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "attach_pre_lancamento_to_batch",
+            userId,
+            batch_id: batchId,
+            voucher_ids: preIds,
+          },
+        });
+        if (error || !data?.success) {
+          allOk = false;
+          toast({ title: "Falha ao anexar pré-lançados", description: data?.error || error?.message, variant: "destructive" });
         } else {
-          const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-            body: {
-              action: "bind_batch_document_to_voucher",
-              userId,
-              batch_document_id: docId,
-              voucher_id: voucherIds[0],
-              tipo_anexo: tipoAnexo,
-            },
-          });
-          if (error || !data?.success) {
-            allOk = false;
-            toast({ title: "Falha ao vincular", description: data?.error || error?.message, variant: "destructive" });
+          extraIds = preIds;
+        }
+      }
+
+      // 2) Compor lista final de voucher_ids (lançados + pré-lançados recém-anexados)
+      const voucherIds = lockedMaster
+        ? lockedMaster.voucherIds
+        : [...Array.from(selectedVouchers), ...extraIds];
+      const isMasterBind = voucherIds.length >= 2;
+
+      if (allOk) {
+        for (const docId of selectedDocs) {
+          if (isMasterBind) {
+            const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+              body: {
+                action: "bind_batch_document_to_master_group",
+                userId,
+                batch_document_id: docId,
+                voucher_ids: voucherIds,
+                tipo_anexo: tipoAnexo,
+              },
+            });
+            if (error || !data?.success) {
+              allOk = false;
+              toast({ title: "Falha ao vincular master", description: data?.error || error?.message, variant: "destructive" });
+            }
+          } else {
+            const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+              body: {
+                action: "bind_batch_document_to_voucher",
+                userId,
+                batch_document_id: docId,
+                voucher_id: voucherIds[0],
+                tipo_anexo: tipoAnexo,
+              },
+            });
+            if (error || !data?.success) {
+              allOk = false;
+              toast({ title: "Falha ao vincular", description: data?.error || error?.message, variant: "destructive" });
+            }
           }
         }
       }
@@ -244,6 +270,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
           total: totalSelecionado,
         });
         setSelectedDocs(new Set());
+        setSelectedPreLanc(new Set());
         // mantém selectedVouchers como feedback visual
       } else if (lockedMaster) {
         // master já travado: limpa apenas docs
@@ -251,8 +278,10 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
       } else {
         setSelectedDocs(new Set());
         setSelectedVouchers(new Set());
+        setSelectedPreLanc(new Set());
       }
       await refresh();
+      await searchPreLancamento();
     } finally {
       setBusy(false);
     }
