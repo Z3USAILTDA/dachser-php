@@ -492,6 +492,16 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                           <Unlink className="h-3 w-3" />
                         </Button>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                        onClick={() => deleteDoc(d.id, d.file_name)}
+                        disabled={busy}
+                        title="Excluir documento"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
                     </div>
                   </div>
                 );
