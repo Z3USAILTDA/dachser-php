@@ -19515,17 +19515,43 @@ Deno.serve(async (req) => {
               for (const vid of grp.vids) childrenPromoted.add(vid);
 
               // Criar anexos no master e atualizar docs
+              const masterAnexoKeys = new Set<string>();
               for (const d of grp.docs) {
                 const anexoId = crypto.randomUUID();
                 await client.execute(`
                   INSERT INTO dados_dachser.t_voucher_anexos (id, voucher_id, tipo, file_name, file_url, file_size, created_at)
                   VALUES (?, ?, ?, ?, ?, ?, NOW())
                 `, [anexoId, masterId, d.tipo_anexo, d.file_name, d.file_url, d.size_bytes || 0]);
+                masterAnexoKeys.add(`${String(d.tipo_anexo || '').toUpperCase()}|${String(d.file_url || '')}`);
                 await client.execute(`
                   UPDATE dados_dachser.t_voucher_batch_documents
                   SET voucher_id = ?, anexo_id = ?
                   WHERE id = ?
                 `, [masterId, anexoId, d.id]);
+              }
+
+              // Espelhar no master os anexos pré-existentes dos filhos (ex.: pré-lançados)
+              try {
+                const childAnexos: any[] = await client.query(
+                  `SELECT tipo, file_name, file_url, file_size
+                     FROM dados_dachser.t_voucher_anexos
+                    WHERE voucher_id IN (${ph})`,
+                  grp.vids
+                );
+                for (const a of (childAnexos || [])) {
+                  const key = `${String(a.tipo || '').toUpperCase()}|${String(a.file_url || '')}`;
+                  if (masterAnexoKeys.has(key)) continue;
+                  try {
+                    const newId = crypto.randomUUID();
+                    await client.execute(`
+                      INSERT INTO dados_dachser.t_voucher_anexos (id, voucher_id, tipo, file_name, file_url, file_size, created_at)
+                      VALUES (?, ?, ?, ?, ?, ?, NOW())
+                    `, [newId, masterId, a.tipo, a.file_name, a.file_url, a.file_size || 0]);
+                    masterAnexoKeys.add(key);
+                  } catch (_) { /* ignore individual anexo errors */ }
+                }
+              } catch (e) {
+                console.error('[finalize_batch_import] copy child anexos failed:', (e as any)?.message || e);
               }
 
               try {
