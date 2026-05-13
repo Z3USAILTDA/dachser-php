@@ -68,7 +68,7 @@ export default function ComprovanteRobot() {
         body: {
           action: "get_vouchers_for_comprovante",
           search: search || undefined,
-          limit: 100,
+          limit: search ? 100 : 500,
         },
       });
 
