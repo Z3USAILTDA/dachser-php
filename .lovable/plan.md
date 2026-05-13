@@ -1,93 +1,74 @@
 
-## Diagnóstico atual
+## Objetivo
 
-Mapeei os principais gargalos olhando o código existente:
+Aplicar a regra única de identidade SPO/ND **em todos os pontos** que cruzam `t_vouchers.numero_spo` com `t_dados_financeiro_voucher.nd` (ou comparam ND livre):
 
-**1. Robô de Comprovantes (`src/pages/esteira/ComprovanteRobot.tsx`)**
-Por arquivo, hoje rodam **3 chamadas sequenciais** + storage:
-- `parse-comprovante-pdf` (LLM, 5–15 s)
-- `mariadb-proxy.find_voucher_multi` (nova conexão MariaDB, ~1–2 s de cold start)
-- `storage.upload` + `mariadb-proxy.attach_comprovante_batch`
-Concorrência atual: identificação=8, upload=6. Cada call de edge function abre **uma conexão MariaDB nova** (logs mostram “connecting / connected” a cada request).
+> Identidade = prefixo numérico antes do primeiro espaço. Ignorar sufixos como ` DIM-BY`, ` SAN`, etc.
 
-**2. Anexo em lote (`BatchDocumentUploadPanel.tsx`)**
-Loop `for…of` **estritamente sequencial**: 1 upload + 1 invoke por arquivo. Subir 25 arquivos = 25 round-trips em série.
+Helper SQL padrão (usado nos dois lados da comparação):
 
-**3. `attach_comprovante_batch` (edge function)**
-Backend itera serialmente; por voucher executa 4 queries (`SELECT etapa_atual` → `INSERT anexo` → `UPDATE voucher` → `INSERT log`). Para 25 comprovantes = 100 queries em série numa única conexão.
-
-**4. Avançar de etapa / anexar documento avulso**
-Cada ação dispara invoke próprio + reload completo (`loadVouchers` recarrega 650 vouchers — log `Fast mode loaded 650 vouchers`). UI espera o reload antes de liberar interação.
-
----
-
-## Metas
-
-- 25 comprovantes ≤ 2 min  → orçamento ~4,8 s/arquivo wall-clock.
-- 50 comprovantes ≤ 4 min → mesmo orçamento, escalando linearmente.
-- Anexar documentos / aprovar etapa: feedback < 500 ms (otimista) e conclusão de fato < 2 s.
-
----
-
-## Plano de mudanças
-
-### A. Robô de Comprovantes — pipeline paralelo de ponta a ponta
-
-1. **Aumentar concorrência** de identificação (8 → 12) e de upload (6 → 10). Limite real é o pool MariaDB e o LLM; testarei com 25 arquivos.
-2. **Pipeline (não sequencial por etapa)**: assim que um arquivo é identificado, já entra na fila de upload — em vez de esperar todos identificarem para depois subir tudo.
-3. **Eliminar round-trip duplicado**: criar nova action `parse_and_match_comprovante` em `mariadb-proxy` que recebe `pdfBase64`, chama o parser internamente (ou recebe o resultado do parser via fan-out), e já roda o `find_voucher_multi` na mesma conexão. Reduz 2 invokes → 1 por arquivo.
-4. **Cache de SPO/ND no cliente**: pré-carregar `get_vouchers_for_comprovante` (já existe) e tentar match local por SPO/ND **antes** de chamar o LLM. Comprovantes cujo nome do arquivo contém SPO/ND válido pulam o LLM totalmente (ganho enorme em lotes nomeados pelo cliente).
-
-### B. `attach_comprovante_batch` — backend em bulk
-
-1. **Multi-row INSERT** para `t_voucher_anexos` (N linhas em uma query).
-2. **Multi-row INSERT** para `t_voucher_logs`.
-3. Substituir o `SELECT etapa_atual` por arquivo por **um único** `SELECT id, etapa_atual FROM t_vouchers WHERE id IN (...)` no início e atualizar em lote com `UPDATE … WHERE id IN (...)` apenas para os não-CONCLUIDO.
-4. Resultado esperado: 100 queries → ~4 queries por lote.
-
-### C. `BatchDocumentUploadPanel` — upload paralelo
-
-1. Trocar `for…of` por `Promise.all` com **pool de concorrência 8** (mesmo padrão do Robô).
-2. Após todos uploads de storage terminarem, **um único invoke** `upload_batch_document_bulk` com array — nova action no proxy fazendo INSERT multi-row em `t_voucher_batch_documents`.
-
-### D. Ações “rápidas” (anexar avulso, aprovar etapa, enviar voucher)
-
-1. **Optimistic UI**: aplicar a mudança no estado local imediatamente; reverter só em caso de erro do invoke.
-2. **Reload incremental**: após uma ação, atualizar **apenas o(s) voucher(s) afetado(s)** (`get_voucher_by_id`) em vez do `loadVouchers` completo. O console mostra `loadVouchers Fast mode loaded 650 vouchers` rodando 5–6 vezes em poucos segundos — isso some.
-3. **Debounce de re-fetch**: se múltiplas ações dispararem em < 800 ms, coalescer num só refresh.
-
-### E. Conexão MariaDB — reduzir cold start
-
-1. Onde o frontend dispara N invokes em sequência (ex.: legacy paths), consolidar em **1 invoke com payload-array**. Cada invoke do `mariadb-proxy` cria uma conexão nova; agrupar amortiza o custo.
-2. Verificar e padronizar o uso de `keep-alive` interno do edge function (já aparece no código — confirmar se não há `client.close()` desnecessário no meio de loops).
-
-### F. Métricas
-
-Adicionar `console.time/console.timeEnd` em pontos-chave (parse, match, upload, attach) e logar duração média por arquivo no toast final do robô. Permite validar a meta de 2 min / 25 arquivos sem chutômetro.
-
----
-
-## Detalhes técnicos (resumo de arquivos)
-
-```
-src/pages/esteira/ComprovanteRobot.tsx        Pipeline + concorrência + pré-match local
-src/components/esteira/BatchDocumentUploadPanel.tsx   Upload paralelo + bulk invoke
-src/components/esteira/PagamentosTab.tsx       Optimistic UI + refresh incremental
-src/components/esteira/RetornarPendenteDialog.tsx     idem
-src/components/esteira/Voucher*Actions.tsx     Refresh incremental ao aprovar etapa
-supabase/functions/mariadb-proxy/index.ts
-  - novo case 'parse_and_match_comprovante' (opcional, ver A.3)
-  - novo case 'upload_batch_document_bulk'
-  - reescrever 'attach_comprovante_batch' com multi-row INSERT/UPDATE
-  - novo helper 'get_voucher_by_id_light' p/ refresh incremental
+```sql
+SUBSTRING_INDEX(TRIM(x), ' ', 1) COLLATE utf8mb4_unicode_ci
 ```
 
----
+## Pontos a alterar em `supabase/functions/mariadb-proxy/index.ts`
+
+Todos passam a usar a normalização por prefixo, em vez de `TRIM(x) = TRIM(y)` ou `x = y`:
+
+| # | Linha aprox. | Contexto | Mudança |
+|---|---|---|---|
+| 1 | 7500 | JOIN exclusão ADM (get_vouchers / list) | JOIN por prefixo |
+| 2 | 10461 | `check_voucher_rm_ready` (gate de avanço) | `WHERE` por prefixo (1 param) |
+| 3 | 10600 | `NOT EXISTS` ADM em filtros | comparação por prefixo |
+| 4 | 11588 | JOIN de listagem | JOIN por prefixo |
+| 5 | 11624 | JOIN de listagem | JOIN por prefixo |
+| 6 | 11847-11852 | `find_voucher_multi.tryByNd` | JOIN+WHERE por prefixo |
+| 7 | 12123-12129 | `find_voucher_by_nd` | JOIN+WHERE por prefixo |
+| 8 | 12482 | LEFT JOIN (vouchers ausentes em t_vouchers) | JOIN por prefixo |
+| 9 | 12652 | `SELECT id_rm ... WHERE nd = ?` | `WHERE prefix(nd)=prefix(?)` |
+| 10 | 13134 | LEFT JOIN agregada | JOIN por prefixo |
+| 11 | 13559 | LEFT JOIN agregada | JOIN por prefixo |
+| 12 | 15908 | Sync incremental | JOIN por prefixo |
+| 13 | 16007 | Auto-fill após criação | JOIN por prefixo |
+| 14 | 16115 | JOIN exclusão ADM | JOIN por prefixo |
+| 15 | 16186 | JOIN exclusão ADM | JOIN por prefixo |
+| 16 | 16205 | LEFT JOIN sync | JOIN por prefixo |
+| 17 | 16300 | JOIN sync | JOIN por prefixo |
+| 18 | 18775 / 18801 | Lookups por nd em ações de tela | `WHERE prefix(nd)=prefix(?)` |
+| 19 | 19557 | LEFT JOIN listagem | JOIN por prefixo |
+
+Padrão exato aplicado a JOINs:
+
+```sql
+ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_unicode_ci
+ = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci
+```
+
+Padrão para WHERE com parâmetro:
+
+```sql
+WHERE SUBSTRING_INDEX(TRIM(nd), ' ', 1) COLLATE utf8mb4_unicode_ci
+    = SUBSTRING_INDEX(TRIM(?), ' ', 1) COLLATE utf8mb4_unicode_ci
+```
+
+Cobre todas as combinações:
+- `'105-293596'` ↔ `'105-293596'`
+- `'105-293596 DIM-BY'` ↔ `'105-293596'`
+- `'105-293596'` ↔ `'105-293596 DIM-BY'`
+- `'105-293596 DIM-BY'` ↔ `'105-293596 DIM-BY'`
+
+## Memória do projeto
+
+Atualizar `mem://vouchers/check-rm-ready-only-blocks-manual` (ou criar `mem://vouchers/spo-nd-prefix-identity-rule`) com a regra única: **comparação SPO↔ND sempre por prefixo antes do primeiro espaço, em ambos os lados**, e listar os pontos cobertos.
 
 ## Fora de escopo
 
-- Não vou refatorar `loadVouchers` por completo nem mudar layout/UX visual.
-- Não mudo o LLM usado pelo `parse-comprovante-pdf` (latência dele é dominante; tratamos com paralelismo + bypass via filename).
-- Mantenho contratos das edge functions existentes; só adiciono novas actions.
+- Sem migração de schema. Sem coluna normalizada. Sem backfill.
+- Não tocar em fluxos de comprovante além das funções já listadas (`find_voucher_multi`, `find_voucher_by_nd`).
+- Não mexer em índices (a função `SUBSTRING_INDEX` invalida índice em `nd`, mas a tabela é pequena no contexto dessas queries — performance permanece aceitável; se virar gargalo no futuro, abre-se uma tarefa separada para coluna gerada `nd_key`).
 
-Quer que eu comece pela parte A+B (robô de comprovantes + batch attach), que é onde está a meta dura de tempo, e depois siga para C/D/E?
+## Risco
+
+Possível leve aumento de custo nos JOINs por full scan em `dfv.nd`. Aceitável dado o volume atual e a criticidade de não bloquear avanço de etapa nem perder match de comprovante.
+
+Posso aplicar?
