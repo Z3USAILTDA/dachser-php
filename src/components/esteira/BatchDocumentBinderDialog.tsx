@@ -752,7 +752,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                   <>
                     <p>
                       Será criado um <strong>voucher master</strong> agrupando{" "}
-                      <strong>{selectedVouchers.size}</strong> vouchers no momento da finalização do lote.
+                      <strong>{selectedVouchers.size + selectedPreLanc.size}</strong> vouchers no momento da finalização do lote.
                     </p>
                     <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-1">
                       <div className="flex justify-between">
