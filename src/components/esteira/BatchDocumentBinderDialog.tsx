@@ -632,17 +632,17 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-mono font-semibold text-foreground truncate">
+                            <span className="text-sm font-mono font-semibold text-foreground truncate">
                               {v.numero_spo}
                             </span>
-                            <span className="text-xs font-mono text-foreground shrink-0">
+                            <span className="text-sm font-mono text-foreground shrink-0">
                               {fmtBRL(Number(v.valor) || 0)}
                             </span>
                           </div>
-                          <div className="text-[11px] text-muted-foreground truncate">
+                          <div className="text-xs text-muted-foreground truncate">
                             {v.fornecedor}
                           </div>
-                          <div className="text-[10px] text-muted-foreground mt-0.5 flex gap-2">
+                          <div className="text-[11px] text-muted-foreground mt-0.5 flex gap-2">
                             <span>{v.forma_pagamento || "—"}</span>
                             {v.vencimento && <span>venc: {String(v.vencimento).slice(0, 10)}</span>}
                           </div>
