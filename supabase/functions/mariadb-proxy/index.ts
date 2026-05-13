@@ -496,7 +496,7 @@ Deno.serve(async (req) => {
       // Importação em lote (admin only)
       'preview_voucher_batch_import','create_voucher_batch_import','upload_batch_document',
       'bind_batch_document_to_voucher','bind_batch_document_to_master_group',
-      'unbind_batch_document','get_batch_import_status',
+      'unbind_batch_document','delete_batch_document','get_batch_import_status',
       'finalize_batch_import','cleanup_abandoned_batch_imports',
       'search_pre_lancamento_by_fornecedores','attach_pre_lancamento_to_batch',
       // Régua / Cobrança / Aging / Disputas
