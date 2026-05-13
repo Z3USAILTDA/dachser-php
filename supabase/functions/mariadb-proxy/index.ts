@@ -11823,20 +11823,9 @@ Deno.serve(async (req) => {
             const existingIds = new Set((vs || []).map((v: any) => v.id));
             for (const m of mr) if (!existingIds.has(m.id)) { vs = vs || []; vs.push(m); }
           }
-          // linha_digitavel/codigo_barras
-          if (!vs || vs.length === 0) {
-            const digitsOnly = String(nd).replace(/\D/g, '');
-            if (digitsOnly.length >= 5) {
-              vs = await client.query(`
-                SELECT id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
-                       cobranca_em_nome_de, moeda, id_rm, processo_id
-                FROM dados_dachser.t_vouchers
-                WHERE REPLACE(REPLACE(REPLACE(IFNULL(linha_digitavel,''),' ',''),'.',''),'-','') LIKE CONCAT('%', ?, '%')
-                   OR REPLACE(REPLACE(REPLACE(IFNULL(codigo_barras,''),' ',''),'.',''),'-','') LIKE CONCAT('%', ?, '%')
-                ORDER BY created_at DESC LIMIT 5
-              `, [digitsOnly, digitsOnly]);
-            }
-          }
+          // NOTE: Match por linha_digitavel/codigo_barras foi REMOVIDO intencionalmente.
+          // O Robô de Comprovantes NUNCA pode identificar voucher por boleto/digitável
+          // (causa falso-positivo quando "nosso número" colide entre vouchers).
           // t_dados_financeiro_voucher.nd
           if (!vs || vs.length === 0) {
             try {
