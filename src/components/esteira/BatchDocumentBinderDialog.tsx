@@ -608,7 +608,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                     </div>
                   )}
                   {!preSearchLoading && filteredPreLanc.length === 0 && (
-                    <div className="py-8 text-center text-xs text-muted-foreground">
+                    <div className="py-8 text-center text-sm text-muted-foreground">
                       {preLancVouchers.length === 0
                         ? "Nenhum pré-lançado disponível."
                         : "Nenhum pré-lançado corresponde à busca."}
