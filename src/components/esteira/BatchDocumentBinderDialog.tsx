@@ -104,27 +104,6 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
     });
   };
 
-  const toggleAllVisible = () => {
-    if (lockedMaster) {
-      toast({
-        title: "Master travado",
-        description: "Encerre o master atual para alterar a seleção de vouchers.",
-      });
-      return;
-    }
-    const visibleIds = filteredChecklist.map((c) => c.voucher_id);
-    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedVouchers.has(id));
-    setSelectedVouchers((prev) => {
-      const n = new Set(prev);
-      if (allSelected) {
-        visibleIds.forEach((id) => n.delete(id));
-      } else {
-        visibleIds.forEach((id) => n.add(id));
-      }
-      return n;
-    });
-  };
-
   const filteredChecklist = useMemo(() => {
     const q = voucherSearch.trim().toLowerCase();
     if (!q) return checklist;
@@ -134,25 +113,74 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
     });
   }, [checklist, voucherSearch]);
 
+  const filteredPreLanc = useMemo(() => {
+    const q = voucherSearch.trim().toLowerCase();
+    if (!q) return preLancVouchers;
+    return preLancVouchers.filter((v) => {
+      const hay = `${v.numero_spo || ""} ${v.fornecedor || ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [preLancVouchers, voucherSearch]);
+
+  const toggleAllVisible = () => {
+    if (lockedMaster) {
+      toast({
+        title: "Master travado",
+        description: "Encerre o master atual para alterar a seleção de vouchers.",
+      });
+      return;
+    }
+    const visibleChecklistIds = filteredChecklist.map((c) => c.voucher_id);
+    const visiblePreIds = filteredPreLanc.map((v) => String(v.id));
+    const totalVisible = visibleChecklistIds.length + visiblePreIds.length;
+    const selectedCount =
+      visibleChecklistIds.filter((id) => selectedVouchers.has(id)).length +
+      visiblePreIds.filter((id) => selectedPreLanc.has(id)).length;
+    const allSelected = totalVisible > 0 && selectedCount === totalVisible;
+    setSelectedVouchers((prev) => {
+      const n = new Set(prev);
+      if (allSelected) visibleChecklistIds.forEach((id) => n.delete(id));
+      else visibleChecklistIds.forEach((id) => n.add(id));
+      return n;
+    });
+    setSelectedPreLanc((prev) => {
+      const n = new Set(prev);
+      if (allSelected) visiblePreIds.forEach((id) => n.delete(id));
+      else visiblePreIds.forEach((id) => n.add(id));
+      return n;
+    });
+  };
+
   const selectedItems = useMemo(
-    () => checklist.filter((c) => selectedVouchers.has(c.voucher_id)),
-    [checklist, selectedVouchers],
+    () => [
+      ...checklist.filter((c) => selectedVouchers.has(c.voucher_id)),
+      ...preLancVouchers
+        .filter((v) => selectedPreLanc.has(String(v.id)))
+        .map((v) => ({
+          voucher_id: String(v.id),
+          numero_spo: v.numero_spo,
+          fornecedor: v.fornecedor,
+          valor: v.valor,
+          id_rm: v.id_rm,
+        })) as any,
+    ],
+    [checklist, selectedVouchers, preLancVouchers, selectedPreLanc],
   );
 
-  const totalSelecionado = selectedItems.reduce((acc, it) => acc + (Number(it.valor) || 0), 0);
+  const totalSelecionado = selectedItems.reduce((acc, it: any) => acc + (Number(it.valor) || 0), 0);
   const isMaster = selectedItems.length >= 2;
 
   // Preview do numero_spo do master: menor id_rm; fallback para o primeiro
   const previewMasterSpo = useMemo(() => {
     if (!isMaster) return null;
     const withRm = selectedItems
-      .map((it) => ({ it, rm: (it as any).id_rm != null ? Number((it as any).id_rm) : null }))
-      .filter((x) => x.rm != null && !Number.isNaN(x.rm));
+      .map((it: any) => ({ it, rm: (it as any).id_rm != null ? Number((it as any).id_rm) : null }))
+      .filter((x: any) => x.rm != null && !Number.isNaN(x.rm));
     if (withRm.length > 0) {
-      withRm.sort((a, b) => (a.rm! - b.rm!));
+      withRm.sort((a: any, b: any) => (a.rm! - b.rm!));
       return withRm[0].it.numero_spo || "—";
     }
-    return selectedItems[0]?.numero_spo || "—";
+    return (selectedItems[0] as any)?.numero_spo || "—";
   }, [isMaster, selectedItems]);
 
   const requestBind = () => {
