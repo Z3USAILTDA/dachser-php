@@ -1,38 +1,26 @@
-## Causa
+## Problema
 
-No handler `search_pre_lancamento_by_fornecedores` (mariadb-proxy/index.ts, linha 19633), a busca SÓ retorna vouchers se houver match exato pelo nome do `fornecedor` do lote. Se o nome não bate (espaço, acento, "S/A" vs "S.A."), ou se o lote não tem fornecedores extraídos, o modal vem vazio — mesmo existindo pré-lançados na base.
+Quando um voucher pré-lançado é incluído num lote e consolidado num master, os documentos já anexados ao voucher pré-lançado (NF, boleto, etc. registrados em `t_voucher_anexos` antes de entrar no lote) **não são copiados** para o voucher master criado.
 
-## Correção
+Hoje, em `finalize_batch_import` (`mariadb-proxy/index.ts` ~linha 19517), ao criar o master só inserimos como anexos do master os arquivos que vieram dos `t_voucher_batch_documents` daquele grupo. Os anexos pré-existentes dos filhos (que ficam apontando para o `voucher_id` do filho) são esquecidos.
 
-Garantir que **sempre** que o usuário abrir o modal apareçam todos os pré-lançamentos disponíveis (sem master, em `PRE_LANCAMENTO`), priorizando os do(s) fornecedor(es) do lote no topo.
+## Correção (cirúrgica, backend)
 
-### Mudança única — `supabase/functions/mariadb-proxy/index.ts` (linhas 19632–19663)
+No bloco que cria cada master (após `INSERT INTO t_voucher_anexos` dos docs do lote, e antes do log `MASTER_CRIADO_LOTE`), adicionar:
 
-Substituir a query do bloco `search_pre_lancamento_by_fornecedores` para:
+1. `SELECT id, tipo, file_name, file_url, file_size FROM t_voucher_anexos WHERE voucher_id IN (grp.vids)`.
+2. Para cada anexo encontrado, inserir uma cópia em `t_voucher_anexos` com `voucher_id = masterId` e novo `id`, **deduplicando** por `(tipo, file_url)` contra os anexos do lote já inseridos no master neste mesmo grupo (para não duplicar caso o mesmo arquivo do pré-lançamento também tenha sido anexado via lote).
+3. Manter os anexos originais nos filhos intactos (apenas espelhar no master). Filhos ficam `CONSOLIDADO_NO_MASTER` e não são promovidos.
+4. Envolver em try/catch silencioso por anexo, sem abortar a criação do master.
 
-1. Buscar **todos** os vouchers em `PRE_LANCAMENTO` com `voucher_master_id IS NULL` (sem filtrar por fornecedor no `WHERE`).
-2. Quando houver lista de fornecedores do lote, ordenar os correspondentes primeiro (via `CASE WHEN UPPER(TRIM(fornecedor)) IN (...) THEN 0 ELSE 1 END`).
-3. Manter ordenação por vencimento/numero_spo.
-4. Limitar a, por exemplo, 500 registros para evitar payloads gigantes.
+Sem mudança de schema, sem mudança no frontend.
 
-Pseudocódigo SQL:
-```sql
-SELECT id, numero_spo, id_rm, fornecedor, cnpj_fornecedor, valor, moeda,
-       vencimento, forma_pagamento, tipo_documento, cobranca_em_nome_de,
-       urgencia_tipo, processo_id, origem_processo, filial,
-       data_emissao_documento, comentarios_operacao, created_at
-  FROM dados_dachser.t_vouchers
- WHERE etapa_atual = 'PRE_LANCAMENTO'
-   AND voucher_master_id IS NULL
- ORDER BY
-   CASE WHEN UPPER(TRIM(fornecedor)) COLLATE utf8mb4_unicode_ci IN (<ph>) THEN 0 ELSE 1 END,
-   vencimento ASC, fornecedor ASC, numero_spo ASC
- LIMIT 500
-```
-Quando `fornecedores` estiver vazio, o `CASE` é omitido e ordena só por vencimento.
+## Arquivo afetado
 
-Sem alterações no frontend, schema, RLS ou no fluxo de `attach_pre_lancamento_to_batch`.
+- `supabase/functions/mariadb-proxy/index.ts` — bloco `finalize_batch_import`, logo após o loop `for (const d of grp.docs)` que cria os anexos de lote no master (~linhas 19517–19529).
 
-## Resultado esperado
+## Validação
 
-Ao abrir o modal "Buscar pré-lançados" no lote, o usuário vê **todos** os pré-lançamentos existentes (com os do fornecedor do lote no topo), podendo selecionar mesmo sem match exato de nome.
+- Criar lote com 1 voucher normal + 1 pré-lançado que já tem NF/boleto anexados.
+- Vincular documento de lote, finalizar.
+- Conferir que `t_voucher_anexos` do master contém: docs do lote + anexos originais do pré-lançado (sem duplicatas exatas de `file_url`).
