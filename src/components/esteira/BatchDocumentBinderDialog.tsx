@@ -372,7 +372,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[92vh] overflow-hidden flex flex-col bg-card border-border/60">
+      <DialogContent className="max-w-[98vw] w-[98vw] sm:max-w-[95vw] h-[96vh] max-h-[96vh] overflow-hidden flex flex-col bg-card border-border/60">
         <DialogHeader className="space-y-1">
           <DialogTitle className="flex items-center gap-2 text-foreground">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
