@@ -12080,25 +12080,8 @@ Deno.serve(async (req) => {
           }
         }
 
-        // 6. Match por linha_digitavel ou codigo_barras (substring numérica)
-        if (!vouchers || vouchers.length === 0) {
-          const digitsOnly = String(numero_nd).replace(/\D/g, '');
-          if (digitsOnly.length >= 5) {
-            vouchers = await client.query(`
-              SELECT 
-                id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
-                cobranca_em_nome_de, moeda, id_rm, processo_id
-              FROM dados_dachser.t_vouchers
-              WHERE REPLACE(REPLACE(REPLACE(IFNULL(linha_digitavel,''),' ',''),'.',''),'-','') LIKE CONCAT('%', ?, '%')
-                 OR REPLACE(REPLACE(REPLACE(IFNULL(codigo_barras,''),' ',''),'.',''),'-','') LIKE CONCAT('%', ?, '%')
-              ORDER BY created_at DESC
-              LIMIT 5
-            `, [digitsOnly, digitsOnly]);
-            if (vouchers && vouchers.length > 0) {
-              console.log(`[find_voucher_by_nd] Match via linha_digitavel/codigo_barras: ${vouchers.length}`);
-            }
-          }
-        }
+        // NOTE: Match por linha_digitavel/codigo_barras foi REMOVIDO intencionalmente.
+        // O Robô NUNCA pode identificar voucher pela linha digitável (causa falso-positivo).
 
         // 7. Match contra t_dados_financeiro_voucher.nd (fonte de verdade pós-limpeza)
         if (!vouchers || vouchers.length === 0) {
