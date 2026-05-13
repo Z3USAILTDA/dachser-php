@@ -7497,9 +7497,9 @@ Deno.serve(async (req) => {
                 MAX(valor_nf) as valor_nf
              FROM dados_dachser.t_dados_financeiro_voucher
              GROUP BY nd
-           ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
-           ${whereClause} 
-           GROUP BY v.id
+           ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
+            ${whereClause} 
+            GROUP BY v.id
            ORDER BY v.created_at DESC
          `, params);
         
@@ -10450,17 +10450,17 @@ Deno.serve(async (req) => {
           result = { ready: false, found: false, missingFields: ['numero_spo'] };
           break;
         }
-        // Normalização: aceitar "105-292964" e "105-292964 DIM-BY"
+        // Normalização por prefixo (antes do primeiro espaço): aceita "105-292964" e "105-292964 DIM-BY" em ambos os lados
         const ndRaw = String(numero_spo).trim();
         const ndCandidates = Array.from(new Set([ndRaw, ndRaw.split(/\s+/)[0]].filter(Boolean)));
-        const placeholders = ndCandidates.map(() => '? COLLATE utf8mb4_unicode_ci').join(', ');
         const rows: any[] = await client.query(`
           SELECT documento, nd, numero_nf, numero_processo, modal, tipo_pag,
                  forma_pag, data_emissao, data_vencimento, valor_nf, cnpj, razao_social
           FROM dados_dachser.t_dados_financeiro_voucher
-          WHERE nd COLLATE utf8mb4_unicode_ci IN (${placeholders})
+          WHERE SUBSTRING_INDEX(TRIM(nd), ' ', 1) COLLATE utf8mb4_unicode_ci
+              = SUBSTRING_INDEX(TRIM(?), ' ', 1) COLLATE utf8mb4_unicode_ci
           LIMIT 1
-        `, ndCandidates);
+        `, [ndRaw]);
 
         if (!rows || rows.length === 0) {
           // Voucher genuinamente manual: nunca foi criado no RM. Bloqueia.
@@ -10597,7 +10597,7 @@ Deno.serve(async (req) => {
         // Usa NOT EXISTS para evitar JOIN que duplica linhas e força DISTINCT (perf)
         const conditions: string[] = [
           "v.etapa_atual IN ('FINANCEIRO', 'ROBO')",
-          "NOT EXISTS (SELECT 1 FROM dados_dachser.t_dados_financeiro_voucher dfv2 WHERE dfv2.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci AND dfv2.modal = 'ADM')",
+          "NOT EXISTS (SELECT 1 FROM dados_dachser.t_dados_financeiro_voucher dfv2 WHERE SUBSTRING_INDEX(TRIM(dfv2.nd), ' ', 1) COLLATE utf8mb4_general_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci AND dfv2.modal = 'ADM')",
           "v.sync_status = 'ATIVO'",
           "(v.voucher_master_id IS NULL OR v.voucher_master_id = '')"
         ];
@@ -11585,7 +11585,7 @@ Deno.serve(async (req) => {
             SELECT nd, MAX(created_by) AS created_by
             FROM dados_dachser.t_dados_financeiro_voucher
             GROUP BY nd
-          ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
+          ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
           ${whereClause}
           ORDER BY v.created_at DESC
           LIMIT 5000
@@ -11621,7 +11621,7 @@ Deno.serve(async (req) => {
             FROM dados_dachser.t_dados_financeiro_voucher
             WHERE data_emissao IS NOT NULL
             GROUP BY nd
-          ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
+          ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
           SET v.data_emissao_documento = dfv.data_emissao
           WHERE v.etapa_atual <> 'A_PROCESSAR'
             AND (v.data_emissao_documento IS NULL OR v.data_emissao_documento = '0000-00-00')
@@ -11845,11 +11845,12 @@ Deno.serve(async (req) => {
                        v.cobranca_em_nome_de, v.moeda, v.id_rm, v.processo_id
                 FROM dados_dachser.t_vouchers v
                 INNER JOIN dados_dachser.t_dados_financeiro_voucher dfv
-                  ON TRIM(dfv.nd) COLLATE utf8mb4_unicode_ci = TRIM(v.numero_spo) COLLATE utf8mb4_unicode_ci
-                WHERE TRIM(dfv.nd) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
-                   OR ? LIKE CONCAT(TRIM(dfv.nd), '%')
+                  ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_unicode_ci
+                   = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci
+                WHERE SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_unicode_ci
+                    = SUBSTRING_INDEX(TRIM(?), ' ', 1) COLLATE utf8mb4_unicode_ci
                 ORDER BY v.created_at DESC LIMIT 5
-              `, [nd, nd]);
+              `, [nd]);
             } catch (e) {
               console.warn('[find_voucher_multi] t_dados_financeiro_voucher indisponível:', (e as Error).message);
             }
@@ -12121,12 +12122,13 @@ Deno.serve(async (req) => {
                 v.cobranca_em_nome_de, v.moeda, v.id_rm, v.processo_id
               FROM dados_dachser.t_vouchers v
               INNER JOIN dados_dachser.t_dados_financeiro_voucher dfv
-                ON TRIM(dfv.nd) COLLATE utf8mb4_unicode_ci = TRIM(v.numero_spo) COLLATE utf8mb4_unicode_ci
-              WHERE TRIM(dfv.nd) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
-                 OR ? LIKE CONCAT(TRIM(dfv.nd), '%')
+                ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_unicode_ci
+                 = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci
+              WHERE SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_unicode_ci
+                  = SUBSTRING_INDEX(TRIM(?), ' ', 1) COLLATE utf8mb4_unicode_ci
               ORDER BY v.created_at DESC
               LIMIT 5
-            `, [numero_nd, numero_nd]);
+            `, [numero_nd]);
             if (vouchers && vouchers.length > 0) {
               console.log(`[find_voucher_by_nd] Match via t_dados_financeiro_voucher.nd: ${vouchers.length}`);
             }
@@ -12479,7 +12481,7 @@ Deno.serve(async (req) => {
             dfv.razao_social,
             dfv.created_by
           FROM dados_dachser.t_dados_financeiro_voucher dfv
-          LEFT JOIN dados_dachser.t_vouchers v ON dfv.nd COLLATE utf8mb4_unicode_ci = v.numero_spo COLLATE utf8mb4_unicode_ci
+          LEFT JOIN dados_dachser.t_vouchers v ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_unicode_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci
           LEFT JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
           WHERE v.id IS NULL
             AND b.IdLancamentoRM IS NULL
@@ -12649,7 +12651,10 @@ Deno.serve(async (req) => {
         // Anti-duplicação: busca por numero_spo OU id_rm (qualquer sync_status)
         // Resolve id_rm a partir do RM antes de checar
         const rmLookup = await client.query(
-          `SELECT id_rm FROM dados_dachser.t_dados_financeiro_voucher WHERE nd = ? LIMIT 1`,
+          `SELECT id_rm FROM dados_dachser.t_dados_financeiro_voucher
+            WHERE SUBSTRING_INDEX(TRIM(nd), ' ', 1) COLLATE utf8mb4_unicode_ci
+                = SUBSTRING_INDEX(TRIM(?), ' ', 1) COLLATE utf8mb4_unicode_ci
+            LIMIT 1`,
           [nd]
         );
         const lookupIdRm = rmLookup?.[0]?.id_rm || null;
@@ -13131,7 +13136,8 @@ Deno.serve(async (req) => {
                  COALESCE(dfv.idmov, v.id_rm, dfv.id_rm) as resolved_sort_key
           FROM dados_dachser.t_vouchers v
           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
-            ON v.numero_spo COLLATE utf8mb4_general_ci = dfv.nd COLLATE utf8mb4_general_ci
+            ON SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
+             = SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci
           WHERE v.numero_spo COLLATE utf8mb4_general_ci IN (${voucher_ids.map(() => '?').join(',')})
         `, voucher_ids);
 
@@ -13556,7 +13562,8 @@ Deno.serve(async (req) => {
                    COALESCE(dfv.idmov, v.id_rm, dfv.id_rm) as resolved_sort_key
             FROM dados_dachser.t_vouchers v
             LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
-              ON v.numero_spo COLLATE utf8mb4_general_ci = dfv.nd COLLATE utf8mb4_general_ci
+              ON SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
+               = SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci
             WHERE v.voucher_master_id = ?
           `, [master.id]);
 
@@ -15905,7 +15912,8 @@ Deno.serve(async (req) => {
             dfv.razao_social, dfv.data_insert
           FROM dados_dachser.t_dados_financeiro_voucher dfv
           LEFT JOIN dados_dachser.t_vouchers v 
-            ON dfv.nd COLLATE utf8mb4_unicode_ci = v.numero_spo COLLATE utf8mb4_unicode_ci
+            ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_unicode_ci
+             = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci
           LEFT JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
           ${whereClause}
             AND v.id IS NULL
@@ -16004,7 +16012,8 @@ Deno.serve(async (req) => {
           const enrichResult = await client.execute(`
             UPDATE dados_dachser.t_vouchers v
             JOIN dados_dachser.t_dados_financeiro_voucher dfv 
-              ON v.numero_spo COLLATE utf8mb4_unicode_ci = dfv.nd COLLATE utf8mb4_unicode_ci
+              ON SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci
+               = SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_unicode_ci
             SET 
               v.id_rm              = COALESCE(v.id_rm, dfv.id_rm),
               v.fornecedor         = COALESCE(NULLIF(TRIM(v.fornecedor), ''), dfv.nome_beneficiario, dfv.razao_social),
@@ -16112,7 +16121,7 @@ Deno.serve(async (req) => {
               MAX(valor_nf) as valor_nf
             FROM dados_dachser.t_dados_financeiro_voucher
             GROUP BY nd
-          ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
+          ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
           ${whereClause} ORDER BY v.created_at DESC
         `, params);
         
@@ -16183,7 +16192,7 @@ Deno.serve(async (req) => {
               MAX(valor_nf) as valor_nf
             FROM dados_dachser.t_dados_financeiro_voucher
             GROUP BY nd
-          ) dfv ON TRIM(dfv.nd) COLLATE utf8mb4_general_ci = TRIM(v.numero_spo) COLLATE utf8mb4_general_ci
+          ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
           WHERE sync_status = "ATIVO"
             AND (voucher_master_id IS NULL OR voucher_master_id = "")
             AND etapa_atual NOT IN ('AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER')
@@ -16202,7 +16211,7 @@ Deno.serve(async (req) => {
             dfv.data_emissao, dfv.data_vencimento, dfv.valor_nf, dfv.moeda, dfv.cnpj, dfv.razao_social,
             dfv.created_by
           FROM dados_dachser.t_dados_financeiro_voucher dfv
-          LEFT JOIN dados_dachser.t_vouchers v ON dfv.nd COLLATE utf8mb4_unicode_ci = v.numero_spo COLLATE utf8mb4_unicode_ci
+          LEFT JOIN dados_dachser.t_vouchers v ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_unicode_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci
           LEFT JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
           WHERE v.id IS NULL
             AND b.IdLancamentoRM IS NULL
@@ -16297,7 +16306,8 @@ Deno.serve(async (req) => {
         const updateResult = await client.execute(`
           UPDATE dados_dachser.t_vouchers v
           JOIN dados_dachser.t_dados_financeiro_voucher dfv 
-            ON v.numero_spo COLLATE utf8mb4_unicode_ci = dfv.nd COLLATE utf8mb4_unicode_ci
+            ON SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci
+             = SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_unicode_ci
           JOIN dados_dachser.tbaixas b ON CAST(dfv.id_rm AS UNSIGNED) = b.IdLancamentoRM
           SET v.sync_status = 'BAIXADO', v.etapa_atual = 'CONCLUIDO'
           WHERE v.sync_status = 'ATIVO'
@@ -19554,7 +19564,8 @@ Deno.serve(async (req) => {
                        COALESCE(dfv.idmov, v.id_rm) AS sort_key
                 FROM dados_dachser.t_vouchers v
                 LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv
-                  ON v.numero_spo COLLATE utf8mb4_unicode_ci = dfv.nd COLLATE utf8mb4_unicode_ci
+                  ON SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci
+                   = SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_unicode_ci
                 WHERE v.id IN (${ph})
               `, grp.vids);
               if (!childRows || childRows.length === 0) {
