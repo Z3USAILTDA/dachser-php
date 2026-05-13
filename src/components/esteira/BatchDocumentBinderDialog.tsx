@@ -294,11 +294,6 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
     setSelectedVouchers(new Set());
   };
 
-  const fornecedoresDoLote = useMemo(() => {
-    const set = new Set<string>();
-    for (const c of checklist) if (c.fornecedor) set.add(String(c.fornecedor));
-    return Array.from(set);
-  }, [checklist]);
 
   const searchPreLancamento = async () => {
     if (!batchId) return;
