@@ -19304,6 +19304,43 @@ Deno.serve(async (req) => {
           break;
         }
 
+        // ===== delete batch document =====
+        if (action === 'delete_batch_document') {
+          const { batch_document_id } = body as any;
+          if (!batch_document_id) {
+            return new Response(JSON.stringify({ success: false, error: 'batch_document_id obrigatório' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const docs = await client.query(`SELECT * FROM dados_dachser.t_voucher_batch_documents WHERE id = ?`, [batch_document_id]);
+          if (!docs || docs.length === 0) {
+            return new Response(JSON.stringify({ success: false, error: 'Documento não encontrado' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const doc = docs[0];
+          let masterGroup: string[] = [];
+          if (Number(doc.is_master_group) === 1 && doc.master_voucher_ids) {
+            try {
+              masterGroup = typeof doc.master_voucher_ids === 'string'
+                ? JSON.parse(doc.master_voucher_ids)
+                : doc.master_voucher_ids;
+            } catch (_) { masterGroup = []; }
+          }
+          if (doc.anexo_id) {
+            try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE id = ?`, [doc.anexo_id]); } catch (_) {}
+          }
+          await client.execute(`DELETE FROM dados_dachser.t_voucher_batch_documents WHERE id = ?`, [batch_document_id]);
+          const logTargets: string[] = doc.voucher_id ? [doc.voucher_id] : masterGroup;
+          for (const vid of logTargets) {
+            try {
+              const logId = crypto.randomUUID();
+              await client.execute(`
+                INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+                VALUES (?, ?, ?, ?, 'DOCUMENTO_LOTE_EXCLUIDO', ?, NOW())
+              `, [logId, vid, String(requesterId), adminUserName, `batch_id=${doc.batch_id}; file=${doc.file_name}`]);
+            } catch (_) {}
+          }
+          result = { success: true };
+          break;
+        }
+
         // ===== status =====
         if (action === 'get_batch_import_status') {
           const { batch_id } = body as any;
