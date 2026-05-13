@@ -340,6 +340,29 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
     }
   };
 
+  const deleteDoc = async (docId: string, fileName: string) => {
+    if (!confirm(`Excluir definitivamente "${fileName}"? Esta ação não pode ser desfeita.`)) return;
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "delete_batch_document", userId, batch_document_id: docId },
+      });
+      if (error || !data?.success) {
+        toast({ title: "Falha ao excluir", description: data?.error || error?.message, variant: "destructive" });
+      } else {
+        toast({ title: "Documento excluído" });
+        setSelectedDocs((prev) => {
+          const n = new Set(prev);
+          n.delete(docId);
+          return n;
+        });
+      }
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const finalize = async () => {
     if (!batchId) return;
     setBusy(true);
