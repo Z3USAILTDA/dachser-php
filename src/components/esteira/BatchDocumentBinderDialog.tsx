@@ -547,7 +547,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                     placeholder="Buscar por fornecedor ou SPO (filtra ambas as colunas)..."
                     value={voucherSearch}
                     onChange={(e) => setVoucherSearch(e.target.value)}
-                    className="h-8 text-xs pl-8"
+                    className="h-9 text-sm pl-8"
                   />
                 </div>
                 <Button
