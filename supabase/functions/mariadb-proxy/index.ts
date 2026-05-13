@@ -19641,11 +19641,12 @@ Deno.serve(async (req) => {
             );
             fornecedores = (rows || []).map((r: any) => String(r.fornecedor)).filter(Boolean);
           }
-          if (!fornecedores || fornecedores.length === 0) {
-            result = { success: true, vouchers: [] };
-            break;
-          }
-          const ph = fornecedores.map(() => '?').join(',');
+          const fornecedoresNorm = (fornecedores || []).map((f) => String(f).trim().toUpperCase()).filter(Boolean);
+          const hasForn = fornecedoresNorm.length > 0;
+          const ph = hasForn ? fornecedoresNorm.map(() => '?').join(',') : '';
+          const orderPriority = hasForn
+            ? `CASE WHEN UPPER(TRIM(fornecedor)) COLLATE utf8mb4_unicode_ci IN (${ph}) THEN 0 ELSE 1 END,`
+            : '';
           const vouchers = await client.query(
             `SELECT id, numero_spo, id_rm, fornecedor, cnpj_fornecedor, valor, moeda,
                     vencimento, forma_pagamento, tipo_documento, cobranca_em_nome_de,
@@ -19654,9 +19655,9 @@ Deno.serve(async (req) => {
                FROM dados_dachser.t_vouchers
               WHERE etapa_atual = 'PRE_LANCAMENTO'
                 AND voucher_master_id IS NULL
-                AND fornecedor COLLATE utf8mb4_unicode_ci IN (${ph})
-              ORDER BY vencimento ASC, fornecedor ASC, numero_spo ASC`,
-            fornecedores
+              ORDER BY ${orderPriority} vencimento ASC, fornecedor ASC, numero_spo ASC
+              LIMIT 500`,
+            hasForn ? fornecedoresNorm : []
           );
           result = { success: true, vouchers: vouchers || [] };
           break;

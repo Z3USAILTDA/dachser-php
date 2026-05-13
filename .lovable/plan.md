@@ -1,41 +1,38 @@
-## Causa raiz
+## Causa
 
-O voucher **105-278235 DIM-BY** está em `t_vouchers` com `etapa_atual = 'PRE_LANCAMENTO'`, mas a tela carrega via `get_vouchers_combined` (fast mode), que aplica um **filtro de mês de emissão** com a seguinte regra (mariadb-proxy, linhas 16110-16117):
+No handler `search_pre_lancamento_by_fornecedores` (mariadb-proxy/index.ts, linha 19633), a busca SÓ retorna vouchers se houver match exato pelo nome do `fornecedor` do lote. Se o nome não bate (espaço, acento, "S/A" vs "S.A."), ou se o lote não tem fornecedores extraídos, o modal vem vazio — mesmo existindo pré-lançados na base.
 
+## Correção
+
+Garantir que **sempre** que o usuário abrir o modal apareçam todos os pré-lançamentos disponíveis (sem master, em `PRE_LANCAMENTO`), priorizando os do(s) fornecedor(es) do lote no topo.
+
+### Mudança única — `supabase/functions/mariadb-proxy/index.ts` (linhas 19632–19663)
+
+Substituir a query do bloco `search_pre_lancamento_by_fornecedores` para:
+
+1. Buscar **todos** os vouchers em `PRE_LANCAMENTO` com `voucher_master_id IS NULL` (sem filtrar por fornecedor no `WHERE`).
+2. Quando houver lista de fornecedores do lote, ordenar os correspondentes primeiro (via `CASE WHEN UPPER(TRIM(fornecedor)) IN (...) THEN 0 ELSE 1 END`).
+3. Manter ordenação por vencimento/numero_spo.
+4. Limitar a, por exemplo, 500 registros para evitar payloads gigantes.
+
+Pseudocódigo SQL:
 ```sql
-AND (
-  v.etapa_atual IN ('OPERACAO','FISCAL','SUPERVISOR','FINANCEIRO',
-                    'AJUSTE_OPERACAO','AJUSTE_FISCAL','CANCELADO')
-  OR (dfv.data_emissao >= ? AND dfv.data_emissao < ?)
-  OR (dfv.data_emissao IS NULL
-      AND v.data_emissao_documento >= ? AND v.data_emissao_documento < ?)
-)
+SELECT id, numero_spo, id_rm, fornecedor, cnpj_fornecedor, valor, moeda,
+       vencimento, forma_pagamento, tipo_documento, cobranca_em_nome_de,
+       urgencia_tipo, processo_id, origem_processo, filial,
+       data_emissao_documento, comentarios_operacao, created_at
+  FROM dados_dachser.t_vouchers
+ WHERE etapa_atual = 'PRE_LANCAMENTO'
+   AND voucher_master_id IS NULL
+ ORDER BY
+   CASE WHEN UPPER(TRIM(fornecedor)) COLLATE utf8mb4_unicode_ci IN (<ph>) THEN 0 ELSE 1 END,
+   vencimento ASC, fornecedor ASC, numero_spo ASC
+ LIMIT 500
 ```
+Quando `fornecedores` estiver vazio, o `CASE` é omitido e ordena só por vencimento.
 
-`PRE_LANCAMENTO` **não está** na lista de etapas "sempre visíveis". Portanto, um voucher em pré-lançamento só aparece se a `data_emissao` (ou `data_emissao_documento`) cair no mês selecionado no filtro superior. Como vouchers em pré-lançamento normalmente ainda não têm fatura/data de emissão preenchida (é justamente o estágio anterior à anexação dos documentos), o registro fica invisível.
+Sem alterações no frontend, schema, RLS ou no fluxo de `attach_pre_lancamento_to_batch`.
 
-Conclusão: o voucher existe, não foi excluído pelo cleanup (porque deve ter algum anexo ou ainda não rodou), mas o filtro de mês o esconde.
+## Resultado esperado
 
-## Correção proposta
-
-Adicionar `'PRE_LANCAMENTO'` à lista de etapas sempre visíveis em `get_vouchers_combined`, mantendo o mesmo comportamento já aplicado a `OPERACAO`, `FISCAL`, `SUPERVISOR`, etc.
-
-### Mudança única
-
-Arquivo: `supabase/functions/mariadb-proxy/index.ts` (linha 16112)
-
-De:
-```sql
-v.etapa_atual IN ('OPERACAO','FISCAL','SUPERVISOR','FINANCEIRO','AJUSTE_OPERACAO','AJUSTE_FISCAL','CANCELADO')
-```
-
-Para:
-```sql
-v.etapa_atual IN ('OPERACAO','FISCAL','SUPERVISOR','FINANCEIRO','AJUSTE_OPERACAO','AJUSTE_FISCAL','CANCELADO','PRE_LANCAMENTO')
-```
-
-Sem alterações em RLS, schema, frontend, lógica de roles ou cleanup. Os filtros de role já permitem `PRE_LANCAMENTO` para Operação, Fiscal e Supervisor (EsteiraIndex.tsx linhas 1269/1274/1278).
-
-## Observação
-
-A regra de cleanup que apaga vouchers em `PRE_LANCAMENTO` sem anexos continua valendo — esta correção apenas garante que, enquanto o voucher existir nessa etapa, ele apareça na esteira independentemente do mês de emissão selecionado.
+Ao abrir o modal "Buscar pré-lançados" no lote, o usuário vê **todos** os pré-lançamentos existentes (com os do fornecedor do lote no topo), podendo selecionar mesmo sem match exato de nome.
