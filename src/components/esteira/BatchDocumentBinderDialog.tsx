@@ -435,7 +435,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                       href={d.file_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 truncate text-xs text-foreground hover:text-primary hover:underline"
+                      className="flex-1 truncate text-sm text-foreground hover:text-primary hover:underline"
                     >
                       {d.file_name}
                     </a>
