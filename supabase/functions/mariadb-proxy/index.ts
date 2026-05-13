@@ -11849,6 +11849,7 @@ Deno.serve(async (req) => {
         };
 
         // Priority order matching ComprovanteRobot.tsx logic
+        // NOTE: linhaDigitavel é aceito por compatibilidade mas IGNORADO no matching.
         if (!voucher && spoPrimary) {
           tried.push(`SPO:${spoPrimary}`);
           voucher = await tryBySpo(spoPrimary);
@@ -11859,11 +11860,8 @@ Deno.serve(async (req) => {
           voucher = await tryByNd(ndPrimary);
           if (voucher) matchedCandidate = `ND:${ndPrimary}`;
         }
-        if (!voucher && linhaDigitavel) {
-          tried.push(`ND:${linhaDigitavel}`);
-          voucher = await tryByNd(linhaDigitavel);
-          if (voucher) matchedCandidate = `LINHA:${linhaDigitavel}`;
-        }
+        // linhaDigitavel propositalmente NÃO é usado para identificação.
+        void linhaDigitavel;
         for (const cand of (ndCandidates || [])) {
           if (voucher || !cand || cand === ndPrimary) continue;
           tried.push(`ND:${cand}`);
