@@ -184,7 +184,9 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
   }, [isMaster, selectedItems]);
 
   const requestBind = () => {
-    const hasVouchers = lockedMaster ? lockedMaster.voucherIds.length > 0 : selectedVouchers.size > 0;
+    const hasVouchers = lockedMaster
+      ? lockedMaster.voucherIds.length > 0
+      : (selectedVouchers.size + selectedPreLanc.size) > 0;
     if (selectedDocs.size === 0 || !hasVouchers || !tipoAnexo) {
       toast({ title: "Selecione documento(s), voucher(s) e tipo", variant: "destructive" });
       return;
