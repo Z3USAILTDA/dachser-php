@@ -380,13 +380,18 @@ export default function ComprovanteRobot() {
       }
     };
 
-    // Upload em paralelo com concorrência limitada
+    // Upload em paralelo com pool contínuo de concorrência
     const comprovantesToUpload: UploadPayload[] = [];
-    for (let start = 0; start < identifiedFiles.length; start += UPLOAD_CONCURRENCY) {
-      const batch = identifiedFiles.slice(start, start + UPLOAD_CONCURRENCY).map(uploadOne);
-      const results = await Promise.all(batch);
-      results.forEach((r) => { if (r) comprovantesToUpload.push(r); });
-    }
+    let upCursor = 0;
+    const upWorkers = Array.from({ length: Math.min(UPLOAD_CONCURRENCY, identifiedFiles.length) }, async () => {
+      while (true) {
+        const i = upCursor++;
+        if (i >= identifiedFiles.length) return;
+        const r = await uploadOne(identifiedFiles[i]);
+        if (r) comprovantesToUpload.push(r);
+      }
+    });
+    await Promise.all(upWorkers);
 
     // Now attach all comprovantes in batch
     if (comprovantesToUpload.length > 0) {
