@@ -19209,6 +19209,34 @@ Deno.serve(async (req) => {
           break;
         }
 
+        // ===== upload doc bulk (multi-row INSERT) =====
+        if (action === 'upload_batch_document_bulk') {
+          const { batch_id, documents } = body as {
+            batch_id: string;
+            documents: Array<{ file_name: string; file_url: string; file_path?: string; mime_type?: string; size_bytes?: number; tipo_anexo?: string }>;
+          };
+          if (!batch_id || !Array.isArray(documents) || documents.length === 0) {
+            return new Response(JSON.stringify({ success: false, error: 'batch_id e documents[] são obrigatórios' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          const ids: string[] = [];
+          const placeholdersArr: string[] = [];
+          const values: any[] = [];
+          for (const d of documents) {
+            const docId = crypto.randomUUID();
+            ids.push(docId);
+            placeholdersArr.push('(?, ?, ?, ?, ?, ?, ?, ?, "PENDENTE", ?, ?)');
+            values.push(docId, batch_id, d.file_name, d.file_url, d.file_path || null, d.mime_type || null, d.size_bytes || 0, d.tipo_anexo || null, String(requesterId), adminUserName);
+          }
+          await client.execute(`
+            INSERT INTO dados_dachser.t_voucher_batch_documents
+              (id, batch_id, file_name, file_url, file_path, mime_type, size_bytes, tipo_anexo, status,
+               uploaded_by_user_id, uploaded_by_user_name)
+            VALUES ${placeholdersArr.join(',')}
+          `, values);
+          result = { success: true, batch_document_ids: ids, count: ids.length };
+          break;
+        }
+
         // ===== bind =====
         if (action === 'bind_batch_document_to_voucher') {
           const { batch_document_id, voucher_id, tipo_anexo } = body as any;
