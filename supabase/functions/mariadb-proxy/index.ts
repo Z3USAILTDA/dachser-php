@@ -19418,10 +19418,16 @@ Deno.serve(async (req) => {
               const tipos = [...(byV[it.voucher_id] || []), ...(masterTiposByVoucher[it.voucher_id] || [])];
               const temFatura = tipos.some(t => t === 'FATURA' || t === 'FATURA_DEMONSTRATIVO');
               const temBoleto = tipos.some(t => t === 'BOLETO' || t === 'BOLETO_INSTRUCOES');
+              const temDai = tipos.some(t => t === 'DAI');
               const requerBoleto = it.forma_pagamento === 'BOLETO';
+              const isPreLanc = String(it.etapa_destino || '').toUpperCase() === 'PRE_LANCAMENTO';
               const motivos: string[] = [];
-              if (!temFatura) motivos.push('PENDENTE_FATURA');
-              if (requerBoleto && !temBoleto) motivos.push('PENDENTE_BOLETO');
+              if (isPreLanc) {
+                if (!temFatura && !temBoleto && !temDai) motivos.push('PENDENTE_DOCUMENTO');
+              } else {
+                if (!temFatura) motivos.push('PENDENTE_FATURA');
+                if (requerBoleto && !temBoleto) motivos.push('PENDENTE_BOLETO');
+              }
               if (motivos.length) pendentes.push({ voucher_id: it.voucher_id, fornecedor: it.fornecedor, motivos });
             }
           }
