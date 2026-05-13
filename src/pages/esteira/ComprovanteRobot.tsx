@@ -317,7 +317,8 @@ export default function ComprovanteRobot() {
     setProgress(0);
 
     let processed = 0;
-    const UPLOAD_CONCURRENCY = 6;
+    const UPLOAD_CONCURRENCY = 10;
+    const t0 = performance.now();
     type UploadPayload = {
       voucher_id: string;
       file_name: string;
