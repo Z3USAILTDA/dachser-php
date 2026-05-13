@@ -660,14 +660,19 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
         </div>
 
         {/* Resumo da seleção */}
-        {selectedVouchers.size > 0 && (
+        {(selectedVouchers.size + selectedPreLanc.size) > 0 && (
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-3.5 py-2.5">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
               Selecionados
             </span>
             <span className="text-sm font-semibold text-foreground">
-              {selectedVouchers.size} voucher(s)
+              {selectedVouchers.size + selectedPreLanc.size} voucher(s)
             </span>
+            {selectedPreLanc.size > 0 && (
+              <span className="text-[11px] text-muted-foreground">
+                ({selectedVouchers.size} no lote + {selectedPreLanc.size} pré-lançado{selectedPreLanc.size > 1 ? "s" : ""})
+              </span>
+            )}
             <span className="text-muted-foreground">·</span>
             <span className="text-sm font-mono font-semibold text-foreground">
               {fmtBRL(totalSelecionado)}
