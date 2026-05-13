@@ -717,7 +717,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
             disabled={
               busy ||
               selectedDocs.size === 0 ||
-              (lockedMaster ? lockedMaster.voucherIds.length === 0 : selectedVouchers.size === 0)
+              (lockedMaster ? lockedMaster.voucherIds.length === 0 : (selectedVouchers.size + selectedPreLanc.size) === 0)
             }
           >
             <Link2 className="h-4 w-4 mr-2" />
