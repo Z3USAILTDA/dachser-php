@@ -494,7 +494,7 @@ Deno.serve(async (req) => {
       'get_pending_vouchers_for_report','find_voucher_by_spo','find_voucher_by_nd','find_voucher_multi',
       'get_vouchers_for_comprovante','attach_comprovante_batch',
       // Importação em lote (admin only)
-      'preview_voucher_batch_import','create_voucher_batch_import','upload_batch_document',
+      'preview_voucher_batch_import','create_voucher_batch_import','upload_batch_document','upload_batch_document_bulk',
       'bind_batch_document_to_voucher','bind_batch_document_to_master_group',
       'unbind_batch_document','delete_batch_document','get_batch_import_status',
       'finalize_batch_import','cleanup_abandoned_batch_imports',
