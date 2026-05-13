@@ -23,37 +23,71 @@ export function BatchDocumentUploadPanel({ batchId, userId, onUploaded }: Props)
     setUploading(true);
     setProgress({ current: 0, total: list.length });
     try {
-      let i = 0;
-      for (const file of list) {
-        i++;
-        setProgress({ current: i, total: list.length });
-        const ext = file.name.split(".").pop();
-        const path = `batch/${batchId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-        const { error: upErr } = await supabase.storage.from("voucher-anexos").upload(path, file);
-        if (upErr) {
-          console.error(upErr);
-          toast({ title: "Falha no upload", description: file.name, variant: "destructive" });
-          continue;
-        }
-        const { data: pub } = supabase.storage.from("voucher-anexos").getPublicUrl(path);
-        const { error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "upload_batch_document",
-            userId,
-            batch_id: batchId,
+      const CONCURRENCY = 8;
+      let completed = 0;
+
+      type UploadedDoc = {
+        file_name: string;
+        file_url: string;
+        file_path: string;
+        mime_type: string;
+        size_bytes: number;
+      };
+
+      const uploadOne = async (file: File): Promise<UploadedDoc | null> => {
+        try {
+          const ext = file.name.split(".").pop();
+          const path = `batch/${batchId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+          const { error: upErr } = await supabase.storage.from("voucher-anexos").upload(path, file);
+          if (upErr) {
+            console.error(upErr);
+            toast({ title: "Falha no upload", description: file.name, variant: "destructive" });
+            return null;
+          }
+          const { data: pub } = supabase.storage.from("voucher-anexos").getPublicUrl(path);
+          return {
             file_name: file.name,
             file_url: pub.publicUrl,
             file_path: path,
             mime_type: file.type,
             size_bytes: file.size,
+          };
+        } finally {
+          completed++;
+          setProgress({ current: completed, total: list.length });
+        }
+      };
+
+      // Pool de concorrência
+      const uploaded: UploadedDoc[] = [];
+      let cursor = 0;
+      const workers = Array.from({ length: Math.min(CONCURRENCY, list.length) }, async () => {
+        while (true) {
+          const idx = cursor++;
+          if (idx >= list.length) return;
+          const r = await uploadOne(list[idx]);
+          if (r) uploaded.push(r);
+        }
+      });
+      await Promise.all(workers);
+
+      // Registrar tudo num único invoke (multi-row INSERT no backend)
+      if (uploaded.length > 0) {
+        const { error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "upload_batch_document_bulk",
+            userId,
+            batch_id: batchId,
+            documents: uploaded,
           },
         });
         if (error) {
-          toast({ title: "Erro ao registrar documento", description: file.name, variant: "destructive" });
+          toast({ title: "Erro ao registrar documentos", description: error.message, variant: "destructive" });
         }
       }
+
       onUploaded();
-      toast({ title: `Upload concluído (${list.length} arquivo${list.length > 1 ? "s" : ""})` });
+      toast({ title: `Upload concluído (${uploaded.length} de ${list.length} arquivo${list.length > 1 ? "s" : ""})` });
     } finally {
       setUploading(false);
       setProgress({ current: 0, total: 0 });
