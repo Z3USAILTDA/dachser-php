@@ -18389,6 +18389,7 @@ Deno.serve(async (req) => {
       case 'bind_batch_document_to_voucher':
       case 'bind_batch_document_to_master_group':
       case 'unbind_batch_document':
+      case 'delete_batch_document':
       case 'get_batch_import_status':
       case 'finalize_batch_import':
       case 'cleanup_abandoned_batch_imports':
