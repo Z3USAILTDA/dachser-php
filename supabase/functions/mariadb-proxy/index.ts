@@ -11823,20 +11823,9 @@ Deno.serve(async (req) => {
             const existingIds = new Set((vs || []).map((v: any) => v.id));
             for (const m of mr) if (!existingIds.has(m.id)) { vs = vs || []; vs.push(m); }
           }
-          // linha_digitavel/codigo_barras
-          if (!vs || vs.length === 0) {
-            const digitsOnly = String(nd).replace(/\D/g, '');
-            if (digitsOnly.length >= 5) {
-              vs = await client.query(`
-                SELECT id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
-                       cobranca_em_nome_de, moeda, id_rm, processo_id
-                FROM dados_dachser.t_vouchers
-                WHERE REPLACE(REPLACE(REPLACE(IFNULL(linha_digitavel,''),' ',''),'.',''),'-','') LIKE CONCAT('%', ?, '%')
-                   OR REPLACE(REPLACE(REPLACE(IFNULL(codigo_barras,''),' ',''),'.',''),'-','') LIKE CONCAT('%', ?, '%')
-                ORDER BY created_at DESC LIMIT 5
-              `, [digitsOnly, digitsOnly]);
-            }
-          }
+          // NOTE: Match por linha_digitavel/codigo_barras foi REMOVIDO intencionalmente.
+          // O Robô de Comprovantes NUNCA pode identificar voucher por boleto/digitável
+          // (causa falso-positivo quando "nosso número" colide entre vouchers).
           // t_dados_financeiro_voucher.nd
           if (!vs || vs.length === 0) {
             try {
@@ -11860,6 +11849,7 @@ Deno.serve(async (req) => {
         };
 
         // Priority order matching ComprovanteRobot.tsx logic
+        // NOTE: linhaDigitavel é aceito por compatibilidade mas IGNORADO no matching.
         if (!voucher && spoPrimary) {
           tried.push(`SPO:${spoPrimary}`);
           voucher = await tryBySpo(spoPrimary);
@@ -11870,11 +11860,8 @@ Deno.serve(async (req) => {
           voucher = await tryByNd(ndPrimary);
           if (voucher) matchedCandidate = `ND:${ndPrimary}`;
         }
-        if (!voucher && linhaDigitavel) {
-          tried.push(`ND:${linhaDigitavel}`);
-          voucher = await tryByNd(linhaDigitavel);
-          if (voucher) matchedCandidate = `LINHA:${linhaDigitavel}`;
-        }
+        // linhaDigitavel propositalmente NÃO é usado para identificação.
+        void linhaDigitavel;
         for (const cand of (ndCandidates || [])) {
           if (voucher || !cand || cand === ndPrimary) continue;
           tried.push(`ND:${cand}`);
@@ -12093,25 +12080,8 @@ Deno.serve(async (req) => {
           }
         }
 
-        // 6. Match por linha_digitavel ou codigo_barras (substring numérica)
-        if (!vouchers || vouchers.length === 0) {
-          const digitsOnly = String(numero_nd).replace(/\D/g, '');
-          if (digitsOnly.length >= 5) {
-            vouchers = await client.query(`
-              SELECT 
-                id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
-                cobranca_em_nome_de, moeda, id_rm, processo_id
-              FROM dados_dachser.t_vouchers
-              WHERE REPLACE(REPLACE(REPLACE(IFNULL(linha_digitavel,''),' ',''),'.',''),'-','') LIKE CONCAT('%', ?, '%')
-                 OR REPLACE(REPLACE(REPLACE(IFNULL(codigo_barras,''),' ',''),'.',''),'-','') LIKE CONCAT('%', ?, '%')
-              ORDER BY created_at DESC
-              LIMIT 5
-            `, [digitsOnly, digitsOnly]);
-            if (vouchers && vouchers.length > 0) {
-              console.log(`[find_voucher_by_nd] Match via linha_digitavel/codigo_barras: ${vouchers.length}`);
-            }
-          }
-        }
+        // NOTE: Match por linha_digitavel/codigo_barras foi REMOVIDO intencionalmente.
+        // O Robô NUNCA pode identificar voucher pela linha digitável (causa falso-positivo).
 
         // 7. Match contra t_dados_financeiro_voucher.nd (fonte de verdade pós-limpeza)
         if (!vouchers || vouchers.length === 0) {

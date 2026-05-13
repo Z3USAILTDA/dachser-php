@@ -1,74 +1,40 @@
+## Contexto
 
-## Objetivo
+O voucher `105-293585 DIM-BY` foi concluído pelo Robô porque o comprovante `101-293081D13052026.68.pdf` casou pela **linha digitável** (a sequência `293081` aparece dentro do "nosso número" do boleto do 105-293585). Isso é falso-positivo: a regra precisa ser SPO/ND apenas.
 
-Aplicar a regra única de identidade SPO/ND **em todos os pontos** que cruzam `t_vouchers.numero_spo` com `t_dados_financeiro_voucher.nd` (ou comparam ND livre):
+## Regra nova
 
-> Identidade = prefixo numérico antes do primeiro espaço. Ignorar sufixos como ` DIM-BY`, ` SAN`, etc.
+> **O Robô de Comprovantes NUNCA pode identificar voucher por `linha_digitavel` ou `codigo_barras`.** Match permitido só por: `numero_spo`, `id_rm` (ND), `processo_id`, `t_dados_financeiro_voucher.nd` e relação child→master.
 
-Helper SQL padrão (usado nos dois lados da comparação):
+## Mudanças (cirúrgicas)
 
-```sql
-SUBSTRING_INDEX(TRIM(x), ' ', 1) COLLATE utf8mb4_unicode_ci
-```
+Arquivo: `supabase/functions/mariadb-proxy/index.ts`
 
-## Pontos a alterar em `supabase/functions/mariadb-proxy/index.ts`
+1. **`find_voucher_multi` (linhas 11689–11894)**
+   - Em `tryByNd`: **remover** o bloco "linha_digitavel/codigo_barras" (linhas ~11826–11839).
+   - **Remover** o passo "linhaDigitavel" da fila de prioridade (linhas ~11873–11877) que faz `tryByNd(linhaDigitavel)`.
+   - Manter o parâmetro `linhaDigitavel` no body só por compatibilidade, mas **ignorá-lo** no matching (sem chamada).
 
-Todos passam a usar a normalização por prefixo, em vez de `TRIM(x) = TRIM(y)` ou `x = y`:
+2. **`find_voucher_by_nd` (linhas 12006–12143)**
+   - **Remover** o passo 6 "Match por linha_digitavel ou codigo_barras" (linhas ~12096–12114).
+   - Renumerar comentários (5 → child-to-master, 6 → t_dados_financeiro_voucher).
 
-| # | Linha aprox. | Contexto | Mudança |
-|---|---|---|---|
-| 1 | 7500 | JOIN exclusão ADM (get_vouchers / list) | JOIN por prefixo |
-| 2 | 10461 | `check_voucher_rm_ready` (gate de avanço) | `WHERE` por prefixo (1 param) |
-| 3 | 10600 | `NOT EXISTS` ADM em filtros | comparação por prefixo |
-| 4 | 11588 | JOIN de listagem | JOIN por prefixo |
-| 5 | 11624 | JOIN de listagem | JOIN por prefixo |
-| 6 | 11847-11852 | `find_voucher_multi.tryByNd` | JOIN+WHERE por prefixo |
-| 7 | 12123-12129 | `find_voucher_by_nd` | JOIN+WHERE por prefixo |
-| 8 | 12482 | LEFT JOIN (vouchers ausentes em t_vouchers) | JOIN por prefixo |
-| 9 | 12652 | `SELECT id_rm ... WHERE nd = ?` | `WHERE prefix(nd)=prefix(?)` |
-| 10 | 13134 | LEFT JOIN agregada | JOIN por prefixo |
-| 11 | 13559 | LEFT JOIN agregada | JOIN por prefixo |
-| 12 | 15908 | Sync incremental | JOIN por prefixo |
-| 13 | 16007 | Auto-fill após criação | JOIN por prefixo |
-| 14 | 16115 | JOIN exclusão ADM | JOIN por prefixo |
-| 15 | 16186 | JOIN exclusão ADM | JOIN por prefixo |
-| 16 | 16205 | LEFT JOIN sync | JOIN por prefixo |
-| 17 | 16300 | JOIN sync | JOIN por prefixo |
-| 18 | 18775 / 18801 | Lookups por nd em ações de tela | `WHERE prefix(nd)=prefix(?)` |
-| 19 | 19557 | LEFT JOIN listagem | JOIN por prefixo |
+Arquivo: `src/pages/esteira/ComprovanteRobot.tsx`
 
-Padrão exato aplicado a JOINs:
+3. Linha 218: **remover** `linhaDigitavel: extractedData?.linhaDigitavel || undefined`. O frontend deixa de enviar essa chave (defesa em profundidade — mesmo se algum dia voltar no backend, não chega).
 
-```sql
-ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_unicode_ci
- = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci
-```
+## Memória
 
-Padrão para WHERE com parâmetro:
-
-```sql
-WHERE SUBSTRING_INDEX(TRIM(nd), ' ', 1) COLLATE utf8mb4_unicode_ci
-    = SUBSTRING_INDEX(TRIM(?), ' ', 1) COLLATE utf8mb4_unicode_ci
-```
-
-Cobre todas as combinações:
-- `'105-293596'` ↔ `'105-293596'`
-- `'105-293596 DIM-BY'` ↔ `'105-293596'`
-- `'105-293596'` ↔ `'105-293596 DIM-BY'`
-- `'105-293596 DIM-BY'` ↔ `'105-293596 DIM-BY'`
-
-## Memória do projeto
-
-Atualizar `mem://vouchers/check-rm-ready-only-blocks-manual` (ou criar `mem://vouchers/spo-nd-prefix-identity-rule`) com a regra única: **comparação SPO↔ND sempre por prefixo antes do primeiro espaço, em ambos os lados**, e listar os pontos cobertos.
+Atualizar `mem://vouchers/comprovante-robot-matching-rules` adicionando a proibição explícita: "Nunca casar por `linha_digitavel`/`codigo_barras`. Match exclusivamente por SPO, ND/id_rm, processo_id, `t_dados_financeiro_voucher.nd` e child→master."
 
 ## Fora de escopo
 
-- Sem migração de schema. Sem coluna normalizada. Sem backfill.
-- Não tocar em fluxos de comprovante além das funções já listadas (`find_voucher_multi`, `find_voucher_by_nd`).
-- Não mexer em índices (a função `SUBSTRING_INDEX` invalida índice em `nd`, mas a tabela é pequena no contexto dessas queries — performance permanece aceitável; se virar gargalo no futuro, abre-se uma tarefa separada para coluna gerada `nd_key`).
+- Não mexer em extração da linha digitável (segue sendo extraída e salva no voucher para pagamento — só não serve mais para identificação).
+- Não mexer em `save_linha_digitavel`, `update_codigo_barras`, geração de remessa, ou qualquer outro fluxo financeiro.
+- Não reverter a conclusão do voucher 105-293585 — isso fica a critério do usuário (manual).
 
 ## Risco
 
-Possível leve aumento de custo nos JOINs por full scan em `dfv.nd`. Aceitável dado o volume atual e a criticidade de não bloquear avanço de etapa nem perder match de comprovante.
+Casos que dependiam exclusivamente da linha digitável para casar passarão a não casar e cair na fila de "não identificado". Isso é o comportamento desejado — falso-positivo é pior que falso-negativo.
 
 Posso aplicar?
