@@ -1,26 +1,42 @@
 ## Problema
 
-Quando um voucher pré-lançado é incluído num lote e consolidado num master, os documentos já anexados ao voucher pré-lançado (NF, boleto, etc. registrados em `t_voucher_anexos` antes de entrar no lote) **não são copiados** para o voucher master criado.
+Quando o lote é criado com a opção **Pré-lançamento**, os vouchers nascem com `etapa_atual = 'PRE_LANCAMENTO'` já dentro do lote. A query `search_pre_lancamento_by_fornecedores` busca **todo** voucher com `etapa = PRE_LANCAMENTO AND voucher_master_id IS NULL`, então esses mesmos vouchers reaparecem na coluna **"Pré-lançados disponíveis"**, dando a impressão de que processos ainda não concluídos estão "soltos" e disponíveis para anexar.
 
-Hoje, em `finalize_batch_import` (`mariadb-proxy/index.ts` ~linha 19517), ao criar o master só inserimos como anexos do master os arquivos que vieram dos `t_voucher_batch_documents` daquele grupo. Os anexos pré-existentes dos filhos (que ficam apontando para o `voucher_id` do filho) são esquecidos.
+O filtro no frontend (`idsNoLote` derivado de `checklist`) não cobre esse caso de forma consistente porque:
+- pode rodar antes do checklist estar carregado;
+- e, conceitualmente, qualquer voucher já vinculado a um lote em andamento (`PENDING_DOCUMENTS`) não deveria ser considerado "disponível" para outro master.
 
-## Correção (cirúrgica, backend)
+## Correção (cirúrgica, somente backend)
 
-No bloco que cria cada master (após `INSERT INTO t_voucher_anexos` dos docs do lote, e antes do log `MASTER_CRIADO_LOTE`), adicionar:
+Arquivo: `supabase/functions/mariadb-proxy/index.ts`, dentro do case `search_pre_lancamento_by_fornecedores` (linhas 19676–19687).
 
-1. `SELECT id, tipo, file_name, file_url, file_size FROM t_voucher_anexos WHERE voucher_id IN (grp.vids)`.
-2. Para cada anexo encontrado, inserir uma cópia em `t_voucher_anexos` com `voucher_id = masterId` e novo `id`, **deduplicando** por `(tipo, file_url)` contra os anexos do lote já inseridos no master neste mesmo grupo (para não duplicar caso o mesmo arquivo do pré-lançamento também tenha sido anexado via lote).
-3. Manter os anexos originais nos filhos intactos (apenas espelhar no master). Filhos ficam `CONSOLIDADO_NO_MASTER` e não são promovidos.
-4. Envolver em try/catch silencioso por anexo, sem abortar a criação do master.
+Adicionar duas exclusões na query:
 
-Sem mudança de schema, sem mudança no frontend.
+1. Excluir vouchers que já estão em algum item do **lote atual** (`batch_id = ?`).
+2. Excluir vouchers que já estão em **qualquer outro lote em aberto** (`t_voucher_batch_import.status = 'PENDING_DOCUMENTS'`), evitando que um pré-lançado "preso" a outro lote em andamento apareça como disponível.
 
-## Arquivo afetado
+Pseudo-SQL adicionado ao `WHERE`:
 
-- `supabase/functions/mariadb-proxy/index.ts` — bloco `finalize_batch_import`, logo após o loop `for (const d of grp.docs)` que cria os anexos de lote no master (~linhas 19517–19529).
+```sql
+AND id NOT IN (
+  SELECT bi.voucher_id
+    FROM dados_dachser.t_voucher_batch_import_item bi
+    JOIN dados_dachser.t_voucher_batch_import b ON b.id = bi.batch_id
+   WHERE bi.voucher_id IS NOT NULL
+     AND (bi.batch_id = ? OR b.status = 'PENDING_DOCUMENTS')
+)
+```
+
+Quando `batchIdArg` for nulo, manter apenas a parte `b.status = 'PENDING_DOCUMENTS'`.
+
+## O que NÃO muda
+
+- Frontend (`BatchDocumentBinderDialog.tsx`) permanece igual; o filtro `idsNoLote` continua como segunda linha de defesa.
+- Lógica de criação do lote (`create_voucher_batch_import`) e de anexação (`attach_pre_lancamento_to_batch`) inalteradas.
+- Vouchers em `PRE_LANCAMENTO` que ficaram realmente "soltos" (sem lote em aberto) seguem aparecendo normalmente na coluna.
 
 ## Validação
 
-- Criar lote com 1 voucher normal + 1 pré-lançado que já tem NF/boleto anexados.
-- Vincular documento de lote, finalizar.
-- Conferir que `t_voucher_anexos` do master contém: docs do lote + anexos originais do pré-lançado (sem duplicatas exatas de `file_url`).
+1. Criar lote em modo **Pré-lançamento** com 2 vouchers → coluna "Pré-lançados disponíveis" deve aparecer **vazia**.
+2. Criar um voucher pré-lançado em outro fluxo (sem lote pendente) → deve aparecer normalmente em outro lote aberto.
+3. Finalizar o lote → vouchers pré-lançados de fora do lote voltam a aparecer normalmente em novos lotes.
