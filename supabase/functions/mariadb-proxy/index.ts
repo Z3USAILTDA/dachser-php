@@ -6609,6 +6609,8 @@ Deno.serve(async (req) => {
               file_url TEXT NOT NULL,
               file_size BIGINT DEFAULT 0,
               created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              is_master TINYINT(1) NOT NULL DEFAULT 0,
+              filhos_spos TEXT NULL,
               INDEX idx_voucher_id (voucher_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
           `);
@@ -6617,20 +6619,45 @@ Deno.serve(async (req) => {
         }
 
         console.log('Saving anexo to dados_dachser.t_voucher_anexos:', anexoData.voucher_id, anexoData.tipo);
-        
+
+        // Detectar se o voucher é master e listar filhos (snapshot no momento do upload)
+        let isMaster = 0;
+        let filhosSposJson: string | null = null;
+        try {
+          const masterCheck = await client.execute(
+            `SELECT COALESCE(is_master,0) AS is_master FROM dados_dachser.t_vouchers WHERE id = ?`,
+            [anexoData.voucher_id]
+          );
+          const mRows = masterCheck.rows as Array<{ is_master: number }>;
+          if (mRows.length > 0 && Number(mRows[0].is_master) === 1) {
+            isMaster = 1;
+            const filhosRes = await client.execute(
+              `SELECT numero_spo FROM dados_dachser.t_vouchers WHERE voucher_master_id = ? ORDER BY numero_spo`,
+              [anexoData.voucher_id]
+            );
+            const fRows = filhosRes.rows as Array<{ numero_spo: string }>;
+            const spos = fRows.map(r => r.numero_spo).filter(Boolean);
+            if (spos.length > 0) filhosSposJson = JSON.stringify(spos);
+          }
+        } catch (mErr) {
+          console.log('Could not resolve is_master/filhos_spos:', mErr);
+        }
+
         const anexoId = crypto.randomUUID();
-        
+
         await client.execute(`
           INSERT INTO dados_dachser.t_voucher_anexos (
-            id, voucher_id, tipo, file_name, file_url, file_size, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, NOW())
+            id, voucher_id, tipo, file_name, file_url, file_size, created_at, is_master, filhos_spos
+          ) VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, ?)
         `, [
           anexoId,
           anexoData.voucher_id,
           anexoData.tipo,
           anexoData.file_name,
           anexoData.file_url,
-          anexoData.file_size || 0
+          anexoData.file_size || 0,
+          isMaster,
+          filhosSposJson
         ]);
         
         // Se o anexo é do tipo FATURA ou FATURA_DEMONSTRATIVO, e o voucher é ADF, 
