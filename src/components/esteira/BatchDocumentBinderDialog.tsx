@@ -494,10 +494,14 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                {filteredChecklist.length > 0 && (() => {
-                  const visibleIds = filteredChecklist.map((c) => c.voucher_id);
-                  const selectedCount = visibleIds.filter((id) => selectedVouchers.has(id)).length;
-                  const allSelected = selectedCount === visibleIds.length;
+                {(filteredChecklist.length > 0 || filteredPreLanc.length > 0) && (() => {
+                  const visibleChecklistIds = filteredChecklist.map((c) => c.voucher_id);
+                  const visiblePreIds = filteredPreLanc.map((v) => String(v.id));
+                  const totalVisible = visibleChecklistIds.length + visiblePreIds.length;
+                  const selectedCount =
+                    visibleChecklistIds.filter((id) => selectedVouchers.has(id)).length +
+                    visiblePreIds.filter((id) => selectedPreLanc.has(id)).length;
+                  const allSelected = totalVisible > 0 && selectedCount === totalVisible;
                   const someSelected = selectedCount > 0 && !allSelected;
                   return (
                     <label className="flex items-center gap-1.5 cursor-pointer text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
@@ -507,7 +511,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                         disabled={!!lockedMaster}
                         className="border-border/80 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground"
                       />
-                      Selecionar todos ({visibleIds.length})
+                      Selecionar todos ({totalVisible})
                     </label>
                   );
                 })()}
@@ -538,131 +542,119 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                 </Button>
               </div>
             )}
-            <div className="border-b border-border/60 px-3 py-2 space-y-2">
+            <div className="border-b border-border/60 px-3 py-2">
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
                   <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar por fornecedor ou SPO..."
+                    placeholder="Buscar por fornecedor ou SPO (filtra ambas as colunas)..."
                     value={voucherSearch}
                     onChange={(e) => setVoucherSearch(e.target.value)}
                     className="h-8 text-xs pl-8"
                   />
                 </div>
-                <Popover
-                  open={preSearchOpen}
-                  onOpenChange={(o) => {
-                    setPreSearchOpen(o);
-                    if (o && preLancVouchers.length === 0) searchPreLancamento();
-                  }}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  onClick={searchPreLancamento}
+                  disabled={preSearchLoading}
+                  title="Atualizar lista de pré-lançados"
                 >
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 px-2 text-[11px] gap-1.5 shrink-0"
-                      disabled={fornecedoresDoLote.length === 0}
-                      title="Buscar SPOs pré-lançados dos fornecedores deste lote"
-                    >
-                      <PackageSearch className="h-3.5 w-3.5" />
-                      Pré-lançados
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-[420px] p-0">
-                    <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
-                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        SPOs pré-lançados do(s) fornecedor(es) do lote
-                      </span>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6"
-                        onClick={searchPreLancamento}
-                        disabled={preSearchLoading}
-                        title="Atualizar"
-                      >
-                        {preSearchLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
-                      </Button>
-                    </div>
-                    <div className="max-h-[320px] overflow-auto p-2 space-y-1">
-                      {preSearchLoading && (
-                        <div className="flex items-center justify-center py-6">
-                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                        </div>
-                      )}
-                      {!preSearchLoading && preLancVouchers.length === 0 && (
-                        <div className="py-6 text-center text-xs text-muted-foreground">
-                          Nenhum SPO pré-lançado encontrado para os fornecedores do lote.
-                        </div>
-                      )}
-                      {preLancVouchers.map((v) => {
-                        const isSel = selectedPreLanc.has(v.id);
-                        return (
-                          <label
-                            key={v.id}
-                            className={`flex items-start gap-2 rounded-md border p-2 cursor-pointer transition ${
-                              isSel ? "border-primary/60 bg-primary/5" : "border-border/60 hover:border-primary/40"
-                            }`}
-                          >
-                            <Checkbox
-                              checked={isSel}
-                              onCheckedChange={() => togglePreLanc(v.id)}
-                              className="mt-0.5"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-mono font-semibold text-foreground truncate">
-                                  {v.numero_spo}
-                                </span>
-                                <span className="text-xs font-mono text-foreground shrink-0">
-                                  {fmtBRL(Number(v.valor) || 0)}
-                                </span>
-                              </div>
-                              <div className="text-[11px] text-muted-foreground truncate">
-                                {v.fornecedor}
-                              </div>
-                              <div className="text-[10px] text-muted-foreground mt-0.5 flex gap-2">
-                                <span>{v.forma_pagamento || "—"}</span>
-                                {v.vencimento && <span>venc: {String(v.vencimento).slice(0, 10)}</span>}
-                              </div>
-                            </div>
-                          </label>
-                        );
-                      })}
-                    </div>
-                    <div className="flex items-center justify-between border-t border-border/60 px-3 py-2">
-                      <span className="text-[11px] text-muted-foreground">
-                        {selectedPreLanc.size} selecionado(s)
-                      </span>
-                      <Button
-                        size="sm"
-                        className="h-7 text-[11px]"
-                        onClick={attachPreLanc}
-                        disabled={busy || selectedPreLanc.size === 0}
-                      >
-                        <Link2 className="h-3 w-3 mr-1" />
-                        Adicionar ao lote
-                      </Button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
+                  {preSearchLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PackageSearch className="h-3.5 w-3.5" />}
+                </Button>
               </div>
             </div>
-            <div className="flex-1 overflow-auto p-3 space-y-2">
-              {filteredChecklist.map((c) => (
-                <BatchVoucherChecklist
-                  key={c.voucher_id}
-                  item={c}
-                  selected={selectedVouchers.has(c.voucher_id)}
-                  onSelect={() => toggleVoucher(c.voucher_id)}
-                  multi
-                />
-              ))}
-              {filteredChecklist.length === 0 && !loading && (
-                <div className="py-8 text-center text-xs text-muted-foreground">
-                  {checklist.length === 0 ? "Nenhum voucher no lote." : "Nenhum voucher corresponde à busca."}
+            <div className="grid grid-cols-2 gap-3 flex-1 overflow-hidden p-3">
+              {/* Coluna 1: Lançados no lote */}
+              <div className="flex flex-col overflow-hidden rounded-lg border border-border/40 bg-card/30">
+                <div className="flex items-center justify-between border-b border-border/40 px-2.5 py-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Lançados no lote
+                  </span>
+                  <span className="rounded-full bg-muted/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                    {filteredChecklist.length}
+                  </span>
                 </div>
-              )}
+                <div className="flex-1 overflow-auto p-2 space-y-2">
+                  {filteredChecklist.map((c) => (
+                    <BatchVoucherChecklist
+                      key={c.voucher_id}
+                      item={c}
+                      selected={selectedVouchers.has(c.voucher_id)}
+                      onSelect={() => toggleVoucher(c.voucher_id)}
+                      multi
+                    />
+                  ))}
+                  {filteredChecklist.length === 0 && !loading && (
+                    <div className="py-8 text-center text-xs text-muted-foreground">
+                      {checklist.length === 0 ? "Nenhum voucher no lote." : "Nenhum voucher corresponde à busca."}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Coluna 2: Pré-lançados */}
+              <div className="flex flex-col overflow-hidden rounded-lg border border-border/40 bg-card/30">
+                <div className="flex items-center justify-between border-b border-border/40 px-2.5 py-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Pré-lançados disponíveis
+                  </span>
+                  <span className="rounded-full bg-muted/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                    {filteredPreLanc.length}
+                  </span>
+                </div>
+                <div className="flex-1 overflow-auto p-2 space-y-2">
+                  {preSearchLoading && preLancVouchers.length === 0 && (
+                    <div className="flex items-center justify-center py-6">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
+                  {!preSearchLoading && filteredPreLanc.length === 0 && (
+                    <div className="py-8 text-center text-xs text-muted-foreground">
+                      {preLancVouchers.length === 0
+                        ? "Nenhum pré-lançado disponível."
+                        : "Nenhum pré-lançado corresponde à busca."}
+                    </div>
+                  )}
+                  {filteredPreLanc.map((v) => {
+                    const id = String(v.id);
+                    const isSel = selectedPreLanc.has(id);
+                    return (
+                      <label
+                        key={id}
+                        className={`flex items-start gap-2 rounded-md border p-2 cursor-pointer transition ${
+                          isSel ? "border-primary/60 bg-primary/5" : "border-border/60 hover:border-primary/40"
+                        } ${lockedMaster ? "opacity-60 cursor-not-allowed" : ""}`}
+                      >
+                        <Checkbox
+                          checked={isSel}
+                          onCheckedChange={() => togglePreLanc(id)}
+                          disabled={!!lockedMaster}
+                          className="mt-0.5 border-border/80 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-mono font-semibold text-foreground truncate">
+                              {v.numero_spo}
+                            </span>
+                            <span className="text-xs font-mono text-foreground shrink-0">
+                              {fmtBRL(Number(v.valor) || 0)}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground truncate">
+                            {v.fornecedor}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5 flex gap-2">
+                            <span>{v.forma_pagamento || "—"}</span>
+                            {v.vencimento && <span>venc: {String(v.vencimento).slice(0, 10)}</span>}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         </div>
