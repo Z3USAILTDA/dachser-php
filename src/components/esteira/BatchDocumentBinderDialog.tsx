@@ -584,7 +584,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                     />
                   ))}
                   {filteredChecklist.length === 0 && !loading && (
-                    <div className="py-8 text-center text-xs text-muted-foreground">
+                    <div className="py-8 text-center text-sm text-muted-foreground">
                       {checklist.length === 0 ? "Nenhum voucher no lote." : "Nenhum voucher corresponde à busca."}
                     </div>
                   )}
