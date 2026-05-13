@@ -215,7 +215,7 @@ export default function ComprovanteRobot() {
             action: "find_voucher_multi",
             spoPrimary: extractedData?.numeroSPO || undefined,
             ndPrimary: extractedData?.numeroND || undefined,
-            linhaDigitavel: extractedData?.linhaDigitavel || undefined,
+            // linhaDigitavel propositalmente NÃO enviada — robô não casa por boleto.
             ndCandidates,
             spoCandidates,
           },
