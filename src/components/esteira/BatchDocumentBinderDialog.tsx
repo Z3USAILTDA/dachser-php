@@ -372,7 +372,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] w-[95vw] max-h-[92vh] overflow-hidden flex flex-col bg-card border-border/60">
+      <DialogContent className="max-w-[80vw] w-[80vw] max-h-[92vh] overflow-hidden flex flex-col bg-card border-border/60">
         <DialogHeader className="space-y-1">
           <DialogTitle className="flex items-center gap-2 text-foreground">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -380,7 +380,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
             </span>
             Vincular documentos ao lote
           </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
+          <DialogDescription className="text-sm text-muted-foreground">
             Faça upload das faturas e boletos e associe cada arquivo aos voucher(s) correspondente(s). Selecione 2 ou mais vouchers para vincular um único arquivo e gerar um voucher master automaticamente. Os vouchers só serão promovidos após todos os anexos obrigatórios e a finalização do lote.
           </DialogDescription>
         </DialogHeader>
@@ -435,7 +435,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                       href={d.file_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 truncate text-xs text-foreground hover:text-primary hover:underline"
+                      className="flex-1 truncate text-sm text-foreground hover:text-primary hover:underline"
                     >
                       {d.file_name}
                     </a>
@@ -474,7 +474,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                 );
               })}
               {docs.length === 0 && !loading && (
-                <div className="py-8 text-center text-xs text-muted-foreground">
+                <div className="py-8 text-center text-sm text-muted-foreground">
                   Nenhum documento enviado.
                 </div>
               )}
@@ -547,7 +547,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                     placeholder="Buscar por fornecedor ou SPO (filtra ambas as colunas)..."
                     value={voucherSearch}
                     onChange={(e) => setVoucherSearch(e.target.value)}
-                    className="h-8 text-xs pl-8"
+                    className="h-9 text-sm pl-8"
                   />
                 </div>
                 <Button
@@ -584,7 +584,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                     />
                   ))}
                   {filteredChecklist.length === 0 && !loading && (
-                    <div className="py-8 text-center text-xs text-muted-foreground">
+                    <div className="py-8 text-center text-sm text-muted-foreground">
                       {checklist.length === 0 ? "Nenhum voucher no lote." : "Nenhum voucher corresponde à busca."}
                     </div>
                   )}
@@ -608,7 +608,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                     </div>
                   )}
                   {!preSearchLoading && filteredPreLanc.length === 0 && (
-                    <div className="py-8 text-center text-xs text-muted-foreground">
+                    <div className="py-8 text-center text-sm text-muted-foreground">
                       {preLancVouchers.length === 0
                         ? "Nenhum pré-lançado disponível."
                         : "Nenhum pré-lançado corresponde à busca."}
@@ -632,17 +632,17 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-mono font-semibold text-foreground truncate">
+                            <span className="text-sm font-mono font-semibold text-foreground truncate">
                               {v.numero_spo}
                             </span>
-                            <span className="text-xs font-mono text-foreground shrink-0">
+                            <span className="text-sm font-mono text-foreground shrink-0">
                               {fmtBRL(Number(v.valor) || 0)}
                             </span>
                           </div>
-                          <div className="text-[11px] text-muted-foreground truncate">
+                          <div className="text-xs text-muted-foreground truncate">
                             {v.fornecedor}
                           </div>
-                          <div className="text-[10px] text-muted-foreground mt-0.5 flex gap-2">
+                          <div className="text-[11px] text-muted-foreground mt-0.5 flex gap-2">
                             <span>{v.forma_pagamento || "—"}</span>
                             {v.vencimento && <span>venc: {String(v.vencimento).slice(0, 10)}</span>}
                           </div>
