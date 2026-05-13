@@ -62,7 +62,7 @@ function formatVencimentoBR(value: string | Date | undefined | null): string {
 }
 
 function getEmailContent(data: NotificationRequest) {
-  const baseUrl = "https://dachser.z3us.app";
+  const baseUrl = "https://dachser.z3us.ai";
   const voucherLink = `${baseUrl}`;
   const logoLight = "https://i.ibb.co/TgXzCqz/logo-preto.png";
   const logoDark = "https://i.ibb.co/sJkY7y5/logo-branco.png";
@@ -304,8 +304,8 @@ async function generateSupervisorTokens(
 }
 
 function injectSupervisorButtons(html: string, approveToken: string, rejectToken: string): string {
-  const approveUrl = `https://dachser.z3us.app/supervisor-approve.html?token=${approveToken}`;
-  const rejectUrl = `https://dachser.z3us.app/supervisor-reject.html?token=${rejectToken}`;
+  const approveUrl = `https://dachser.z3us.ai/supervisor-approve.php?token=${approveToken}`;
+  const rejectUrl = `https://dachser.z3us.ai/supervisor-reject.php?token=${rejectToken}`;
 
   const buttonsHtml = `
   <tr><td style="padding:0 28px 8px" align="left">
