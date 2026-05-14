@@ -1002,7 +1002,7 @@ export const CreateVoucherDialog = ({
               <div className="flex items-center gap-2 mb-4">
                 <FileText className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium text-primary">Vinculação ao Processo</span>
-                <span className="text-destructive text-xs">obrigatório</span>
+                
               </div>
               
               <div className="grid grid-cols-2 gap-4">
