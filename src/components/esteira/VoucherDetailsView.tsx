@@ -53,6 +53,8 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
   const slaLimit = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA] || 24;
   const slaExcedido = tempoNaEtapa >= slaLimit;
   const { save, savingField, savedField } = useVoucherInlineSave(voucher.id, onUpdate);
+  const [isEditing, setIsEditing] = useState(false);
+  const editableNow = canEditFields && isEditing;
 
   const SaveIndicator = ({ field }: { field: string }) => {
     if (savingField === field) return <Loader2 className="h-3 w-3 animate-spin text-[#F5B843]" />;
