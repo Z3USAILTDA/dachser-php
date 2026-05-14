@@ -345,10 +345,14 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <p className="text-sm text-muted-foreground">Nº Voucher/SPO</p>
-              <p className="font-mono font-medium text-foreground flex items-center gap-2">
-                {voucher.numeroSPO}
-                <MoedaBadge moeda={voucher.moeda} />
-              </p>
+              {canEditFields ? (
+                <EditableText field="numero_spo" value={voucher.numeroSPO} />
+              ) : (
+                <p className="font-mono font-medium text-foreground flex items-center gap-2">
+                  {voucher.numeroSPO}
+                  <MoedaBadge moeda={voucher.moeda} />
+                </p>
+              )}
             </div>
             {voucher.isMaster && voucher.nomeMaster && (
               <div>
@@ -362,56 +366,144 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
                 <p className="font-mono font-medium text-foreground">{voucher.processoId}</p>
               </div>
             )}
-            {voucher.fornecedor && (
-              <div>
-                <p className="text-sm text-muted-foreground">Fornecedor</p>
-                <p className="text-sm font-medium text-foreground">{voucher.fornecedor}</p>
-              </div>
-            )}
-            {voucher.cnpjFornecedor && (
-              <div>
-                <p className="text-sm text-muted-foreground">CNPJ Fornecedor</p>
-                <p className="text-sm font-mono text-foreground">{voucher.cnpjFornecedor}</p>
-              </div>
-            )}
-            {voucher.valor && (
-              <div>
-                <p className="text-sm text-muted-foreground">Valor</p>
+            <div>
+              <p className="text-sm text-muted-foreground">Fornecedor</p>
+              {canEditFields ? (
+                <EditableText field="fornecedor" value={voucher.fornecedor} placeholder="Nome do fornecedor" />
+              ) : (
+                <p className="text-sm font-medium text-foreground">{voucher.fornecedor || "—"}</p>
+              )}
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">CNPJ Fornecedor</p>
+              {canEditFields ? (
+                <EditableText field="cnpj_fornecedor" value={voucher.cnpjFornecedor} placeholder="00.000.000/0000-00" />
+              ) : (
+                <p className="text-sm font-mono text-foreground">{voucher.cnpjFornecedor || "—"}</p>
+              )}
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Valor</p>
+              {canEditFields ? (
+                <EditableText field="valor" value={voucher.valor} type="number" placeholder="0.00" />
+              ) : (
                 <p className="text-sm font-medium text-foreground">
-                  {voucher.moeda} {voucher.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {voucher.valor != null
+                    ? `${voucher.moeda} ${voucher.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : "—"}
                 </p>
+              )}
+            </div>
+            {canEditFields && (
+              <div>
+                <p className="text-sm text-muted-foreground">Moeda</p>
+                <MoedaInline />
               </div>
             )}
             <div>
               <p className="text-sm text-muted-foreground">Vencimento</p>
-              <p className="font-medium text-foreground">
-                {formatDateOnlyBR(voucher.vencimento)}
-              </p>
+              {canEditFields ? (
+                <EditableText field="vencimento" value={voucher.vencimento as any} type="date" />
+              ) : (
+                <p className="font-medium text-foreground">{formatDateOnlyBR(voucher.vencimento)}</p>
+              )}
             </div>
-            {voucher.dataEmissaoDocumento && (
-              <div>
-                <p className="text-sm text-muted-foreground">Data Emissão</p>
+            <div>
+              <p className="text-sm text-muted-foreground">Data Emissão</p>
+              {canEditFields ? (
+                <EditableText field="data_emissao_documento" value={voucher.dataEmissaoDocumento as any} type="date" />
+              ) : (
                 <p className="text-sm text-foreground">
-                  {formatDateOnlyBR(voucher.dataEmissaoDocumento)}
+                  {voucher.dataEmissaoDocumento ? formatDateOnlyBR(voucher.dataEmissaoDocumento) : "—"}
                 </p>
-              </div>
-            )}
-            {voucher.tipoDocumento && (
-              <div>
-                <p className="text-sm text-muted-foreground">Tipo Documento</p>
-                <Badge variant="outline">{voucher.tipoDocumento.replace(/_/g, " ")}</Badge>
-              </div>
-            )}
-            {voucher.filial && (
-              <div>
-                <p className="text-sm text-muted-foreground">Filial</p>
-                <p className="text-sm text-foreground">{voucher.filial}</p>
-              </div>
-            )}
+              )}
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Tipo Documento</p>
+              {canEditFields ? (
+                <EditableSelect
+                  field="tipo_documento"
+                  value={voucher.tipoDocumento}
+                  placeholder="Selecione..."
+                  options={[
+                    { label: "Voucher", value: "VOUCHER" },
+                    { label: "SPO", value: "SPO" },
+                    { label: "ICMS", value: "ICMS" },
+                    { label: "Armazenagem", value: "ARMAZENAGEM" },
+                    { label: "ADF", value: "ADF" },
+                    { label: "Outros", value: "OUTROS" },
+                  ]}
+                />
+              ) : (
+                voucher.tipoDocumento ? <Badge variant="outline">{voucher.tipoDocumento.replace(/_/g, " ")}</Badge> : <p className="text-sm text-foreground">—</p>
+              )}
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Filial</p>
+              {canEditFields ? (
+                <EditableText field="filial" value={voucher.filial} placeholder="Ex: SP01" />
+              ) : (
+                <p className="text-sm text-foreground">{voucher.filial || "—"}</p>
+              )}
+            </div>
             <div>
               <p className="text-sm text-muted-foreground">Forma de Pagamento</p>
-              <p className="text-sm text-foreground">{voucher.formaPagamento?.replace(/_/g, "/")}</p>
+              {canEditFields ? (
+                <EditableSelect
+                  field="forma_pagamento"
+                  value={voucher.formaPagamento}
+                  options={[
+                    { label: "Boleto", value: "BOLETO" },
+                    { label: "PIX", value: "PIX" },
+                    { label: "Transferência", value: "TRANSFERENCIA" },
+                    { label: "Cartão", value: "CARTAO" },
+                    { label: "Depósito", value: "DEPOSITO" },
+                    { label: "DARF", value: "DARF" },
+                    { label: "GPS", value: "GPS" },
+                    { label: "Débito", value: "DEBITO" },
+                    { label: "Câmbio", value: "CAMBIO" },
+                    { label: "ADF", value: "ADF" },
+                  ]}
+                />
+              ) : (
+                <p className="text-sm text-foreground">{voucher.formaPagamento?.replace(/_/g, "/")}</p>
+              )}
             </div>
+            {canEditFields && (
+              <div>
+                <p className="text-sm text-muted-foreground">Cobrança em Nome de</p>
+                <EditableSelect
+                  field="cobranca_em_nome_de"
+                  value={voucher.cobrancaEmNomeDe}
+                  options={[
+                    { label: "DACHSER (com Fiscal)", value: "DACHSER" },
+                    { label: "CLIENTE (direto Financeiro)", value: "CLIENTE" },
+                  ]}
+                />
+              </div>
+            )}
+            {canEditFields && voucher.formaPagamento === "PIX" && (
+              <div>
+                <p className="text-sm text-muted-foreground">Chave PIX</p>
+                <EditableText field="chave_pix" value={voucher.chavePix} placeholder="CPF, CNPJ, e-mail ou chave aleatória" />
+              </div>
+            )}
+            {canEditFields && (
+              <div>
+                <p className="text-sm text-muted-foreground">Origem do Processo</p>
+                <EditableSelect
+                  field="origem_processo"
+                  value={voucher.origemProcesso}
+                  placeholder="—"
+                  options={[
+                    { label: "AIR", value: "AIR" },
+                    { label: "SEA", value: "SEA" },
+                    { label: "CHB", value: "CHB" },
+                    { label: "ROD", value: "ROD" },
+                  ]}
+                />
+              </div>
+            )}
             <div>
               <p className="text-sm text-muted-foreground">Remessa</p>
               <p className="text-sm text-foreground">{voucher.remessa?.replace(/_/g, " ") || "Nenhum"}</p>
@@ -443,6 +535,30 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
               <div>
                 <p className="text-sm text-muted-foreground">Email do Cliente</p>
                 <p className="text-sm text-foreground">{voucher.clienteEmail}</p>
+              </div>
+            )}
+            {canEditFields && (
+              <div>
+                <p className="text-sm text-muted-foreground">Marcar como urgente</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <Switch
+                    checked={voucher.urgenciaTipo === "URGENTE_REAL"}
+                    disabled={voucher.tipoDocumento === "ARMAZENAGEM" || voucher.tipoDocumento === "ICMS"}
+                    onCheckedChange={(checked) => save("urgencia_tipo", checked ? "URGENTE_REAL" : "NORMAL")}
+                  />
+                  <SaveIndicator field="urgencia_tipo" />
+                </div>
+              </div>
+            )}
+            {canEditFields && (
+              <div className="md:col-span-3">
+                <p className="text-sm text-muted-foreground">Comentários</p>
+                <EditableText
+                  field="comentarios_operacao"
+                  value={voucher.comentariosOperacao}
+                  placeholder="Informações adicionais..."
+                  multiline
+                />
               </div>
             )}
           </div>
