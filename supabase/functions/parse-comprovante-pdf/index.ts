@@ -110,14 +110,9 @@ function extractFromFilename(fileName: string): ExtractedData {
   }
 
   // ---------------------------------------------------------------
-  // Linha digitável: filename é só dígitos com 44–48 caracteres
+  // Linha digitável NÃO é usada para identificação (regra do projeto).
+  // Mantemos o campo apenas para compatibilidade — sempre null.
   // ---------------------------------------------------------------
-  const onlyDigits = nameWithoutExt.replace(/\D/g, '');
-  if (/^\d+$/.test(nameWithoutExt) && onlyDigits.length >= 44 && onlyDigits.length <= 48) {
-    result.linhaDigitavel = onlyDigits;
-    addCandidate(ndScores, onlyDigits, 80);
-    console.log(`[Extract] Linha digitável detectada: ${onlyDigits}`);
-  }
 
   // ---------------------------------------------------------------
   // Pure number curto (≤13 dígitos) — pode ser SPO ou ND
@@ -152,22 +147,45 @@ function extractFromFilename(fileName: string): ExtractedData {
   }
 
   // ---------------------------------------------------------------
-  // Voucher Remessa: "<ND><DDMMYYYY>.<seq>"
-  // Adiciona TODAS as variantes de ND (10–13 dígitos) que validem a data
+  // Voucher Remessa: "<SPO/ND><DDMMYYYY>[sufixo 0-2 dígitos].<seq 1-3>"
+  // Aceita também sufixos extras entre data e ponto (ex.: "20261883270130520260.119"
+  // = SPO 20261883270 + DDMMYYYY 13052026 + sufixo "0" + .119)
+  // O número antes da data pode ser SPO ou ND — adiciona em ambos os mapas.
   // ---------------------------------------------------------------
-  const voucherRemessaFull = nameWithoutExt.match(/^(\d{18,21})\.(\d{1,2})$/);
+  const voucherRemessaFull = nameWithoutExt.match(/^(\d{18,22})\.(\d{1,3})$/);
   if (voucherRemessaFull) {
     const digits = voucherRemessaFull[1];
     for (const ndLen of [13, 12, 11, 10]) {
-      if (digits.length - ndLen !== 8) continue;
-      const ndCandidate = digits.slice(0, ndLen);
-      const datePart = digits.slice(ndLen);
-      if (ndCandidate.startsWith('20') && isPlausibleDate(datePart)) {
-        // Maior comprimento ganha leve prioridade adicional (ndLen mais "raro" = mais específico)
-        const score = 95 + ndLen; // 105–108
-        addCandidate(ndScores, ndCandidate, score);
-        console.log(`[Extract] Voucher Remessa: ND=${ndCandidate} (len=${ndLen}), data=${datePart}, score=${score}`);
+      for (const extra of [0, 1, 2]) {
+        if (digits.length - ndLen - 8 !== extra) continue;
+        const ndCandidate = digits.slice(0, ndLen);
+        const datePart = digits.slice(ndLen, ndLen + 8);
+        if (ndCandidate.startsWith('20') && isPlausibleDate(datePart)) {
+          // Maior comprimento ganha leve prioridade; sufixo penaliza levemente
+          const score = 95 + ndLen - extra; // 102–108
+          addCandidate(ndScores, ndCandidate, score);
+          addCandidate(spoScores, ndCandidate, score);
+          console.log(`[Extract] Voucher Remessa: ${ndCandidate} (len=${ndLen}, data=${datePart}, sufixo=${extra}), score=${score}`);
+        }
       }
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Fallback posicional: corridas longas puramente numéricas (>14)
+  // varre janelas de 8 dígitos plausíveis como DDMMYYYY; o prefixo
+  // de 10–13 dígitos começando com "20" vira candidato SPO/ND (score 90).
+  // ---------------------------------------------------------------
+  const longRuns = nameWithoutExt.match(/\d{15,}/g) || [];
+  for (const run of longRuns) {
+    for (let i = 10; i + 8 <= run.length && i <= 13; i++) {
+      const datePart = run.slice(i, i + 8);
+      if (!isPlausibleDate(datePart)) continue;
+      const prefix = run.slice(0, i);
+      if (!prefix.startsWith('20')) continue;
+      addCandidate(ndScores, prefix, 90);
+      addCandidate(spoScores, prefix, 90);
+      console.log(`[Extract] Posicional: ${prefix} (len=${i}, data=${datePart})`);
     }
   }
 
@@ -260,111 +278,13 @@ serve(async (req) => {
       );
     }
 
+    // REGRA: identificação do robô vem EXCLUSIVAMENTE do nome do arquivo.
+    // NUNCA usar conteúdo do PDF nem linha digitável (ver mem://vouchers/comprovante-robot-matching-rules).
     const filenameResult = extractFromFilename(fileName);
-    const HIGH_CONF_THRESHOLD = 0.85;
+    // Garantia defensiva: nunca devolver linha digitável extraída de qualquer fonte.
+    filenameResult.linhaDigitavel = null;
 
-    // Se confiança alta, retorna direto (não precisa chamar IA — economia de tokens)
-    if (filenameResult.confidence >= HIGH_CONF_THRESHOLD) {
-      console.log(`[Parse] Alta confiança (${filenameResult.confidence}) — retornando filename`);
-      return new Response(
-        JSON.stringify({ success: true, data: filenameResult }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Confiança baixa OU sem matches: tentar IA do PDF para complementar
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      console.warn('[Parse] LOVABLE_API_KEY não configurada — retornando filename');
-      return new Response(
-        JSON.stringify({ success: true, data: filenameResult }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const prompt = `Analyze this bank payment receipt/proof PDF and extract the following information in JSON format:
-
-1. "numeroSPO" - Look for SPO number, usually 5-7 digits
-2. "numeroND" - Look for ND (Número do Documento) or Voucher number, usually 10-13 digits starting with year
-3. "linhaDigitavel" - The barcode/boleto line (linha digitável), usually 44-48 digits
-4. "valor" - The payment amount in BRL (just the number)
-5. "fornecedor" - The supplier/vendor name
-6. "dataVencimento" - Due date in YYYY-MM-DD format
-
-Return ONLY a JSON object with these fields. Use null for any field you cannot find.`;
-
-    try {
-      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              {
-                type: 'image_url',
-                image_url: { url: `data:application/pdf;base64,${pdfBase64.substring(0, 50000)}` },
-              },
-            ],
-          }],
-          max_tokens: 8000,
-        }),
-      });
-
-      if (aiResponse.ok) {
-        const aiData = await aiResponse.json();
-        const content = aiData.choices?.[0]?.message?.content || '';
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-
-          // Combinar resultado da IA com candidatos do filename
-          const aiSPO = parsed.numeroSPO ? String(parsed.numeroSPO) : null;
-          const aiND = parsed.numeroND ? String(parsed.numeroND) : null;
-
-          const mergedCandidatosSPO = Array.from(new Set([
-            ...(aiSPO ? [aiSPO] : []),
-            ...(filenameResult.numeroSPO ? [filenameResult.numeroSPO] : []),
-            ...filenameResult.candidatosSPO,
-          ]));
-          const mergedCandidatosND = Array.from(new Set([
-            ...(aiND ? [aiND] : []),
-            ...(filenameResult.numeroND ? [filenameResult.numeroND] : []),
-            ...filenameResult.candidatosND,
-          ]));
-
-          const contentResult: ExtractedData = {
-            numeroSPO: aiSPO || filenameResult.numeroSPO,
-            numeroND: aiND || filenameResult.numeroND,
-            linhaDigitavel: parsed.linhaDigitavel || filenameResult.linhaDigitavel || null,
-            valor: parsed.valor ? Number(parsed.valor) : null,
-            fornecedor: parsed.fornecedor || null,
-            dataVencimento: parsed.dataVencimento || null,
-            confidence: 0.8,
-            source: 'content',
-            candidatosSPO: mergedCandidatosSPO,
-            candidatosND: mergedCandidatosND,
-          };
-
-          console.log(`[Parse] IA: SPO=${contentResult.numeroSPO}, ND=${contentResult.numeroND}, candND=${mergedCandidatosND.length}`);
-          return new Response(
-            JSON.stringify({ success: true, data: contentResult }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-      } else {
-        console.error('[Parse] AI API error:', aiResponse.status, await aiResponse.text());
-      }
-    } catch (aiError) {
-      console.error('[Parse] AI extraction error:', aiError);
-    }
-
-    // Fallback final: retorna o que foi possível extrair do filename (com candidatos)
+    console.log(`[Parse] filename-only: SPO=${filenameResult.numeroSPO}, ND=${filenameResult.numeroND}, conf=${filenameResult.confidence}`);
     return new Response(
       JSON.stringify({ success: true, data: filenameResult }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
