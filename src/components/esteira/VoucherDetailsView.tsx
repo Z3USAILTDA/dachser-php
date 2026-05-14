@@ -731,7 +731,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, onPatch, onAnexosChanged
               <ExtraAnexoUpload
                 voucherId={voucher.id}
                 etapaAtual={voucher.etapaAtual}
-                onUploaded={onUpdate}
+                onUploaded={onAnexosChanged ?? onUpdate}
               />
             )}
             {canEditAttachments && (
