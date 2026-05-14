@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -38,6 +39,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
     urgente: false,
     chavePix: "",
     origemProcesso: "" as "" | "AIR" | "SEA" | "CHB" | "ROD",
+    comentariosOperacao: "",
   });
 
   // Helper to extract date string as YYYY-MM-DD without timezone conversion
@@ -85,6 +87,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
         urgente: voucher.urgenciaTipo === "URGENTE_REAL",
         chavePix: voucher.chavePix || "",
         origemProcesso: ((voucher.origemProcesso || "") as "" | "AIR" | "SEA" | "CHB" | "ROD"),
+        comentariosOperacao: voucher.comentariosOperacao || "",
       });
     }
   }, [voucher]);
@@ -155,6 +158,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
             urgencia_tipo: urgenciaTipo,
             chave_pix: formData.formaPagamento === "PIX" ? (formData.chavePix || null) : null,
             origem_processo: formData.origemProcesso || null,
+            comentarios_operacao: formData.comentariosOperacao || null,
           },
           user_id: localUser?.id ? String(localUser.id) : null,
           user_name: localUser?.username || localUser?.name || localUser?.email || "Sistema",
@@ -448,6 +452,17 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
                 <span className="text-xs text-muted-foreground ml-2">(automático para este tipo)</span>
               )}
             </Label>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-comentarios">Comentários</Label>
+            <Textarea
+              id="edit-comentarios"
+              value={formData.comentariosOperacao}
+              onChange={(e) => setFormData({ ...formData, comentariosOperacao: e.target.value })}
+              placeholder="Informações adicionais..."
+              className="min-h-[80px] resize-y"
+            />
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
