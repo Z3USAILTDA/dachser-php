@@ -141,7 +141,7 @@ export function RoboTab() {
       });
 
       if (!error && data?.vouchers?.length > 0) {
-        const chosen = pickVoucher(data.vouchers);
+        const chosen = pickVoucher(data.vouchers, nd);
         if (chosen) return buildMatch(chosen);
       }
     } catch (e) {
