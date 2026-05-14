@@ -480,7 +480,7 @@ Deno.serve(async (req) => {
       'admin_bulk_update_etapa','admin_reset_all_to_a_processar','admin_reset_stale_to_a_processar',
       'get_vouchers_esteira','get_voucher_by_id','get_voucher_responsaveis_emails',
       'save_voucher_log','save_voucher_log_extended','get_voucher_anexos','delete_voucher_anexo',
-      'delete_voucher_esteira','get_esteira_users','update_esteira_role','toggle_esteira_active',
+      'delete_voucher_esteira','get_esteira_users','update_esteira_role','toggle_esteira_active','cleanup_orphan_anexos_and_relink',
       'get_users_by_esteira_roles','get_all_users_esteira','update_user_esteira_role',
       'update_user_esteira_active','update_user_supervisor','get_user_esteira_role',
       'cancelar_voucher','consolidar_vouchers','get_vouchers_agrupados','get_vouchers_filhos',
