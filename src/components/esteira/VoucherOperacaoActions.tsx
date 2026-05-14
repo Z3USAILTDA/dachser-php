@@ -42,7 +42,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
+  
   const [showRouteChoice, setShowRouteChoice] = useState(false);
   const [routeChoice, setRouteChoice] = useState<"REQUESTER" | "NORMAL">("REQUESTER");
   const [selectedTipo, setSelectedTipo] = useState<TipoAnexo>("FATURA_DEMONSTRATIVO");
