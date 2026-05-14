@@ -596,14 +596,6 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
 
       <div className="flex gap-3 flex-wrap">
         <Button
-          variant="outline"
-          onClick={() => setShowEditDialog(true)}
-          className="gap-2"
-        >
-          <Edit className="h-4 w-4" />
-          Editar Dados
-        </Button>
-        <Button
           onClick={handleSendClick}
           disabled={loading || !canEnviar}
           className={`gap-2 ${isMaster ? 'bg-purple-600 hover:bg-purple-700' : 'bg-primary hover:bg-primary/90'}`}
@@ -613,13 +605,6 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         </Button>
 
       </div>
-
-      <EditVoucherDialog
-        open={showEditDialog}
-        onOpenChange={setShowEditDialog}
-        voucher={voucher}
-        onSuccess={onUpdate}
-      />
 
       <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
         <AlertDialogContent>
