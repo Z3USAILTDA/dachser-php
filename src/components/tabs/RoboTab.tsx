@@ -158,9 +158,9 @@ export function RoboTab() {
         tries.push({ kind, value });
       };
 
-      // Prioridade: ND principal → linha digitável → demais ND → SPO principal → demais SPO
+      // Prioridade: ND principal → demais ND → SPO principal → demais SPO
+      // NUNCA usar linha digitável (regra do projeto: identificação só pelo nome do arquivo)
       push("nd", extracted.numeroND);
-      push("nd", extracted.linhaDigitavel);
       for (const c of extracted.candidatosND.slice(0, MAX_CANDIDATES_PER_KIND)) push("nd", c);
       push("spo", extracted.numeroSPO);
       for (const c of extracted.candidatosSPO.slice(0, MAX_CANDIDATES_PER_KIND)) push("spo", c);
