@@ -152,22 +152,45 @@ function extractFromFilename(fileName: string): ExtractedData {
   }
 
   // ---------------------------------------------------------------
-  // Voucher Remessa: "<ND><DDMMYYYY>.<seq>"
-  // Adiciona TODAS as variantes de ND (10–13 dígitos) que validem a data
+  // Voucher Remessa: "<SPO/ND><DDMMYYYY>[sufixo 0-2 dígitos].<seq 1-3>"
+  // Aceita também sufixos extras entre data e ponto (ex.: "20261883270130520260.119"
+  // = SPO 20261883270 + DDMMYYYY 13052026 + sufixo "0" + .119)
+  // O número antes da data pode ser SPO ou ND — adiciona em ambos os mapas.
   // ---------------------------------------------------------------
-  const voucherRemessaFull = nameWithoutExt.match(/^(\d{18,21})\.(\d{1,2})$/);
+  const voucherRemessaFull = nameWithoutExt.match(/^(\d{18,22})\.(\d{1,3})$/);
   if (voucherRemessaFull) {
     const digits = voucherRemessaFull[1];
     for (const ndLen of [13, 12, 11, 10]) {
-      if (digits.length - ndLen !== 8) continue;
-      const ndCandidate = digits.slice(0, ndLen);
-      const datePart = digits.slice(ndLen);
-      if (ndCandidate.startsWith('20') && isPlausibleDate(datePart)) {
-        // Maior comprimento ganha leve prioridade adicional (ndLen mais "raro" = mais específico)
-        const score = 95 + ndLen; // 105–108
-        addCandidate(ndScores, ndCandidate, score);
-        console.log(`[Extract] Voucher Remessa: ND=${ndCandidate} (len=${ndLen}), data=${datePart}, score=${score}`);
+      for (const extra of [0, 1, 2]) {
+        if (digits.length - ndLen - 8 !== extra) continue;
+        const ndCandidate = digits.slice(0, ndLen);
+        const datePart = digits.slice(ndLen, ndLen + 8);
+        if (ndCandidate.startsWith('20') && isPlausibleDate(datePart)) {
+          // Maior comprimento ganha leve prioridade; sufixo penaliza levemente
+          const score = 95 + ndLen - extra; // 102–108
+          addCandidate(ndScores, ndCandidate, score);
+          addCandidate(spoScores, ndCandidate, score);
+          console.log(`[Extract] Voucher Remessa: ${ndCandidate} (len=${ndLen}, data=${datePart}, sufixo=${extra}), score=${score}`);
+        }
       }
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Fallback posicional: corridas longas puramente numéricas (>14)
+  // varre janelas de 8 dígitos plausíveis como DDMMYYYY; o prefixo
+  // de 10–13 dígitos começando com "20" vira candidato SPO/ND (score 90).
+  // ---------------------------------------------------------------
+  const longRuns = nameWithoutExt.match(/\d{15,}/g) || [];
+  for (const run of longRuns) {
+    for (let i = 10; i + 8 <= run.length && i <= 13; i++) {
+      const datePart = run.slice(i, i + 8);
+      if (!isPlausibleDate(datePart)) continue;
+      const prefix = run.slice(0, i);
+      if (!prefix.startsWith('20')) continue;
+      addCandidate(ndScores, prefix, 90);
+      addCandidate(spoScores, prefix, 90);
+      console.log(`[Extract] Posicional: ${prefix} (len=${i}, data=${datePart})`);
     }
   }
 
