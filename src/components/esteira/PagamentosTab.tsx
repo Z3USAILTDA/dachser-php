@@ -67,6 +67,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format as fnsFormat } from "date-fns";
 
 import { CalendarIcon } from "lucide-react";
+import { MoedaBadge } from "./MoedaBadge";
 
 interface PagamentoItem {
   id: string;
