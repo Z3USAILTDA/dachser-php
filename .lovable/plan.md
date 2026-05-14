@@ -1,49 +1,48 @@
-## Ajustes na edição inline da tela de Detalhes do Voucher
+## Diagnóstico
 
-Três ajustes pontuais em `src/components/esteira/VoucherDetailsView.tsx` (sem mudanças de backend, sem tocar em `EditVoucherDialog`/`CreateVoucherDialog`).
+Os dois vouchers abaixo foram agrupados em um master que recebeu o `numero_spo` errado:
 
-### 1. Nº Voucher/SPO — sempre somente leitura
+| numero_spo  | id_rm    | idmov   | created_at (t_vouchers) |
+|-------------|----------|---------|--------------------------|
+| 20261567083 | 4665781  | 7755987 | 2026-05-13 15:36:43      |
+| 20263777220 | 4665788  | 7755997 | 2026-05-13 15:33:22      |
+| **MASTER**  | NULL     | —       | 2026-05-13 15:36:43      |
 
-Hoje, com `canEditFields=true`, o campo vira `<EditableText field="numero_spo">`. Isso será removido. O Nº SPO renderiza sempre como o `<p>` atual (`font-mono`) com o `MoedaBadge` ao lado, independentemente de `canEditFields`. Continua existindo apenas a leitura — nunca editável.
+A regra (memória `master-numbering-logic-v1`) diz que o master herda o `numero_spo` do filho com **menor `sort_key = COALESCE(idmov, id_rm)`**. O menor `idmov` é `7755987` (filho `20261567083`), então o master deveria ser **`20261567083`** — mas ficou **`20263777220`**.
 
-### 2. "Cobrança em Nome de" → rótulo "Necessita Fiscal?" + atalho da lista
+### Causa raiz
 
-Substituir o bloco atual por um padrão idêntico ao `CreateVoucherDialog`:
+No `case 'create_voucher_master'` (mariadb-proxy/index.ts ~13147) o cálculo do `sort_key` é feito por uma query que parte de `t_vouchers`:
 
-- Label: **"Necessita Fiscal?"** (com asterisco visual de obrigatoriedade)
-- Ao lado do label, botão `<FornecedoresSemFiscalDialog />` (o componente já existe em `src/components/esteira/FornecedoresSemFiscalDialog.tsx` e mostra a lista de fornecedores que não exigem fiscal)
-- O `EditableSelect` permanece com as duas opções, mas com textos espelhando o cadastro:
-  - `DACHSER` → "Sim — enviar para o Fiscal"
-  - `CLIENTE` → "Não — enviar diretamente para o Financeiro"
+```sql
+FROM dados_dachser.t_vouchers v
+LEFT JOIN t_dados_financeiro_voucher dfv ON ...
+WHERE v.numero_spo IN (...voucher_ids)
+```
 
-Quando `canEditFields=false`, manter a renderização atual (não há bloco de leitura hoje, então fica oculto como já está).
+E só **depois** dessa query o código cria os "mirror records" para os processos que existem apenas no financeiro (`missingProcessos`).
 
-### 3. Edição protegida por ícone de lápis (toggle global da seção)
+Pelos timestamps, o filho `20261567083` foi criado no mesmo instante do master (`15:36:43`) — ou seja, ele **era um mirror criado durante o próprio fluxo de `create_voucher_master`**. Quando a query do `sort_key` rodou, esse filho **ainda não existia em `t_vouchers`**, então ele não entrou no `reduce` que escolhe o menor `idmov`. O único filho considerado foi o `20263777220` (já existente desde 15:33:22), e o master herdou o `numero_spo` dele.
 
-Hoje, quando `canEditFields=true`, todos os campos da seção "Informações do Voucher/SPO" já aparecem como inputs. O usuário quer que a seção comece em modo leitura mesmo quando o stage permitir edição, e que um ícone de lápis no canto superior direito do card alterne para modo edição.
+Resultado: o `numeroSpoMaster` foi decidido com base num conjunto **incompleto** de filhos. O filho com `idmov` realmente menor (`7755987`) só passou a existir alguns ms depois, via mirror — tarde demais.
 
-Implementação:
+## Correção proposta (cirúrgica, 1 arquivo)
 
-- Novo estado local `const [isEditing, setIsEditing] = useState(false);` no `VoucherDetailsView`.
-- Um derivado `const editableNow = canEditFields && isEditing;` substitui todas as ocorrências de `canEditFields` **dentro da seção "Informações do Voucher/SPO"** (linhas 345–564), exceto no Nº SPO que vira read-only puro (item 1).
-- No `CardHeader` (linha 341–343), adicionar um botão à direita do título quando `canEditFields=true`:
-  - Modo leitura: ícone `Pencil` (lucide-react) com tooltip "Editar dados", `onClick={() => setIsEditing(true)}`.
-  - Modo edição: ícone `Check` com tooltip "Concluir edição", `onClick={() => setIsEditing(false)}`. Como o autosave já dispara em `onBlur`/`onValueChange`, o botão apenas fecha o modo de edição (sem submit explícito).
-- Layout do header: `flex items-center justify-between` para encostar o botão no canto direito; estilo `ghost` discreto, ícone tamanho `h-4 w-4`, cor `#F5B843` no hover para combinar com o tema.
+**Arquivo:** `supabase/functions/mariadb-proxy/index.ts` — `case 'create_voucher_master'`
 
-Outras seções do componente (Anexos, Comentários, Filhos, etc.) ficam intactas.
+1. Antes de calcular `numeroSpoMaster`, fazer **uma segunda query em `t_dados_financeiro_voucher`** para todos os `voucher_ids` (não só os já presentes em `t_vouchers`), trazendo `nd, idmov, id_rm`.
+2. Construir uma lista unificada `{ numero_spo, sort_key }` combinando:
+   - linhas resolvidas de `t_vouchers` (com `COALESCE(dfv.idmov, v.id_rm, dfv.id_rm)`)
+   - linhas de `dfv` que tenham `nd` em `voucher_ids` (com `COALESCE(idmov, id_rm)`)
+3. Aplicar o `reduce` do menor `sort_key` sobre essa lista unificada → garante que filhos que ainda serão criados como mirror também participem da escolha.
+4. Manter o fallback atual (primeiro `numero_spo` ou `MASTER-XXXX`) inalterado.
 
-### Arquivo único alterado
+Nenhuma mudança em `fix_master_numero_spo` (já lê de `t_vouchers` após os mirrors estarem criados, então funciona corretamente para reprocessar masters antigos).
 
-- `src/components/esteira/VoucherDetailsView.tsx`
-  - Import adicional: `Pencil` (lucide-react) e `FornecedoresSemFiscalDialog`.
-  - Novo estado `isEditing` + variável derivada `editableNow`.
-  - Header do card "Informações do Voucher/SPO" recebe o botão lápis/check.
-  - Bloco do Nº SPO sempre read-only.
-  - Bloco "Cobrança em Nome de" reescrito como "Necessita Fiscal?" com `FornecedoresSemFiscalDialog` ao lado e textos das opções atualizados.
-  - Substituir `canEditFields` por `editableNow` apenas dentro dos campos editáveis dessa seção (Fornecedor, CNPJ, Valor, Moeda, Vencimento, Data Emissão, Tipo Documento, Filial, Forma de Pagamento, Necessita Fiscal, Chave PIX, Origem do Processo, Urgente, Comentários).
+## Fix retroativo para esses 2 masters
 
-### Não muda
+Após aplicar a correção, basta chamar `fix_master_numero_spo` (já existe) ou rodar um `UPDATE` direto trocando o `numero_spo` do master `041fec4c-…` de `20263777220` para `20261567083`. Posso fazer isso via `raw_query` na próxima etapa, se você confirmar.
 
-- `EditVoucherDialog.tsx`, `CreateVoucherDialog.tsx`, hooks, backend, regras de stage e o trigger atual de `canEditFields` em `EsteiraVoucherDetails.tsx`.
-- O comportamento das demais seções da tela.
+## Atualização de memória
+
+Atualizar `mem://vouchers/master-numbering-logic-v1` adicionando: "A coleta de `sort_key` deve unir `t_vouchers` + `t_dados_financeiro_voucher` para `voucher_ids` informados, pois mirrors são criados depois e seriam ignorados."
