@@ -341,21 +341,28 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
         className="border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]"
         style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
       >
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-[#f5f5f5]">Informações do Voucher/SPO</CardTitle>
+          {canEditFields && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-[#F5B843] hover:bg-[#F5B843]/10"
+              onClick={() => setIsEditing((v) => !v)}
+              title={isEditing ? "Concluir edição" : "Editar dados"}
+            >
+              {isEditing ? <Check className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+            </Button>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <p className="text-sm text-muted-foreground">Nº Voucher/SPO</p>
-              {canEditFields ? (
-                <EditableText field="numero_spo" value={voucher.numeroSPO} />
-              ) : (
-                <p className="font-mono font-medium text-foreground flex items-center gap-2">
-                  {voucher.numeroSPO}
-                  <MoedaBadge moeda={voucher.moeda} />
-                </p>
-              )}
+              <p className="font-mono font-medium text-foreground flex items-center gap-2">
+                {voucher.numeroSPO}
+                <MoedaBadge moeda={voucher.moeda} />
+              </p>
             </div>
             {voucher.isMaster && voucher.nomeMaster && (
               <div>
