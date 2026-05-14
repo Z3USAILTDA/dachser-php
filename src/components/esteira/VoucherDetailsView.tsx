@@ -37,11 +37,39 @@ import { useVoucherInlineSave } from "@/hooks/useVoucherInlineSave";
 interface VoucherDetailsViewProps {
   voucher: Voucher;
   onUpdate?: () => void;
+  onPatch?: (patch: Partial<Voucher>) => void;
+  onAnexosChanged?: () => void;
   canEditAttachments?: boolean;
   canEditFields?: boolean;
 }
 
-export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = false, canEditFields = false }: VoucherDetailsViewProps) => {
+// Mapeia o nome do campo no banco para a chave correspondente no objeto Voucher,
+// para podermos atualizar o estado local sem refetch após cada autosave inline.
+const DB_FIELD_TO_VOUCHER_KEY: Record<string, keyof Voucher> = {
+  fornecedor: "fornecedor",
+  cnpj_fornecedor: "cnpjFornecedor",
+  valor: "valor",
+  moeda: "moeda",
+  vencimento: "vencimento",
+  data_emissao_documento: "dataEmissaoDocumento",
+  cobranca_em_nome_de: "cobrancaEmNomeDe",
+  forma_pagamento: "formaPagamento",
+  tipo_documento: "tipoDocumento",
+  filial: "filial",
+  remessa: "remessa",
+  urgencia_tipo: "urgenciaTipo",
+  comentarios_operacao: "comentariosOperacao",
+  comentarios_fiscal: "comentariosFiscal",
+  comentarios_financeiro: "comentariosFinanceiro",
+  ajuste_operacao: "ajusteOperacao",
+  ajuste_fiscal: "ajusteFiscal",
+  chave_pix: "chavePix",
+  linha_digitavel: "linhaDigitavel",
+  codigo_barras: "codigoBarras",
+  cliente_email: "clienteEmail",
+};
+
+export const VoucherDetailsView = ({ voucher, onUpdate, onPatch, onAnexosChanged, canEditAttachments = false, canEditFields = false }: VoucherDetailsViewProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
@@ -52,7 +80,33 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
   const tempoNaEtapa = calcularTempoNaEtapa(voucher);
   const slaLimit = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA] || 24;
   const slaExcedido = tempoNaEtapa >= slaLimit;
-  const { save, savingField, savedField } = useVoucherInlineSave(voucher.id, onUpdate);
+  // Não passar onUpdate aqui: quem dispara refresh agora é o wrapper saveField (via onPatch local).
+  const { save: rawSave, savingField, savedField } = useVoucherInlineSave(voucher.id, undefined);
+  const save = async (field: string, value: any) => {
+    const ok = await rawSave(field, value);
+    if (ok) {
+      const key = DB_FIELD_TO_VOUCHER_KEY[field];
+      if (key && onPatch) {
+        let patchValue: any = value;
+        if (key === "urgenciaTipo") {
+          onPatch({ urgenciaTipo: value, urgente: value !== "NORMAL" } as Partial<Voucher>);
+          return ok;
+        }
+        if (key === "vencimento" || key === "dataEmissaoDocumento") {
+          // Preserva tipo Date no estado local quando possível
+          if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+            const [y, m, d] = value.slice(0, 10).split("-").map(Number);
+            patchValue = new Date(y, (m || 1) - 1, d || 1);
+          }
+        }
+        onPatch({ [key]: patchValue } as Partial<Voucher>);
+      } else if (!key) {
+        // Campo sem mapeamento conhecido: cai no refresh completo para garantir consistência.
+        onUpdate?.();
+      }
+    }
+    return ok;
+  };
   const [isEditing, setIsEditing] = useState(false);
   const editableNow = canEditFields && isEditing;
 
