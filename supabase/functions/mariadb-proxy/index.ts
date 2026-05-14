@@ -11929,48 +11929,23 @@ Deno.serve(async (req) => {
           LIMIT 5
         `, [numero_spo]);
 
-        // 2a. Exact prefix with optional space-suffix (ex: "105-292915 DIM-BY")
+        // 2. Match com sufixo de espaço via SUBSTRING_INDEX (ex.: "105-292915 DIM-BY")
+        // SOMENTE match exato no prefixo antes do espaço — sem LIKE %X% nem prefixo progressivo
+        // (evita colisão entre SPOs sequenciais como 20261882948 vs 20261882950).
         if (!vouchers || vouchers.length === 0) {
           vouchers = await client.query(`
             SELECT 
               id, numero_spo, fornecedor, valor, vencimento, etapa_atual, 
               cobranca_em_nome_de, moeda, is_master, id_rm, nome_master, voucher_master_id
             FROM dados_dachser.t_vouchers
-            WHERE numero_spo COLLATE utf8mb4_unicode_ci = ?
-               OR numero_spo COLLATE utf8mb4_unicode_ci LIKE CONCAT(?, ' %')
+            WHERE SUBSTRING_INDEX(TRIM(numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+                = SUBSTRING_INDEX(TRIM(?),' ',1) COLLATE utf8mb4_unicode_ci
             ORDER BY CHAR_LENGTH(numero_spo) ASC, created_at DESC
-            LIMIT 5
-          `, [numero_spo, numero_spo]);
-        }
-
-        // 2b. LIKE match (fallback amplo)
-        if (!vouchers || vouchers.length === 0) {
-          vouchers = await client.query(`
-            SELECT 
-              id, numero_spo, fornecedor, valor, vencimento, etapa_atual, 
-              cobranca_em_nome_de, moeda, is_master, id_rm, nome_master, voucher_master_id
-            FROM dados_dachser.t_vouchers
-            WHERE numero_spo LIKE ?
-            ORDER BY created_at DESC
-            LIMIT 5
-          `, [`%${numero_spo}%`]);
-        }
-
-        // 3. Progressive prefix match: the extracted number STARTS WITH the DB numero_spo
-        // e.g. filename "2025187823128012026" starts with DB value "20251878231"
-        if (!vouchers || vouchers.length === 0) {
-          vouchers = await client.query(`
-            SELECT 
-              id, numero_spo, fornecedor, valor, vencimento, etapa_atual, 
-              cobranca_em_nome_de, moeda, is_master, id_rm, nome_master, voucher_master_id
-            FROM dados_dachser.t_vouchers
-            WHERE ? LIKE CONCAT(numero_spo, '%') AND CHAR_LENGTH(numero_spo) >= 5
-            ORDER BY CHAR_LENGTH(numero_spo) DESC, created_at DESC
             LIMIT 5
           `, [numero_spo]);
         }
 
-        // 4. Child-to-master: ALWAYS check if SPO belongs to a child and include the master
+        // 3. Child-to-master: SPO de filho aponta para master (match exato de prefixo)
         {
           const masterVouchers = await client.query(`
             SELECT m.id, m.numero_spo, m.fornecedor, m.valor, m.vencimento, m.etapa_atual,
@@ -11978,10 +11953,11 @@ Deno.serve(async (req) => {
                    c.id as child_voucher_id, c.numero_spo as child_spo
             FROM dados_dachser.t_vouchers c
             JOIN dados_dachser.t_vouchers m ON m.id = c.voucher_master_id
-            WHERE (c.numero_spo = ? OR ? LIKE CONCAT(c.numero_spo, '%'))
+            WHERE SUBSTRING_INDEX(TRIM(c.numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+                = SUBSTRING_INDEX(TRIM(?),' ',1) COLLATE utf8mb4_unicode_ci
               AND c.voucher_master_id IS NOT NULL AND c.voucher_master_id != ''
             LIMIT 5
-          `, [numero_spo, numero_spo]);
+          `, [numero_spo]);
 
           if (masterVouchers && masterVouchers.length > 0) {
             const masterResults = masterVouchers.map((mv: any) => ({
