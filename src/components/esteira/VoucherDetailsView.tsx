@@ -68,16 +68,18 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
     multiline?: boolean;
   };
   const EditableText = ({ field, value, type = "text", placeholder, multiline }: EditableTextProps) => {
-    const initial =
-      value == null
-        ? ""
-        : type === "date"
-        ? (typeof value === "string"
-            ? value.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || ""
-            : value instanceof Date
-            ? `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`
-            : String(value))
-        : String(value);
+    const initial = (() => {
+      if (value == null) return "";
+      if (type === "date") {
+        if (typeof value === "string") return value.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || "";
+        const d = value as unknown as Date;
+        if (d instanceof Date) {
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        }
+        return String(value);
+      }
+      return String(value);
+    })();
     const [local, setLocal] = useState(initial);
     useEffect(() => setLocal(initial), [initial]);
 
