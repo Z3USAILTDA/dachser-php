@@ -323,7 +323,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, onPatch, onAnexosChanged
         description: `"${fileName}" foi removido com sucesso.`,
       });
 
-      onUpdate?.();
+      (onAnexosChanged ?? onUpdate)?.();
     } catch (error: any) {
       toast({
         title: "Erro ao excluir anexo",
