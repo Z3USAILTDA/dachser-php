@@ -7938,39 +7938,6 @@ Deno.serve(async (req) => {
         break;
       }
 
-
-        // Pre-check duplicados ativos por (id_rm, numero_spo)
-        const dupes = await client.query(`
-          SELECT id_rm, numero_spo, COUNT(*) AS c, GROUP_CONCAT(id) AS ids
-            FROM dados_dachser.t_vouchers
-           WHERE id_rm IS NOT NULL
-           GROUP BY id_rm, numero_spo
-          HAVING c > 1
-        `);
-        if (dupes && dupes.length > 0) {
-          result = { success: false, error: 'DUPLICADOS_EXISTENTES', duplicados: dupes };
-          break;
-        }
-        // Verifica se já existe índice
-        const existing = await client.query(`
-          SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
-           WHERE TABLE_SCHEMA = 'dados_dachser'
-             AND TABLE_NAME = 't_vouchers'
-             AND INDEX_NAME = 'uq_voucher_rm_spo'
-           LIMIT 1
-        `);
-        if (existing && existing.length > 0) {
-          result = { success: true, alreadyExists: true };
-          break;
-        }
-        await client.execute(`
-          ALTER TABLE dados_dachser.t_vouchers
-            ADD UNIQUE KEY uq_voucher_rm_spo (id_rm, numero_spo)
-        `);
-        result = { success: true, created: true };
-        break;
-      }
-
       // ==================== ESTEIRA USER MANAGEMENT ====================
       case 'get_esteira_users': {
         console.log('Fetching all users for Esteira management');
