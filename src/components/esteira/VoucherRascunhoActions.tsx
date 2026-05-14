@@ -5,7 +5,7 @@ import { Voucher, TipoAnexo } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Edit, Send, Trash2, Loader2, Upload, FileText, AlertCircle, CalendarIcon } from "lucide-react";
+import { Send, Trash2, Loader2, Upload, FileText, AlertCircle, CalendarIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FileUpload } from "./FileUpload";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
