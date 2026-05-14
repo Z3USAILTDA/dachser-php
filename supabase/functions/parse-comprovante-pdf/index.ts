@@ -110,14 +110,9 @@ function extractFromFilename(fileName: string): ExtractedData {
   }
 
   // ---------------------------------------------------------------
-  // Linha digitável: filename é só dígitos com 44–48 caracteres
+  // Linha digitável NÃO é usada para identificação (regra do projeto).
+  // Mantemos o campo apenas para compatibilidade — sempre null.
   // ---------------------------------------------------------------
-  const onlyDigits = nameWithoutExt.replace(/\D/g, '');
-  if (/^\d+$/.test(nameWithoutExt) && onlyDigits.length >= 44 && onlyDigits.length <= 48) {
-    result.linhaDigitavel = onlyDigits;
-    addCandidate(ndScores, onlyDigits, 80);
-    console.log(`[Extract] Linha digitável detectada: ${onlyDigits}`);
-  }
 
   // ---------------------------------------------------------------
   // Pure number curto (≤13 dígitos) — pode ser SPO ou ND
