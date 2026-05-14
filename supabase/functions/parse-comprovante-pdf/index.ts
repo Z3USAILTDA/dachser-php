@@ -95,7 +95,9 @@ function extractFromFilename(fileName: string): ExtractedData {
   const addCandidate = (map: Map<string, number>, value: string | null | undefined, score: number) => {
     if (!value) return;
     const v = String(value).trim();
-    if (!v || !/^\d+$/.test(v)) return;
+    // Aceita puramente numérico OU composto "NNN-NNNNNN" (filial-SPO/ND), preservando o prefixo de filial.
+    if (!v) return;
+    if (!/^\d+$/.test(v) && !/^\d{2,4}-\d{4,13}$/.test(v)) return;
     const prev = map.get(v) ?? 0;
     if (score > prev) map.set(v, score);
   };
