@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Voucher, ETAPA_LABELS, calcularTempoNaEtapa, formatarTempoNaEtapa, SLA_POR_ETAPA } from "@/types/voucher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { MoedaBadge } from "./MoedaBadge";
 import { Button } from "@/components/ui/button";
 import { FileText, AlertCircle, Building2, User, Clock, Trash2, Loader2, ExternalLink } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -207,7 +208,10 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <p className="text-sm text-muted-foreground">Nº Voucher/SPO</p>
-              <p className="font-mono font-medium text-foreground">{voucher.numeroSPO}</p>
+              <p className="font-mono font-medium text-foreground flex items-center gap-2">
+                {voucher.numeroSPO}
+                <MoedaBadge moeda={voucher.moeda} />
+              </p>
             </div>
             {voucher.isMaster && voucher.nomeMaster && (
               <div>
@@ -524,12 +528,15 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
                         onDoubleClick={() => navigate(`/fin/esteira/voucher/${filho.id}`)}
                       >
                         <TableCell className="font-mono font-medium">
-                          {filho.numero_spo || filho.numeroSPO}
-                          {filho.qtd_duplicados > 1 && (
-                            <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 border-amber-500/30 text-amber-400">
-                              ×{filho.qtd_duplicados}
-                            </Badge>
-                          )}
+                          <span className="inline-flex items-center gap-2">
+                            {filho.numero_spo || filho.numeroSPO}
+                            <MoedaBadge moeda={filho.moeda} />
+                            {filho.qtd_duplicados > 1 && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/30 text-amber-400">
+                                ×{filho.qtd_duplicados}
+                              </Badge>
+                            )}
+                          </span>
                         </TableCell>
                         <TableCell className="max-w-[200px] truncate">{filho.fornecedor}</TableCell>
                         <TableCell>

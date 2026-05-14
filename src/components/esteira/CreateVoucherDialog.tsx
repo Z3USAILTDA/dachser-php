@@ -1179,29 +1179,42 @@ export const CreateVoucherDialog = ({
                   <FormField
                     control={form.control}
                     name="moeda"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-1.5 text-sm">
-                          Moeda
-                        </FormLabel>
-                        <Select 
-                          onValueChange={field.onChange} 
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="bg-background/50 border-border">
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="BRL">BRL</SelectItem>
-                            <SelectItem value="USD">USD</SelectItem>
-                            <SelectItem value="EUR">EUR</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    render={({ field }) => {
+                      const isEstrangeira = field.value === "XXX";
+                      return (
+                        <FormItem>
+                          <FormLabel className="flex items-center gap-1.5 text-sm">
+                            Moeda
+                          </FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={isEstrangeira ? "BRL" : (field.value || "BRL")}
+                            disabled={isEstrangeira}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="bg-background/50 border-border">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="BRL">BRL</SelectItem>
+                              <SelectItem value="USD">USD</SelectItem>
+                              <SelectItem value="EUR">EUR</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer mt-1">
+                            <input
+                              type="checkbox"
+                              checked={isEstrangeira}
+                              onChange={(e) => field.onChange(e.target.checked ? "XXX" : "BRL")}
+                              className="h-3 w-3 rounded border-border accent-[#F5B843]"
+                            />
+                            Moeda estrangeira
+                          </label>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
                 </div>
 

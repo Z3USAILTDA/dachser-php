@@ -24,6 +24,7 @@ import {
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { parseMariaDBDate } from "@/utils/parseMariaDBDate";
+import { MoedaBadge } from "./MoedaBadge";
 
 interface PendingVoucher {
   id_rm: string;
@@ -288,7 +289,12 @@ export const BacklogTab = ({ onVoucherImported }: BacklogTabProps) => {
                     key={voucher.nd}
                     className={`border-white/10 ${vencido ? "bg-red-500/10" : ""}`}
                   >
-                    <TableCell className="font-mono text-white">{voucher.nd}</TableCell>
+                    <TableCell className="font-mono text-white">
+                      <span className="inline-flex items-center gap-2">
+                        {voucher.nd}
+                        <MoedaBadge moeda={voucher.moeda} />
+                      </span>
+                    </TableCell>
                     <TableCell className="text-white max-w-[200px] truncate">
                       {voucher.nome_beneficiario || voucher.razao_social || "-"}
                     </TableCell>

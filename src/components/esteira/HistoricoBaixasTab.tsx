@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { TablePagination } from "@/components/layout/TablePagination";
 
 import * as XLSX from "xlsx-js-style";
+import { MoedaBadge } from "./MoedaBadge";
 
 interface BaixaRecord {
   IdLancamentoRM: number;
@@ -350,7 +351,12 @@ export const HistoricoBaixasTab = () => {
             <TableBody>
               {paginatedBaixas.map((baixa, index) => (
                 <TableRow key={`${baixa.IdLancamentoRM}-${index}`} className="border-white/5 hover:bg-white/5">
-                  <TableCell className="font-mono text-xs">{baixa.nd || "-"}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    <span className="inline-flex items-center gap-2">
+                      {baixa.nd || "-"}
+                      <MoedaBadge moeda={baixa.moeda} />
+                    </span>
+                  </TableCell>
                   <TableCell className="max-w-[200px] truncate text-xs" title={baixa.nome_beneficiario}>
                     {baixa.nome_beneficiario || "-"}
                   </TableCell>

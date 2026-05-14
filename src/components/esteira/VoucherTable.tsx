@@ -22,6 +22,7 @@ import { RetornarPendenteDialog } from "./RetornarPendenteDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
 import { toast } from "sonner";
+import { MoedaBadge } from "./MoedaBadge";
 
 const PAGE_SIZE = 10;
 
@@ -567,6 +568,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-2">
                             {voucher.numeroSPO}
+                            <MoedaBadge moeda={voucher.moeda} />
                             {(voucher.isMaster || voucher.origemCriacao === "MASTER") && (
                               <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-[10px] gap-1">
                                 <Layers className="h-3 w-3" />

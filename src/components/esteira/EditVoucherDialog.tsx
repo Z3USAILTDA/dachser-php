@@ -242,8 +242,9 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
             <div className="space-y-2">
               <Label htmlFor="edit-moeda">Moeda</Label>
               <Select
-                value={formData.moeda}
+                value={formData.moeda === "XXX" ? "BRL" : formData.moeda}
                 onValueChange={(value) => setFormData({ ...formData, moeda: value })}
+                disabled={formData.moeda === "XXX"}
               >
                 <SelectTrigger id="edit-moeda">
                   <SelectValue />
@@ -254,6 +255,15 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
                   <SelectItem value="EUR">EUR</SelectItem>
                 </SelectContent>
               </Select>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.moeda === "XXX"}
+                  onChange={(e) => setFormData({ ...formData, moeda: e.target.checked ? "XXX" : "BRL" })}
+                  className="h-3 w-3 rounded border-border accent-[#F5B843]"
+                />
+                Moeda estrangeira
+              </label>
             </div>
           </div>
 
