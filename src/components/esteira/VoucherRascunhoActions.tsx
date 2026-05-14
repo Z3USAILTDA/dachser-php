@@ -5,7 +5,7 @@ import { Voucher, TipoAnexo } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Edit, Send, Trash2, Loader2, Upload, FileText, AlertCircle, CalendarIcon } from "lucide-react";
+import { Send, Trash2, Loader2, Upload, FileText, AlertCircle, CalendarIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FileUpload } from "./FileUpload";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +35,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { EditVoucherDialog } from "./EditVoucherDialog";
+
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -51,7 +51,7 @@ interface VoucherRascunhoActionsProps {
 export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoActionsProps) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
+  
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEnviarDialog, setShowEnviarDialog] = useState(false);
   const [selectedTipo, setSelectedTipo] = useState<TipoAnexo>("FATURA_DEMONSTRATIVO");
@@ -436,15 +436,6 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
 
       <div className="flex gap-3 flex-wrap">
         <Button
-          variant="outline"
-          onClick={() => setShowEditDialog(true)}
-          className="gap-2"
-        >
-          <Edit className="h-4 w-4" />
-          Editar Dados
-        </Button>
-
-        <Button
           onClick={() => setShowEnviarDialog(true)}
           disabled={loading || !canEnviar || isVencimentoExpirado}
           className="gap-2 bg-primary hover:bg-primary/90"
@@ -464,16 +455,6 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
           Excluir Voucher
         </Button>
       </div>
-
-      {/* Dialog de edição */}
-      {showEditDialog && (
-        <EditVoucherDialog
-          voucher={voucher}
-          open={showEditDialog}
-          onOpenChange={setShowEditDialog}
-          onSuccess={onUpdate}
-        />
-      )}
 
       {/* Dialog de envio com campo de vencimento editável */}
       <Dialog open={showEnviarDialog} onOpenChange={setShowEnviarDialog}>

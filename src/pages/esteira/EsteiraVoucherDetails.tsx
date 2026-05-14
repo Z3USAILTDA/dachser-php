@@ -387,6 +387,7 @@ const EsteiraVoucherDetails = () => {
                  hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO") ||
                  hasRole("ADMIN"))
               }
+              canEditFields={["A_PROCESSAR","OPERACAO","AJUSTE_OPERACAO"].includes(voucher.etapaAtual as string)}
             />
 
             {/* Rascunho Actions */}
