@@ -283,111 +283,13 @@ serve(async (req) => {
       );
     }
 
+    // REGRA: identificação do robô vem EXCLUSIVAMENTE do nome do arquivo.
+    // NUNCA usar conteúdo do PDF nem linha digitável (ver mem://vouchers/comprovante-robot-matching-rules).
     const filenameResult = extractFromFilename(fileName);
-    const HIGH_CONF_THRESHOLD = 0.85;
+    // Garantia defensiva: nunca devolver linha digitável extraída de qualquer fonte.
+    filenameResult.linhaDigitavel = null;
 
-    // Se confiança alta, retorna direto (não precisa chamar IA — economia de tokens)
-    if (filenameResult.confidence >= HIGH_CONF_THRESHOLD) {
-      console.log(`[Parse] Alta confiança (${filenameResult.confidence}) — retornando filename`);
-      return new Response(
-        JSON.stringify({ success: true, data: filenameResult }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Confiança baixa OU sem matches: tentar IA do PDF para complementar
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      console.warn('[Parse] LOVABLE_API_KEY não configurada — retornando filename');
-      return new Response(
-        JSON.stringify({ success: true, data: filenameResult }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const prompt = `Analyze this bank payment receipt/proof PDF and extract the following information in JSON format:
-
-1. "numeroSPO" - Look for SPO number, usually 5-7 digits
-2. "numeroND" - Look for ND (Número do Documento) or Voucher number, usually 10-13 digits starting with year
-3. "linhaDigitavel" - The barcode/boleto line (linha digitável), usually 44-48 digits
-4. "valor" - The payment amount in BRL (just the number)
-5. "fornecedor" - The supplier/vendor name
-6. "dataVencimento" - Due date in YYYY-MM-DD format
-
-Return ONLY a JSON object with these fields. Use null for any field you cannot find.`;
-
-    try {
-      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              {
-                type: 'image_url',
-                image_url: { url: `data:application/pdf;base64,${pdfBase64.substring(0, 50000)}` },
-              },
-            ],
-          }],
-          max_tokens: 8000,
-        }),
-      });
-
-      if (aiResponse.ok) {
-        const aiData = await aiResponse.json();
-        const content = aiData.choices?.[0]?.message?.content || '';
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-
-          // Combinar resultado da IA com candidatos do filename
-          const aiSPO = parsed.numeroSPO ? String(parsed.numeroSPO) : null;
-          const aiND = parsed.numeroND ? String(parsed.numeroND) : null;
-
-          const mergedCandidatosSPO = Array.from(new Set([
-            ...(aiSPO ? [aiSPO] : []),
-            ...(filenameResult.numeroSPO ? [filenameResult.numeroSPO] : []),
-            ...filenameResult.candidatosSPO,
-          ]));
-          const mergedCandidatosND = Array.from(new Set([
-            ...(aiND ? [aiND] : []),
-            ...(filenameResult.numeroND ? [filenameResult.numeroND] : []),
-            ...filenameResult.candidatosND,
-          ]));
-
-          const contentResult: ExtractedData = {
-            numeroSPO: aiSPO || filenameResult.numeroSPO,
-            numeroND: aiND || filenameResult.numeroND,
-            linhaDigitavel: parsed.linhaDigitavel || filenameResult.linhaDigitavel || null,
-            valor: parsed.valor ? Number(parsed.valor) : null,
-            fornecedor: parsed.fornecedor || null,
-            dataVencimento: parsed.dataVencimento || null,
-            confidence: 0.8,
-            source: 'content',
-            candidatosSPO: mergedCandidatosSPO,
-            candidatosND: mergedCandidatosND,
-          };
-
-          console.log(`[Parse] IA: SPO=${contentResult.numeroSPO}, ND=${contentResult.numeroND}, candND=${mergedCandidatosND.length}`);
-          return new Response(
-            JSON.stringify({ success: true, data: contentResult }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-      } else {
-        console.error('[Parse] AI API error:', aiResponse.status, await aiResponse.text());
-      }
-    } catch (aiError) {
-      console.error('[Parse] AI extraction error:', aiError);
-    }
-
-    // Fallback final: retorna o que foi possível extrair do filename (com candidatos)
+    console.log(`[Parse] filename-only: SPO=${filenameResult.numeroSPO}, ND=${filenameResult.numeroND}, conf=${filenameResult.confidence}`);
     return new Response(
       JSON.stringify({ success: true, data: filenameResult }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
