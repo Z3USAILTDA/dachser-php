@@ -1,60 +1,49 @@
-## Editar Dados — Inline na tela de Detalhes
+## Ajustes na edição inline da tela de Detalhes do Voucher
 
-O modal `EditVoucherDialog` ainda é aberto pelo botão **Editar Dados** dentro da tela de detalhes (`VoucherOperacaoActions` e `VoucherRascunhoActions`). Vou substituir por edição inline com autosave, conforme o item 3a do plano original.
+Três ajustes pontuais em `src/components/esteira/VoucherDetailsView.tsx` (sem mudanças de backend, sem tocar em `EditVoucherDialog`/`CreateVoucherDialog`).
 
-### 1. Novo hook `useVoucherInlineSave(voucherId)`
+### 1. Nº Voucher/SPO — sempre somente leitura
 
-Arquivo: `src/hooks/useVoucherInlineSave.ts`
+Hoje, com `canEditFields=true`, o campo vira `<EditableText field="numero_spo">`. Isso será removido. O Nº SPO renderiza sempre como o `<p>` atual (`font-mono`) com o `MoedaBadge` ao lado, independentemente de `canEditFields`. Continua existindo apenas a leitura — nunca editável.
 
-- Retorna `{ save(field, value), savingField, savedField }`.
-- `save` chama `mariadb-proxy.update_voucher_esteira` com **apenas** o campo alterado (`updates: { [snakeKey]: value }`).
-- Autenticação igual ao `EditVoucherDialog` (`localStorage.user/dachser_user`).
-- Debounce mínimo (300 ms) por campo. Toast discreto em sucesso/erro.
-- Indicador visual: `savingField === field` → spinner; após sucesso, ícone check por 1.5 s.
-- Após sucesso, dispara callback `onSaved?.()` para o pai recarregar (`onUpdate`).
+### 2. "Cobrança em Nome de" → rótulo "Necessita Fiscal?" + atalho da lista
 
-### 2. Componente `InlineField` interno (em `VoucherDetailsView.tsx`)
+Substituir o bloco atual por um padrão idêntico ao `CreateVoucherDialog`:
 
-Renderiza o label + o valor formatado. Quando `editable=true`, ao clicar vira input/select/textarea, com `onBlur` salvando via hook.
+- Label: **"Necessita Fiscal?"** (com asterisco visual de obrigatoriedade)
+- Ao lado do label, botão `<FornecedoresSemFiscalDialog />` (o componente já existe em `src/components/esteira/FornecedoresSemFiscalDialog.tsx` e mostra a lista de fornecedores que não exigem fiscal)
+- O `EditableSelect` permanece com as duas opções, mas com textos espelhando o cadastro:
+  - `DACHSER` → "Sim — enviar para o Fiscal"
+  - `CLIENTE` → "Não — enviar diretamente para o Financeiro"
 
-Tipos suportados:
-- `text` (fornecedor, CNPJ, filial, chave PIX, comentários)
-- `number` (valor)
-- `date` (vencimento, data emissão)
-- `select` (moeda + checkbox estrangeira, tipo documento, forma pagamento, cobrança em nome de, origem do processo)
-- `switch` (urgente)
+Quando `canEditFields=false`, manter a renderização atual (não há bloco de leitura hoje, então fica oculto como já está).
 
-Visual: borda discreta dourada (`#F5B843`) ao focar, indicador de save à direita. Não-editáveis renderizam exatamente como hoje.
+### 3. Edição protegida por ícone de lápis (toggle global da seção)
 
-### 3. Editabilidade em `VoucherDetailsView`
+Hoje, quando `canEditFields=true`, todos os campos da seção "Informações do Voucher/SPO" já aparecem como inputs. O usuário quer que a seção comece em modo leitura mesmo quando o stage permitir edição, e que um ícone de lápis no canto superior direito do card alterne para modo edição.
 
-Nova prop `canEditFields?: boolean` (default `false`). Habilitada quando o pai detecta `etapaAtual ∈ {A_PROCESSAR, OPERACAO, AJUSTE_OPERACAO}`. Substitui cada `<p>` dos campos da seção "Informações do Voucher/SPO" por `<InlineField>` quando `canEditFields`.
+Implementação:
 
-Campos editáveis (espelha o `CreateVoucherDialog`):
-- Nº Voucher/SPO, Fornecedor, CNPJ, Valor, Moeda + flag estrangeira, Vencimento, Data Emissão, Tipo Documento, Filial, Forma de Pagamento, Cobrança em Nome de, Urgente, Chave PIX (só se PIX), Origem do Processo, Comentários.
+- Novo estado local `const [isEditing, setIsEditing] = useState(false);` no `VoucherDetailsView`.
+- Um derivado `const editableNow = canEditFields && isEditing;` substitui todas as ocorrências de `canEditFields` **dentro da seção "Informações do Voucher/SPO"** (linhas 345–564), exceto no Nº SPO que vira read-only puro (item 1).
+- No `CardHeader` (linha 341–343), adicionar um botão à direita do título quando `canEditFields=true`:
+  - Modo leitura: ícone `Pencil` (lucide-react) com tooltip "Editar dados", `onClick={() => setIsEditing(true)}`.
+  - Modo edição: ícone `Check` com tooltip "Concluir edição", `onClick={() => setIsEditing(false)}`. Como o autosave já dispara em `onBlur`/`onValueChange`, o botão apenas fecha o modo de edição (sem submit explícito).
+- Layout do header: `flex items-center justify-between` para encostar o botão no canto direito; estilo `ghost` discreto, ícone tamanho `h-4 w-4`, cor `#F5B843` no hover para combinar com o tema.
 
-Não editáveis: Nº Processo, Status Baixa, Status Financeiro, Remessa, Email do Cliente, Tempo na Etapa.
+Outras seções do componente (Anexos, Comentários, Filhos, etc.) ficam intactas.
 
-### 4. Remover botão "Editar Dados" e modal
+### Arquivo único alterado
 
-- `VoucherOperacaoActions.tsx`: remover `<Button>Editar Dados</Button>`, `<EditVoucherDialog>`, `showEditDialog` state e import.
-- `VoucherRascunhoActions.tsx`: idem.
-- `EditVoucherDialog.tsx`: **mantido** (segue acessível pelo menu de ações da lista — `VoucherActionsMenu`).
-
-### 5. Wire-up em `EsteiraVoucherDetails.tsx`
-
-Passar `canEditFields={["A_PROCESSAR","OPERACAO","AJUSTE_OPERACAO"].includes(voucher.etapaAtual)}` para `VoucherDetailsView`.
-
-### Arquivos alterados
-
-- `src/hooks/useVoucherInlineSave.ts` (novo)
 - `src/components/esteira/VoucherDetailsView.tsx`
-- `src/components/esteira/VoucherOperacaoActions.tsx`
-- `src/components/esteira/VoucherRascunhoActions.tsx`
-- `src/pages/esteira/EsteiraVoucherDetails.tsx`
+  - Import adicional: `Pencil` (lucide-react) e `FornecedoresSemFiscalDialog`.
+  - Novo estado `isEditing` + variável derivada `editableNow`.
+  - Header do card "Informações do Voucher/SPO" recebe o botão lápis/check.
+  - Bloco do Nº SPO sempre read-only.
+  - Bloco "Cobrança em Nome de" reescrito como "Necessita Fiscal?" com `FornecedoresSemFiscalDialog` ao lado e textos das opções atualizados.
+  - Substituir `canEditFields` por `editableNow` apenas dentro dos campos editáveis dessa seção (Fornecedor, CNPJ, Valor, Moeda, Vencimento, Data Emissão, Tipo Documento, Filial, Forma de Pagamento, Necessita Fiscal, Chave PIX, Origem do Processo, Urgente, Comentários).
 
-### Não vou alterar
+### Não muda
 
-- `EditVoucherDialog.tsx` (ainda usado pelo menu da lista).
-- Backend (`update_voucher_esteira` já aceita updates parciais).
-- Lógica de stages, anexos, baixa.
+- `EditVoucherDialog.tsx`, `CreateVoucherDialog.tsx`, hooks, backend, regras de stage e o trigger atual de `canEditFields` em `EsteiraVoucherDetails.tsx`.
+- O comportamento das demais seções da tela.

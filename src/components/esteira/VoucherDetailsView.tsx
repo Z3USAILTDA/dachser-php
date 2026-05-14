@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MoedaBadge } from "./MoedaBadge";
 import { Button } from "@/components/ui/button";
-import { FileText, AlertCircle, Building2, User, Clock, Trash2, Loader2, ExternalLink } from "lucide-react";
+import { FileText, AlertCircle, Building2, User, Clock, Trash2, Loader2, ExternalLink, Pencil } from "lucide-react";
+import { FornecedoresSemFiscalDialog } from "./FornecedoresSemFiscalDialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { FilePreview } from "./FilePreview";
@@ -52,6 +53,8 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
   const slaLimit = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA] || 24;
   const slaExcedido = tempoNaEtapa >= slaLimit;
   const { save, savingField, savedField } = useVoucherInlineSave(voucher.id, onUpdate);
+  const [isEditing, setIsEditing] = useState(false);
+  const editableNow = canEditFields && isEditing;
 
   const SaveIndicator = ({ field }: { field: string }) => {
     if (savingField === field) return <Loader2 className="h-3 w-3 animate-spin text-[#F5B843]" />;
@@ -338,21 +341,28 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
         className="border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]"
         style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
       >
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-[#f5f5f5]">Informações do Voucher/SPO</CardTitle>
+          {canEditFields && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-[#F5B843] hover:bg-[#F5B843]/10"
+              onClick={() => setIsEditing((v) => !v)}
+              title={isEditing ? "Concluir edição" : "Editar dados"}
+            >
+              {isEditing ? <Check className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+            </Button>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <p className="text-sm text-muted-foreground">Nº Voucher/SPO</p>
-              {canEditFields ? (
-                <EditableText field="numero_spo" value={voucher.numeroSPO} />
-              ) : (
-                <p className="font-mono font-medium text-foreground flex items-center gap-2">
-                  {voucher.numeroSPO}
-                  <MoedaBadge moeda={voucher.moeda} />
-                </p>
-              )}
+              <p className="font-mono font-medium text-foreground flex items-center gap-2">
+                {voucher.numeroSPO}
+                <MoedaBadge moeda={voucher.moeda} />
+              </p>
             </div>
             {voucher.isMaster && voucher.nomeMaster && (
               <div>
@@ -368,7 +378,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             )}
             <div>
               <p className="text-sm text-muted-foreground">Fornecedor</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableText field="fornecedor" value={voucher.fornecedor} placeholder="Nome do fornecedor" />
               ) : (
                 <p className="text-sm font-medium text-foreground">{voucher.fornecedor || "—"}</p>
@@ -376,7 +386,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             </div>
             <div>
               <p className="text-sm text-muted-foreground">CNPJ Fornecedor</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableText field="cnpj_fornecedor" value={voucher.cnpjFornecedor} placeholder="00.000.000/0000-00" />
               ) : (
                 <p className="text-sm font-mono text-foreground">{voucher.cnpjFornecedor || "—"}</p>
@@ -384,7 +394,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Valor</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableText field="valor" value={voucher.valor} type="number" placeholder="0.00" />
               ) : (
                 <p className="text-sm font-medium text-foreground">
@@ -394,7 +404,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
                 </p>
               )}
             </div>
-            {canEditFields && (
+            {editableNow && (
               <div>
                 <p className="text-sm text-muted-foreground">Moeda</p>
                 <MoedaInline />
@@ -402,7 +412,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             )}
             <div>
               <p className="text-sm text-muted-foreground">Vencimento</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableText field="vencimento" value={voucher.vencimento as any} type="date" />
               ) : (
                 <p className="font-medium text-foreground">{formatDateOnlyBR(voucher.vencimento)}</p>
@@ -410,7 +420,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Data Emissão</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableText field="data_emissao_documento" value={voucher.dataEmissaoDocumento as any} type="date" />
               ) : (
                 <p className="text-sm text-foreground">
@@ -420,7 +430,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Tipo Documento</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableSelect
                   field="tipo_documento"
                   value={voucher.tipoDocumento}
@@ -440,7 +450,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Filial</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableText field="filial" value={voucher.filial} placeholder="Ex: SP01" />
               ) : (
                 <p className="text-sm text-foreground">{voucher.filial || "—"}</p>
@@ -448,7 +458,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Forma de Pagamento</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableSelect
                   field="forma_pagamento"
                   value={voucher.formaPagamento}
@@ -469,26 +479,31 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
                 <p className="text-sm text-foreground">{voucher.formaPagamento?.replace(/_/g, "/")}</p>
               )}
             </div>
-            {canEditFields && (
+            {editableNow && (
               <div>
-                <p className="text-sm text-muted-foreground">Cobrança em Nome de</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm text-muted-foreground">
+                    Necessita Fiscal? <span className="text-destructive">*</span>
+                  </p>
+                  <FornecedoresSemFiscalDialog />
+                </div>
                 <EditableSelect
                   field="cobranca_em_nome_de"
                   value={voucher.cobrancaEmNomeDe}
                   options={[
-                    { label: "DACHSER (com Fiscal)", value: "DACHSER" },
-                    { label: "CLIENTE (direto Financeiro)", value: "CLIENTE" },
+                    { label: "Sim — enviar para o Fiscal", value: "DACHSER" },
+                    { label: "Não — enviar diretamente para o Financeiro", value: "CLIENTE" },
                   ]}
                 />
               </div>
             )}
-            {canEditFields && voucher.formaPagamento === "PIX" && (
+            {editableNow && voucher.formaPagamento === "PIX" && (
               <div>
                 <p className="text-sm text-muted-foreground">Chave PIX</p>
                 <EditableText field="chave_pix" value={voucher.chavePix} placeholder="CPF, CNPJ, e-mail ou chave aleatória" />
               </div>
             )}
-            {canEditFields && (
+            {editableNow && (
               <div>
                 <p className="text-sm text-muted-foreground">Origem do Processo</p>
                 <EditableSelect
@@ -537,7 +552,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
                 <p className="text-sm text-foreground">{voucher.clienteEmail}</p>
               </div>
             )}
-            {canEditFields && (
+            {editableNow && (
               <div>
                 <p className="text-sm text-muted-foreground">Marcar como urgente</p>
                 <div className="flex items-center gap-2 mt-1">
@@ -550,7 +565,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
                 </div>
               </div>
             )}
-            {canEditFields && (
+            {editableNow && (
               <div className="md:col-span-3">
                 <p className="text-sm text-muted-foreground">Comentários</p>
                 <EditableText
