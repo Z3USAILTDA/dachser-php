@@ -1220,6 +1220,7 @@ export const PagamentosTab = () => {
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono font-bold text-foreground">{pag.numero_spo}</span>
+                            <MoedaBadge moeda={pag.moeda} />
                             <Badge className="bg-purple-600 text-[9px] px-1.5">Master</Badge>
                           </div>
                           {(() => {
@@ -1230,7 +1231,10 @@ export const PagamentosTab = () => {
                           })()}
                         </div>
                       ) : (
-                        <span className="font-mono font-medium text-foreground">{pag.numero_spo}</span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="font-mono font-medium text-foreground">{pag.numero_spo}</span>
+                          <MoedaBadge moeda={pag.moeda} />
+                        </span>
                       )}
                       {pag.urgencia_tipo === "URGENTE_REAL" && (
                         <Badge className="ml-2 text-[9px] px-1.5 bg-red-500/15 text-red-400 border border-red-500/30">
