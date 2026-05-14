@@ -51,6 +51,134 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
   const tempoNaEtapa = calcularTempoNaEtapa(voucher);
   const slaLimit = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA] || 24;
   const slaExcedido = tempoNaEtapa >= slaLimit;
+  const { save, savingField, savedField } = useVoucherInlineSave(voucher.id, onUpdate);
+
+  const SaveIndicator = ({ field }: { field: string }) => {
+    if (savingField === field) return <Loader2 className="h-3 w-3 animate-spin text-[#F5B843]" />;
+    if (savedField === field) return <Check className="h-3 w-3 text-green-400" />;
+    return null;
+  };
+
+  // ---- Inline editors -------------------------------------------------------
+  type EditableTextProps = {
+    field: string;
+    value: string | number | undefined | null;
+    type?: "text" | "number" | "date";
+    placeholder?: string;
+    multiline?: boolean;
+  };
+  const EditableText = ({ field, value, type = "text", placeholder, multiline }: EditableTextProps) => {
+    const initial =
+      value == null
+        ? ""
+        : type === "date"
+        ? (typeof value === "string"
+            ? value.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || ""
+            : value instanceof Date
+            ? `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`
+            : String(value))
+        : String(value);
+    const [local, setLocal] = useState(initial);
+    useEffect(() => setLocal(initial), [initial]);
+
+    const commit = () => {
+      if (local === initial) return;
+      let payload: any = local;
+      if (type === "number") payload = local === "" ? null : parseFloat(local.replace(",", "."));
+      save(field, payload);
+    };
+
+    if (multiline) {
+      return (
+        <div className="flex items-start gap-2">
+          <Textarea
+            value={local}
+            onChange={(e) => setLocal(e.target.value)}
+            onBlur={commit}
+            placeholder={placeholder}
+            className="min-h-[60px] text-sm bg-background/40 border-border/60"
+          />
+          <SaveIndicator field={field} />
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center gap-2">
+        <Input
+          type={type}
+          value={local}
+          onChange={(e) => setLocal(e.target.value)}
+          onBlur={commit}
+          placeholder={placeholder}
+          className="h-8 text-sm bg-background/40 border-border/60"
+        />
+        <SaveIndicator field={field} />
+      </div>
+    );
+  };
+
+  const EditableSelect = ({
+    field,
+    value,
+    options,
+    placeholder,
+  }: {
+    field: string;
+    value: string | undefined | null;
+    options: { label: string; value: string }[];
+    placeholder?: string;
+  }) => (
+    <div className="flex items-center gap-2">
+      <Select value={value || ""} onValueChange={(v) => save(field, v || null)}>
+        <SelectTrigger className="h-8 text-sm bg-background/40 border-border/60">
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <SaveIndicator field={field} />
+    </div>
+  );
+
+  const MoedaInline = () => {
+    const isEstrangeira = voucher.moeda === "XXX";
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <Select
+            value={isEstrangeira ? "BRL" : (voucher.moeda || "BRL")}
+            onValueChange={(v) => save("moeda", v)}
+            disabled={isEstrangeira}
+          >
+            <SelectTrigger className="h-8 text-sm bg-background/40 border-border/60 w-24">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="BRL">BRL</SelectItem>
+              <SelectItem value="USD">USD</SelectItem>
+              <SelectItem value="EUR">EUR</SelectItem>
+            </SelectContent>
+          </Select>
+          <SaveIndicator field="moeda" />
+        </div>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isEstrangeira}
+            onChange={(e) => save("moeda", e.target.checked ? "XXX" : "BRL")}
+            className="h-3 w-3 rounded border-border accent-[#F5B843]"
+          />
+          <Globe className="h-3 w-3" /> Moeda estrangeira
+        </label>
+      </div>
+    );
+  };
+
 
   useEffect(() => {
     if (voucher.isMaster) {
