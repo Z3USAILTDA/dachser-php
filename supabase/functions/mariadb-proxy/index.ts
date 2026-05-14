@@ -7857,6 +7857,10 @@ Deno.serve(async (req) => {
         }
         
         await client.execute(`
+          DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id = ?
+        `, [voucher_id]);
+        try { await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id = ?`, [voucher_id]); } catch (_) {}
+        await client.execute(`
           DELETE FROM dados_dachser.t_vouchers WHERE id = ?
         `, [voucher_id]);
         
