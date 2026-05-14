@@ -378,7 +378,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             )}
             <div>
               <p className="text-sm text-muted-foreground">Fornecedor</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableText field="fornecedor" value={voucher.fornecedor} placeholder="Nome do fornecedor" />
               ) : (
                 <p className="text-sm font-medium text-foreground">{voucher.fornecedor || "—"}</p>
@@ -386,7 +386,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             </div>
             <div>
               <p className="text-sm text-muted-foreground">CNPJ Fornecedor</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableText field="cnpj_fornecedor" value={voucher.cnpjFornecedor} placeholder="00.000.000/0000-00" />
               ) : (
                 <p className="text-sm font-mono text-foreground">{voucher.cnpjFornecedor || "—"}</p>
@@ -394,7 +394,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Valor</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableText field="valor" value={voucher.valor} type="number" placeholder="0.00" />
               ) : (
                 <p className="text-sm font-medium text-foreground">
@@ -404,7 +404,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
                 </p>
               )}
             </div>
-            {canEditFields && (
+            {editableNow && (
               <div>
                 <p className="text-sm text-muted-foreground">Moeda</p>
                 <MoedaInline />
@@ -412,7 +412,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             )}
             <div>
               <p className="text-sm text-muted-foreground">Vencimento</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableText field="vencimento" value={voucher.vencimento as any} type="date" />
               ) : (
                 <p className="font-medium text-foreground">{formatDateOnlyBR(voucher.vencimento)}</p>
@@ -420,7 +420,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Data Emissão</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableText field="data_emissao_documento" value={voucher.dataEmissaoDocumento as any} type="date" />
               ) : (
                 <p className="text-sm text-foreground">
@@ -430,7 +430,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Tipo Documento</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableSelect
                   field="tipo_documento"
                   value={voucher.tipoDocumento}
@@ -450,7 +450,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Filial</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableText field="filial" value={voucher.filial} placeholder="Ex: SP01" />
               ) : (
                 <p className="text-sm text-foreground">{voucher.filial || "—"}</p>
@@ -458,7 +458,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Forma de Pagamento</p>
-              {canEditFields ? (
+              {editableNow ? (
                 <EditableSelect
                   field="forma_pagamento"
                   value={voucher.formaPagamento}
@@ -479,26 +479,31 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
                 <p className="text-sm text-foreground">{voucher.formaPagamento?.replace(/_/g, "/")}</p>
               )}
             </div>
-            {canEditFields && (
+            {editableNow && (
               <div>
-                <p className="text-sm text-muted-foreground">Cobrança em Nome de</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm text-muted-foreground">
+                    Necessita Fiscal? <span className="text-destructive">*</span>
+                  </p>
+                  <FornecedoresSemFiscalDialog />
+                </div>
                 <EditableSelect
                   field="cobranca_em_nome_de"
                   value={voucher.cobrancaEmNomeDe}
                   options={[
-                    { label: "DACHSER (com Fiscal)", value: "DACHSER" },
-                    { label: "CLIENTE (direto Financeiro)", value: "CLIENTE" },
+                    { label: "Sim — enviar para o Fiscal", value: "DACHSER" },
+                    { label: "Não — enviar diretamente para o Financeiro", value: "CLIENTE" },
                   ]}
                 />
               </div>
             )}
-            {canEditFields && voucher.formaPagamento === "PIX" && (
+            {editableNow && voucher.formaPagamento === "PIX" && (
               <div>
                 <p className="text-sm text-muted-foreground">Chave PIX</p>
                 <EditableText field="chave_pix" value={voucher.chavePix} placeholder="CPF, CNPJ, e-mail ou chave aleatória" />
               </div>
             )}
-            {canEditFields && (
+            {editableNow && (
               <div>
                 <p className="text-sm text-muted-foreground">Origem do Processo</p>
                 <EditableSelect
@@ -547,7 +552,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
                 <p className="text-sm text-foreground">{voucher.clienteEmail}</p>
               </div>
             )}
-            {canEditFields && (
+            {editableNow && (
               <div>
                 <p className="text-sm text-muted-foreground">Marcar como urgente</p>
                 <div className="flex items-center gap-2 mt-1">
@@ -560,7 +565,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
                 </div>
               </div>
             )}
-            {canEditFields && (
+            {editableNow && (
               <div className="md:col-span-3">
                 <p className="text-sm text-muted-foreground">Comentários</p>
                 <EditableText
