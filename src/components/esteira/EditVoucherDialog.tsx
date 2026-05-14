@@ -454,6 +454,17 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
             </Label>
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="edit-comentarios">Comentários</Label>
+            <Textarea
+              id="edit-comentarios"
+              value={formData.comentariosOperacao}
+              onChange={(e) => setFormData({ ...formData, comentariosOperacao: e.target.value })}
+              placeholder="Informações adicionais..."
+              className="min-h-[80px] resize-y"
+            />
+          </div>
+
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
