@@ -12015,46 +12015,34 @@ Deno.serve(async (req) => {
           LIMIT 5
         `, [numero_nd]);
 
-        // 2. LIKE match
+        // 2. Match exato em processo_id (sem LIKE %X% — evita colisão entre IDs sequenciais)
         if (!vouchers || vouchers.length === 0) {
           vouchers = await client.query(`
             SELECT 
               id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
               cobranca_em_nome_de, moeda, id_rm, processo_id
             FROM dados_dachser.t_vouchers
-            WHERE id_rm LIKE ? OR processo_id LIKE ?
+            WHERE processo_id COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
             ORDER BY created_at DESC
             LIMIT 5
-          `, [`%${numero_nd}%`, `%${numero_nd}%`]);
+          `, [numero_nd]);
         }
 
-        // 3. Progressive prefix match: extracted number STARTS WITH the DB id_rm
+        // 3. Match no numero_spo via prefixo antes do espaço (cobre "<numero> DIM-BY", etc.)
         if (!vouchers || vouchers.length === 0) {
           vouchers = await client.query(`
             SELECT 
               id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
               cobranca_em_nome_de, moeda, id_rm, processo_id
             FROM dados_dachser.t_vouchers
-            WHERE ? LIKE CONCAT(id_rm, '%') AND CHAR_LENGTH(id_rm) >= 5
-            ORDER BY CHAR_LENGTH(id_rm) DESC, created_at DESC
+            WHERE SUBSTRING_INDEX(TRIM(numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+                = SUBSTRING_INDEX(TRIM(?),' ',1) COLLATE utf8mb4_unicode_ci
+            ORDER BY CHAR_LENGTH(numero_spo) ASC, created_at DESC
             LIMIT 5
           `, [numero_nd]);
         }
 
-        // 4. Progressive prefix on numero_spo too
-        if (!vouchers || vouchers.length === 0) {
-          vouchers = await client.query(`
-            SELECT 
-              id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
-              cobranca_em_nome_de, moeda, id_rm, processo_id
-            FROM dados_dachser.t_vouchers
-            WHERE ? LIKE CONCAT(numero_spo, '%') AND CHAR_LENGTH(numero_spo) >= 5
-            ORDER BY CHAR_LENGTH(numero_spo) DESC, created_at DESC
-            LIMIT 5
-          `, [numero_nd]);
-        }
-
-        // 5. Child-to-master: ALWAYS check if ND belongs to a child and include the master
+        // 4. Child-to-master: ND/processo de filho aponta para master (match exato)
         {
           const masterVouchers = await client.query(`
             SELECT m.id, m.numero_spo, m.fornecedor, m.valor, m.vencimento, m.etapa_atual,
