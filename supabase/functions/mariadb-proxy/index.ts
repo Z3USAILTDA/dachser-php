@@ -7195,6 +7195,20 @@ Deno.serve(async (req) => {
             )
           `);
           
+          // Cascade: remove anexos/logs antes de apagar os vouchers (evita órfãos em t_voucher_anexos)
+          const invalidIdsRows = await client.query(`
+            SELECT id FROM dados_dachser.t_vouchers
+            WHERE numero_spo IS NULL
+               OR numero_spo = ''
+               OR numero_spo LIKE 'MANUAL-%'
+               OR (fornecedor IS NULL AND valor IS NULL AND etapa_atual NOT IN ('RASCUNHO', 'CANCELADO'))
+          `);
+          const invalidIds: string[] = (invalidIdsRows || []).map((r: any) => r.id).filter(Boolean);
+          if (invalidIds.length > 0) {
+            const iph = invalidIds.map(() => '?').join(',');
+            try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${iph})`, invalidIds); } catch (_) {}
+            try { await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id IN (${iph})`, invalidIds); } catch (_) {}
+          }
           // Delete invalid vouchers
           await client.execute(`
             DELETE FROM dados_dachser.t_vouchers 
