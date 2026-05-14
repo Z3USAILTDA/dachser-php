@@ -436,15 +436,6 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
 
       <div className="flex gap-3 flex-wrap">
         <Button
-          variant="outline"
-          onClick={() => setShowEditDialog(true)}
-          className="gap-2"
-        >
-          <Edit className="h-4 w-4" />
-          Editar Dados
-        </Button>
-
-        <Button
           onClick={() => setShowEnviarDialog(true)}
           disabled={loading || !canEnviar || isVencimentoExpirado}
           className="gap-2 bg-primary hover:bg-primary/90"
@@ -464,16 +455,6 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
           Excluir Voucher
         </Button>
       </div>
-
-      {/* Dialog de edição */}
-      {showEditDialog && (
-        <EditVoucherDialog
-          voucher={voucher}
-          open={showEditDialog}
-          onOpenChange={setShowEditDialog}
-          onSuccess={onUpdate}
-        />
-      )}
 
       {/* Dialog de envio com campo de vencimento editável */}
       <Dialog open={showEnviarDialog} onOpenChange={setShowEnviarDialog}>
