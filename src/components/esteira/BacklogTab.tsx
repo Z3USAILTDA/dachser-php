@@ -24,6 +24,7 @@ import {
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { parseMariaDBDate } from "@/utils/parseMariaDBDate";
+import { MoedaBadge } from "./MoedaBadge";
 
 interface PendingVoucher {
   id_rm: string;
