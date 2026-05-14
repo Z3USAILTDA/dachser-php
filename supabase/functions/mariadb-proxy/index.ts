@@ -7869,7 +7869,76 @@ Deno.serve(async (req) => {
         break;
       }
 
-      case 'voucher_create_unique_index_rm': {
+      // ===== one-shot admin action: limpa anexos órfãos + re-vincula 4 anexos vinculados ao voucher errado =====
+      case 'cleanup_orphan_anexos_and_relink': {
+        console.log('[cleanup_orphan_anexos_and_relink] starting');
+
+        // 1) Re-vincular 4 anexos conhecidamente errados
+        const fixes: Array<{ anexoId: string; correctKey: string; oldVoucherId: string }> = [
+          { anexoId: 'fbf934c9-1f90-45a6-9593-bdf84ca2ec2c', correctKey: '20261566968', oldVoucherId: '' },
+          { anexoId: 'cf189dd4-b9c4-480a-aed3-65982a6d5f0a', correctKey: '20263777175', oldVoucherId: '' },
+          { anexoId: 'bbe1cee7-f63f-4d7f-912f-7806ad2964c3', correctKey: '20261882950', oldVoucherId: '' },
+          { anexoId: 'ef2fff80-7eb0-4d2e-b3f9-1d89dda4dc8c', correctKey: '20261882956', oldVoucherId: '' },
+        ];
+        const relinked: any[] = [];
+        const relinkErrors: any[] = [];
+        for (const f of fixes) {
+          try {
+            const rows = await client.query(
+              `SELECT id, numero_spo, id_rm FROM dados_dachser.t_vouchers
+                WHERE SUBSTRING_INDEX(TRIM(numero_spo),' ',1) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                   OR id_rm = ?
+                ORDER BY (etapa_atual = 'CONCLUIDO') DESC, created_at DESC
+                LIMIT 1`,
+              [f.correctKey, f.correctKey]
+            );
+            if (!rows || rows.length === 0) {
+              relinkErrors.push({ anexo: f.anexoId, key: f.correctKey, error: 'voucher correto não encontrado' });
+              continue;
+            }
+            const correctId = rows[0].id;
+            await client.execute(
+              `UPDATE dados_dachser.t_voucher_anexos SET voucher_id = ? WHERE id = ?`,
+              [correctId, f.anexoId]
+            );
+            relinked.push({ anexo: f.anexoId, newVoucherId: correctId, numero_spo: rows[0].numero_spo, id_rm: rows[0].id_rm });
+          } catch (e: any) {
+            relinkErrors.push({ anexo: f.anexoId, error: String(e?.message || e) });
+          }
+        }
+
+        // 2) Apagar anexos órfãos (voucher_id que não existe mais em t_vouchers)
+        const orphanRows = await client.query(`
+          SELECT a.id, a.voucher_id
+            FROM dados_dachser.t_voucher_anexos a
+            LEFT JOIN dados_dachser.t_vouchers v
+              ON v.id COLLATE utf8mb4_unicode_ci = a.voucher_id COLLATE utf8mb4_unicode_ci
+           WHERE v.id IS NULL
+        `);
+        const orphanCount = (orphanRows || []).length;
+        let orphansDeleted = 0;
+        if (orphanCount > 0) {
+          const delRes: any = await client.execute(`
+            DELETE a FROM dados_dachser.t_voucher_anexos a
+              LEFT JOIN dados_dachser.t_vouchers v
+                ON v.id COLLATE utf8mb4_unicode_ci = a.voucher_id COLLATE utf8mb4_unicode_ci
+             WHERE v.id IS NULL
+          `);
+          orphansDeleted = Number(delRes?.affectedRows ?? delRes?.affected_rows ?? 0);
+        }
+
+        result = {
+          success: true,
+          relinked,
+          relinkErrors,
+          orphansFound: orphanCount,
+          orphansDeleted,
+        };
+        console.log('[cleanup_orphan_anexos_and_relink] done', result);
+        break;
+      }
+
+
         // Pre-check duplicados ativos por (id_rm, numero_spo)
         const dupes = await client.query(`
           SELECT id_rm, numero_spo, COUNT(*) AS c, GROUP_CONCAT(id) AS ids
