@@ -22,6 +22,7 @@ import { RetornarPendenteDialog } from "./RetornarPendenteDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
 import { toast } from "sonner";
+import { MoedaBadge } from "./MoedaBadge";
 
 const PAGE_SIZE = 10;
 
