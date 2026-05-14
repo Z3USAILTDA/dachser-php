@@ -16373,6 +16373,19 @@ Deno.serve(async (req) => {
       case 'cleanup_auto_sync_vouchers': {
         console.log('[cleanup] Removing vouchers created by auto sync (no user)...');
         
+        // Cascade: anexos/logs antes de deletar os vouchers (evita órfãos)
+        const autoSyncIdsRows = await client.query(`
+          SELECT id FROM dados_dachser.t_vouchers
+          WHERE criado_por_user_id = 'SISTEMA_SYNC'
+             OR criado_por_user_id IS NULL
+             OR criado_por_user_id = ''
+        `);
+        const autoSyncIds: string[] = (autoSyncIdsRows || []).map((r: any) => r.id).filter(Boolean);
+        if (autoSyncIds.length > 0) {
+          const aph = autoSyncIds.map(() => '?').join(',');
+          try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${aph})`, autoSyncIds); } catch (_) {}
+          try { await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id IN (${aph})`, autoSyncIds); } catch (_) {}
+        }
         // Delete vouchers where criado_por_user_id is 'SISTEMA_SYNC' or NULL/empty (created by auto sync)
         const deleteResult = await client.execute(`
           DELETE FROM dados_dachser.t_vouchers 
