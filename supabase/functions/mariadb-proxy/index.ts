@@ -13160,16 +13160,38 @@ Deno.serve(async (req) => {
         const resolvedProcessos = (resolvedChildren || []).map((c: any) => c.numero_spo);
         console.log(`Resolved ${resolvedIds.length} child voucher IDs from ${voucher_ids.length} processo values`);
 
-        // Determine numero_spo for master from child with lowest sort_key (idmov primary, id_rm fallback)
+        // Also fetch sort_key candidates directly from t_dados_financeiro_voucher for ALL voucher_ids,
+        // including those that don't yet exist in t_vouchers (mirrors are created later in this same flow).
+        // Without this, mirror children would be excluded from the "lowest sort_key" decision.
+        const dfvAllRows = await client.query(`
+          SELECT nd AS numero_spo, idmov, id_rm,
+                 COALESCE(idmov, id_rm) AS resolved_sort_key
+          FROM dados_dachser.t_dados_financeiro_voucher
+          WHERE nd COLLATE utf8mb4_general_ci IN (${voucher_ids.map(() => '?').join(',')})
+        `, voucher_ids);
+
+        // Unified candidate list: t_vouchers-resolved + dfv-only
+        const candidates = [
+          ...((resolvedChildren || []).map((c: any) => ({
+            numero_spo: c.numero_spo,
+            resolved_sort_key: c.resolved_sort_key,
+            source: c.dfv_idmov != null ? 'idmov' : 'id_rm',
+          }))),
+          ...((dfvAllRows || []).map((d: any) => ({
+            numero_spo: d.numero_spo,
+            resolved_sort_key: d.resolved_sort_key,
+            source: d.idmov != null ? 'idmov' : 'id_rm',
+          }))),
+        ].filter((c: any) => c.resolved_sort_key != null);
+
+        // Determine numero_spo for master from candidate with lowest sort_key
         let numeroSpoMaster: string;
-        const childrenWithKey = (resolvedChildren || []).filter((c: any) => c.resolved_sort_key != null);
-        if (childrenWithKey.length > 0) {
-          const lowestChild = childrenWithKey.reduce((prev: any, curr: any) => {
+        if (candidates.length > 0) {
+          const lowest = candidates.reduce((prev: any, curr: any) => {
             return (parseInt(prev.resolved_sort_key) || Infinity) < (parseInt(curr.resolved_sort_key) || Infinity) ? prev : curr;
           });
-          numeroSpoMaster = lowestChild.numero_spo;
-          const source = lowestChild.dfv_idmov != null ? 'idmov' : 'id_rm';
-          console.log(`Master numero_spo determined from child with lowest ${source} (${lowestChild.resolved_sort_key}): ${numeroSpoMaster}`);
+          numeroSpoMaster = lowest.numero_spo;
+          console.log(`Master numero_spo determined from candidate with lowest ${lowest.source} (${lowest.resolved_sort_key}): ${numeroSpoMaster}`);
         } else {
           // Fallback: use first child's numero_spo or generate random
           numeroSpoMaster = resolvedProcessos[0] || voucher_ids[0] || `MASTER-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
