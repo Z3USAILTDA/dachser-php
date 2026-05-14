@@ -208,7 +208,10 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <p className="text-sm text-muted-foreground">Nº Voucher/SPO</p>
-              <p className="font-mono font-medium text-foreground">{voucher.numeroSPO}</p>
+              <p className="font-mono font-medium text-foreground flex items-center gap-2">
+                {voucher.numeroSPO}
+                <MoedaBadge moeda={voucher.moeda} />
+              </p>
             </div>
             {voucher.isMaster && voucher.nomeMaster && (
               <div>
