@@ -18642,6 +18642,7 @@ Deno.serve(async (req) => {
             const preIds: string[] = (preRows || []).map((r: any) => r.id).filter(Boolean);
             if (preIds.length > 0) {
               const pph = preIds.map(() => '?').join(',');
+              try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${pph})`, preIds); } catch (_) {}
               try { await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id IN (${pph})`, preIds); } catch (_) {}
               try { await client.execute(`DELETE FROM dados_dachser.t_voucher_batch_import_item WHERE voucher_id IN (${pph})`, preIds); } catch (_) {}
               const delP: any = await client.execute(
