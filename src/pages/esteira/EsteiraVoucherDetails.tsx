@@ -177,6 +177,46 @@ const EsteiraVoucherDetails = () => {
     loadVoucher();
   }, [id]);
 
+  // Atualização local sem refetch (evita re-render que parece "recarregar a tela")
+  const patchVoucher = (patch: Partial<Voucher>) => {
+    setVoucher((prev) => (prev ? { ...prev, ...patch } : prev));
+  };
+
+  // Refresh apenas dos anexos (e logs) sem trocar o resto do objeto
+  const refreshAnexos = async () => {
+    if (!id) return;
+    try {
+      const { data: responseData, error: fnError } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'get_voucher_by_id', voucher_id: id }
+      });
+      if (fnError) throw fnError;
+      if (!responseData?.success) return;
+      const data = responseData.data || {};
+      const anexos = (responseData.anexos || []).map((a: any) => ({
+        id: a.id,
+        voucherId: data.id,
+        tipo: a.tipo,
+        fileName: a.file_name,
+        fileUrl: a.file_url,
+        fileSize: a.file_size,
+        uploadedByUserId: data.criado_por_user_id,
+        createdAt: parseDBDate(a.created_at) || new Date(),
+      }));
+      const logs = (responseData.logs || []).map((l: any) => ({
+        id: l.id,
+        voucherId: data.id,
+        dataHora: parseDBDate(l.data_hora) || new Date(),
+        userId: l.user_id,
+        userName: l.user_name,
+        acao: l.acao,
+        detalhe: l.detalhe,
+      })).sort((a: any, b: any) => b.dataHora.getTime() - a.dataHora.getTime());
+      setVoucher((prev) => (prev ? { ...prev, anexos, logs } : prev));
+    } catch {
+      /* silent */
+    }
+  };
+
   const canShowRascunhoActions = () => {
     if (!voucher || !role) return false;
     // A_PROCESSAR também usa o mesmo componente de ações que RASCUNHO
