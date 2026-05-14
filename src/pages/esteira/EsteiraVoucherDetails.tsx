@@ -415,9 +415,11 @@ const EsteiraVoucherDetails = () => {
 
           <TabsContent value="detalhes" className="space-y-6">
             {/* Voucher Details */}
-            <VoucherDetailsView 
-              voucher={voucher} 
-              onUpdate={loadVoucher}
+              <VoucherDetailsView 
+                voucher={voucher} 
+                onUpdate={loadVoucher}
+                onPatch={patchVoucher}
+                onAnexosChanged={refreshAnexos}
               canEditAttachments={
                 voucher.etapaAtual !== "CONCLUIDO" && 
                 voucher.etapaAtual !== "CANCELADO" &&
