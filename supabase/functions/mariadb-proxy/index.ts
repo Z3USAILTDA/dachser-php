@@ -13469,6 +13469,8 @@ Deno.serve(async (req) => {
 
         // Se keep_master é false OU se não há mais filhos, excluir o master
         if (!keep_master || remainingCount === 0) {
+          try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id = ?`, [master_id]); } catch (_) {}
+          try { await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id = ?`, [master_id]); } catch (_) {}
           await client.execute(`
             DELETE FROM dados_dachser.t_vouchers WHERE id = ?
           `, [master_id]);
