@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { TablePagination } from "@/components/layout/TablePagination";
 
 import * as XLSX from "xlsx-js-style";
+import { MoedaBadge } from "./MoedaBadge";
 
 interface BaixaRecord {
   IdLancamentoRM: number;
