@@ -26,14 +26,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Check, Globe } from "lucide-react";
+import { useVoucherInlineSave } from "@/hooks/useVoucherInlineSave";
 
 interface VoucherDetailsViewProps {
   voucher: Voucher;
   onUpdate?: () => void;
   canEditAttachments?: boolean;
+  canEditFields?: boolean;
 }
 
-export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = false }: VoucherDetailsViewProps) => {
+export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = false, canEditFields = false }: VoucherDetailsViewProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
