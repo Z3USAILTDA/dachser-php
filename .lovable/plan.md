@@ -1,73 +1,86 @@
+# Plano — Corrigir vínculos incorretos e órfãos em `t_voucher_anexos`
+
 ## Diagnóstico
 
-**Caso reportado:** arquivo `20261883270130520260.119.pdf` → "Voucher não encontrado". O badge mostra `876271039000060` (linha digitável extraída do conteúdo do PDF pelo LLM), e não o SPO real `20261883270` que está embutido no nome do arquivo.
+Análise dos 48 registros revela **duas causas-raiz** no `mariadb-proxy`:
 
-**Voucher real existe** em MariaDB: `numero_spo = 20261883270`, `etapa_atual = ROBO`.
+### Causa 1 — Vínculos incorretos (4 casos: 324, 370, 402, 434)
 
-**Duas falhas combinadas em `parse-comprovante-pdf`:**
+`find_voucher_by_spo` e `find_voucher_by_nd` usam fallbacks **`LIKE '%X%'`** e **prefixo progressivo** (`? LIKE CONCAT(numero_spo, '%')`) que casam vouchers vizinhos quando o número correto não existe ainda no banco:
 
-1. **Filename não foi parametrizado** para extrair `20261883270`:
-   - Nome sem extensão: `20261883270130520260.119` (corrida única de 20 dígitos + `.119`).
-   - Decomposição correta: `20261883270` (SPO 11) + `13052026` (DDMMYYYY) + `0` (sufixo) + `.119` (sequência).
-   - Regex `voucherRemessaFull` exige `^(\d{18,21})\.(\d{1,2})$` — `.119` tem 3 dígitos, não casa.
-   - Mesmo aceitando `.119`, a lógica `digits.length - ndLen === 8` não permite o `0` extra entre data e ponto.
-   - `collectNumericCandidates` só pega substrings com fronteira não-dígito; numa corrida única de 20 dígitos, não extrai nada.
-   - Resultado: nenhum candidato sai do nome.
+- 402: ND `20261882950` → vinculou em `20261882948` (vizinho sequencial)
+- 434: `20261882956` → `20261882940`
+- 324: `20261566968` → `20261566925`
+- 370: `20263777175` → `105-293381 DIM-BY` (LIKE `%X%` em `processo_id` casou um master)
 
-2. **Caiu no LLM do conteúdo**, que retornou a linha digitável do boleto. **Isso nunca deveria ser usado para identificação** (regra já existente em `mem://vouchers/comprovante-robot-matching-rules`), mas hoje o parser ainda devolve `linhaDigitavel` em `data` e o `RoboTab` (linha 163) faz `push("nd", extracted.linhaDigitavel)` e tenta casar.
+### Causa 2 — Anexos órfãos (44 casos)
 
-## Mudanças propostas
+Várias rotas de delete em `t_vouchers` **não cascateiam** para `t_voucher_anexos`/`t_voucher_logs`:
+- `delete_voucher_esteira` (7845), delete único (13491), cleanup auto-sync (16394), consolidação master (18565, 18624, 18651).
 
-### 1. `supabase/functions/parse-comprovante-pdf/index.ts` — só usar filename
+Apenas `voucher_create_unique_index_rm` (452-454) e `import_voucher_from_rm` (6388-6390) cascateiam corretamente. IDs repetidos na lista (`235b8f81…` 3×, `1e611522…` 2×) confirmam: voucher recriado/deletado, anexos antigos pendurados.
 
-- **Remover toda a etapa de LLM/conteúdo** desta função. O resultado passa a ser sempre o de `extractFromFilename`. Isso elimina a janela em que `linhaDigitavel` (ou qualquer texto do PDF) vira candidato.
-- Manter o campo `linhaDigitavel` no schema de retorno **sempre `null`** (compatibilidade com chamadores), mas garantir que **nunca seja preenchido** a partir do conteúdo.
-- Remover do log e do header o trecho "Extração via LLM/conteúdo".
+## Correções
 
-### 2. Parametrizar o filename para o caso `20261883270130520260.119.pdf`
+### 1. Endurecer matchers — **preservando parametrizações existentes**
 
-Em `extractFromFilename`:
+Princípio: **manter intactos** todos os formatos de filename já reconhecidos pelo `parse-comprovante-pdf` (regra `mem://vouchers/parser-filename-pattern-spo-date-suffix`) e a regra de prefixo SPO/ND (`mem://vouchers/spo-nd-prefix-identity-rule`). A mudança ocorre **só na camada de busca SQL**, não na extração:
 
-a. Trocar `^(\d{18,21})\.(\d{1,2})$` por `^(\d{18,22})\.(\d{1,3})$` (aceita `.119`, `.999`).
+Em `find_voucher_by_spo` e `find_voucher_by_nd`, manter:
+1. **Match exato** (`= ?`) — comportamento atual
+2. **Match com sufixo de espaço** via `SUBSTRING_INDEX` em ambos os lados (já documentado em `spo-nd-prefix-identity-rule`) — preserva `"105-293381 DIM-BY"`, `" SAN"`, etc.
+3. **Match exato no `id_rm`** e no `processo_id` (sem `LIKE %`)
 
-b. No loop de `voucherRemessaFull`, em vez de exigir `digits.length - ndLen === 8`, varrer `ndLen ∈ {10,11,12,13}` × `extra ∈ {0,1,2}`:
-   - condição: `digits.length - ndLen - 8 === extra`
-   - validar `digits.slice(ndLen, ndLen+8)` como DDMMYYYY plausível
-   - validar `ndCandidate.startsWith('20')`
-   - adicionar o candidato em **ambos** os mapas (SPO e ND) com score `95 + ndLen` (104–108), pois nesse padrão o número antes da data tanto pode ser SPO quanto ND.
+Remover:
+- Bloco `LIKE '%X%'` em `numero_spo`, `id_rm` e `processo_id` (causa as colisões).
+- "Progressive prefix" (`? LIKE CONCAT(numero_spo, '%')`) — só serve quando o extrator entrega lixo extra; com a regra atual de `SUBSTRING_INDEX(TRIM(x),' ',1)` aplicada na extração, isso já está coberto.
 
-c. Adicionar fallback posicional para corridas longas (>14 dígitos puramente numéricas): varrer toda janela de 8 dígitos plausível como data; o prefixo de 10–13 dígitos começando com `20` vira candidato SPO/ND com score 90.
+Resultado: nenhum filename hoje suportado deixa de casar; apenas matches "vizinhos" silenciosos somem.
 
-### 3. `src/components/tabs/RoboTab.tsx` — não tentar linha digitável
+### 2. Validação extra no `RoboTab.processOne`
 
-- Remover a linha `push("nd", extracted.linhaDigitavel);` (linha 163). Mesmo que o backend nunca mais devolva, defesa em profundidade.
-- Atualizar comentário da prioridade para refletir: ND principal → demais ND → SPO principal → demais SPO. Sem linha digitável.
+Após o match, conferir que o `numero_spo` ou `id_rm` retornado é **idêntico** (após `SUBSTRING_INDEX trim`) ao candidato testado. Se não for, tratar como "não encontrado" e cair para o próximo candidato. Defesa em profundidade caso algum fallback futuro seja reintroduzido.
 
-### 4. Memória
+### 3. Cascade ao deletar voucher
 
-- Atualizar `mem://vouchers/comprovante-robot-matching-rules` para reforçar: **identificação do robô vem exclusivamente do nome do arquivo** (parser do filename), nunca do conteúdo do PDF nem da linha digitável.
-- Criar memória curta `mem://vouchers/parser-filename-pattern-spo-date-suffix` documentando o padrão `<SPO/ND><DDMMYYYY>[sufixo 0-2 dígitos].<seq 1-3>`.
+Helper interna no `mariadb-proxy`:
+```sql
+DELETE FROM t_voucher_anexos WHERE voucher_id = ?;
+DELETE FROM t_voucher_logs   WHERE voucher_id = ?;
+DELETE FROM t_vouchers       WHERE id = ?;
+```
+Aplicar nos 6 pontos: 7845, 13491, 16394, 18565, 18624, 18651. Padronizar 452-454 e 6388-6390 com a mesma helper.
 
-## Fora de escopo
+### 4. Limpeza única dos órfãos atuais
 
-- `extract-boleto-barcode` (continua existindo para outras telas onde o usuário explicitamente pede leitura de boleto — não é usado pelo robô).
-- `mariadb-proxy`, banco, UI fora do `RoboTab`.
+Script administrativo único (via `mariadb-proxy` sob ação restrita ou execução pontual aprovada) deletando os 44 anexos cujo `voucher_id` não existe mais em `t_vouchers`. Arquivos no bucket `voucher-anexos` não são tocados.
 
-## Verificação após implementar
+### 5. Re-vincular os 4 anexos errados
 
-Filenames de regressão (devem continuar casando):
-- `20261883270130520260.119.pdf` → SPO `20261883270` (novo)
-- `2026377674530042026.13.pdf` → ND `20263776745`
-- `2025156579326122025.53.pdf` → ND `2025156579`
-- `101-286102D26122025.35.pdf` → SPO `286102`
-- `101-286105.pdf` → SPO `286105`
+Resolver IDs corretos:
 
-Conferir via `console.log` da função após upload de cada caso.
+| linha | voucher errado (atual) | nome correto → buscar voucher por |
+|---|---|---|
+| 324 | `fbf934c9-1f90-45a6-9593-bdf84ca2ec2c` (em `20261566925`) | `20261566968` |
+| 370 | `cf189dd4-b9c4-480a-aed3-65982a6d5f0a` (em `105-293381 DIM-BY`) | `20263777175` |
+| 402 | `bbe1cee7-f63f-4d7f-912f-7806ad2964c3` (em `20261882948`) | `20261882950` |
+| 434 | `ef2fff80-7eb0-4d2e-b3f9-1d89dda4dc8c` (em `20261882940`) | `20261882956` |
 
-## Arquivos afetados
+`UPDATE t_voucher_anexos SET voucher_id = ? WHERE id = ?` para cada um, executado após resolver o `id` correto via `SELECT id FROM t_vouchers WHERE numero_spo = ? OR id_rm = ?`.
 
-- `supabase/functions/parse-comprovante-pdf/index.ts`
-- `src/components/tabs/RoboTab.tsx` (1 linha)
-- `.lovable/memory/vouchers/comprovante-robot-matching-rules.md` (atualizar)
-- `.lovable/memory/vouchers/parser-filename-pattern-spo-date-suffix.md` (novo)
-- `.lovable/memory/index.md` (entrada nova)
+## Detalhes técnicos
+
+- Arquivos tocados:
+  - `supabase/functions/mariadb-proxy/index.ts` — handlers de busca (passos 1-2 mantidos, fallbacks LIKE/progressivo removidos) + helper de cascade nos deletes.
+  - `src/components/tabs/RoboTab.tsx` — validação de identidade após match.
+  - **Não tocar** `parse-comprovante-pdf/index.ts` — todas as regras de filename existentes permanecem.
+- Sem migration de schema.
+- Memória a atualizar: novo `mem://vouchers/anexos-cascade-and-strict-matching.md` (cascade obrigatório + remoção de LIKE %% no matcher, mantendo regras de prefixo SPO/ND).
+
+## Ordem de execução
+
+1. Endurecer handlers SQL (mantendo prefixo `SUBSTRING_INDEX` e sufixo espaço).
+2. Validação exata no `RoboTab`.
+3. Helper de cascade nos 6 pontos de delete.
+4. Limpeza dos 44 órfãos + re-vínculo dos 4 anexos errados.
+5. Atualizar memória.

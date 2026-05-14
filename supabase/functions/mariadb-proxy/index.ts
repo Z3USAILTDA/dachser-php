@@ -480,7 +480,7 @@ Deno.serve(async (req) => {
       'admin_bulk_update_etapa','admin_reset_all_to_a_processar','admin_reset_stale_to_a_processar',
       'get_vouchers_esteira','get_voucher_by_id','get_voucher_responsaveis_emails',
       'save_voucher_log','save_voucher_log_extended','get_voucher_anexos','delete_voucher_anexo',
-      'delete_voucher_esteira','get_esteira_users','update_esteira_role','toggle_esteira_active',
+      'delete_voucher_esteira','get_esteira_users','update_esteira_role','toggle_esteira_active','cleanup_orphan_anexos_and_relink',
       'get_users_by_esteira_roles','get_all_users_esteira','update_user_esteira_role',
       'update_user_esteira_active','update_user_supervisor','get_user_esteira_role',
       'cancelar_voucher','consolidar_vouchers','get_vouchers_agrupados','get_vouchers_filhos',
@@ -7195,6 +7195,20 @@ Deno.serve(async (req) => {
             )
           `);
           
+          // Cascade: remove anexos/logs antes de apagar os vouchers (evita órfãos em t_voucher_anexos)
+          const invalidIdsRows = await client.query(`
+            SELECT id FROM dados_dachser.t_vouchers
+            WHERE numero_spo IS NULL
+               OR numero_spo = ''
+               OR numero_spo LIKE 'MANUAL-%'
+               OR (fornecedor IS NULL AND valor IS NULL AND etapa_atual NOT IN ('RASCUNHO', 'CANCELADO'))
+          `);
+          const invalidIds: string[] = (invalidIdsRows || []).map((r: any) => r.id).filter(Boolean);
+          if (invalidIds.length > 0) {
+            const iph = invalidIds.map(() => '?').join(',');
+            try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${iph})`, invalidIds); } catch (_) {}
+            try { await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id IN (${iph})`, invalidIds); } catch (_) {}
+          }
           // Delete invalid vouchers
           await client.execute(`
             DELETE FROM dados_dachser.t_vouchers 
@@ -7843,6 +7857,10 @@ Deno.serve(async (req) => {
         }
         
         await client.execute(`
+          DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id = ?
+        `, [voucher_id]);
+        try { await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id = ?`, [voucher_id]); } catch (_) {}
+        await client.execute(`
           DELETE FROM dados_dachser.t_vouchers WHERE id = ?
         `, [voucher_id]);
         
@@ -7851,7 +7869,76 @@ Deno.serve(async (req) => {
         break;
       }
 
-      case 'voucher_create_unique_index_rm': {
+      // ===== one-shot admin action: limpa anexos órfãos + re-vincula 4 anexos vinculados ao voucher errado =====
+      case 'cleanup_orphan_anexos_and_relink': {
+        console.log('[cleanup_orphan_anexos_and_relink] starting');
+
+        // 1) Re-vincular 4 anexos conhecidamente errados
+        const fixes: Array<{ anexoId: string; correctKey: string; oldVoucherId: string }> = [
+          { anexoId: 'fbf934c9-1f90-45a6-9593-bdf84ca2ec2c', correctKey: '20261566968', oldVoucherId: '' },
+          { anexoId: 'cf189dd4-b9c4-480a-aed3-65982a6d5f0a', correctKey: '20263777175', oldVoucherId: '' },
+          { anexoId: 'bbe1cee7-f63f-4d7f-912f-7806ad2964c3', correctKey: '20261882950', oldVoucherId: '' },
+          { anexoId: 'ef2fff80-7eb0-4d2e-b3f9-1d89dda4dc8c', correctKey: '20261882956', oldVoucherId: '' },
+        ];
+        const relinked: any[] = [];
+        const relinkErrors: any[] = [];
+        for (const f of fixes) {
+          try {
+            const rows = await client.query(
+              `SELECT id, numero_spo, id_rm FROM dados_dachser.t_vouchers
+                WHERE SUBSTRING_INDEX(TRIM(numero_spo),' ',1) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                   OR id_rm = ?
+                ORDER BY (etapa_atual = 'CONCLUIDO') DESC, created_at DESC
+                LIMIT 1`,
+              [f.correctKey, f.correctKey]
+            );
+            if (!rows || rows.length === 0) {
+              relinkErrors.push({ anexo: f.anexoId, key: f.correctKey, error: 'voucher correto não encontrado' });
+              continue;
+            }
+            const correctId = rows[0].id;
+            await client.execute(
+              `UPDATE dados_dachser.t_voucher_anexos SET voucher_id = ? WHERE id = ?`,
+              [correctId, f.anexoId]
+            );
+            relinked.push({ anexo: f.anexoId, newVoucherId: correctId, numero_spo: rows[0].numero_spo, id_rm: rows[0].id_rm });
+          } catch (e: any) {
+            relinkErrors.push({ anexo: f.anexoId, error: String(e?.message || e) });
+          }
+        }
+
+        // 2) Apagar anexos órfãos (voucher_id que não existe mais em t_vouchers)
+        const orphanRows = await client.query(`
+          SELECT a.id, a.voucher_id
+            FROM dados_dachser.t_voucher_anexos a
+            LEFT JOIN dados_dachser.t_vouchers v
+              ON v.id COLLATE utf8mb4_unicode_ci = a.voucher_id COLLATE utf8mb4_unicode_ci
+           WHERE v.id IS NULL
+        `);
+        const orphanCount = (orphanRows || []).length;
+        let orphansDeleted = 0;
+        if (orphanCount > 0) {
+          const delRes: any = await client.execute(`
+            DELETE a FROM dados_dachser.t_voucher_anexos a
+              LEFT JOIN dados_dachser.t_vouchers v
+                ON v.id COLLATE utf8mb4_unicode_ci = a.voucher_id COLLATE utf8mb4_unicode_ci
+             WHERE v.id IS NULL
+          `);
+          orphansDeleted = Number(delRes?.affectedRows ?? delRes?.affected_rows ?? 0);
+        }
+
+        result = {
+          success: true,
+          relinked,
+          relinkErrors,
+          orphansFound: orphanCount,
+          orphansDeleted,
+        };
+        console.log('[cleanup_orphan_anexos_and_relink] done', result);
+        break;
+      }
+
+
         // Pre-check duplicados ativos por (id_rm, numero_spo)
         const dupes = await client.query(`
           SELECT id_rm, numero_spo, COUNT(*) AS c, GROUP_CONCAT(id) AS ids
@@ -11929,48 +12016,23 @@ Deno.serve(async (req) => {
           LIMIT 5
         `, [numero_spo]);
 
-        // 2a. Exact prefix with optional space-suffix (ex: "105-292915 DIM-BY")
+        // 2. Match com sufixo de espaço via SUBSTRING_INDEX (ex.: "105-292915 DIM-BY")
+        // SOMENTE match exato no prefixo antes do espaço — sem LIKE %X% nem prefixo progressivo
+        // (evita colisão entre SPOs sequenciais como 20261882948 vs 20261882950).
         if (!vouchers || vouchers.length === 0) {
           vouchers = await client.query(`
             SELECT 
               id, numero_spo, fornecedor, valor, vencimento, etapa_atual, 
               cobranca_em_nome_de, moeda, is_master, id_rm, nome_master, voucher_master_id
             FROM dados_dachser.t_vouchers
-            WHERE numero_spo COLLATE utf8mb4_unicode_ci = ?
-               OR numero_spo COLLATE utf8mb4_unicode_ci LIKE CONCAT(?, ' %')
+            WHERE SUBSTRING_INDEX(TRIM(numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+                = SUBSTRING_INDEX(TRIM(?),' ',1) COLLATE utf8mb4_unicode_ci
             ORDER BY CHAR_LENGTH(numero_spo) ASC, created_at DESC
-            LIMIT 5
-          `, [numero_spo, numero_spo]);
-        }
-
-        // 2b. LIKE match (fallback amplo)
-        if (!vouchers || vouchers.length === 0) {
-          vouchers = await client.query(`
-            SELECT 
-              id, numero_spo, fornecedor, valor, vencimento, etapa_atual, 
-              cobranca_em_nome_de, moeda, is_master, id_rm, nome_master, voucher_master_id
-            FROM dados_dachser.t_vouchers
-            WHERE numero_spo LIKE ?
-            ORDER BY created_at DESC
-            LIMIT 5
-          `, [`%${numero_spo}%`]);
-        }
-
-        // 3. Progressive prefix match: the extracted number STARTS WITH the DB numero_spo
-        // e.g. filename "2025187823128012026" starts with DB value "20251878231"
-        if (!vouchers || vouchers.length === 0) {
-          vouchers = await client.query(`
-            SELECT 
-              id, numero_spo, fornecedor, valor, vencimento, etapa_atual, 
-              cobranca_em_nome_de, moeda, is_master, id_rm, nome_master, voucher_master_id
-            FROM dados_dachser.t_vouchers
-            WHERE ? LIKE CONCAT(numero_spo, '%') AND CHAR_LENGTH(numero_spo) >= 5
-            ORDER BY CHAR_LENGTH(numero_spo) DESC, created_at DESC
             LIMIT 5
           `, [numero_spo]);
         }
 
-        // 4. Child-to-master: ALWAYS check if SPO belongs to a child and include the master
+        // 3. Child-to-master: SPO de filho aponta para master (match exato de prefixo)
         {
           const masterVouchers = await client.query(`
             SELECT m.id, m.numero_spo, m.fornecedor, m.valor, m.vencimento, m.etapa_atual,
@@ -11978,10 +12040,11 @@ Deno.serve(async (req) => {
                    c.id as child_voucher_id, c.numero_spo as child_spo
             FROM dados_dachser.t_vouchers c
             JOIN dados_dachser.t_vouchers m ON m.id = c.voucher_master_id
-            WHERE (c.numero_spo = ? OR ? LIKE CONCAT(c.numero_spo, '%'))
+            WHERE SUBSTRING_INDEX(TRIM(c.numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+                = SUBSTRING_INDEX(TRIM(?),' ',1) COLLATE utf8mb4_unicode_ci
               AND c.voucher_master_id IS NOT NULL AND c.voucher_master_id != ''
             LIMIT 5
-          `, [numero_spo, numero_spo]);
+          `, [numero_spo]);
 
           if (masterVouchers && masterVouchers.length > 0) {
             const masterResults = masterVouchers.map((mv: any) => ({
@@ -12039,46 +12102,34 @@ Deno.serve(async (req) => {
           LIMIT 5
         `, [numero_nd]);
 
-        // 2. LIKE match
+        // 2. Match exato em processo_id (sem LIKE %X% — evita colisão entre IDs sequenciais)
         if (!vouchers || vouchers.length === 0) {
           vouchers = await client.query(`
             SELECT 
               id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
               cobranca_em_nome_de, moeda, id_rm, processo_id
             FROM dados_dachser.t_vouchers
-            WHERE id_rm LIKE ? OR processo_id LIKE ?
+            WHERE processo_id COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
             ORDER BY created_at DESC
             LIMIT 5
-          `, [`%${numero_nd}%`, `%${numero_nd}%`]);
+          `, [numero_nd]);
         }
 
-        // 3. Progressive prefix match: extracted number STARTS WITH the DB id_rm
+        // 3. Match no numero_spo via prefixo antes do espaço (cobre "<numero> DIM-BY", etc.)
         if (!vouchers || vouchers.length === 0) {
           vouchers = await client.query(`
             SELECT 
               id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
               cobranca_em_nome_de, moeda, id_rm, processo_id
             FROM dados_dachser.t_vouchers
-            WHERE ? LIKE CONCAT(id_rm, '%') AND CHAR_LENGTH(id_rm) >= 5
-            ORDER BY CHAR_LENGTH(id_rm) DESC, created_at DESC
+            WHERE SUBSTRING_INDEX(TRIM(numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+                = SUBSTRING_INDEX(TRIM(?),' ',1) COLLATE utf8mb4_unicode_ci
+            ORDER BY CHAR_LENGTH(numero_spo) ASC, created_at DESC
             LIMIT 5
           `, [numero_nd]);
         }
 
-        // 4. Progressive prefix on numero_spo too
-        if (!vouchers || vouchers.length === 0) {
-          vouchers = await client.query(`
-            SELECT 
-              id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
-              cobranca_em_nome_de, moeda, id_rm, processo_id
-            FROM dados_dachser.t_vouchers
-            WHERE ? LIKE CONCAT(numero_spo, '%') AND CHAR_LENGTH(numero_spo) >= 5
-            ORDER BY CHAR_LENGTH(numero_spo) DESC, created_at DESC
-            LIMIT 5
-          `, [numero_nd]);
-        }
-
-        // 5. Child-to-master: ALWAYS check if ND belongs to a child and include the master
+        // 4. Child-to-master: ND/processo de filho aponta para master (match exato)
         {
           const masterVouchers = await client.query(`
             SELECT m.id, m.numero_spo, m.fornecedor, m.valor, m.vencimento, m.etapa_atual,
@@ -13487,6 +13538,8 @@ Deno.serve(async (req) => {
 
         // Se keep_master é false OU se não há mais filhos, excluir o master
         if (!keep_master || remainingCount === 0) {
+          try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id = ?`, [master_id]); } catch (_) {}
+          try { await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id = ?`, [master_id]); } catch (_) {}
           await client.execute(`
             DELETE FROM dados_dachser.t_vouchers WHERE id = ?
           `, [master_id]);
@@ -16389,6 +16442,19 @@ Deno.serve(async (req) => {
       case 'cleanup_auto_sync_vouchers': {
         console.log('[cleanup] Removing vouchers created by auto sync (no user)...');
         
+        // Cascade: anexos/logs antes de deletar os vouchers (evita órfãos)
+        const autoSyncIdsRows = await client.query(`
+          SELECT id FROM dados_dachser.t_vouchers
+          WHERE criado_por_user_id = 'SISTEMA_SYNC'
+             OR criado_por_user_id IS NULL
+             OR criado_por_user_id = ''
+        `);
+        const autoSyncIds: string[] = (autoSyncIdsRows || []).map((r: any) => r.id).filter(Boolean);
+        if (autoSyncIds.length > 0) {
+          const aph = autoSyncIds.map(() => '?').join(',');
+          try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${aph})`, autoSyncIds); } catch (_) {}
+          try { await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id IN (${aph})`, autoSyncIds); } catch (_) {}
+        }
         // Delete vouchers where criado_por_user_id is 'SISTEMA_SYNC' or NULL/empty (created by auto sync)
         const deleteResult = await client.execute(`
           DELETE FROM dados_dachser.t_vouchers 
@@ -18645,6 +18711,7 @@ Deno.serve(async (req) => {
             const preIds: string[] = (preRows || []).map((r: any) => r.id).filter(Boolean);
             if (preIds.length > 0) {
               const pph = preIds.map(() => '?').join(',');
+              try { await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${pph})`, preIds); } catch (_) {}
               try { await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id IN (${pph})`, preIds); } catch (_) {}
               try { await client.execute(`DELETE FROM dados_dachser.t_voucher_batch_import_item WHERE voucher_id IN (${pph})`, preIds); } catch (_) {}
               const delP: any = await client.execute(
