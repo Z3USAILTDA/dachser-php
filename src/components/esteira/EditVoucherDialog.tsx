@@ -158,6 +158,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
             urgencia_tipo: urgenciaTipo,
             chave_pix: formData.formaPagamento === "PIX" ? (formData.chavePix || null) : null,
             origem_processo: formData.origemProcesso || null,
+            comentarios_operacao: formData.comentariosOperacao || null,
           },
           user_id: localUser?.id ? String(localUser.id) : null,
           user_name: localUser?.username || localUser?.name || localUser?.email || "Sistema",
