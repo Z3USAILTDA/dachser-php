@@ -51,7 +51,7 @@ interface VoucherRascunhoActionsProps {
 export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoActionsProps) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
+  
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEnviarDialog, setShowEnviarDialog] = useState(false);
   const [selectedTipo, setSelectedTipo] = useState<TipoAnexo>("FATURA_DEMONSTRATIVO");
