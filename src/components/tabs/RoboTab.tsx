@@ -71,13 +71,33 @@ export function RoboTab() {
     }
   };
 
-  const pickVoucher = (vouchers: any[]) => {
+  // Normaliza um SPO/ND extraindo apenas o prefixo antes do espaço (ignora " DIM-BY", " SAN", etc.)
+  const normalizeKey = (v: any): string => String(v ?? '').trim().split(/\s+/)[0].toUpperCase();
+
+  // Valida match exato por identidade: o número testado precisa bater com numero_spo OU id_rm
+  // (após normalização). Defesa em profundidade caso fallbacks frouxos sejam reintroduzidos no SQL.
+  const isIdentityMatch = (chosen: any, queried: string): boolean => {
+    const q = normalizeKey(queried);
+    if (!q) return false;
+    if (normalizeKey(chosen?.numero_spo) === q) return true;
+    if (normalizeKey(chosen?.id_rm) === q) return true;
+    if (normalizeKey(chosen?.processo_id) === q) return true;
+    if (normalizeKey(chosen?.child_spo) === q) return true;
+    return false;
+  };
+
+  const pickVoucher = (vouchers: any[], queried?: string) => {
     if (!vouchers || vouchers.length === 0) return null;
+    // Quando há um valor consultado, exigir identidade exata (filtra match colateral)
+    const pool = queried
+      ? vouchers.filter((v: any) => isIdentityMatch(v, queried))
+      : vouchers;
+    if (pool.length === 0) return null;
     return (
-      vouchers.find((v: any) => v.etapa_atual === 'ROBO' && v.is_master) ||
-      vouchers.find((v: any) => v.etapa_atual === 'ROBO') ||
-      vouchers.find((v: any) => v.is_master) ||
-      vouchers[0]
+      pool.find((v: any) => v.etapa_atual === 'ROBO' && v.is_master) ||
+      pool.find((v: any) => v.etapa_atual === 'ROBO') ||
+      pool.find((v: any) => v.is_master) ||
+      pool[0]
     );
   };
 
