@@ -53,7 +53,25 @@ serve(async (req) => {
 
     console.log('[voucher-check-baixas] Result:', JSON.stringify(data));
 
-    return new Response(JSON.stringify({ success: true, ...data }), {
+    // Mirror t_vouchers <- t_dados_financeiro_voucher (id_rm authoritative)
+    // Garante que campos de origem (fornecedor, cnpj, valor, data_emissao, processo, filial)
+    // nunca divirjam do dfv.
+    let mirrorResult: any = null;
+    try {
+      const { data: mData, error: mErr } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'mirror_vouchers_from_dfv' },
+      });
+      if (mErr) {
+        console.warn('[voucher-check-baixas] mirror_vouchers_from_dfv error:', mErr);
+      } else {
+        mirrorResult = mData;
+        console.log('[voucher-check-baixas] mirror result:', JSON.stringify(mData));
+      }
+    } catch (mirrorErr) {
+      console.warn('[voucher-check-baixas] mirror_vouchers_from_dfv threw:', mirrorErr);
+    }
+
+    return new Response(JSON.stringify({ success: true, ...data, mirror: mirrorResult }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {

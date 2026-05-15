@@ -85,24 +85,20 @@ const EsteiraVoucherDetails = () => {
         const mappedVoucher: Voucher = {
           id: data.id,
           numeroSPO: data.numero_spo,
-          // Prefer the most complete name: t_vouchers.fornecedor often holds an abbreviation
-          // (e.g. "DTA") while dfv.razao_social/nome_beneficiario carry the full legal name.
-          // Pick the longest non-empty candidate so the detail screen never shows a truncated label.
-          fornecedor: [data.fornecedor, data.dfv_razao_social, data.dfv_nome_beneficiario]
-            .map((v: any) => (v == null ? '' : String(v).trim()))
-            .filter((v: string) => v.length > 0)
-            .sort((a: string, b: string) => b.length - a.length)[0] || '',
-          cnpjFornecedor: data.cnpj_fornecedor || data.dfv_cnpj || undefined,
+          // t_vouchers é espelhado a partir de t_dados_financeiro_voucher pelo
+          // mirror_vouchers_from_dfv (cron 1 min). Ler direto, sem fallback.
+          fornecedor: data.fornecedor || '',
+          cnpjFornecedor: data.cnpj_fornecedor || undefined,
           valor: (data.valor != null && data.valor !== '')
             ? parseFloat(data.valor)
             : ((data.dfv_valor_nf != null && data.dfv_valor_nf !== '') ? parseFloat(data.dfv_valor_nf) : undefined),
-          moeda: data.moeda || data.dfv_moeda || "BRL",
+          moeda: data.moeda || "BRL",
           vencimento: parseDBDate(data.vencimento) || new Date(),
           dataEmissaoDocumento: parseDBDate(data.data_emissao_documento) || undefined,
           cobrancaEmNomeDe: data.cobranca_em_nome_de || 'DACHSER',
           formaPagamento: data.forma_pagamento || 'BOLETO',
           tipoDocumento: data.tipo_documento,
-          filial: data.filial || data.dfv_nome_cobranca || undefined,
+          filial: data.filial || undefined,
           remessa: data.remessa,
           urgente: data.urgencia_tipo !== "NORMAL",
           urgenciaTipo: data.urgencia_tipo || "NORMAL",
