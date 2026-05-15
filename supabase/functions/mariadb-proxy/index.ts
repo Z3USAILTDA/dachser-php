@@ -18359,15 +18359,17 @@ Deno.serve(async (req) => {
           console.log('[mirror_vouchers_from_dfv] Starting mirror...');
 
           // (a) Vouchers com id_rm: espelho 1:1
+          // CONVERT(... USING utf8mb4) garante uma collation neutra para o COALESCE
+          // funcionar entre colunas com utf8mb4_general_ci (v) e utf8mb4_unicode_ci (dfv).
           const r1: any = await client.execute(`
             UPDATE dados_dachser.t_vouchers v
             JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.id_rm = v.id_rm
-            SET v.fornecedor             = COALESCE(NULLIF(TRIM(dfv.nome_beneficiario),''), NULLIF(TRIM(dfv.razao_social),''), v.fornecedor),
-                v.cnpj_fornecedor        = COALESCE(NULLIF(TRIM(dfv.cnpj),''), v.cnpj_fornecedor),
+            SET v.fornecedor             = COALESCE(NULLIF(TRIM(CONVERT(dfv.nome_beneficiario USING utf8mb4)),''), NULLIF(TRIM(CONVERT(dfv.razao_social USING utf8mb4)),''), v.fornecedor),
+                v.cnpj_fornecedor        = COALESCE(NULLIF(TRIM(CONVERT(dfv.cnpj USING utf8mb4)),''), v.cnpj_fornecedor),
                 v.valor                  = COALESCE(dfv.valor_nf, v.valor),
                 v.data_emissao_documento = COALESCE(dfv.data_emissao, v.data_emissao_documento),
-                v.processo_id            = COALESCE(NULLIF(TRIM(dfv.numero_processo),''), v.processo_id),
-                v.filial                 = COALESCE(NULLIF(TRIM(dfv.nome_cobranca),''), v.filial),
+                v.processo_id            = COALESCE(NULLIF(TRIM(CONVERT(dfv.numero_processo USING utf8mb4)),''), v.processo_id),
+                v.filial                 = COALESCE(NULLIF(TRIM(CONVERT(dfv.nome_cobranca USING utf8mb4)),''), v.filial),
                 v.updated_at             = NOW()
             WHERE v.sync_status = 'ATIVO'
               AND v.id_rm IS NOT NULL AND v.id_rm <> ''
@@ -18381,19 +18383,19 @@ Deno.serve(async (req) => {
             UPDATE dados_dachser.t_vouchers v
             JOIN (
               SELECT MIN(id_rm) AS id_rm,
-                     SUBSTRING_INDEX(TRIM(nd),' ',1) COLLATE utf8mb4_unicode_ci AS nd_norm
+                     SUBSTRING_INDEX(TRIM(CONVERT(nd USING utf8mb4)),' ',1) AS nd_norm
               FROM dados_dachser.t_dados_financeiro_voucher
-              GROUP BY SUBSTRING_INDEX(TRIM(nd),' ',1)
+              GROUP BY SUBSTRING_INDEX(TRIM(CONVERT(nd USING utf8mb4)),' ',1)
               HAVING COUNT(DISTINCT id_rm) = 1
-            ) m ON m.nd_norm = SUBSTRING_INDEX(TRIM(v.numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+            ) m ON m.nd_norm = SUBSTRING_INDEX(TRIM(CONVERT(v.numero_spo USING utf8mb4)),' ',1)
             JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.id_rm = m.id_rm
             SET v.id_rm                  = dfv.id_rm,
-                v.fornecedor             = COALESCE(NULLIF(TRIM(dfv.nome_beneficiario),''), NULLIF(TRIM(dfv.razao_social),''), v.fornecedor),
-                v.cnpj_fornecedor        = COALESCE(NULLIF(TRIM(dfv.cnpj),''), v.cnpj_fornecedor),
+                v.fornecedor             = COALESCE(NULLIF(TRIM(CONVERT(dfv.nome_beneficiario USING utf8mb4)),''), NULLIF(TRIM(CONVERT(dfv.razao_social USING utf8mb4)),''), v.fornecedor),
+                v.cnpj_fornecedor        = COALESCE(NULLIF(TRIM(CONVERT(dfv.cnpj USING utf8mb4)),''), v.cnpj_fornecedor),
                 v.valor                  = COALESCE(dfv.valor_nf, v.valor),
                 v.data_emissao_documento = COALESCE(dfv.data_emissao, v.data_emissao_documento),
-                v.processo_id            = COALESCE(NULLIF(TRIM(dfv.numero_processo),''), v.processo_id),
-                v.filial                 = COALESCE(NULLIF(TRIM(dfv.nome_cobranca),''), v.filial),
+                v.processo_id            = COALESCE(NULLIF(TRIM(CONVERT(dfv.numero_processo USING utf8mb4)),''), v.processo_id),
+                v.filial                 = COALESCE(NULLIF(TRIM(CONVERT(dfv.nome_cobranca USING utf8mb4)),''), v.filial),
                 v.updated_at             = NOW()
             WHERE (v.id_rm IS NULL OR v.id_rm = '')
               AND v.sync_status = 'ATIVO'
@@ -18406,8 +18408,8 @@ Deno.serve(async (req) => {
             SELECT v.id, v.numero_spo, COUNT(DISTINCT dfv.id_rm) AS id_rm_count
             FROM dados_dachser.t_vouchers v
             JOIN dados_dachser.t_dados_financeiro_voucher dfv
-              ON SUBSTRING_INDEX(TRIM(dfv.nd),' ',1) COLLATE utf8mb4_unicode_ci
-               = SUBSTRING_INDEX(TRIM(v.numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+              ON SUBSTRING_INDEX(TRIM(CONVERT(dfv.nd USING utf8mb4)),' ',1)
+               = SUBSTRING_INDEX(TRIM(CONVERT(v.numero_spo USING utf8mb4)),' ',1)
             WHERE (v.id_rm IS NULL OR v.id_rm = '')
               AND v.sync_status = 'ATIVO'
               AND v.etapa_atual NOT IN ('CONCLUIDO','CANCELADO')
