@@ -7559,9 +7559,33 @@ Deno.serve(async (req) => {
           );
         }
         
-        // Fetch voucher
+        // Fetch voucher (with same DFV enrichment as get_vouchers_combined,
+        // so that detail screen has parity with the listing for legacy/RM vouchers
+        // whose valor/fornecedor live only in t_dados_financeiro_voucher)
         const vouchers = await client.query(`
-          SELECT * FROM dados_dachser.t_vouchers WHERE id = ?
+          SELECT v.*,
+            COALESCE(v.data_emissao_documento, dfv.data_emissao) AS data_emissao_documento,
+            dfv.id_rm AS dfv_id_rm,
+            dfv.numero_processo AS dfv_numero_processo,
+            dfv.razao_social AS dfv_razao_social,
+            dfv.nome_beneficiario AS dfv_nome_beneficiario,
+            dfv.valor_nf AS dfv_valor_nf,
+            dfv.moeda AS dfv_moeda
+          FROM dados_dachser.t_vouchers v
+          LEFT JOIN (
+            SELECT nd,
+              MIN(id_rm) AS id_rm,
+              MAX(data_emissao) AS data_emissao,
+              MIN(numero_processo) AS numero_processo,
+              MAX(razao_social) AS razao_social,
+              MAX(nome_beneficiario) AS nome_beneficiario,
+              MAX(valor_nf) AS valor_nf,
+              MAX(moeda) AS moeda
+            FROM dados_dachser.t_dados_financeiro_voucher
+            GROUP BY nd
+          ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci
+                = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
+          WHERE v.id = ?
         `, [voucher_id]);
         
         const voucher = vouchers?.[0] || null;

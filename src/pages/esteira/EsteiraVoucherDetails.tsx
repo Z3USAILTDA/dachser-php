@@ -85,10 +85,12 @@ const EsteiraVoucherDetails = () => {
         const mappedVoucher: Voucher = {
           id: data.id,
           numeroSPO: data.numero_spo,
-          fornecedor: data.fornecedor,
+          fornecedor: data.fornecedor || data.dfv_razao_social || data.dfv_nome_beneficiario || '',
           cnpjFornecedor: data.cnpj_fornecedor,
-          valor: data.valor ? parseFloat(data.valor) : undefined,
-          moeda: data.moeda || "BRL",
+          valor: (data.valor != null && data.valor !== '')
+            ? parseFloat(data.valor)
+            : ((data.dfv_valor_nf != null && data.dfv_valor_nf !== '') ? parseFloat(data.dfv_valor_nf) : undefined),
+          moeda: data.moeda || data.dfv_moeda || "BRL",
           vencimento: parseDBDate(data.vencimento) || new Date(),
           dataEmissaoDocumento: parseDBDate(data.data_emissao_documento) || undefined,
           cobrancaEmNomeDe: data.cobranca_em_nome_de || 'DACHSER',
@@ -114,7 +116,7 @@ const EsteiraVoucherDetails = () => {
           responsavelFinanceiroUserId: data.responsavel_financeiro_user_id,
           aprovadoPorUserId: data.aprovado_por_user_id,
           clienteEmail: data.cliente_email,
-          processoId: data.processo_id || null,
+          processoId: data.processo_id || data.dfv_numero_processo || null,
           origemProcesso: data.origem_processo || null,
           createdAt: parseDBDate(data.created_at) || new Date(),
           updatedAt: parseDBDate(data.updated_at) || new Date(),
