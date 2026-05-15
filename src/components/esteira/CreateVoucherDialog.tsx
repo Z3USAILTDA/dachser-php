@@ -365,15 +365,6 @@ export const CreateVoucherDialog = ({
         return;
       }
 
-      if (entryMode === "manual" && !values.fornecedor) {
-        toast({
-          title: "Erro de validação",
-          description: "Fornecedor é obrigatório no modo manual",
-          variant: "destructive",
-        });
-        return;
-      }
-
       if (!values.vencimento) {
         toast({
           title: "Erro de validação",
