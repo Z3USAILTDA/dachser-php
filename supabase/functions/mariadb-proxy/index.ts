@@ -16035,8 +16035,8 @@ Deno.serve(async (req) => {
                 id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda,
                 vencimento, data_emissao_documento, cobranca_em_nome_de, forma_pagamento,
                 etapa_atual, status_baixa, criado_por_user_id, id_rm, data_insert_rm, sync_status,
-                processo_id, origem_processo, tipo_execucao_pagamento
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'SISTEMA_SYNC', ?, ?, 'ATIVO', ?, 'RM', 'A_DEFINIR')
+                processo_id, origem_processo, tipo_execucao_pagamento, filial
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'SISTEMA_SYNC', ?, ?, 'ATIVO', ?, 'RM', 'A_DEFINIR', ?)
             `, [
               voucherId,
               rm.nd || rm.documento,
@@ -16050,7 +16050,8 @@ Deno.serve(async (req) => {
               mapFormaPag(rm.forma_pag),
               rm.id_rm,
               rm.data_insert,
-              rm.numero_processo || null
+              rm.numero_processo || null,
+              rm.nome_cobranca || null
             ]);
             
             inserted++;
