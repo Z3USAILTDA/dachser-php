@@ -18379,6 +18379,9 @@ Deno.serve(async (req) => {
 
           // (b) Vouchers manuais sem id_rm: enrich + grava id_rm. Só age quando o nd
           //     aponta para um único id_rm (sem ambiguidade).
+          // Picks one voucher per (id_rm, spo-prefix) — the smallest v.id —
+          // to avoid violating uq_voucher_rm_spo when multiple manual vouchers
+          // share the same SPO prefix targeting the same id_rm.
           const r2: any = await client.execute(`
             UPDATE dados_dachser.t_vouchers v
             JOIN (
@@ -18389,6 +18392,21 @@ Deno.serve(async (req) => {
               HAVING COUNT(DISTINCT id_rm) = 1
             ) m ON m.nd_norm = SUBSTRING_INDEX(TRIM(CONVERT(v.numero_spo USING utf8mb4)),' ',1)
             JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.id_rm = m.id_rm
+            JOIN (
+              SELECT MIN(v3.id) AS keep_id, m3.id_rm
+              FROM dados_dachser.t_vouchers v3
+              JOIN (
+                SELECT MIN(id_rm) AS id_rm,
+                       SUBSTRING_INDEX(TRIM(CONVERT(nd USING utf8mb4)),' ',1) AS nd_norm
+                FROM dados_dachser.t_dados_financeiro_voucher
+                GROUP BY SUBSTRING_INDEX(TRIM(CONVERT(nd USING utf8mb4)),' ',1)
+                HAVING COUNT(DISTINCT id_rm) = 1
+              ) m3 ON m3.nd_norm = SUBSTRING_INDEX(TRIM(CONVERT(v3.numero_spo USING utf8mb4)),' ',1)
+              WHERE (v3.id_rm IS NULL OR v3.id_rm = '')
+                AND v3.sync_status = 'ATIVO'
+                AND v3.etapa_atual NOT IN ('CONCLUIDO','CANCELADO')
+              GROUP BY m3.id_rm, SUBSTRING_INDEX(TRIM(CONVERT(v3.numero_spo USING utf8mb4)),' ',1)
+            ) pick ON pick.keep_id = v.id AND pick.id_rm = m.id_rm
             SET v.id_rm                  = dfv.id_rm,
                 v.fornecedor             = COALESCE(NULLIF(TRIM(CONVERT(dfv.nome_beneficiario USING utf8mb4)),''), NULLIF(TRIM(CONVERT(dfv.razao_social USING utf8mb4)),''), v.fornecedor),
                 v.cnpj_fornecedor        = COALESCE(NULLIF(TRIM(CONVERT(dfv.cnpj USING utf8mb4)),''), v.cnpj_fornecedor),
