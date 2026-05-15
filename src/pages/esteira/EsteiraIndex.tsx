@@ -764,7 +764,10 @@ const EsteiraIndex = () => {
   const mapVoucherFromDB = (v: any): Voucher => ({
     id: v.id,
     numeroSPO: v.numero_spo,
-    fornecedor: v.fornecedor || v.dfv_razao_social || v.dfv_nome_beneficiario || null,
+    fornecedor: ([v.fornecedor, v.dfv_razao_social, v.dfv_nome_beneficiario]
+      .map((x: any) => (x == null ? '' : String(x).trim()))
+      .filter((x: string) => x.length > 0)
+      .sort((a: string, b: string) => b.length - a.length)[0]) || null,
     cnpjFornecedor: v.cnpj_fornecedor,
     valor: v.valor ? parseFloat(v.valor) : (v.dfv_valor_nf ? parseFloat(v.dfv_valor_nf) : null),
     moeda: v.moeda || "BRL",
