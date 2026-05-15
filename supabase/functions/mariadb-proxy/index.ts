@@ -18525,6 +18525,8 @@ Deno.serve(async (req) => {
               SET v.sync_status = 'DUPLICADO',
                   v.updated_at  = NOW()
             `)
+            ,
+            { label: 'dedupe_vouchers/update', timeoutMs: 30000 }
           );
 
           const markedDuplicated = (upd as any)?.affectedRows ?? 0;
