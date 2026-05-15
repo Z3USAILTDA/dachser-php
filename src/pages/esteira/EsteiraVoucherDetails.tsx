@@ -92,7 +92,7 @@ const EsteiraVoucherDetails = () => {
             .map((v: any) => (v == null ? '' : String(v).trim()))
             .filter((v: string) => v.length > 0)
             .sort((a: string, b: string) => b.length - a.length)[0] || '',
-          cnpjFornecedor: data.cnpj_fornecedor,
+          cnpjFornecedor: data.cnpj_fornecedor || data.dfv_cnpj || undefined,
           valor: (data.valor != null && data.valor !== '')
             ? parseFloat(data.valor)
             : ((data.dfv_valor_nf != null && data.dfv_valor_nf !== '') ? parseFloat(data.dfv_valor_nf) : undefined),
