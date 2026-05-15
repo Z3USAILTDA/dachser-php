@@ -18363,7 +18363,7 @@ Deno.serve(async (req) => {
           // funcionar entre colunas com utf8mb4_general_ci (v) e utf8mb4_unicode_ci (dfv).
           const r1: any = await client.execute(`
             UPDATE dados_dachser.t_vouchers v
-            JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.id_rm = v.id_rm
+            JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.id_rm = CAST(v.id_rm AS UNSIGNED)
             SET v.fornecedor             = COALESCE(NULLIF(TRIM(CONVERT(dfv.nome_beneficiario USING utf8mb4)),''), NULLIF(TRIM(CONVERT(dfv.razao_social USING utf8mb4)),''), v.fornecedor),
                 v.cnpj_fornecedor        = COALESCE(NULLIF(TRIM(CONVERT(dfv.cnpj USING utf8mb4)),''), v.cnpj_fornecedor),
                 v.valor                  = COALESCE(dfv.valor_nf, v.valor),
