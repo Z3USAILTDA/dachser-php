@@ -116,7 +116,7 @@ const EsteiraVoucherDetails = () => {
           responsavelFinanceiroUserId: data.responsavel_financeiro_user_id,
           aprovadoPorUserId: data.aprovado_por_user_id,
           clienteEmail: data.cliente_email,
-          processoId: data.processo_id || null,
+          processoId: data.processo_id || data.dfv_numero_processo || null,
           origemProcesso: data.origem_processo || null,
           createdAt: parseDBDate(data.created_at) || new Date(),
           updatedAt: parseDBDate(data.updated_at) || new Date(),
