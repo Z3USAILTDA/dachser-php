@@ -102,7 +102,7 @@ const EsteiraVoucherDetails = () => {
           cobrancaEmNomeDe: data.cobranca_em_nome_de || 'DACHSER',
           formaPagamento: data.forma_pagamento || 'BOLETO',
           tipoDocumento: data.tipo_documento,
-          filial: data.filial,
+          filial: data.filial || data.dfv_nome_cobranca || undefined,
           remessa: data.remessa,
           urgente: data.urgencia_tipo !== "NORMAL",
           urgenciaTipo: data.urgencia_tipo || "NORMAL",
