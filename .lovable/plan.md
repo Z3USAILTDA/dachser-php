@@ -1,108 +1,97 @@
 ## Objetivo
 
-Garantir que `t_vouchers` **nunca** divirja de `t_dados_financeiro_voucher` (dfv) nas colunas de origem do dado financeiro. O dfv passa a ser fonte da verdade, casado por `id_rm`.
+Eliminar as duplicatas reais em `t_vouchers` (mesmo SPO + mesmo fornecedor + mesmo valor, criadas em segundos próximos) e impedir que voltem.
 
-## Campos espelhados (sempre sobrescritos pelo dfv)
+## Escopo da limpeza
 
-| t_vouchers | ← origem em t_dados_financeiro_voucher |
-|---|---|
-| `fornecedor` | `nome_beneficiario` (fallback `razao_social`) |
-| `cnpj_fornecedor` | `cnpj` |
-| `valor` | `valor_nf` |
-| `data_emissao_documento` | `data_emissao` |
-| `processo_id` | `numero_processo` |
-| `filial` | `nome_cobranca` |
+5 SPOs com cópias idênticas, todos sem `id_rm`. Para cada grupo, **mantém o voucher cujo `updated_at` é o mais recente** (= histórico mais movimentado) e marca os demais como `sync_status = 'DUPLICADO'` (soft-delete — somem da tela de processos via filtro `sync_status='ATIVO'`, mas ficam auditáveis no banco).
 
-## Campos protegidos (nunca tocados pelo sync)
+| SPO | Cópias | Ação |
+|---|---|---|
+| `105-292899 DIM-BY` | 3 → 1 | mantém max(updated_at) |
+| `20261882923` | 3 → 1 | mantém max(updated_at) |
+| `20261882924` | 2 → 1 | mantém max(updated_at) |
+| `20261882925` | 2 → 1 | mantém max(updated_at) |
+| `20261882926` | 2 → 1 | mantém max(updated_at) |
 
-`moeda` (pode ser ajustada pelo usuário no cadastro), `etapa_atual`, `status_baixa`, `status_financeiro`, `status_envio_cliente`, `status_pagamento`, `status_documento_fiscal`, `status_comprovante`, `status_integracao_rm`, `comentarios_*`, `ajuste_*`, `urgencia_tipo`, `urgente`, `responsavel_*_user_id`, `aprovado_por_user_id`, `cobranca_em_nome_de`, `forma_pagamento`, `vencimento`, `tipo_documento`, `tipo_execucao_pagamento`, `is_master`, `voucher_master_id`, anexos.
+Critério de desempate: maior `updated_at`; se empatar, maior `id` (mais recente lexicograficamente).
 
-## Regra de match (chave autoritativa)
-
-1. `t_vouchers.id_rm IS NOT NULL` → `JOIN dfv ON dfv.id_rm = v.id_rm` (1‑para‑1, sem ambiguidade).
-2. `id_rm IS NULL` (voucher manual ainda sem RM) → match por `SUBSTRING_INDEX(nd,' ',1) = SUBSTRING_INDEX(numero_spo,' ',1)`. No primeiro enrich, gravar o `id_rm` no voucher para que dali em diante use a regra 1.
+Os outros 7 SPOs "ambíguos" (valores diferentes — vouchers legítimos distintos) **não são tocados** por essa limpeza.
 
 ## Mudanças
 
-### 1. Edge function `mariadb-proxy` (`supabase/functions/mariadb-proxy/index.ts`)
+### 1. Backfill único (one-shot)
 
-**a. Novo case `mirror_vouchers_from_dfv`** (executável on‑demand e via cron):
+Novo case em `mariadb-proxy/index.ts` → `dedupe_vouchers_by_spo_fornecedor_valor`:
 
 ```sql
--- (a) Vouchers com id_rm: espelho 1:1 (sempre sobrescreve)
-UPDATE dados_dachser.t_vouchers v
-JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.id_rm = v.id_rm
-SET v.fornecedor              = COALESCE(NULLIF(TRIM(dfv.nome_beneficiario),''), NULLIF(TRIM(dfv.razao_social),''), v.fornecedor),
-    v.cnpj_fornecedor         = COALESCE(NULLIF(TRIM(dfv.cnpj),''), v.cnpj_fornecedor),
-    v.valor                   = COALESCE(dfv.valor_nf, v.valor),
-    v.data_emissao_documento  = COALESCE(dfv.data_emissao, v.data_emissao_documento),
-    v.processo_id             = COALESCE(NULLIF(TRIM(dfv.numero_processo),''), v.processo_id),
-    v.filial                  = COALESCE(NULLIF(TRIM(dfv.nome_cobranca),''), v.filial),
-    v.updated_at              = NOW()
-WHERE v.sync_status = 'ATIVO'
-  AND v.etapa_atual NOT IN ('CONCLUIDO','CANCELADO');
-
--- (b) Vouchers manuais sem id_rm: enrich + grava id_rm para virar 1:1 daqui pra frente.
---     Só age quando o nd aponta para um único id_rm (sem ambiguidade).
+-- Identifica grupos de duplicatas reais (mesmo SPO normalizado + fornecedor + valor)
+-- e marca todos exceto o de updated_at mais recente como DUPLICADO.
 UPDATE dados_dachser.t_vouchers v
 JOIN (
-  SELECT MIN(id_rm) AS id_rm,
-         SUBSTRING_INDEX(TRIM(nd),' ',1) AS nd_norm
-  FROM dados_dachser.t_dados_financeiro_voucher
-  GROUP BY SUBSTRING_INDEX(TRIM(nd),' ',1)
-  HAVING COUNT(DISTINCT id_rm) = 1
-) m ON m.nd_norm = SUBSTRING_INDEX(TRIM(v.numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
-JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.id_rm = m.id_rm
-SET v.id_rm                   = dfv.id_rm,
-    v.fornecedor              = COALESCE(NULLIF(TRIM(dfv.nome_beneficiario),''), NULLIF(TRIM(dfv.razao_social),''), v.fornecedor),
-    v.cnpj_fornecedor         = COALESCE(NULLIF(TRIM(dfv.cnpj),''), v.cnpj_fornecedor),
-    v.valor                   = COALESCE(dfv.valor_nf, v.valor),
-    v.data_emissao_documento  = COALESCE(dfv.data_emissao, v.data_emissao_documento),
-    v.processo_id             = COALESCE(NULLIF(TRIM(dfv.numero_processo),''), v.processo_id),
-    v.filial                  = COALESCE(NULLIF(TRIM(dfv.nome_cobranca),''), v.filial),
-    v.updated_at              = NOW()
-WHERE (v.id_rm IS NULL OR v.id_rm = '')
-  AND v.sync_status = 'ATIVO'
-  AND v.etapa_atual NOT IN ('CONCLUIDO','CANCELADO');
+  SELECT
+    v2.id,
+    ROW_NUMBER() OVER (
+      PARTITION BY SUBSTRING_INDEX(TRIM(v2.numero_spo),' ',1),
+                   TRIM(v2.fornecedor),
+                   COALESCE(v2.valor, 0)
+      ORDER BY v2.updated_at DESC, v2.id DESC
+    ) AS rn,
+    COUNT(*) OVER (
+      PARTITION BY SUBSTRING_INDEX(TRIM(v2.numero_spo),' ',1),
+                   TRIM(v2.fornecedor),
+                   COALESCE(v2.valor, 0)
+    ) AS grp_size
+  FROM dados_dachser.t_vouchers v2
+  WHERE v2.sync_status = 'ATIVO'
+    AND (v2.id_rm IS NULL OR v2.id_rm = '')
+    AND v2.numero_spo IS NOT NULL
+    AND v2.fornecedor IS NOT NULL
+    AND v2.valor IS NOT NULL
+) ranked ON ranked.id = v.id
+SET v.sync_status = 'DUPLICADO',
+    v.updated_at  = NOW()
+WHERE ranked.rn > 1 AND ranked.grp_size > 1;
 ```
 
-Retorno: `{ updated_with_idrm, enriched_manual, ambiguous_pending: [...] }` (lista os SPOs cujo `nd` casa com mais de um `id_rm`, para auditoria).
+Retorno: `{ marked_duplicated: N, groups_resolved: M, sample: [...] }`.
 
-**b. Ajustes nas writes existentes:**
+Depois rodo `mirror_vouchers_from_dfv` em sequência para garantir que os sobreviventes recebam `id_rm` quando aplicável.
 
-- `sync_vouchers_incremental` (insert inicial, linha 16034): adicionar `filial` e gravar `rm.nome_cobranca`.
-- Bloco "ENRICH MANUAL" (linha 16079): substituir o match ambíguo por `nd` pela regra (b) acima e incluir `filial`. **Não** mexer em `moeda` (continua respeitando o que o usuário cadastrou).
-- Demais `INSERT INTO t_vouchers` (linhas 6496, 12809, 13270, 13365, 19688): conferir e adicionar `filial` quando a origem for RM.
+### 2. Prevenção (importador / cadastro manual)
 
-**c. `get_vouchers_combined` (linha 16223):** depois do mirror, os campos já estão em `v.*`. Remover a regra "pegar o nome mais longo" e os fallbacks de `dfv_*` no frontend.
+No mesmo edge function, antes de cada `INSERT INTO t_vouchers` que vem do importador (linhas ~6496, 12809, 13270, 13365, 16034, 19688), adiciono guard:
 
-### 2. Backfill imediato (uma vez)
+```sql
+-- só insere se não existir um ATIVO com mesma chave lógica
+INSERT INTO t_vouchers (...)
+SELECT ... FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM dados_dachser.t_vouchers
+  WHERE sync_status = 'ATIVO'
+    AND SUBSTRING_INDEX(TRIM(numero_spo),' ',1) = SUBSTRING_INDEX(TRIM(?),' ',1)
+    AND TRIM(fornecedor) = TRIM(?)
+    AND COALESCE(valor,0) = COALESCE(?,0)
+);
+```
 
-Rodar `mirror_vouchers_from_dfv` para corrigir os 311 vouchers sem filial, o SPO 20261883397 sem CNPJ e os 27 vouchers com fornecedor incorreto/abreviado.
+Sem mudança de schema (sem `UNIQUE INDEX`) para não bloquear casos legítimos do tipo "mesmo SPO mas valor `NULL` durante rascunho". A chave lógica é apenas barreira no path de escrita.
 
-### 3. Agendamento
+### 3. Validação
 
-Adicionar `mirror_vouchers_from_dfv` ao cron de 1 minuto que já roda `sync_voucher_statuses` (mesma janela).
-
-### 4. Frontend (limpeza)
-
-- `src/pages/esteira/EsteiraVoucherDetails.tsx` (linhas 88–105): remover `sort by length` do fornecedor e os fallbacks `dfv_cnpj` / `dfv_nome_cobranca`. Voltar a ler direto de `data.fornecedor`, `data.cnpj_fornecedor`, `data.filial`. **Manter `data.moeda` como está** (vem de t_vouchers, que é o que o usuário cadastrou).
-- `src/pages/esteira/EsteiraIndex.tsx` (linhas 767 e 978): mesma limpeza.
-
-### 5. Casos residuais
-
-- **SPO 20261567059** continua sem `processo` (não há linha em dfv). Estado vazio na UI; ação operacional.
-- Vouchers cujo `nd` casa com vários `id_rm` distintos ficam de fora do enrich automático (regra b) e aparecem em `ambiguous_pending` no log do mirror.
+1. Rodar `dedupe_vouchers_by_spo_fornecedor_valor` → esperado 7 linhas marcadas `DUPLICADO`.
+2. `SELECT numero_spo, COUNT(*) FROM t_vouchers WHERE sync_status='ATIVO' GROUP BY 1 HAVING COUNT(*) > 1` para os 5 SPOs → cada um devolve 1.
+3. Conferir tela de processos (`/fin/esteira`) → cada SPO aparece uma única vez.
+4. Repassar `mirror_vouchers_from_dfv` → log com `ambiguous_pending` cai dos 17 atuais.
 
 ## Detalhes técnicos
 
-- Sem mudança de schema; apenas DML em MariaDB.
-- Mantém COLLATE `utf8mb4_unicode_ci` nos JOINs.
-- Não toca em `auth.users`, RLS ou tabelas Supabase.
-- Atualizar memória do projeto: nova entrada **t_vouchers ↔ dfv mirroring rule** (id_rm como chave; `moeda` protegida por ser editável pelo usuário).
+- Sem migração de schema; somente DML em MariaDB e código no edge function.
+- `sync_status = 'DUPLICADO'` já é filtrado no `get_vouchers_combined` (que só carrega ATIVO), então a tela limpa automaticamente.
+- Anexos/logs dos vouchers marcados ficam intactos — soft-delete reversível trocando `sync_status` de volta para `ATIVO`.
+- Nada toca `auth.users`, RLS, Supabase, ou os 7 SPOs com valores legítimos distintos.
+- Atualizar memória: nova entrada **vouchers/dedupe-by-spo-fornecedor-valor** documentando o critério (max updated_at) e o guard de inserção.
 
-## Validação pós‑implementação
+## Fora de escopo (decidir depois)
 
-1. Rodar `mirror_vouchers_from_dfv`.
-2. Re‑executar o script de QA: esperado 0 vouchers com filial/cnpj/fornecedor divergentes.
-3. Conferir manualmente SPO 20261567041 (LUFTHANSA), SPO 20261883397 (DTA) e SPO 20262162097 — devem refletir o que está em dfv para o `id_rm` deles, e a moeda deve continuar a do cadastro.
+- Os 7 SPOs com `id_rm` ambíguo no DFV (20261882977 com 5 candidatos, 20261882979 com 6, etc.) continuam sem `id_rm`, aparecendo em `ambiguous_pending`. Não impactam a tela de processos (não geram duplicatas) — só o enrich automático fica suspenso até definirmos uma regra (tela de QA, match por valor, ou aceitar manual).
