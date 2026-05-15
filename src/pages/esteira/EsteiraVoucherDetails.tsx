@@ -92,7 +92,7 @@ const EsteiraVoucherDetails = () => {
             .map((v: any) => (v == null ? '' : String(v).trim()))
             .filter((v: string) => v.length > 0)
             .sort((a: string, b: string) => b.length - a.length)[0] || '',
-          cnpjFornecedor: data.cnpj_fornecedor,
+          cnpjFornecedor: data.cnpj_fornecedor || data.dfv_cnpj || undefined,
           valor: (data.valor != null && data.valor !== '')
             ? parseFloat(data.valor)
             : ((data.dfv_valor_nf != null && data.dfv_valor_nf !== '') ? parseFloat(data.dfv_valor_nf) : undefined),
@@ -102,7 +102,7 @@ const EsteiraVoucherDetails = () => {
           cobrancaEmNomeDe: data.cobranca_em_nome_de || 'DACHSER',
           formaPagamento: data.forma_pagamento || 'BOLETO',
           tipoDocumento: data.tipo_documento,
-          filial: data.filial,
+          filial: data.filial || data.dfv_nome_cobranca || undefined,
           remessa: data.remessa,
           urgente: data.urgencia_tipo !== "NORMAL",
           urgenciaTipo: data.urgencia_tipo || "NORMAL",

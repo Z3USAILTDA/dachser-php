@@ -7570,7 +7570,9 @@ Deno.serve(async (req) => {
             dfv.razao_social AS dfv_razao_social,
             dfv.nome_beneficiario AS dfv_nome_beneficiario,
             dfv.valor_nf AS dfv_valor_nf,
-            dfv.moeda AS dfv_moeda
+            dfv.moeda AS dfv_moeda,
+            dfv.cnpj AS dfv_cnpj,
+            dfv.nome_cobranca AS dfv_nome_cobranca
           FROM dados_dachser.t_vouchers v
           LEFT JOIN (
             SELECT nd,
@@ -7580,7 +7582,9 @@ Deno.serve(async (req) => {
               MAX(razao_social) AS razao_social,
               MAX(nome_beneficiario) AS nome_beneficiario,
               MAX(valor_nf) AS valor_nf,
-              MAX(moeda) AS moeda
+              MAX(moeda) AS moeda,
+              MAX(cnpj) AS cnpj,
+              MAX(nome_cobranca) AS nome_cobranca
             FROM dados_dachser.t_dados_financeiro_voucher
             GROUP BY nd
           ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci
