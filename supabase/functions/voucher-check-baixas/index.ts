@@ -71,7 +71,26 @@ serve(async (req) => {
       console.warn('[voucher-check-baixas] mirror_vouchers_from_dfv threw:', mirrorErr);
     }
 
-    return new Response(JSON.stringify({ success: true, ...data, mirror: mirrorResult }), {
+    // Dedupe vouchers (mesmo SPO + fornecedor + valor) — preven\u00e7\u00e3o cont\u00ednua.
+    // Mant\u00e9m o de updated_at mais recente; demais viram sync_status='DUPLICADO'.
+    let dedupeResult: any = null;
+    try {
+      const { data: dData, error: dErr } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'dedupe_vouchers_by_spo_fornecedor_valor' },
+      });
+      if (dErr) {
+        console.warn('[voucher-check-baixas] dedupe error:', dErr);
+      } else {
+        dedupeResult = dData;
+        if ((dData?.marked_duplicated ?? 0) > 0) {
+          console.log('[voucher-check-baixas] dedupe result:', JSON.stringify(dData));
+        }
+      }
+    } catch (dedupeErr) {
+      console.warn('[voucher-check-baixas] dedupe threw:', dedupeErr);
+    }
+
+    return new Response(JSON.stringify({ success: true, ...data, mirror: mirrorResult, dedupe: dedupeResult }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
