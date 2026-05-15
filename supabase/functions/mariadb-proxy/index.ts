@@ -488,7 +488,7 @@ Deno.serve(async (req) => {
       'backfill_emissao_enviado_por',
       'get_voucher_filhos_batch','search_masters_by_child_spo','sync_vouchers_incremental',
       'sync_vouchers_baixados','get_sync_status','cleanup_auto_sync_vouchers',
-      'sync_voucher_statuses','search_vouchers_for_master','create_voucher_master',
+      'sync_voucher_statuses','mirror_vouchers_from_dfv','search_vouchers_for_master','create_voucher_master',
       'get_voucher_filhos','update_voucher_numero_spo','disassemble_master_voucher',
       'update_master_processo_ids','fix_master_numero_spo','export_vouchers_report',
       'get_pending_vouchers_for_report','find_voucher_by_spo','find_voucher_by_nd','find_voucher_multi',
