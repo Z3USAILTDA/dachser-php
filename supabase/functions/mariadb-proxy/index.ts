@@ -18402,7 +18402,10 @@ Deno.serve(async (req) => {
               AND v.etapa_atual NOT IN ('CONCLUIDO','CANCELADO')
               AND NOT EXISTS (
                 SELECT 1 FROM dados_dachser.t_vouchers v2
-                WHERE CAST(v2.id_rm AS UNSIGNED) = m.id_rm AND v2.id <> v.id
+                WHERE CAST(v2.id_rm AS UNSIGNED) = m.id_rm
+                  AND v2.id <> v.id
+                  AND SUBSTRING_INDEX(TRIM(CONVERT(v2.numero_spo USING utf8mb4)),' ',1)
+                    = SUBSTRING_INDEX(TRIM(CONVERT(v.numero_spo USING utf8mb4)),' ',1)
               )
           `);
           const enrichedManual = r2?.affectedRows || 0;
