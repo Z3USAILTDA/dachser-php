@@ -18400,6 +18400,10 @@ Deno.serve(async (req) => {
             WHERE (v.id_rm IS NULL OR v.id_rm = '')
               AND v.sync_status = 'ATIVO'
               AND v.etapa_atual NOT IN ('CONCLUIDO','CANCELADO')
+              AND NOT EXISTS (
+                SELECT 1 FROM dados_dachser.t_vouchers v2
+                WHERE CAST(v2.id_rm AS UNSIGNED) = m.id_rm AND v2.id <> v.id
+              )
           `);
           const enrichedManual = r2?.affectedRows || 0;
 
