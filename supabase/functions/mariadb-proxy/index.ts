@@ -18482,6 +18482,8 @@ Deno.serve(async (req) => {
               GROUP BY spo_norm, forn, valor_norm
               HAVING COUNT(*) > 1
             `)
+            ,
+            { label: 'dedupe_vouchers/groups', timeoutMs: 20000 }
           );
 
           const groupsResolved = (groups || []).length;
