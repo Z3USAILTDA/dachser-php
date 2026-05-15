@@ -71,7 +71,7 @@ serve(async (req) => {
       console.warn('[voucher-check-baixas] mirror_vouchers_from_dfv threw:', mirrorErr);
     }
 
-    return new Response(JSON.stringify({ success: true, ...data }), {
+    return new Response(JSON.stringify({ success: true, ...data, mirror: mirrorResult }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
