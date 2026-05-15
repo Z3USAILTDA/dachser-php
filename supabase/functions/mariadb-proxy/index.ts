@@ -18346,6 +18346,89 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ==================== MIRROR T_VOUCHERS FROM DFV ====================
+      // Garante que t_vouchers nunca diverge de t_dados_financeiro_voucher (dfv)
+      // nas colunas de origem do dado financeiro. dfv é fonte da verdade, casado por id_rm.
+      // Campos espelhados: fornecedor, cnpj_fornecedor, valor, data_emissao_documento,
+      //                    processo_id, filial.
+      // PROTEGIDOS (nunca alterados aqui): moeda (editável pelo usuário), vencimento,
+      //   forma_pagamento, cobranca_em_nome_de, status_*, etapa_atual, comentarios_*,
+      //   ajuste_*, urgencia_*, responsaveis, anexos, etc.
+      case 'mirror_vouchers_from_dfv': {
+        try {
+          console.log('[mirror_vouchers_from_dfv] Starting mirror...');
+
+          // (a) Vouchers com id_rm: espelho 1:1
+          const r1: any = await client.execute(`
+            UPDATE dados_dachser.t_vouchers v
+            JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.id_rm = v.id_rm
+            SET v.fornecedor             = COALESCE(NULLIF(TRIM(dfv.nome_beneficiario),''), NULLIF(TRIM(dfv.razao_social),''), v.fornecedor),
+                v.cnpj_fornecedor        = COALESCE(NULLIF(TRIM(dfv.cnpj),''), v.cnpj_fornecedor),
+                v.valor                  = COALESCE(dfv.valor_nf, v.valor),
+                v.data_emissao_documento = COALESCE(dfv.data_emissao, v.data_emissao_documento),
+                v.processo_id            = COALESCE(NULLIF(TRIM(dfv.numero_processo),''), v.processo_id),
+                v.filial                 = COALESCE(NULLIF(TRIM(dfv.nome_cobranca),''), v.filial),
+                v.updated_at             = NOW()
+            WHERE v.sync_status = 'ATIVO'
+              AND v.id_rm IS NOT NULL AND v.id_rm <> ''
+              AND v.etapa_atual NOT IN ('CONCLUIDO','CANCELADO')
+          `);
+          const updatedWithIdRm = r1?.affectedRows || 0;
+
+          // (b) Vouchers manuais sem id_rm: enrich + grava id_rm. Só age quando o nd
+          //     aponta para um único id_rm (sem ambiguidade).
+          const r2: any = await client.execute(`
+            UPDATE dados_dachser.t_vouchers v
+            JOIN (
+              SELECT MIN(id_rm) AS id_rm,
+                     SUBSTRING_INDEX(TRIM(nd),' ',1) COLLATE utf8mb4_unicode_ci AS nd_norm
+              FROM dados_dachser.t_dados_financeiro_voucher
+              GROUP BY SUBSTRING_INDEX(TRIM(nd),' ',1)
+              HAVING COUNT(DISTINCT id_rm) = 1
+            ) m ON m.nd_norm = SUBSTRING_INDEX(TRIM(v.numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+            JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.id_rm = m.id_rm
+            SET v.id_rm                  = dfv.id_rm,
+                v.fornecedor             = COALESCE(NULLIF(TRIM(dfv.nome_beneficiario),''), NULLIF(TRIM(dfv.razao_social),''), v.fornecedor),
+                v.cnpj_fornecedor        = COALESCE(NULLIF(TRIM(dfv.cnpj),''), v.cnpj_fornecedor),
+                v.valor                  = COALESCE(dfv.valor_nf, v.valor),
+                v.data_emissao_documento = COALESCE(dfv.data_emissao, v.data_emissao_documento),
+                v.processo_id            = COALESCE(NULLIF(TRIM(dfv.numero_processo),''), v.processo_id),
+                v.filial                 = COALESCE(NULLIF(TRIM(dfv.nome_cobranca),''), v.filial),
+                v.updated_at             = NOW()
+            WHERE (v.id_rm IS NULL OR v.id_rm = '')
+              AND v.sync_status = 'ATIVO'
+              AND v.etapa_atual NOT IN ('CONCLUIDO','CANCELADO')
+          `);
+          const enrichedManual = r2?.affectedRows || 0;
+
+          // (c) Lista vouchers cujo nd casa com >1 id_rm (auditoria)
+          const ambiguous: any[] = await client.query(`
+            SELECT v.id, v.numero_spo, COUNT(DISTINCT dfv.id_rm) AS id_rm_count
+            FROM dados_dachser.t_vouchers v
+            JOIN dados_dachser.t_dados_financeiro_voucher dfv
+              ON SUBSTRING_INDEX(TRIM(dfv.nd),' ',1) COLLATE utf8mb4_unicode_ci
+               = SUBSTRING_INDEX(TRIM(v.numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+            WHERE (v.id_rm IS NULL OR v.id_rm = '')
+              AND v.sync_status = 'ATIVO'
+              AND v.etapa_atual NOT IN ('CONCLUIDO','CANCELADO')
+            GROUP BY v.id, v.numero_spo
+            HAVING COUNT(DISTINCT dfv.id_rm) > 1
+          `);
+
+          console.log(`[mirror_vouchers_from_dfv] Done. mirrored=${updatedWithIdRm}, enriched=${enrichedManual}, ambiguous=${ambiguous?.length || 0}`);
+          result = {
+            success: true,
+            updated_with_idrm: updatedWithIdRm,
+            enriched_manual: enrichedManual,
+            ambiguous_pending: (ambiguous || []).map((r: any) => ({ spo: r.numero_spo, id_rm_count: r.id_rm_count }))
+          };
+        } catch (e: any) {
+          console.error('[mirror_vouchers_from_dfv] Error:', e);
+          result = { success: false, error: e.message };
+        }
+        break;
+      }
+
       // ==================== FATURAMENTO DASHBOARD ====================
       case 'get_faturamento_dashboard': {
         try {
