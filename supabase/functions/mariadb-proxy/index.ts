@@ -488,7 +488,7 @@ Deno.serve(async (req) => {
       'backfill_emissao_enviado_por',
       'get_voucher_filhos_batch','search_masters_by_child_spo','sync_vouchers_incremental',
       'sync_vouchers_baixados','get_sync_status','cleanup_auto_sync_vouchers',
-      'sync_voucher_statuses','mirror_vouchers_from_dfv','search_vouchers_for_master','create_voucher_master',
+      'sync_voucher_statuses','mirror_vouchers_from_dfv','dedupe_vouchers_by_spo_fornecedor_valor','search_vouchers_for_master','create_voucher_master',
       'get_voucher_filhos','update_voucher_numero_spo','disassemble_master_voucher',
       'update_master_processo_ids','fix_master_numero_spo','export_vouchers_report',
       'get_pending_vouchers_for_report','find_voucher_by_spo','find_voucher_by_nd','find_voucher_multi',
@@ -18456,7 +18456,94 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // ==================== FATURAMENTO DASHBOARD ====================
+      // ==================== DEDUPE VOUCHERS (SPO + FORNECEDOR + VALOR) ====================
+      // Marca como sync_status='DUPLICADO' as cópias idênticas (mesmo SPO normalizado +
+      // mesmo fornecedor + mesmo valor), preservando a de updated_at mais recente.
+      // Só age sobre vouchers ATIVO sem id_rm (duplicatas reais do importador / cadastro manual).
+      case 'dedupe_vouchers_by_spo_fornecedor_valor': {
+        try {
+          console.log('[dedupe_vouchers] Starting dedupe...');
+
+          // 1) Identifica vencedores e perdedores antes de marcar (para auditoria)
+          const groups = await queryWithRetry(
+            () => client!.query(`
+              SELECT
+                SUBSTRING_INDEX(TRIM(numero_spo),' ',1) AS spo_norm,
+                TRIM(fornecedor) AS forn,
+                COALESCE(valor, 0) AS valor_norm,
+                COUNT(*) AS qtd,
+                GROUP_CONCAT(id ORDER BY updated_at DESC, id DESC) AS ids_ranked
+              FROM dados_dachser.t_vouchers
+              WHERE sync_status = 'ATIVO'
+                AND (id_rm IS NULL OR id_rm = '')
+                AND numero_spo IS NOT NULL
+                AND fornecedor IS NOT NULL
+                AND valor IS NOT NULL
+              GROUP BY spo_norm, forn, valor_norm
+              HAVING COUNT(*) > 1
+            `)
+            ,
+            { label: 'dedupe_vouchers/groups', timeoutMs: 20000 }
+          );
+
+          const groupsResolved = (groups || []).length;
+          const sample = (groups || []).slice(0, 20).map((r: any) => {
+            const ids = String(r.ids_ranked || '').split(',');
+            return { spo: r.spo_norm, fornecedor: r.forn, valor: r.valor_norm, qtd: r.qtd, kept: ids[0], dropped: ids.slice(1) };
+          });
+
+          // 2) Marca como DUPLICADO todas exceto a de updated_at mais recente em cada grupo.
+          // Implementação compatível com MariaDB sem CTE/window: usa subquery correlacionada.
+          const upd = await queryWithRetry(
+            () => client!.query(`
+              UPDATE dados_dachser.t_vouchers v
+              JOIN (
+                SELECT v2.id
+                FROM dados_dachser.t_vouchers v2
+                JOIN (
+                  SELECT
+                    SUBSTRING_INDEX(TRIM(numero_spo),' ',1) AS spo_norm,
+                    TRIM(fornecedor) AS forn,
+                    COALESCE(valor, 0) AS valor_norm,
+                    MAX(updated_at) AS max_upd
+                  FROM dados_dachser.t_vouchers
+                  WHERE sync_status = 'ATIVO'
+                    AND (id_rm IS NULL OR id_rm = '')
+                    AND numero_spo IS NOT NULL
+                    AND fornecedor IS NOT NULL
+                    AND valor IS NOT NULL
+                  GROUP BY spo_norm, forn, valor_norm
+                  HAVING COUNT(*) > 1
+                ) g
+                  ON g.spo_norm   = SUBSTRING_INDEX(TRIM(v2.numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+                 AND g.forn       = TRIM(v2.fornecedor) COLLATE utf8mb4_unicode_ci
+                 AND g.valor_norm = COALESCE(v2.valor, 0)
+                WHERE v2.sync_status = 'ATIVO'
+                  AND (v2.id_rm IS NULL OR v2.id_rm = '')
+                  AND v2.updated_at < g.max_upd
+              ) losers ON losers.id = v.id
+              SET v.sync_status = 'DUPLICADO',
+                  v.updated_at  = NOW()
+            `)
+            ,
+            { label: 'dedupe_vouchers/update', timeoutMs: 30000 }
+          );
+
+          const markedDuplicated = (upd as any)?.affectedRows ?? 0;
+          console.log(`[dedupe_vouchers] Done. groups=${groupsResolved}, marked=${markedDuplicated}`);
+
+          result = {
+            success: true,
+            groups_resolved: groupsResolved,
+            marked_duplicated: markedDuplicated,
+            sample
+          };
+        } catch (e: any) {
+          console.error('[dedupe_vouchers] Error:', e);
+          result = { success: false, error: e.message };
+        }
+        break;
+      }
       case 'get_faturamento_dashboard': {
         try {
           console.log('[get_faturamento_dashboard] Fetching billing data from 3 tables...');
