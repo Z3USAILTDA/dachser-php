@@ -85,7 +85,13 @@ const EsteiraVoucherDetails = () => {
         const mappedVoucher: Voucher = {
           id: data.id,
           numeroSPO: data.numero_spo,
-          fornecedor: data.fornecedor || data.dfv_razao_social || data.dfv_nome_beneficiario || '',
+          // Prefer the most complete name: t_vouchers.fornecedor often holds an abbreviation
+          // (e.g. "DTA") while dfv.razao_social/nome_beneficiario carry the full legal name.
+          // Pick the longest non-empty candidate so the detail screen never shows a truncated label.
+          fornecedor: [data.fornecedor, data.dfv_razao_social, data.dfv_nome_beneficiario]
+            .map((v: any) => (v == null ? '' : String(v).trim()))
+            .filter((v: string) => v.length > 0)
+            .sort((a: string, b: string) => b.length - a.length)[0] || '',
           cnpjFornecedor: data.cnpj_fornecedor,
           valor: (data.valor != null && data.valor !== '')
             ? parseFloat(data.valor)
