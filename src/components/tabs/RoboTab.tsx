@@ -474,6 +474,14 @@ export function RoboTab() {
   };
 
   const getStatusBadge = (fileMatch: FileMatch) => {
+    if (fileMatch.status === "identifying") {
+      return (
+        <Badge variant="outline" className="border-primary/40 text-primary gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+          Analisando nome do arquivo…
+        </Badge>
+      );
+    }
     if (!fileMatch.numeroSPO) {
       return <Badge className="bg-destructive text-destructive-foreground">Voucher não identificado</Badge>;
     }
