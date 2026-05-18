@@ -1,30 +1,41 @@
-## Objetivo
-Corrigir o robô de comprovantes para identificar arquivos como `105-29290509876206.pdf` como o voucher `105-292905 DIM-BY`, e deixar claro visualmente que a identificação/processamento continua em andamento após o upload inicial.
+
+## Problema
+
+No `RoboTab` (tela `/fin/esteira` → aba Robô), ao arrastar/selecionar comprovantes, a função `handleFilesSelected` em `src/components/tabs/RoboTab.tsx` faz extração de candidatos + várias chamadas ao `mariadb-proxy` (`find_voucher_by_spo` / `find_voucher_by_nd`) em lotes de 5, e só dá `setFiles((prev) => [...prev, ...results])` **no final**, quando todos os lotes terminam. Resultado: depois do toast inicial "Identificando X arquivo(s)…", a tela fica imóvel — sem barra de progresso, sem lista, sem spinner — e o usuário pensa que travou.
+
+A barra de progresso e o estado de "processing" hoje só existem para a etapa de *envio* (`processFiles`), não para a etapa de *identificação*.
 
 ## Plano
 
-1. **Ajustar o parser de nome do arquivo**
-   - Em `parse-comprovante-pdf`, adicionar um fallback específico para o padrão:
-     - `NNN-<SPO><sufixo numérico>.pdf`
-     - Exemplo: `105-29290509876206.pdf` → candidatos `105-292905` e `292905`.
-   - Priorizar o candidato composto com filial (`105-292905`) acima do falso ND capturado pelo regex atual.
-   - Manter a regra existente: identificação do robô continua sendo exclusivamente pelo nome do arquivo, sem usar conteúdo do PDF nem linha digitável.
+1. **Adicionar estado de identificação em `RoboTab.tsx`**
+   - Novo state `identifying: boolean` e `identifyProgress: { done: number; total: number }`.
+   - Setar `identifying=true` e `total = selectedFiles.length` no início de `handleFilesSelected`; resetar no `finally`.
 
-2. **Preservar precedência dos padrões mais confiáveis**
-   - Não alterar o funcionamento de SPO Remessa, Voucher Remessa e Voucher Manual.
-   - O novo fallback ficará abaixo dos padrões formais de remessa, mas acima do match incorreto que transforma o sufixo em ND.
+2. **Renderizar arquivos imediatamente como "identifying"**
+   - Antes do loop de identificação, fazer `setFiles(prev => [...prev, ...placeholders])`, onde cada placeholder tem `status: "identifying"`, apenas com `fileName` e o `File`. O usuário já vê a lista crescer no instante do drop.
+   - Incluir um novo valor `"identifying"` no tipo `FileMatch["status"]` (e ajustar `getStatusBadge` para exibir um badge animado "Buscando voucher…").
+   - À medida que cada `processOne` termina, fazer `setFiles(prev => prev.map(...))` substituindo o placeholder pelo resultado real (status volta para `"pending"` se houver match, ou continua sem voucher).
+   - Incrementar `identifyProgress.done` a cada arquivo concluído.
 
-3. **Melhorar feedback visual no card de upload**
-   - Durante identificação, mostrar no próprio card de upload um estado ativo com mensagem como `Analisando X de Y arquivos...`.
-   - Atualizar o botão para indicar progresso real, por exemplo `Identificando (3/10)`.
-   - Manter a barra de progresso global, mas com texto mais claro do que está acontecendo.
+3. **Banner de progresso no card de upload**
+   - Logo abaixo do `UploadZone`, quando `identifying === true`, mostrar um bloco pulsante (mesmo padrão visual já usado no `processing`):
+     - spinner + "Identificando X de Y comprovantes…"
+     - `Progress` com `value = done / total * 100`
+     - texto auxiliar: "Lendo o nome de cada arquivo e cruzando com os vouchers em aberto. Não feche esta janela."
+   - Desabilitar o `UploadZone` e o botão "Processar" enquanto `identifying` for verdadeiro (evita drops sobrepostos).
 
-4. **Adicionar feedback por arquivo na lista**
-   - Arquivos `pending`: mostrar que estão na fila.
-   - Arquivos `identifying`: destacar a linha com borda/estado animado e texto `Analisando nome do arquivo...`.
-   - Arquivos `processing`: destacar com texto `Enviando para o servidor...`.
-   - Arquivos finalizados continuam com os status atuais: identificado, não identificado, sucesso ou erro.
+4. **Feedback por linha**
+   - Linhas com `status: "identifying"`: borda animada (`animate-pulse` + `border-primary/40`) e texto "Analisando nome do arquivo…" no lugar do badge.
+   - Linhas já resolvidas: comportamento atual preservado (badge "Identificado", "Não identificado", etc.).
 
-5. **Validar o caso reportado**
-   - Testar a lógica do parser para confirmar que `105-29290509876206.pdf` gera `105-292905` como candidato prioritário.
-   - Conferir que a UI mostra progresso contínuo enquanto há identificação/processamento em andamento.
+5. **Sem mudança de lógica de negócio**
+   - Nenhuma alteração no parser, no `mariadb-proxy`, nos critérios de match ou na regra "identificação só pelo nome do arquivo". Mudança 100% de UI/feedback no `RoboTab.tsx`.
+   - Concurrency continua em 5; só passa a reportar progresso incremental.
+
+## Arquivos a editar
+
+- `src/components/tabs/RoboTab.tsx` — único arquivo afetado.
+
+## Validação
+
+- Soltar 10+ comprovantes e confirmar que: (a) a lista aparece imediatamente com status "Analisando…", (b) o banner mostra "X de Y" subindo, (c) ao final, todos viram "Identificado / Não identificado" como hoje, (d) o botão "Processar" só habilita após o término da identificação.

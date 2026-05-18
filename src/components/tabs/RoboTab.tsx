@@ -16,7 +16,7 @@ interface FileMatch {
   fileName: string;
   numeroSPO: string | null;
   voucherId: string | null;
-  status: "pending" | "processing" | "success" | "error";
+  status: "identifying" | "pending" | "processing" | "success" | "error";
   error?: string;
   manualSpoInput?: string;
   isEditingSpo?: boolean;
@@ -32,6 +32,8 @@ export function RoboTab() {
   const [files, setFiles] = useState<FileMatch[]>([]);
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [identifying, setIdentifying] = useState(false);
+  const [identifyProgress, setIdentifyProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
 
   // Lê o arquivo como base64 para enviar ao parser exaustivo
   const fileToBase64 = (file: File): Promise<string> =>
@@ -164,7 +166,29 @@ export function RoboTab() {
     const CONCURRENCY = 5;
     const MAX_CANDIDATES_PER_KIND = 6;
 
-    const processOne = async (file: File): Promise<FileMatch> => {
+    // Insere imediatamente placeholders com status "identifying" para o usuário
+    // ver a lista crescendo no instante do drop, em vez de tela imóvel.
+    const baseIndex = files.length;
+    const placeholders: FileMatch[] = selectedFiles.map((file) => ({
+      file,
+      fileName: file.name,
+      numeroSPO: null,
+      voucherId: null,
+      status: "identifying" as const,
+      manualSpoInput: "",
+      isEditingSpo: false,
+    }));
+    setFiles((prev) => [...prev, ...placeholders]);
+
+    setIdentifying(true);
+    setIdentifyProgress({ done: 0, total: selectedFiles.length });
+
+    toast({
+      title: "Arquivos carregados",
+      description: `Identificando ${selectedFiles.length} arquivo(s)...`,
+    });
+
+    const processOne = async (file: File, slot: number): Promise<void> => {
       const extracted = await extractCandidatesFromFile(file);
 
       // Monta lista ordenada de tentativas (kind, value), deduplicada
@@ -200,7 +224,7 @@ export function RoboTab() {
         displayNumero = extracted.numeroND || extracted.numeroSPO || null;
       }
 
-      return {
+      const result: FileMatch = {
         file,
         fileName: file.name,
         numeroSPO: displayNumero,
@@ -210,25 +234,23 @@ export function RoboTab() {
         isMaster: match?.isMaster,
         matchedViaChild: match?.matchedViaChild,
         etapaAtual: match?.etapaAtual,
-        status: "pending" as const,
+        status: "pending",
         manualSpoInput: "",
         isEditingSpo: !displayNumero,
       };
+
+      setFiles((prev) => prev.map((f, i) => (i === slot ? result : f)));
+      setIdentifyProgress((p) => ({ ...p, done: p.done + 1 }));
     };
 
-    toast({
-      title: "Arquivos carregados",
-      description: `Identificando ${selectedFiles.length} arquivo(s)...`,
-    });
-
-    const results: FileMatch[] = new Array(selectedFiles.length);
-    for (let start = 0; start < selectedFiles.length; start += CONCURRENCY) {
-      const slice = selectedFiles.slice(start, start + CONCURRENCY);
-      const batch = await Promise.all(slice.map((f) => processOne(f)));
-      batch.forEach((r, k) => (results[start + k] = r));
+    try {
+      for (let start = 0; start < selectedFiles.length; start += CONCURRENCY) {
+        const slice = selectedFiles.slice(start, start + CONCURRENCY);
+        await Promise.all(slice.map((f, k) => processOne(f, baseIndex + start + k)));
+      }
+    } finally {
+      setIdentifying(false);
     }
-
-    setFiles((prev) => [...prev, ...results]);
   };
 
   const handleManualSpoSearch = async (index: number) => {
@@ -452,6 +474,14 @@ export function RoboTab() {
   };
 
   const getStatusBadge = (fileMatch: FileMatch) => {
+    if (fileMatch.status === "identifying") {
+      return (
+        <Badge variant="outline" className="border-primary/40 text-primary gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+          Analisando nome do arquivo…
+        </Badge>
+      );
+    }
     if (!fileMatch.numeroSPO) {
       return <Badge className="bg-destructive text-destructive-foreground">Voucher não identificado</Badge>;
     }
@@ -486,7 +516,7 @@ export function RoboTab() {
     );
   };
 
-  const canProcess = files.length > 0 && files.some((f) => f.voucherId && f.status === "pending");
+  const canProcess = files.length > 0 && !identifying && files.some((f) => f.voucherId && f.status === "pending");
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -515,6 +545,27 @@ export function RoboTab() {
             label="Arraste comprovantes aqui ou clique para selecionar"
             description="Aceitos: PDF, JPG, PNG - Múltiplos arquivos permitidos"
           />
+
+          {identifying && (
+            <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3 animate-pulse">
+              <div className="flex justify-between text-sm">
+                <span className="text-foreground font-medium flex items-center gap-2">
+                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  Identificando {identifyProgress.done} de {identifyProgress.total} comprovante{identifyProgress.total !== 1 ? "s" : ""}…
+                </span>
+                <span className="text-primary font-medium">
+                  {identifyProgress.total > 0 ? Math.round((identifyProgress.done / identifyProgress.total) * 100) : 0}%
+                </span>
+              </div>
+              <Progress
+                value={identifyProgress.total > 0 ? (identifyProgress.done / identifyProgress.total) * 100 : 0}
+                className="h-2"
+              />
+              <p className="text-xs text-muted-foreground">
+                Lendo o nome de cada arquivo e cruzando com os vouchers em aberto. Não feche esta janela.
+              </p>
+            </div>
+          )}
 
           {/* Process button */}
           {files.length > 0 && (
@@ -566,7 +617,11 @@ export function RoboTab() {
                 {files.map((fileMatch, index) => (
                   <div
                     key={index}
-                    className="flex items-start gap-3 p-3 border border-border/50 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors animate-fade-in"
+                    className={`flex items-start gap-3 p-3 border rounded-lg transition-colors animate-fade-in ${
+                      fileMatch.status === "identifying"
+                        ? "border-primary/40 bg-primary/5 animate-pulse"
+                        : "border-border/50 bg-muted/30 hover:bg-muted/50"
+                    }`}
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
                     <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-1" />
