@@ -516,7 +516,7 @@ export function RoboTab() {
     );
   };
 
-  const canProcess = files.length > 0 && files.some((f) => f.voucherId && f.status === "pending");
+  const canProcess = files.length > 0 && !identifying && files.some((f) => f.voucherId && f.status === "pending");
 
   return (
     <div className="space-y-6 animate-fade-in">
