@@ -617,7 +617,11 @@ export function RoboTab() {
                 {files.map((fileMatch, index) => (
                   <div
                     key={index}
-                    className="flex items-start gap-3 p-3 border border-border/50 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors animate-fade-in"
+                    className={`flex items-start gap-3 p-3 border rounded-lg transition-colors animate-fade-in ${
+                      fileMatch.status === "identifying"
+                        ? "border-primary/40 bg-primary/5 animate-pulse"
+                        : "border-border/50 bg-muted/30 hover:bg-muted/50"
+                    }`}
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
                     <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-1" />
