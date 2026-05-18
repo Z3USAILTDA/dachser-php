@@ -54,6 +54,7 @@ export default function ComprovanteRobot() {
   const [processing, setProcessing] = useState(false);
   const [identifying, setIdentifying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [progressCount, setProgressCount] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
   const [availableVouchers, setAvailableVouchers] = useState<VoucherMatch[]>([]);
   const [searchVoucher, setSearchVoucher] = useState("");
 
@@ -142,6 +143,7 @@ export default function ComprovanteRobot() {
   const identifyFiles = async () => {
     setIdentifying(true);
     setProgress(0);
+    setProgressCount({ done: 0, total: files.length });
     const t0 = performance.now();
 
     const totalFiles = files.length;
@@ -260,6 +262,7 @@ export default function ComprovanteRobot() {
       } finally {
         identified++;
         setProgress((identified / totalFiles) * 100);
+        setProgressCount({ done: identified, total: totalFiles });
       }
     };
 
@@ -315,6 +318,7 @@ export default function ComprovanteRobot() {
 
     setProcessing(true);
     setProgress(0);
+    setProgressCount({ done: 0, total: identifiedFiles.length });
 
     let processed = 0;
     const UPLOAD_CONCURRENCY = 10;
@@ -377,6 +381,7 @@ export default function ComprovanteRobot() {
       } finally {
         processed++;
         setProgress((processed / identifiedFiles.length) * 100);
+        setProgressCount({ done: processed, total: identifiedFiles.length });
       }
     };
 
@@ -563,7 +568,7 @@ export default function ComprovanteRobot() {
                   {identifying ? (
                     <>
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                      Identificando...
+                      Identificando ({progressCount.done}/{progressCount.total})
                     </>
                   ) : (
                     <>
@@ -580,7 +585,7 @@ export default function ComprovanteRobot() {
                   {processing ? (
                     <>
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
-                      Processando...
+                      Enviando ({progressCount.done}/{progressCount.total})
                     </>
                   ) : (
                     <>
@@ -593,14 +598,22 @@ export default function ComprovanteRobot() {
             </div>
 
             {(processing || identifying) && (
-              <div className="space-y-2">
+              <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3 animate-pulse">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    {identifying ? "Identificando..." : "Enviando..."}
+                  <span className="text-foreground font-medium flex items-center gap-2">
+                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    {identifying
+                      ? `Analisando ${progressCount.done} de ${progressCount.total} arquivo${progressCount.total !== 1 ? "s" : ""}...`
+                      : `Enviando ${progressCount.done} de ${progressCount.total} comprovante${progressCount.total !== 1 ? "s" : ""}...`}
                   </span>
                   <span className="text-primary font-medium">{Math.round(progress)}%</span>
                 </div>
                 <Progress value={progress} className="h-2" />
+                <p className="text-xs text-muted-foreground">
+                  {identifying
+                    ? "Lendo o nome de cada arquivo e cruzando com os vouchers em aberto. Não feche esta janela."
+                    : "Anexando os comprovantes aos vouchers. Não feche esta janela."}
+                </p>
               </div>
             )}
 
@@ -631,7 +644,15 @@ export default function ComprovanteRobot() {
                   {files.map((fileMatch, index) => (
                     <div
                       key={index}
-                      className="flex items-center gap-3 p-3 border border-border/50 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors animate-fade-in"
+                      className={`flex items-center gap-3 p-3 border rounded-lg transition-all animate-fade-in ${
+                        fileMatch.status === "identifying"
+                          ? "border-primary/60 bg-primary/10 shadow-[0_0_0_1px_hsl(var(--primary)/0.3)] animate-pulse"
+                          : fileMatch.status === "processing"
+                          ? "border-accent/60 bg-accent/10 shadow-[0_0_0_1px_hsl(var(--accent)/0.3)] animate-pulse"
+                          : fileMatch.status === "pending" && (identifying || processing)
+                          ? "border-dashed border-border/70 bg-muted/20"
+                          : "border-border/50 bg-muted/30 hover:bg-muted/50"
+                      }`}
                       style={{ animationDelay: `${index * 30}ms` }}
                     >
                       {getStatusIcon(fileMatch.status)}
@@ -640,8 +661,16 @@ export default function ComprovanteRobot() {
                           {fileMatch.fileName}
                         </p>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          {getStatusBadge(fileMatch)}
-                          {fileMatch.voucherInfo && (
+                          {fileMatch.status === "identifying" ? (
+                            <span className="text-xs text-primary font-medium">Analisando nome do arquivo...</span>
+                          ) : fileMatch.status === "processing" ? (
+                            <span className="text-xs text-accent-foreground font-medium">Enviando para o servidor...</span>
+                          ) : fileMatch.status === "pending" && (identifying || processing) ? (
+                            <span className="text-xs text-muted-foreground">Na fila...</span>
+                          ) : (
+                            getStatusBadge(fileMatch)
+                          )}
+                          {fileMatch.voucherInfo && fileMatch.status !== "identifying" && fileMatch.status !== "processing" && (
                             <span className="text-xs text-muted-foreground">
                               {fileMatch.voucherInfo.fornecedor} - R$ {fileMatch.voucherInfo.valor?.toLocaleString("pt-BR")}
                             </span>
@@ -654,6 +683,7 @@ export default function ComprovanteRobot() {
                           )}
                         </div>
                       </div>
+                      
                       
                       {/* Manual association for unidentified files */}
                       {fileMatch.status === "not_identified" && !fileMatch.voucherId && (
