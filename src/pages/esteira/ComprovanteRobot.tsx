@@ -54,6 +54,7 @@ export default function ComprovanteRobot() {
   const [processing, setProcessing] = useState(false);
   const [identifying, setIdentifying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [progressCount, setProgressCount] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
   const [availableVouchers, setAvailableVouchers] = useState<VoucherMatch[]>([]);
   const [searchVoucher, setSearchVoucher] = useState("");
 
