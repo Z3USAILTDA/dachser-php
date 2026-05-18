@@ -166,7 +166,29 @@ export function RoboTab() {
     const CONCURRENCY = 5;
     const MAX_CANDIDATES_PER_KIND = 6;
 
-    const processOne = async (file: File): Promise<FileMatch> => {
+    // Insere imediatamente placeholders com status "identifying" para o usuário
+    // ver a lista crescendo no instante do drop, em vez de tela imóvel.
+    const baseIndex = files.length;
+    const placeholders: FileMatch[] = selectedFiles.map((file) => ({
+      file,
+      fileName: file.name,
+      numeroSPO: null,
+      voucherId: null,
+      status: "identifying" as const,
+      manualSpoInput: "",
+      isEditingSpo: false,
+    }));
+    setFiles((prev) => [...prev, ...placeholders]);
+
+    setIdentifying(true);
+    setIdentifyProgress({ done: 0, total: selectedFiles.length });
+
+    toast({
+      title: "Arquivos carregados",
+      description: `Identificando ${selectedFiles.length} arquivo(s)...`,
+    });
+
+    const processOne = async (file: File, slot: number): Promise<void> => {
       const extracted = await extractCandidatesFromFile(file);
 
       // Monta lista ordenada de tentativas (kind, value), deduplicada
@@ -202,7 +224,7 @@ export function RoboTab() {
         displayNumero = extracted.numeroND || extracted.numeroSPO || null;
       }
 
-      return {
+      const result: FileMatch = {
         file,
         fileName: file.name,
         numeroSPO: displayNumero,
@@ -212,25 +234,23 @@ export function RoboTab() {
         isMaster: match?.isMaster,
         matchedViaChild: match?.matchedViaChild,
         etapaAtual: match?.etapaAtual,
-        status: "pending" as const,
+        status: "pending",
         manualSpoInput: "",
         isEditingSpo: !displayNumero,
       };
+
+      setFiles((prev) => prev.map((f, i) => (i === slot ? result : f)));
+      setIdentifyProgress((p) => ({ ...p, done: p.done + 1 }));
     };
 
-    toast({
-      title: "Arquivos carregados",
-      description: `Identificando ${selectedFiles.length} arquivo(s)...`,
-    });
-
-    const results: FileMatch[] = new Array(selectedFiles.length);
-    for (let start = 0; start < selectedFiles.length; start += CONCURRENCY) {
-      const slice = selectedFiles.slice(start, start + CONCURRENCY);
-      const batch = await Promise.all(slice.map((f) => processOne(f)));
-      batch.forEach((r, k) => (results[start + k] = r));
+    try {
+      for (let start = 0; start < selectedFiles.length; start += CONCURRENCY) {
+        const slice = selectedFiles.slice(start, start + CONCURRENCY);
+        await Promise.all(slice.map((f, k) => processOne(f, baseIndex + start + k)));
+      }
+    } finally {
+      setIdentifying(false);
     }
-
-    setFiles((prev) => [...prev, ...results]);
   };
 
   const handleManualSpoSearch = async (index: number) => {
