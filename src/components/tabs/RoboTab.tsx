@@ -32,6 +32,8 @@ export function RoboTab() {
   const [files, setFiles] = useState<FileMatch[]>([]);
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [identifying, setIdentifying] = useState(false);
+  const [identifyProgress, setIdentifyProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
 
   // Lê o arquivo como base64 para enviar ao parser exaustivo
   const fileToBase64 = (file: File): Promise<string> =>
