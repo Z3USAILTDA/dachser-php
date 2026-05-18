@@ -35,43 +35,142 @@ export function RoboTab() {
   const [identifying, setIdentifying] = useState(false);
   const [identifyProgress, setIdentifyProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
 
-  // Lê o arquivo como base64 para enviar ao parser exaustivo
-  const fileToBase64 = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        const base64 = result.includes(",") ? result.split(",")[1] : result;
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+  // ─────────────────────────────────────────────────────────────────────────
+  // Extração de candidatos SPO/ND a partir do NOME DO ARQUIVO (client-side).
+  // Porta da lógica de supabase/functions/parse-comprovante-pdf (filename-only,
+  // regra mem://vouchers/comprovante-robot-matching-rules). Elimina upload do
+  // PDF em base64 + round-trip à edge function de parse (ganho de 3–6s/arquivo).
+  // ─────────────────────────────────────────────────────────────────────────
+  const isPlausibleDate = (s: string) =>
+    /^(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(20\d{2})$/.test(s);
 
-  // Chama o parser exaustivo (mesmo usado em /fin/esteira/robot)
-  // Retorna candidatos SPO/ND ordenados por prioridade.
-  const extractCandidatesFromFile = async (
-    file: File
-  ): Promise<{ numeroSPO: string | null; numeroND: string | null; linhaDigitavel: string | null; candidatosSPO: string[]; candidatosND: string[] }> => {
-    try {
-      const base64 = await fileToBase64(file);
-      const { data, error } = await supabase.functions.invoke("parse-comprovante-pdf", {
-        body: { pdfBase64: base64, fileName: file.name },
-      });
-      if (error) throw error;
-      const d = data?.data || {};
-      return {
-        numeroSPO: d.numeroSPO || null,
-        numeroND: d.numeroND || null,
-        linhaDigitavel: d.linhaDigitavel || null,
-        candidatosSPO: Array.isArray(d.candidatosSPO) ? d.candidatosSPO : [],
-        candidatosND: Array.isArray(d.candidatosND) ? d.candidatosND : [],
-      };
-    } catch (e) {
-      console.error("[RoboTab] Erro ao extrair candidatos:", e);
-      return { numeroSPO: null, numeroND: null, linhaDigitavel: null, candidatosSPO: [], candidatosND: [] };
+  const extractCandidatesFromFilename = (
+    fileName: string
+  ): { numeroSPO: string | null; numeroND: string | null; candidatosSPO: string[]; candidatosND: string[] } => {
+    const nameNoExt = fileName.replace(/\.[^/.]+$/, '');
+    const spoScores = new Map<string, number>();
+    const ndScores = new Map<string, number>();
+    const add = (map: Map<string, number>, v: string | null | undefined, score: number) => {
+      if (!v) return;
+      const val = String(v).trim();
+      if (!val) return;
+      if (!/^\d+$/.test(val) && !/^\d{2,4}-\d{4,13}$/.test(val)) return;
+      const prev = map.get(val) ?? 0;
+      if (score > prev) map.set(val, score);
+    };
+
+    // BASE: substrings numéricas 5–13 dígitos (score 20)
+    for (const m of nameNoExt.matchAll(/(?<![0-9])(\d{5,13})(?![0-9])/g)) {
+      const n = m[1];
+      if (/^(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(20\d{2})$/.test(n)) continue;
+      if (/^(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/.test(n)) continue;
+      add(spoScores, n, 20);
+      add(ndScores, n, 20);
     }
+
+    // Pure number curto
+    const pure = nameNoExt.match(/^(\d+)$/);
+    if (pure && pure[1].length <= 13) {
+      add(spoScores, pure[1], 85);
+      add(ndScores, pure[1], 85);
+    }
+
+    // SPO Remessa: "101-286102D26122025.35"
+    for (const m of fileName.matchAll(/(\d{3})-(\d{6})[A-Z]\d{8}\.\d{1,2}/gi)) {
+      add(spoScores, `${m[1]}-${m[2]}`, 102);
+      add(spoScores, m[2], 100);
+    }
+
+    // SPO Manual: "101-286105"
+    for (const m of fileName.matchAll(/(\d{3})-(\d{5,7})(?:\.|$|[^0-9])/g)) {
+      add(spoScores, `${m[1]}-${m[2]}`, 97);
+      add(spoScores, m[2], 95);
+    }
+
+    // Voucher Remessa: "<SPO/ND><DDMMYYYY>[sufixo].<seq>"
+    const vrFull = nameNoExt.match(/^(\d{18,22})\.(\d{1,3})$/);
+    if (vrFull) {
+      const digits = vrFull[1];
+      for (const ndLen of [13, 12, 11, 10]) {
+        for (const extra of [0, 1, 2]) {
+          if (digits.length - ndLen - 8 !== extra) continue;
+          const cand = digits.slice(0, ndLen);
+          const date = digits.slice(ndLen, ndLen + 8);
+          if (cand.startsWith('20') && isPlausibleDate(date)) {
+            const score = 95 + ndLen - extra;
+            add(ndScores, cand, score);
+            add(spoScores, cand, score);
+          }
+        }
+      }
+    }
+
+    // Fallback posicional em corridas longas
+    const longRuns = nameNoExt.match(/\d{15,}/g) || [];
+    for (const run of longRuns) {
+      for (let i = 10; i + 8 <= run.length && i <= 13; i++) {
+        const date = run.slice(i, i + 8);
+        if (!isPlausibleDate(date)) continue;
+        const prefix = run.slice(0, i);
+        if (!prefix.startsWith('20')) continue;
+        add(ndScores, prefix, 90);
+        add(spoScores, prefix, 90);
+      }
+    }
+
+    // Voucher Manual: "OT 433-20251877370"
+    for (const m of fileName.matchAll(/(?:OT\s*)?(\d{3})-(\d{10,13})/gi)) {
+      add(ndScores, m[2], 90);
+    }
+
+    // SPO Manual + sufixo numérico livre: "105-29290509876206.pdf"
+    for (const m of fileName.matchAll(/(?<![0-9])(\d{3})-(\d{11,})(?![0-9])/g)) {
+      const filial = m[1];
+      const tail = m[2];
+      for (const len of [6, 7, 5]) {
+        if (tail.length <= len) continue;
+        const spo = tail.slice(0, len);
+        const score = len === 6 ? 96 : (len === 7 ? 92 : 88);
+        add(spoScores, `${filial}-${spo}`, score);
+        add(spoScores, spo, score - 2);
+      }
+    }
+
+    // SPO explícito
+    for (const pat of [/SPO[-_\s]*(\d{5,7})/gi, /comprovante[-_\s]*(\d{5,7})/gi, /spo\s*n[°ºo]?\s*(\d{5,7})/gi]) {
+      for (const m of fileName.matchAll(pat)) add(spoScores, m[1], 85);
+    }
+
+    // Genérico 6–7 dígitos
+    for (const m of nameNoExt.matchAll(/(?<![0-9])(\d{6,7})(?![0-9])/g)) {
+      const n = m[1];
+      if (/^20\d{4,5}$/.test(n)) continue;
+      if (/^\d{2}(0[1-9]|1[0-2])(20\d{2})$/.test(n)) continue;
+      add(spoScores, n, 60);
+      add(ndScores, n, 60);
+    }
+
+    // ND genérico 20XXXXXXXX
+    for (const m of nameNoExt.matchAll(/(?<![0-9])(20\d{8,11})(?![0-9])/g)) {
+      add(ndScores, m[1], 55);
+    }
+
+    // Genérico 5 dígitos
+    for (const m of nameNoExt.matchAll(/(?<![0-9])(\d{5})(?![0-9])/g)) {
+      add(spoScores, m[1], 40);
+      add(ndScores, m[1], 40);
+    }
+
+    const sortedSPO = [...spoScores.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v);
+    const sortedND = [...ndScores.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v);
+    return {
+      numeroSPO: sortedSPO[0] ?? null,
+      numeroND: sortedND[0] ?? null,
+      candidatosSPO: sortedSPO,
+      candidatosND: sortedND,
+    };
   };
+
 
   // Normaliza um SPO/ND extraindo apenas o prefixo antes do espaço (ignora " DIM-BY", " SAN", etc.)
   const normalizeKey = (v: any): string => String(v ?? '').trim().split(/\s+/)[0].toUpperCase();
@@ -160,11 +259,38 @@ export function RoboTab() {
     return result;
   };
 
+  // Lookup batch: 1 round-trip por arquivo, tentando todos os candidatos no servidor.
+  const searchVoucherMulti = async (
+    extracted: { numeroSPO: string | null; numeroND: string | null; candidatosSPO: string[]; candidatosND: string[] }
+  ): Promise<{ match: { id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean; etapaAtual?: string } | null; matchedValue: string | null }> => {
+    const MAX = 6;
+    try {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'find_voucher_multi',
+          spoPrimary: extracted.numeroSPO || undefined,
+          ndPrimary: extracted.numeroND || undefined,
+          spoCandidates: extracted.candidatosSPO.slice(0, MAX),
+          ndCandidates: extracted.candidatosND.slice(0, MAX),
+        },
+      });
+      if (!error && data?.voucher) {
+        const matchedCandidate: string | undefined = data.matchedCandidate;
+        const matchedValue = matchedCandidate ? matchedCandidate.replace(/^(SPO|ND):/, '') : null;
+        // Defesa em profundidade: re-valida identidade
+        const chosen = pickVoucher([data.voucher], matchedValue || undefined);
+        if (chosen) return { match: buildMatch(chosen), matchedValue };
+      }
+    } catch (e) {
+      console.error('Error fetching voucher (multi):', e);
+    }
+    return { match: null, matchedValue: null };
+  };
+
   const handleFilesSelected = async (selectedFiles: File[]) => {
     if (selectedFiles.length === 0) return;
 
-    const CONCURRENCY = 5;
-    const MAX_CANDIDATES_PER_KIND = 6;
+    const CONCURRENCY = 10;
 
     // Insere imediatamente placeholders com status "identifying" para o usuário
     // ver a lista crescendo no instante do drop, em vez de tela imóvel.
@@ -189,40 +315,11 @@ export function RoboTab() {
     });
 
     const processOne = async (file: File, slot: number): Promise<void> => {
-      const extracted = await extractCandidatesFromFile(file);
+      const extracted = extractCandidatesFromFilename(file.name);
+      const { match, matchedValue } = await searchVoucherMulti(extracted);
 
-      // Monta lista ordenada de tentativas (kind, value), deduplicada
-      const tries: Array<{ kind: "spo" | "nd"; value: string }> = [];
-      const seen = new Set<string>();
-      const push = (kind: "spo" | "nd", value?: string | null) => {
-        if (!value) return;
-        const key = `${kind}:${value}`;
-        if (seen.has(key)) return;
-        seen.add(key);
-        tries.push({ kind, value });
-      };
-
-      // Prioridade: ND principal → demais ND → SPO principal → demais SPO
-      // NUNCA usar linha digitável (regra do projeto: identificação só pelo nome do arquivo)
-      push("nd", extracted.numeroND);
-      for (const c of extracted.candidatosND.slice(0, MAX_CANDIDATES_PER_KIND)) push("nd", c);
-      push("spo", extracted.numeroSPO);
-      for (const c of extracted.candidatosSPO.slice(0, MAX_CANDIDATES_PER_KIND)) push("spo", c);
-
-      let match: { id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean; etapaAtual?: string } | null = null;
-      let displayNumero: string | null = null;
-
-      for (const t of tries) {
-        match = t.kind === "spo" ? await searchVoucherBySPO(t.value) : await searchVoucherByND(t.value);
-        if (match) {
-          displayNumero = t.value;
-          break;
-        }
-      }
-
-      if (!displayNumero) {
-        displayNumero = extracted.numeroND || extracted.numeroSPO || null;
-      }
+      const displayNumero =
+        matchedValue || extracted.numeroND || extracted.numeroSPO || null;
 
       const result: FileMatch = {
         file,
@@ -244,14 +341,21 @@ export function RoboTab() {
     };
 
     try {
-      for (let start = 0; start < selectedFiles.length; start += CONCURRENCY) {
-        const slice = selectedFiles.slice(start, start + CONCURRENCY);
-        await Promise.all(slice.map((f, k) => processOne(f, baseIndex + start + k)));
-      }
+      // Worker pool: N workers consomem uma fila — sem barreiras de lote.
+      let cursor = 0;
+      const next = () => (cursor < selectedFiles.length ? cursor++ : -1);
+      const worker = async () => {
+        let i: number;
+        while ((i = next()) !== -1) {
+          await processOne(selectedFiles[i], baseIndex + i);
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, selectedFiles.length) }, worker));
     } finally {
       setIdentifying(false);
     }
   };
+
 
   const handleManualSpoSearch = async (index: number) => {
     const file = files[index];
