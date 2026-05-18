@@ -1,69 +1,72 @@
 ## Diagnóstico
 
-Hoje, em `src/components/tabs/RoboTab.tsx#handleFilesSelected`, cada comprovante passa por:
+A identificação já foi otimizada. O gargalo agora é `processFiles` em `src/components/tabs/RoboTab.tsx` (linha 434), que é **100% sequencial** — `for (const fileMatch of files) { await ... }`. Por arquivo:
 
-1. **Upload do PDF inteiro (base64) para a edge function `parse-comprovante-pdf`** — mesmo que essa função, por regra do projeto ([mem](mem://vouchers/comprovante-robot-matching-rules)), **identifique exclusivamente pelo nome do arquivo** e nunca leia o conteúdo do PDF. O `pdfBase64` é exigido mas nunca usado.
-2. **Até 14 chamadas sequenciais** à `mariadb-proxy` (`find_voucher_by_spo` / `find_voucher_by_nd`), uma por candidato, dentro do `for (const t of tries)`.
-3. Concorrência limitada a `CONCURRENCY = 5`.
+1. `storage.upload` (PDF para Supabase Storage)
+2. `invoke('save_voucher_anexo')`
+3. `invoke('update_voucher_esteira')`
+4. `invoke('save_voucher_log COMPROVANTE_ANEXADO')`
+5. `invoke('save_voucher_log CONCLUIDO_ROBO')` (quando não estava CONCLUIDO)
 
-Com 25 arquivos = 5 lotes × (1 upload pesado + até 14 round-trips) → ~13s/arquivo, total 5min29s.
+São **5 round-trips em série por arquivo, e um arquivo por vez**. Com ~400–700ms por invoke + 1–2s no upload → ~13s/arquivo → ~5–6 min para 25. Bate com o reportado.
 
-A action `find_voucher_multi` **já existe** em `mariadb-proxy` e aceita arrays `spoCandidates` / `ndCandidates`, fazendo todo o fallback server-side em uma única chamada — mas não está sendo usada pelo RoboTab.
+## Meta
 
-## Mudanças (somente frontend / um único arquivo)
+≤ 4s por comprovante em média (25 arquivos em ≤ ~1min40s, idealmente bem menos com paralelismo).
 
-Arquivo: `src/components/tabs/RoboTab.tsx`
+## Mudanças (cirúrgicas, 1 arquivo)
 
-### 1. Extrair candidatos do nome do arquivo no cliente
-- Replicar a lógica de `extractFromFilename` de `supabase/functions/parse-comprovante-pdf/index.ts` (≈200 linhas de regex puras, sem dependências) em uma nova função local `extractCandidatesFromFilename(fileName)`.
-- Eliminar `fileToBase64()` e a chamada `supabase.functions.invoke('parse-comprovante-pdf', …)` — economiza upload de base64 (PDFs de ~500KB–2MB) + cold start + parse.
-- Ganho esperado: ~3–6s por arquivo.
+Arquivo único: `src/components/tabs/RoboTab.tsx`. Nenhuma edge function tocada.
 
-### 2. Uma única chamada de lookup por arquivo
-- Substituir o loop `for (const t of tries) { searchVoucherBySPO / searchVoucherByND }` por **uma chamada** a `find_voucher_multi`, passando `spoPrimary`, `ndPrimary`, `spoCandidates`, `ndCandidates`.
-- Manter `pickVoucher` / `isIdentityMatch` para validação de identidade do retorno (defesa em profundidade).
-- Ganho esperado: ~5–7s por arquivo (de até 14 round-trips para 1).
+### 1. Worker pool em `processFiles` (mudança principal)
 
-### 3. Aumentar concorrência
-- `CONCURRENCY` de **5 → 10**. O gargalo deixa de ser o servidor (1 query por arquivo) e passa a ser a fila do cliente.
-- Trocar o padrão "batch-await-batch" por um **worker pool** real (10 workers consumindo uma fila), para não esperar o arquivo mais lento de cada lote.
+Extrair o corpo do loop em `processOne(fileMatch)` e substituir o `for` sequencial pelo mesmo padrão de worker pool já usado em `handleFilesSelected`:
 
-### 4. Manter UI atual
-- Placeholders "identifying", banner de progresso, `setIdentifyProgress` continuam iguais — só o tempo até `done` muda.
+```ts
+const CONCURRENCY = 8;
+let cursor = 0;
+const next = () => (cursor < files.length ? cursor++ : -1);
+const worker = async () => {
+  let i: number;
+  while ((i = next()) !== -1) await processOne(files[i]);
+};
+await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker));
+```
 
-## Resultado esperado
+Contadores `processed`, `successCount`, `errorCount` continuam como `let` simples (JS single-thread → `++` é atômico). `setProgress` é chamado a cada arquivo concluído. Updates `setFiles(prev => prev.map(...))` permanecem (já são imutáveis).
 
-- Por arquivo: **~2–4s** (1 lookup + overhead de invoke).
-- 25 arquivos com 10 workers: **≤1min** total (vs 5min29s atuais).
-- Meta de ≤5s/arquivo atendida com folga.
+### 2. Paralelizar as 3 chamadas mariadb pós-anexo dentro de cada arquivo
+
+`update_voucher_esteira` e os `save_voucher_log` **não dependem entre si** — só dependem do `save_voucher_anexo` ter gravado. Após o anexo resolver, disparar o resto via `Promise.all`:
+
+```ts
+await invoke('save_voucher_anexo', { ... });
+const tasks = [
+  invoke('update_voucher_esteira', { voucher_id, updates }),
+  invoke('save_voucher_log', { acao: 'COMPROVANTE_ANEXADO', ... }),
+];
+if (!wasConcluded) {
+  tasks.push(invoke('save_voucher_log', { acao: 'CONCLUIDO_ROBO', ... }));
+}
+await Promise.all(tasks);
+```
+
+Reduz round-trips serializados por arquivo de **5 → 3** (upload + anexo + bloco paralelo).
+
+## Resultado esperado para 25 comprovantes
+
+| Cenário | Tempo total | Média/arquivo |
+|---|---|---|
+| Hoje (sequencial) | **05:59** | ~14s |
+| Só worker pool (#1) | ~50–60s | ~2,3s |
+| Worker pool + Promise.all (#1+#2) | **~35–45s** | **~1,5s** |
+
+Meta de ≤4s/arquivo atendida com folga.
 
 ## O que NÃO muda
 
-- `parse-comprovante-pdf` continua existindo (pode ser usada por outros fluxos) — apenas o RoboTab para de chamá-la.
-- `mariadb-proxy` (sem alterações — `find_voucher_multi` já existe).
-- Regras de matching, prioridade, normalização de SPO/ND, `pickVoucher`, validação de identidade.
-- Comportamento de upload/processamento depois da identificação (fase "Processar").
-
-## Detalhes técnicos
-
-```text
-ANTES (por arquivo)
-  fileToBase64 → invoke(parse-comprovante-pdf) [PDF ~1MB]
-  └─ até 14× invoke(mariadb-proxy: find_voucher_by_spo|nd)
-
-DEPOIS (por arquivo)
-  extractCandidatesFromFilename(file.name)   [pure JS, <1ms]
-  └─ 1× invoke(mariadb-proxy: find_voucher_multi)
-```
-
-Pool de workers (esboço):
-```ts
-const CONCURRENCY = 10;
-let cursor = 0;
-const next = () => (cursor < selectedFiles.length ? cursor++ : -1);
-const worker = async () => {
-  let i;
-  while ((i = next()) !== -1) await processOne(selectedFiles[i], baseIndex + i);
-};
-await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-```
+- Edge functions intactas (zero deploy).
+- Ordem lógica preservada: anexo gravado antes de update/logs.
+- Regras de matching, fallback CONCLUIDO, badges, toasts, contadores idênticos.
+- Memórias [Robo Stage & Attachments](mem://vouchers/robo-stage-and-attachments-v2), [Anexos Master/Filhos](mem://vouchers/anexos-master-children-columns), [Comprovante Robô Matching](mem://vouchers/comprovante-robot-matching-rules) respeitadas.
+- Storage e `mariadb-proxy` aguentam tranquilamente 8 concorrentes; se houver throttling no futuro, basta baixar `CONCURRENCY`.
