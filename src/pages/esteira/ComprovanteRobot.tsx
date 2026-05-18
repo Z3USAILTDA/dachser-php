@@ -318,6 +318,7 @@ export default function ComprovanteRobot() {
 
     setProcessing(true);
     setProgress(0);
+    setProgressCount({ done: 0, total: identifiedFiles.length });
 
     let processed = 0;
     const UPLOAD_CONCURRENCY = 10;
