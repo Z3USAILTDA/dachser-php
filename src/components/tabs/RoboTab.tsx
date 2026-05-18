@@ -546,6 +546,27 @@ export function RoboTab() {
             description="Aceitos: PDF, JPG, PNG - Múltiplos arquivos permitidos"
           />
 
+          {identifying && (
+            <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3 animate-pulse">
+              <div className="flex justify-between text-sm">
+                <span className="text-foreground font-medium flex items-center gap-2">
+                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  Identificando {identifyProgress.done} de {identifyProgress.total} comprovante{identifyProgress.total !== 1 ? "s" : ""}…
+                </span>
+                <span className="text-primary font-medium">
+                  {identifyProgress.total > 0 ? Math.round((identifyProgress.done / identifyProgress.total) * 100) : 0}%
+                </span>
+              </div>
+              <Progress
+                value={identifyProgress.total > 0 ? (identifyProgress.done / identifyProgress.total) * 100 : 0}
+                className="h-2"
+              />
+              <p className="text-xs text-muted-foreground">
+                Lendo o nome de cada arquivo e cruzando com os vouchers em aberto. Não feche esta janela.
+              </p>
+            </div>
+          )}
+
           {/* Process button */}
           {files.length > 0 && (
             <div className="flex justify-end">
