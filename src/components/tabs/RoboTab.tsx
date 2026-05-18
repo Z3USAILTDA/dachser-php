@@ -440,7 +440,7 @@ export function RoboTab() {
     let successCount = 0;
     let errorCount = 0;
 
-    for (const fileMatch of files) {
+    const processOne = async (fileMatch: FileMatch) => {
       setFiles((prev) =>
         prev.map((f) =>
           f.fileName === fileMatch.fileName
@@ -471,7 +471,7 @@ export function RoboTab() {
           .from("voucher-anexos")
           .getPublicUrl(filePath);
 
-        // Save attachment metadata to MariaDB using the correct action
+        // Save attachment metadata to MariaDB (must complete before subsequent calls)
         const { error: attachmentError } = await supabase.functions.invoke('mariadb-proxy', {
           body: {
             action: 'save_voucher_anexo',
@@ -496,39 +496,43 @@ export function RoboTab() {
               status_financeiro: 'CONCLUIDO',
             };
 
-        await supabase.functions.invoke('mariadb-proxy', {
-          body: {
-            action: 'update_voucher_esteira',
-            voucher_id: fileMatch.voucherId,
-            updates,
-          },
-        });
-
-        // Log comprovante anexado
-        await supabase.functions.invoke('mariadb-proxy', {
-          body: {
-            action: 'save_voucher_log',
-            voucher_id: fileMatch.voucherId,
-            user_id: userData.user?.id || null,
-            user_name: userData.user?.email || 'Sistema',
-            acao: "COMPROVANTE_ANEXADO",
-            detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô${fileMatch.childSpo ? ` (filho SPO ${fileMatch.childSpo})` : ''}${wasConcluded ? ' (revínculo em voucher já concluído)' : ''}`,
-          },
-        });
-
-        // Log conclusão automática (apenas quando o robô efetivamente concluiu o voucher)
-        if (!wasConcluded) {
-          await supabase.functions.invoke('mariadb-proxy', {
+        // Disparar update + logs em paralelo (independentes entre si)
+        const tasks: Promise<any>[] = [
+          supabase.functions.invoke('mariadb-proxy', {
+            body: {
+              action: 'update_voucher_esteira',
+              voucher_id: fileMatch.voucherId,
+              updates,
+            },
+          }),
+          supabase.functions.invoke('mariadb-proxy', {
             body: {
               action: 'save_voucher_log',
               voucher_id: fileMatch.voucherId,
               user_id: userData.user?.id || null,
               user_name: userData.user?.email || 'Sistema',
-              acao: "CONCLUIDO_ROBO",
-              detalhe: `Voucher concluído automaticamente após processamento do comprovante`,
+              acao: "COMPROVANTE_ANEXADO",
+              detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô${fileMatch.childSpo ? ` (filho SPO ${fileMatch.childSpo})` : ''}${wasConcluded ? ' (revínculo em voucher já concluído)' : ''}`,
             },
-          });
+          }),
+        ];
+
+        if (!wasConcluded) {
+          tasks.push(
+            supabase.functions.invoke('mariadb-proxy', {
+              body: {
+                action: 'save_voucher_log',
+                voucher_id: fileMatch.voucherId,
+                user_id: userData.user?.id || null,
+                user_name: userData.user?.email || 'Sistema',
+                acao: "CONCLUIDO_ROBO",
+                detalhe: `Voucher concluído automaticamente após processamento do comprovante`,
+              },
+            })
+          );
         }
+
+        await Promise.all(tasks);
 
         successCount++;
         setFiles((prev) =>
@@ -540,7 +544,7 @@ export function RoboTab() {
         );
       } catch (error: any) {
         console.error("Erro ao processar arquivo:", error);
-        
+
         errorCount++;
         setFiles((prev) =>
           prev.map((f) =>
@@ -553,7 +557,21 @@ export function RoboTab() {
 
       processed++;
       setProgress((processed / files.length) * 100);
-    }
+    };
+
+    // Worker pool: até 8 arquivos processados concorrentemente
+    const CONCURRENCY = 8;
+    let cursor = 0;
+    const next = () => (cursor < files.length ? cursor++ : -1);
+    const worker = async () => {
+      let i: number;
+      while ((i = next()) !== -1) {
+        await processOne(files[i]);
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker)
+    );
 
     setProcessing(false);
 
@@ -563,6 +581,7 @@ export function RoboTab() {
       variant: errorCount > 0 ? "destructive" : "default",
     });
   };
+
 
   const getStatusIcon = (status: FileMatch["status"]) => {
     switch (status) {
