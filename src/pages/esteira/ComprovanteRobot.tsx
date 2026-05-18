@@ -568,7 +568,7 @@ export default function ComprovanteRobot() {
                   {identifying ? (
                     <>
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                      Identificando...
+                      Identificando ({progressCount.done}/{progressCount.total})
                     </>
                   ) : (
                     <>
@@ -585,7 +585,7 @@ export default function ComprovanteRobot() {
                   {processing ? (
                     <>
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
-                      Processando...
+                      Enviando ({progressCount.done}/{progressCount.total})
                     </>
                   ) : (
                     <>
@@ -598,14 +598,22 @@ export default function ComprovanteRobot() {
             </div>
 
             {(processing || identifying) && (
-              <div className="space-y-2">
+              <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3 animate-pulse">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    {identifying ? "Identificando..." : "Enviando..."}
+                  <span className="text-foreground font-medium flex items-center gap-2">
+                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    {identifying
+                      ? `Analisando ${progressCount.done} de ${progressCount.total} arquivo${progressCount.total !== 1 ? "s" : ""}...`
+                      : `Enviando ${progressCount.done} de ${progressCount.total} comprovante${progressCount.total !== 1 ? "s" : ""}...`}
                   </span>
                   <span className="text-primary font-medium">{Math.round(progress)}%</span>
                 </div>
                 <Progress value={progress} className="h-2" />
+                <p className="text-xs text-muted-foreground">
+                  {identifying
+                    ? "Lendo o nome de cada arquivo e cruzando com os vouchers em aberto. Não feche esta janela."
+                    : "Anexando os comprovantes aos vouchers. Não feche esta janela."}
+                </p>
               </div>
             )}
 
