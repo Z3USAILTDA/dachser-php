@@ -259,11 +259,38 @@ export function RoboTab() {
     return result;
   };
 
+  // Lookup batch: 1 round-trip por arquivo, tentando todos os candidatos no servidor.
+  const searchVoucherMulti = async (
+    extracted: { numeroSPO: string | null; numeroND: string | null; candidatosSPO: string[]; candidatosND: string[] }
+  ): Promise<{ match: { id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean; etapaAtual?: string } | null; matchedValue: string | null }> => {
+    const MAX = 6;
+    try {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'find_voucher_multi',
+          spoPrimary: extracted.numeroSPO || undefined,
+          ndPrimary: extracted.numeroND || undefined,
+          spoCandidates: extracted.candidatosSPO.slice(0, MAX),
+          ndCandidates: extracted.candidatosND.slice(0, MAX),
+        },
+      });
+      if (!error && data?.voucher) {
+        const matchedCandidate: string | undefined = data.matchedCandidate;
+        const matchedValue = matchedCandidate ? matchedCandidate.replace(/^(SPO|ND):/, '') : null;
+        // Defesa em profundidade: re-valida identidade
+        const chosen = pickVoucher([data.voucher], matchedValue || undefined);
+        if (chosen) return { match: buildMatch(chosen), matchedValue };
+      }
+    } catch (e) {
+      console.error('Error fetching voucher (multi):', e);
+    }
+    return { match: null, matchedValue: null };
+  };
+
   const handleFilesSelected = async (selectedFiles: File[]) => {
     if (selectedFiles.length === 0) return;
 
-    const CONCURRENCY = 5;
-    const MAX_CANDIDATES_PER_KIND = 6;
+    const CONCURRENCY = 10;
 
     // Insere imediatamente placeholders com status "identifying" para o usuário
     // ver a lista crescendo no instante do drop, em vez de tela imóvel.
@@ -288,40 +315,11 @@ export function RoboTab() {
     });
 
     const processOne = async (file: File, slot: number): Promise<void> => {
-      const extracted = await extractCandidatesFromFile(file);
+      const extracted = extractCandidatesFromFilename(file.name);
+      const { match, matchedValue } = await searchVoucherMulti(extracted);
 
-      // Monta lista ordenada de tentativas (kind, value), deduplicada
-      const tries: Array<{ kind: "spo" | "nd"; value: string }> = [];
-      const seen = new Set<string>();
-      const push = (kind: "spo" | "nd", value?: string | null) => {
-        if (!value) return;
-        const key = `${kind}:${value}`;
-        if (seen.has(key)) return;
-        seen.add(key);
-        tries.push({ kind, value });
-      };
-
-      // Prioridade: ND principal → demais ND → SPO principal → demais SPO
-      // NUNCA usar linha digitável (regra do projeto: identificação só pelo nome do arquivo)
-      push("nd", extracted.numeroND);
-      for (const c of extracted.candidatosND.slice(0, MAX_CANDIDATES_PER_KIND)) push("nd", c);
-      push("spo", extracted.numeroSPO);
-      for (const c of extracted.candidatosSPO.slice(0, MAX_CANDIDATES_PER_KIND)) push("spo", c);
-
-      let match: { id: string; masterName?: string; childSpo?: string; isMaster?: boolean; matchedViaChild?: boolean; etapaAtual?: string } | null = null;
-      let displayNumero: string | null = null;
-
-      for (const t of tries) {
-        match = t.kind === "spo" ? await searchVoucherBySPO(t.value) : await searchVoucherByND(t.value);
-        if (match) {
-          displayNumero = t.value;
-          break;
-        }
-      }
-
-      if (!displayNumero) {
-        displayNumero = extracted.numeroND || extracted.numeroSPO || null;
-      }
+      const displayNumero =
+        matchedValue || extracted.numeroND || extracted.numeroSPO || null;
 
       const result: FileMatch = {
         file,
@@ -343,14 +341,21 @@ export function RoboTab() {
     };
 
     try {
-      for (let start = 0; start < selectedFiles.length; start += CONCURRENCY) {
-        const slice = selectedFiles.slice(start, start + CONCURRENCY);
-        await Promise.all(slice.map((f, k) => processOne(f, baseIndex + start + k)));
-      }
+      // Worker pool: N workers consomem uma fila — sem barreiras de lote.
+      let cursor = 0;
+      const next = () => (cursor < selectedFiles.length ? cursor++ : -1);
+      const worker = async () => {
+        let i: number;
+        while ((i = next()) !== -1) {
+          await processOne(selectedFiles[i], baseIndex + i);
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, selectedFiles.length) }, worker));
     } finally {
       setIdentifying(false);
     }
   };
+
 
   const handleManualSpoSearch = async (index: number) => {
     const file = files[index];
