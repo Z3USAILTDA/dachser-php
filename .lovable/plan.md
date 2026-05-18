@@ -1,41 +1,69 @@
+## Diagnóstico
 
-## Problema
+Hoje, em `src/components/tabs/RoboTab.tsx#handleFilesSelected`, cada comprovante passa por:
 
-No `RoboTab` (tela `/fin/esteira` → aba Robô), ao arrastar/selecionar comprovantes, a função `handleFilesSelected` em `src/components/tabs/RoboTab.tsx` faz extração de candidatos + várias chamadas ao `mariadb-proxy` (`find_voucher_by_spo` / `find_voucher_by_nd`) em lotes de 5, e só dá `setFiles((prev) => [...prev, ...results])` **no final**, quando todos os lotes terminam. Resultado: depois do toast inicial "Identificando X arquivo(s)…", a tela fica imóvel — sem barra de progresso, sem lista, sem spinner — e o usuário pensa que travou.
+1. **Upload do PDF inteiro (base64) para a edge function `parse-comprovante-pdf`** — mesmo que essa função, por regra do projeto ([mem](mem://vouchers/comprovante-robot-matching-rules)), **identifique exclusivamente pelo nome do arquivo** e nunca leia o conteúdo do PDF. O `pdfBase64` é exigido mas nunca usado.
+2. **Até 14 chamadas sequenciais** à `mariadb-proxy` (`find_voucher_by_spo` / `find_voucher_by_nd`), uma por candidato, dentro do `for (const t of tries)`.
+3. Concorrência limitada a `CONCURRENCY = 5`.
 
-A barra de progresso e o estado de "processing" hoje só existem para a etapa de *envio* (`processFiles`), não para a etapa de *identificação*.
+Com 25 arquivos = 5 lotes × (1 upload pesado + até 14 round-trips) → ~13s/arquivo, total 5min29s.
 
-## Plano
+A action `find_voucher_multi` **já existe** em `mariadb-proxy` e aceita arrays `spoCandidates` / `ndCandidates`, fazendo todo o fallback server-side em uma única chamada — mas não está sendo usada pelo RoboTab.
 
-1. **Adicionar estado de identificação em `RoboTab.tsx`**
-   - Novo state `identifying: boolean` e `identifyProgress: { done: number; total: number }`.
-   - Setar `identifying=true` e `total = selectedFiles.length` no início de `handleFilesSelected`; resetar no `finally`.
+## Mudanças (somente frontend / um único arquivo)
 
-2. **Renderizar arquivos imediatamente como "identifying"**
-   - Antes do loop de identificação, fazer `setFiles(prev => [...prev, ...placeholders])`, onde cada placeholder tem `status: "identifying"`, apenas com `fileName` e o `File`. O usuário já vê a lista crescer no instante do drop.
-   - Incluir um novo valor `"identifying"` no tipo `FileMatch["status"]` (e ajustar `getStatusBadge` para exibir um badge animado "Buscando voucher…").
-   - À medida que cada `processOne` termina, fazer `setFiles(prev => prev.map(...))` substituindo o placeholder pelo resultado real (status volta para `"pending"` se houver match, ou continua sem voucher).
-   - Incrementar `identifyProgress.done` a cada arquivo concluído.
+Arquivo: `src/components/tabs/RoboTab.tsx`
 
-3. **Banner de progresso no card de upload**
-   - Logo abaixo do `UploadZone`, quando `identifying === true`, mostrar um bloco pulsante (mesmo padrão visual já usado no `processing`):
-     - spinner + "Identificando X de Y comprovantes…"
-     - `Progress` com `value = done / total * 100`
-     - texto auxiliar: "Lendo o nome de cada arquivo e cruzando com os vouchers em aberto. Não feche esta janela."
-   - Desabilitar o `UploadZone` e o botão "Processar" enquanto `identifying` for verdadeiro (evita drops sobrepostos).
+### 1. Extrair candidatos do nome do arquivo no cliente
+- Replicar a lógica de `extractFromFilename` de `supabase/functions/parse-comprovante-pdf/index.ts` (≈200 linhas de regex puras, sem dependências) em uma nova função local `extractCandidatesFromFilename(fileName)`.
+- Eliminar `fileToBase64()` e a chamada `supabase.functions.invoke('parse-comprovante-pdf', …)` — economiza upload de base64 (PDFs de ~500KB–2MB) + cold start + parse.
+- Ganho esperado: ~3–6s por arquivo.
 
-4. **Feedback por linha**
-   - Linhas com `status: "identifying"`: borda animada (`animate-pulse` + `border-primary/40`) e texto "Analisando nome do arquivo…" no lugar do badge.
-   - Linhas já resolvidas: comportamento atual preservado (badge "Identificado", "Não identificado", etc.).
+### 2. Uma única chamada de lookup por arquivo
+- Substituir o loop `for (const t of tries) { searchVoucherBySPO / searchVoucherByND }` por **uma chamada** a `find_voucher_multi`, passando `spoPrimary`, `ndPrimary`, `spoCandidates`, `ndCandidates`.
+- Manter `pickVoucher` / `isIdentityMatch` para validação de identidade do retorno (defesa em profundidade).
+- Ganho esperado: ~5–7s por arquivo (de até 14 round-trips para 1).
 
-5. **Sem mudança de lógica de negócio**
-   - Nenhuma alteração no parser, no `mariadb-proxy`, nos critérios de match ou na regra "identificação só pelo nome do arquivo". Mudança 100% de UI/feedback no `RoboTab.tsx`.
-   - Concurrency continua em 5; só passa a reportar progresso incremental.
+### 3. Aumentar concorrência
+- `CONCURRENCY` de **5 → 10**. O gargalo deixa de ser o servidor (1 query por arquivo) e passa a ser a fila do cliente.
+- Trocar o padrão "batch-await-batch" por um **worker pool** real (10 workers consumindo uma fila), para não esperar o arquivo mais lento de cada lote.
 
-## Arquivos a editar
+### 4. Manter UI atual
+- Placeholders "identifying", banner de progresso, `setIdentifyProgress` continuam iguais — só o tempo até `done` muda.
 
-- `src/components/tabs/RoboTab.tsx` — único arquivo afetado.
+## Resultado esperado
 
-## Validação
+- Por arquivo: **~2–4s** (1 lookup + overhead de invoke).
+- 25 arquivos com 10 workers: **≤1min** total (vs 5min29s atuais).
+- Meta de ≤5s/arquivo atendida com folga.
 
-- Soltar 10+ comprovantes e confirmar que: (a) a lista aparece imediatamente com status "Analisando…", (b) o banner mostra "X de Y" subindo, (c) ao final, todos viram "Identificado / Não identificado" como hoje, (d) o botão "Processar" só habilita após o término da identificação.
+## O que NÃO muda
+
+- `parse-comprovante-pdf` continua existindo (pode ser usada por outros fluxos) — apenas o RoboTab para de chamá-la.
+- `mariadb-proxy` (sem alterações — `find_voucher_multi` já existe).
+- Regras de matching, prioridade, normalização de SPO/ND, `pickVoucher`, validação de identidade.
+- Comportamento de upload/processamento depois da identificação (fase "Processar").
+
+## Detalhes técnicos
+
+```text
+ANTES (por arquivo)
+  fileToBase64 → invoke(parse-comprovante-pdf) [PDF ~1MB]
+  └─ até 14× invoke(mariadb-proxy: find_voucher_by_spo|nd)
+
+DEPOIS (por arquivo)
+  extractCandidatesFromFilename(file.name)   [pure JS, <1ms]
+  └─ 1× invoke(mariadb-proxy: find_voucher_multi)
+```
+
+Pool de workers (esboço):
+```ts
+const CONCURRENCY = 10;
+let cursor = 0;
+const next = () => (cursor < selectedFiles.length ? cursor++ : -1);
+const worker = async () => {
+  let i;
+  while ((i = next()) !== -1) await processOne(selectedFiles[i], baseIndex + i);
+};
+await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+```
