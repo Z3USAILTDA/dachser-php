@@ -16,7 +16,7 @@ interface FileMatch {
   fileName: string;
   numeroSPO: string | null;
   voucherId: string | null;
-  status: "pending" | "processing" | "success" | "error";
+  status: "identifying" | "pending" | "processing" | "success" | "error";
   error?: string;
   manualSpoInput?: string;
   isEditingSpo?: boolean;
