@@ -143,6 +143,7 @@ export default function ComprovanteRobot() {
   const identifyFiles = async () => {
     setIdentifying(true);
     setProgress(0);
+    setProgressCount({ done: 0, total: files.length });
     const t0 = performance.now();
 
     const totalFiles = files.length;
