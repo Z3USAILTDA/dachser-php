@@ -201,6 +201,27 @@ function extractFromFilename(fileName: string): ExtractedData {
   }
 
   // ---------------------------------------------------------------
+  // SPO Manual com sufixo numérico livre: "105-29290509876206.pdf"
+  // → SPO 105-292905 + sufixo "09876206" (não-data).
+  // Sem este fallback, o regex "Voucher Manual" acima captura o tail
+  // inteiro como ND e o SPO real (6 dígitos) nunca é gerado.
+  // Score 96 (composto) e 94 (curto) — abaixo de SPO Remessa (100/102)
+  // e Voucher Remessa (≥102), mas acima de Voucher Manual (90).
+  // ---------------------------------------------------------------
+  for (const m of fileName.matchAll(/(?<![0-9])(\d{3})-(\d{11,})(?![0-9])/g)) {
+    const filial = m[1];
+    const tail = m[2];
+    for (const len of [6, 7, 5]) {
+      if (tail.length <= len) continue;
+      const spo = tail.slice(0, len);
+      const score = len === 6 ? 96 : (len === 7 ? 92 : 88);
+      addCandidate(spoScores, `${filial}-${spo}`, score);
+      addCandidate(spoScores, spo, score - 2);
+      console.log(`[Extract] SPO Manual + sufixo: ${filial}-${spo} (len=${len}, score=${score})`);
+    }
+  }
+
+  // ---------------------------------------------------------------
   // SPO explícito: "SPO 123", "comprovante 123", "spo nº 123" (score 85)
   // ---------------------------------------------------------------
   const explicitPatterns = [
