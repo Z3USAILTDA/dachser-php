@@ -381,6 +381,7 @@ export default function ComprovanteRobot() {
       } finally {
         processed++;
         setProgress((processed / identifiedFiles.length) * 100);
+        setProgressCount({ done: processed, total: identifiedFiles.length });
       }
     };
 
