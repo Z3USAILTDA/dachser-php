@@ -171,7 +171,7 @@ function ReguaCobrancaContent() {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_regua_counts" },
+        body: { action: "get_regua_counts_cr" },
       });
 
       if (error) throw error;
@@ -196,7 +196,7 @@ function ReguaCobrancaContent() {
     setIsLoadingDbStats(true);
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_financeiro_nfs_stats" },
+        body: { action: "get_financeiro_nfs_stats_cr" },
       });
 
       if (error) {
@@ -258,7 +258,7 @@ function ReguaCobrancaContent() {
     setStageLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_regua_stage", stage },
+        body: { action: "get_regua_stage_cr", stage },
       });
 
       if (error) throw error;
@@ -302,7 +302,7 @@ function ReguaCobrancaContent() {
     
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_regua_clientes_resumo", cliente: clienteSearch.trim() },
+        body: { action: "get_regua_clientes_resumo_cr", cliente: clienteSearch.trim() },
       });
       
       if (error) throw error;
