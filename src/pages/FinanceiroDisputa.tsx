@@ -125,7 +125,7 @@ function FinanceiroDisputaContent() {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_disputas", tipo: tipoFilter === "all" ? "" : tipoFilter },
+        body: { action: "get_disputas_cr", tipo: tipoFilter === "all" ? "" : tipoFilter },
       });
 
       if (error) throw error;
