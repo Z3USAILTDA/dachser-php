@@ -3569,6 +3569,9 @@ Deno.serve(async (req) => {
         console.log(`Lookup documento CR found: ${rows.length} rows for "${searchTerm}"`);
         result = { success: true, rows };
         break;
+      }
+
+
 
       case 'update_disputa_observacoes': {
         const { doc_key, observacoes } = body as { doc_key?: string; observacoes?: string };
