@@ -355,7 +355,20 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // ====== Fase 2C.2: três modos controlados ======
+    // ====== Fase 2C.3: whitelist de stages permitidos ======
+    const ALLOWED_STAGES = ["PRE", "D1", "D7", "D15", "D30", "D45", "D60"] as const;
+    if (!ALLOWED_STAGES.includes(stage as any)) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "stage não permitido",
+          permitidos: ALLOWED_STAGES,
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ====== Fase 2C.3: três modos controlados (envio interno liberado para todos os buckets) ======
     // 1) dryRun:true                     → simula, não chama Resend, não grava log
     // 2) envio interno de teste          → exige dryRun:false + testMode:true + confirmInternalSend:"SEND_TO_DEVS_ONLY"
     //                                      → envia APENAS para devs@z3us.ai, não grava log
@@ -370,7 +383,7 @@ serve(async (req: Request): Promise<Response> => {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Fase 2C.2: envio real bloqueado. Travas ausentes ou inválidas.",
+          error: "Fase 2C.3: envio real bloqueado. Travas ausentes ou inválidas.",
           requeridos: {
             dryRun: false,
             testMode: true,
@@ -380,6 +393,7 @@ serve(async (req: Request): Promise<Response> => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
 
     // Connect to MariaDB
     const host = Deno.env.get("MARIADB_FIN_HOST");
@@ -461,7 +475,7 @@ serve(async (req: Request): Promise<Response> => {
       ORDER BY t.data_vencimento ASC, t.razao_social ASC
     `;
 
-    console.log(`[regua-send-emails] [Fase 2C.2 ${isDryRun ? "dryRun" : "internalTestSend"}] stage=${stage}`);
+    console.log(`[regua-send-emails] [Fase 2C.3 ${isDryRun ? "dryRun" : "internalTestSend"}] stage=${stage}`);
     const invoices = await client.query(sql);
     const totalTitulosStage = invoices.length;
     console.log(`[regua-send-emails] total_titulos_stage=${totalTitulosStage}`);
