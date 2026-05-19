@@ -424,8 +424,10 @@ function FinanceiroDisputaContent() {
     responsavelDebounceTimers.current[docKey] = setTimeout(async () => {
       setSavingResponsavel(prev => ({ ...prev, [docKey]: true }));
       try {
+        const targetNf = rowsRef.current.find(r => r.doc_key === docKey)?.nf;
+        if (!targetNf) throw new Error("Linha não encontrada");
         const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "update_disputa_responsavel", doc_key: docKey, responsavel: value },
+          body: { action: "update_disputa_responsavel_cr", nf: targetNf, responsavel: value },
         });
 
         if (error) throw error;
