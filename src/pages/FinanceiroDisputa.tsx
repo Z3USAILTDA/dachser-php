@@ -277,9 +277,16 @@ function FinanceiroDisputaContent() {
 
   const handleDelete = async () => {
     if (!deleteDocKey) return;
+    const targetNf = rows.find(r => r.doc_key === deleteDocKey)?.nf;
+    if (!targetNf) {
+      toast({ title: "Erro", description: "Linha não encontrada", variant: "destructive" });
+      setDeleteDialogOpen(false);
+      setDeleteDocKey(null);
+      return;
+    }
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "delete_disputa", doc_key: deleteDocKey },
+        body: { action: "delete_disputa_cr", nf: targetNf },
       });
 
       if (error) throw error;
@@ -300,9 +307,16 @@ function FinanceiroDisputaContent() {
 
   const handleResolve = async () => {
     if (!resolveDocKey) return;
+    const targetNf = rows.find(r => r.doc_key === resolveDocKey)?.nf;
+    if (!targetNf) {
+      toast({ title: "Erro", description: "Linha não encontrada", variant: "destructive" });
+      setResolveDialogOpen(false);
+      setResolveDocKey(null);
+      return;
+    }
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "resolve_disputa", doc_key: resolveDocKey },
+        body: { action: "resolve_disputa_cr", nf: targetNf },
       });
 
       if (error) throw error;
