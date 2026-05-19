@@ -461,7 +461,7 @@ serve(async (req: Request): Promise<Response> => {
       ORDER BY t.data_vencimento ASC, t.razao_social ASC
     `;
 
-    console.log(`[regua-send-emails] [Fase 2C.1 dryRun] stage=${stage}`);
+    console.log(`[regua-send-emails] [Fase 2C.2 ${isDryRun ? "dryRun" : "internalTestSend"}] stage=${stage}`);
     const invoices = await client.query(sql);
     const totalTitulosStage = invoices.length;
     console.log(`[regua-send-emails] total_titulos_stage=${totalTitulosStage}`);
@@ -470,7 +470,7 @@ serve(async (req: Request): Promise<Response> => {
       return new Response(
         JSON.stringify({
           success: true,
-          dryRun: true,
+          mode: isDryRun ? "dry_run" : "internal_test_send",
           stage,
           destinatario_simulado: "devs@z3us.ai",
           total_titulos_stage: 0,
@@ -498,26 +498,103 @@ serve(async (req: Request): Promise<Response> => {
     const [clientKey, clientInvoices] = firstClientEntry;
     const clientName = clientKey.split("|")[0];
 
-    // Amostra sanitizada (até 5 títulos do primeiro cliente)
-    // Apenas: doc_key, tipo_documento, dias_atraso, valor_nf
-    const amostra = clientInvoices.slice(0, 5).map((r: any) => ({
-      doc_key: r.doc_key,
-      tipo_documento: r.tipo_documento,
-      dias_atraso: Number(r.dias) || 0,
-      valor_nf: Number(r.valor_nf) || 0,
-    }));
+    // ====== Modo DRY-RUN: retorna amostra sanitizada e sai ======
+    if (isDryRun) {
+      const amostra = clientInvoices.slice(0, 5).map((r: any) => ({
+        doc_key: r.doc_key,
+        tipo_documento: r.tipo_documento,
+        dias_atraso: Number(r.dias) || 0,
+        valor_nf: Number(r.valor_nf) || 0,
+      }));
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          mode: "dry_run",
+          dryRun: true,
+          stage,
+          destinatario_simulado: "devs@z3us.ai",
+          total_titulos_stage: totalTitulosStage,
+          total_clientes_stage: clientGroups.size,
+          titulos_processados: clientInvoices.length,
+          cliente_processado: clientName,
+          amostra,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ====== Modo ENVIO INTERNO DE TESTE ======
+    // Envia APENAS para devs@z3us.ai. Destinatário hardcoded.
+    // Não lê email_cliente, não aceita forceRecipient, não grava log.
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    if (!resendApiKey) {
+      throw new Error("RESEND_API_KEY não configurada");
+    }
+    const resend = new Resend(resendApiKey);
+
+    const tipoPagto = clientInvoices[0]?.tipo_pagto || "A prazo";
+    const { subject, bodyBefore, bodyAfter } = buildTemplateText(
+      tipoPagto,
+      stage,
+      clientInvoices,
+      new Date()
+    );
+
+    const tableHtml = buildTableHtml(clientInvoices);
+    const beforeHtml = htmlEncode(bodyBefore).replace(/\n/g, "<br>");
+    const afterHtml = htmlEncode(bodyAfter).replace(/\n/g, "<br>");
+
+    const html = `<!DOCTYPE html>
+<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#000;">
+<div>${beforeHtml}</div>
+<br>
+${tableHtml}
+<br>
+<div>${afterHtml}</div>
+</body></html>`;
+
+    const fromEmail = Deno.env.get("SMTP_FROM_EMAIL") || "onboarding@resend.dev";
+    const fromName = Deno.env.get("SMTP_FROM_NAME") || "Dachser Financeiro";
+    const fromHeader = `${fromName} <${fromEmail}>`;
+
+    const testSubject = `[TESTE INTERNO - Cliente: ${clientName}] ${subject}`;
+
+    console.log(`[regua-send-emails] enviando teste interno para devs@z3us.ai (stage=${stage}, cliente=${clientName}, titulos=${clientInvoices.length})`);
+
+    const { data: sendData, error: sendError } = await resend.emails.send({
+      from: fromHeader,
+      to: ["devs@z3us.ai"],
+      subject: testSubject,
+      html,
+    });
+
+    if (sendError) {
+      console.error("[regua-send-emails] Resend error:", sendError);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          mode: "internal_test_send",
+          stage,
+          error: "Falha ao enviar via Resend",
+          details: sendError,
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     return new Response(
       JSON.stringify({
         success: true,
-        dryRun: true,
+        mode: "internal_test_send",
         stage,
-        destinatario_simulado: "devs@z3us.ai",
+        destinatario_real: "devs@z3us.ai",
+        cliente_origem_dados: clientName,
         total_titulos_stage: totalTitulosStage,
         total_clientes_stage: clientGroups.size,
-        titulos_processados: clientInvoices.length,
-        cliente_processado: clientName,
-        amostra,
+        total_titulos_enviados: clientInvoices.length,
+        resend_message_id: sendData?.id || null,
+        log_gravado: false,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
