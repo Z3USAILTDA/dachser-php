@@ -198,7 +198,7 @@ export function useUserRole() {
   const canEditVoucher = isAdmin || isSupervisor || isFinanceiro || isOperacao;
 
   // Verifica se pode deletar vouchers (Supervisor, Financeiro, Admin)
-  const canDeleteVoucher = isAdmin || isSupervisor || isFinanceiro;
+  const canDeleteVoucher = isAdmin || isSupervisor;
 
   // Verifica se pode aprovar etapa fiscal (Fiscal, Supervisor, Financeiro, Admin)
   const canApproveFiscal = isAdmin || isSupervisor || isFinanceiro || isFiscal;
