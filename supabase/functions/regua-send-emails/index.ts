@@ -395,7 +395,7 @@ serve(async (req: Request): Promise<Response> => {
         case "PRE":
           return "t.data_vencimento >= CURDATE()";
         case "D1":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 6";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) = 1";
         case "D7":
           return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7 AND 14";
         case "D15":
