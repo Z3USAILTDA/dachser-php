@@ -355,15 +355,29 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // ====== Fase 2C.1: dryRun OBRIGATÓRIO ======
-    // Bloqueio total contra envio real. Nunca chama Resend, nunca grava log.
-    if (payload?.dryRun !== true) {
+    // ====== Fase 2C.2: três modos controlados ======
+    // 1) dryRun:true                     → simula, não chama Resend, não grava log
+    // 2) envio interno de teste          → exige dryRun:false + testMode:true + confirmInternalSend:"SEND_TO_DEVS_ONLY"
+    //                                      → envia APENAS para devs@z3us.ai, não grava log
+    // 3) qualquer outro caso             → bloqueado
+    const isDryRun = payload?.dryRun === true;
+    const isInternalTestSend =
+      payload?.dryRun === false &&
+      (payload as any)?.testMode === true &&
+      (payload as any)?.confirmInternalSend === "SEND_TO_DEVS_ONLY";
+
+    if (!isDryRun && !isInternalTestSend) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Fase 2C.1: dryRun obrigatório. Envio real bloqueado.",
+          error: "Fase 2C.2: envio real bloqueado. Travas ausentes ou inválidas.",
+          requeridos: {
+            dryRun: false,
+            testMode: true,
+            confirmInternalSend: "SEND_TO_DEVS_ONLY",
+          },
         }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
