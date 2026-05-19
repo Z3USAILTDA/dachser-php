@@ -526,6 +526,9 @@ Deno.serve(async (req) => {
       'delete_accrual_entry','clear_accrual_entries',
       // Faturamento / NFS / Stats financeiras
       'get_faturamento_dashboard','get_financeiro_nfs_stats','fetch_fin_voucher_stats',
+      // Régua shadow _cr (Fase 1 — nova base v_fin_regua_contas_receber, sem cutover)
+      'get_regua_counts_cr','get_regua_stage_cr','get_regua_clientes_resumo_cr',
+      'get_financeiro_nfs_stats_cr','compare_regua_old_vs_cr',
       // Supervisor tokens (aprovação fluxo voucher)
       'setup_supervisor_tokens_table','create_supervisor_token',
       'validate_supervisor_token','mark_supervisor_token_used',
