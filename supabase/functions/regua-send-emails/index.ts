@@ -475,7 +475,7 @@ serve(async (req: Request): Promise<Response> => {
       ORDER BY t.data_vencimento ASC, t.razao_social ASC
     `;
 
-    console.log(`[regua-send-emails] [Fase 2C.2 ${isDryRun ? "dryRun" : "internalTestSend"}] stage=${stage}`);
+    console.log(`[regua-send-emails] [Fase 2C.3 ${isDryRun ? "dryRun" : "internalTestSend"}] stage=${stage}`);
     const invoices = await client.query(sql);
     const totalTitulosStage = invoices.length;
     console.log(`[regua-send-emails] total_titulos_stage=${totalTitulosStage}`);
