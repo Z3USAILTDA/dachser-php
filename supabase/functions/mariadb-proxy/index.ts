@@ -3426,15 +3426,25 @@ Deno.serve(async (req) => {
               )
           ),
           candidatos AS (
-            SELECT fd.id AS fd_id, fd.nf AS fd_nf, fd.responsavel AS fd_responsavel,
-                   fd.departamento, fd.observacoes, fd.escalation,
+            SELECT fd.id AS fd_id,
+                   CONVERT(fd.nf USING utf8mb4)            COLLATE utf8mb4_unicode_ci AS fd_nf,
+                   CONVERT(fd.responsavel USING utf8mb4)   COLLATE utf8mb4_unicode_ci AS fd_responsavel,
+                   CONVERT(fd.departamento USING utf8mb4)  COLLATE utf8mb4_unicode_ci AS departamento,
+                   CONVERT(fd.observacoes USING utf8mb4)   COLLATE utf8mb4_unicode_ci AS observacoes,
+                   CONVERT(fd.escalation USING utf8mb4)    COLLATE utf8mb4_unicode_ci AS escalation,
                    fd.created_at AS fd_created_at,
-                   v.doc_key, v.idlan, v.id_rm,
-                   v.documento, v.numero_nf, v.nd,
-                   v.razao_social AS cliente,
+                   CONVERT(v.doc_key USING utf8mb4)        COLLATE utf8mb4_unicode_ci AS doc_key,
+                   CONVERT(v.idlan USING utf8mb4)          COLLATE utf8mb4_unicode_ci AS idlan,
+                   CONVERT(v.id_rm USING utf8mb4)          COLLATE utf8mb4_unicode_ci AS id_rm,
+                   CONVERT(v.documento USING utf8mb4)      COLLATE utf8mb4_unicode_ci AS documento,
+                   CONVERT(v.numero_nf USING utf8mb4)      COLLATE utf8mb4_unicode_ci AS numero_nf,
+                   CONVERT(v.nd USING utf8mb4)             COLLATE utf8mb4_unicode_ci AS nd,
+                   CONVERT(v.razao_social USING utf8mb4)   COLLATE utf8mb4_unicode_ci AS cliente,
                    v.data_emissao, v.data_vencimento,
-                   v.valor_nf, v.tipo_documento, v.modal,
-                   'nova_base' AS origem_disputa
+                   v.valor_nf,
+                   CONVERT(v.tipo_documento USING utf8mb4) COLLATE utf8mb4_unicode_ci AS tipo_documento,
+                   CONVERT(v.modal USING utf8mb4)          COLLATE utf8mb4_unicode_ci AS modal,
+                   CONVERT('nova_base' USING utf8mb4)      COLLATE utf8mb4_unicode_ci AS origem_disputa
             FROM fd_ativas fd
             INNER JOIN dados_dachser.v_fin_regua_contas_receber v
               ON v.doc_key COLLATE utf8mb4_unicode_ci
@@ -3443,15 +3453,25 @@ Deno.serve(async (req) => {
 
             UNION ALL
 
-            SELECT fd.id, fd.nf, fd.responsavel,
-                   fd.departamento, fd.observacoes, fd.escalation,
+            SELECT fd.id,
+                   CONVERT(fd.nf USING utf8mb4)            COLLATE utf8mb4_unicode_ci,
+                   CONVERT(fd.responsavel USING utf8mb4)   COLLATE utf8mb4_unicode_ci,
+                   CONVERT(fd.departamento USING utf8mb4)  COLLATE utf8mb4_unicode_ci,
+                   CONVERT(fd.observacoes USING utf8mb4)   COLLATE utf8mb4_unicode_ci,
+                   CONVERT(fd.escalation USING utf8mb4)    COLLATE utf8mb4_unicode_ci,
                    fd.created_at,
-                   v.doc_key, v.idlan, v.id_rm,
-                   v.documento, v.numero_nf, v.nd,
-                   v.razao_social,
+                   CONVERT(v.doc_key USING utf8mb4)        COLLATE utf8mb4_unicode_ci,
+                   CONVERT(v.idlan USING utf8mb4)          COLLATE utf8mb4_unicode_ci,
+                   CONVERT(v.id_rm USING utf8mb4)          COLLATE utf8mb4_unicode_ci,
+                   CONVERT(v.documento USING utf8mb4)      COLLATE utf8mb4_unicode_ci,
+                   CONVERT(v.numero_nf USING utf8mb4)      COLLATE utf8mb4_unicode_ci,
+                   CONVERT(v.nd USING utf8mb4)             COLLATE utf8mb4_unicode_ci,
+                   CONVERT(v.razao_social USING utf8mb4)   COLLATE utf8mb4_unicode_ci,
                    v.data_emissao, v.data_vencimento,
-                   v.valor_nf, v.tipo_documento, v.modal,
-                   'legado_casado'
+                   v.valor_nf,
+                   CONVERT(v.tipo_documento USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                   CONVERT(v.modal USING utf8mb4)          COLLATE utf8mb4_unicode_ci,
+                   CONVERT('legado_casado' USING utf8mb4)  COLLATE utf8mb4_unicode_ci
             FROM fd_ativas fd
             INNER JOIN dados_dachser.v_fin_regua_contas_receber v
               ON (
@@ -3473,15 +3493,26 @@ Deno.serve(async (req) => {
             SELECT * FROM dedup WHERE rn = 1
           ),
           orfas AS (
-            SELECT fd.id AS fd_id, fd.nf AS fd_nf, fd.responsavel AS fd_responsavel,
-                   fd.departamento, fd.observacoes, fd.escalation,
+            SELECT fd.id AS fd_id,
+                   CONVERT(fd.nf USING utf8mb4)           COLLATE utf8mb4_unicode_ci AS fd_nf,
+                   CONVERT(fd.responsavel USING utf8mb4)  COLLATE utf8mb4_unicode_ci AS fd_responsavel,
+                   CONVERT(fd.departamento USING utf8mb4) COLLATE utf8mb4_unicode_ci AS departamento,
+                   CONVERT(fd.observacoes USING utf8mb4)  COLLATE utf8mb4_unicode_ci AS observacoes,
+                   CONVERT(fd.escalation USING utf8mb4)   COLLATE utf8mb4_unicode_ci AS escalation,
                    fd.created_at AS fd_created_at,
-                   fd.nf AS doc_key, NULL AS idlan, NULL AS id_rm,
-                   NULL AS documento, NULL AS numero_nf, NULL AS nd,
-                   fd.cliente AS cliente,
-                   NULL AS data_emissao, NULL AS data_vencimento,
-                   NULL AS valor_nf, NULL AS tipo_documento, NULL AS modal,
-                   'legado_orfao' AS origem_disputa,
+                   CONVERT(fd.nf USING utf8mb4)           COLLATE utf8mb4_unicode_ci AS doc_key,
+                   CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS idlan,
+                   CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS id_rm,
+                   CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS documento,
+                   CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS numero_nf,
+                   CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS nd,
+                   CONVERT(fd.cliente USING utf8mb4)      COLLATE utf8mb4_unicode_ci AS cliente,
+                   CAST(NULL AS DATETIME) AS data_emissao,
+                   CAST(NULL AS DATETIME) AS data_vencimento,
+                   CAST(NULL AS DECIMAL(18,2)) AS valor_nf,
+                   CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS tipo_documento,
+                   CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS modal,
+                   CONVERT('legado_orfao' USING utf8mb4)  COLLATE utf8mb4_unicode_ci AS origem_disputa,
                    1 AS rn
             FROM fd_ativas fd
             WHERE NOT EXISTS (SELECT 1 FROM casadas k WHERE k.fd_id = fd.id)
