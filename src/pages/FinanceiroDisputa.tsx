@@ -357,45 +357,21 @@ function FinanceiroDisputaContent() {
   };
 
   const handleBulkDelete = async () => {
-    if (selectedDocKeys.size === 0) return;
-    setBulkLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "bulk_delete_disputas", doc_keys: Array.from(selectedDocKeys) },
-      });
-      if (error) throw error;
-      toast({ title: "Sucesso", description: `${data.deleted} disputa(s) excluída(s)` });
-      setSelectedDocKeys(new Set());
-      setSelectAll(false);
-      fetchDisputas();
-    } catch (err) {
-      console.error("Erro ao excluir em lote:", err);
-      toast({ title: "Erro", description: "Falha ao excluir disputas", variant: "destructive" });
-    } finally {
-      setBulkLoading(false);
-      setBulkDeleteDialogOpen(false);
-    }
+    toast({
+      title: "Indisponível",
+      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
+      variant: "destructive",
+    });
+    setBulkDeleteDialogOpen(false);
   };
 
   const handleBulkResolve = async () => {
-    if (selectedDocKeys.size === 0) return;
-    setBulkLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "bulk_resolve_disputas", doc_keys: Array.from(selectedDocKeys) },
-      });
-      if (error) throw error;
-      toast({ title: "Sucesso", description: `${data.resolved} disputa(s) resolvida(s)` });
-      setSelectedDocKeys(new Set());
-      setSelectAll(false);
-      fetchDisputas();
-    } catch (err) {
-      console.error("Erro ao resolver em lote:", err);
-      toast({ title: "Erro", description: "Falha ao resolver disputas", variant: "destructive" });
-    } finally {
-      setBulkLoading(false);
-      setBulkResolveDialogOpen(false);
-    }
+    toast({
+      title: "Indisponível",
+      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
+      variant: "destructive",
+    });
+    setBulkResolveDialogOpen(false);
   };
 
   const clearFilters = () => {
