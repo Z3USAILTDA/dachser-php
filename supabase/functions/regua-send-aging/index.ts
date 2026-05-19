@@ -293,8 +293,30 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
 
+    // Collect razao_base / cnpj inputs
+    const allRazaoBases: string[] = [];
+    if (razao_bases && Array.isArray(razao_bases) && razao_bases.length > 0) {
+      allRazaoBases.push(...razao_bases);
+    } else if (razao_base) {
+      allRazaoBases.push(razao_base);
+    }
+    const inputCnpjsRaw: string[] = [];
+    if (cnpjs && Array.isArray(cnpjs) && cnpjs.length > 0) inputCnpjsRaw.push(...cnpjs);
+    else if (cnpj) inputCnpjsRaw.push(cnpj);
+
+    const mode = allRazaoBases.length > 0 ? "razao_base" : "cnpj";
+
+    // Sanitized log — never expose custom_text or recipient list
+    console.log("[regua-send-aging] req", {
+      mode,
+      cliente: cliente || null,
+      cnpjs_recebidos: inputCnpjsRaw.length,
+      razao_bases_recebidas: allRazaoBases.length,
+      email_to_informado: !!(email_to && email_to.trim()),
+      custom_text_informado: !!(custom_text && custom_text.trim()),
+    });
+
     const recipientList = parseEmails(email_to);
-    console.log("[regua-send-aging] Sending to:", recipientList);
 
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     if (!resendApiKey) throw new Error("RESEND_API_KEY não configurada");
@@ -317,85 +339,69 @@ serve(async (req: Request): Promise<Response> => {
       idleTimeout: 60000,
     });
 
-    // Determine target CNPJs — prefer razao_base grouping over CNPJ root
+    // Resolve target CNPJs (always normalized = digits only) from the new canonical view
     let allCnpjs: string[] = [];
 
-    // Collect all razao_base values to resolve
-    const allRazaoBases: string[] = [];
-    if (razao_bases && Array.isArray(razao_bases) && razao_bases.length > 0) {
-      allRazaoBases.push(...razao_bases);
-    } else if (razao_base) {
-      allRazaoBases.push(razao_base);
-    }
-
     if (allRazaoBases.length > 0) {
-      // Resolve CNPJs by razao_base (commercial grouping)
       const placeholders = allRazaoBases.map(() => "?").join(",");
       const [rows] = await connection.query(`
-        SELECT DISTINCT t.cnpj 
-        FROM dados_dachser.t_dados_financeiro_nfs t
-        WHERE SUBSTRING_INDEX(t.razao_social, ' - ', 1) IN (${placeholders})
-          AND DATEDIFF(CURDATE(), t.data_vencimento) >= 1
-          AND NOT EXISTS (SELECT 1 FROM dados_dachser.tbaixas b WHERE b.IdLancamentoRM = t.id_rm AND b.StatusLan IN (1, 2, 3))
-          AND (t.disputa IS NULL OR t.disputa = 0)
+        SELECT DISTINCT REPLACE(REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-',''),' ','') AS cnpj
+        FROM dados_dachser.v_fin_regua_contas_receber
+        WHERE SUBSTRING_INDEX(razao_social, ' - ', 1) IN (${placeholders})
       `, allRazaoBases);
-      allCnpjs = (rows as any[]).map(r => r.cnpj);
-      console.log(`[regua-send-aging] Resolved ${allCnpjs.length} CNPJs from ${allRazaoBases.length} razao_base(s)`);
-    } else if (cnpjs && Array.isArray(cnpjs) && cnpjs.length > 0) {
-      // Fallback: resolve by CNPJ root
-      for (const c of cnpjs) {
-        const baseCnpj = c.replace(/\D/g, "").substring(0, 8);
-        const [rows] = await connection.query(`
-          SELECT DISTINCT cnpj FROM dados_dachser.t_dados_financeiro_nfs t
-          WHERE cnpj LIKE CONCAT(?, '%')
-            AND DATEDIFF(CURDATE(), data_vencimento) >= 1
-            AND NOT EXISTS (SELECT 1 FROM dados_dachser.tbaixas b WHERE b.IdLancamentoRM = t.id_rm AND b.StatusLan IN (1, 2, 3))
-            AND (t.disputa IS NULL OR t.disputa = 0)
-        `, [baseCnpj]);
-        allCnpjs.push(...(rows as any[]).map(r => r.cnpj));
-      }
-      allCnpjs = [...new Set(allCnpjs)];
-    } else if (cnpj) {
-      const baseCnpj = cnpj.replace(/\D/g, "").substring(0, 8);
-      const [rows] = await connection.query(`
-        SELECT DISTINCT cnpj FROM dados_dachser.t_dados_financeiro_nfs t
-        WHERE cnpj LIKE CONCAT(?, '%')
-          AND DATEDIFF(CURDATE(), data_vencimento) >= 1
-          AND NOT EXISTS (SELECT 1 FROM dados_dachser.tbaixas b WHERE b.IdLancamentoRM = t.id_rm AND b.StatusLan IN (1, 2, 3))
-          AND (t.disputa IS NULL OR t.disputa = 0)
-      `, [baseCnpj]);
-      allCnpjs = (rows as any[]).map(r => r.cnpj);
-      if (allCnpjs.length === 0) allCnpjs.push(cnpj);
+      allCnpjs = (rows as any[]).map(r => String(r.cnpj || "")).filter(Boolean);
+    } else if (inputCnpjsRaw.length > 0) {
+      allCnpjs = [...new Set(inputCnpjsRaw.map(c => c.replace(/\D/g, "")).filter(Boolean))];
     }
 
-    // Fetch invoices
+    console.log(`[regua-send-aging] cnpjs_resolvidos: ${allCnpjs.length}`);
+
+    // Guard rail — never emit IN ()
+    if (allCnpjs.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Nenhum CNPJ encontrado para gerar o Aging List." }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Fetch invoices from new canonical view
     const placeholders = allCnpjs.map(() => "?").join(",");
     const [invoicesResult] = await connection.query(`
-      SELECT 
-        t.documento, COALESCE(t.nd, '') AS nd, COALESCE(t.referencia_cliente, '') AS referencia_cliente,
-        COALESCE(NULLIF(t.numero_nf,''), '') AS numero_nf, COALESCE(t.modal, '') AS modal,
-        t.tipo_documento, DATE_FORMAT(t.data_emissao, '%d/%m/%Y') AS data_emissao,
+      SELECT
+        t.documento,
+        COALESCE(t.nd, '') AS nd,
+        COALESCE(t.ref_cliente, '') AS referencia_cliente,
+        COALESCE(NULLIF(t.numero_nf,''), '') AS numero_nf,
+        COALESCE(t.modal, '') AS modal,
+        t.tipo_documento,
+        DATE_FORMAT(t.data_emissao, '%d/%m/%Y') AS data_emissao,
         DATE_FORMAT(t.data_vencimento, '%d/%m/%Y') AS data_vencimento,
-        t.valor_nf, t.razao_social, t.cnpj,
-        COALESCE(n.numero_processo, '') AS numero_processo,
-        COALESCE(n.house, '') AS house, COALESCE(n.master, '') AS master,
-        'Em atraso' AS status_fatura, 'Financeiro' AS responsavel
-      FROM dados_dachser.t_dados_financeiro_nfs t
-      LEFT JOIN dados_dachser.t_dados_nfs n ON t.id_rm = n.id_rm
-      LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
-      WHERE t.cnpj IN (${placeholders})
-        AND COALESCE(sd.active, 1) = 1
-        AND NOT EXISTS (SELECT 1 FROM dados_dachser.tbaixas b WHERE b.IdLancamentoRM = t.id_rm AND b.StatusLan IN (1, 2, 3))
-        AND (t.disputa IS NULL OR t.disputa = 0)
+        t.valor_nf,
+        t.razao_social,
+        t.cnpj,
+        COALESCE(t.processo, '') AS numero_processo,
+        COALESCE(t.house, '') AS house,
+        COALESCE(t.master, '') AS master,
+        'Em atraso' AS status_fatura,
+        'Financeiro' AS responsavel
+      FROM dados_dachser.v_fin_regua_contas_receber t
+      WHERE REPLACE(REPLACE(REPLACE(REPLACE(t.cnpj,'.',''),'/',''),'-',''),' ','') IN (${placeholders})
         AND DATEDIFF(CURDATE(), t.data_vencimento) >= 1
+        AND NOT EXISTS (
+          SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+          WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+            AND sd.active = 0
+        )
       ORDER BY t.cnpj, t.data_vencimento ASC
     `, allCnpjs);
 
     const invoices = invoicesResult as InvoiceRow[];
+    const totalValueLog = invoices.reduce((s, i) => s + (Number(i.valor_nf) || 0), 0);
+    console.log(`[regua-send-aging] titulos_encontrados: ${invoices.length} valor_total: ${totalValueLog.toFixed(2)}`);
 
     if (invoices.length === 0) {
       return new Response(
-        JSON.stringify({ success: false, message: "Nenhuma fatura em atraso encontrada para este cliente" }),
+        JSON.stringify({ success: false, error: "Nenhum título vencido encontrado para este cliente." }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
