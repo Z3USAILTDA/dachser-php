@@ -234,10 +234,23 @@ function FinanceiroDisputaContent() {
     setAddLoading(true);
 
     try {
+      // Lookup do documento na nova base (CR) — pega a primeira ocorrência
+      const { data: lookupData, error: lookupError } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "lookup_documento_cr", termo: addNf.trim() },
+      });
+
+      if (lookupError) throw lookupError;
+      const lookupRows = lookupData?.rows || [];
+      if (!lookupData?.success || lookupRows.length === 0) {
+        setAddError("Documento não encontrado.");
+        return;
+      }
+      const docKey = lookupRows[0].doc_key;
+
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { 
-          action: "save_disputa", 
-          nf: addNf.trim(), 
+        body: {
+          action: "save_disputa_cr",
+          doc_key: docKey,
           responsavel: addResp.trim(),
           observacoes: addObservacoes.trim(),
         },
