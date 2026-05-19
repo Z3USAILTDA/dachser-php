@@ -345,7 +345,8 @@ serve(async (req: Request): Promise<Response> => {
   let client: Client | null = null;
 
   try {
-    const { stage, dryRun = false }: StageEmailRequest = await req.json();
+    const payload: StageEmailRequest = await req.json();
+    const { stage } = payload;
 
     if (!stage) {
       return new Response(
@@ -354,12 +355,17 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    if (!resendApiKey && !dryRun) {
-      throw new Error("RESEND_API_KEY não configurada");
+    // ====== Fase 2C.1: dryRun OBRIGATÓRIO ======
+    // Bloqueio total contra envio real. Nunca chama Resend, nunca grava log.
+    if (payload?.dryRun !== true) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Fase 2C.1: dryRun obrigatório. Envio real bloqueado.",
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
-
-    const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
     // Connect to MariaDB
     const host = Deno.env.get("MARIADB_FIN_HOST");
@@ -381,272 +387,123 @@ serve(async (req: Request): Promise<Response> => {
       charset: "utf8mb4",
     });
 
-    // Build stage condition - EXATAMENTE como no C#
+    // ====== Stage condition — alinhado com a régua visual ======
+    // PRE/D1/D7/D15/D30: por dias de atraso (independente de tipo_documento)
+    // D45/D60: split por tipo_documento (FAT_NF antecipa em 15 dias)
     const getStageCondition = (s: string): string => {
       switch (s) {
         case "PRE":
           return "t.data_vencimento >= CURDATE()";
         case "D1":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) = 2";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 6";
         case "D7":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) = 8";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7 AND 14";
         case "D15":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) = 16";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29";
         case "D30":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) = 31";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44";
         case "D45":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) = 46";
+          return "t.tipo_documento <> 'FAT_NF' AND DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59";
         case "D60":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) = 61";
+          return "((t.tipo_documento <> 'FAT_NF' AND DATEDIFF(CURDATE(), t.data_vencimento) >= 60) OR (t.tipo_documento = 'FAT_NF' AND DATEDIFF(CURDATE(), t.data_vencimento) >= 45))";
         default:
           return "1=0";
       }
     };
 
-    // Fetch invoices com JOIN para t_dados_nfs para pegar processo, house, master
-    // A conexão é feita por documento (numero NF) pois id_rm pode estar vazio ou diferente
+    // ====== Query da view canônica ======
+    // - Fonte única: dados_dachser.v_fin_regua_contas_receber
+    // - Soft delete por doc_key (NOT EXISTS com sd.active = 0)
+    // - Sem tbaixas, sem disputa, sem t_dados_financeiro_nfs, sem t_dados_nfs,
+    //   sem t_dados_financeiro_contatos, sem email_cliente
     const sql = `
-      SELECT 
+      SELECT
+        t.doc_key,
         SUBSTRING_INDEX(t.razao_social, ' - ', 1) AS razao_base,
         t.razao_social,
         t.documento,
-        t.nd,
-        t.referencia_cliente AS ref_cliente,
+        COALESCE(t.nd, '') AS nd,
+        COALESCE(t.ref_cliente, '') AS ref_cliente,
         COALESCE(NULLIF(t.numero_nf,''), t.documento) AS nf_exibicao,
-        t.numero_nf,
-        t.modal,
+        COALESCE(t.numero_nf, '') AS numero_nf,
+        COALESCE(t.modal, '') AS modal,
         t.tipo_documento,
         DATE_FORMAT(t.data_emissao, '%d/%m/%Y') AS data_emissao,
         DATE_FORMAT(t.data_vencimento, '%d/%m/%Y') AS data_vencimento,
         DATEDIFF(CURDATE(), t.data_vencimento) AS dias,
         t.valor_nf,
         t.cnpj,
-        CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo_pagto,
-        t.id_rm AS id_rm_financeiro,
-        COALESCE(nf.numero_processo, '') AS processo,
-        COALESCE(nf.house, '') AS house,
-        COALESCE(nf.master, '') AS master,
-        t.id_rm AS debug_id_rm,
-        (
-          SELECT GROUP_CONCAT(DISTINCT c.email_contato SEPARATOR ';')
-          FROM dados_dachser.t_dados_financeiro_contatos c
-          WHERE REPLACE(REPLACE(REPLACE(c.cnpj,'.',''),'/',''),'-','')
-                = REPLACE(REPLACE(REPLACE(t.cnpj,'.',''),'/',''),'-','')
-        ) AS email_cliente
-      FROM dados_dachser.t_dados_financeiro_nfs t
-      LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
-      LEFT JOIN dados_dachser.t_dados_nfs nf ON CAST(nf.id_rm AS CHAR) = CAST(t.id_rm AS CHAR)
-      WHERE COALESCE(sd.active, 1) = 1
-        AND NOT EXISTS (
-          SELECT 1 FROM dados_dachser.tbaixas b
-          WHERE b.IdLancamentoRM = t.id_rm AND b.StatusLan IN (1, 2, 3)
+        CASE WHEN t.tipo_documento = 'FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo_pagto,
+        COALESCE(t.processo, '') AS processo,
+        COALESCE(t.house, '') AS house,
+        COALESCE(t.master, '') AS master
+      FROM dados_dachser.v_fin_regua_contas_receber t
+      WHERE NOT EXISTS (
+          SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+          WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+            AND sd.active = 0
         )
-        AND (t.disputa IS NULL OR t.disputa = 0)
         AND ${getStageCondition(stage)}
       ORDER BY t.data_vencimento ASC, t.razao_social ASC
     `;
 
-    console.log(`[regua-send-emails] Executando query para stage ${stage}`);
+    console.log(`[regua-send-emails] [Fase 2C.1 dryRun] stage=${stage}`);
     const invoices = await client.query(sql);
-    console.log(`[regua-send-emails] Encontradas ${invoices.length} faturas`);
-    
-    // Debug: log primeira fatura para verificar os campos
-    if (invoices.length > 0) {
-      const first = invoices[0];
-      console.log(`[regua-send-emails] DEBUG primeira fatura:`, JSON.stringify({
-        documento: first.documento,
-        id_rm_financeiro: first.id_rm_financeiro,
-        debug_id_rm: first.debug_id_rm,
-        processo: first.processo,
-        house: first.house,
-        master: first.master
-      }));
-      
-      // Diagnóstico detalhado para descobrir a conexão correta
-      try {
-        // 1. Verificar estrutura da tabela t_dados_nfs
-        const cols = await client.query(`SHOW COLUMNS FROM dados_dachser.t_dados_nfs`);
-        console.log(`[regua-send-emails] DEBUG colunas t_dados_nfs:`, JSON.stringify(cols.map((c: any) => c.Field)));
-        
-        // 2. Contar total de registros
-        const countResult = await client.query(`SELECT COUNT(*) as total FROM dados_dachser.t_dados_nfs`);
-        console.log(`[regua-send-emails] DEBUG total registros t_dados_nfs:`, countResult[0]?.total);
-        
-        // 3. Buscar por numero NF similar
-        const nfNumerico = (first.documento || "").replace(/\D/g, "");
-        if (nfNumerico) {
-          const byNf = await client.query(`
-            SELECT id_rm, numero_nf, numero_processo, house, master 
-            FROM dados_dachser.t_dados_nfs 
-            WHERE numero_nf LIKE ? OR numero_nf LIKE ?
-            LIMIT 3
-          `, [`%${nfNumerico}%`, `%${nfNumerico.slice(-6)}%`]);
-          console.log(`[regua-send-emails] DEBUG t_dados_nfs por numero_nf (${nfNumerico}):`, JSON.stringify(byNf));
-        }
-        
-        // 4. Mostrar amostra de registros
-        const sample = await client.query(`
-          SELECT id_rm, numero_nf, numero_processo, house, master 
-          FROM dados_dachser.t_dados_nfs 
-          LIMIT 3
-        `);
-        console.log(`[regua-send-emails] DEBUG amostra t_dados_nfs:`, JSON.stringify(sample));
-      } catch (e) {
-        console.log(`[regua-send-emails] DEBUG erro ao diagnosticar t_dados_nfs:`, e);
-      }
-    }
+    const totalTitulosStage = invoices.length;
+    console.log(`[regua-send-emails] total_titulos_stage=${totalTitulosStage}`);
 
-    if (invoices.length === 0) {
+    if (totalTitulosStage === 0) {
       return new Response(
-        JSON.stringify({ success: true, message: "Nenhuma fatura encontrada para este estágio", sent: 0 }),
+        JSON.stringify({
+          success: true,
+          dryRun: true,
+          stage,
+          destinatario_simulado: "devs@z3us.ai",
+          total_titulos_stage: 0,
+          total_clientes_stage: 0,
+          titulos_processados: 0,
+          amostra: [],
+          message: "Nenhum título encontrado para este estágio",
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Group invoices by client (razao_base + cnpj) - COMO NO C#
+    // Group invoices by client (razao_base + cnpj)
     const clientGroups: Map<string, InvoiceRow[]> = new Map();
     for (const inv of invoices) {
       const cliente = inv.razao_base || inv.razao_social || "SEM NOME";
       const cnpjNorm = (inv.cnpj || "").replace(/\D/g, "");
       const key = `${cliente}|${cnpjNorm}`;
-      
-      if (!clientGroups.has(key)) {
-        clientGroups.set(key, []);
-      }
+      if (!clientGroups.has(key)) clientGroups.set(key, []);
       clientGroups.get(key)!.push(inv);
     }
 
-    let sentCount = 0;
-    let skippedCount = 0;
-    const errors: string[] = [];
-    const sentDetails: Array<{ cliente: string; email: string; invoiceCount: number }> = [];
-
-    // TESTING: Process only the FIRST client for testing purposes
+    // Mantém trava: apenas primeiro cliente é processado
     const firstClientEntry = clientGroups.entries().next().value;
-    if (!firstClientEntry) {
-      return new Response(
-        JSON.stringify({ success: false, message: "Nenhum cliente encontrado para este estágio" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    
     const [clientKey, clientInvoices] = firstClientEntry;
     const clientName = clientKey.split("|")[0];
-    
-    // For testing, always use devs@z3us.ai
-    const clientEmail = "devs@z3us.ai";
 
-    // Check if already sent today
-    try {
-      const alreadySent = await client.query(`
-        SELECT 1 FROM ai_agente.t_regua_email_log 
-        WHERE cliente = ? AND stage = ? AND DATE(sent_at) = CURDATE() AND tipo_email = 'STAGE'
-        LIMIT 1
-      `, [clientName, stage]);
-
-      if (alreadySent.length > 0) {
-        skippedCount++;
-        console.log(`Skipping ${clientName}: already sent today`);
-        return new Response(
-          JSON.stringify({
-            success: true,
-            stage,
-            totalClients: clientGroups.size,
-            sent: 0,
-            skipped: 1,
-            message: `${clientName} já recebeu email hoje`,
-            dryRun,
-          }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-    } catch (checkErr) {
-      console.log("Note: Could not check previous sends:", checkErr);
-    }
-
-    // Build template text - EXATAMENTE como no C#
-    const tipoPagto = clientInvoices[0]?.tipo_pagto || "A prazo";
-    const hoje = new Date();
-    const { subject, bodyBefore, bodyAfter } = buildTemplateText(tipoPagto, stage, clientInvoices, hoje);
-
-    // Sempre mostra tabela consolidada
-    const isConsolidado = true;
-
-    // Build HTML body
-    const beforeHtml = htmlEncode(bodyBefore).replace(/\n/g, "<br>");
-    
-    let htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;line-height:1.4;">`;
-    htmlBody += beforeHtml;
-    
-    if (isConsolidado) {
-      const tabelaHtml = buildTableHtml(clientInvoices);
-      htmlBody += "<br>";
-      htmlBody += tabelaHtml;
-      
-      if (bodyAfter) {
-        const afterHtml = htmlEncode(bodyAfter).replace(/\n/g, "<br>");
-        htmlBody += "<br>";
-        htmlBody += afterHtml;
-      }
-    }
-    
-    htmlBody += "</div>";
-
-    if (dryRun) {
-      sentCount++;
-      sentDetails.push({ cliente: clientName, email: clientEmail, invoiceCount: clientInvoices.length });
-      console.log(`[DRY RUN] Would send to ${clientEmail} for ${clientName} (${clientInvoices.length} invoices)`);
-    } else {
-      try {
-        const emailResponse = await resend!.emails.send({
-          from: "Dachser <noreply@hermes.z3us.ai>",
-          to: [clientEmail],
-          subject: subject,
-          html: htmlBody,
-        });
-
-        console.log(`Email sent to ${clientEmail}:`, emailResponse);
-        const emailId = (emailResponse as any)?.data?.id || (emailResponse as any)?.id || "";
-
-        // Log the send
-        try {
-          await client.execute(`
-            INSERT INTO ai_agente.t_regua_email_log 
-            (documento, stage, cliente, cnpj, email_to, subject, resend_message_id, status, tipo_email)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'SENT', 'STAGE')
-          `, [
-            clientInvoices[0]?.documento || "",
-            stage,
-            clientName,
-            clientInvoices[0]?.cnpj || "",
-            clientEmail,
-            subject,
-            emailId,
-          ]);
-        } catch (logErr) {
-          console.log("Note: Could not log email:", logErr);
-        }
-
-        sentCount++;
-        sentDetails.push({ cliente: clientName, email: clientEmail, invoiceCount: clientInvoices.length });
-
-      } catch (sendErr) {
-        const errMsg = sendErr instanceof Error ? sendErr.message : "Unknown error";
-        errors.push(`${clientName}: ${errMsg}`);
-        console.error(`Error sending to ${clientEmail}:`, sendErr);
-      }
-    }
+    // Amostra sanitizada (até 5 títulos do primeiro cliente)
+    // Apenas: doc_key, tipo_documento, dias_atraso, valor_nf
+    const amostra = clientInvoices.slice(0, 5).map((r: any) => ({
+      doc_key: r.doc_key,
+      tipo_documento: r.tipo_documento,
+      dias_atraso: Number(r.dias) || 0,
+      valor_nf: Number(r.valor_nf) || 0,
+    }));
 
     return new Response(
       JSON.stringify({
         success: true,
+        dryRun: true,
         stage,
-        totalClients: clientGroups.size,
-        sent: sentCount,
-        skipped: skippedCount,
-        errors: errors.length > 0 ? errors : undefined,
-        details: sentDetails,
-        dryRun,
+        destinatario_simulado: "devs@z3us.ai",
+        total_titulos_stage: totalTitulosStage,
+        total_clientes_stage: clientGroups.size,
+        titulos_processados: clientInvoices.length,
+        cliente_processado: clientName,
+        amostra,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
