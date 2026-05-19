@@ -505,6 +505,8 @@ Deno.serve(async (req) => {
       'get_pymt_term_rating','get_aging_analitico','get_regua_stage','get_regua_clientes_resumo',
       'get_disputas','update_disputa_observacoes','update_disputa_responsavel','lookup_documento',
       'get_disputas_cr','lookup_documento_cr',
+      'save_disputa_cr','resolve_disputa_cr','delete_disputa_cr',
+      'update_disputa_observacoes_cr','update_disputa_responsavel_cr',
       'save_disputa','delete_disputa','resolve_disputa','check_disputas_planilha',
       'import_disputas_planilha','bulk_delete_disputas','bulk_resolve_disputas',
       'get_aging_historical','get_aging_historical_by_client','get_pymt_term_by_client',
@@ -3601,6 +3603,311 @@ Deno.serve(async (req) => {
         result = { success: true, rows };
         break;
       }
+
+      case 'save_disputa_cr': {
+        const { doc_key, responsavel, observacoes, departamento, escalation } = body as {
+          doc_key?: string;
+          responsavel?: string | null;
+          observacoes?: string | null;
+          departamento?: string | null;
+          escalation?: string | null;
+        };
+
+        if (!doc_key) {
+          console.log('[save_disputa_cr] error: doc_key obrigatório');
+          return new Response(
+            JSON.stringify({ success: false, action: 'save_disputa_cr', message: 'doc_key é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          const titulo = await client.query(
+            `SELECT doc_key, razao_social, data_vencimento, valor_nf, tipo_documento
+             FROM dados_dachser.v_fin_regua_contas_receber
+             WHERE doc_key = ? LIMIT 1`,
+            [doc_key]
+          );
+
+          if (!titulo || titulo.length === 0) {
+            console.log(`[save_disputa_cr] key=${doc_key} error: título não encontrado`);
+            return new Response(
+              JSON.stringify({
+                success: false,
+                action: 'save_disputa_cr',
+                doc_key,
+                message: 'Título não encontrado em v_fin_regua_contas_receber',
+              }),
+              { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          const t = titulo[0];
+          const cliente = t.razao_social ?? null;
+          const vencimento = t.data_vencimento ?? null;
+          const valor = t.valor_nf ?? null;
+          const tipo = t.tipo_documento === 'FAT_NF' ? 'À vista' : 'A prazo';
+          const resp = responsavel ?? null;
+          const obs = observacoes ?? null;
+          const dep = departamento ?? null;
+          const esc = escalation ?? null;
+
+          const existing = await client.query(
+            `SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
+            [doc_key]
+          );
+
+          let affectedRows = 0;
+          let mode: 'insert' | 'update';
+          if (existing && existing.length > 0) {
+            mode = 'update';
+            const upd = await client.execute(
+              `UPDATE ai_agente.t_fin_disputas
+                 SET cliente = ?,
+                     vencimento = ?,
+                     valor = ?,
+                     tipo = ?,
+                     responsavel  = COALESCE(?, responsavel),
+                     observacoes  = COALESCE(?, observacoes),
+                     departamento = COALESCE(?, departamento),
+                     escalation   = COALESCE(?, escalation),
+                     is_disputa = 1,
+                     resolved_at = NULL,
+                     deleted_at = NULL,
+                     updated_at = NOW()
+               WHERE nf = ?`,
+              [cliente, vencimento, valor, tipo, resp, obs, dep, esc, doc_key]
+            );
+            affectedRows = Number((upd as any)?.affectedRows ?? 0);
+          } else {
+            mode = 'insert';
+            const ins = await client.execute(
+              `INSERT INTO ai_agente.t_fin_disputas
+                 (nf, cliente, vencimento, valor, tipo, responsavel, observacoes,
+                  departamento, escalation, is_disputa, resolved_at, deleted_at,
+                  created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NOW(), NOW())`,
+              [doc_key, cliente, vencimento, valor, tipo, resp, obs, dep, esc]
+            );
+            affectedRows = Number((ins as any)?.affectedRows ?? 0);
+          }
+
+          console.log(`[save_disputa_cr] key=${doc_key} mode=${mode} affected=${affectedRows}`);
+          result = {
+            success: true,
+            action: 'save_disputa_cr',
+            doc_key,
+            mode,
+            affectedRows,
+            message: mode === 'insert' ? 'Disputa criada' : 'Disputa atualizada',
+          };
+        } catch (e: any) {
+          console.log(`[save_disputa_cr] key=${doc_key} error: ${e?.message ?? e}`);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              action: 'save_disputa_cr',
+              doc_key,
+              message: e?.message ?? 'Erro ao salvar disputa',
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        break;
+      }
+
+      case 'resolve_disputa_cr': {
+        const { nf, doc_key } = body as { nf?: string; doc_key?: string };
+        const key = (nf ?? doc_key ?? '').toString().trim();
+
+        if (!key) {
+          console.log('[resolve_disputa_cr] error: nf/doc_key obrigatório');
+          return new Response(
+            JSON.stringify({ success: false, action: 'resolve_disputa_cr', message: 'nf ou doc_key é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          const upd = await client.execute(
+            `UPDATE ai_agente.t_fin_disputas
+               SET resolved_at = NOW(),
+                   is_disputa  = 0,
+                   updated_at  = NOW()
+             WHERE nf = ?`,
+            [key]
+          );
+          const affectedRows = Number((upd as any)?.affectedRows ?? 0);
+          console.log(`[resolve_disputa_cr] key=${key} affected=${affectedRows}`);
+          result = {
+            success: affectedRows > 0,
+            action: 'resolve_disputa_cr',
+            nf: key,
+            affectedRows,
+            message: affectedRows > 0 ? 'Disputa resolvida' : 'Disputa não encontrada',
+          };
+        } catch (e: any) {
+          console.log(`[resolve_disputa_cr] key=${key} error: ${e?.message ?? e}`);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              action: 'resolve_disputa_cr',
+              nf: key,
+              message: e?.message ?? 'Erro ao resolver disputa',
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        break;
+      }
+
+      case 'delete_disputa_cr': {
+        const { nf, doc_key } = body as { nf?: string; doc_key?: string };
+        const key = (nf ?? doc_key ?? '').toString().trim();
+
+        if (!key) {
+          console.log('[delete_disputa_cr] error: nf/doc_key obrigatório');
+          return new Response(
+            JSON.stringify({ success: false, action: 'delete_disputa_cr', message: 'nf ou doc_key é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          const upd = await client.execute(
+            `UPDATE ai_agente.t_fin_disputas
+               SET deleted_at = NOW(),
+                   is_disputa = 0,
+                   updated_at = NOW()
+             WHERE nf = ?`,
+            [key]
+          );
+          const affectedRows = Number((upd as any)?.affectedRows ?? 0);
+
+          let softDeleteUpserted = false;
+          try {
+            await client.execute(
+              `INSERT INTO ai_agente.t_financeiro_soft_delete (documento, active, active_at)
+               VALUES (?, 0, NOW())
+               ON DUPLICATE KEY UPDATE active = 0, active_at = NOW()`,
+              [key]
+            );
+            softDeleteUpserted = true;
+          } catch (sdErr: any) {
+            console.log(`[delete_disputa_cr] key=${key} soft_delete_error: ${sdErr?.message ?? sdErr}`);
+          }
+
+          console.log(`[delete_disputa_cr] key=${key} affected=${affectedRows} softDeleteUpserted=${softDeleteUpserted}`);
+          result = {
+            success: affectedRows > 0 || softDeleteUpserted,
+            action: 'delete_disputa_cr',
+            nf: key,
+            affectedRows,
+            softDeleteUpserted,
+            message: affectedRows > 0 ? 'Disputa marcada como deletada (soft delete)' : 'Disputa não encontrada (soft delete aplicado)',
+          };
+        } catch (e: any) {
+          console.log(`[delete_disputa_cr] key=${key} error: ${e?.message ?? e}`);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              action: 'delete_disputa_cr',
+              nf: key,
+              message: e?.message ?? 'Erro ao deletar disputa',
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        break;
+      }
+
+      case 'update_disputa_observacoes_cr': {
+        const { nf, doc_key, observacoes } = body as { nf?: string; doc_key?: string; observacoes?: string };
+        const key = (nf ?? doc_key ?? '').toString().trim();
+
+        if (!key) {
+          console.log('[update_disputa_observacoes_cr] error: nf/doc_key obrigatório');
+          return new Response(
+            JSON.stringify({ success: false, action: 'update_disputa_observacoes_cr', message: 'nf ou doc_key é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          const upd = await client.execute(
+            `UPDATE ai_agente.t_fin_disputas
+               SET observacoes = ?, updated_at = NOW()
+             WHERE nf = ?`,
+            [observacoes ?? null, key]
+          );
+          const affectedRows = Number((upd as any)?.affectedRows ?? 0);
+          console.log(`[update_disputa_observacoes_cr] key=${key} affected=${affectedRows}`);
+          result = {
+            success: affectedRows > 0,
+            action: 'update_disputa_observacoes_cr',
+            nf: key,
+            affectedRows,
+            message: affectedRows > 0 ? 'Observações atualizadas' : 'Disputa não encontrada',
+          };
+        } catch (e: any) {
+          console.log(`[update_disputa_observacoes_cr] key=${key} error: ${e?.message ?? e}`);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              action: 'update_disputa_observacoes_cr',
+              nf: key,
+              message: e?.message ?? 'Erro ao atualizar observações',
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        break;
+      }
+
+      case 'update_disputa_responsavel_cr': {
+        const { nf, doc_key, responsavel } = body as { nf?: string; doc_key?: string; responsavel?: string };
+        const key = (nf ?? doc_key ?? '').toString().trim();
+
+        if (!key) {
+          console.log('[update_disputa_responsavel_cr] error: nf/doc_key obrigatório');
+          return new Response(
+            JSON.stringify({ success: false, action: 'update_disputa_responsavel_cr', message: 'nf ou doc_key é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          const upd = await client.execute(
+            `UPDATE ai_agente.t_fin_disputas
+               SET responsavel = ?, updated_at = NOW()
+             WHERE nf = ?`,
+            [responsavel ?? null, key]
+          );
+          const affectedRows = Number((upd as any)?.affectedRows ?? 0);
+          console.log(`[update_disputa_responsavel_cr] key=${key} affected=${affectedRows}`);
+          result = {
+            success: affectedRows > 0,
+            action: 'update_disputa_responsavel_cr',
+            nf: key,
+            affectedRows,
+            message: affectedRows > 0 ? 'Responsável atualizado' : 'Disputa não encontrada',
+          };
+        } catch (e: any) {
+          console.log(`[update_disputa_responsavel_cr] key=${key} error: ${e?.message ?? e}`);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              action: 'update_disputa_responsavel_cr',
+              nf: key,
+              message: e?.message ?? 'Erro ao atualizar responsável',
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        break;
+      }
+
+
 
 
 
