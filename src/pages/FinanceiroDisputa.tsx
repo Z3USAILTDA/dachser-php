@@ -65,6 +65,8 @@ function FinanceiroDisputaContent() {
   const { toast } = useToast();
 
   const [rows, setRows] = useState<DisputaRow[]>([]);
+  const rowsRef = useRef<DisputaRow[]>([]);
+  useEffect(() => { rowsRef.current = rows; }, [rows]);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -125,7 +127,7 @@ function FinanceiroDisputaContent() {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_disputas", tipo: tipoFilter === "all" ? "" : tipoFilter },
+        body: { action: "get_disputas_cr", tipo: tipoFilter === "all" ? "" : tipoFilter },
       });
 
       if (error) throw error;
@@ -234,10 +236,23 @@ function FinanceiroDisputaContent() {
     setAddLoading(true);
 
     try {
+      // Lookup do documento na nova base (CR) — pega a primeira ocorrência
+      const { data: lookupData, error: lookupError } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "lookup_documento_cr", termo: addNf.trim() },
+      });
+
+      if (lookupError) throw lookupError;
+      const lookupRows = lookupData?.rows || [];
+      if (!lookupData?.success || lookupRows.length === 0) {
+        setAddError("Documento não encontrado.");
+        return;
+      }
+      const docKey = lookupRows[0].doc_key;
+
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { 
-          action: "save_disputa", 
-          nf: addNf.trim(), 
+        body: {
+          action: "save_disputa_cr",
+          doc_key: docKey,
           responsavel: addResp.trim(),
           observacoes: addObservacoes.trim(),
         },
@@ -264,9 +279,16 @@ function FinanceiroDisputaContent() {
 
   const handleDelete = async () => {
     if (!deleteDocKey) return;
+    const targetNf = rows.find(r => r.doc_key === deleteDocKey)?.nf;
+    if (!targetNf) {
+      toast({ title: "Erro", description: "Linha não encontrada", variant: "destructive" });
+      setDeleteDialogOpen(false);
+      setDeleteDocKey(null);
+      return;
+    }
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "delete_disputa", doc_key: deleteDocKey },
+        body: { action: "delete_disputa_cr", nf: targetNf },
       });
 
       if (error) throw error;
@@ -287,9 +309,16 @@ function FinanceiroDisputaContent() {
 
   const handleResolve = async () => {
     if (!resolveDocKey) return;
+    const targetNf = rows.find(r => r.doc_key === resolveDocKey)?.nf;
+    if (!targetNf) {
+      toast({ title: "Erro", description: "Linha não encontrada", variant: "destructive" });
+      setResolveDialogOpen(false);
+      setResolveDocKey(null);
+      return;
+    }
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "resolve_disputa", doc_key: resolveDocKey },
+        body: { action: "resolve_disputa_cr", nf: targetNf },
       });
 
       if (error) throw error;
@@ -330,45 +359,21 @@ function FinanceiroDisputaContent() {
   };
 
   const handleBulkDelete = async () => {
-    if (selectedDocKeys.size === 0) return;
-    setBulkLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "bulk_delete_disputas", doc_keys: Array.from(selectedDocKeys) },
-      });
-      if (error) throw error;
-      toast({ title: "Sucesso", description: `${data.deleted} disputa(s) excluída(s)` });
-      setSelectedDocKeys(new Set());
-      setSelectAll(false);
-      fetchDisputas();
-    } catch (err) {
-      console.error("Erro ao excluir em lote:", err);
-      toast({ title: "Erro", description: "Falha ao excluir disputas", variant: "destructive" });
-    } finally {
-      setBulkLoading(false);
-      setBulkDeleteDialogOpen(false);
-    }
+    toast({
+      title: "Indisponível",
+      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
+      variant: "destructive",
+    });
+    setBulkDeleteDialogOpen(false);
   };
 
   const handleBulkResolve = async () => {
-    if (selectedDocKeys.size === 0) return;
-    setBulkLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "bulk_resolve_disputas", doc_keys: Array.from(selectedDocKeys) },
-      });
-      if (error) throw error;
-      toast({ title: "Sucesso", description: `${data.resolved} disputa(s) resolvida(s)` });
-      setSelectedDocKeys(new Set());
-      setSelectAll(false);
-      fetchDisputas();
-    } catch (err) {
-      console.error("Erro ao resolver em lote:", err);
-      toast({ title: "Erro", description: "Falha ao resolver disputas", variant: "destructive" });
-    } finally {
-      setBulkLoading(false);
-      setBulkResolveDialogOpen(false);
-    }
+    toast({
+      title: "Indisponível",
+      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
+      variant: "destructive",
+    });
+    setBulkResolveDialogOpen(false);
   };
 
   const clearFilters = () => {
@@ -389,8 +394,10 @@ function FinanceiroDisputaContent() {
     debounceTimers.current[docKey] = setTimeout(async () => {
       setSavingObservacoes(prev => ({ ...prev, [docKey]: true }));
       try {
+        const targetNf = rowsRef.current.find(r => r.doc_key === docKey)?.nf;
+        if (!targetNf) throw new Error("Linha não encontrada");
         const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "update_disputa_observacoes", doc_key: docKey, observacoes: value },
+          body: { action: "update_disputa_observacoes_cr", nf: targetNf, observacoes: value },
         });
 
         if (error) throw error;
@@ -417,8 +424,10 @@ function FinanceiroDisputaContent() {
     responsavelDebounceTimers.current[docKey] = setTimeout(async () => {
       setSavingResponsavel(prev => ({ ...prev, [docKey]: true }));
       try {
+        const targetNf = rowsRef.current.find(r => r.doc_key === docKey)?.nf;
+        if (!targetNf) throw new Error("Linha não encontrada");
         const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "update_disputa_responsavel", doc_key: docKey, responsavel: value },
+          body: { action: "update_disputa_responsavel_cr", nf: targetNf, responsavel: value },
         });
 
         if (error) throw error;
@@ -632,102 +641,40 @@ function FinanceiroDisputaContent() {
   };
 
   const handleImportSpreadsheet = async () => {
-    if (!importFile) {
-      toast({ title: "Erro", description: "Selecione um arquivo", variant: "destructive" });
-      return;
-    }
-
-    setImportLoading(true);
-    try {
-      const items = await parseSpreadsheet(importFile);
-      
-      if (items.length === 0) {
-        toast({ title: "Erro", description: "Nenhum documento encontrado na planilha", variant: "destructive" });
-        setImportLoading(false);
-        return;
-      }
-
-      // Apply observation propagation
-      const processedItems = propagateObservations(items);
-
-      // Step 1: Check for duplicates
-      const { data: checkData, error: checkError } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "check_disputas_planilha", items: processedItems.map(i => ({ nd: i.nd })) },
-      });
-
-      if (checkError) throw checkError;
-
-      const existingItems = checkData?.existingItems || [];
-      const newNds = checkData?.newItems || [];
-
-      if (existingItems.length > 0) {
-        // Has duplicates — open confirmation modal
-        setDuplicateItems(existingItems);
-        setParsedItemsForImport(processedItems);
-        setNewItemsNds(newNds);
-        setImportModalOpen(false);
-        setDuplicateModalOpen(true);
-        setImportLoading(false);
-        return;
-      }
-
-      // No duplicates — import directly
-      await executeImport(processedItems, false);
-    } catch (err) {
-      console.error("Erro ao importar:", err);
-      toast({ title: "Erro", description: "Falha ao processar planilha", variant: "destructive" });
-    } finally {
-      setImportLoading(false);
-    }
+    toast({
+      title: "Indisponível",
+      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
+      variant: "destructive",
+    });
+    setImportModalOpen(false);
   };
 
-  const executeImport = async (items: typeof parsedItemsForImport, forceUpdate: boolean) => {
-    setImportLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "import_disputas_planilha", items, forceUpdate },
-      });
-
-      if (error) throw error;
-      
-      if (data?.success) {
-        const parts = [`${data.imported} nova(s)`];
-        if (data.updated > 0) parts.push(`${data.updated} atualizada(s)`);
-        if (data.skipped > 0) parts.push(`${data.skipped} ignorada(s)`);
-        if (data.notFound > 0) parts.push(`${data.notFound} não encontrada(s)`);
-        toast({ title: "Importação concluída", description: parts.join(', ') });
-        
-        setImportModalOpen(false);
-        setDuplicateModalOpen(false);
-        setImportFile(null);
-        setParsedItemsForImport([]);
-        setDuplicateItems([]);
-        setNewItemsNds([]);
-        fetchDisputas();
-      } else {
-        toast({ title: "Erro", description: data?.error || "Falha na importação", variant: "destructive" });
-      }
-    } catch (err) {
-      console.error("Erro ao importar:", err);
-      toast({ title: "Erro", description: "Falha ao processar planilha", variant: "destructive" });
-    } finally {
-      setImportLoading(false);
-    }
+  const executeImport = async (_items: typeof parsedItemsForImport, _forceUpdate: boolean) => {
+    toast({
+      title: "Indisponível",
+      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
+      variant: "destructive",
+    });
+    setImportModalOpen(false);
+    setDuplicateModalOpen(false);
   };
 
   const handleImportOnlyNew = async () => {
-    // Filter items to only include new ones
-    const onlyNewItems = parsedItemsForImport.filter(i => newItemsNds.includes(i.nd));
-    if (onlyNewItems.length === 0) {
-      toast({ title: "Aviso", description: "Nenhum item novo para importar" });
-      setDuplicateModalOpen(false);
-      return;
-    }
-    await executeImport(onlyNewItems, false);
+    toast({
+      title: "Indisponível",
+      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
+      variant: "destructive",
+    });
+    setDuplicateModalOpen(false);
   };
 
   const handleImportReplaceAll = async () => {
-    await executeImport(parsedItemsForImport, true);
+    toast({
+      title: "Indisponível",
+      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
+      variant: "destructive",
+    });
+    setDuplicateModalOpen(false);
   };
 
   const handleExport = () => {
