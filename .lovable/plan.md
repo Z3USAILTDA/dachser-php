@@ -1,163 +1,134 @@
-## Fase 1 — Migração controlada Régua de Cobrança para `t_dados_financeiro_contas_receber` (final)
+# Fase 2B — regua-send-aging migrado para v_fin_regua_contas_receber (revisado)
 
-Objetivo: criar camada paralela (view + endpoints shadow `_cr`) sem alterar nenhum endpoint atual, tela, e-mail, disputa ou Olimpo. Permite validação lado-a-lado antes de cutover.
+## Escopo
+Alterar **apenas** `supabase/functions/regua-send-aging/index.ts`. Nenhum outro arquivo é tocado (UI, mariadb-proxy, regua-send-emails, endpoints _cr, disputas, Olimpo, layout, textos, permissões, rotas, buckets).
 
-### Escopo
+## Problema atual
+Endpoint retorna 500 com `SQL syntax error near ') AND COALESCE(sd.active, 1) = 1 AND NOT EXISTS ...`. Causa raiz: tabela antiga `t_dados_financeiro_nfs` vazia → resolução de CNPJs devolve lista vazia → segundo SELECT monta `cnpj IN ()`.
 
-1. **`supabase/functions/mariadb-proxy/index.ts`** — adicionar 5 novos `case` (endpoints shadow). Nenhum endpoint atual alterado.
-2. **DDL MariaDB** — criar a view `dados_dachser.v_fin_regua_contas_receber` (executada manualmente pelo usuário).
+## Mudanças
 
-Tudo o mais permanece intocado.
+### 1. Fonte de dados
+Substituir queries de `dados_dachser.t_dados_financeiro_nfs` por `dados_dachser.v_fin_regua_contas_receber` (alias `t`). Remover `LEFT JOIN t_dados_nfs` — a view já expõe `processo`, `master`, `house`.
 
----
+### 2. Campos canônicos (mapeados em `InvoiceRow`)
+- `documento` → `t.documento`
+- `nd` → `t.nd`
+- `referencia_cliente` → `t.ref_cliente`
+- `numero_nf` → `t.numero_nf`
+- `modal`, `tipo_documento` → idem
+- `data_emissao`/`data_vencimento` → `DATE_FORMAT(..., '%d/%m/%Y')`
+- **`valor_nf` → `t.valor_nf`** (que na view = `valorpendentebaixa`; valor principal do Aging)
+- `razao_social`, `cnpj` → idem
+- `numero_processo` → `t.processo`
+- `house`, `master` → idem
+- `status_fatura` = `'Em atraso'` (constante)
+- `responsavel` = `'Financeiro'` (constante)
 
-### 1. View `v_fin_regua_contas_receber`
+Não usar `valororiginal` nem `valorliquido` como valor principal.
 
-Mesma estrutura especificada, com aliases extras (`ref_cliente`, `referencia_cliente`, `nro_di`, `statuslan`, `datavalidade`) apenas se as colunas-fonte existirem em `t_dados_financeiro_contas_receber` (validar com `DESCRIBE` antes).
+### 3. Filtros (substituem antigos)
+```sql
+WHERE DATEDIFF(CURDATE(), t.data_vencimento) >= 1
+  AND NOT EXISTS (
+    SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+    WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+      AND sd.active = 0
+  )
+```
+Remover: `LEFT JOIN tbaixas`, `NOT EXISTS (... tbaixas ...)`, `(t.disputa IS NULL OR t.disputa = 0)`, `COALESCE(sd.active,1) = 1`.
+
+### 4. Normalização de CNPJ no SQL (ajuste obrigatório 1)
+A view pode conter CNPJ com máscara. Toda comparação `IN (?)` deve usar a forma normalizada nos **dois lados**:
 
 ```sql
-CREATE OR REPLACE VIEW dados_dachser.v_fin_regua_contas_receber AS
-SELECT
-  t.idlan AS id_rm,
-  t.idlan AS idlan,
-  t.idmov AS idmov,
-  CONCAT('CR|', t.idlan) AS doc_key,
-  t.numerodocumento AS documento,
-  t.nota_fiscal AS numero_nf,
-  t.segundonumero AS nd,
-  t.segundonumero AS segundo_numero,
-  t.codcfo AS cod_cliente,
-  t.customercode AS customer_code,
-  t.cnpjoucpf AS cnpj,
-  t.razaosocial_clifor AS razao_social,
-  t.codtb5flx AS modal,
-  t.codtdo AS tipo_documento,
-  t.codtmv AS tipo_movimento,
-  t.dataemissao AS data_emissao,
-  t.datavencimento AS data_vencimento,
-  t.dataprevbaixa AS data_prev_baixa,
-  t.databaixa AS data_baixa,
-  t.valororiginal AS valor_original,
-  t.valorliquido AS valor_liquido,
-  t.valorbaixado AS valor_baixado,
-  t.valorpendentebaixa AS valor_nf,
-  t.valorpendentebaixa AS valor_pendente_baixa,
-  t.valorpendbx_dtcorte AS valor_pendente_data_corte,
-  t.valorjuros AS valor_juros,
-  t.valordesconto AS valor_desconto,
-  t.retencao AS retencao,
-  t.outrasdeducoes AS outras_deducoes,
-  t.processo AS processo,
-  t.codmaster AS master,
-  t.house AS house,
-  t.nrodi AS di,
-  t.nrodi AS nro_di,
-  t.origem AS origem,
-  t.destino AS destino,
-  t.codcpgvenda AS cod_condicao_pagamento,
-  t.nomepgvenda AS condicao_pag,
-  t.vendedor AS nome_vendedor,
-  t.oth_salesid AS sales_id,
-  t.statuslan AS status_lancamento,
-  t.statuslan AS statuslan,
-  t.carteira AS carteira,
-  t.datacriacao AS data_criacao,
-  t.ultimaalteracao AS ultima_alteracao,
-  t.datavalidade AS data_insert,
-  t.datavalidade AS datavalidade,
-  t.refcliente AS ref_cliente,
-  t.refcliente AS referencia_cliente,
-  CASE WHEN t.codtdo = 'FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo_pagamento
-FROM dados_dachser.t_dados_financeiro_contas_receber t
-WHERE t.carteira = 'Receber'
-  AND COALESCE(t.valorpendentebaixa, 0) > 0
-  AND t.statuslan IN ('Em aberto', 'Baixado parcialmente')
-  AND t.datavencimento IS NOT NULL;
+REPLACE(REPLACE(REPLACE(REPLACE(t.cnpj,'.',''),'/',''),'-',''),' ','') IN (?, ?, ...)
 ```
+Os parâmetros enviados ao MariaDB são **somente dígitos** (já normalizados no Deno via `c.replace(/\D/g,'')`).
 
----
+Aplica-se a:
+- Query de busca de faturas
+- Qualquer query auxiliar que filtre por CNPJ
 
-### 2. Endpoints shadow
+### 5. Resolução de CNPJs (com proteção contra `IN ()`)
 
-**Regra de ouro:** mesmo *shape* de retorno dos endpoints atuais, **SQL reescrito** — sem copiar referências a colunas inexistentes na view (`t.disputa`, `t.inicio_disputa`, `t.responsavel_disp`, `t.email_cliente`, JOINs com `tbaixas` etc.). Se o endpoint antigo filtrava `AND t.disputa = 0`, a versão `_cr` **omite** esse filtro nesta fase.
+Fluxo:
+1. Ler payload (`cnpj`, `cnpjs`, `razao_base`, `razao_bases`, `cliente`, `email_to`, `custom_text`).
+2. **Log sanitizado (ajuste obrigatório 2)** — nunca logar `custom_text` completo nem lista de destinatários. Logar apenas:
+   - `mode: razao_base | cnpj`
+   - `cliente`
+   - `cnpjs_recebidos: N`
+   - `razao_bases_recebidas: N`
+   - `email_to_informado: sim/não`
+   - `custom_text_informado: sim/não`
+3. Se `razao_bases`/`razao_base` informados:
+   ```sql
+   SELECT DISTINCT REPLACE(REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-',''),' ','') AS cnpj
+   FROM dados_dachser.v_fin_regua_contas_receber
+   WHERE SUBSTRING_INDEX(razao_social, ' - ', 1) IN (?, ?, ...)
+   ```
+   Retorna CNPJs já normalizados.
+4. Senão se `cnpjs`/`cnpj`: normalizar dígitos no Deno antes de usar.
+5. **Guard rail**: se `allCnpjs.length === 0`, devolver `200`:
+   ```json
+   { "success": false, "error": "Nenhum CNPJ encontrado para gerar o Aging List." }
+   ```
+   Nunca emitir SQL com `IN ()`.
+6. Log após resolução: `cnpjs_resolvidos: N`.
 
-**Padrão de soft delete (todos os `_cr`):** usar `NOT EXISTS` em vez de `LEFT JOIN`, para evitar duplicidade caso existam múltiplos registros para a mesma chave:
-
+### 6. Busca de faturas
 ```sql
-AND NOT EXISTS (
-  SELECT 1
-  FROM ai_agente.t_financeiro_soft_delete sd
-  WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
-    AND sd.active = 0
-)
+SELECT t.documento, COALESCE(t.nd,'') AS nd, COALESCE(t.ref_cliente,'') AS referencia_cliente,
+       COALESCE(NULLIF(t.numero_nf,''),'') AS numero_nf, COALESCE(t.modal,'') AS modal,
+       t.tipo_documento,
+       DATE_FORMAT(t.data_emissao,'%d/%m/%Y') AS data_emissao,
+       DATE_FORMAT(t.data_vencimento,'%d/%m/%Y') AS data_vencimento,
+       t.valor_nf, t.razao_social, t.cnpj,
+       COALESCE(t.processo,'') AS numero_processo,
+       COALESCE(t.house,'')    AS house,
+       COALESCE(t.master,'')   AS master,
+       'Em atraso' AS status_fatura, 'Financeiro' AS responsavel
+FROM dados_dachser.v_fin_regua_contas_receber t
+WHERE REPLACE(REPLACE(REPLACE(REPLACE(t.cnpj,'.',''),'/',''),'-',''),' ','') IN (?, ?, ...)
+  AND DATEDIFF(CURDATE(), t.data_vencimento) >= 1
+  AND NOT EXISTS (
+    SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+    WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+      AND sd.active = 0
+  )
+ORDER BY t.cnpj, t.data_vencimento ASC
+```
+Logs: `titulos_encontrados: N`, `valor_total: R$ X`.
+
+Se `invoices.length === 0`, retornar `200`:
+```json
+{ "success": false, "error": "Nenhum título vencido encontrado para este cliente." }
 ```
 
-Sem registro = aparece; com `active = 0` = oculto. Equivalente em comportamento ao `COALESCE(sd.active, 1) = 1` antigo, sem multiplicar linhas.
+### 7. Não alterado
+- Geração XLSX (`createSheetForCnpj`, estilos, headers, merges)
+- Template HTML do e-mail, rodapé legal, remetente, parse de destinatários, fallback `devs@z3us.ai`
+- Log em `ai_agente.t_regua_email_log` após envio
+- Erro de conexão (503 vs 500), `connectWithRetry`
+- Envio via Resend
+- Frontend (`ReguaCobranca.tsx` continua chamando `regua-send-aging` igual)
 
-#### Cases a adicionar
+## Validação após deploy (ajuste obrigatório 3 — somente e-mail interno)
 
-- **`get_regua_counts_cr`** — **shape idêntico ao `get_regua_counts` atual.** Hoje o endpoint atual **não** retorna `FORA_DA_REGUA`; portanto o `_cr` **também não** retorna. Buckets: PRE, D1, D7, D15, D30, D45, D60, com regra especial `FAT_NF` (sem D45; D60 = 45+). Valor somado: `valor_nf` (= `valorpendentebaixa`). Origem: `v_fin_regua_contas_receber`. Soft delete por `NOT EXISTS` em `doc_key`.
+Via `supabase--curl_edge_functions` POST `regua-send-aging`:
 
-- **`get_regua_stage_cr`** — mesmos parâmetros e mesmo shape de `get_regua_stage`. Campos retornados (só os existentes na view): `id_rm, idlan, doc_key, documento, numero_nf, nd, cnpj, razao_social, modal, tipo_documento, tipo_pagamento, data_emissao, data_vencimento, valor_nf, valor_liquido, valor_pendente_baixa, processo, master, house, condicao_pag, nome_vendedor, status_lancamento`.
+1. **Teste positivo**: `{ razao_base: "AGCO DO BRASIL SOLUCOES AGRICOLAS LTDA", cliente: "AGCO", email_to: "devs@z3us.ai" }`
+   - Status 200, sem SQL syntax error
+   - `cnpjs_resolvidos > 0`, `titulos_encontrados > 0`
+   - Excel gerado, Resend id presente
+2. **Teste negativo (razao_base inexistente)**: `{ razao_base: "ZZZ-INEXISTENTE", cliente: "X", email_to: "devs@z3us.ai" }`
+   - 200 com `{ success:false, error:"Nenhum CNPJ encontrado..." }`
+3. **Teste negativo (CNPJ sem títulos vencidos)**: CNPJ válido sem títulos atrasados
+   - 200 com `{ success:false, error:"Nenhum título vencido..." }`
+4. **Logs sanitizados**: confirmar que `custom_text` e lista de destinatários NÃO aparecem nos logs.
+5. **Inalterados**: `mariadb-proxy`, `regua-send-emails`, `/fin/regua` permanecem como estão.
 
-- **`get_regua_clientes_resumo_cr`** — agrupado por cliente. Retorno: `razao_social, razao_base, cnpj, total_titulos, valor_total, menor_vencimento, maior_vencimento`. `razao_base = SUBSTRING_INDEX(razao_social, ' - ', 1)`. Soft delete via `NOT EXISTS`.
+Nunca usar e-mail real de cliente nos testes desta fase.
 
-- **`get_financeiro_nfs_stats_cr`**:
-  ```sql
-  SELECT COUNT(*) AS total_records, MAX(data_insert) AS last_update
-  FROM dados_dachser.v_fin_regua_contas_receber;
-  ```
-
-- **`compare_regua_old_vs_cr`** — endpoint auxiliar, não plugado em tela. **Único lugar que expõe `FORA_DA_REGUA`** (apenas para auditoria). Retorna:
-  ```json
-  {
-    "base_antiga": { "total_titulos": n, "valor_total": v,
-      "buckets": { "PRE": ..., "D1": ..., "D7": ..., "D15": ..., "D30": ..., "D45": ..., "D60": ..., "FORA_DA_REGUA": ... } },
-    "base_nova":   { ... mesmo shape ... },
-    "diferenca":   { "total_titulos": nova-antiga, "valor_total": nova-antiga, "buckets": { ... } },
-    "diferencas_esperadas": [
-      "Origem: nfs vs contas_receber",
-      "Valor: base antiga pode usar valor_nf/tbaixas; base nova usa valorpendentebaixa",
-      "Statuslan: nova filtra 'Em aberto'/'Baixado parcialmente'",
-      "Disputa: base antiga pode excluir títulos em disputa; base nova ainda não trata disputa",
-      "Soft delete: base antiga usa chaves antigas; base nova usa doc_key=CR|idlan",
-      "Títulos com 2 a 6 dias de atraso seguem FORA_DA_REGUA em ambas as bases"
-    ]
-  }
-  ```
-
-Adicionar os 5 novos action names à allowlist (linhas ~503-528). Logar cada case com prefixo `[*_cr]`.
-
----
-
-### 3. Ressalvas documentadas (comentário no topo de cada case `_cr`)
-
-- **Disputa fora desta fase.** Endpoints `_cr` não filtram nem resolvem disputa. Diferença vs. base antiga por causa disso é esperada.
-- **Soft delete antigo pode não bater 100%.** Registros antigos foram gravados com chave antiga (`documento` ou `documento|nf`), não com `CR|idlan`. Não migrar nesta fase.
-- **Sem JOIN com `tbaixas`** nos `_cr` — `valorpendentebaixa > 0` na view já reflete saldo aberto.
-- Nada de `valororiginal`/`valorliquido` como valor principal.
-- Nada de INSERT/UPDATE/DELETE.
-
----
-
-### 4. Validação manual
-
-```
-get_regua_counts            vs  get_regua_counts_cr
-get_regua_stage             vs  get_regua_stage_cr
-get_regua_clientes_resumo   vs  get_regua_clientes_resumo_cr
-get_financeiro_nfs_stats    vs  get_financeiro_nfs_stats_cr
-compare_regua_old_vs_cr
-```
-
-Aceite: `_cr` mesmo shape do antigo (sem `FORA_DA_REGUA` no `counts_cr`); `compare_regua_old_vs_cr` retorna comparação + `diferencas_esperadas`; endpoints antigos inalterados; nenhuma tela mudou.
-
----
-
-### Fora desta fase
-
-- Cutover do frontend para `_cr`.
-- Migração de disputas para `ai_agente.t_fin_disputas` com `doc_key`.
-- Migração de chaves antigas de soft delete para `CR|idlan`.
-- Migração do Olimpo.
-- Revisão do `regua-send-emails` (modo teste / devs@z3us.ai).
+## Rollback
+Reverter o único arquivo alterado para a versão anterior.
