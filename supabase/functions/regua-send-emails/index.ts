@@ -377,7 +377,7 @@ serve(async (req: Request): Promise<Response> => {
             confirmInternalSend: "SEND_TO_DEVS_ONLY",
           },
         }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
