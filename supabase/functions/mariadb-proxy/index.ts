@@ -16459,6 +16459,386 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ====================================================================
+      // RÉGUA SHADOW _cr — Fase 1 da migração para t_dados_financeiro_contas_receber
+      // Origem: VIEW dados_dachser.v_fin_regua_contas_receber
+      // Regras:
+      //  - Mesmo SHAPE de retorno dos endpoints atuais (sem FORA_DA_REGUA em counts_cr).
+      //  - Soft delete via NOT EXISTS em sd.documento = doc_key (CR|idlan), sd.active = 0.
+      //  - SEM filtro de disputa nesta fase (a view nova não tem coluna disputa).
+      //  - SEM JOIN com tbaixas (valorpendentebaixa > 0 na view já reflete saldo aberto).
+      //  - Valor principal: valor_nf (= valorpendentebaixa). Nunca valororiginal/valorliquido.
+      // ====================================================================
+
+      case 'get_regua_counts_cr': {
+        const MAX_DIAS_ATRASO = 120;
+
+        const sqlCount = `
+          SELECT stage, COUNT(*) as qt, COALESCE(SUM(valor_nf), 0) as total_valor
+          FROM (
+            SELECT
+              CASE
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 'PRE'
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) = 1 THEN 'D1'
+                WHEN t.tipo_documento = 'FAT_NF' THEN
+                  CASE
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7  AND 14 THEN 'D7'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29 THEN 'D15'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44 THEN 'D30'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) >= 45 THEN 'D60'
+                    ELSE NULL
+                  END
+                ELSE
+                  CASE
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7  AND 14 THEN 'D7'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29 THEN 'D15'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44 THEN 'D30'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59 THEN 'D45'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) >= 60 THEN 'D60'
+                    ELSE NULL
+                  END
+              END AS stage,
+              t.valor_nf
+            FROM dados_dachser.v_fin_regua_contas_receber t
+            WHERE NOT EXISTS (
+                SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+                WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                  AND sd.active = 0
+              )
+              AND (
+                DATEDIFF(CURDATE(), t.data_vencimento) < 0
+                OR DATEDIFF(CURDATE(), t.data_vencimento) <= ?
+                OR (t.tipo_documento <> 'FAT_NF' AND DATEDIFF(CURDATE(), t.data_vencimento) >= 61)
+                OR (t.tipo_documento = 'FAT_NF' AND DATEDIFF(CURDATE(), t.data_vencimento) >= 45)
+              )
+          ) x
+          WHERE stage IS NOT NULL
+          GROUP BY stage
+        `;
+
+        const countRows = await client.query(sqlCount, [MAX_DIAS_ATRASO]);
+        const counts: Record<string, number> = { PRE: 0, D1: 0, D7: 0, D15: 0, D30: 0, D45: 0, D60: 0 };
+        const amounts: Record<string, number> = { PRE: 0, D1: 0, D7: 0, D15: 0, D30: 0, D45: 0, D60: 0 };
+
+        for (const row of countRows) {
+          if (row.stage && counts.hasOwnProperty(row.stage)) {
+            counts[row.stage] = Number(row.qt) || 0;
+            amounts[row.stage] = Number(row.total_valor) || 0;
+          }
+        }
+
+        console.log('[get_regua_counts_cr] counts:', counts, 'amounts:', amounts);
+        result = { success: true, counts, amounts };
+        break;
+      }
+
+      case 'get_regua_stage_cr': {
+        const { stage } = body as { stage?: string };
+        if (!stage) {
+          return new Response(
+            JSON.stringify({ error: 'Stage é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const MAX_DIAS_ATRASO = 120;
+        const sanitizedStage = (stage || '').replace(/[^A-Z0-9+]/g, '');
+
+        const sql = `
+          SELECT
+            SUBSTRING_INDEX(t.razao_social, ' - ', 1) AS razao_base,
+            t.razao_social,
+            t.documento,
+            COALESCE(NULLIF(t.numero_nf,''), t.documento) AS nf_exibicao,
+            DATE_FORMAT(t.data_vencimento, '%d/%m/%Y') AS data_venc_br,
+            DATEDIFF(CURDATE(), t.data_vencimento) AS dias,
+            CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo_pagto,
+            t.valor_nf,
+            t.cnpj,
+            t.condicao_pag AS condicao_pagamento,
+            t.nome_vendedor,
+            t.doc_key,
+            t.id_rm,
+            t.idlan,
+            t.nd,
+            t.modal,
+            t.tipo_documento,
+            t.data_emissao,
+            t.data_vencimento,
+            t.valor_liquido,
+            t.valor_pendente_baixa,
+            t.processo,
+            t.master,
+            t.house,
+            t.status_lancamento
+          FROM dados_dachser.v_fin_regua_contas_receber t
+          WHERE NOT EXISTS (
+              SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+              WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND sd.active = 0
+            )
+            AND (
+              (? IN ('PRE','D1','D7','D15','D30','D45') AND (? = 'PRE' OR DATEDIFF(CURDATE(), t.data_vencimento) <= ?))
+              OR ? = 'D60'
+            )
+            AND (
+              CASE
+                WHEN ? = 'PRE' THEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0
+                WHEN ? = 'D1' THEN DATEDIFF(CURDATE(), t.data_vencimento) = 1
+                WHEN t.tipo_documento='FAT_NF' THEN
+                  CASE ?
+                    WHEN 'D7' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7 AND 14
+                    WHEN 'D15' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29
+                    WHEN 'D30' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44
+                    WHEN 'D60' THEN DATEDIFF(CURDATE(), t.data_vencimento) >= 45
+                    ELSE FALSE
+                  END
+                ELSE
+                  CASE ?
+                    WHEN 'D7' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7 AND 14
+                    WHEN 'D15' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29
+                    WHEN 'D30' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44
+                    WHEN 'D45' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59
+                    WHEN 'D60' THEN DATEDIFF(CURDATE(), t.data_vencimento) >= 60
+                    ELSE FALSE
+                  END
+              END
+            )
+          ORDER BY t.data_vencimento ASC, t.razao_social ASC
+        `;
+
+        const rows = await client.query(sql, [
+          sanitizedStage, sanitizedStage, MAX_DIAS_ATRASO,
+          sanitizedStage,
+          sanitizedStage, sanitizedStage, sanitizedStage, sanitizedStage
+        ]);
+
+        const formattedRows = rows.map((r: any) => ({
+          ...r,
+          valor_br: r.valor_nf !== null && r.valor_nf !== undefined
+            ? 'R$ ' + Number(r.valor_nf).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : '-'
+        }));
+
+        console.log(`[get_regua_stage_cr] stage ${sanitizedStage}: ${formattedRows.length} rows`);
+        result = { success: true, rows: formattedRows };
+        break;
+      }
+
+      case 'get_regua_clientes_resumo_cr': {
+        const { cliente } = body as { cliente?: string };
+        if (!cliente) {
+          return new Response(
+            JSON.stringify({ error: 'Cliente é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const searchTerm = `%${cliente}%`;
+
+        const sql = `
+          SELECT
+            SUBSTRING_INDEX(t.razao_social, ' - ', 1) AS razao_base,
+            t.razao_social,
+            t.cnpj,
+            COUNT(*) AS qtd_faturas
+          FROM dados_dachser.v_fin_regua_contas_receber t
+          WHERE NOT EXISTS (
+              SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+              WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND sd.active = 0
+            )
+            AND (t.razao_social LIKE ? OR t.cnpj LIKE ?)
+          GROUP BY t.cnpj, t.razao_social
+          ORDER BY razao_base ASC
+          LIMIT 50
+        `;
+
+        const rows = await client.query(sql, [searchTerm, searchTerm]);
+
+        console.log(`[get_regua_clientes_resumo_cr] ${rows.length} clientes para "${cliente}"`);
+        result = { success: true, rows };
+        break;
+      }
+
+      case 'get_financeiro_nfs_stats_cr': {
+        console.log('[get_financeiro_nfs_stats_cr] Fetching stats from v_fin_regua_contas_receber...');
+
+        const statsResult = await client.query(`
+          SELECT COUNT(*) AS total_records, MAX(data_insert) AS last_update
+          FROM dados_dachser.v_fin_regua_contas_receber
+        `);
+
+        const lastUpdate = statsResult[0]?.last_update || null;
+        const totalRecords = Number(statsResult[0]?.total_records || 0);
+
+        console.log(`[get_financeiro_nfs_stats_cr] Last update: ${lastUpdate}, Total: ${totalRecords}`);
+
+        result = {
+          success: true,
+          stats: { lastUpdate, totalRecords }
+        };
+        break;
+      }
+
+      case 'compare_regua_old_vs_cr': {
+        console.log('[compare_regua_old_vs_cr] Running side-by-side comparison...');
+        const MAX_DIAS_ATRASO = 120;
+
+        // Base ANTIGA — espelha get_regua_counts (com disputa, tbaixas, soft delete antigo) + FORA_DA_REGUA
+        const sqlOld = `
+          SELECT stage, COUNT(*) as qt, COALESCE(SUM(valor_nf), 0) as total_valor
+          FROM (
+            SELECT
+              CASE
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 'PRE'
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) = 1 THEN 'D1'
+                WHEN t.tipo_documento = 'FAT_NF' THEN
+                  CASE
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7  AND 14 THEN 'D7'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29 THEN 'D15'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44 THEN 'D30'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) >= 45 THEN 'D60'
+                    ELSE 'FORA_DA_REGUA'
+                  END
+                ELSE
+                  CASE
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7  AND 14 THEN 'D7'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29 THEN 'D15'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44 THEN 'D30'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59 THEN 'D45'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) >= 60 THEN 'D60'
+                    ELSE 'FORA_DA_REGUA'
+                  END
+              END AS stage,
+              t.valor_nf
+            FROM dados_dachser.t_dados_financeiro_nfs t
+            LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
+            WHERE COALESCE(sd.active, 1) = 1
+              AND NOT EXISTS (
+                SELECT 1 FROM dados_dachser.tbaixas b
+                WHERE b.IdLancamentoRM = t.id_rm AND b.StatusLan IN (1, 2, 3)
+              )
+              AND (t.disputa IS NULL OR t.disputa = 0)
+          ) x
+          GROUP BY stage
+        `;
+
+        // Base NOVA — view + soft delete por doc_key (sem disputa, sem tbaixas) + FORA_DA_REGUA
+        const sqlNew = `
+          SELECT stage, COUNT(*) as qt, COALESCE(SUM(valor_nf), 0) as total_valor
+          FROM (
+            SELECT
+              CASE
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 'PRE'
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) = 1 THEN 'D1'
+                WHEN t.tipo_documento = 'FAT_NF' THEN
+                  CASE
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7  AND 14 THEN 'D7'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29 THEN 'D15'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44 THEN 'D30'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) >= 45 THEN 'D60'
+                    ELSE 'FORA_DA_REGUA'
+                  END
+                ELSE
+                  CASE
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7  AND 14 THEN 'D7'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29 THEN 'D15'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44 THEN 'D30'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59 THEN 'D45'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) >= 60 THEN 'D60'
+                    ELSE 'FORA_DA_REGUA'
+                  END
+              END AS stage,
+              t.valor_nf
+            FROM dados_dachser.v_fin_regua_contas_receber t
+            WHERE NOT EXISTS (
+                SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+                WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                  AND sd.active = 0
+              )
+          ) x
+          GROUP BY stage
+        `;
+
+        const buildBuckets = (rows: any[]) => {
+          const b: Record<string, { qt: number; valor: number }> = {
+            PRE: { qt: 0, valor: 0 }, D1: { qt: 0, valor: 0 },
+            D7: { qt: 0, valor: 0 }, D15: { qt: 0, valor: 0 },
+            D30: { qt: 0, valor: 0 }, D45: { qt: 0, valor: 0 },
+            D60: { qt: 0, valor: 0 }, FORA_DA_REGUA: { qt: 0, valor: 0 },
+          };
+          let total_titulos = 0;
+          let valor_total = 0;
+          for (const r of rows) {
+            if (r.stage && b[r.stage]) {
+              b[r.stage].qt = Number(r.qt) || 0;
+              b[r.stage].valor = Number(r.total_valor) || 0;
+              total_titulos += b[r.stage].qt;
+              valor_total += b[r.stage].valor;
+            }
+          }
+          return { total_titulos, valor_total, buckets: b };
+        };
+
+        let baseAntiga: any = null;
+        let antigaError: string | null = null;
+        try {
+          const oldRows = await client.query(sqlOld);
+          baseAntiga = buildBuckets(oldRows);
+        } catch (e) {
+          antigaError = e instanceof Error ? e.message : String(e);
+          console.error('[compare_regua_old_vs_cr] base_antiga error:', antigaError);
+        }
+
+        let baseNova: any = null;
+        let novaError: string | null = null;
+        try {
+          const newRows = await client.query(sqlNew);
+          baseNova = buildBuckets(newRows);
+        } catch (e) {
+          novaError = e instanceof Error ? e.message : String(e);
+          console.error('[compare_regua_old_vs_cr] base_nova error:', novaError);
+        }
+
+        let diferenca: any = null;
+        if (baseAntiga && baseNova) {
+          const diffBuckets: Record<string, { qt: number; valor: number }> = {} as any;
+          for (const k of Object.keys(baseNova.buckets)) {
+            diffBuckets[k] = {
+              qt: (baseNova.buckets[k]?.qt || 0) - (baseAntiga.buckets[k]?.qt || 0),
+              valor: (baseNova.buckets[k]?.valor || 0) - (baseAntiga.buckets[k]?.valor || 0),
+            };
+          }
+          diferenca = {
+            total_titulos: baseNova.total_titulos - baseAntiga.total_titulos,
+            valor_total: baseNova.valor_total - baseAntiga.valor_total,
+            buckets: diffBuckets,
+          };
+        }
+
+        result = {
+          success: true,
+          base_antiga: baseAntiga,
+          base_nova: baseNova,
+          diferenca,
+          errors: { base_antiga: antigaError, base_nova: novaError },
+          diferencas_esperadas: [
+            "Origem: t_dados_financeiro_nfs vs t_dados_financeiro_contas_receber (via view v_fin_regua_contas_receber)",
+            "Valor: base antiga usa valor_nf da t_dados_financeiro_nfs; base nova usa valorpendentebaixa (mapeado em valor_nf na view)",
+            "Statuslan: base nova filtra somente 'Em aberto' e 'Baixado parcialmente'",
+            "Disputa: base antiga exclui títulos com t.disputa = 1; base nova não trata disputa nesta fase",
+            "Soft delete: base antiga usa chave antiga (documento e documento|nf); base nova usa doc_key = CR|idlan e não migra registros antigos",
+            "tbaixas: base antiga exclui títulos com baixa StatusLan IN (1,2,3); base nova confia em valorpendentebaixa > 0 na view",
+            "Janela: base antiga aplica MAX_DIAS_ATRASO; base nova não aplica corte (comparação completa por bucket, incluindo FORA_DA_REGUA)",
+            "Títulos com 2 a 6 dias de atraso seguem em FORA_DA_REGUA em ambas as bases"
+          ],
+          _note: "Endpoint de validação. Não consumir no frontend. Único endpoint da Fase 1 que expõe FORA_DA_REGUA."
+        };
+        console.log('[compare_regua_old_vs_cr] done. antiga:', baseAntiga?.total_titulos, 'nova:', baseNova?.total_titulos);
+        break;
+      }
+
       // ==================== CLEANUP AUTO SYNC VOUCHERS ====================
       case 'cleanup_auto_sync_vouchers': {
         console.log('[cleanup] Removing vouchers created by auto sync (no user)...');
