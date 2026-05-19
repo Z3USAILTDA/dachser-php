@@ -65,6 +65,8 @@ function FinanceiroDisputaContent() {
   const { toast } = useToast();
 
   const [rows, setRows] = useState<DisputaRow[]>([]);
+  const rowsRef = useRef<DisputaRow[]>([]);
+  useEffect(() => { rowsRef.current = rows; }, [rows]);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
