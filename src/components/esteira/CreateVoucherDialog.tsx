@@ -953,8 +953,9 @@ export const CreateVoucherDialog = ({
                           <Input 
                             placeholder="Ex: 8647525655" 
                             className="bg-background/50 border-border"
+                            disabled={rmDataLoaded}
                             onKeyDown={(e) => {
-                              if (e.key === "Enter") {
+                              if (e.key === "Enter" && !rmDataLoaded) {
                                 e.preventDefault();
                                 handleSearchRM();
                               }
