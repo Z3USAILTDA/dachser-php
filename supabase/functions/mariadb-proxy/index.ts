@@ -3396,6 +3396,180 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'get_disputas_cr': {
+        const { tipo } = body as { tipo?: string };
+        const tipoFiltro = tipo && tipo.trim() ? tipo.trim() : null;
+
+        const params: string[] = [];
+        const tipoExpr = "CASE WHEN tipo_documento='FAT_NF' THEN 'À vista' WHEN tipo_documento IS NULL THEN NULL ELSE 'A prazo' END";
+
+        let whereTipo = '';
+        if (tipoFiltro) {
+          // Filtra tipo e implicitamente exclui órfãos (tipo_documento IS NULL)
+          whereTipo = ` AND tipo_documento IS NOT NULL AND ${tipoExpr} = ?`;
+          params.push(tipoFiltro);
+        }
+
+        const sql = `
+          WITH fd_ativas AS (
+            SELECT fd.id, fd.nf, fd.cliente, fd.responsavel, fd.departamento,
+                   fd.observacoes, fd.escalation, fd.tipo, fd.created_at
+            FROM ai_agente.t_fin_disputas fd
+            WHERE fd.is_disputa = 1
+              AND fd.resolved_at IS NULL
+              AND fd.deleted_at  IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+                WHERE sd.documento COLLATE utf8mb4_unicode_ci
+                      = fd.nf       COLLATE utf8mb4_unicode_ci
+                  AND sd.active = 0
+              )
+          ),
+          candidatos AS (
+            SELECT fd.id AS fd_id, fd.nf AS fd_nf, fd.responsavel AS fd_responsavel,
+                   fd.departamento, fd.observacoes, fd.escalation,
+                   fd.created_at AS fd_created_at,
+                   v.doc_key, v.idlan, v.id_rm,
+                   v.documento, v.numero_nf, v.nd,
+                   v.razao_social AS cliente,
+                   v.data_emissao, v.data_vencimento,
+                   v.valor_nf, v.tipo_documento, v.modal,
+                   'nova_base' AS origem_disputa
+            FROM fd_ativas fd
+            INNER JOIN dados_dachser.v_fin_regua_contas_receber v
+              ON v.doc_key COLLATE utf8mb4_unicode_ci
+                 = fd.nf   COLLATE utf8mb4_unicode_ci
+            WHERE fd.nf LIKE 'CR|%'
+
+            UNION ALL
+
+            SELECT fd.id, fd.nf, fd.responsavel,
+                   fd.departamento, fd.observacoes, fd.escalation,
+                   fd.created_at,
+                   v.doc_key, v.idlan, v.id_rm,
+                   v.documento, v.numero_nf, v.nd,
+                   v.razao_social,
+                   v.data_emissao, v.data_vencimento,
+                   v.valor_nf, v.tipo_documento, v.modal,
+                   'legado_casado'
+            FROM fd_ativas fd
+            INNER JOIN dados_dachser.v_fin_regua_contas_receber v
+              ON (
+                   SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.documento COLLATE utf8mb4_unicode_ci
+                OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.numero_nf COLLATE utf8mb4_unicode_ci
+                OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.nd        COLLATE utf8mb4_unicode_ci
+              )
+            WHERE fd.nf NOT LIKE 'CR|%'
+          ),
+          dedup AS (
+            SELECT c.*,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY c.fd_id
+                     ORDER BY c.data_vencimento ASC, c.idlan ASC
+                   ) AS rn
+            FROM candidatos c
+          ),
+          casadas AS (
+            SELECT * FROM dedup WHERE rn = 1
+          ),
+          orfas AS (
+            SELECT fd.id AS fd_id, fd.nf AS fd_nf, fd.responsavel AS fd_responsavel,
+                   fd.departamento, fd.observacoes, fd.escalation,
+                   fd.created_at AS fd_created_at,
+                   fd.nf AS doc_key, NULL AS idlan, NULL AS id_rm,
+                   NULL AS documento, NULL AS numero_nf, NULL AS nd,
+                   fd.cliente AS cliente,
+                   NULL AS data_emissao, NULL AS data_vencimento,
+                   NULL AS valor_nf, NULL AS tipo_documento, NULL AS modal,
+                   'legado_orfao' AS origem_disputa,
+                   1 AS rn
+            FROM fd_ativas fd
+            WHERE NOT EXISTS (SELECT 1 FROM casadas k WHERE k.fd_id = fd.id)
+          ),
+          todas AS (
+            SELECT * FROM casadas
+            UNION ALL
+            SELECT * FROM orfas
+          )
+          SELECT
+            doc_key,
+            COALESCE(NULLIF(numero_nf,''), NULLIF(documento,''), NULLIF(nd,''), fd_nf) AS nf,
+            nd,
+            SUBSTRING_INDEX(cliente, ' - ', 1) AS razao_base,
+            cliente,
+            DATE_FORMAT(data_emissao,    '%Y-%m-%dT%H:%i:%s-03:00') AS emissao,
+            DATE_FORMAT(data_vencimento, '%Y-%m-%dT%H:%i:%s-03:00') AS vencimento,
+            valor_nf AS valor,
+            ${tipoExpr} AS tipo,
+            fd_responsavel AS responsavel,
+            observacoes,
+            departamento,
+            escalation,
+            DATE_FORMAT(fd_created_at, '%Y-%m-%dT%H:%i:%s-03:00') AS created_at,
+            origem_disputa,
+            id_rm,
+            idlan,
+            modal
+          FROM todas
+          WHERE 1=1${whereTipo}
+          ORDER BY fd_created_at DESC, cliente ASC
+        `;
+
+        const rows = await client.query(sql, params);
+        const nova = rows.filter((r: any) => r.origem_disputa === 'nova_base').length;
+        const casado = rows.filter((r: any) => r.origem_disputa === 'legado_casado').length;
+        const orfao = rows.filter((r: any) => r.origem_disputa === 'legado_orfao').length;
+        console.log(`Disputas CR loaded: ${rows.length} (nova=${nova}, legado_casado=${casado}, orfao=${orfao})`);
+        result = { success: true, rows };
+        break;
+      }
+
+      case 'lookup_documento_cr': {
+        const { nd } = body as { nd?: string };
+
+        if (!nd) {
+          return new Response(
+            JSON.stringify({ error: 'ND/NF/Documento é obrigatório', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const searchTerm = nd.toString().trim();
+        const lookupSql = `
+          SELECT
+            doc_key,
+            idlan,
+            id_rm,
+            documento,
+            numero_nf,
+            nd,
+            razao_social AS cliente,
+            cnpj,
+            DATE_FORMAT(data_vencimento, '%Y-%m-%d') AS vencimento,
+            DATE_FORMAT(data_emissao,    '%Y-%m-%d') AS emissao,
+            valor_nf AS valor,
+            CASE WHEN tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo,
+            modal,
+            processo,
+            master,
+            house
+          FROM dados_dachser.v_fin_regua_contas_receber
+          WHERE documento = ? OR numero_nf = ? OR nd = ?
+          ORDER BY data_vencimento ASC, idlan ASC
+        `;
+        const rows = await client.query(lookupSql, [searchTerm, searchTerm, searchTerm]);
+
+        if (!rows || rows.length === 0) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Documento não encontrado' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log(`Lookup documento CR found: ${rows.length} rows for "${searchTerm}"`);
+        result = { success: true, rows };
+        break;
+
       case 'update_disputa_observacoes': {
         const { doc_key, observacoes } = body as { doc_key?: string; observacoes?: string };
         
