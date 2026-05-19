@@ -970,7 +970,7 @@ export const CreateVoucherDialog = ({
                   <Button
                     type="button"
                     onClick={handleSearchRM}
-                    disabled={isSearchingRM}
+                    disabled={isSearchingRM || rmDataLoaded}
                     className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
                   >
                     {isSearchingRM ? (
