@@ -573,6 +573,8 @@ Financeiro Dachser`;
         body: {
           stage: openStage,
           dryRun: false,
+          testMode: true,
+          confirmInternalSend: "SEND_TO_DEVS_ONLY",
         },
       });
 
