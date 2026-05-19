@@ -1,72 +1,39 @@
-## Diagnóstico
+## Mudanças na Esteira
 
-A identificação já foi otimizada. O gargalo agora é `processFiles` em `src/components/tabs/RoboTab.tsx` (linha 434), que é **100% sequencial** — `for (const fileMatch of files) { await ... }`. Por arquivo:
+### 1. Exclusão de voucher restrita a SUPERVISOR + ADMIN
 
-1. `storage.upload` (PDF para Supabase Storage)
-2. `invoke('save_voucher_anexo')`
-3. `invoke('update_voucher_esteira')`
-4. `invoke('save_voucher_log COMPROVANTE_ANEXADO')`
-5. `invoke('save_voucher_log CONCLUIDO_ROBO')` (quando não estava CONCLUIDO)
+**Arquivo:** `src/hooks/useUserRole.ts`
 
-São **5 round-trips em série por arquivo, e um arquivo por vez**. Com ~400–700ms por invoke + 1–2s no upload → ~13s/arquivo → ~5–6 min para 25. Bate com o reportado.
-
-## Meta
-
-≤ 4s por comprovante em média (25 arquivos em ≤ ~1min40s, idealmente bem menos com paralelismo).
-
-## Mudanças (cirúrgicas, 1 arquivo)
-
-Arquivo único: `src/components/tabs/RoboTab.tsx`. Nenhuma edge function tocada.
-
-### 1. Worker pool em `processFiles` (mudança principal)
-
-Extrair o corpo do loop em `processOne(fileMatch)` e substituir o `for` sequencial pelo mesmo padrão de worker pool já usado em `handleFilesSelected`:
+Alterar a flag `canDeleteVoucher` removendo `isFinanceiro`:
 
 ```ts
-const CONCURRENCY = 8;
-let cursor = 0;
-const next = () => (cursor < files.length ? cursor++ : -1);
-const worker = async () => {
-  let i: number;
-  while ((i = next()) !== -1) await processOne(files[i]);
-};
-await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker));
+// antes
+const canDeleteVoucher = isAdmin || isSupervisor || isFinanceiro;
+// depois
+const canDeleteVoucher = isAdmin || isSupervisor;
 ```
 
-Contadores `processed`, `successCount`, `errorCount` continuam como `let` simples (JS single-thread → `++` é atômico). `setProgress` é chamado a cada arquivo concluído. Updates `setFiles(prev => prev.map(...))` permanecem (já são imutáveis).
+Efeito imediato em:
+- `EsteiraIndex.tsx` (prop `canDelete` passada ao `VoucherTable`)
+- `VoucherTable.tsx` → `VoucherActionsMenu` (item "Excluir" do menu de ações)
+- Qualquer outro consumidor da flag
 
-### 2. Paralelizar as 3 chamadas mariadb pós-anexo dentro de cada arquivo
+Não mexer em `canCancelVoucher` (cancelar continua liberado para os demais perfis).
 
-`update_voucher_esteira` e os `save_voucher_log` **não dependem entre si** — só dependem do `save_voucher_anexo` ter gravado. Após o anexo resolver, disparar o resto via `Promise.all`:
+### 2. Bloquear edição do "Buscar Voucher/SPO no RM" após dados carregados
 
-```ts
-await invoke('save_voucher_anexo', { ... });
-const tasks = [
-  invoke('update_voucher_esteira', { voucher_id, updates }),
-  invoke('save_voucher_log', { acao: 'COMPROVANTE_ANEXADO', ... }),
-];
-if (!wasConcluded) {
-  tasks.push(invoke('save_voucher_log', { acao: 'CONCLUIDO_ROBO', ... }));
-}
-await Promise.all(tasks);
-```
+**Arquivo:** `src/components/esteira/CreateVoucherDialog.tsx`
 
-Reduz round-trips serializados por arquivo de **5 → 3** (upload + anexo + bloco paralelo).
+No bloco do modo RM (linhas ~919-995), quando `rmDataLoaded === true` (já controlado pelo `handleSearchRM` ao encontrar o SPO/voucher em `t_dados_financeiro_voucher`):
 
-## Resultado esperado para 25 comprovantes
+- Adicionar `disabled={rmDataLoaded}` no `<Input>` do campo `numeroRM`.
+- Adicionar `disabled={isSearchingRM || rmDataLoaded}` no botão "Buscar".
+- Bloquear o atalho Enter quando `rmDataLoaded`.
+- Manter o badge verde "Dados carregados" já existente como indicador visual.
 
-| Cenário | Tempo total | Média/arquivo |
-|---|---|---|
-| Hoje (sequencial) | **05:59** | ~14s |
-| Só worker pool (#1) | ~50–60s | ~2,3s |
-| Worker pool + Promise.all (#1+#2) | **~35–45s** | **~1,5s** |
+O reset continua funcionando via `handleModeChange` (trocar entre RM/Manual) e ao fechar/reabrir o diálogo, então o usuário ainda pode corrigir um SPO digitado errado limpando o modo.
 
-Meta de ≤4s/arquivo atendida com folga.
-
-## O que NÃO muda
-
-- Edge functions intactas (zero deploy).
-- Ordem lógica preservada: anexo gravado antes de update/logs.
-- Regras de matching, fallback CONCLUIDO, badges, toasts, contadores idênticos.
-- Memórias [Robo Stage & Attachments](mem://vouchers/robo-stage-and-attachments-v2), [Anexos Master/Filhos](mem://vouchers/anexos-master-children-columns), [Comprovante Robô Matching](mem://vouchers/comprovante-robot-matching-rules) respeitadas.
-- Storage e `mariadb-proxy` aguentam tranquilamente 8 concorrentes; se houver throttling no futuro, basta baixar `CONCURRENCY`.
+### Escopo não alterado
+- `EditVoucherDialog` não expõe o campo de busca RM — sem mudança.
+- Permissões de cancelar, editar, voltar etapa, desmembrar permanecem como hoje.
+- Nenhuma mudança de backend/SQL.
