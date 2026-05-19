@@ -394,8 +394,10 @@ function FinanceiroDisputaContent() {
     debounceTimers.current[docKey] = setTimeout(async () => {
       setSavingObservacoes(prev => ({ ...prev, [docKey]: true }));
       try {
+        const targetNf = rowsRef.current.find(r => r.doc_key === docKey)?.nf;
+        if (!targetNf) throw new Error("Linha não encontrada");
         const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "update_disputa_observacoes", doc_key: docKey, observacoes: value },
+          body: { action: "update_disputa_observacoes_cr", nf: targetNf, observacoes: value },
         });
 
         if (error) throw error;
