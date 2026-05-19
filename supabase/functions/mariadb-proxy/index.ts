@@ -504,6 +504,7 @@ Deno.serve(async (req) => {
       'get_client_faturas','save_cobranca_observacao','get_budget_forecast_auto',
       'get_pymt_term_rating','get_aging_analitico','get_regua_stage','get_regua_clientes_resumo',
       'get_disputas','update_disputa_observacoes','update_disputa_responsavel','lookup_documento',
+      'get_disputas_cr','lookup_documento_cr',
       'save_disputa','delete_disputa','resolve_disputa','check_disputas_planilha',
       'import_disputas_planilha','bulk_delete_disputas','bulk_resolve_disputas',
       'get_aging_historical','get_aging_historical_by_client','get_pymt_term_by_client',
@@ -3394,6 +3395,214 @@ Deno.serve(async (req) => {
         result = { success: true, rows };
         break;
       }
+
+      case 'get_disputas_cr': {
+        const { tipo } = body as { tipo?: string };
+        const tipoFiltro = tipo && tipo.trim() ? tipo.trim() : null;
+
+        const params: string[] = [];
+        const tipoExpr = "CASE WHEN tipo_documento='FAT_NF' THEN 'À vista' WHEN tipo_documento IS NULL THEN NULL ELSE 'A prazo' END";
+
+        let whereTipo = '';
+        if (tipoFiltro) {
+          // Filtra tipo e implicitamente exclui órfãos (tipo_documento IS NULL)
+          whereTipo = ` AND tipo_documento IS NOT NULL AND ${tipoExpr} = ?`;
+          params.push(tipoFiltro);
+        }
+
+        const sql = `
+          WITH fd_ativas AS (
+            SELECT fd.id, fd.nf, fd.cliente, fd.responsavel, fd.departamento,
+                   fd.observacoes, fd.escalation, fd.tipo, fd.created_at
+            FROM ai_agente.t_fin_disputas fd
+            WHERE fd.is_disputa = 1
+              AND fd.resolved_at IS NULL
+              AND fd.deleted_at  IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+                WHERE sd.documento COLLATE utf8mb4_unicode_ci
+                      = fd.nf       COLLATE utf8mb4_unicode_ci
+                  AND sd.active = 0
+              )
+          ),
+          candidatos AS (
+            SELECT fd.id AS fd_id,
+                   CONVERT(fd.nf USING utf8mb4)            COLLATE utf8mb4_unicode_ci AS fd_nf,
+                   CONVERT(fd.responsavel USING utf8mb4)   COLLATE utf8mb4_unicode_ci AS fd_responsavel,
+                   CONVERT(fd.departamento USING utf8mb4)  COLLATE utf8mb4_unicode_ci AS departamento,
+                   CONVERT(fd.observacoes USING utf8mb4)   COLLATE utf8mb4_unicode_ci AS observacoes,
+                   CONVERT(fd.escalation USING utf8mb4)    COLLATE utf8mb4_unicode_ci AS escalation,
+                   fd.created_at AS fd_created_at,
+                   CONVERT(v.doc_key USING utf8mb4)        COLLATE utf8mb4_unicode_ci AS doc_key,
+                   CONVERT(v.idlan USING utf8mb4)          COLLATE utf8mb4_unicode_ci AS idlan,
+                   CONVERT(v.id_rm USING utf8mb4)          COLLATE utf8mb4_unicode_ci AS id_rm,
+                   CONVERT(v.documento USING utf8mb4)      COLLATE utf8mb4_unicode_ci AS documento,
+                   CONVERT(v.numero_nf USING utf8mb4)      COLLATE utf8mb4_unicode_ci AS numero_nf,
+                   CONVERT(v.nd USING utf8mb4)             COLLATE utf8mb4_unicode_ci AS nd,
+                   CONVERT(v.razao_social USING utf8mb4)   COLLATE utf8mb4_unicode_ci AS cliente,
+                   v.data_emissao, v.data_vencimento,
+                   v.valor_nf,
+                   CONVERT(v.tipo_documento USING utf8mb4) COLLATE utf8mb4_unicode_ci AS tipo_documento,
+                   CONVERT(v.modal USING utf8mb4)          COLLATE utf8mb4_unicode_ci AS modal,
+                   CONVERT('nova_base' USING utf8mb4)      COLLATE utf8mb4_unicode_ci AS origem_disputa
+            FROM fd_ativas fd
+            INNER JOIN dados_dachser.v_fin_regua_contas_receber v
+              ON v.doc_key COLLATE utf8mb4_unicode_ci
+                 = fd.nf   COLLATE utf8mb4_unicode_ci
+            WHERE fd.nf LIKE 'CR|%'
+
+            UNION ALL
+
+            SELECT fd.id,
+                   CONVERT(fd.nf USING utf8mb4)            COLLATE utf8mb4_unicode_ci,
+                   CONVERT(fd.responsavel USING utf8mb4)   COLLATE utf8mb4_unicode_ci,
+                   CONVERT(fd.departamento USING utf8mb4)  COLLATE utf8mb4_unicode_ci,
+                   CONVERT(fd.observacoes USING utf8mb4)   COLLATE utf8mb4_unicode_ci,
+                   CONVERT(fd.escalation USING utf8mb4)    COLLATE utf8mb4_unicode_ci,
+                   fd.created_at,
+                   CONVERT(v.doc_key USING utf8mb4)        COLLATE utf8mb4_unicode_ci,
+                   CONVERT(v.idlan USING utf8mb4)          COLLATE utf8mb4_unicode_ci,
+                   CONVERT(v.id_rm USING utf8mb4)          COLLATE utf8mb4_unicode_ci,
+                   CONVERT(v.documento USING utf8mb4)      COLLATE utf8mb4_unicode_ci,
+                   CONVERT(v.numero_nf USING utf8mb4)      COLLATE utf8mb4_unicode_ci,
+                   CONVERT(v.nd USING utf8mb4)             COLLATE utf8mb4_unicode_ci,
+                   CONVERT(v.razao_social USING utf8mb4)   COLLATE utf8mb4_unicode_ci,
+                   v.data_emissao, v.data_vencimento,
+                   v.valor_nf,
+                   CONVERT(v.tipo_documento USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                   CONVERT(v.modal USING utf8mb4)          COLLATE utf8mb4_unicode_ci,
+                   CONVERT('legado_casado' USING utf8mb4)  COLLATE utf8mb4_unicode_ci
+            FROM fd_ativas fd
+            INNER JOIN dados_dachser.v_fin_regua_contas_receber v
+              ON (
+                   SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.documento COLLATE utf8mb4_unicode_ci
+                OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.numero_nf COLLATE utf8mb4_unicode_ci
+                OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.nd        COLLATE utf8mb4_unicode_ci
+              )
+            WHERE fd.nf NOT LIKE 'CR|%'
+          ),
+          dedup AS (
+            SELECT c.*,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY c.fd_id
+                     ORDER BY c.data_vencimento ASC, c.idlan ASC
+                   ) AS rn
+            FROM candidatos c
+          ),
+          casadas AS (
+            SELECT * FROM dedup WHERE rn = 1
+          ),
+          orfas AS (
+            SELECT fd.id AS fd_id,
+                   CONVERT(fd.nf USING utf8mb4)           COLLATE utf8mb4_unicode_ci AS fd_nf,
+                   CONVERT(fd.responsavel USING utf8mb4)  COLLATE utf8mb4_unicode_ci AS fd_responsavel,
+                   CONVERT(fd.departamento USING utf8mb4) COLLATE utf8mb4_unicode_ci AS departamento,
+                   CONVERT(fd.observacoes USING utf8mb4)  COLLATE utf8mb4_unicode_ci AS observacoes,
+                   CONVERT(fd.escalation USING utf8mb4)   COLLATE utf8mb4_unicode_ci AS escalation,
+                   fd.created_at AS fd_created_at,
+                   CONVERT(fd.nf USING utf8mb4)           COLLATE utf8mb4_unicode_ci AS doc_key,
+                   CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS idlan,
+                   CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS id_rm,
+                   CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS documento,
+                   CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS numero_nf,
+                   CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS nd,
+                   CONVERT(fd.cliente USING utf8mb4)      COLLATE utf8mb4_unicode_ci AS cliente,
+                   CAST(NULL AS DATETIME) AS data_emissao,
+                   CAST(NULL AS DATETIME) AS data_vencimento,
+                   CAST(NULL AS DECIMAL(18,2)) AS valor_nf,
+                   CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS tipo_documento,
+                   CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS modal,
+                   CONVERT('legado_orfao' USING utf8mb4)  COLLATE utf8mb4_unicode_ci AS origem_disputa,
+                   1 AS rn
+            FROM fd_ativas fd
+            WHERE NOT EXISTS (SELECT 1 FROM casadas k WHERE k.fd_id = fd.id)
+          ),
+          todas AS (
+            SELECT * FROM casadas
+            UNION ALL
+            SELECT * FROM orfas
+          )
+          SELECT
+            doc_key,
+            COALESCE(NULLIF(numero_nf,''), NULLIF(documento,''), NULLIF(nd,''), fd_nf) AS nf,
+            nd,
+            SUBSTRING_INDEX(cliente, ' - ', 1) AS razao_base,
+            cliente,
+            DATE_FORMAT(data_emissao,    '%Y-%m-%dT%H:%i:%s-03:00') AS emissao,
+            DATE_FORMAT(data_vencimento, '%Y-%m-%dT%H:%i:%s-03:00') AS vencimento,
+            valor_nf AS valor,
+            ${tipoExpr} AS tipo,
+            fd_responsavel AS responsavel,
+            observacoes,
+            departamento,
+            escalation,
+            DATE_FORMAT(fd_created_at, '%Y-%m-%dT%H:%i:%s-03:00') AS created_at,
+            origem_disputa,
+            id_rm,
+            idlan,
+            modal
+          FROM todas
+          WHERE 1=1${whereTipo}
+          ORDER BY fd_created_at DESC, cliente ASC
+        `;
+
+        const rows = await client.query(sql, params);
+        const nova = rows.filter((r: any) => r.origem_disputa === 'nova_base').length;
+        const casado = rows.filter((r: any) => r.origem_disputa === 'legado_casado').length;
+        const orfao = rows.filter((r: any) => r.origem_disputa === 'legado_orfao').length;
+        console.log(`Disputas CR loaded: ${rows.length} (nova=${nova}, legado_casado=${casado}, orfao=${orfao})`);
+        result = { success: true, rows };
+        break;
+      }
+
+      case 'lookup_documento_cr': {
+        const { nd } = body as { nd?: string };
+
+        if (!nd) {
+          return new Response(
+            JSON.stringify({ error: 'ND/NF/Documento é obrigatório', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const searchTerm = nd.toString().trim();
+        const lookupSql = `
+          SELECT
+            doc_key,
+            idlan,
+            id_rm,
+            documento,
+            numero_nf,
+            nd,
+            razao_social AS cliente,
+            cnpj,
+            DATE_FORMAT(data_vencimento, '%Y-%m-%d') AS vencimento,
+            DATE_FORMAT(data_emissao,    '%Y-%m-%d') AS emissao,
+            valor_nf AS valor,
+            CASE WHEN tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo,
+            modal,
+            processo,
+            master,
+            house
+          FROM dados_dachser.v_fin_regua_contas_receber
+          WHERE documento = ? OR numero_nf = ? OR nd = ?
+          ORDER BY data_vencimento ASC, idlan ASC
+        `;
+        const rows = await client.query(lookupSql, [searchTerm, searchTerm, searchTerm]);
+
+        if (!rows || rows.length === 0) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Documento não encontrado' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log(`Lookup documento CR found: ${rows.length} rows for "${searchTerm}"`);
+        result = { success: true, rows };
+        break;
+      }
+
+
 
       case 'update_disputa_observacoes': {
         const { doc_key, observacoes } = body as { doc_key?: string; observacoes?: string };
