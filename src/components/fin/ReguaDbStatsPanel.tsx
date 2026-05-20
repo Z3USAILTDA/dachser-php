@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 export interface ReguaDbStats {
   lastUpdate: string | null;
   totalRecords: number;
+  totalOpenAmount?: number | null;
 }
 
 interface ReguaDbStatsPanelProps {

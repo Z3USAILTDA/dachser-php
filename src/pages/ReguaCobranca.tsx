@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useNavigate } from "react-router-dom";
-import { CalendarRange, HelpCircle, Mail, Send, RefreshCw, FileText, Clock, Flag, Search, X } from "lucide-react";
+import { CalendarRange, HelpCircle, Mail, Send, RefreshCw, FileText, Clock, Flag, Search, X, Wallet } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useUsageLog } from "@/hooks/useUsageLog";
@@ -665,9 +665,25 @@ Financeiro Dachser`;
     >
       {/* Meta pills + Client search */}
       <div className="flex flex-wrap items-center gap-[10px] mb-[18px]">
+        <span
+          className="px-3 py-2 rounded-full bg-white/6 border border-white/12 text-[#ddd] text-[0.85rem] inline-flex items-center gap-[6px]"
+          title={typeof dbStats?.totalOpenAmount === "number" ? dbStats.totalOpenAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : undefined}
+        >
+          <Wallet className="w-4 h-4" />
+          <span>Total em aberto:</span>
+          <b>{isLoadingDbStats ? "..." : (() => {
+            const v = Number(dbStats?.totalOpenAmount ?? 0);
+            if (!v) return "R$ 0,00";
+            const abs = Math.abs(v);
+            if (abs >= 1e9) return `R$ ${(v / 1e9).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}B`;
+            if (abs >= 1e6) return `R$ ${(v / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}M`;
+            if (abs >= 1e3) return `R$ ${(v / 1e3).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}K`;
+            return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+          })()}</b>
+        </span>
         <span className="px-3 py-2 rounded-full bg-white/6 border border-white/12 text-[#ddd] text-[0.85rem] inline-flex items-center gap-[6px]">
           <FileText className="w-4 h-4" />
-          <span>Total de títulos na régua:</span>
+          <span>Títulos na régua:</span>
           <b>{loading ? "..." : totalTitles}</b>
         </span>
         <span className="px-3 py-2 rounded-full bg-white/6 border border-white/12 text-[#ddd] text-[0.85rem] inline-flex items-center gap-[6px]">
