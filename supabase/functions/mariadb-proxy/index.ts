@@ -17154,18 +17154,19 @@ Deno.serve(async (req) => {
         console.log('[get_financeiro_nfs_stats_cr] Fetching stats from v_fin_regua_contas_receber...');
 
         const statsResult = await client.query(`
-          SELECT COUNT(*) AS total_records, MAX(data_insert) AS last_update
+          SELECT COUNT(*) AS total_records, SUM(valor_nf) AS total_open_amount, MAX(data_insert) AS last_update
           FROM dados_dachser.v_fin_regua_contas_receber
         `);
 
         const lastUpdate = statsResult[0]?.last_update || null;
         const totalRecords = Number(statsResult[0]?.total_records || 0);
+        const totalOpenAmount = Number(statsResult[0]?.total_open_amount || 0);
 
-        console.log(`[get_financeiro_nfs_stats_cr] Last update: ${lastUpdate}, Total: ${totalRecords}`);
+        console.log(`[get_financeiro_nfs_stats_cr] Last update: ${lastUpdate}, Total: ${totalRecords}, Open: ${totalOpenAmount}`);
 
         result = {
           success: true,
-          stats: { lastUpdate, totalRecords }
+          stats: { lastUpdate, totalRecords, totalOpenAmount }
         };
         break;
       }
