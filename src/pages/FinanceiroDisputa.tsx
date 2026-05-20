@@ -361,21 +361,55 @@ function FinanceiroDisputaContent() {
   };
 
   const handleBulkDelete = async () => {
-    toast({
-      title: "Indisponível",
-      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
-      variant: "destructive",
-    });
-    setBulkDeleteDialogOpen(false);
+    const keys = Array.from(selectedDocKeys);
+    if (keys.length === 0) {
+      setBulkDeleteDialogOpen(false);
+      return;
+    }
+    setBulkLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "bulk_delete_disputas_cr", doc_keys: keys },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Falha no bulk delete");
+      toast({ title: "Excluído", description: `${data.deleted ?? keys.length} disputa(s) removida(s)` });
+      setSelectedDocKeys(new Set());
+      setSelectAll(false);
+      await fetchDisputas();
+    } catch (err: any) {
+      console.error("Erro no bulk delete:", err);
+      toast({ title: "Erro", description: err?.message || "Falha ao excluir disputas", variant: "destructive" });
+    } finally {
+      setBulkLoading(false);
+      setBulkDeleteDialogOpen(false);
+    }
   };
 
   const handleBulkResolve = async () => {
-    toast({
-      title: "Indisponível",
-      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
-      variant: "destructive",
-    });
-    setBulkResolveDialogOpen(false);
+    const keys = Array.from(selectedDocKeys);
+    if (keys.length === 0) {
+      setBulkResolveDialogOpen(false);
+      return;
+    }
+    setBulkLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "bulk_resolve_disputas_cr", doc_keys: keys },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Falha no bulk resolve");
+      toast({ title: "Resolvido", description: `${data.resolved ?? keys.length} disputa(s) resolvida(s)` });
+      setSelectedDocKeys(new Set());
+      setSelectAll(false);
+      await fetchDisputas();
+    } catch (err: any) {
+      console.error("Erro no bulk resolve:", err);
+      toast({ title: "Erro", description: err?.message || "Falha ao resolver disputas", variant: "destructive" });
+    } finally {
+      setBulkLoading(false);
+      setBulkResolveDialogOpen(false);
+    }
   };
 
   const clearFilters = () => {
