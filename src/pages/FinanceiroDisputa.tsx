@@ -52,7 +52,7 @@ interface DisputaRow {
   vencimento: string;
   created_at: string;
   responsavel: string;
-  valor: number;
+  valor: number | string | null;
   tipo: string;
   departamento: string;
   observacoes: string;
@@ -201,9 +201,10 @@ function FinanceiroDisputaContent() {
     }
   };
 
-  const formatMoney = (val: number | null | undefined) => {
-    const n = typeof val === "number" && Number.isFinite(val) ? val : 0;
-    return "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatMoney = (val: number | string | null | undefined) => {
+    const n = Number(val);
+    const safe = Number.isFinite(n) ? n : 0;
+    return "R$ " + safe.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   const formatElapsed = (startDate: string) => {
