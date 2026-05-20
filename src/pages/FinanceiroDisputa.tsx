@@ -98,7 +98,7 @@ function FinanceiroDisputaContent() {
   // Duplicate confirmation modal
   const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
   const [duplicateItems, setDuplicateItems] = useState<Array<{ nd: string; cliente: string; responsavel: string }>>([]);
-  const [parsedItemsForImport, setParsedItemsForImport] = useState<Array<{ nd: string; descricao: string; departamento: string; responsavel: string; escalation: string }>>([]);
+  const [parsedItemsForImport, setParsedItemsForImport] = useState<Array<{ nd: string; descricao: string; departamento: string; responsavel: string; escalation: string; prazo?: string }>>([]);
   const [newItemsNds, setNewItemsNds] = useState<string[]>([]);
 
   // Observações editing state
@@ -361,21 +361,55 @@ function FinanceiroDisputaContent() {
   };
 
   const handleBulkDelete = async () => {
-    toast({
-      title: "Indisponível",
-      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
-      variant: "destructive",
-    });
-    setBulkDeleteDialogOpen(false);
+    const keys = Array.from(selectedDocKeys);
+    if (keys.length === 0) {
+      setBulkDeleteDialogOpen(false);
+      return;
+    }
+    setBulkLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "bulk_delete_disputas_cr", doc_keys: keys },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Falha no bulk delete");
+      toast({ title: "Excluído", description: `${data.deleted ?? keys.length} disputa(s) removida(s)` });
+      setSelectedDocKeys(new Set());
+      setSelectAll(false);
+      await fetchDisputas();
+    } catch (err: any) {
+      console.error("Erro no bulk delete:", err);
+      toast({ title: "Erro", description: err?.message || "Falha ao excluir disputas", variant: "destructive" });
+    } finally {
+      setBulkLoading(false);
+      setBulkDeleteDialogOpen(false);
+    }
   };
 
   const handleBulkResolve = async () => {
-    toast({
-      title: "Indisponível",
-      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
-      variant: "destructive",
-    });
-    setBulkResolveDialogOpen(false);
+    const keys = Array.from(selectedDocKeys);
+    if (keys.length === 0) {
+      setBulkResolveDialogOpen(false);
+      return;
+    }
+    setBulkLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "bulk_resolve_disputas_cr", doc_keys: keys },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Falha no bulk resolve");
+      toast({ title: "Resolvido", description: `${data.resolved ?? keys.length} disputa(s) resolvida(s)` });
+      setSelectedDocKeys(new Set());
+      setSelectAll(false);
+      await fetchDisputas();
+    } catch (err: any) {
+      console.error("Erro no bulk resolve:", err);
+      toast({ title: "Erro", description: err?.message || "Falha ao resolver disputas", variant: "destructive" });
+    } finally {
+      setBulkLoading(false);
+      setBulkResolveDialogOpen(false);
+    }
   };
 
   const clearFilters = () => {
@@ -642,41 +676,88 @@ function FinanceiroDisputaContent() {
     return items;
   };
 
-  const handleImportSpreadsheet = async () => {
-    toast({
-      title: "Indisponível",
-      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
-      variant: "destructive",
-    });
-    setImportModalOpen(false);
+  const executeImport = async (items: typeof parsedItemsForImport, forceUpdate: boolean) => {
+    if (!items || items.length === 0) {
+      toast({ title: "Aviso", description: "Nenhum item para importar", variant: "destructive" });
+      return;
+    }
+    setImportLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "import_disputas_planilha_cr", items, forceUpdate },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Falha na importação");
+      const parts: string[] = [];
+      if (data.count) parts.push(`${data.count} criada(s)`);
+      if (data.updatedCount) parts.push(`${data.updatedCount} atualizada(s)`);
+      if (data.skippedCount) parts.push(`${data.skippedCount} ignorada(s)`);
+      if (data.notFoundCount) parts.push(`${data.notFoundCount} não encontrada(s)`);
+      toast({
+        title: "Importação concluída",
+        description: parts.join(" · ") || "Nenhuma alteração",
+      });
+      setImportModalOpen(false);
+      setDuplicateModalOpen(false);
+      setImportFile(null);
+      setParsedItemsForImport([]);
+      setDuplicateItems([]);
+      setNewItemsNds([]);
+      await fetchDisputas();
+    } catch (err: any) {
+      console.error("Erro na importação:", err);
+      toast({ title: "Erro", description: err?.message || "Falha ao importar planilha", variant: "destructive" });
+    } finally {
+      setImportLoading(false);
+    }
   };
 
-  const executeImport = async (_items: typeof parsedItemsForImport, _forceUpdate: boolean) => {
-    toast({
-      title: "Indisponível",
-      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
-      variant: "destructive",
-    });
-    setImportModalOpen(false);
-    setDuplicateModalOpen(false);
+  const handleImportSpreadsheet = async () => {
+    if (!importFile) {
+      toast({ title: "Aviso", description: "Selecione um arquivo", variant: "destructive" });
+      return;
+    }
+    setImportLoading(true);
+    try {
+      const parsed = await parseSpreadsheet(importFile);
+      if (!parsed || parsed.length === 0) {
+        setImportLoading(false);
+        return;
+      }
+      const items = propagateObservations(parsed);
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "check_disputas_planilha_cr", items: items.map(i => ({ nd: i.nd })) },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Falha na verificação");
+
+      setParsedItemsForImport(items);
+
+      if ((data.existingItems?.length ?? 0) > 0) {
+        setDuplicateItems(data.existingItems);
+        setNewItemsNds(data.newItems || []);
+        setImportModalOpen(false);
+        setDuplicateModalOpen(true);
+        setImportLoading(false);
+        return;
+      }
+
+      await executeImport(items, false);
+    } catch (err: any) {
+      console.error("Erro ao processar planilha:", err);
+      toast({ title: "Erro", description: err?.message || "Falha ao processar planilha", variant: "destructive" });
+      setImportLoading(false);
+    }
   };
 
   const handleImportOnlyNew = async () => {
-    toast({
-      title: "Indisponível",
-      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
-      variant: "destructive",
-    });
-    setDuplicateModalOpen(false);
+    const newSet = new Set(newItemsNds);
+    const onlyNew = parsedItemsForImport.filter(i => newSet.has(i.nd));
+    await executeImport(onlyNew, false);
   };
 
   const handleImportReplaceAll = async () => {
-    toast({
-      title: "Indisponível",
-      description: "Funcionalidade temporariamente indisponível durante a migração da nova base.",
-      variant: "destructive",
-    });
-    setDuplicateModalOpen(false);
+    await executeImport(parsedItemsForImport, true);
   };
 
   const handleExport = () => {

@@ -509,6 +509,8 @@ Deno.serve(async (req) => {
       'update_disputa_observacoes_cr','update_disputa_responsavel_cr',
       'save_disputa','delete_disputa','resolve_disputa','check_disputas_planilha',
       'import_disputas_planilha','bulk_delete_disputas','bulk_resolve_disputas',
+      'bulk_delete_disputas_cr','bulk_resolve_disputas_cr',
+      'check_disputas_planilha_cr','import_disputas_planilha_cr',
       'get_aging_historical','get_aging_historical_by_client','get_pymt_term_by_client',
       // Fornecedores fiscais / dados bancários
       'get_faturas_do_dia','get_fornecedores_sem_fiscal','add_fornecedor_sem_fiscal',
@@ -18448,6 +18450,311 @@ Deno.serve(async (req) => {
         
         console.log(`[bulk_resolve_disputas] Bulk resolved ${resolvedCount} disputas`);
         result = { success: true, resolved: resolvedCount };
+        break;
+      }
+
+      // ==================== BULK DELETE DISPUTAS (CR - NOVA BASE) ====================
+      case 'bulk_delete_disputas_cr': {
+        const { doc_keys } = body as { doc_keys?: string[] };
+        const keys = Array.from(new Set((doc_keys || []).map(k => (k ?? '').toString().trim()).filter(Boolean)));
+        if (keys.length === 0) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Nenhum item válido informado.' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        console.log(`[bulk_delete_disputas_cr] Processing ${keys.length} doc_keys`);
+        let deleted = 0;
+        let softDeleteUpserted = 0;
+        try {
+          await client.execute('START TRANSACTION');
+          for (const key of keys) {
+            const upd = await client.execute(
+              `UPDATE ai_agente.t_fin_disputas
+               SET deleted_at = NOW(), is_disputa = 0, updated_at = NOW()
+               WHERE nf = ?`,
+              [key]
+            );
+            if ((upd as any)?.affectedRows > 0) deleted++;
+            const sd = await client.execute(
+              `INSERT INTO ai_agente.t_financeiro_soft_delete (documento, active, active_at)
+               VALUES (?, 0, NOW())
+               ON DUPLICATE KEY UPDATE active = 0, active_at = NOW()`,
+              [key]
+            );
+            if ((sd as any)?.affectedRows > 0) softDeleteUpserted++;
+          }
+          await client.execute('COMMIT');
+        } catch (e: any) {
+          try { await client.execute('ROLLBACK'); } catch (_) {}
+          console.error('[bulk_delete_disputas_cr] Error:', e);
+          return new Response(
+            JSON.stringify({ success: false, error: e?.message || 'Falha no bulk delete' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        console.log(`[bulk_delete_disputas_cr] deleted=${deleted}, softDeleteUpserted=${softDeleteUpserted}`);
+        result = { success: true, deleted, softDeleteUpserted };
+        break;
+      }
+
+      // ==================== BULK RESOLVE DISPUTAS (CR - NOVA BASE) ====================
+      case 'bulk_resolve_disputas_cr': {
+        const { doc_keys } = body as { doc_keys?: string[] };
+        const keys = Array.from(new Set((doc_keys || []).map(k => (k ?? '').toString().trim()).filter(Boolean)));
+        if (keys.length === 0) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Nenhum item válido informado.' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        console.log(`[bulk_resolve_disputas_cr] Processing ${keys.length} doc_keys`);
+        let resolved = 0;
+        let notFound = 0;
+        try {
+          await client.execute('START TRANSACTION');
+          for (const key of keys) {
+            const upd = await client.execute(
+              `UPDATE ai_agente.t_fin_disputas
+               SET resolved_at = NOW(), is_disputa = 0, updated_at = NOW()
+               WHERE nf = ?`,
+              [key]
+            );
+            const aff = (upd as any)?.affectedRows ?? 0;
+            if (aff > 0) resolved++; else notFound++;
+          }
+          await client.execute('COMMIT');
+        } catch (e: any) {
+          try { await client.execute('ROLLBACK'); } catch (_) {}
+          console.error('[bulk_resolve_disputas_cr] Error:', e);
+          return new Response(
+            JSON.stringify({ success: false, error: e?.message || 'Falha no bulk resolve' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        console.log(`[bulk_resolve_disputas_cr] resolved=${resolved}, notFound=${notFound}`);
+        result = { success: true, resolved, notFound };
+        break;
+      }
+
+      // ==================== CHECK DISPUTAS PLANILHA (CR - NOVA BASE) ====================
+      case 'check_disputas_planilha_cr': {
+        const { items } = body as { items?: Array<{ nd?: string }> };
+        const ndList = Array.from(new Set((items || []).map(i => (i?.nd ?? '').toString().trim()).filter(Boolean)));
+        if (ndList.length === 0) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Nenhum item válido informado.' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        console.log(`[check_disputas_planilha_cr] checking ${ndList.length} NDs`);
+        const newItems: string[] = [];
+        const existingItems: Array<{ nd: string; cliente: string; responsavel: string }> = [];
+        const notFoundItems: string[] = [];
+        try {
+          for (const nd of ndList) {
+            const rows = await client.query(
+              `SELECT doc_key, razao_social AS cliente
+               FROM dados_dachser.v_fin_regua_contas_receber
+               WHERE nd = ? OR documento = ? OR numero_nf = ?`,
+              [nd, nd, nd]
+            );
+            if (!rows || rows.length === 0) {
+              notFoundItems.push(nd);
+              continue;
+            }
+            const docKeys = (rows as any[]).map(r => r.doc_key).filter(Boolean);
+            if (docKeys.length === 0) {
+              notFoundItems.push(nd);
+              continue;
+            }
+            const placeholders = docKeys.map(() => '?').join(',');
+            const active = await client.query(
+              `SELECT nf, responsavel
+               FROM ai_agente.t_fin_disputas
+               WHERE nf IN (${placeholders})
+                 AND is_disputa = 1
+                 AND resolved_at IS NULL
+                 AND deleted_at IS NULL`,
+              docKeys
+            );
+            const activeNfs = new Set((active as any[]).map(r => r.nf));
+            const allActive = docKeys.every(k => activeNfs.has(k));
+            if (allActive) {
+              const cliente = (rows as any[])[0]?.cliente || '';
+              const responsavel = (active as any[]).find(r => r.responsavel)?.responsavel || '';
+              existingItems.push({ nd, cliente, responsavel });
+            } else {
+              newItems.push(nd);
+            }
+          }
+        } catch (e: any) {
+          console.error('[check_disputas_planilha_cr] Error:', e);
+          return new Response(
+            JSON.stringify({ success: false, error: e?.message || 'Falha no check' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        console.log(`[check_disputas_planilha_cr] new=${newItems.length}, existing=${existingItems.length}, notFound=${notFoundItems.length}`);
+        result = { success: true, newItems, existingItems, notFoundItems };
+        break;
+      }
+
+      // ==================== IMPORT DISPUTAS PLANILHA (CR - NOVA BASE) ====================
+      case 'import_disputas_planilha_cr': {
+        const { items, forceUpdate } = body as {
+          items?: Array<{ nd?: string; descricao?: string; departamento?: string; responsavel?: string; escalation?: string; prazo?: string }>;
+          forceUpdate?: boolean;
+        };
+
+        // Excel serial date → YYYY-MM-DD
+        const excelDateToSQL = (val: any): string | null => {
+          if (val === null || val === undefined || val === '') return null;
+          const num = Number(val);
+          if (!isNaN(num) && num > 30000 && num < 100000) {
+            const ms = (num - 25569) * 86400000;
+            const d = new Date(ms);
+            if (!isNaN(d.getTime())) {
+              return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+            }
+          }
+          if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) return val.substring(0, 10);
+          return null;
+        };
+
+        // dedupe by nd
+        const ndMap = new Map<string, any>();
+        for (const it of items || []) {
+          const nd = (it?.nd ?? '').toString().trim();
+          if (!nd) continue;
+          if (!ndMap.has(nd)) ndMap.set(nd, it);
+        }
+        if (ndMap.size === 0) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Nenhum item válido informado.' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        console.log(`[import_disputas_planilha_cr] processing ${ndMap.size} NDs, forceUpdate=${!!forceUpdate}`);
+
+        let count = 0;
+        let updatedCount = 0;
+        let skippedCount = 0;
+        let notFoundCount = 0;
+        const notFoundItems: string[] = [];
+        const skippedItems: string[] = [];
+
+        try {
+          await client.execute('START TRANSACTION');
+          for (const [nd, item] of ndMap) {
+            const docRows = await client.query(
+              `SELECT doc_key, razao_social, data_vencimento, valor_nf, tipo_documento
+               FROM dados_dachser.v_fin_regua_contas_receber
+               WHERE nd = ? OR documento = ? OR numero_nf = ?`,
+              [nd, nd, nd]
+            );
+            if (!docRows || docRows.length === 0) {
+              notFoundCount++;
+              notFoundItems.push(nd);
+              continue;
+            }
+            for (const doc of docRows as any[]) {
+              const docKey = doc.doc_key;
+              if (!docKey) continue;
+              const tipo = doc.tipo_documento === 'FAT_NF' ? 'À vista' : 'A prazo';
+              const vencimento = excelDateToSQL(item.prazo) || doc.data_vencimento || null;
+
+              const existing = await client.query(
+                `SELECT id, deleted_at, resolved_at, is_disputa
+                 FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
+                [docKey]
+              );
+
+              if (existing && existing.length > 0) {
+                const row = (existing as any[])[0];
+                const isActive = row.is_disputa === 1 && !row.resolved_at && !row.deleted_at;
+                if (isActive && !forceUpdate) {
+                  skippedCount++;
+                  skippedItems.push(docKey);
+                  continue;
+                }
+                // Update or reopen
+                await client.execute(
+                  `UPDATE ai_agente.t_fin_disputas
+                   SET responsavel = COALESCE(NULLIF(?, ''), responsavel),
+                       departamento = COALESCE(NULLIF(?, ''), departamento),
+                       observacoes = COALESCE(NULLIF(?, ''), observacoes),
+                       escalation = COALESCE(NULLIF(?, ''), escalation),
+                       vencimento = COALESCE(?, vencimento),
+                       cliente = COALESCE(NULLIF(?, ''), cliente),
+                       valor = COALESCE(?, valor),
+                       tipo = COALESCE(NULLIF(?, ''), tipo),
+                       is_disputa = 1,
+                       resolved_at = NULL,
+                       deleted_at = NULL,
+                       updated_at = NOW()
+                   WHERE nf = ?`,
+                  [
+                    item.responsavel || '',
+                    item.departamento || '',
+                    item.descricao || '',
+                    item.escalation || '',
+                    vencimento,
+                    doc.razao_social || '',
+                    doc.valor_nf ?? null,
+                    tipo,
+                    docKey,
+                  ]
+                );
+                if (isActive) updatedCount++; else count++;
+              } else {
+                await client.execute(
+                  `INSERT INTO ai_agente.t_fin_disputas
+                    (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())`,
+                  [
+                    docKey,
+                    doc.razao_social || 'N/A',
+                    vencimento,
+                    doc.valor_nf ?? 0,
+                    tipo,
+                    item.responsavel || null,
+                    item.departamento || null,
+                    item.descricao || null,
+                    item.escalation || null,
+                  ]
+                );
+                count++;
+              }
+
+              // Reactivate visibility in soft_delete
+              await client.execute(
+                `INSERT INTO ai_agente.t_financeiro_soft_delete (documento, active, active_at)
+                 VALUES (?, 1, NOW())
+                 ON DUPLICATE KEY UPDATE active = 1, active_at = NOW()`,
+                [docKey]
+              );
+            }
+          }
+          await client.execute('COMMIT');
+        } catch (e: any) {
+          try { await client.execute('ROLLBACK'); } catch (_) {}
+          console.error('[import_disputas_planilha_cr] Error:', e);
+          return new Response(
+            JSON.stringify({ success: false, error: e?.message || 'Falha na importação' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        console.log(`[import_disputas_planilha_cr] inserted=${count}, updated=${updatedCount}, skipped=${skippedCount}, notFound=${notFoundCount}`);
+        result = {
+          success: true,
+          count,
+          notFoundCount,
+          skippedCount,
+          updatedCount,
+          notFoundItems,
+          skippedItems,
+        };
         break;
       }
 
