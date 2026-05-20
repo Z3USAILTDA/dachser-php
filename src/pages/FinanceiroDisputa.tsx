@@ -281,16 +281,9 @@ function FinanceiroDisputaContent() {
 
   const handleDelete = async () => {
     if (!deleteDocKey) return;
-    const targetNf = rows.find(r => r.doc_key === deleteDocKey)?.nf;
-    if (!targetNf) {
-      toast({ title: "Erro", description: "Linha não encontrada", variant: "destructive" });
-      setDeleteDialogOpen(false);
-      setDeleteDocKey(null);
-      return;
-    }
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "delete_disputa_cr", nf: targetNf },
+        body: { action: "delete_disputa_cr", doc_key: deleteDocKey },
       });
 
       if (error) throw error;
@@ -298,7 +291,7 @@ function FinanceiroDisputaContent() {
         toast({ title: "Sucesso", description: "Disputa excluída" });
         fetchDisputas();
       } else {
-        toast({ title: "Erro", description: data?.error || "Falha ao excluir", variant: "destructive" });
+        toast({ title: "Erro", description: data?.error || data?.message || "Falha ao excluir", variant: "destructive" });
       }
     } catch (err) {
       console.error("Erro ao excluir:", err);
