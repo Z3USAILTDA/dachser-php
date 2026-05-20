@@ -9,7 +9,7 @@ interface DisputaRow {
   vencimento?: string;
   created_at?: string;
   responsavel?: string;
-  valor?: number;
+  valor?: number | string | null;
   tipo?: string;
   observacoes?: string;
   status?: string;
