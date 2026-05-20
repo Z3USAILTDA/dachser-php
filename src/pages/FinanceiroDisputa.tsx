@@ -57,6 +57,7 @@ interface DisputaRow {
   departamento: string;
   observacoes: string;
   escalation: string;
+  origem_disputa?: string | null;
 }
 
 function FinanceiroDisputaContent() {
