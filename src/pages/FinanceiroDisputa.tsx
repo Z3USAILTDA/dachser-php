@@ -908,8 +908,19 @@ function FinanceiroDisputaContent() {
                         onCheckedChange={() => toggleSelectRow(r.doc_key)}
                       />
                     </td>
-                    <td className="px-4 py-[14px] whitespace-nowrap max-w-[220px] overflow-hidden text-ellipsis" title={r.cliente || "-"}>
-                      {r.razao_base || r.cliente || "-"}
+                    <td className="px-4 py-[14px] whitespace-nowrap max-w-[260px] overflow-hidden text-ellipsis" title={r.cliente || "-"}>
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <span className="overflow-hidden text-ellipsis">{r.razao_base || r.cliente || "-"}</span>
+                        {r.origem_disputa === "legado_orfao" && (
+                          <Badge
+                            variant="outline"
+                            className="shrink-0 text-[0.65rem] uppercase tracking-wider border-amber-500/40 text-amber-300/90 bg-amber-500/10"
+                            title="Registro antigo sem título correspondente na carga atual de contas a receber."
+                          >
+                            Histórico
+                          </Badge>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-[14px] whitespace-nowrap">{r.nf || "-"}</td>
                     <td className="px-4 py-[14px] whitespace-nowrap">{formatDate(r.emissao)}</td>
