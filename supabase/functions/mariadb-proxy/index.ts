@@ -18472,23 +18472,58 @@ Deno.serve(async (req) => {
         console.log(`[bulk_delete_disputas_cr] Processing ${keys.length} doc_keys`);
         let deleted = 0;
         let softDeleteUpserted = 0;
+        let resolvedIds = 0;
         try {
           await client.execute('START TRANSACTION');
           for (const key of keys) {
-            const upd = await client.execute(
-              `UPDATE ai_agente.t_fin_disputas
-               SET deleted_at = NOW(), is_disputa = 0, updated_at = NOW()
-               WHERE nf = ?`,
-              [key]
+            // Resolve doc_key/nf -> fd.id, fd.nf
+            const resolved = await client.query(
+              `SELECT DISTINCT fd.id AS fd_id, fd.nf AS fd_nf
+               FROM ai_agente.t_fin_disputas fd
+               LEFT JOIN dados_dachser.v_fin_regua_contas_receber v
+                 ON (
+                      v.doc_key COLLATE utf8mb4_unicode_ci = fd.nf COLLATE utf8mb4_unicode_ci
+                   OR (
+                        fd.nf NOT LIKE 'CR|%' AND (
+                          SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.documento COLLATE utf8mb4_unicode_ci
+                       OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.numero_nf COLLATE utf8mb4_unicode_ci
+                       OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.nd        COLLATE utf8mb4_unicode_ci
+                        )
+                      )
+                    )
+               WHERE fd.is_disputa = 1 AND fd.deleted_at IS NULL
+                 AND (
+                      fd.nf COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                   OR v.doc_key COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                 )`,
+              [key, key]
             );
-            if ((upd as any)?.affectedRows > 0) deleted++;
-            const sd = await client.execute(
-              `INSERT INTO ai_agente.t_financeiro_soft_delete (documento, active, active_at)
-               VALUES (?, 0, NOW())
-               ON DUPLICATE KEY UPDATE active = 0, active_at = NOW()`,
-              [key]
-            );
-            if ((sd as any)?.affectedRows > 0) softDeleteUpserted++;
+
+            const ids = (resolved as any[]).map((r: any) => r.fd_id).filter((x: any) => x != null);
+            const nfs = (resolved as any[]).map((r: any) => r.fd_nf).filter((x: any) => x != null);
+            resolvedIds += ids.length;
+
+            if (ids.length > 0) {
+              const placeholders = ids.map(() => '?').join(',');
+              const upd = await client.execute(
+                `UPDATE ai_agente.t_fin_disputas
+                   SET deleted_at = NOW(), is_disputa = 0, updated_at = NOW()
+                 WHERE id IN (${placeholders})`,
+                ids
+              );
+              if ((upd as any)?.affectedRows > 0) deleted++;
+            }
+
+            const sdKeys = nfs.length > 0 ? nfs : [key];
+            for (const sdKey of sdKeys) {
+              const sd = await client.execute(
+                `INSERT INTO ai_agente.t_financeiro_soft_delete (documento, active, active_at)
+                 VALUES (?, 0, NOW())
+                 ON DUPLICATE KEY UPDATE active = 0, active_at = NOW()`,
+                [sdKey]
+              );
+              if ((sd as any)?.affectedRows > 0) softDeleteUpserted++;
+            }
           }
           await client.execute('COMMIT');
         } catch (e: any) {
@@ -18499,10 +18534,11 @@ Deno.serve(async (req) => {
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        console.log(`[bulk_delete_disputas_cr] deleted=${deleted}, softDeleteUpserted=${softDeleteUpserted}`);
-        result = { success: true, deleted, softDeleteUpserted };
+        console.log(`[bulk_delete_disputas_cr] resolvedIds=${resolvedIds}, deleted=${deleted}, softDeleteUpserted=${softDeleteUpserted}`);
+        result = { success: true, deleted, softDeleteUpserted, resolvedIds };
         break;
       }
+
 
       // ==================== BULK RESOLVE DISPUTAS (CR - NOVA BASE) ====================
       case 'bulk_resolve_disputas_cr': {
