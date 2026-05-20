@@ -200,8 +200,9 @@ function FinanceiroDisputaContent() {
     }
   };
 
-  const formatMoney = (val: number) => {
-    return "R$ " + val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatMoney = (val: number | null | undefined) => {
+    const n = typeof val === "number" && Number.isFinite(val) ? val : 0;
+    return "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   const formatElapsed = (startDate: string) => {
