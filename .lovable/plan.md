@@ -1,62 +1,72 @@
-## Causa raiz
+## Diagnóstico
 
-A função `sea-tracking-cron` — que orquestra `olimpo-sync` + enriquecimento via JSONCargo (`sea_seed_smart`) + `enrich_missing_coords` — **não tem mais agendamento no `pg_cron`**. Listei `cron.job` e não há nenhum job SEA/tracking/olimpo. `cron.job_run_details` e os logs da edge function também estão vazios. Por isso o monitoramento marítimo está ~1 mês desatualizado, mesmo com a flag interna `JSONCARGO_DISABLED = false` e o secret `JSONCARGO_API_KEY` presentes.
+Na tela **Financeiro › Disputas** (`/financeiro/disputa`), o "excluir" devolve sucesso visualmente, mas o registro reaparece no próximo refresh. A causa está no **mariadb-proxy**, nos handlers `delete_disputa_cr` e `bulk_delete_disputas_cr`:
 
-## Escopo do que vou alterar
+- O front-end envia ao backend o campo `nf` (single) ou `doc_keys` (bulk).
+- Esses valores vêm da `get_disputas_cr`, onde:
+  - `nf = COALESCE(numero_nf, documento, nd, fd_nf)` — geralmente **não** é igual a `t_fin_disputas.nf`.
+  - `doc_key`:
+    - origem `nova_base` / `legado_orfao` → é `CR|...` (= `fd.nf`) ✔
+    - origem `legado_casado` → é `v.doc_key` da view financeira, **≠** `fd.nf` ✘
+- Backend faz `UPDATE t_fin_disputas SET deleted_at=NOW() WHERE nf = ?` com a chave recebida → `affectedRows = 0` para todas as linhas que não casam diretamente.
+- O fallback `INSERT t_financeiro_soft_delete (documento=?, active=0)` também é inútil, porque a query `get_disputas_cr` filtra com `sd.documento = fd.nf` — e a chave gravada não é a `fd.nf` real.
 
-Apenas 3 ações, todas cirúrgicas. Nada na UI do `/sea/tracking`, nada nos demais módulos.
+Resultado: a linha continua aparecendo, mesmo a UI mostrando "Disputa excluída".
 
-### 1. Recriar o cron no schedule original
-Via `supabase--insert` (não migration, pois carrega URL + anon key específicos do projeto):
+## Plano de correção (cirúrgico)
+
+### 1. Front: enviar `doc_key` em vez de `nf`
+
+`src/pages/FinanceiroDisputa.tsx`
+- `handleDelete`: trocar `body: { action: "delete_disputa_cr", nf: targetNf }` por `body: { action: "delete_disputa_cr", doc_key: deleteDocKey }`. Remover o `rows.find(...).nf`.
+- `handleBulkDelete`: já envia `doc_keys` — manter.
+
+### 2. Backend: resolver `doc_key → fd.id` antes de marcar como deletado
+
+`supabase/functions/mariadb-proxy/index.ts`, casos `delete_disputa_cr` (≈ linha 3737) e `bulk_delete_disputas_cr` (≈ linha 18426).
+
+Para cada chave recebida, primeiro descobrir o(s) `fd.id` reais usando a mesma lógica do `get_disputas_cr`:
 
 ```sql
-select cron.schedule(
-  'sea-tracking-cron-mon-wed-02utc',
-  '0 2 * * 1,3',
-  $$
-  select net.http_post(
-    url := 'https://finktakbjcfmurqeiubz.supabase.co/functions/v1/sea-tracking-cron',
-    headers := '{"Content-Type":"application/json","Authorization":"Bearer <ANON_KEY>"}'::jsonb,
-    body := '{}'::jsonb
-  );
-  $$
-);
+SELECT fd.id, fd.nf
+FROM ai_agente.t_fin_disputas fd
+LEFT JOIN dados_dachser.v_fin_regua_contas_receber v
+  ON v.doc_key COLLATE utf8mb4_unicode_ci = fd.nf COLLATE utf8mb4_unicode_ci
+ OR (
+      fd.nf NOT LIKE 'CR|%' AND (
+        SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.documento COLLATE utf8mb4_unicode_ci
+     OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.numero_nf COLLATE utf8mb4_unicode_ci
+     OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.nd        COLLATE utf8mb4_unicode_ci
+      )
+    )
+WHERE fd.is_disputa = 1 AND fd.deleted_at IS NULL
+  AND (
+       fd.nf = ?                                  -- nova_base / órfão (doc_key = CR|...)
+    OR v.doc_key COLLATE utf8mb4_unicode_ci = ?   -- legado_casado (doc_key = v.doc_key)
+  )
 ```
 
-Confirmo extensões `pg_cron` e `pg_net` ativas antes (se faltar alguma, habilito).
+Depois:
 
-### 2. Catch-up imediato
-Após criar o cron, invoco `sea-tracking-cron` uma vez via `supabase--curl_edge_functions` (POST `/sea-tracking-cron`) e confirmo no retorno:
-- `olimpo_sync` ok
-- `sea_seed_batches[]` com `api_calls > 0` (JSONCargo respondendo)
-- `errors: []`
+```sql
+UPDATE ai_agente.t_fin_disputas
+   SET deleted_at = NOW(), is_disputa = 0, updated_at = NOW()
+ WHERE id IN (...ids...);
 
-Se a primeira execução estourar limite/erro, registro o motivo e seguimos sem reexecutar — o próximo ciclo agendado resolve o restante.
-
-### 3. Reativar `demurrage-import-jsoncargo`
-Editar `supabase/functions/demurrage-import-jsoncargo/index.ts`:
-
-```ts
-// antes
-const JSONCARGO_DISABLED = true;
-// depois
-const JSONCARGO_DISABLED = false;
+INSERT INTO ai_agente.t_financeiro_soft_delete (documento, active, active_at)
+VALUES (?, 0, NOW())  -- usar fd.nf real de cada linha resolvida
+ON DUPLICATE KEY UPDATE active = 0, active_at = NOW();
 ```
 
-Sem outras mudanças no arquivo. Redeploy só dessa função.
+Aceitar tanto `doc_key` quanto `nf` no payload por compatibilidade (preferindo `doc_key`).
 
-## Validações finais
+Manter `success = false` se nenhum `fd.id` for resolvido (em vez do falso-positivo atual).
 
-- `cron.job` mostra `sea-tracking-cron-mon-wed-02utc` `active = true`.
-- Resposta da invocação manual com `duration_ms`, batches e zero erros graves.
-- Em `/sea/tracking`, processos ativos voltam a ter `last_check` recente.
-- `demurrage-import-jsoncargo` aceita import de MBL novamente (teste só se você pedir; senão fica disponível).
+### 3. Verificação
 
-## Rollback
+- Excluir 1 disputa nova_base → desaparece após refresh.
+- Excluir 1 disputa legado_casado (sem prefixo `CR|`) → desaparece após refresh.
+- Bulk delete misturando origens → todas somem.
+- Conferir log do edge function: `affected > 0` e `softDeleteUpserted` correto.
 
-- Cron: `select cron.unschedule('sea-tracking-cron-mon-wed-02utc');`
-- Flag demurrage: voltar para `const JSONCARGO_DISABLED = true;` e redeploy.
-
-## Fora de escopo (não toco)
-
-Régua de Cobrança, Disputas, Olimpo, view `v_fin_regua_contas_receber`, qualquer função `*_cr`, UI do tracking marítimo, lógica de status/timeline, retention rules, secrets.
+Sem mudanças de schema, sem refactor estrutural — apenas o front (1 linha) e os 2 cases do proxy.
