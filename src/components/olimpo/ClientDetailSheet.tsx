@@ -115,7 +115,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_client_cnpj_detail", clientName: client.product },
+        body: { action: "get_client_cnpj_detail_cr", clientName: client.product },
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Erro");
@@ -138,7 +138,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
     setFaturasLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_client_faturas", clientName: client.product, page, pageSize: faturasPageSize },
+        body: { action: "get_client_faturas_cr", clientName: client.product, page, pageSize: faturasPageSize },
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Erro");
