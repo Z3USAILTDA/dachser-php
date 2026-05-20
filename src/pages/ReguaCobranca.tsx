@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useNavigate } from "react-router-dom";
-import { CalendarRange, HelpCircle, Mail, Send, RefreshCw, FileText, Clock, Flag, Search, X } from "lucide-react";
+import { CalendarRange, HelpCircle, Mail, Send, RefreshCw, FileText, Clock, Flag, Search, X, Wallet } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useUsageLog } from "@/hooks/useUsageLog";
