@@ -230,7 +230,7 @@ export default function OlimpoCobranca() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const agingAction = viewMode === "client" ? "get_aging_by_client" : "get_aging_overview";
+      const agingAction = viewMode === "client" ? "get_aging_by_client_cr" : "get_aging_overview_cr";
 
       const [agingResult, bfResult, pymtResult, histResult, pymtClientResult, agingClientResult] = await Promise.allSettled([
         supabase.functions.invoke("mariadb-proxy", { body: { action: agingAction } }),
@@ -501,8 +501,8 @@ export default function OlimpoCobranca() {
     try {
       // Fetch both datasets in parallel (independent of current viewMode)
       const [productResp, clientResp] = await Promise.all([
-        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_aging_overview" } }),
-        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_aging_by_client" } }),
+        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_aging_overview_cr" } }),
+        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_aging_by_client_cr" } }),
       ]);
 
       const wb = XLSX.utils.book_new();
@@ -530,7 +530,7 @@ export default function OlimpoCobranca() {
       // ===== ABA 3: ANALÍTICO =====
       try {
         const { data: analiticoResp } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "get_aging_analitico" },
+          body: { action: "get_aging_analitico_cr" },
         });
 
         if (analiticoResp?.success && analiticoResp.data?.length > 0) {
