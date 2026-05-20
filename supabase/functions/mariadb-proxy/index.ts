@@ -17200,6 +17200,342 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ====================================================================
+      // OLIMPO COBRANÇA — Shadow _cr (Fase 4.1)
+      // Fonte: dados_dachser.v_fin_regua_contas_receber
+      // Regras:
+      //  - Soft delete por doc_key em ai_agente.t_financeiro_soft_delete (active=0)
+      //  - Exclusão de disputa ativa via ai_agente.t_fin_disputas.nf = doc_key
+      //    (exceto get_client_faturas_cr, que apenas expõe flag derivada)
+      //  - Sem t_dados_financeiro_nfs, sem tbaixas
+      //  - valor_nf da view = saldo pendente (já líquido de baixas)
+      // ====================================================================
+
+      case 'get_aging_overview_cr': {
+        console.log('[get_aging_overview_cr] Fetching aging from v_fin_regua_contas_receber...');
+        const agingSql = `
+          SELECT
+            COALESCE(t.modal, 'Outros') AS product,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS aging_30,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 40 THEN t.valor_nf ELSE 0 END) AS aging_40,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 41 AND 60 THEN t.valor_nf ELSE 0 END) AS aging_60,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 61 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 120 THEN t.valor_nf ELSE 0 END) AS aging_120,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 121 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS aging_240,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 365 THEN t.valor_nf ELSE 0 END) AS aging_365,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 365 THEN t.valor_nf ELSE 0 END) AS aging_366_plus,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 1 ELSE 0 END) AS count_not_due,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN 1 ELSE 0 END) AS count_30,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 40 THEN 1 ELSE 0 END) AS count_40,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 41 AND 60 THEN 1 ELSE 0 END) AS count_60,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 61 AND 90 THEN 1 ELSE 0 END) AS count_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 120 THEN 1 ELSE 0 END) AS count_120,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 121 AND 180 THEN 1 ELSE 0 END) AS count_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN 1 ELSE 0 END) AS count_240,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 365 THEN 1 ELSE 0 END) AS count_365,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 365 THEN 1 ELSE 0 END) AS count_366_plus
+          FROM dados_dachser.v_fin_regua_contas_receber t
+          WHERE NOT EXISTS (
+              SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+              WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND sd.active = 0
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM ai_agente.t_fin_disputas d
+              WHERE d.nf COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND d.is_disputa = 1
+                AND d.resolved_at IS NULL
+                AND d.deleted_at IS NULL
+            )
+          GROUP BY COALESCE(t.modal, 'Outros')
+          ORDER BY SUM(t.valor_nf) DESC
+        `;
+        const agingRows = await client.query(agingSql);
+        const totals: any = {
+          product: 'Grand Total',
+          not_due: 0, aging_30: 0, aging_40: 0, aging_60: 0, aging_90: 0, aging_120: 0, aging_180: 0, aging_240: 0, aging_365: 0, aging_366_plus: 0,
+          count_not_due: 0, count_30: 0, count_40: 0, count_60: 0, count_90: 0, count_120: 0, count_180: 0, count_240: 0, count_365: 0, count_366_plus: 0,
+        };
+        const agingFields = ['not_due', 'aging_30', 'aging_40', 'aging_60', 'aging_90', 'aging_120', 'aging_180', 'aging_240', 'aging_365', 'aging_366_plus'];
+        const countFields = ['count_not_due', 'count_30', 'count_40', 'count_60', 'count_90', 'count_120', 'count_180', 'count_240', 'count_365', 'count_366_plus'];
+        const rows = agingRows.map((r: any) => {
+          const row: any = { product: r.product || 'Outros' };
+          for (const f of agingFields) { row[f] = Number(r[f]) || 0; totals[f] += row[f]; }
+          for (const f of countFields) { row[f] = Number(r[f]) || 0; totals[f] += row[f]; }
+          return row;
+        });
+        const lastUpdateResult = await client.query(`SELECT MAX(data_insert) as last_update FROM dados_dachser.v_fin_regua_contas_receber`);
+        const lastUpdate = lastUpdateResult?.[0]?.last_update || null;
+        console.log(`[get_aging_overview_cr] ${rows.length} products`);
+        result = { success: true, data: rows, totals, lastUpdate };
+        break;
+      }
+
+      case 'get_aging_by_client_cr': {
+        console.log('[get_aging_by_client_cr] Fetching aging by client from view...');
+        const clientAgingSql = `
+          SELECT
+            TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1)) AS product,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS aging_30,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 40 THEN t.valor_nf ELSE 0 END) AS aging_40,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 41 AND 60 THEN t.valor_nf ELSE 0 END) AS aging_60,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 61 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 120 THEN t.valor_nf ELSE 0 END) AS aging_120,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 121 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS aging_240,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 365 THEN t.valor_nf ELSE 0 END) AS aging_365,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 365 THEN t.valor_nf ELSE 0 END) AS aging_366_plus,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 1 ELSE 0 END) AS count_not_due,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN 1 ELSE 0 END) AS count_30,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 40 THEN 1 ELSE 0 END) AS count_40,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 41 AND 60 THEN 1 ELSE 0 END) AS count_60,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 61 AND 90 THEN 1 ELSE 0 END) AS count_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 120 THEN 1 ELSE 0 END) AS count_120,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 121 AND 180 THEN 1 ELSE 0 END) AS count_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN 1 ELSE 0 END) AS count_240,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 365 THEN 1 ELSE 0 END) AS count_365,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 365 THEN 1 ELSE 0 END) AS count_366_plus,
+            GROUP_CONCAT(DISTINCT REPLACE(REPLACE(REPLACE(t.cnpj, '.', ''), '/', ''), '-', '') SEPARATOR ',') AS cnpjs
+          FROM dados_dachser.v_fin_regua_contas_receber t
+          WHERE NOT EXISTS (
+              SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+              WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND sd.active = 0
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM ai_agente.t_fin_disputas d
+              WHERE d.nf COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND d.is_disputa = 1
+                AND d.resolved_at IS NULL
+                AND d.deleted_at IS NULL
+            )
+          GROUP BY TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))
+          ORDER BY SUM(t.valor_nf) DESC
+        `;
+        const clientAgingRows = await client.query(clientAgingSql);
+        const clientTotals: any = {
+          product: 'Grand Total',
+          not_due: 0, aging_30: 0, aging_40: 0, aging_60: 0, aging_90: 0, aging_120: 0, aging_180: 0, aging_240: 0, aging_365: 0, aging_366_plus: 0,
+          count_not_due: 0, count_30: 0, count_40: 0, count_60: 0, count_90: 0, count_120: 0, count_180: 0, count_240: 0, count_365: 0, count_366_plus: 0,
+        };
+        const agingFieldsC = ['not_due', 'aging_30', 'aging_40', 'aging_60', 'aging_90', 'aging_120', 'aging_180', 'aging_240', 'aging_365', 'aging_366_plus'];
+        const countFieldsC = ['count_not_due', 'count_30', 'count_40', 'count_60', 'count_90', 'count_120', 'count_180', 'count_240', 'count_365', 'count_366_plus'];
+        const clientRows = clientAgingRows.map((r: any) => {
+          const row: any = {
+            product: r.product || 'Sem Cliente',
+            cnpjs: r.cnpjs ? String(r.cnpjs).split(',') : [],
+          };
+          for (const f of agingFieldsC) { row[f] = Number(r[f]) || 0; clientTotals[f] += row[f]; }
+          for (const f of countFieldsC) { row[f] = Number(r[f]) || 0; clientTotals[f] += row[f]; }
+          return row;
+        });
+        const clientLastUpdateResult = await client.query(`SELECT MAX(data_insert) as last_update FROM dados_dachser.v_fin_regua_contas_receber`);
+        const clientLastUpdate = clientLastUpdateResult?.[0]?.last_update || null;
+        console.log(`[get_aging_by_client_cr] ${clientRows.length} clients`);
+        result = { success: true, data: clientRows, totals: clientTotals, lastUpdate: clientLastUpdate };
+        break;
+      }
+
+      case 'get_client_cnpj_detail_cr': {
+        const { clientName } = body as { clientName: string };
+        if (!clientName) { result = { success: false, error: 'clientName required' }; break; }
+        console.log(`[get_client_cnpj_detail_cr] client=${clientName}`);
+        const cnpjDetailSql = `
+          SELECT
+            REPLACE(REPLACE(REPLACE(t.cnpj, '.', ''), '/', ''), '-', '') AS cnpj_clean,
+            t.cnpj AS cnpj_original,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS aging_30,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 91 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS aging_240,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 241 AND 360 THEN t.valor_nf ELSE 0 END) AS aging_360,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 360 THEN t.valor_nf ELSE 0 END) AS aging_360_plus,
+            COUNT(*) AS total_count,
+            MAX(t.condicao_pag) AS condicao_pagamento,
+            MAX(t.nome_vendedor) AS nome_vendedor
+          FROM dados_dachser.v_fin_regua_contas_receber t
+          WHERE TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1)) = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+              WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND sd.active = 0
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM ai_agente.t_fin_disputas d
+              WHERE d.nf COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND d.is_disputa = 1
+                AND d.resolved_at IS NULL
+                AND d.deleted_at IS NULL
+            )
+          GROUP BY cnpj_clean, cnpj_original
+          ORDER BY total_count DESC
+        `;
+        const cnpjRows = await client.query(cnpjDetailSql, [clientName]);
+        const mapped = cnpjRows.map((r: any) => ({
+          cnpj: r.cnpj_original || r.cnpj_clean,
+          cnpjClean: r.cnpj_clean,
+          not_due: Number(r.not_due) || 0,
+          aging_30: Number(r.aging_30) || 0,
+          aging_90: Number(r.aging_90) || 0,
+          aging_180: Number(r.aging_180) || 0,
+          aging_240: Number(r.aging_240) || 0,
+          aging_360: Number(r.aging_360) || 0,
+          aging_360_plus: Number(r.aging_360_plus) || 0,
+          totalCount: Number(r.total_count) || 0,
+          condicao_pagamento: r.condicao_pagamento || null,
+          nome_vendedor: r.nome_vendedor || null,
+        }));
+        const cnpjList = mapped.map((m: any) => m.cnpjClean).filter(Boolean);
+        let observacoes: any[] = [];
+        if (cnpjList.length > 0) {
+          try {
+            const placeholders = cnpjList.map(() => '?').join(',');
+            observacoes = await client.query(
+              `SELECT cnpj, observacao, updated_by, updated_at FROM dados_dachser.t_cobranca_observacoes WHERE cnpj IN (${placeholders})`,
+              cnpjList
+            );
+          } catch (e) {
+            console.warn('[get_client_cnpj_detail_cr] Could not fetch observacoes:', e);
+          }
+        }
+        result = { success: true, data: mapped, observacoes };
+        break;
+      }
+
+      case 'get_client_faturas_cr': {
+        const { clientName: fatClientName, page: fatPage = 1, pageSize: fatPageSize = 20 } = body as { clientName: string; page?: number; pageSize?: number };
+        if (!fatClientName) { result = { success: false, error: 'clientName required' }; break; }
+        console.log(`[get_client_faturas_cr] client=${fatClientName} page=${fatPage} size=${fatPageSize}`);
+        const offset = (fatPage - 1) * fatPageSize;
+        const likePattern = `${fatClientName} - %`;
+
+        const fatSql = `
+          SELECT
+            t.doc_key,
+            t.documento,
+            t.numero_nf,
+            t.nd,
+            t.cnpj,
+            t.razao_social,
+            DATE_FORMAT(t.data_emissao, '%d/%m/%Y') AS data_emissao,
+            DATE_FORMAT(t.data_vencimento, '%d/%m/%Y') AS data_vencimento,
+            t.valor_nf,
+            t.valor_liquido,
+            t.modal,
+            t.tipo_documento,
+            t.processo AS numero_processo,
+            t.master,
+            t.house,
+            t.condicao_pag AS condicao_pagamento,
+            t.nome_vendedor,
+            t.id_rm,
+            t.idlan,
+            CASE WHEN EXISTS (
+              SELECT 1 FROM ai_agente.t_fin_disputas d
+              WHERE d.nf COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND d.is_disputa = 1
+                AND d.resolved_at IS NULL
+                AND d.deleted_at IS NULL
+            ) THEN 1 ELSE 0 END AS disputa,
+            COALESCE(NULLIF(t.numero_nf,''), t.documento) AS referencia_cliente
+          FROM dados_dachser.v_fin_regua_contas_receber t
+          WHERE (t.razao_social LIKE ? OR t.razao_social = ?)
+            AND NOT EXISTS (
+              SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+              WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND sd.active = 0
+            )
+          ORDER BY t.data_vencimento DESC
+          LIMIT ? OFFSET ?
+        `;
+        const fatRows = await client.query(fatSql, [likePattern, fatClientName, fatPageSize, offset]);
+
+        const countSql = `
+          SELECT COUNT(*) as total
+          FROM dados_dachser.v_fin_regua_contas_receber t
+          WHERE (t.razao_social LIKE ? OR t.razao_social = ?)
+            AND NOT EXISTS (
+              SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+              WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND sd.active = 0
+            )
+        `;
+        const countResult = await client.query(countSql, [likePattern, fatClientName]);
+        const total = Number(countResult[0]?.total || 0);
+
+        result = { success: true, rows: fatRows, total, page: fatPage, pageSize: fatPageSize };
+        break;
+      }
+
+      case 'get_aging_analitico_cr': {
+        console.log('[get_aging_analitico_cr] Fetching analítico from view...');
+        try {
+          const analiticoSql = `
+            SELECT
+              t.documento,
+              t.numero_nf,
+              t.modal,
+              t.tipo_documento,
+              t.data_emissao,
+              t.data_vencimento,
+              NULL AS cod_cliente,
+              t.razao_social,
+              t.valor_nf,
+              t.valor_liquido,
+              t.processo,
+              t.master,
+              t.house,
+              t.id_rm,
+              DATEDIFF(CURDATE(), t.data_vencimento) AS dias_vencimento
+            FROM dados_dachser.v_fin_regua_contas_receber t
+            WHERE NOT EXISTS (
+                SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+                WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                  AND sd.active = 0
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM ai_agente.t_fin_disputas d
+                WHERE d.nf COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                  AND d.is_disputa = 1
+                  AND d.resolved_at IS NULL
+                  AND d.deleted_at IS NULL
+              )
+            ORDER BY t.razao_social, t.data_vencimento
+            LIMIT 10000
+          `;
+          const analiticoRows = await client.query(analiticoSql);
+          const data = analiticoRows.map((r: any) => ({
+            documento: r.documento,
+            numero_nf: r.numero_nf,
+            modal: r.modal,
+            tipo_documento: r.tipo_documento,
+            data_emissao: r.data_emissao,
+            data_vencimento: r.data_vencimento,
+            cod_cliente: r.cod_cliente,
+            razao_social: r.razao_social,
+            valor_nf: Number(r.valor_nf) || 0,
+            valor_liquido: Number(r.valor_liquido) || Number(r.valor_nf) || 0,
+            processo: r.processo,
+            master: r.master,
+            house: r.house,
+            id_rm: r.id_rm,
+            dias_vencimento: Number(r.dias_vencimento) || 0,
+          }));
+          console.log(`[get_aging_analitico_cr] ${data.length} records`);
+          result = { success: true, data, dataCorte: new Date().toISOString().slice(0, 10) };
+        } catch (e: any) {
+          console.error('[get_aging_analitico_cr] Error:', e);
+          result = { success: false, error: e.message };
+        }
+        break;
+      }
+
+
+
       case 'compare_regua_old_vs_cr': {
         console.log('[compare_regua_old_vs_cr] Running side-by-side comparison...');
         const MAX_DIAS_ATRASO = 120;
