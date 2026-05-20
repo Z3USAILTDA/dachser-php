@@ -509,6 +509,8 @@ Deno.serve(async (req) => {
       'update_disputa_observacoes_cr','update_disputa_responsavel_cr',
       'save_disputa','delete_disputa','resolve_disputa','check_disputas_planilha',
       'import_disputas_planilha','bulk_delete_disputas','bulk_resolve_disputas',
+      'bulk_delete_disputas_cr','bulk_resolve_disputas_cr',
+      'check_disputas_planilha_cr','import_disputas_planilha_cr',
       'get_aging_historical','get_aging_historical_by_client','get_pymt_term_by_client',
       // Fornecedores fiscais / dados bancários
       'get_faturas_do_dia','get_fornecedores_sem_fiscal','add_fornecedor_sem_fiscal',
