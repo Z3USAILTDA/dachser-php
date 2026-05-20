@@ -19434,7 +19434,9 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'setup_supervisor_tokens_table': {
         try {
+
           await client.execute(`
             CREATE TABLE IF NOT EXISTS ai_agente.t_supervisor_email_tokens (
               id INT AUTO_INCREMENT PRIMARY KEY,
