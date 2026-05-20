@@ -117,8 +117,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // FLAG: JsonCargo DESATIVADO temporariamente até segunda ordem
-  const JSONCARGO_DISABLED = true;
+  // FLAG: JsonCargo REATIVADO
+  const JSONCARGO_DISABLED = false;
   if (JSONCARGO_DISABLED) {
     return new Response(
       JSON.stringify({ 

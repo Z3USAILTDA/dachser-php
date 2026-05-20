@@ -1,50 +1,62 @@
 ## Causa raiz
 
-`/fin/disputa` quebra com `TypeError: Cannot read properties of null (reading 'toLocaleString')` em `formatMoney` (`src/pages/FinanceiroDisputa.tsx:204`).
+A função `sea-tracking-cron` — que orquestra `olimpo-sync` + enriquecimento via JSONCargo (`sea_seed_smart`) + `enrich_missing_coords` — **não tem mais agendamento no `pg_cron`**. Listei `cron.job` e não há nenhum job SEA/tracking/olimpo. `cron.job_run_details` e os logs da edge function também estão vazios. Por isso o monitoramento marítimo está ~1 mês desatualizado, mesmo com a flag interna `JSONCARGO_DISABLED = false` e o secret `JSONCARGO_API_KEY` presentes.
 
-A função assume `val: number` não-nulo:
+## Escopo do que vou alterar
 
-```ts
-const formatMoney = (val: number) =>
-  "R$ " + val.toLocaleString("pt-BR", { ... });
+Apenas 3 ações, todas cirúrgicas. Nada na UI do `/sea/tracking`, nada nos demais módulos.
+
+### 1. Recriar o cron no schedule original
+Via `supabase--insert` (não migration, pois carrega URL + anon key específicos do projeto):
+
+```sql
+select cron.schedule(
+  'sea-tracking-cron-mon-wed-02utc',
+  '0 2 * * 1,3',
+  $$
+  select net.http_post(
+    url := 'https://finktakbjcfmurqeiubz.supabase.co/functions/v1/sea-tracking-cron',
+    headers := '{"Content-Type":"application/json","Authorization":"Bearer <ANON_KEY>"}'::jsonb,
+    body := '{}'::jsonb
+  );
+  $$
+);
 ```
 
-Mas o log do edge function mostra:
-`Disputas CR loaded: 81 (nova=0, legado_casado=28, orfao=53)` — 53 linhas "órfãs" (sem casamento na `v_fin_regua_contas_receber`). Para essas linhas, campos numéricos como `valor` vêm `null` do backend, e o render na linha 1383 chama `formatMoney(r.valor)` direto, estourando.
+Confirmo extensões `pg_cron` e `pg_net` ativas antes (se faltar alguma, habilito).
 
-Esse é o erro pré-existente herdado do cutover (Fase 5.1 já citou que disputas órfãs aparecem sem dados financeiros) — agora ele virou crash porque o número de órfãos cresceu na nova carga.
+### 2. Catch-up imediato
+Após criar o cron, invoco `sea-tracking-cron` uma vez via `supabase--curl_edge_functions` (POST `/sea-tracking-cron`) e confirmo no retorno:
+- `olimpo_sync` ok
+- `sea_seed_batches[]` com `api_calls > 0` (JSONCargo respondendo)
+- `errors: []`
 
-## Correção proposta (cirúrgica)
+Se a primeira execução estourar limite/erro, registro o motivo e seguimos sem reexecutar — o próximo ciclo agendado resolve o restante.
 
-Tornar `formatMoney` resiliente a `null`/`undefined`/`NaN`, sem alterar nenhum outro fluxo, layout, texto ou endpoint.
-
-**Arquivo alterado**: somente `src/pages/FinanceiroDisputa.tsx`, linhas 203-205.
+### 3. Reativar `demurrage-import-jsoncargo`
+Editar `supabase/functions/demurrage-import-jsoncargo/index.ts`:
 
 ```ts
-const formatMoney = (val: number | null | undefined) => {
-  const n = typeof val === "number" && Number.isFinite(val) ? val : 0;
-  return "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
+// antes
+const JSONCARGO_DISABLED = true;
+// depois
+const JSONCARGO_DISABLED = false;
 ```
 
-Comportamento:
-- Linhas órfãs (valor `null`) exibem `R$ 0,00` em vez de quebrar a tela.
-- Nenhum efeito em linhas com valor numérico válido.
-- Nenhuma alteração no backend, view, endpoints `_cr`, ou demais módulos.
+Sem outras mudanças no arquivo. Redeploy só dessa função.
 
-## Fora de escopo
+## Validações finais
 
-- Não tratar o problema de fundo das 53 disputas órfãs (já registrado como pendência da migração).
-- Não alterar `vencimento`, `data_emissao`, datas, ou qualquer outro formatter.
-- Não tocar em endpoints, view, RLS, layout, textos, rotas, permissões.
+- `cron.job` mostra `sea-tracking-cron-mon-wed-02utc` `active = true`.
+- Resposta da invocação manual com `duration_ms`, batches e zero erros graves.
+- Em `/sea/tracking`, processos ativos voltam a ter `last_check` recente.
+- `demurrage-import-jsoncargo` aceita import de MBL novamente (teste só se você pedir; senão fica disponível).
 
 ## Rollback
 
-Reverter as 3 linhas alteradas em `formatMoney`.
+- Cron: `select cron.unschedule('sea-tracking-cron-mon-wed-02utc');`
+- Flag demurrage: voltar para `const JSONCARGO_DISABLED = true;` e redeploy.
 
-## Validação após implementação
+## Fora de escopo (não toco)
 
-1. Recarregar `/fin/disputa` — tela carrega sem ErrorBoundary.
-2. Conferir que linhas com `valor` válido continuam formatadas corretamente.
-3. Conferir que linhas órfãs exibem `R$ 0,00` sem quebrar.
-4. Console limpo de `Cannot read properties of null`.
+Régua de Cobrança, Disputas, Olimpo, view `v_fin_regua_contas_receber`, qualquer função `*_cr`, UI do tracking marítimo, lógica de status/timeline, retention rules, secrets.
