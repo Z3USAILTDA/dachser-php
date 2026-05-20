@@ -238,7 +238,7 @@ function FinanceiroDisputaContent() {
     try {
       // Lookup do documento na nova base (CR) — pega a primeira ocorrência
       const { data: lookupData, error: lookupError } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "lookup_documento_cr", termo: addNf.trim() },
+        body: { action: "lookup_documento_cr", nd: addNf.trim() },
       });
 
       if (lookupError) throw lookupError;
