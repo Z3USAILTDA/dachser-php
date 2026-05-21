@@ -2668,6 +2668,9 @@ const ContainerTracking = () => {
                                     <TooltipContent>
                                       <p className="text-xs font-medium">{statusCode}</p>
                                       <p className="text-xs text-muted-foreground">{getStatusDescription(mbl.last_event, mbl.container_status, mbl.tipo_processo)}</p>
+                                      {mbl.last_check && (
+                                        <p className="text-xs text-[#ffc800] mt-1">{formatSaoPaulo(parseMariaDBLocalDate(mbl.last_check) || new Date(mbl.last_check))}</p>
+                                      )}
                                     </TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
