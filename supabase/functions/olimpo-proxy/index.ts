@@ -1678,7 +1678,7 @@ serve(async (req) => {
           WHERE mawb IN (${stuckMbls.map(() => '?').join(',')})
         `, stuckMbls) : [];
         const inDM = stuckMbls.length ? await client.query(`
-          SELECT bl_number, container FROM dados_dachser.t_dados_maritimo
+          SELECT bl_number, container_numbers FROM dados_dachser.t_dados_maritimo
           WHERE bl_number IN (${stuckMbls.map(() => '?').join(',')})
           LIMIT 20
         `, stuckMbls).catch((e: any) => ({ error: e.message })) : [];
