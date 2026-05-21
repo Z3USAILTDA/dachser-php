@@ -1,79 +1,55 @@
-## Objetivo
+## Diagnóstico dos 3 pontos
 
-Restaurar o visual original da visão expandida do MBL (sub-tabela `Container | Armador | Status | Último Evento | ETA Tracking | ETA Cadastrado | Última Atualização`) e aplicar três ajustes mínimos pedidos:
+### 1. Nenhum processo mostra histórico
+Bug de parsing no frontend. A edge function `olimpo-proxy` action `get_tracking_history` retorna `{ success, data: history, stats }`, mas `fetchMblEvents` lê `result.history` (que não existe). Resultado: `mblEvents` sempre vazio → botão `+` nunca aparece e nada de `event_datetime` chega na linha agregada.
 
-1. Em vez de uma linha por container, mostrar **uma única linha** representando o último evento do MBL — na coluna **Container**, listar todos os containers do MBL juntos.
-2. Adicionar um botão **`+`** no canto direito dessa linha que, ao ser clicado, abre **linhas extras logo abaixo** com os eventos anteriores, em ordem cronológica, usando exatamente as mesmas colunas/visual.
-3. Adicionar uma nova coluna **`Data/Hora`** (primeira coluna da sub-tabela) com o `event_datetime` do evento mostrado em cada linha (último evento + cada evento histórico).
+Arquivo: `src/pages/ContainerTracking.tsx` linha 993.
 
-Nenhuma outra mudança de layout, cores, mapa VesselFinder, paginação, filtros, edge functions ou backend.
-
-## Escopo
-
-Arquivo único: `src/pages/ContainerTracking.tsx`, apenas dentro do bloco `{isExpanded && <tr>…</tr>}` (linhas ~2772–2851).
-
-## Mudanças detalhadas
-
-### 1. Restaurar sub-tabela original
-
-Remover o conjunto introduzido na última iteração:
-- Bloco "Container chips" (linhas ~2790–2808).
-- Bloco "Events timeline" com colunas Data/Hora · Código · Descrição · Local · Navio · Container (linhas ~2810–2848).
-
-Substituir por uma única `<table>` com o cabeçalho original acrescido de **Data/Hora** como primeira coluna:
-
-```text
-Data/Hora | Container | Armador | Status | Último Evento | ETA Tracking | ETA Cadastrado | Última Atualização
+### 2. Data/Hora mostra a "processada" em vez do evento
+Consequência direta do bug #1. A linha agregada faz:
 ```
-
-Manter o `VesselFinderMap` exatamente como está hoje (com a condicional `shouldShowVesselMap`).
-
-### 2. Linha principal agregada (último evento)
-
-Renderizar **uma única `<tr>` agregada** com:
-- `Data/Hora`: `mblEvents[0]?.event_datetime` (mais recente) ou `mbl.last_check` como fallback.
-- `Container`: lista de todos os `mblContainers.map(c => c.container)` separados por vírgula (ou `flex flex-wrap` com chips finos, mantendo `font-mono text-[#f5f5f5]`).
-- `Armador`: `getShippingLineFromMbl(mbl.mbl_id, mbl.shipping_line)`.
-- `Status`: badge `getReportStatus(mbl.last_event, mbl.container_status, mbl.tipo_processo).code` com a mesma estilização inline atual.
-- `Último Evento`: `mbl.last_event || "Aguardando..."`.
-- `ETA Tracking`: `mbl.eta_api` formatado pt-BR.
-- `ETA Cadastrado`: `mbl.eta_master` formatado pt-BR.
-- `Última Atualização`: `mbl.last_check` via `formatSaoPaulo(parseMariaDBLocalDate(...))`.
-
-No canto direito da linha (ou em coluna `Container` ao lado dos números), adicionar botão `+` / `-`:
-
-```tsx
-<button onClick={() => setHistoryExpanded(p => p === mbl.mbl_id ? null : mbl.mbl_id)}>
-  {isHistoryExpanded ? <Minus/> : <Plus/>}
-</button>
+event_datetime mais recente  ||  fallback mbl.last_check
 ```
+Como `mblEvents` está sempre vazio, sempre cai no `last_check` (hora em que nosso sync processou). Corrigindo o parse, passa a usar `h.event_datetime` (a hora real do evento).
 
-Novo estado local: `const [historyExpanded, setHistoryExpanded] = useState<string | null>(null);`.
+### 3. Processos em `t_tracking_sea_history` que não aparecem na tela
+A query `get_sea_tracking` parte de `t_tracking_sea` e aplica filtros que escondem MBLs que ainda têm histórico:
+- `WHERE ts.active = 1` — manter (marcação canônica do sistema).
+- `HAVING NOT (… DELIVERED/DLV …)` — esconde entregues imediatamente, contradiz a regra de retenção pós-entrega.
+- `HAVING NOT (… GOD/GATE_OUT_FULL/EMPTY_RETURNED/EMPTY_RECEIVED_AT_CY … AND last_check < NOW()-24h)` — **manter** (concluídos somem após 24 h).
+- `LIMIT 500` — **remover**.
 
-### 3. Linhas de histórico (eventos anteriores)
+## Mudanças
 
-Quando `historyExpanded === mbl.mbl_id`, renderizar `mblEvents.slice(1)` (pula o mais recente, já mostrado acima) **em ordem cronológica decrescente** (já vem assim de `get_tracking_history`), cada evento em uma `<tr>` com as **mesmas colunas** da linha principal:
+Tudo cirúrgico, sem refator.
 
-- `Data/Hora`: `ev.event_datetime` formatado SP.
-- `Container`: `ev.container` (container específico do evento).
-- `Armador`: mesmo armador do MBL.
-- `Status`: `getReportStatus(ev.event_description, ev.event_code, mbl.tipo_processo).code` (derivado do evento).
-- `Último Evento`: `ev.event_description` (+ `ev.location` em `text-xs text-[#666]` opcional, mantendo visual atual).
-- `ETA Tracking` / `ETA Cadastrado` / `Última Atualização`: manter `—` (não há dado histórico por evento; mantém grid alinhado).
+### A) `src/pages/ContainerTracking.tsx` (linha 993)
+Trocar:
+```ts
+setMblEvents(Array.isArray(result?.history) ? result.history : []);
+```
+por:
+```ts
+setMblEvents(Array.isArray(result?.data) ? result.data : []);
+```
+Resolve os pontos **#1** (histórico chega e o botão `+` abre as linhas) e **#2** (Data/Hora da linha agregada passa a vir de `event_datetime`).
 
-Estilo de linha igual ao da principal, com `opacity-80` leve para diferenciar (opcional, sem mudar fundo).
+### B) `supabase/functions/olimpo-proxy/index.ts` — action `get_sea_tracking`
+1. Remover a cláusula `HAVING NOT (… DELIVERED/DLV …)` (linhas ~2303-2306). DELIVERED continua coberto pela cláusula seguinte (`last_event LIKE '%DELIVERED%'`) com a regra de 24 h.
+2. **Manter** intacta a cláusula `HAVING NOT (… GOD/GATE_OUT_FULL/EMPTY_RETURNED/EMPTY_RECEIVED_AT_CY OR last_event LIKE '%DELIVERED%/%GATE OUT%/%EMPTY RETURNED%' … AND last_check < NOW()-24h)`. Esta é a regra "concluídos somem após 24 h".
+3. **Remover o `LIMIT 500`** da query (linha ~2321), sem substituir por outro cap.
 
-## O que NÃO muda
+Nenhuma outra alteração de coluna, CTE, agregação ou ordenação.
 
-- Tabela principal de MBLs (colunas MBL/Consignee/Coordenador/Armador/Rota/Timeline/Status/Situação) — intocada.
-- Mapa VesselFinder dentro do expandido — mantido como está.
-- `fetchMblContainers` e `fetchMblEvents` — reutilizados sem alteração; nenhuma nova chamada de API.
-- Edge functions (`olimpo-proxy`, `sea-carrier-fallback`) — sem alterações.
-- Estados, hooks, filtros, paginação, e-mail modal, free time — sem alterações.
+### C) Não muda
+- Estrutura da sub-tabela expandida (linha agregada + `+` para histórico).
+- Coluna `Última Atualização` continua mostrando `last_check`.
+- `fetchMblContainers`, `VesselFinderMap`, edge functions de tracking/fallback, paginação, filtros, modais.
+- `WHERE ts.active = 1`.
 
 ## Critério de aceite
 
-- Ao expandir um MBL, vê-se o mapa + uma sub-tabela com **uma única linha** agregada e **todos os containers listados** na coluna Container.
-- Há um botão `+` que abre linhas abaixo com os eventos anteriores no mesmo formato de colunas.
-- A coluna `Data/Hora` aparece em todas as linhas da sub-tabela (principal + históricas).
-- O visual (cores, espaçamentos, badges) é idêntico ao original anterior à última iteração, exceto pela nova coluna e pela agregação.
+- Ao expandir qualquer MBL com eventos em `t_tracking_sea_history`, o botão `+` aparece e abre as linhas históricas com `event_datetime`.
+- A coluna `Data/Hora` da linha agregada mostra o `event_datetime` do evento mais recente (não mais o `last_check`).
+- Processos concluídos (DELIVERED / GATE OUT / EMPTY RETURNED / GOD / EMPTY_RECEIVED_AT_CY) **ficam visíveis por 24 h após a conclusão** e **somem após 24 h**.
+- A listagem principal não tem mais teto de 500 MBLs.

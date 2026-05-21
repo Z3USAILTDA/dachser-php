@@ -990,7 +990,7 @@ const ContainerTracking = () => {
         body: JSON.stringify({ mbl_id, limit: 200 })
       });
       const result = await res.json();
-      setMblEvents(Array.isArray(result?.history) ? result.history : []);
+      setMblEvents(Array.isArray(result?.data) ? result.data : []);
     } catch (e) {
       console.error('Error fetching events:', e);
       setMblEvents([]);
