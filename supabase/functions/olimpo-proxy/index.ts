@@ -2873,14 +2873,14 @@ serve(async (req) => {
 
           const SOURCES: Array<{ name: string; sql: string }> = [];
 
-          // 1) t_sea_master (master -> container)
+          // 1) t_sea_master (master -> container) — se tabela tiver coluna container
           {
             const mblCol = pickCol('dados_dachser.t_sea_master', ['master']);
-            const ctCol = pickCol('dados_dachser.t_sea_master', ['container','cntr_no','container_no','container_number','num_container']);
+            const ctCol = pickCol('dados_dachser.t_sea_master', ['container','cntr_no','container_no','container_number','container_numbers','num_container']);
             if (mblCol && ctCol) {
               SOURCES.push({
                 name: 't_sea_master',
-                sql: `SELECT DISTINCT TRIM(${mblCol}) AS mbl_id, UPPER(REGEXP_REPLACE(${ctCol}, '[^A-Za-z0-9]', '')) AS container
+                sql: `SELECT TRIM(${mblCol}) AS mbl_id, ${ctCol} AS container_raw
                       FROM dados_dachser.t_sea_master
                       WHERE ${mblCol} IS NOT NULL AND TRIM(${mblCol}) <> ''
                         AND ${ctCol} IS NOT NULL AND TRIM(${ctCol}) <> ''`,
@@ -2888,14 +2888,14 @@ serve(async (req) => {
             }
           }
 
-          // 2) t_dados_maritimo (bl_number -> container)
+          // 2) t_dados_maritimo.container_numbers (plural, normalmente CSV/JSON)
           {
             const mblCol = pickCol('dados_dachser.t_dados_maritimo', ['bl_number']);
-            const ctCol = pickCol('dados_dachser.t_dados_maritimo', ['container','container_number','num_container','cntr_no']);
+            const ctCol = pickCol('dados_dachser.t_dados_maritimo', ['container_numbers','container','container_number']);
             if (mblCol && ctCol) {
               SOURCES.push({
                 name: 't_dados_maritimo',
-                sql: `SELECT DISTINCT TRIM(${mblCol}) AS mbl_id, UPPER(REGEXP_REPLACE(${ctCol}, '[^A-Za-z0-9]', '')) AS container
+                sql: `SELECT TRIM(${mblCol}) AS mbl_id, ${ctCol} AS container_raw
                       FROM dados_dachser.t_dados_maritimo
                       WHERE ${mblCol} IS NOT NULL AND TRIM(${mblCol}) <> ''
                         AND ${ctCol} IS NOT NULL AND TRIM(${ctCol}) <> ''`,
@@ -2903,13 +2903,28 @@ serve(async (req) => {
             }
           }
 
-          // 3) t_master_dados (mawb -> container) — fonte atual
+          // 3) t_cadastro_maritimo (bl_number/master_number -> container_numbers)
+          {
+            const mblCol = pickCol('dados_dachser.t_cadastro_maritimo', ['bl_number','master_number']);
+            const ctCol = pickCol('dados_dachser.t_cadastro_maritimo', ['container_numbers','container','container_number']);
+            if (mblCol && ctCol) {
+              SOURCES.push({
+                name: 't_cadastro_maritimo',
+                sql: `SELECT TRIM(${mblCol}) AS mbl_id, ${ctCol} AS container_raw
+                      FROM dados_dachser.t_cadastro_maritimo
+                      WHERE ${mblCol} IS NOT NULL AND TRIM(${mblCol}) <> ''
+                        AND ${ctCol} IS NOT NULL AND TRIM(${ctCol}) <> ''`,
+              });
+            }
+          }
+
+          // 4) t_master_dados (mawb -> container) — fonte atual
           {
             const ctCol = pickCol('dados_dachser.t_master_dados', ['container']);
             if (ctCol) {
               SOURCES.push({
                 name: 't_master_dados',
-                sql: `SELECT DISTINCT TRIM(mawb) AS mbl_id, UPPER(REGEXP_REPLACE(${ctCol}, '[^A-Za-z0-9]', '')) AS container
+                sql: `SELECT TRIM(mawb) AS mbl_id, ${ctCol} AS container_raw
                       FROM dados_dachser.t_master_dados
                       WHERE tipo_processo LIKE '%SEA%'
                         AND mawb IS NOT NULL AND TRIM(mawb) <> ''
@@ -2918,14 +2933,29 @@ serve(async (req) => {
             }
           }
 
-          // 4) ai_agente.t_dachser_sea_items (mbl/bol -> container)
+          // 5) t_dados_master (mawb -> container)
           {
-            const mblCol = pickCol('ai_agente.t_dachser_sea_items', ['mbl','bol','master','mbl_number','bl_number']);
+            const ctCol = pickCol('dados_dachser.t_dados_master', ['container']);
+            const mblCol = pickCol('dados_dachser.t_dados_master', ['mawb']);
+            if (ctCol && mblCol) {
+              SOURCES.push({
+                name: 't_dados_master',
+                sql: `SELECT TRIM(${mblCol}) AS mbl_id, ${ctCol} AS container_raw
+                      FROM dados_dachser.t_dados_master
+                      WHERE ${mblCol} IS NOT NULL AND TRIM(${mblCol}) <> ''
+                        AND ${ctCol} IS NOT NULL AND TRIM(${ctCol}) <> ''`,
+              });
+            }
+          }
+
+          // 6) ai_agente.t_dachser_sea_items (mbl_number -> container)
+          {
+            const mblCol = pickCol('ai_agente.t_dachser_sea_items', ['mbl_number','mbl','bol','master','bl_number']);
             const ctCol = pickCol('ai_agente.t_dachser_sea_items', ['container','container_number']);
             if (mblCol && ctCol) {
               SOURCES.push({
                 name: 't_dachser_sea_items',
-                sql: `SELECT DISTINCT TRIM(${mblCol}) AS mbl_id, UPPER(REGEXP_REPLACE(${ctCol}, '[^A-Za-z0-9]', '')) AS container
+                sql: `SELECT TRIM(${mblCol}) AS mbl_id, ${ctCol} AS container_raw
                       FROM ai_agente.t_dachser_sea_items
                       WHERE ${mblCol} IS NOT NULL AND TRIM(${mblCol}) <> ''
                         AND ${ctCol} IS NOT NULL AND TRIM(${ctCol}) <> ''`,
@@ -2933,20 +2963,22 @@ serve(async (req) => {
             }
           }
 
-          // 5) ai_agente.t_dachser_container_tracking (mbl_reference -> container)
+          // 7) ai_agente.t_dachser_container_tracking (mawb/mbl -> container)
           {
-            const mblCol = pickCol('ai_agente.t_dachser_container_tracking', ['mbl_reference','mbl','bol']);
+            const mblCol = pickCol('ai_agente.t_dachser_container_tracking', ['mawb','mbl_reference','mbl','bol']);
             const ctCol = pickCol('ai_agente.t_dachser_container_tracking', ['container','container_number']);
             if (mblCol && ctCol) {
               SOURCES.push({
                 name: 't_dachser_container_tracking',
-                sql: `SELECT DISTINCT TRIM(${mblCol}) AS mbl_id, UPPER(REGEXP_REPLACE(${ctCol}, '[^A-Za-z0-9]', '')) AS container
+                sql: `SELECT TRIM(${mblCol}) AS mbl_id, ${ctCol} AS container_raw
                       FROM ai_agente.t_dachser_container_tracking
                       WHERE ${mblCol} IS NOT NULL AND TRIM(${mblCol}) <> ''
                         AND ${ctCol} IS NOT NULL AND TRIM(${ctCol}) <> ''`,
               });
             }
           }
+
+
 
           console.log(`[sync_sea_tracking] backfill sources available: ${SOURCES.map(s => s.name).join(', ')}`);
 
