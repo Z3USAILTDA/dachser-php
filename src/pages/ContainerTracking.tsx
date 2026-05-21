@@ -2061,11 +2061,11 @@ const ContainerTracking = () => {
       return matchesSearch && matchesLine && matchesCardFilter && matchesTipoProcesso && matchesCoordenador && matchesSyncHoje && matchesTipoCarga;
     });
 
-    // Ordenar: MBLs com status "Aguardando" (AGD) por último
+    // Ordenar: MBLs com status "Aguardando" (AGD/AGD_NO_CT/SIA) por último
     mbls.sort((a, b) => {
-      const statusA = getReportStatus(a.last_event, a.container_status);
-      const statusB = getReportStatus(b.last_event, b.container_status);
-      const bottomCodes = ['AGD', 'SIA'];
+      const statusA = getReportStatus(a.last_event, a.container_status, a.tipo_processo, a.container_count);
+      const statusB = getReportStatus(b.last_event, b.container_status, b.tipo_processo, b.container_count);
+      const bottomCodes = ['AGD', 'AGD_NO_CT', 'SIA'];
       const aIsBottom = bottomCodes.includes(statusA.code);
       const bIsBottom = bottomCodes.includes(statusB.code);
       if (aIsBottom && !bIsBottom) return 1;
