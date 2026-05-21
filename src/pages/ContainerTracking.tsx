@@ -293,23 +293,42 @@ const getReportStatus = (lastEvent: string | null, containerStatus?: string | nu
   };
   const overrideStatus = checkEmptyAtCy(containerStatus) || checkEmptyAtCy(lastEvent);
   if (overrideStatus) return overrideStatus;
+
+  // Em EXPORTAÇÃO, eventos como GATE_OUT_FULL/OUT_GATE/CONTAINER_TO_CONSIGNEE/EMPTY_RETURN
+  // pertencem ao fluxo de IMPORTAÇÃO (devolução / entrega ao consignee) e NÃO devem
+  // marcar o processo como entregue. Para export, esses tokens são removidos e o status
+  // cai no fluxo normal (CRG/DEP/ARR/DCH).
+  const IMPORT_ONLY_DELIVERY_KEYS = new Set([
+    'GATE_OUT_FULL', 'FULL_OUT', 'OUT_GATE', 'CONTAINER_TO_CONSIGNEE',
+    'DELIVERED', 'DELIVERY', 'EMPTY_RETURN', 'EMPTY_RETURNED'
+  ]);
+  const IMPORT_ONLY_DELIVERY_SUBSTR = [
+    'gate out', 'gate-out', 'to consignee',
+    'delivered', 'empty return', 'empty received', 'end import cycle'
+  ];
+  const skipImportDelivery = isExport;
+
   
   // Try to resolve from container_status first (comes from API or manual update)
   if (containerStatus) {
     // Direct match with internal codes
     const upperStatus = containerStatus.toUpperCase().trim();
-    if (REPORT_STATUSES[upperStatus as keyof typeof REPORT_STATUSES]) {
-      return REPORT_STATUSES[upperStatus as keyof typeof REPORT_STATUSES];
+    const directHit = REPORT_STATUSES[upperStatus as keyof typeof REPORT_STATUSES];
+    if (directHit && !(skipImportDelivery && (directHit.code === 'GOD' || directHit.code === 'DLV'))) {
+      return directHit;
     }
     // Try normalized match via EVENT_TO_REPORT_STATUS
     const normalizedStatus = upperStatus.replace(/[\s-]/g, '_');
-    if (EVENT_TO_REPORT_STATUS[normalizedStatus]) {
+    if (EVENT_TO_REPORT_STATUS[normalizedStatus] && !(skipImportDelivery && IMPORT_ONLY_DELIVERY_KEYS.has(normalizedStatus))) {
       return REPORT_STATUSES[EVENT_TO_REPORT_STATUS[normalizedStatus]];
     }
     // Pattern matching on container_status text (API freeform values)
     const lowerStatus = containerStatus.toLowerCase();
-    if (lowerStatus.includes('delivered') || lowerStatus.includes('empty return') || lowerStatus.includes('empty received')) return REPORT_STATUSES.DLV;
-    if (lowerStatus.includes('gate out') || lowerStatus.includes('gate-out') || lowerStatus.includes('to consignee')) return REPORT_STATUSES.GOD;
+    const hasImportDeliveryToken = IMPORT_ONLY_DELIVERY_SUBSTR.some(t => lowerStatus.includes(t));
+    if (!(skipImportDelivery && hasImportDeliveryToken)) {
+      if (lowerStatus.includes('delivered') || lowerStatus.includes('empty return') || lowerStatus.includes('empty received')) return REPORT_STATUSES.DLV;
+      if (lowerStatus.includes('gate out') || lowerStatus.includes('gate-out') || lowerStatus.includes('to consignee')) return REPORT_STATUSES.GOD;
+    }
     if (lowerStatus.includes('customs') || lowerStatus.includes('released') || lowerStatus.includes('available for delivery') || lowerStatus.includes('carrier release')) return REPORT_STATUSES.INS;
     if (lowerStatus.includes('discharged') || lowerStatus.includes('discharge') || lowerStatus.includes('unloaded')) return REPORT_STATUSES.DCH;
     if (lowerStatus.includes('arrived') || lowerStatus.includes('arrival')) return REPORT_STATUSES.ARR;
@@ -336,8 +355,8 @@ const getReportStatus = (lastEvent: string | null, containerStatus?: string | nu
   if (lowerEvent.includes('transshipment') || lowerEvent.includes('t/s')) return REPORT_STATUSES.TSP;
   if (lowerEvent.includes('discharged from vessel') || lowerEvent.includes('import discharged') || lowerEvent.includes('discharge')) return REPORT_STATUSES.DCH;
   if (lowerEvent.includes('available for delivery') || lowerEvent.includes('carrier release') || lowerEvent.includes('customs') || lowerEvent.includes('released')) return REPORT_STATUSES.INS;
-  if (lowerEvent.includes('import to consignee') || lowerEvent.includes('to consignee') || lowerEvent.includes('gate out') || lowerEvent.includes('gate-out')) return REPORT_STATUSES.GOD;
-  if (lowerEvent.includes('empty received') || lowerEvent.includes('end import cycle') || lowerEvent.includes('delivered') || lowerEvent.includes('empty return')) return REPORT_STATUSES.DLV;
+  if (!skipImportDelivery && (lowerEvent.includes('import to consignee') || lowerEvent.includes('to consignee') || lowerEvent.includes('gate out') || lowerEvent.includes('gate-out'))) return REPORT_STATUSES.GOD;
+  if (!skipImportDelivery && (lowerEvent.includes('empty received') || lowerEvent.includes('end import cycle') || lowerEvent.includes('delivered') || lowerEvent.includes('empty return'))) return REPORT_STATUSES.DLV;
   if (lowerEvent.includes('empty to shipper') || lowerEvent.includes('picked up') || lowerEvent.includes('pick up')) return REPORT_STATUSES.CLT;
   if (lowerEvent.includes('start export cycle') || lowerEvent.includes('booking') || lowerEvent.includes('booked')) return REPORT_STATUSES.BKG;
   if (lowerEvent.includes('arrived at destination') || lowerEvent.includes('arrived') || lowerEvent.includes('arrival')) return REPORT_STATUSES.ARR;
@@ -822,8 +841,8 @@ const ContainerTracking = () => {
     const upper = lastEvent.toUpperCase().replace(/[_\s-]/g, "");
     return upper.includes("DELAYED") || upper.includes("DELAY") || upper.includes("CANCELLED") || upper.includes("CANCEL") || upper.includes("CUSTOMSHOLD") || upper.includes("MISSED");
   };
-  const isEntregue = (lastEvent: string | null): boolean => {
-    const status = getReportStatus(lastEvent);
+  const isEntregue = (m: MblTrackingData): boolean => {
+    const status = getReportStatus(m.last_event, m.container_status, m.tipo_processo);
     return ['GOD', 'DLV'].includes(status.code);
   };
 
@@ -2015,13 +2034,13 @@ const ContainerTracking = () => {
       const matchesCoordenador = filterCoordenador === "all" || (m.nome_analista || "-") === filterCoordenador;
       let matchesCardFilter = true;
       if (activeCardFilter === "transito") {
-        matchesCardFilter = isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico);
+        matchesCardFilter = isEmTransito(m.last_event) && !isEntregue(m) && !isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico);
       } else if (activeCardFilter === "alerta") {
         matchesCardFilter = isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico);
       } else if (activeCardFilter === "critico") {
         matchesCardFilter = isEmCritico(m.is_critico);
       } else if (activeCardFilter === "entregues") {
-        matchesCardFilter = isEntregue(m.last_event);
+        matchesCardFilter = isEntregue(m);
       }
       const matchesTipoProcesso = filterTipoProcesso === "all" || m.tipo_processo === filterTipoProcesso;
 
@@ -2055,9 +2074,9 @@ const ContainerTracking = () => {
   const stats = useMemo(() => {
     const total = filteredMblListByCarrier.length;
     const criticos = filteredMblListByCarrier.filter(m => isEmCritico(m.is_critico)).length;
-    const emTransito = filteredMblListByCarrier.filter(m => isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
+    const emTransito = filteredMblListByCarrier.filter(m => isEmTransito(m.last_event) && !isEntregue(m) && !isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
     const emAlerta = filteredMblListByCarrier.filter(m => isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
-    const entregues = filteredMblListByCarrier.filter(m => isEntregue(m.last_event)).length;
+    const entregues = filteredMblListByCarrier.filter(m => isEntregue(m)).length;
     return {
       total,
       emTransito,

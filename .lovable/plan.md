@@ -1,40 +1,55 @@
-## Diagnóstico
+# Por que processos não-entregues aparecem em "Entregues"
 
-Logs do último sync:
+## Causa raiz
 
-```text
-[sync_sea_tracking] Found 252 candidates from t_sea_master
-[sync_sea_tracking] Found 0 candidates from t_dados_maritimo
-[sync_sea_tracking] 0 to insert, 1 to reactivate
+No `src/pages/ContainerTracking.tsx`, o card "Entregues" usa:
+
+```ts
+const isEntregue = (lastEvent) => {
+  const status = getReportStatus(lastEvent);   // ← chama SEM container_status e SEM tipoProcesso
+  return ['GOD','DLV'].includes(status.code);
+};
 ```
 
-A query de candidatos de `t_dados_maritimo` filtra apenas por `dm.created_at >= '2026-02-01'`. Processos novos cujo `created_at` está vazio, antigo, ou cuja data real de entrada está em `master_insert`, são descartados antes da validação de MBL — por isso nenhum é adicionado.
+`getReportStatus` só faz a distinção import × export quando recebe `tipoProcesso` (e somente para o caso `EMPTY_RECEIVED_AT_CY`). Como `isEntregue` passa apenas `lastEvent`, **toda lógica de export é ignorada** e eventos do início do ciclo de exportação são classificados como entrega:
 
-## Ajuste proposto (cirúrgico, apenas em `sync_sea_tracking`)
+| `last_event` real | Significado export | Mapeamento atual | Deveria ser |
+|---|---|---|---|
+| `EMPTY_RECEIVED_AT_CY` | Gate-in do vazio na origem (início) | **DLV** ✗ | GIO |
+| `GATE_OUT_FULL` / `OUT_GATE` / "gate out" | Saída do cheio do terminal de origem rumo ao navio | **GOD** ✗ | CRG/DEP |
+| `EMPTY_RETURN` / "empty return" | N/A em export | **DLV** ✗ | — |
+| `CONTAINER_TO_CONSIGNEE` / "to consignee" | N/A em export | **GOD** ✗ | — |
 
-Em `supabase/functions/olimpo-proxy/index.ts`, na CTE de candidatos de `t_dados_maritimo` (~linha 2715):
+Em importação, esses eventos realmente indicam entrega, então a regra atual funciona; o erro é exclusivo de **processos de exportação** que estão no início do ciclo. Isso explica por que o card mostra 10 entregues incluindo processos que ainda não foram entregues.
 
-1. Substituir o filtro atual:
-   ```sql
-   AND dm.created_at >= '2026-02-01'
+Confirmação adicional: na linha 2060 (e nas linhas 825-828) o cálculo das estatísticas e do filtro do card chama `isEntregue(m.last_event)` sem repassar `m.container_status` nem `m.tipo_processo`, perdendo todo o contexto que `getReportStatus` já sabe tratar.
+
+## Correção proposta (cirúrgica)
+
+1. **`isEntregue` passa a receber o MBL inteiro** (ou os 3 campos) e repassa para `getReportStatus`:
+   ```ts
+   const isEntregue = (m: MblTrackingData) =>
+     ['GOD','DLV'].includes(
+       getReportStatus(m.last_event, m.container_status, m.tipo_processo).code
+     );
    ```
-   por um filtro que considere `created_at` **e** `master_insert`, aceitando o registro se qualquer um dos dois for válido:
-   ```sql
-   AND (
-     dm.created_at    >= '2026-02-01'
-     OR dm.master_insert >= '2026-02-01'
-   )
-   ```
-   Assim, processos novos que só têm `master_insert` preenchido (ou só `created_at`) passam a entrar como candidatos.
 
-2. Manter intactas todas as demais regras:
-   - validação de formato de MBL (`VALID_MBL_PREFIXES` + regex SCAC);
-   - exclusão de booking/refs internas (`EBKG`, `BKNG`, `GLNL`, `GLSL`, `GLDL`, `BRSA`);
-   - exclusão de HAWBs brasileiros (`^BR[A-Za-z]{3}`);
-   - `INSERT ... ON DUPLICATE KEY UPDATE active=1` (não sobrescreve dados de MBLs já ativos).
+2. **Atualizar as 2 chamadas** existentes:
+   - Linha 2060 (cálculo de `stats.entregues`): `filteredMblListByCarrier.filter(isEntregue)`
+   - Linha 2058 (`emTransito` usa `!isEntregue(...)` também): passar o objeto `m`.
+   - Linha 2023 (filtro do card "entregues" no `mbls.filter`): idem.
 
-3. Não alterar a CTE de `t_sea_master` nem a lógica de reativação.
+3. **Reforçar `getReportStatus` para export** — adicionar, logo após o bloco `checkEmptyAtCy` (linha 295), um guard que, quando `isExport === true`, **não** classifique como GOD/DLV os padrões `GATE_OUT_FULL`, `OUT_GATE`, `CONTAINER_TO_CONSIGNEE`, `EMPTY_RETURN(ED)`, nem os matches freeform "gate out", "to consignee", "empty return", "delivered". Para exportação esses casos devolvem o status anterior do ciclo (CRG/DEP) ou caem no fluxo padrão.
 
-## Resultado esperado
+   Forma sugerida: criar um set `IMPORT_ONLY_DELIVERY_TOKENS` e, quando `isExport`, pular os ramos correspondentes nas linhas 270-278 e nos `includes` 311-312, 339-340.
 
-Após o redeploy, o log deve passar a mostrar candidatos > 0 vindos de `t_dados_maritimo`, e MBLs novos com `master_insert` recente (mesmo sem `created_at`) serão inseridos em `t_tracking_sea`.
+## Escopo
+
+- Arquivo único: `src/pages/ContainerTracking.tsx`.
+- Sem mudanças de schema, backend ou edge function.
+- Sem refactor de outras telas/hooks.
+
+## Validação
+
+- Após o fix, conferir no preview `/sea/tracking` que o contador "Entregues" cai (esperado: somente processos de import com GOD/DLV reais, ou export concluído via DCH/destino final conforme regra existente).
+- Validar que processos export listados hoje como "Entregues" voltam para "Em Trânsito" / status correto.
