@@ -1,39 +1,16 @@
-## Objetivo
+## Reativar health-check da jsoncargo
 
-Na esteira de vouchers (`/fin/esteira`), trocar os filtros de coluna **Enviado por** e **Criado por** — hoje campos de texto livre — por **multi-seleção via Popover + Checkbox com campo de busca interno**, no mesmo padrão visual já usado pelo filtro de **Etapa Atual**. As opções disponíveis são geradas dinamicamente a partir dos vouchers carregados.
+**Arquivo:** `supabase/functions/demurrage-health-check/index.ts`
 
-## Mudanças
+Trocar a flag local na seção "2. Check JSONCARGO API":
 
-Somente UI/frontend. Sem backend, migration ou alteração de tipos do payload.
+```ts
+// antes
+const JSONCARGO_DISABLED = true;
+// depois
+const JSONCARGO_DISABLED = false;
+```
 
-### 1. `src/components/esteira/VoucherTable.tsx`
+Resultado: o health-check passará a executar `GET https://api.jsoncargo.com/api/tracking/line/msc/container/MSCU1234567` com `x-api-key` a cada execução, retornando `healthy` para HTTP 200/404 (auth OK), `unhealthy` para outros códigos e `degraded` em timeout (10s).
 
-- Aceitar duas novas props opcionais:
-  - `enviadoPorOptions: string[]`
-  - `criadoPorOptions: string[]`
-- Substituir o `<Input>` da coluna **Enviado por** (linhas 417–424) por um `Popover` com checkboxes, espelhando o padrão do filtro de Etapa Atual (linhas 460–507), com os seguintes acréscimos:
-  - **Campo de busca** (`<Input>` pequeno) no topo do Popover, com `useState` local, que filtra a lista por `includes` case-insensitive.
-  - Lista rolável (`max-h-72 overflow-auto`) abaixo, mostrando apenas os itens que casam com a busca.
-  - Valor armazenado em `filters.enviadoPor` como CSV (`"João,Maria"`) ou `""` (todos).
-  - Trigger mostra "Todos" / nome único / "N selecionados".
-  - Botão "Limpar" quando há seleção.
-  - Mensagem "Nenhum resultado" quando a busca não retorna nada.
-- Idem para **Criado por** (linhas 425–432), usando `criadoPorOptions`.
-
-### 2. `src/pages/esteira/EsteiraIndex.tsx`
-
-- Calcular as opções únicas a partir da lista completa de vouchers (antes da filtragem), via `useMemo`:
-  - `enviadoPorOptions` = união de `enviadoPorUserName` e `criadoPorUserName`, sem vazios, ordenado alfabeticamente.
-  - `criadoPorOptions` = únicos de `criadoPorDfv`, sem vazios, ordenado.
-- Atualizar a lógica de filtragem (linhas 1506–1516) para tratar CSV:
-  - Se `filters.enviadoPor` vazio → não filtra.
-  - Caso contrário, dividir por vírgula e exigir match exato (case-insensitive) com `enviadoPorUserName` **ou** `criadoPorUserName` (mantém o comportamento atual de buscar nos dois campos).
-  - Mesmo tratamento para `filters.criadoPor` contra `criadoPorDfv`.
-- Passar as listas como props para `<VoucherTable>`.
-- Estado inicial e botão "Limpar filtros" (linhas 591–592 e 2205–2206) permanecem com `""`.
-
-## Fora de escopo
-
-- Backend, edge functions, queries MariaDB.
-- Outros filtros da tela.
-- Persistência dos filtros entre sessões.
+**Fora de escopo:** demurrage-fetch-timelines continua desativada; nenhuma alteração em sea-tracking-cron, secrets, schema ou UI.
