@@ -2456,10 +2456,10 @@ const ContainerTracking = () => {
                   </thead>
                   <tbody>
                     {currentMbls.map((mbl, idx) => {
-                   const reportStatus = getReportStatus(mbl.last_event, mbl.container_status);
-                   const statusCode = reportStatus.code;
-                   const isSIA = statusCode === 'SIA';
-                   const progress = isSIA ? 0 : getTimelineProgress(mbl.last_event);
+                    const reportStatus = getReportStatus(mbl.last_event, mbl.container_status, mbl.tipo_processo);
+                    const statusCode = reportStatus.code;
+                    const isSIA = statusCode === 'SIA';
+                    const progress = isSIA ? 0 : getTimelineProgress(mbl.last_event, mbl.container_status, mbl.tipo_processo);
                   const statusColor = reportStatus.color;
                   const isExpanded = expandedMbl === mbl.mbl_id;
                   return <Fragment key={`${mbl.mbl_id}-${idx}`}>
