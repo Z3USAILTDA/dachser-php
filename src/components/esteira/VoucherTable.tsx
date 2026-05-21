@@ -492,19 +492,21 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                   />
                 </TableHead>
                 <TableHead className="py-2">
-                  <Input
+                  <MultiSelectFilter
                     value={filters.enviadoPor || ""}
-                    onChange={(e) => handleFilterChange("enviadoPor", e.target.value)}
-                    placeholder="Filtrar..."
-                    className="h-8 text-xs w-24"
+                    options={enviadoPorOptions}
+                    onChange={(csv) => handleFilterChange("enviadoPor", csv)}
+                    width="w-24"
+                    searchPlaceholder="Buscar pessoa..."
                   />
                 </TableHead>
                 <TableHead className="py-2">
-                  <Input
+                  <MultiSelectFilter
                     value={filters.criadoPor || ""}
-                    onChange={(e) => handleFilterChange("criadoPor", e.target.value)}
-                    placeholder="Filtrar..."
-                    className="h-8 text-xs w-24"
+                    options={criadoPorOptions}
+                    onChange={(csv) => handleFilterChange("criadoPor", csv)}
+                    width="w-24"
+                    searchPlaceholder="Buscar DFV..."
                   />
                 </TableHead>
                 <TableHead className="py-2">
