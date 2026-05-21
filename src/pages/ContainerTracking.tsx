@@ -219,6 +219,13 @@ const REPORT_STATUSES: Record<string, ReportStatus> = {
     etapaIndex: 0,
     color: '#64748b'
   },
+  AGD_NO_CT: {
+    code: 'AGD_NO_CT',
+    label: 'Aguardando container',
+    etapa: 'PRE_EMBARQUE',
+    etapaIndex: 0,
+    color: '#f59e0b'
+  },
   SIA: {
     code: 'SIA',
     label: 'Sem informação no armador',
@@ -279,7 +286,9 @@ const EVENT_TO_REPORT_STATUS: Record<string, string> = {
   'NAO_ENCONTRADO': 'SIA',
   'SEM_INFORMAÇÃO_NO_ARMADOR': 'SIA'
 };
-const getReportStatus = (lastEvent: string | null, containerStatus?: string | null, tipoProcesso?: string | null): ReportStatus => {
+const getReportStatus = (lastEvent: string | null, containerStatus?: string | null, tipoProcesso?: string | null, containerCount?: number | null): ReportStatus => {
+  const noContainer = (containerCount ?? null) !== null && Number(containerCount) <= 0;
+  const agdFallback = noContainer ? REPORT_STATUSES.AGD_NO_CT : REPORT_STATUSES.AGD;
   // Check container_status first for NAO_ENCONTRADO
   if (containerStatus === 'NAO_ENCONTRADO') return REPORT_STATUSES.SIA;
 
@@ -341,7 +350,7 @@ const getReportStatus = (lastEvent: string | null, containerStatus?: string | nu
     if (lowerStatus.includes('booked') || lowerStatus.includes('booking') || lowerStatus.includes('pending')) return REPORT_STATUSES.BKG;
   }
 
-  if (!lastEvent) return REPORT_STATUSES.AGD;
+  if (!lastEvent) return agdFallback;
   // Check for "Sem informação" in last_event
   if (lastEvent.toLowerCase().includes('sem informação') || lastEvent.toLowerCase().includes('sem informacao')) {
     return REPORT_STATUSES.SIA;
@@ -374,7 +383,7 @@ const getReportStatus = (lastEvent: string | null, containerStatus?: string | nu
       return REPORT_STATUSES[statusCode];
     }
   }
-  return REPORT_STATUSES.AGD;
+  return agdFallback;
 };
 const getTimelineProgress = (lastEvent: string | null, containerStatus?: string | null, tipoProcesso?: string | null): number => {
   const status = getReportStatus(lastEvent, containerStatus, tipoProcesso);
@@ -2052,11 +2061,11 @@ const ContainerTracking = () => {
       return matchesSearch && matchesLine && matchesCardFilter && matchesTipoProcesso && matchesCoordenador && matchesSyncHoje && matchesTipoCarga;
     });
 
-    // Ordenar: MBLs com status "Aguardando" (AGD) por último
+    // Ordenar: MBLs com status "Aguardando" (AGD/AGD_NO_CT/SIA) por último
     mbls.sort((a, b) => {
-      const statusA = getReportStatus(a.last_event, a.container_status);
-      const statusB = getReportStatus(b.last_event, b.container_status);
-      const bottomCodes = ['AGD', 'SIA'];
+      const statusA = getReportStatus(a.last_event, a.container_status, a.tipo_processo, a.container_count);
+      const statusB = getReportStatus(b.last_event, b.container_status, b.tipo_processo, b.container_count);
+      const bottomCodes = ['AGD', 'AGD_NO_CT', 'SIA'];
       const aIsBottom = bottomCodes.includes(statusA.code);
       const bIsBottom = bottomCodes.includes(statusB.code);
       if (aIsBottom && !bIsBottom) return 1;
@@ -2500,7 +2509,7 @@ const ContainerTracking = () => {
                   </thead>
                   <tbody>
                     {currentMbls.map((mbl, idx) => {
-                    const reportStatus = getReportStatus(mbl.last_event, mbl.container_status, mbl.tipo_processo);
+                    const reportStatus = getReportStatus(mbl.last_event, mbl.container_status, mbl.tipo_processo, mbl.container_count);
                     const statusCode = reportStatus.code;
                     const isSIA = statusCode === 'SIA';
                     const progress = isSIA ? 0 : getTimelineProgress(mbl.last_event, mbl.container_status, mbl.tipo_processo);
@@ -2825,7 +2834,7 @@ const ContainerTracking = () => {
                                         </thead>
                                         <tbody>
                                           {(() => {
-                                            const aggStatus = getReportStatus(mbl.last_event, mbl.container_status, mbl.tipo_processo);
+                                            const aggStatus = getReportStatus(mbl.last_event, mbl.container_status, mbl.tipo_processo, mbl.container_count);
                                             // Dedup: agrega por (código, descrição, local) — ignora timestamp para evitar
                                             // repetições do mesmo evento emitido várias vezes em poucos minutos pelo armador.
                                             // Mantém o evento MAIS RECENTE e agrega containers afetados.

@@ -2810,21 +2810,118 @@ serve(async (req) => {
           }
         }
 
+        // Step 6: Backfill REAL container numbers for MBLs still stuck in PENDENTE/empty.
+        // Source: t_master_dados (which has both mawb and container for SEA processes).
+        // This rescues SEA EXPORT MBLs that ficaram presos como "Aguardando" porque
+        // t_sea_master não traz container.
+        const MBL_PREFIX_TO_SHIPPING_LINE: Record<string, string> = {
+          'COSU': 'COSCO', 'CSNU': 'COSCO', 'CBHU': 'COSCO', 'OOLU': 'COSCO',
+          'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD', 'HLCS': 'HAPAG_LLOYD', 'SAHL': 'HAPAG_LLOYD',
+          'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK',
+          'MSCU': 'MSC', 'MEDU': 'MSC',
+          'CMAU': 'CMA_CGM', 'CCLU': 'CMA_CGM', 'CXDU': 'CMA_CGM',
+          'ONEY': 'ONE', 'ONEU': 'ONE',
+          'HDMU': 'HMM', 'HMMU': 'HMM',
+          'EISU': 'EVERGREEN', 'EITU': 'EVERGREEN', 'EGSU': 'EVERGREEN', 'EGHU': 'EVERGREEN', 'EGLV': 'EVERGREEN',
+          'YMLU': 'YANG_MING', 'YMMU': 'YANG_MING',
+          'ZIMU': 'ZIM', 'ZCSU': 'ZIM',
+          'GLNL': 'HAPAG_LLOYD', 'GLSL': 'CMA_CGM',
+          'BKKM': 'RCL', 'BKMR': 'RCL',
+          'GLHK': 'SINOTRANS', 'SNKO': 'SINOTRANS', 'SNTU': 'SINOTRANS',
+        };
+
+        let backfilled = 0;
+        const backfilledMbls = new Set<string>();
+        try {
+          const backfillRows = await client.query(`
+            SELECT DISTINCT TRIM(md.mawb) AS mbl_id, TRIM(md.container) AS container
+            FROM dados_dachser.t_master_dados md
+            JOIN dados_dachser.t_tracking_sea ts
+              ON TRIM(ts.mbl_id) COLLATE utf8mb4_unicode_ci = TRIM(md.mawb) COLLATE utf8mb4_unicode_ci
+            WHERE md.tipo_processo LIKE '%SEA%'
+              AND md.mawb IS NOT NULL AND TRIM(md.mawb) <> ''
+              AND md.container IS NOT NULL AND TRIM(md.container) <> ''
+              AND TRIM(md.container) REGEXP '^[A-Z]{4}[0-9]{7}$'
+              AND ts.active = 1
+              AND (ts.container IS NULL OR ts.container IN ('PENDENTE', ''))
+          `);
+          for (const r of (backfillRows as any[])) {
+            const mbl = (r.mbl_id || '').trim();
+            const ct = (r.container || '').trim().toUpperCase();
+            if (!mbl || !ct) continue;
+            const upper = mbl.toUpperCase();
+            let sl: string | null = MBL_PREFIX_TO_SHIPPING_LINE[upper.substring(0, 4)] || null;
+            if (!sl) {
+              for (const p of Object.keys(MBL_PREFIX_TO_SHIPPING_LINE)) {
+                if (upper.startsWith(p)) { sl = MBL_PREFIX_TO_SHIPPING_LINE[p]; break; }
+              }
+            }
+            try {
+              await client.execute(`
+                INSERT INTO dados_dachser.t_tracking_sea
+                  (mbl_id, tipo_processo, container, shipping_line, active)
+                VALUES (?, 'SEA EXPORT', ?, ?, 1)
+                ON DUPLICATE KEY UPDATE
+                  shipping_line = COALESCE(VALUES(shipping_line), shipping_line),
+                  active = 1
+              `, [mbl, ct, sl]);
+              backfilledMbls.add(mbl);
+              backfilled++;
+            } catch (e) {
+              console.warn(`[sync_sea_tracking] backfill failed ${mbl}/${ct}:`, (e as any)?.message || e);
+            }
+          }
+
+          // Step 7: Drop PENDENTE/empty rows for MBLs que agora têm container real
+          if (backfilledMbls.size > 0) {
+            const placeholders = [...backfilledMbls].map(() => '?').join(',');
+            await client.execute(`
+              DELETE FROM dados_dachser.t_tracking_sea
+              WHERE container IN ('PENDENTE', '')
+                AND mbl_id IN (${placeholders})
+                AND mbl_id IN (
+                  SELECT mbl_id FROM (
+                    SELECT mbl_id FROM dados_dachser.t_tracking_sea
+                    WHERE container REGEXP '^[A-Z]{4}[0-9]{7}$'
+                  ) v
+                )
+            `, [...backfilledMbls]);
+          }
+
+          // Step 8: Preencher shipping_line via prefixo do MBL onde estiver vazio
+          const orderedPrefixes = Object.keys(MBL_PREFIX_TO_SHIPPING_LINE)
+            .sort((a, b) => b.length - a.length);
+          const cases = orderedPrefixes
+            .map(p => `WHEN UPPER(mbl_id) LIKE '${p}%' THEN '${MBL_PREFIX_TO_SHIPPING_LINE[p]}'`)
+            .join(' ');
+          await client.execute(`
+            UPDATE dados_dachser.t_tracking_sea
+            SET shipping_line = CASE ${cases} ELSE shipping_line END
+            WHERE (shipping_line IS NULL OR shipping_line = '') AND active = 1
+          `);
+        } catch (e) {
+          console.warn('[sync_sea_tracking] backfill step error:', (e as any)?.message || e);
+        }
+
         await client.close();
 
-        console.log(`[sync_sea_tracking] synced=${synced} (sm=${syncedFromSeaMaster}, dm=${syncedFromDadosMaritimo}), reactivated=${reactivated}`);
+        console.log(`[sync_sea_tracking] synced=${synced} (sm=${syncedFromSeaMaster}, dm=${syncedFromDadosMaritimo}), reactivated=${reactivated}, backfilled_containers=${backfilled} (mbls=${backfilledMbls.size})`);
+
+
 
         return new Response(JSON.stringify({
           success: true,
           synced,
           reactivated,
+          backfilled_containers: backfilled,
+          backfilled_mbls: backfilledMbls.size,
           total_candidates: allCandidates.length,
           already_active: allCandidates.filter(c => activeSet.has(c.mbl_id?.trim())).length,
           sources: {
             t_sea_master: syncedFromSeaMaster,
             t_dados_maritimo: syncedFromDadosMaritimo
           },
-          message: `${synced} inseridos, ${reactivated} reativados`
+          message: `${synced} inseridos, ${reactivated} reativados, ${backfilled} containers preenchidos`
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
