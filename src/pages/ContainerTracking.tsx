@@ -355,8 +355,8 @@ const getReportStatus = (lastEvent: string | null, containerStatus?: string | nu
   if (lowerEvent.includes('transshipment') || lowerEvent.includes('t/s')) return REPORT_STATUSES.TSP;
   if (lowerEvent.includes('discharged from vessel') || lowerEvent.includes('import discharged') || lowerEvent.includes('discharge')) return REPORT_STATUSES.DCH;
   if (lowerEvent.includes('available for delivery') || lowerEvent.includes('carrier release') || lowerEvent.includes('customs') || lowerEvent.includes('released')) return REPORT_STATUSES.INS;
-  if (lowerEvent.includes('import to consignee') || lowerEvent.includes('to consignee') || lowerEvent.includes('gate out') || lowerEvent.includes('gate-out')) return REPORT_STATUSES.GOD;
-  if (lowerEvent.includes('empty received') || lowerEvent.includes('end import cycle') || lowerEvent.includes('delivered') || lowerEvent.includes('empty return')) return REPORT_STATUSES.DLV;
+  if (!skipImportDelivery && (lowerEvent.includes('import to consignee') || lowerEvent.includes('to consignee') || lowerEvent.includes('gate out') || lowerEvent.includes('gate-out'))) return REPORT_STATUSES.GOD;
+  if (!skipImportDelivery && (lowerEvent.includes('empty received') || lowerEvent.includes('end import cycle') || lowerEvent.includes('delivered') || lowerEvent.includes('empty return'))) return REPORT_STATUSES.DLV;
   if (lowerEvent.includes('empty to shipper') || lowerEvent.includes('picked up') || lowerEvent.includes('pick up')) return REPORT_STATUSES.CLT;
   if (lowerEvent.includes('start export cycle') || lowerEvent.includes('booking') || lowerEvent.includes('booked')) return REPORT_STATUSES.BKG;
   if (lowerEvent.includes('arrived at destination') || lowerEvent.includes('arrived') || lowerEvent.includes('arrival')) return REPORT_STATUSES.ARR;
