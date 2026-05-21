@@ -5021,7 +5021,7 @@ serve(async (req) => {
 
         await client.close();
         const elapsed = Date.now() - startTime;
-        console.log(`[enrich_sea_containers] Done in ${elapsed}ms. Enriched: ${enriched}, Errors: ${errors}, No containers: ${noContainers}, Skipped: ${skipped}, Processed: ${processed}/${pendingMbls.length}`);
+        console.log(`[enrich_sea_containers] Done in ${elapsed}ms. Enriched: ${enriched}, Errors: ${errors}, No containers: ${noContainers}, Skipped: ${skipped}, Processed: ${processed}/${pendingMbls.length}, CarrierFallback: ${recoveredByCarrierFallback}/${carrierFallbackAttempts}`);
 
         return new Response(JSON.stringify({
           success: true,
@@ -5030,10 +5030,13 @@ serve(async (req) => {
           noContainers,
           skipped,
           processed,
+          recovered_by_carrier_fallback: recoveredByCarrierFallback,
+          carrier_fallback_attempts: carrierFallbackAttempts,
           total_pending: pendingMbls.length,
           elapsed_ms: elapsed,
           details
         }), {
+
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
 
