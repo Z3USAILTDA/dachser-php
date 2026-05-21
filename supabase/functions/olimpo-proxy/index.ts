@@ -2220,8 +2220,7 @@ serve(async (req) => {
               COALESCE(
                 NULLIF(TRIM(MAX(md.nome_analista)), ''),
                 NULLIF(TRIM(MAX(mdn.nome_analista)), ''),
-                NULLIF(TRIM(MAX(ts.email_analista)), ''),
-                NULLIF(TRIM(MAX(ts.nome_analista)), '')
+                NULLIF(TRIM(MAX(ts.email_analista)), '')
               ) as nome_analista,
               MAX(ts.eta) as eta_api,
               COALESCE(MAX(md.hbl), MAX(mdn.hawb)) as hbl,
