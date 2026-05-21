@@ -48,6 +48,10 @@ serve(async (req) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
+  // Single-MBL mode: ?single_mbl=<MBL> processa apenas o MBL informado
+  const url = new URL(req.url);
+  const singleMbl = url.searchParams.get('single_mbl')?.trim() || null;
+
   const stats = {
     total_pending: 0,
     processed: 0,
@@ -56,34 +60,42 @@ serve(async (req) => {
     errors: [] as string[],
     details: [] as any[],
     duration_ms: 0,
+    single_mbl_mode: !!singleMbl,
   };
 
   let client: Client | null = null;
 
   try {
-    // 1. Fetch MBLs with PENDENTE/NAO_ENCONTRADO containers
-    console.log('[sea-carrier-fallback] Buscando MBLs pendentes...');
-    client = await getMariaClient();
+    let pendingRows: any[];
 
-    const pendingRows: any[] = await client.query(`
-      SELECT DISTINCT ts.mbl_id
-      FROM dados_dachser.t_tracking_sea ts
-      WHERE ts.active = 1
-        AND ts.container IN ('PENDENTE', 'NAO_ENCONTRADO', '')
-        AND (
-          ts.container <> 'NAO_ENCONTRADO'
-          OR ts.last_check IS NULL
-          OR ts.last_check < DATE_SUB(NOW(), INTERVAL ? HOUR)
-        )
-      ORDER BY ts.last_check ASC
-      LIMIT ?
-    `, [NAO_ENCONTRADO_COOLDOWN_HOURS, MAX_MBLS]);
+    if (singleMbl) {
+      console.log(`[sea-carrier-fallback] Modo single_mbl: ${singleMbl}`);
+      pendingRows = [{ mbl_id: singleMbl }];
+    } else {
+      // 1. Fetch MBLs with PENDENTE/NAO_ENCONTRADO containers
+      console.log('[sea-carrier-fallback] Buscando MBLs pendentes...');
+      client = await getMariaClient();
 
-    await client.close();
-    client = null;
+      pendingRows = await client.query(`
+        SELECT DISTINCT ts.mbl_id
+        FROM dados_dachser.t_tracking_sea ts
+        WHERE ts.active = 1
+          AND ts.container IN ('PENDENTE', 'NAO_ENCONTRADO', '')
+          AND (
+            ts.container <> 'NAO_ENCONTRADO'
+            OR ts.last_check IS NULL
+            OR ts.last_check < DATE_SUB(NOW(), INTERVAL ? HOUR)
+          )
+        ORDER BY ts.last_check ASC
+        LIMIT ?
+      `, [NAO_ENCONTRADO_COOLDOWN_HOURS, MAX_MBLS]);
+
+      await client.close();
+      client = null;
+    }
 
     stats.total_pending = pendingRows.length;
-    console.log(`[sea-carrier-fallback] Encontrados ${pendingRows.length} MBLs pendentes`);
+    console.log(`[sea-carrier-fallback] Processando ${pendingRows.length} MBL(s)`);
 
     if (pendingRows.length === 0) {
       stats.duration_ms = Date.now() - startTime;
@@ -91,6 +103,7 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
+
 
     // 2. Process each MBL
     for (let i = 0; i < pendingRows.length; i++) {
