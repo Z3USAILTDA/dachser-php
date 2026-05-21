@@ -1,86 +1,99 @@
-# Por que ainda existem processos como AGD
+## Objetivo
 
-## Diagnóstico (não é bug de mapeamento)
+Reduzir drasticamente os MBLs presos como "Aguardando container" / "NAO_ENCONTRADO" expandindo as fontes consultadas no backfill antes de cair para chamadas de API externa.
 
-Inspecionei a tela `/sea/tracking` chamando `olimpo-proxy?action=get_sea_tracking` e analisei os 544 MBLs retornados:
+## Diagnóstico do que existe hoje
 
-| Métrica | Valor |
-|---|---|
-| Total de MBLs ativos | 544 |
-| **Em AGD** (sem `last_event` e sem `container_status`) | **381** (70%) |
-| Todos os 381 AGD têm `container = NULL` | sim |
-| Todos os 381 AGD têm `shipping_line = NULL` | sim |
-| Todos os 381 AGD têm `last_error = NULL` | sim |
-| Idade da última varredura (`last_check`) | mediana 30 dias / max 35 dias |
-| Tipo de processo dos 381 AGD | 380 SEA EXPORT + 1 SEA IMPORT |
-
-A regra do `getReportStatus` em `src/pages/ContainerTracking.tsx:344` está correta:
-```ts
-if (!lastEvent) return REPORT_STATUSES.AGD;
-```
-Ou seja, AGD aparece **sempre que a linha de tracking não tem evento nenhum**. O problema não é classificação — é que o pipeline de enriquecimento nunca rodou nesses MBLs.
-
-## Causa raiz
-
-A action `sync_sea_tracking` (`supabase/functions/olimpo-proxy/index.ts:2624-2780`) faz:
+Hoje o `sync_sea_tracking` (`supabase/functions/olimpo-proxy/index.ts`) faz backfill de container em **uma única fonte**:
 
 ```sql
-SELECT TRIM(sm.master) AS mbl_id,
-       'SEA EXPORT'    AS tipo_processo,
-       'PENDENTE'      AS container,        -- ← container fixo "PENDENTE"
-       sm.customer_no  AS consignee,
-       ...
-FROM dados_dachser.t_sea_master sm
+-- Atual (Step 6)
+FROM dados_dachser.t_master_dados md
+JOIN dados_dachser.t_tracking_sea ts ON ts.mbl_id = md.mawb
+WHERE md.tipo_processo LIKE '%SEA%'
+  AND md.container REGEXP '^[A-Z]{4}[0-9]{7}$'
 ```
 
-`t_sea_master` não tem coluna de container, então toda inserção entra com `container = 'PENDENTE'`. Como nenhum scraper/API consegue rastrear sem número de container, esses MBLs ficam para sempre com `last_event = NULL` ⇒ **AGD permanente**.
+Problemas observados:
 
-Confirmações:
-- 381/381 AGD têm `container = NULL` ("PENDENTE" foi limpo por algum job, mas o container real nunca foi descoberto).
-- 381/381 AGD têm `shipping_line = NULL` — o enrich nunca preencheu o armador a partir do prefixo do MBL.
-- Nenhum erro foi gravado (`last_error = NULL`), confirmando que o tracker provavelmente nem foi chamado (precisa de container) ou foi pulado silenciosamente.
-- 542 dos 544 MBLs são SEA EXPORT (a fila de import praticamente inexiste hoje), e justamente o fluxo de export é o que sofre — porque `t_sea_master` é a fonte de export e ela não traz container.
+1. `t_master_dados.mawb` raramente é preenchido para SEA EXPORT — os MBLs são inseridos a partir de `t_sea_master.master` e `t_dados_maritimo.bl_number`, mas **nenhuma dessas duas tabelas é consultada para container**.
+2. O regex `^[A-Z]{4}[0-9]{7}$` rejeita silenciosamente containers que vêm com hífen, espaço, dígito verificador faltando ou minúsculas, mesmo quando são válidos depois de normalizar.
+3. Não há fallback para `ai_agente.t_dachser_sea_items` / `ai_agente.t_dachser_container` / `ai_agente.t_dachser_container_tracking`, que já têm milhares de containers casados a MBL/booking.
+4. Quando o container é descoberto via API (`enrich_sea_containers`), ele é gravado, mas **a linha PENDENTE só é deletada se o backfill estrutural rodar depois** — então a UI ainda mostra duas linhas (uma com container e outra como AGD) durante uma janela.
 
-## Como sair de AGD
+## Mudanças propostas (somente backend, sem schema)
 
-Para um MBL deixar AGD ele precisa de:
-1. **Container preenchido** em `t_tracking_sea` (descoberto via `t_sea_master_containers` ou tabela equivalente).
-2. O scraper/API do armador correspondente rodar e devolver pelo menos 1 evento → grava `last_event` e/ou `container_status`.
+Arquivo: `supabase/functions/olimpo-proxy/index.ts`, dentro do bloco `action === 'sync_sea_tracking'`, **substituir** a Step 6 atual por um pipeline em cascata. **Nada mais é tocado** — Step 5 (insert), Step 7 (delete PENDENTE), Step 8 (shipping_line) continuam iguais.
 
-Hoje nenhum dos dois acontece para 70% da base de export.
+### Step 6 novo: cascata de fontes
 
-## Correção proposta (A + B combinados)
+Para cada MBL ativo em `t_tracking_sea` cujo `container IS NULL OR container IN ('PENDENTE','NAO_ENCONTRADO','')`, tentar na ordem e **parar na primeira que devolver um container válido**:
 
-### A) Preenchimento automático de container
+```text
+1. t_sea_master.master   → coluna container/cntr_no se existir nessa tabela
+2. t_dados_maritimo.bl_number → colunas container / container_number / num_container
+3. t_master_dados.mawb   → fonte atual (mantida)
+4. ai_agente.t_dachser_sea_items (container, mbl/bol)
+5. ai_agente.t_dachser_container_tracking (container, mbl_reference)
+```
 
-1. Verificar no MariaDB (`dados_dachser`) qual tabela liga MBL → container para export (candidatas: `t_sea_master_containers`, `t_dados_maritimo_containers` ou colunas dentro de `t_dados_maritimo`).
-2. Estender `sync_sea_tracking` para fazer `LEFT JOIN` dessa tabela ao inserir, e adicionar um **passo extra** que atualiza `container` (e `shipping_line` derivado do prefixo do MBL) em registros já existentes com `container IS NULL OR container = 'PENDENTE'`.
-3. Após preencher, o cron de retrack normal (`update frequency rules v2`) passa a tentar esses MBLs.
-
-### B) Sub-status visual "Aguardando container"
-
-Em `src/pages/ContainerTracking.tsx`, no `getReportStatus`:
+A consulta vai ser uma única query com `LEFT JOIN` em todas e `COALESCE` na ordem acima, devolvendo `(mbl_id, container, source)`. Normalização aplicada antes de comparar com regex:
 
 ```ts
-if (!lastEvent) {
-  // Distinguir "MBL sem container ainda" de "container existe mas sem evento"
-  const hasContainer = !!(containerStatus || /* container do MBL */);
-  return hasContainer ? REPORT_STATUSES.AGD : REPORT_STATUSES.AGD_NO_CT;
+const norm = (c: string) => c.toUpperCase().replace(/[^A-Z0-9]/g, '');
+// aceitar se norm tem 10-11 chars e bate ^[A-Z]{4}[0-9]{6,7}$
+```
+
+### Sub-etapa 6B: dedup determinístico
+
+Após inserir o container real, executar **na mesma transação** o DELETE que hoje vive na Step 7, expandido para também limpar `NAO_ENCONTRADO`:
+
+```sql
+DELETE FROM t_tracking_sea
+WHERE container IN ('PENDENTE','NAO_ENCONTRADO','')
+  AND mbl_id IN (<mbls com container real>)
+```
+
+Assim acabamos com a janela de "duas linhas para o mesmo MBL".
+
+### Sub-etapa 6C: descoberta de schema defensiva
+
+Antes de rodar a query, executar uma única vez por invocação:
+
+```sql
+SELECT TABLE_NAME, COLUMN_NAME
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA IN ('dados_dachser','ai_agente')
+  AND TABLE_NAME IN ('t_sea_master','t_dados_maritimo','t_dachser_sea_items','t_dachser_container_tracking')
+  AND COLUMN_NAME REGEXP 'container|cntr'
+```
+
+Só monta o `LEFT JOIN` para tabelas/colunas que realmente existirem — evita quebrar o sync se uma das fontes mudar nome ou for removida.
+
+### Resposta da action
+
+Adicionar contadores por fonte no JSON de retorno:
+
+```json
+"backfill_by_source": {
+  "t_sea_master": 0,
+  "t_dados_maritimo": 0,
+  "t_master_dados": 0,
+  "t_dachser_sea_items": 0,
+  "t_dachser_container_tracking": 0
 }
 ```
 
-- Adicionar novo `REPORT_STATUSES.AGD_NO_CT` (label "Aguardando container", mesma `etapa` PRE_EMBARQUE, cor distinta — ex. âmbar).
-- O contador do card "Aguardando" continua somando os dois; opcionalmente expor um split visual ("X aguardando container / Y aguardando evento do armador").
-- Como a propriedade `container` não está hoje no payload de `getReportStatus`, vamos passar o MBL inteiro (mesmo padrão já usado para `isEntregue`) **apenas nas chamadas do dashboard**, sem mudar a assinatura para o resto.
-
-## Escopo da implementação
-
-- **Backend**: `supabase/functions/olimpo-proxy/index.ts` — alterar query do `sync_sea_tracking` + adicionar passo de update para preencher container/shipping_line.
-- **Frontend**: `src/pages/ContainerTracking.tsx` — novo sub-status `AGD_NO_CT` e ajuste dos pontos que chamam `getReportStatus` no contexto do dashboard.
-- **Sem mudanças** de schema, RLS, ou outras telas.
+Útil para medir a eficácia depois do deploy.
 
 ## Validação
 
-1. Após o deploy do backend, rodar `sync_sea_tracking` uma vez e medir quantos dos 381 AGD ganham `container`.
-2. Aguardar próximo ciclo do retrack e conferir queda do card "Aguardando".
-3. No frontend, conferir que os MBLs ainda sem container aparecem como "Aguardando container" (cor distinta) e os que têm container mas seguem sem evento permanecem como "Aguardando" clássico.
+1. Rodar `sync_sea_tracking` manualmente e ler `backfill_by_source` no response.
+2. Comparar contagem de AGD no dashboard `/sea/tracking` antes e depois.
+3. Para os MBLs que **continuarem** sem container após a cascata, o pipeline já existente `enrich_sea_containers` (JsonCargo + Hapag) continua sendo o último recurso — sem mudanças.
+
+## Fora de escopo
+
+- Frontend (`ContainerTracking.tsx`) — nenhuma mudança; o sub-status `AGD_NO_CT` já criado anteriormente segue válido.
+- Schema MariaDB ou Supabase.
+- `enrich_sea_containers` e o cron de retrack.
