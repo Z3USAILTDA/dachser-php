@@ -3054,7 +3054,9 @@ serve(async (req) => {
             t_sea_master: syncedFromSeaMaster,
             t_dados_maritimo: syncedFromDadosMaritimo
           },
+          backfill_by_source: backfillBySource,
           message: `${synced} inseridos, ${reactivated} reativados, ${backfilled} containers preenchidos`
+
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
