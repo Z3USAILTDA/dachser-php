@@ -219,6 +219,13 @@ const REPORT_STATUSES: Record<string, ReportStatus> = {
     etapaIndex: 0,
     color: '#64748b'
   },
+  AGD_NO_CT: {
+    code: 'AGD_NO_CT',
+    label: 'Aguardando container',
+    etapa: 'PRE_EMBARQUE',
+    etapaIndex: 0,
+    color: '#f59e0b'
+  },
   SIA: {
     code: 'SIA',
     label: 'Sem informação no armador',
