@@ -2832,23 +2832,153 @@ serve(async (req) => {
 
         let backfilled = 0;
         const backfilledMbls = new Set<string>();
+        const backfillBySource: Record<string, number> = {
+          t_sea_master: 0,
+          t_dados_maritimo: 0,
+          t_master_dados: 0,
+          t_dachser_sea_items: 0,
+          t_dachser_container_tracking: 0,
+        };
         try {
-          const backfillRows = await client.query(`
-            SELECT DISTINCT TRIM(md.mawb) AS mbl_id, TRIM(md.container) AS container
-            FROM dados_dachser.t_master_dados md
-            JOIN dados_dachser.t_tracking_sea ts
-              ON TRIM(ts.mbl_id) COLLATE utf8mb4_unicode_ci = TRIM(md.mawb) COLLATE utf8mb4_unicode_ci
-            WHERE md.tipo_processo LIKE '%SEA%'
-              AND md.mawb IS NOT NULL AND TRIM(md.mawb) <> ''
-              AND md.container IS NOT NULL AND TRIM(md.container) <> ''
-              AND TRIM(md.container) REGEXP '^[A-Z]{4}[0-9]{7}$'
-              AND ts.active = 1
-              AND (ts.container IS NULL OR ts.container IN ('PENDENTE', ''))
+          // Step 6.C: Descoberta de schema defensiva — só consulta colunas que existem.
+          const schemaRows = await client.query(`
+            SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE (TABLE_SCHEMA = 'dados_dachser' AND TABLE_NAME IN ('t_sea_master','t_dados_maritimo','t_master_dados'))
+               OR (TABLE_SCHEMA = 'ai_agente' AND TABLE_NAME IN ('t_dachser_sea_items','t_dachser_container_tracking'))
           `);
-          for (const r of (backfillRows as any[])) {
-            const mbl = (r.mbl_id || '').trim();
-            const ct = (r.container || '').trim().toUpperCase();
-            if (!mbl || !ct) continue;
+          const cols: Record<string, Set<string>> = {};
+          for (const r of (schemaRows as any[])) {
+            const key = `${r.TABLE_SCHEMA}.${r.TABLE_NAME}`;
+            if (!cols[key]) cols[key] = new Set();
+            cols[key].add(String(r.COLUMN_NAME).toLowerCase());
+          }
+          const pickCol = (table: string, candidates: string[]): string | null => {
+            const set = cols[table];
+            if (!set) return null;
+            for (const c of candidates) if (set.has(c.toLowerCase())) return c;
+            return null;
+          };
+
+          const SOURCES: Array<{ name: string; sql: string }> = [];
+
+          // 1) t_sea_master (master -> container)
+          {
+            const mblCol = pickCol('dados_dachser.t_sea_master', ['master']);
+            const ctCol = pickCol('dados_dachser.t_sea_master', ['container','cntr_no','container_no','container_number','num_container']);
+            if (mblCol && ctCol) {
+              SOURCES.push({
+                name: 't_sea_master',
+                sql: `SELECT DISTINCT TRIM(${mblCol}) AS mbl_id, UPPER(REGEXP_REPLACE(${ctCol}, '[^A-Za-z0-9]', '')) AS container
+                      FROM dados_dachser.t_sea_master
+                      WHERE ${mblCol} IS NOT NULL AND TRIM(${mblCol}) <> ''
+                        AND ${ctCol} IS NOT NULL AND TRIM(${ctCol}) <> ''`,
+              });
+            }
+          }
+
+          // 2) t_dados_maritimo (bl_number -> container)
+          {
+            const mblCol = pickCol('dados_dachser.t_dados_maritimo', ['bl_number']);
+            const ctCol = pickCol('dados_dachser.t_dados_maritimo', ['container','container_number','num_container','cntr_no']);
+            if (mblCol && ctCol) {
+              SOURCES.push({
+                name: 't_dados_maritimo',
+                sql: `SELECT DISTINCT TRIM(${mblCol}) AS mbl_id, UPPER(REGEXP_REPLACE(${ctCol}, '[^A-Za-z0-9]', '')) AS container
+                      FROM dados_dachser.t_dados_maritimo
+                      WHERE ${mblCol} IS NOT NULL AND TRIM(${mblCol}) <> ''
+                        AND ${ctCol} IS NOT NULL AND TRIM(${ctCol}) <> ''`,
+              });
+            }
+          }
+
+          // 3) t_master_dados (mawb -> container) — fonte atual
+          {
+            const ctCol = pickCol('dados_dachser.t_master_dados', ['container']);
+            if (ctCol) {
+              SOURCES.push({
+                name: 't_master_dados',
+                sql: `SELECT DISTINCT TRIM(mawb) AS mbl_id, UPPER(REGEXP_REPLACE(${ctCol}, '[^A-Za-z0-9]', '')) AS container
+                      FROM dados_dachser.t_master_dados
+                      WHERE tipo_processo LIKE '%SEA%'
+                        AND mawb IS NOT NULL AND TRIM(mawb) <> ''
+                        AND ${ctCol} IS NOT NULL AND TRIM(${ctCol}) <> ''`,
+              });
+            }
+          }
+
+          // 4) ai_agente.t_dachser_sea_items (mbl/bol -> container)
+          {
+            const mblCol = pickCol('ai_agente.t_dachser_sea_items', ['mbl','bol','master','mbl_number','bl_number']);
+            const ctCol = pickCol('ai_agente.t_dachser_sea_items', ['container','container_number']);
+            if (mblCol && ctCol) {
+              SOURCES.push({
+                name: 't_dachser_sea_items',
+                sql: `SELECT DISTINCT TRIM(${mblCol}) AS mbl_id, UPPER(REGEXP_REPLACE(${ctCol}, '[^A-Za-z0-9]', '')) AS container
+                      FROM ai_agente.t_dachser_sea_items
+                      WHERE ${mblCol} IS NOT NULL AND TRIM(${mblCol}) <> ''
+                        AND ${ctCol} IS NOT NULL AND TRIM(${ctCol}) <> ''`,
+              });
+            }
+          }
+
+          // 5) ai_agente.t_dachser_container_tracking (mbl_reference -> container)
+          {
+            const mblCol = pickCol('ai_agente.t_dachser_container_tracking', ['mbl_reference','mbl','bol']);
+            const ctCol = pickCol('ai_agente.t_dachser_container_tracking', ['container','container_number']);
+            if (mblCol && ctCol) {
+              SOURCES.push({
+                name: 't_dachser_container_tracking',
+                sql: `SELECT DISTINCT TRIM(${mblCol}) AS mbl_id, UPPER(REGEXP_REPLACE(${ctCol}, '[^A-Za-z0-9]', '')) AS container
+                      FROM ai_agente.t_dachser_container_tracking
+                      WHERE ${mblCol} IS NOT NULL AND TRIM(${mblCol}) <> ''
+                        AND ${ctCol} IS NOT NULL AND TRIM(${ctCol}) <> ''`,
+              });
+            }
+          }
+
+          console.log(`[sync_sea_tracking] backfill sources available: ${SOURCES.map(s => s.name).join(', ')}`);
+
+          // Conjunto de MBLs que precisam de container
+          const pendingRows = await client.query(`
+            SELECT DISTINCT TRIM(mbl_id) AS mbl_id
+            FROM dados_dachser.t_tracking_sea
+            WHERE active = 1
+              AND (container IS NULL OR container IN ('PENDENTE','NAO_ENCONTRADO',''))
+              AND mbl_id IS NOT NULL AND TRIM(mbl_id) <> ''
+          `);
+          const pending = new Set<string>(
+            (pendingRows as any[]).map(r => String(r.mbl_id || '').trim().toUpperCase()).filter(Boolean)
+          );
+          console.log(`[sync_sea_tracking] ${pending.size} MBLs aguardando container`);
+
+          const containerRegex = /^[A-Z]{4}[0-9]{6,7}$/;
+          const resolved = new Map<string, { container: string; source: string }>();
+
+          for (const src of SOURCES) {
+            if (pending.size === resolved.size) break;
+            let rows: any[] = [];
+            try {
+              rows = await client.query(src.sql) as any[];
+            } catch (e) {
+              console.warn(`[sync_sea_tracking] source ${src.name} failed:`, (e as any)?.message || e);
+              continue;
+            }
+            for (const r of rows) {
+              const mbl = String(r.mbl_id || '').trim().toUpperCase();
+              const ct = String(r.container || '').trim().toUpperCase();
+              if (!mbl || !ct) continue;
+              if (!pending.has(mbl)) continue;
+              if (resolved.has(mbl)) continue;
+              if (!containerRegex.test(ct)) continue;
+              resolved.set(mbl, { container: ct, source: src.name });
+            }
+            const found = [...resolved.values()].filter(v => v.source === src.name).length;
+            console.log(`[sync_sea_tracking] source ${src.name}: +${found} resolvidos`);
+          }
+
+          // Inserir os containers resolvidos
+          for (const [mbl, info] of resolved) {
             const upper = mbl.toUpperCase();
             let sl: string | null = MBL_PREFIX_TO_SHIPPING_LINE[upper.substring(0, 4)] || null;
             if (!sl) {
@@ -2864,29 +2994,32 @@ serve(async (req) => {
                 ON DUPLICATE KEY UPDATE
                   shipping_line = COALESCE(VALUES(shipping_line), shipping_line),
                   active = 1
-              `, [mbl, ct, sl]);
+              `, [mbl, info.container, sl]);
               backfilledMbls.add(mbl);
               backfilled++;
+              backfillBySource[info.source] = (backfillBySource[info.source] || 0) + 1;
             } catch (e) {
-              console.warn(`[sync_sea_tracking] backfill failed ${mbl}/${ct}:`, (e as any)?.message || e);
+              console.warn(`[sync_sea_tracking] backfill failed ${mbl}/${info.container}:`, (e as any)?.message || e);
             }
           }
 
-          // Step 7: Drop PENDENTE/empty rows for MBLs que agora têm container real
+          // Step 7: Drop PENDENTE/NAO_ENCONTRADO/empty rows para MBLs que agora têm container real
           if (backfilledMbls.size > 0) {
             const placeholders = [...backfilledMbls].map(() => '?').join(',');
             await client.execute(`
               DELETE FROM dados_dachser.t_tracking_sea
-              WHERE container IN ('PENDENTE', '')
+              WHERE container IN ('PENDENTE','NAO_ENCONTRADO','')
                 AND mbl_id IN (${placeholders})
                 AND mbl_id IN (
                   SELECT mbl_id FROM (
                     SELECT mbl_id FROM dados_dachser.t_tracking_sea
-                    WHERE container REGEXP '^[A-Z]{4}[0-9]{7}$'
+                    WHERE container REGEXP '^[A-Z]{4}[0-9]{6,7}$'
                   ) v
                 )
             `, [...backfilledMbls]);
           }
+
+
 
           // Step 8: Preencher shipping_line via prefixo do MBL onde estiver vazio
           const orderedPrefixes = Object.keys(MBL_PREFIX_TO_SHIPPING_LINE)
