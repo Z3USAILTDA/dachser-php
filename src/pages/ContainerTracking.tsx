@@ -2787,49 +2787,64 @@ const ContainerTracking = () => {
                                         <span className="text-sm">Navio já descarregou - mapa não disponível</span>
                                       </div>}
                                     
+                                    {/* Container chips */}
+                                    <div className="bg-[rgba(0,0,0,.3)] border border-[rgba(255,255,255,.08)] rounded-lg p-3">
+                                      <div className="text-xs text-[#666] uppercase tracking-wide mb-2">Containers ({mblContainers.length})</div>
+                                      <div className="flex flex-wrap gap-2">
+                                        {mblContainers.map(cnt => {
+                                          const cntStatus = getReportStatus(cnt.last_event, cnt.container_status, mbl.tipo_processo);
+                                          return (
+                                            <span key={cnt.id} className="font-mono text-xs px-2 py-1 rounded border flex items-center gap-2" style={{
+                                              color: cntStatus.color,
+                                              backgroundColor: `${cntStatus.color}15`,
+                                              borderColor: `${cntStatus.color}40`
+                                            }}>
+                                              <span className="text-[#f5f5f5]">{cnt.container}</span>
+                                              <span className="font-bold">{cntStatus.code}</span>
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+
+                                    {/* Events timeline */}
                                     <div className="overflow-x-auto">
-                                      <table className="w-full text-sm">
-                                        <thead>
-                                          <tr className="text-[#666] text-xs uppercase">
-                                            <th className="px-3 py-2 text-left">Container</th>
-                                            <th className="px-3 py-2 text-left">Armador</th>
-                                            <th className="px-3 py-2 text-left">Status</th>
-                                            <th className="px-3 py-2 text-left">Último Evento</th>
-                                            <th className="px-3 py-2 text-left">ETA Tracking</th>
-                                            <th className="px-3 py-2 text-left">ETA Cadastrado</th>
-                                            <th className="px-3 py-2 text-left">Última Atualização</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {mblContainers.map(cnt => {
-                                  const cntStatus = getReportStatus(cnt.last_event);
-                                  return <tr key={cnt.id} className="border-t border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.02)]">
-                                                <td className="px-3 py-2 font-mono text-[#f5f5f5]">{cnt.container}</td>
-                                                <td className="px-3 py-2 text-[#aaaaaa]">{getShippingLineFromMbl(cnt.container, cnt.shipping_line)}</td>
-                                                <td className="px-3 py-2">
-                                                  <span className="text-xs font-bold px-2 py-0.5 rounded" style={{
-                                        color: cntStatus.color,
-                                        backgroundColor: `${cntStatus.color}20`
-                                      }}>
-                                                    {cntStatus.code}
-                                                  </span>
+                                      <div className="text-xs text-[#666] uppercase tracking-wide mb-2 flex items-center gap-2">
+                                        <Clock className="w-3 h-3" />
+                                        Histórico de eventos {loadingEvents && <Loader2 className="w-3 h-3 animate-spin" />}
+                                      </div>
+                                      {(!loadingEvents && mblEvents.length === 0) ? (
+                                        <div className="text-sm text-[#666] py-4 text-center border border-dashed border-[rgba(255,255,255,.1)] rounded-lg">
+                                          Nenhum evento registrado ainda
+                                        </div>
+                                      ) : (
+                                        <table className="w-full text-sm">
+                                          <thead>
+                                            <tr className="text-[#666] text-xs uppercase">
+                                              <th className="px-3 py-2 text-left">Data/Hora</th>
+                                              <th className="px-3 py-2 text-left">Código</th>
+                                              <th className="px-3 py-2 text-left">Descrição</th>
+                                              <th className="px-3 py-2 text-left">Local</th>
+                                              <th className="px-3 py-2 text-left">Navio</th>
+                                              <th className="px-3 py-2 text-left">Container</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {mblEvents.map((ev: any, i: number) => (
+                                              <tr key={ev.id ?? i} className="border-t border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.02)]">
+                                                <td className="px-3 py-2 text-[#ffc800] whitespace-nowrap">
+                                                  {ev.event_datetime ? formatSaoPaulo(parseMariaDBLocalDate(ev.event_datetime) || new Date(ev.event_datetime)) : "—"}
                                                 </td>
-                                                <td className="px-3 py-2 text-[#aaaaaa] max-w-[200px] truncate">
-                                                  {cnt.last_event || "Aguardando..."}
-                                                </td>
-                                                <td className="px-3 py-2 text-[#aaaaaa]">
-                                                  {mbl.eta_api ? new Date(mbl.eta_api).toLocaleDateString('pt-BR') : "—"}
-                                                </td>
-                                                <td className="px-3 py-2 text-[#aaaaaa]">
-                                                  {mbl.eta_master ? new Date(mbl.eta_master).toLocaleDateString('pt-BR') : "—"}
-                                                </td>
-                                                <td className="px-3 py-2 text-[#aaaaaa]">
-                                                  {mbl.last_check ? formatSaoPaulo(parseMariaDBLocalDate(mbl.last_check) || new Date(mbl.last_check)) : "—"}
-                                                </td>
-                                              </tr>;
-                                })}
-                                        </tbody>
-                                      </table>
+                                                <td className="px-3 py-2 text-[#aaaaaa] font-mono text-xs">{ev.event_code || "—"}</td>
+                                                <td className="px-3 py-2 text-[#f5f5f5]">{ev.event_description || "—"}</td>
+                                                <td className="px-3 py-2 text-[#aaaaaa]">{ev.location || "—"}</td>
+                                                <td className="px-3 py-2 text-[#aaaaaa]">{ev.vessel_name || "—"}</td>
+                                                <td className="px-3 py-2 text-[#aaaaaa] font-mono text-xs">{ev.container || "—"}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      )}
                                     </div>
                                   </div>}
                               </td>
