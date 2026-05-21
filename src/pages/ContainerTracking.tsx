@@ -383,7 +383,7 @@ const getReportStatus = (lastEvent: string | null, containerStatus?: string | nu
       return REPORT_STATUSES[statusCode];
     }
   }
-  return REPORT_STATUSES.AGD;
+  return agdFallback;
 };
 const getTimelineProgress = (lastEvent: string | null, containerStatus?: string | null, tipoProcesso?: string | null): number => {
   const status = getReportStatus(lastEvent, containerStatus, tipoProcesso);
