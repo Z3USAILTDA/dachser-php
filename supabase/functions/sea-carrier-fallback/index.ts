@@ -18,8 +18,9 @@ const CARRIER_CONFIG: Partial<Record<ShippingLineCode, { fn: string; shortName: 
   'ONE': { fn: 'draft-track-one', shortName: 'ONE' },
 };
 
-const MAX_MBLS = 15;
+const MAX_MBLS = 40;
 const DELAY_MS = 1500;
+const NAO_ENCONTRADO_COOLDOWN_HOURS = 24;
 
 async function getMariaClient(): Promise<Client> {
   return await new Client().connect({
@@ -69,9 +70,14 @@ serve(async (req) => {
       FROM dados_dachser.t_tracking_sea ts
       WHERE ts.active = 1
         AND ts.container IN ('PENDENTE', 'NAO_ENCONTRADO', '')
+        AND (
+          ts.container <> 'NAO_ENCONTRADO'
+          OR ts.last_check IS NULL
+          OR ts.last_check < DATE_SUB(NOW(), INTERVAL ? HOUR)
+        )
       ORDER BY ts.last_check ASC
       LIMIT ?
-    `, [MAX_MBLS]);
+    `, [NAO_ENCONTRADO_COOLDOWN_HOURS, MAX_MBLS]);
 
     await client.close();
     client = null;
