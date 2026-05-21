@@ -3043,7 +3043,7 @@ serve(async (req) => {
                 }
               }
             }
-            console.log(`[sync_sea_tracking] source ${src.name}: +${foundThisSrc} (mbl,container) pares`);
+            console.log(`[sync_sea_tracking] source ${src.name}: rows=${rows.length} w/container=${rowsWithContainer} mbl_match=${rowsMblMatched} pares=+${foundThisSrc} miss_samples=${sampleMisses.join('|')}`);
           }
 
           // Inserir os containers resolvidos (uma linha por par MBL+container)
