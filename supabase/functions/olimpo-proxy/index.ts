@@ -9506,6 +9506,38 @@ serve(async (req) => {
       }
     }
 
+    if (action === 'reset_nao_encontrado') {
+      const mblId = url.searchParams.get('mbl_id');
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: Deno.env.get('MARIADB_OPS_HOST'),
+        port: parseInt(Deno.env.get('MARIADB_OPS_PORT') || '3306', 10),
+        username: Deno.env.get('MARIADB_OPS_USER'),
+        password: Deno.env.get('MARIADB_OPS_PASSWORD'),
+        db: 'dados_dachser',
+      });
+      try {
+        const whereMbl = mblId ? 'AND mbl_id = ?' : '';
+        const params = mblId ? [mblId] : [];
+        const result: any = await client.execute(
+          `UPDATE dados_dachser.t_tracking_sea
+           SET container = 'PENDENTE', updated_at = NOW()
+           WHERE container = 'NAO_ENCONTRADO' ${whereMbl}`,
+          params
+        );
+        await client.close();
+        return new Response(JSON.stringify({ success: true, reset: result?.affectedRows ?? 0 }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+
     return new Response(JSON.stringify({ error: 'Ação não reconhecida' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
