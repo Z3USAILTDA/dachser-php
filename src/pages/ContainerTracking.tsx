@@ -313,18 +313,22 @@ const getReportStatus = (lastEvent: string | null, containerStatus?: string | nu
   if (containerStatus) {
     // Direct match with internal codes
     const upperStatus = containerStatus.toUpperCase().trim();
-    if (REPORT_STATUSES[upperStatus as keyof typeof REPORT_STATUSES]) {
-      return REPORT_STATUSES[upperStatus as keyof typeof REPORT_STATUSES];
+    const directHit = REPORT_STATUSES[upperStatus as keyof typeof REPORT_STATUSES];
+    if (directHit && !(skipImportDelivery && (directHit.code === 'GOD' || directHit.code === 'DLV'))) {
+      return directHit;
     }
     // Try normalized match via EVENT_TO_REPORT_STATUS
     const normalizedStatus = upperStatus.replace(/[\s-]/g, '_');
-    if (EVENT_TO_REPORT_STATUS[normalizedStatus]) {
+    if (EVENT_TO_REPORT_STATUS[normalizedStatus] && !(skipImportDelivery && IMPORT_ONLY_DELIVERY_KEYS.has(normalizedStatus))) {
       return REPORT_STATUSES[EVENT_TO_REPORT_STATUS[normalizedStatus]];
     }
     // Pattern matching on container_status text (API freeform values)
     const lowerStatus = containerStatus.toLowerCase();
-    if (lowerStatus.includes('delivered') || lowerStatus.includes('empty return') || lowerStatus.includes('empty received')) return REPORT_STATUSES.DLV;
-    if (lowerStatus.includes('gate out') || lowerStatus.includes('gate-out') || lowerStatus.includes('to consignee')) return REPORT_STATUSES.GOD;
+    const hasImportDeliveryToken = IMPORT_ONLY_DELIVERY_SUBSTR.some(t => lowerStatus.includes(t));
+    if (!(skipImportDelivery && hasImportDeliveryToken)) {
+      if (lowerStatus.includes('delivered') || lowerStatus.includes('empty return') || lowerStatus.includes('empty received')) return REPORT_STATUSES.DLV;
+      if (lowerStatus.includes('gate out') || lowerStatus.includes('gate-out') || lowerStatus.includes('to consignee')) return REPORT_STATUSES.GOD;
+    }
     if (lowerStatus.includes('customs') || lowerStatus.includes('released') || lowerStatus.includes('available for delivery') || lowerStatus.includes('carrier release')) return REPORT_STATUSES.INS;
     if (lowerStatus.includes('discharged') || lowerStatus.includes('discharge') || lowerStatus.includes('unloaded')) return REPORT_STATUSES.DCH;
     if (lowerStatus.includes('arrived') || lowerStatus.includes('arrival')) return REPORT_STATUSES.ARR;
