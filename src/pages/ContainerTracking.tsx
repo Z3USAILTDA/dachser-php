@@ -279,9 +279,20 @@ const EVENT_TO_REPORT_STATUS: Record<string, string> = {
   'NAO_ENCONTRADO': 'SIA',
   'SEM_INFORMAÇÃO_NO_ARMADOR': 'SIA'
 };
-const getReportStatus = (lastEvent: string | null, containerStatus?: string | null): ReportStatus => {
+const getReportStatus = (lastEvent: string | null, containerStatus?: string | null, tipoProcesso?: string | null): ReportStatus => {
   // Check container_status first for NAO_ENCONTRADO
   if (containerStatus === 'NAO_ENCONTRADO') return REPORT_STATUSES.SIA;
+
+  // EMPTY_RECEIVED_AT_CY: EXPORT = GIO (gate-in vazio na origem); IMPORT = DLV (devolução do vazio)
+  const isExport = (tipoProcesso || '').toUpperCase().includes('EXPORT');
+  const checkEmptyAtCy = (s: string | null | undefined) => {
+    if (!s) return null;
+    const u = s.toUpperCase().replace(/[\s-]/g, '_');
+    if (u === 'EMPTY_RECEIVED_AT_CY') return isExport ? REPORT_STATUSES.GIO : REPORT_STATUSES.DLV;
+    return null;
+  };
+  const overrideStatus = checkEmptyAtCy(containerStatus) || checkEmptyAtCy(lastEvent);
+  if (overrideStatus) return overrideStatus;
   
   // Try to resolve from container_status first (comes from API or manual update)
   if (containerStatus) {
@@ -346,12 +357,12 @@ const getReportStatus = (lastEvent: string | null, containerStatus?: string | nu
   }
   return REPORT_STATUSES.AGD;
 };
-const getTimelineProgress = (lastEvent: string | null): number => {
-  const status = getReportStatus(lastEvent);
+const getTimelineProgress = (lastEvent: string | null, containerStatus?: string | null, tipoProcesso?: string | null): number => {
+  const status = getReportStatus(lastEvent, containerStatus, tipoProcesso);
   return status.etapaIndex / 5 * 100;
 };
-const getStatusDescription = (lastEvent: string | null): string => {
-  const status = getReportStatus(lastEvent);
+const getStatusDescription = (lastEvent: string | null, containerStatus?: string | null, tipoProcesso?: string | null): string => {
+  const status = getReportStatus(lastEvent, containerStatus, tipoProcesso);
   return status.label;
 };
 const TIMELINE_STAGES = [{
