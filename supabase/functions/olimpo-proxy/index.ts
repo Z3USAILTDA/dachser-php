@@ -2723,7 +2723,10 @@ serve(async (req) => {
           FROM dados_dachser.t_dados_maritimo dm
           WHERE dm.bl_number IS NOT NULL
             AND TRIM(dm.bl_number) != ''
-            AND dm.created_at >= '2026-02-01'
+            AND (
+              dm.created_at >= '2026-02-01'
+              OR dm.master_insert >= '2026-02-01'
+            )
             AND (
               TRIM(dm.bl_number) REGEXP '^[A-Za-z]{4}[0-9]+$'
               OR TRIM(dm.bl_number) REGEXP '^(${VALID_MBL_PREFIXES})[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$'
