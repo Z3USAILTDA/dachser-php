@@ -2643,7 +2643,7 @@ const ContainerTracking = () => {
                                     </TooltipTrigger>
                                     <TooltipContent>
                                       <p className="text-xs font-medium">{statusCode}</p>
-                                      <p className="text-xs text-muted-foreground">{getStatusDescription(mbl.last_event)}</p>
+                                      <p className="text-xs text-muted-foreground">{getStatusDescription(mbl.last_event, mbl.container_status, mbl.tipo_processo)}</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
