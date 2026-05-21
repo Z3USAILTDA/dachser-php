@@ -76,6 +76,8 @@ interface VoucherTableProps {
   canApproveSupervisor?: boolean;
   canRetornarPendente?: boolean;
   lastUpdateTime?: Date | null;
+  enviadoPorOptions?: string[];
+  criadoPorOptions?: string[];
 }
 
 const getEtapaColor = (etapa: string) => {
