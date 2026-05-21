@@ -143,11 +143,12 @@ serve(async (req) => {
           console.log(`[sea-carrier-fallback] ${mblId}: sem containers encontrados`);
           stats.details.push({ mbl: mblId, carrier: carrierInfo.code, result: 'no_containers' });
 
-          // Update last_check + mark NAO_ENCONTRADO
+          // Update last_check + mark NAO_ENCONTRADO + last_error
+          const errMsg = `Armador ${carrierConfig.shortName} retornou vazio em ${new Date().toISOString()}`;
           client = await getMariaClient();
           await client.execute(
-            `UPDATE dados_dachser.t_tracking_sea SET last_check = NOW(), container = 'NAO_ENCONTRADO' WHERE mbl_id = ? AND container IN ('PENDENTE', 'NAO_ENCONTRADO', '')`,
-            [mblId]
+            `UPDATE dados_dachser.t_tracking_sea SET last_check = NOW(), container = 'NAO_ENCONTRADO', last_error = ? WHERE mbl_id = ? AND container IN ('PENDENTE', 'NAO_ENCONTRADO', '')`,
+            [errMsg.substring(0, 250), mblId]
           );
           await client.close();
           client = null;
