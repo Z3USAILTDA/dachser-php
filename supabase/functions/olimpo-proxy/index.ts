@@ -3021,10 +3021,18 @@ serve(async (req) => {
               continue;
             }
             let foundThisSrc = 0;
+            let rowsWithContainer = 0;
+            let rowsMblMatched = 0;
+            const sampleMisses: string[] = [];
             for (const r of rows) {
               const mbl = String(r.mbl_id || '').trim().toUpperCase();
-              if (!mbl || !pending.has(mbl)) continue;
+              if (!mbl) continue;
               const containers = extractContainers(r.container_raw);
+              if (containers.length > 0) rowsWithContainer++;
+              if (pending.has(mbl)) rowsMblMatched++;
+              else if (sampleMisses.length < 3 && containers.length > 0) sampleMisses.push(`${mbl}=>${containers[0]}`);
+              if (!pending.has(mbl)) continue;
+
               if (containers.length === 0) continue;
               if (!resolved.has(mbl)) resolved.set(mbl, new Map());
               const m = resolved.get(mbl)!;
