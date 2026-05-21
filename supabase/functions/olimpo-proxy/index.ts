@@ -2659,6 +2659,13 @@ serve(async (req) => {
           'YMLU', 'YMMU',                   // YANG MING
           'ZIMU', 'ZCSU',                   // ZIM
         ].join('|');
+        const comparableDate = (column: string) => `COALESCE(
+          DATE(${column}),
+          DATE(STR_TO_DATE(NULLIF(TRIM(CAST(${column} AS CHAR)), ''), '%Y-%m-%d')),
+          DATE(STR_TO_DATE(NULLIF(TRIM(CAST(${column} AS CHAR)), ''), '%Y-%m-%d %H:%i:%s')),
+          DATE(STR_TO_DATE(NULLIF(TRIM(CAST(${column} AS CHAR)), ''), '%d/%m/%Y')),
+          DATE(STR_TO_DATE(NULLIF(TRIM(CAST(${column} AS CHAR)), ''), '%d/%m/%Y %H:%i:%s'))
+        )`;
         
         // OPTIMIZATION: Skip heavy stats query that causes timeout
         // Stats are nice-to-have but not essential for sync operation
@@ -2724,8 +2731,8 @@ serve(async (req) => {
           WHERE dm.bl_number IS NOT NULL
             AND TRIM(dm.bl_number) != ''
             AND (
-              dm.created_at >= '2026-02-01'
-              OR dm.master_insert >= '2026-02-01'
+              ${comparableDate('dm.created_at')} >= DATE('2026-02-01')
+              OR ${comparableDate('dm.master_insert')} >= DATE('2026-02-01')
             )
             AND (
               TRIM(dm.bl_number) REGEXP '^[A-Za-z]{4}[0-9]+$'
@@ -2759,18 +2766,32 @@ serve(async (req) => {
         let syncedFromSeaMaster = 0;
         let syncedFromDadosMaritimo = 0;
         let reactivated = 0;
-        for (const row of toInsert) {
+        const insertChunk = async (chunk: any[]) => {
+          const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, 1)').join(', ');
+          const values = chunk.flatMap((row: any) => [row.mbl_id, row.tipo_processo, row.container, row.consignee, row.email_analista, row.email_cliente]);
+          await client.execute(`
+            INSERT INTO dados_dachser.t_tracking_sea (
+              mbl_id, tipo_processo, container, consignee, email_analista, email_cliente, active
+            ) VALUES ${placeholders}
+            ON DUPLICATE KEY UPDATE active = 1, email_analista = COALESCE(VALUES(email_analista), email_analista)
+          `, values);
+          synced += chunk.length;
+          syncedFromSeaMaster += chunk.filter((row: any) => seaMasterSet.has(row.mbl_id?.trim())).length;
+          syncedFromDadosMaritimo += chunk.filter((row: any) => !seaMasterSet.has(row.mbl_id?.trim())).length;
+        };
+        for (let i = 0; i < toInsert.length; i += 100) {
+          const chunk = toInsert.slice(i, i + 100);
           try {
-            await client.execute(`
-              INSERT INTO dados_dachser.t_tracking_sea (
-                mbl_id, tipo_processo, container, consignee, email_analista, email_cliente, active
-              ) VALUES (?, ?, ?, ?, ?, ?, 1)
-              ON DUPLICATE KEY UPDATE active = 1, email_analista = COALESCE(VALUES(email_analista), email_analista)
-            `, [row.mbl_id, row.tipo_processo, row.container, row.consignee, row.email_analista, row.email_cliente]);
-            synced++;
-            if (seaMasterSet.has(row.mbl_id?.trim())) syncedFromSeaMaster++; else syncedFromDadosMaritimo++;
-          } catch (insertErr) {
-            console.warn(`[sync_sea_tracking] Failed to insert ${row.mbl_id}:`, insertErr);
+            await insertChunk(chunk);
+          } catch (batchErr) {
+            console.warn(`[sync_sea_tracking] Failed to insert batch starting at ${i}:`, batchErr);
+            for (const row of chunk) {
+              try {
+                await insertChunk([row]);
+              } catch (insertErr) {
+                console.warn(`[sync_sea_tracking] Failed to insert ${row.mbl_id}:`, insertErr);
+              }
+            }
           }
         }
 
