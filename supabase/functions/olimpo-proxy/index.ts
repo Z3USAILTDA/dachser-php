@@ -2680,10 +2680,16 @@ serve(async (req) => {
         // OPTIMIZATION: Use a two-step approach to avoid timeout
         // Step 1: Get list of existing MBLs in tracking table (fast indexed lookup)
         const existingMbls = await client.query(`
-          SELECT DISTINCT mbl_id FROM dados_dachser.t_tracking_sea WHERE active = 1
+          SELECT mbl_id, active FROM dados_dachser.t_tracking_sea
         `);
-        const existingSet = new Set((existingMbls as any[]).map(r => r.mbl_id?.trim()));
-        console.log(`[sync_sea_tracking] Found ${existingSet.size} existing MBLs in tracking table`);
+        const activeSet = new Set<string>();
+        const inactiveSet = new Set<string>();
+        for (const r of (existingMbls as any[])) {
+          const id = (r.mbl_id || '').trim();
+          if (!id) continue;
+          if (Number(r.active) === 1) activeSet.add(id); else inactiveSet.add(id);
+        }
+        console.log(`[sync_sea_tracking] Existing: ${activeSet.size} active, ${inactiveSet.size} inactive`);
 
         // Step 2A: Get candidates from t_sea_master (FONTE PRINCIPAL)
         const candidatesSeaMaster = await client.query(`
@@ -2704,7 +2710,6 @@ serve(async (req) => {
             AND LEFT(TRIM(sm.master), 4) NOT IN ('EBKG', 'BKNG', 'GLNL', 'GLSL', 'GLDL', 'BRSA')
             AND TRIM(sm.master) NOT REGEXP '^BR[A-Za-z]{3}'
           GROUP BY TRIM(sm.master), sm.customer_no, sm.nome_analista
-          LIMIT 500
         `);
         console.log(`[sync_sea_tracking] Found ${(candidatesSeaMaster as any[]).length} candidates from t_sea_master`);
 
@@ -2715,7 +2720,7 @@ serve(async (req) => {
             'SEA EXPORT' AS tipo_processo,
             'PENDENTE' AS container,
             dm.consignee_nome AS consignee,
-            dm.clerk_email AS email_analista,
+            COALESCE(dm.clerk, dm.clerk_email) AS email_analista,
             NULL AS email_cliente
           FROM dados_dachser.t_dados_maritimo dm
           WHERE dm.bl_number IS NOT NULL
@@ -2727,8 +2732,7 @@ serve(async (req) => {
             )
             AND LEFT(TRIM(dm.bl_number), 4) NOT IN ('EBKG', 'BKNG', 'GLNL', 'GLSL', 'GLDL', 'BRSA')
             AND TRIM(dm.bl_number) NOT REGEXP '^BR[A-Za-z]{3}'
-          GROUP BY TRIM(dm.bl_number), dm.consignee_nome, dm.clerk_email
-          
+          GROUP BY TRIM(dm.bl_number), dm.consignee_nome, dm.clerk, dm.clerk_email
         `);
         console.log(`[sync_sea_tracking] Found ${(candidatesDadosMaritimo as any[]).length} candidates from t_dados_maritimo`);
 
@@ -2736,60 +2740,69 @@ serve(async (req) => {
         const seaMasterSet = new Set((candidatesSeaMaster as any[]).map(c => c.mbl_id?.trim()));
         const uniqueDadosMaritimo = (candidatesDadosMaritimo as any[]).filter(c => !seaMasterSet.has(c.mbl_id?.trim()));
         const allCandidates = [...(candidatesSeaMaster as any[]), ...uniqueDadosMaritimo];
-        console.log(`[sync_sea_tracking] Total unique candidates: ${allCandidates.length} (${(candidatesSeaMaster as any[]).length} from t_sea_master + ${uniqueDadosMaritimo.length} unique from t_dados_maritimo)`);
+        console.log(`[sync_sea_tracking] Total unique candidates: ${allCandidates.length}`);
 
-        // Step 4: Filter out existing MBLs in JavaScript (much faster than SQL NOT EXISTS)
-        const toInsert = allCandidates.filter(c => !existingSet.has(c.mbl_id?.trim()));
-        console.log(`[sync_sea_tracking] ${toInsert.length} new MBLs to insert`);
+        // Step 4: Classify
+        const toInsert = allCandidates.filter(c => {
+          const id = c.mbl_id?.trim();
+          return id && !activeSet.has(id) && !inactiveSet.has(id);
+        });
+        const toReactivate = allCandidates.filter(c => {
+          const id = c.mbl_id?.trim();
+          return id && inactiveSet.has(id);
+        });
+        console.log(`[sync_sea_tracking] ${toInsert.length} to insert, ${toReactivate.length} to reactivate`);
 
-        // Step 5: Batch insert new records
+        // Step 5: Batch insert (ON DUPLICATE KEY UPDATE active=1)
         let synced = 0;
         let syncedFromSeaMaster = 0;
         let syncedFromDadosMaritimo = 0;
+        let reactivated = 0;
         for (const row of toInsert) {
           try {
             await client.execute(`
-              INSERT IGNORE INTO dados_dachser.t_tracking_sea (
+              INSERT INTO dados_dachser.t_tracking_sea (
                 mbl_id, tipo_processo, container, consignee, email_analista, email_cliente, active
               ) VALUES (?, ?, ?, ?, ?, ?, 1)
+              ON DUPLICATE KEY UPDATE active = 1, email_analista = COALESCE(VALUES(email_analista), email_analista)
             `, [row.mbl_id, row.tipo_processo, row.container, row.consignee, row.email_analista, row.email_cliente]);
             synced++;
-            // Track source
-            if (seaMasterSet.has(row.mbl_id?.trim())) {
-              syncedFromSeaMaster++;
-            } else {
-              syncedFromDadosMaritimo++;
-            }
+            if (seaMasterSet.has(row.mbl_id?.trim())) syncedFromSeaMaster++; else syncedFromDadosMaritimo++;
           } catch (insertErr) {
             console.warn(`[sync_sea_tracking] Failed to insert ${row.mbl_id}:`, insertErr);
           }
         }
 
-        // Step 6: Retroactive fix - removed (t_dados_maritimo has no tipo_processo)
-        let retroFixed = 0;
+        // Step 5B: Reactivate inactive MBLs that reappeared
+        for (const row of toReactivate) {
+          try {
+            await client.execute(`
+              UPDATE dados_dachser.t_tracking_sea
+              SET active = 1,
+                  email_analista = COALESCE(?, email_analista)
+              WHERE mbl_id = ?
+            `, [row.email_analista, row.mbl_id]);
+            reactivated++;
+          } catch (e) {
+            console.warn(`[sync_sea_tracking] Failed to reactivate ${row.mbl_id}:`, e);
+          }
+        }
 
         await client.close();
-        
-        console.log(`[sync_sea_tracking] Synced ${synced} rows (${syncedFromSeaMaster} from t_sea_master, ${syncedFromDadosMaritimo} from t_dados_maritimo), retroFixed ${retroFixed}`);
-        
-        return new Response(JSON.stringify({ 
-          success: true, 
+
+        console.log(`[sync_sea_tracking] synced=${synced} (sm=${syncedFromSeaMaster}, dm=${syncedFromDadosMaritimo}), reactivated=${reactivated}`);
+
+        return new Response(JSON.stringify({
+          success: true,
           synced,
-          retroFixed,
+          reactivated,
+          total_candidates: allCandidates.length,
+          already_active: allCandidates.filter(c => activeSet.has(c.mbl_id?.trim())).length,
           sources: {
             t_sea_master: syncedFromSeaMaster,
             t_dados_maritimo: syncedFromDadosMaritimo
           },
-          message: `${synced} registros sincronizados (${syncedFromSeaMaster} t_sea_master + ${syncedFromDadosMaritimo} t_dados_maritimo)`,
-          validation_rules: {
-            mbl_scac_padrao: '^[A-Za-z]{4}[0-9]+$ (ex: COSU6437929310)',
-            mbl_scac_estendido: `^(${VALID_MBL_PREFIXES.substring(0, 30)}...)[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$ (ex: HLCUHAM251021534)`,
-            mbl_reject_booking: 'EBKG*, BKNG* (booking references)',
-            mbl_reject_internal: 'GLNL*, GLSL*, GLDL*, BRSA* (referências internas)',
-            mbl_reject_hawb: '^BR[A-Za-z]{3} (HAWBs brasileiros)',
-            container: 'Opcional (usa PENDENTE se vazio)',
-            t_dados_maritimo_filter: 'created_at >= 2026-02-01'
-          }
+          message: `${synced} inseridos, ${reactivated} reativados`
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
