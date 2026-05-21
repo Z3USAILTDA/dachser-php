@@ -286,7 +286,9 @@ const EVENT_TO_REPORT_STATUS: Record<string, string> = {
   'NAO_ENCONTRADO': 'SIA',
   'SEM_INFORMAÇÃO_NO_ARMADOR': 'SIA'
 };
-const getReportStatus = (lastEvent: string | null, containerStatus?: string | null, tipoProcesso?: string | null): ReportStatus => {
+const getReportStatus = (lastEvent: string | null, containerStatus?: string | null, tipoProcesso?: string | null, containerCount?: number | null): ReportStatus => {
+  const noContainer = (containerCount ?? null) !== null && Number(containerCount) <= 0;
+  const agdFallback = noContainer ? REPORT_STATUSES.AGD_NO_CT : REPORT_STATUSES.AGD;
   // Check container_status first for NAO_ENCONTRADO
   if (containerStatus === 'NAO_ENCONTRADO') return REPORT_STATUSES.SIA;
 
