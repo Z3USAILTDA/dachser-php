@@ -4907,7 +4907,57 @@ serve(async (req) => {
               }
             }
 
+            // === STAGE 3: Carrier fallback dedicado por MBL (HAPAG/HAMBURG SUD/MSC/ONE) ===
+            // Usa as APIs já implementadas na tela Draft Exportação via sea-carrier-fallback?single_mbl=...
+            if (containers.length === 0 && effectiveShippingLine && CARRIER_FALLBACK_SUPPORTED.has(effectiveShippingLine)) {
+              carrierFallbackAttempts++;
+              console.log(`[enrich_sea_containers] Stage 3: invoking sea-carrier-fallback for MBL ${mblId} (${effectiveShippingLine})`);
+              try {
+                const supabaseUrlEnv = Deno.env.get('SUPABASE_URL');
+                const supabaseAnon = Deno.env.get('SUPABASE_ANON_KEY');
+                if (supabaseUrlEnv && supabaseAnon) {
+                  const cfController = new AbortController();
+                  const cfTimeout = setTimeout(() => cfController.abort(), 60000);
+                  try {
+                    const cfRes = await fetch(
+                      `${supabaseUrlEnv}/functions/v1/sea-carrier-fallback?single_mbl=${encodeURIComponent(mblId)}`,
+                      {
+                        method: 'POST',
+                        headers: {
+                          'Authorization': `Bearer ${supabaseAnon}`,
+                          'Content-Type': 'application/json',
+                        },
+                        signal: cfController.signal,
+                      }
+                    );
+                    clearTimeout(cfTimeout);
+                    const cfText = await cfRes.text();
+                    let cfData: any = {};
+                    try { cfData = JSON.parse(cfText); } catch { cfData = { raw: cfText }; }
+                    const discovered = cfData.discovered || 0;
+                    console.log(`[enrich_sea_containers] sea-carrier-fallback for ${mblId}: discovered=${discovered}`);
+                    if (discovered > 0) {
+                      recoveredByCarrierFallback++;
+                      enriched++;
+                      details.push({ mbl: mblId, status: 'enriched_via_carrier_fallback', discovered });
+                      // sea-carrier-fallback já inseriu/atualizou as linhas em t_tracking_sea
+                      await new Promise(r => setTimeout(r, 500));
+                      continue;
+                    }
+                  } catch (cfErr: any) {
+                    clearTimeout(cfTimeout);
+                    console.error(`[enrich_sea_containers] sea-carrier-fallback error for ${mblId}: ${cfErr.message}`);
+                  }
+                } else {
+                  console.log(`[enrich_sea_containers] SUPABASE_URL/ANON_KEY not configured, skipping carrier fallback`);
+                }
+              } catch (stage3Err: any) {
+                console.error(`[enrich_sea_containers] Stage 3 error for ${mblId}: ${stage3Err.message}`);
+              }
+            }
+
             if (containers.length === 0) {
+
               console.log(`[enrich_sea_containers] No containers found for MBL ${mblId} after trying ${mblVariations.length} variations`);
               // Marcar como NAO_ENCONTRADO para não reprocessar (atualiza updated_at para controle de retry)
               await client.execute(`
