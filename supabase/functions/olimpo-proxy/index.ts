@@ -4618,7 +4618,11 @@ serve(async (req) => {
         let noContainers = 0;
         let skipped = 0;
         let processed = 0;
+        let recoveredByCarrierFallback = 0;
+        let carrierFallbackAttempts = 0;
         const details: any[] = [];
+        const CARRIER_FALLBACK_SUPPORTED = new Set(['HAPAG_LLOYD', 'HAMBURG_SUD', 'MSC', 'ONE']);
+
 
         for (const row of pendingMbls) {
           // Check if we've exceeded time limit
