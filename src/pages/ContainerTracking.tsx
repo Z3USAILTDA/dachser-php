@@ -496,6 +496,7 @@ const ContainerTracking = () => {
 
   // Expansion state
   const [expandedMbl, setExpandedMbl] = useState<string | null>(null);
+  const [historyExpanded, setHistoryExpanded] = useState<string | null>(null);
   const [mblContainers, setMblContainers] = useState<ContainerDetail[]>([]);
   const [loadingContainers, setLoadingContainers] = useState(false);
   const [mblEvents, setMblEvents] = useState<any[]>([]);
