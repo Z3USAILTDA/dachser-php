@@ -9508,7 +9508,14 @@ serve(async (req) => {
 
     if (action === 'reset_nao_encontrado') {
       const mblId = url.searchParams.get('mbl_id');
-      const client = await getMariaDBClient();
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: Deno.env.get('MARIADB_OPS_HOST'),
+        port: parseInt(Deno.env.get('MARIADB_OPS_PORT') || '3306', 10),
+        username: Deno.env.get('MARIADB_OPS_USER'),
+        password: Deno.env.get('MARIADB_OPS_PASSWORD'),
+        db: 'dados_dachser',
+      });
       try {
         const whereMbl = mblId ? 'AND mbl_id = ?' : '';
         const params = mblId ? [mblId] : [];
