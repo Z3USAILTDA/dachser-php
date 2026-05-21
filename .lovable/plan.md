@@ -1,28 +1,39 @@
-## Causa raiz
+## Objetivo
 
-Os registros aparecem como **R$ 0,00** na tela de Disputas, mas com o valor correto no Excel exportado, porque o campo `valor` retornado pela query `get_disputas_cr` (coluna `valor_nf` da view `v_fin_regua_contas_receber`, tipo `DECIMAL`) chega como **string** no JSON do `mariadb-proxy` (comportamento padrão do driver MariaDB para tipos decimais).
+Na esteira de vouchers (`/fin/esteira`), trocar os filtros de coluna **Enviado por** e **Criado por** — hoje campos de texto livre — por **multi-seleção via Popover + Checkbox com campo de busca interno**, no mesmo padrão visual já usado pelo filtro de **Etapa Atual**. As opções disponíveis são geradas dinamicamente a partir dos vouchers carregados.
 
-- **Excel (`src/utils/disputaExcelExport.ts`)**: usa `Number(r.valor) || 0` → coage a string corretamente → valor correto.
-- **Tela (`src/pages/FinanceiroDisputa.tsx` linhas 204-207)**: `formatMoney` checa `typeof val === "number"` antes de formatar. Como `val` é string, o guard cai no `else` e retorna `0` → exibe **R$ 0,00**.
+## Mudanças
 
-Não é problema de dados nem de query — é uma simples checagem de tipo restritiva demais no front.
+Somente UI/frontend. Sem backend, migration ou alteração de tipos do payload.
 
-## Correção (1 arquivo, mudança cirúrgica)
+### 1. `src/components/esteira/VoucherTable.tsx`
 
-**`src/pages/FinanceiroDisputa.tsx`** — ajustar `formatMoney` para coagir o valor antes de validar, como já faz o export:
+- Aceitar duas novas props opcionais:
+  - `enviadoPorOptions: string[]`
+  - `criadoPorOptions: string[]`
+- Substituir o `<Input>` da coluna **Enviado por** (linhas 417–424) por um `Popover` com checkboxes, espelhando o padrão do filtro de Etapa Atual (linhas 460–507), com os seguintes acréscimos:
+  - **Campo de busca** (`<Input>` pequeno) no topo do Popover, com `useState` local, que filtra a lista por `includes` case-insensitive.
+  - Lista rolável (`max-h-72 overflow-auto`) abaixo, mostrando apenas os itens que casam com a busca.
+  - Valor armazenado em `filters.enviadoPor` como CSV (`"João,Maria"`) ou `""` (todos).
+  - Trigger mostra "Todos" / nome único / "N selecionados".
+  - Botão "Limpar" quando há seleção.
+  - Mensagem "Nenhum resultado" quando a busca não retorna nada.
+- Idem para **Criado por** (linhas 425–432), usando `criadoPorOptions`.
 
-```ts
-const formatMoney = (val: number | string | null | undefined) => {
-  const n = Number(val);
-  const safe = Number.isFinite(n) ? n : 0;
-  return "R$ " + safe.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-```
+### 2. `src/pages/esteira/EsteiraIndex.tsx`
 
-Também atualizar o tipo da interface `DisputaRow.valor` para `number | string` (linha 55) para refletir a realidade do payload e evitar futuros enganos.
+- Calcular as opções únicas a partir da lista completa de vouchers (antes da filtragem), via `useMemo`:
+  - `enviadoPorOptions` = união de `enviadoPorUserName` e `criadoPorUserName`, sem vazios, ordenado alfabeticamente.
+  - `criadoPorOptions` = únicos de `criadoPorDfv`, sem vazios, ordenado.
+- Atualizar a lógica de filtragem (linhas 1506–1516) para tratar CSV:
+  - Se `filters.enviadoPor` vazio → não filtra.
+  - Caso contrário, dividir por vírgula e exigir match exato (case-insensitive) com `enviadoPorUserName` **ou** `criadoPorUserName` (mantém o comportamento atual de buscar nos dois campos).
+  - Mesmo tratamento para `filters.criadoPor` contra `criadoPorDfv`.
+- Passar as listas como props para `<VoucherTable>`.
+- Estado inicial e botão "Limpar filtros" (linhas 591–592 e 2205–2206) permanecem com `""`.
 
 ## Fora de escopo
 
-- Não alterar a query no `mariadb-proxy` nem o tipo retornado pelo driver (afetaria outras telas).
-- Não mexer no export do Excel (já está correto).
-- Nenhuma mudança de backend, migração ou RLS.
+- Backend, edge functions, queries MariaDB.
+- Outros filtros da tela.
+- Persistência dos filtros entre sessões.
