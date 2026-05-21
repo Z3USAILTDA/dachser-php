@@ -279,9 +279,20 @@ const EVENT_TO_REPORT_STATUS: Record<string, string> = {
   'NAO_ENCONTRADO': 'SIA',
   'SEM_INFORMAÇÃO_NO_ARMADOR': 'SIA'
 };
-const getReportStatus = (lastEvent: string | null, containerStatus?: string | null): ReportStatus => {
+const getReportStatus = (lastEvent: string | null, containerStatus?: string | null, tipoProcesso?: string | null): ReportStatus => {
   // Check container_status first for NAO_ENCONTRADO
   if (containerStatus === 'NAO_ENCONTRADO') return REPORT_STATUSES.SIA;
+
+  // EMPTY_RECEIVED_AT_CY: EXPORT = GIO (gate-in vazio na origem); IMPORT = DLV (devolução do vazio)
+  const isExport = (tipoProcesso || '').toUpperCase().includes('EXPORT');
+  const checkEmptyAtCy = (s: string | null | undefined) => {
+    if (!s) return null;
+    const u = s.toUpperCase().replace(/[\s-]/g, '_');
+    if (u === 'EMPTY_RECEIVED_AT_CY') return isExport ? REPORT_STATUSES.GIO : REPORT_STATUSES.DLV;
+    return null;
+  };
+  const overrideStatus = checkEmptyAtCy(containerStatus) || checkEmptyAtCy(lastEvent);
+  if (overrideStatus) return overrideStatus;
   
   // Try to resolve from container_status first (comes from API or manual update)
   if (containerStatus) {
@@ -346,12 +357,12 @@ const getReportStatus = (lastEvent: string | null, containerStatus?: string | nu
   }
   return REPORT_STATUSES.AGD;
 };
-const getTimelineProgress = (lastEvent: string | null): number => {
-  const status = getReportStatus(lastEvent);
+const getTimelineProgress = (lastEvent: string | null, containerStatus?: string | null, tipoProcesso?: string | null): number => {
+  const status = getReportStatus(lastEvent, containerStatus, tipoProcesso);
   return status.etapaIndex / 5 * 100;
 };
-const getStatusDescription = (lastEvent: string | null): string => {
-  const status = getReportStatus(lastEvent);
+const getStatusDescription = (lastEvent: string | null, containerStatus?: string | null, tipoProcesso?: string | null): string => {
+  const status = getReportStatus(lastEvent, containerStatus, tipoProcesso);
   return status.label;
 };
 const TIMELINE_STAGES = [{
@@ -487,6 +498,8 @@ const ContainerTracking = () => {
   const [expandedMbl, setExpandedMbl] = useState<string | null>(null);
   const [mblContainers, setMblContainers] = useState<ContainerDetail[]>([]);
   const [loadingContainers, setLoadingContainers] = useState(false);
+  const [mblEvents, setMblEvents] = useState<any[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
   const [vesselImo, setVesselImo] = useState<string | null>(null);
   const [vesselName, setVesselName] = useState<string | null>(null);
 
@@ -964,18 +977,40 @@ const ContainerTracking = () => {
     }
   };
 
+  const fetchMblEvents = async (mbl_id: string) => {
+    setLoadingEvents(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=get_tracking_history`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ mbl_id, limit: 200 })
+      });
+      const result = await res.json();
+      setMblEvents(Array.isArray(result?.history) ? result.history : []);
+    } catch (e) {
+      console.error('Error fetching events:', e);
+      setMblEvents([]);
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+
   // Toggle MBL expansion
   const handleToggleExpand = async (mbl_id: string) => {
     if (expandedMbl === mbl_id) {
       trackEvent("sea.mbl.collapse");
       setExpandedMbl(null);
       setMblContainers([]);
+      setMblEvents([]);
       setVesselImo(null);
       setVesselName(null);
     } else {
       trackEvent("sea.mbl.expand");
       setExpandedMbl(mbl_id);
-      await fetchMblContainers(mbl_id);
+      await Promise.all([fetchMblContainers(mbl_id), fetchMblEvents(mbl_id)]);
     }
   };
 
@@ -990,7 +1025,7 @@ const ContainerTracking = () => {
     try {
       await fetchMblData();
       if (expandedMbl) {
-        await fetchMblContainers(expandedMbl);
+        await Promise.all([fetchMblContainers(expandedMbl), fetchMblEvents(expandedMbl)]);
       }
       toast({
         title: "Atualizado",
@@ -2445,10 +2480,10 @@ const ContainerTracking = () => {
                   </thead>
                   <tbody>
                     {currentMbls.map((mbl, idx) => {
-                   const reportStatus = getReportStatus(mbl.last_event, mbl.container_status);
-                   const statusCode = reportStatus.code;
-                   const isSIA = statusCode === 'SIA';
-                   const progress = isSIA ? 0 : getTimelineProgress(mbl.last_event);
+                    const reportStatus = getReportStatus(mbl.last_event, mbl.container_status, mbl.tipo_processo);
+                    const statusCode = reportStatus.code;
+                    const isSIA = statusCode === 'SIA';
+                    const progress = isSIA ? 0 : getTimelineProgress(mbl.last_event, mbl.container_status, mbl.tipo_processo);
                   const statusColor = reportStatus.color;
                   const isExpanded = expandedMbl === mbl.mbl_id;
                   return <Fragment key={`${mbl.mbl_id}-${idx}`}>
@@ -2632,7 +2667,10 @@ const ContainerTracking = () => {
                                     </TooltipTrigger>
                                     <TooltipContent>
                                       <p className="text-xs font-medium">{statusCode}</p>
-                                      <p className="text-xs text-muted-foreground">{getStatusDescription(mbl.last_event)}</p>
+                                      <p className="text-xs text-muted-foreground">{getStatusDescription(mbl.last_event, mbl.container_status, mbl.tipo_processo)}</p>
+                                      {mbl.last_check && (
+                                        <p className="text-xs text-[#ffc800] mt-1">{formatSaoPaulo(parseMariaDBLocalDate(mbl.last_check) || new Date(mbl.last_check))}</p>
+                                      )}
                                     </TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
@@ -2749,49 +2787,64 @@ const ContainerTracking = () => {
                                         <span className="text-sm">Navio já descarregou - mapa não disponível</span>
                                       </div>}
                                     
+                                    {/* Container chips */}
+                                    <div className="bg-[rgba(0,0,0,.3)] border border-[rgba(255,255,255,.08)] rounded-lg p-3">
+                                      <div className="text-xs text-[#666] uppercase tracking-wide mb-2">Containers ({mblContainers.length})</div>
+                                      <div className="flex flex-wrap gap-2">
+                                        {mblContainers.map(cnt => {
+                                          const cntStatus = getReportStatus(cnt.last_event, cnt.container_status, mbl.tipo_processo);
+                                          return (
+                                            <span key={cnt.id} className="font-mono text-xs px-2 py-1 rounded border flex items-center gap-2" style={{
+                                              color: cntStatus.color,
+                                              backgroundColor: `${cntStatus.color}15`,
+                                              borderColor: `${cntStatus.color}40`
+                                            }}>
+                                              <span className="text-[#f5f5f5]">{cnt.container}</span>
+                                              <span className="font-bold">{cntStatus.code}</span>
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+
+                                    {/* Events timeline */}
                                     <div className="overflow-x-auto">
-                                      <table className="w-full text-sm">
-                                        <thead>
-                                          <tr className="text-[#666] text-xs uppercase">
-                                            <th className="px-3 py-2 text-left">Container</th>
-                                            <th className="px-3 py-2 text-left">Armador</th>
-                                            <th className="px-3 py-2 text-left">Status</th>
-                                            <th className="px-3 py-2 text-left">Último Evento</th>
-                                            <th className="px-3 py-2 text-left">ETA Tracking</th>
-                                            <th className="px-3 py-2 text-left">ETA Cadastrado</th>
-                                            <th className="px-3 py-2 text-left">Última Atualização</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {mblContainers.map(cnt => {
-                                  const cntStatus = getReportStatus(cnt.last_event);
-                                  return <tr key={cnt.id} className="border-t border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.02)]">
-                                                <td className="px-3 py-2 font-mono text-[#f5f5f5]">{cnt.container}</td>
-                                                <td className="px-3 py-2 text-[#aaaaaa]">{getShippingLineFromMbl(cnt.container, cnt.shipping_line)}</td>
-                                                <td className="px-3 py-2">
-                                                  <span className="text-xs font-bold px-2 py-0.5 rounded" style={{
-                                        color: cntStatus.color,
-                                        backgroundColor: `${cntStatus.color}20`
-                                      }}>
-                                                    {cntStatus.code}
-                                                  </span>
+                                      <div className="text-xs text-[#666] uppercase tracking-wide mb-2 flex items-center gap-2">
+                                        <Clock className="w-3 h-3" />
+                                        Histórico de eventos {loadingEvents && <Loader2 className="w-3 h-3 animate-spin" />}
+                                      </div>
+                                      {(!loadingEvents && mblEvents.length === 0) ? (
+                                        <div className="text-sm text-[#666] py-4 text-center border border-dashed border-[rgba(255,255,255,.1)] rounded-lg">
+                                          Nenhum evento registrado ainda
+                                        </div>
+                                      ) : (
+                                        <table className="w-full text-sm">
+                                          <thead>
+                                            <tr className="text-[#666] text-xs uppercase">
+                                              <th className="px-3 py-2 text-left">Data/Hora</th>
+                                              <th className="px-3 py-2 text-left">Código</th>
+                                              <th className="px-3 py-2 text-left">Descrição</th>
+                                              <th className="px-3 py-2 text-left">Local</th>
+                                              <th className="px-3 py-2 text-left">Navio</th>
+                                              <th className="px-3 py-2 text-left">Container</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {mblEvents.map((ev: any, i: number) => (
+                                              <tr key={ev.id ?? i} className="border-t border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.02)]">
+                                                <td className="px-3 py-2 text-[#ffc800] whitespace-nowrap">
+                                                  {ev.event_datetime ? formatSaoPaulo(parseMariaDBLocalDate(ev.event_datetime) || new Date(ev.event_datetime)) : "—"}
                                                 </td>
-                                                <td className="px-3 py-2 text-[#aaaaaa] max-w-[200px] truncate">
-                                                  {cnt.last_event || "Aguardando..."}
-                                                </td>
-                                                <td className="px-3 py-2 text-[#aaaaaa]">
-                                                  {mbl.eta_api ? new Date(mbl.eta_api).toLocaleDateString('pt-BR') : "—"}
-                                                </td>
-                                                <td className="px-3 py-2 text-[#aaaaaa]">
-                                                  {mbl.eta_master ? new Date(mbl.eta_master).toLocaleDateString('pt-BR') : "—"}
-                                                </td>
-                                                <td className="px-3 py-2 text-[#aaaaaa]">
-                                                  {mbl.last_check ? formatSaoPaulo(parseMariaDBLocalDate(mbl.last_check) || new Date(mbl.last_check)) : "—"}
-                                                </td>
-                                              </tr>;
-                                })}
-                                        </tbody>
-                                      </table>
+                                                <td className="px-3 py-2 text-[#aaaaaa] font-mono text-xs">{ev.event_code || "—"}</td>
+                                                <td className="px-3 py-2 text-[#f5f5f5]">{ev.event_description || "—"}</td>
+                                                <td className="px-3 py-2 text-[#aaaaaa]">{ev.location || "—"}</td>
+                                                <td className="px-3 py-2 text-[#aaaaaa]">{ev.vessel_name || "—"}</td>
+                                                <td className="px-3 py-2 text-[#aaaaaa] font-mono text-xs">{ev.container || "—"}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      )}
                                     </div>
                                   </div>}
                               </td>
