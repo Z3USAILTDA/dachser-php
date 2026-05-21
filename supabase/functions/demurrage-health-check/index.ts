@@ -67,8 +67,8 @@ serve(async (req) => {
     }
 
     // 2. Check JSONCARGO API
-    // FLAG: JsonCargo DESATIVADO temporariamente até segunda ordem
-    const JSONCARGO_DISABLED = true;
+    // FLAG: JsonCargo reativado no health-check
+    const JSONCARGO_DISABLED = false;
 
     if (JSONCARGO_DISABLED) {
       results.push({
