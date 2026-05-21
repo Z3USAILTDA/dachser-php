@@ -822,8 +822,8 @@ const ContainerTracking = () => {
     const upper = lastEvent.toUpperCase().replace(/[_\s-]/g, "");
     return upper.includes("DELAYED") || upper.includes("DELAY") || upper.includes("CANCELLED") || upper.includes("CANCEL") || upper.includes("CUSTOMSHOLD") || upper.includes("MISSED");
   };
-  const isEntregue = (lastEvent: string | null): boolean => {
-    const status = getReportStatus(lastEvent);
+  const isEntregue = (m: MblTrackingData): boolean => {
+    const status = getReportStatus(m.last_event, m.container_status, m.tipo_processo);
     return ['GOD', 'DLV'].includes(status.code);
   };
 
