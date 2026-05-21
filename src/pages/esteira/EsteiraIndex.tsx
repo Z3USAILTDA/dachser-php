@@ -1502,17 +1502,23 @@ const EsteiraIndex = () => {
         if (voucher.statusBaixa !== filters.statusBaixa) return false;
       }
 
-      // Filtro por enviado por
+      // Filtro por enviado por (multi-select CSV)
       if (filters.enviadoPor) {
-        const searchVal = filters.enviadoPor.toLowerCase();
-        if (!voucher.enviadoPorUserName?.toLowerCase().includes(searchVal) && 
-            !voucher.criadoPorUserName?.toLowerCase().includes(searchVal)) return false;
+        const wanted = filters.enviadoPor.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+        if (wanted.length > 0) {
+          const enviado = (voucher.enviadoPorUserName || "").toLowerCase();
+          const criado = (voucher.criadoPorUserName || "").toLowerCase();
+          if (!wanted.includes(enviado) && !wanted.includes(criado)) return false;
+        }
       }
 
-      // Filtro por criado por (DFV)
+      // Filtro por criado por (DFV) (multi-select CSV)
       if (filters.criadoPor) {
-        const searchVal = filters.criadoPor.toLowerCase();
-        if (!voucher.criadoPorDfv?.toLowerCase().includes(searchVal)) return false;
+        const wanted = filters.criadoPor.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+        if (wanted.length > 0) {
+          const dfv = (voucher.criadoPorDfv || "").toLowerCase();
+          if (!wanted.includes(dfv)) return false;
+        }
       }
 
       // Quick filter: Fornecedor
@@ -1565,6 +1571,27 @@ const EsteiraIndex = () => {
   const uniqueFornecedores = useMemo(() => {
     const fornecedores = vouchers.map(v => v.fornecedor).filter((f): f is string => !!f);
     return [...new Set(fornecedores)].sort();
+  }, [vouchers]);
+
+  // Opções únicas para os filtros multi-select "Enviado por" e "Criado por"
+  const enviadoPorOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const v of vouchers) {
+      const a = (v.enviadoPorUserName || "").trim();
+      const b = (v.criadoPorUserName || "").trim();
+      if (a) set.add(a);
+      if (b) set.add(b);
+    }
+    return Array.from(set).sort((x, y) => x.localeCompare(y, "pt-BR"));
+  }, [vouchers]);
+
+  const criadoPorOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const v of vouchers) {
+      const dfv = (v.criadoPorDfv || "").trim();
+      if (dfv) set.add(dfv);
+    }
+    return Array.from(set).sort((x, y) => x.localeCompare(y, "pt-BR"));
   }, [vouchers]);
 
   // Block access for users without role - MUST be after all hooks
@@ -2225,7 +2252,7 @@ const EsteiraIndex = () => {
           {/* Tab Content */}
           {activeTab === "processos" && <div className="mt-3">
               {loading ? <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" /> : <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)] overflow-hidden">
-                    <VoucherTable vouchers={filteredVouchers} onViewDetails={handleViewDetails} onEdit={handleEdit} onDelete={handleDelete} onGoBack={handleGoBack} onCancel={handleCancel} onDisassemble={handleDisassemble} onValidateComprovante={handleValidateComprovante} filters={filters} onFilterChange={(newFilters) => { setFilters(newFilters); setDrillDownFilter("all"); }} canEdit={canEditVoucher} canDelete={canDeleteVoucher} canGoBackStage={canGoBackStage} canCancelVoucher={canCancelVoucher} canDisassembleMaster={canDisassembleMaster} canValidateComprovante={isFinanceiro || isAdmin || isSystemAdmin} canApproveSupervisor={canApproveSupervisor} canRetornarPendente={isFinanceiro || isAdmin || isSystemAdmin} lastUpdateTime={lastUpdateTime} />
+                    <VoucherTable vouchers={filteredVouchers} onViewDetails={handleViewDetails} onEdit={handleEdit} onDelete={handleDelete} onGoBack={handleGoBack} onCancel={handleCancel} onDisassemble={handleDisassemble} onValidateComprovante={handleValidateComprovante} filters={filters} onFilterChange={(newFilters) => { setFilters(newFilters); setDrillDownFilter("all"); }} canEdit={canEditVoucher} canDelete={canDeleteVoucher} canGoBackStage={canGoBackStage} canCancelVoucher={canCancelVoucher} canDisassembleMaster={canDisassembleMaster} canValidateComprovante={isFinanceiro || isAdmin || isSystemAdmin} canApproveSupervisor={canApproveSupervisor} canRetornarPendente={isFinanceiro || isAdmin || isSystemAdmin} lastUpdateTime={lastUpdateTime} enviadoPorOptions={enviadoPorOptions} criadoPorOptions={criadoPorOptions} />
                 </div>}
             </div>}
 
