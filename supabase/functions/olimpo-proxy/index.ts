@@ -1638,6 +1638,66 @@ serve(async (req) => {
       });
     }
 
+    // ===== TEMP DISCOVERY: probe schemas/availability for AGD diagnosis =====
+    if (action === 'debug_agd_sources') {
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: Deno.env.get('MARIADB_OPS_HOST')!,
+        port: parseInt(Deno.env.get('MARIADB_OPS_PORT') || '3306', 10),
+        username: Deno.env.get('MARIADB_OPS_USER')!,
+        password: Deno.env.get('MARIADB_OPS_PASSWORD')!,
+        db: 'dados_dachser',
+      });
+      try {
+        await client.execute('SET NAMES utf8mb4 COLLATE utf8mb4_general_ci');
+        const dmCols = await client.query(`
+          SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_SCHEMA='dados_dachser' AND TABLE_NAME='t_dados_maritimo'
+          ORDER BY ORDINAL_POSITION
+        `);
+        const smCols = await client.query(`
+          SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_SCHEMA='dados_dachser' AND TABLE_NAME='t_sea_master'
+          ORDER BY ORDINAL_POSITION
+        `);
+        const containerTables = await client.query(`
+          SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+          WHERE TABLE_SCHEMA='dados_dachser' AND TABLE_NAME LIKE '%container%'
+        `);
+        const stuck = await client.query(`
+          SELECT mbl_id, tipo_processo, container, shipping_line, last_event, last_check
+          FROM dados_dachser.t_tracking_sea
+          WHERE active = 1
+            AND (container IS NULL OR container IN ('PENDENTE',''))
+            AND (last_event IS NULL OR last_event = '')
+          LIMIT 5
+        `);
+        const stuckMbls = (stuck as any[]).map(r => r.mbl_id);
+        const inMaster = stuckMbls.length ? await client.query(`
+          SELECT mawb, container, tipo_processo, etd FROM dados_dachser.t_master_dados
+          WHERE mawb IN (${stuckMbls.map(() => '?').join(',')})
+        `, stuckMbls) : [];
+        const inDM = stuckMbls.length ? await client.query(`
+          SELECT bl_number, container FROM dados_dachser.t_dados_maritimo
+          WHERE bl_number IN (${stuckMbls.map(() => '?').join(',')})
+          LIMIT 20
+        `, stuckMbls).catch((e: any) => ({ error: e.message })) : [];
+        await client.close();
+        return new Response(JSON.stringify({
+          success: true,
+          t_dados_maritimo_columns: (dmCols as any[]).map(c => c.COLUMN_NAME),
+          t_sea_master_columns: (smCols as any[]).map(c => c.COLUMN_NAME),
+          container_tables: (containerTables as any[]).map(c => c.TABLE_NAME),
+          sample_stuck: stuck,
+          sample_stuck_in_master_dados: inMaster,
+          sample_stuck_in_dados_maritimo: inDM,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      } catch (e: any) {
+        await client.close();
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
     // ===== SEA TRACKING DEBUG: Analyze t_master_dados data =====
     if (action === 'debug_sea_tracking') {
       const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
