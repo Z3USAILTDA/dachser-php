@@ -1502,17 +1502,23 @@ const EsteiraIndex = () => {
         if (voucher.statusBaixa !== filters.statusBaixa) return false;
       }
 
-      // Filtro por enviado por
+      // Filtro por enviado por (multi-select CSV)
       if (filters.enviadoPor) {
-        const searchVal = filters.enviadoPor.toLowerCase();
-        if (!voucher.enviadoPorUserName?.toLowerCase().includes(searchVal) && 
-            !voucher.criadoPorUserName?.toLowerCase().includes(searchVal)) return false;
+        const wanted = filters.enviadoPor.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+        if (wanted.length > 0) {
+          const enviado = (voucher.enviadoPorUserName || "").toLowerCase();
+          const criado = (voucher.criadoPorUserName || "").toLowerCase();
+          if (!wanted.includes(enviado) && !wanted.includes(criado)) return false;
+        }
       }
 
-      // Filtro por criado por (DFV)
+      // Filtro por criado por (DFV) (multi-select CSV)
       if (filters.criadoPor) {
-        const searchVal = filters.criadoPor.toLowerCase();
-        if (!voucher.criadoPorDfv?.toLowerCase().includes(searchVal)) return false;
+        const wanted = filters.criadoPor.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+        if (wanted.length > 0) {
+          const dfv = (voucher.criadoPorDfv || "").toLowerCase();
+          if (!wanted.includes(dfv)) return false;
+        }
       }
 
       // Quick filter: Fornecedor
