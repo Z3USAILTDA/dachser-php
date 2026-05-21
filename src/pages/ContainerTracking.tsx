@@ -2807,10 +2807,11 @@ const ContainerTracking = () => {
                                         <tbody>
                                           {(() => {
                                             const aggStatus = getReportStatus(mbl.last_event, mbl.container_status, mbl.tipo_processo);
-                                            // Dedup: mesmo evento aparece 1x por container; agregamos por (data, código, descrição, local)
+                                            // Dedup: agrega por (código, descrição, local) — ignora timestamp para evitar
+                                            // repetições do mesmo evento emitido várias vezes em poucos minutos pelo armador.
+                                            // Mantém o evento MAIS RECENTE e agrega containers afetados.
                                             const dedupKey = (e: any) => [
-                                              e.event_datetime ?? '',
-                                              (e.event_code ?? '').toUpperCase(),
+                                              (e.event_code ?? '').toUpperCase().trim(),
                                               (e.event_description ?? '').toUpperCase().trim(),
                                               (e.location ?? '').toUpperCase().trim(),
                                             ].join('|');
@@ -2821,11 +2822,25 @@ const ContainerTracking = () => {
                                                 const prev = map.get(k);
                                                 if (!prev) {
                                                   map.set(k, { ...ev, containers: ev.container ? [ev.container] : [] });
-                                                } else if (ev.container && !prev.containers.includes(ev.container)) {
-                                                  prev.containers.push(ev.container);
+                                                } else {
+                                                  const prevDt = prev.event_datetime ? new Date(prev.event_datetime).getTime() : 0;
+                                                  const curDt = ev.event_datetime ? new Date(ev.event_datetime).getTime() : 0;
+                                                  if (curDt > prevDt) {
+                                                    const merged = { ...ev, containers: prev.containers.slice() };
+                                                    if (ev.container && !merged.containers.includes(ev.container)) {
+                                                      merged.containers.push(ev.container);
+                                                    }
+                                                    map.set(k, merged);
+                                                  } else if (ev.container && !prev.containers.includes(ev.container)) {
+                                                    prev.containers.push(ev.container);
+                                                  }
                                                 }
                                               }
-                                              return Array.from(map.values());
+                                              return Array.from(map.values()).sort((a, b) => {
+                                                const ad = a.event_datetime ? new Date(a.event_datetime).getTime() : 0;
+                                                const bd = b.event_datetime ? new Date(b.event_datetime).getTime() : 0;
+                                                return bd - ad;
+                                              });
                                             })();
                                             const latestEv = dedupedEvents[0];
                                             const aggDate = latestEv?.event_datetime
