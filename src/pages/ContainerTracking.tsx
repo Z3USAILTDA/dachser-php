@@ -293,6 +293,21 @@ const getReportStatus = (lastEvent: string | null, containerStatus?: string | nu
   };
   const overrideStatus = checkEmptyAtCy(containerStatus) || checkEmptyAtCy(lastEvent);
   if (overrideStatus) return overrideStatus;
+
+  // Em EXPORTAÇÃO, eventos como GATE_OUT_FULL/OUT_GATE/CONTAINER_TO_CONSIGNEE/EMPTY_RETURN
+  // pertencem ao fluxo de IMPORTAÇÃO (devolução / entrega ao consignee) e NÃO devem
+  // marcar o processo como entregue. Para export, esses tokens são removidos e o status
+  // cai no fluxo normal (CRG/DEP/ARR/DCH).
+  const IMPORT_ONLY_DELIVERY_KEYS = new Set([
+    'GATE_OUT_FULL', 'FULL_OUT', 'OUT_GATE', 'CONTAINER_TO_CONSIGNEE',
+    'DELIVERED', 'DELIVERY', 'EMPTY_RETURN', 'EMPTY_RETURNED'
+  ]);
+  const IMPORT_ONLY_DELIVERY_SUBSTR = [
+    'gate out', 'gate-out', 'to consignee',
+    'delivered', 'empty return', 'empty received', 'end import cycle'
+  ];
+  const skipImportDelivery = isExport;
+
   
   // Try to resolve from container_status first (comes from API or manual update)
   if (containerStatus) {
