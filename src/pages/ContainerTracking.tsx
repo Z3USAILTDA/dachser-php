@@ -350,7 +350,7 @@ const getReportStatus = (lastEvent: string | null, containerStatus?: string | nu
     if (lowerStatus.includes('booked') || lowerStatus.includes('booking') || lowerStatus.includes('pending')) return REPORT_STATUSES.BKG;
   }
 
-  if (!lastEvent) return REPORT_STATUSES.AGD;
+  if (!lastEvent) return agdFallback;
   // Check for "Sem informação" in last_event
   if (lastEvent.toLowerCase().includes('sem informação') || lastEvent.toLowerCase().includes('sem informacao')) {
     return REPORT_STATUSES.SIA;
