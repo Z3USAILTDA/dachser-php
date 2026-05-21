@@ -2218,7 +2218,7 @@ serve(async (req) => {
               ) as vessel_imo,
               COALESCE(MAX(md.eta), MAX(mdn.eta), MAX(ts.eta)) as eta,
               COALESCE(MAX(md.eta), MAX(mdn.eta)) as eta_master,
-              COALESCE(MAX(md.nome_analista), MAX(mdn.nome_analista)) as nome_analista,
+              COALESCE(MAX(md.nome_analista), MAX(mdn.nome_analista), MAX(ts.email_analista)) as nome_analista,
               MAX(ts.eta) as eta_api,
               COALESCE(MAX(md.hbl), MAX(mdn.hawb)) as hbl,
               COALESCE(MAX(md.etd), MAX(mdn.etd)) as etd,
