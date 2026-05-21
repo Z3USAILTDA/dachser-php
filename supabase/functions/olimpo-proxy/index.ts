@@ -2728,7 +2728,7 @@ serve(async (req) => {
             AND LEFT(TRIM(dm.bl_number), 4) NOT IN ('EBKG', 'BKNG', 'GLNL', 'GLSL', 'GLDL', 'BRSA')
             AND TRIM(dm.bl_number) NOT REGEXP '^BR[A-Za-z]{3}'
           GROUP BY TRIM(dm.bl_number), dm.consignee_nome, dm.clerk_email
-          LIMIT 300
+          
         `);
         console.log(`[sync_sea_tracking] Found ${(candidatesDadosMaritimo as any[]).length} candidates from t_dados_maritimo`);
 
