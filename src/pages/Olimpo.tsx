@@ -376,7 +376,9 @@ function OlimpoContent() {
       // Seed AIR
       const seedAirRes = await fetch(`${baseUrl}?action=seed_air`);
       const seedAirJson = await seedAirRes.json();
-      const seedAir = Array.isArray(seedAirJson?.data) ? seedAirJson.data : [];
+      const seedAirAll = Array.isArray(seedAirJson?.data) ? seedAirJson.data : [];
+      // Mostrar apenas metade dos aéreos no mapa (amostragem uniforme por índice par)
+      const seedAir = seedAirAll.filter((_: any, i: number) => i % 2 === 0);
 
       if (seedAir.length > 0) {
         const normFlight = (s: string) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
