@@ -2015,7 +2015,6 @@ serve(async (req) => {
                 FROM dados_dachser.t_dados_maritimo
                 WHERE bl_number IS NOT NULL
                   AND TRIM(bl_number) != ''
-                  AND created_at >= '2026-02-01'
                 GROUP BY TRIM(bl_number)
               ),
               -- CTE 2: Navio/vessel_imo mais recente por mbl (ranking)
@@ -2221,8 +2220,7 @@ serve(async (req) => {
               COALESCE(
                 NULLIF(TRIM(MAX(md.nome_analista)), ''),
                 NULLIF(TRIM(MAX(mdn.nome_analista)), ''),
-                NULLIF(TRIM(MAX(ts.email_analista)), ''),
-                NULLIF(TRIM(MAX(ts.nome_analista)), '')
+                NULLIF(TRIM(MAX(ts.email_analista)), '')
               ) as nome_analista,
               MAX(ts.eta) as eta_api,
               COALESCE(MAX(md.hbl), MAX(mdn.hawb)) as hbl,
