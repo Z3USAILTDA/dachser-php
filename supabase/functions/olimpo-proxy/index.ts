@@ -2840,12 +2840,15 @@ serve(async (req) => {
           t_dachser_container_tracking: 0,
         };
         try {
-          // Step 6.C: Descoberta de schema defensiva — só consulta colunas que existem.
+          // Step 6.C: Descoberta de schema defensiva — varre dados_dachser e ai_agente
+          // procurando colunas de container em qualquer tabela "sea/maritimo/master/dachser".
           const schemaRows = await client.query(`
             SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME
             FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE (TABLE_SCHEMA = 'dados_dachser' AND TABLE_NAME IN ('t_sea_master','t_dados_maritimo','t_master_dados'))
-               OR (TABLE_SCHEMA = 'ai_agente' AND TABLE_NAME IN ('t_dachser_sea_items','t_dachser_container_tracking'))
+            WHERE TABLE_SCHEMA IN ('dados_dachser','ai_agente')
+              AND (
+                TABLE_NAME REGEXP 'sea|maritim|master|dachser|container'
+              )
           `);
           const cols: Record<string, Set<string>> = {};
           for (const r of (schemaRows as any[])) {
@@ -2853,12 +2856,20 @@ serve(async (req) => {
             if (!cols[key]) cols[key] = new Set();
             cols[key].add(String(r.COLUMN_NAME).toLowerCase());
           }
+          // Loga todas as tabelas com qualquer coluna que pareça container
+          const tablesWithContainer = Object.entries(cols)
+            .filter(([_, s]) => [...s].some(c => /container|cntr/.test(c)))
+            .map(([t, s]) => `${t}(${[...s].filter(c => /container|cntr|mbl|bol|bl_|master|mawb|booking/.test(c)).join(',')})`);
+          console.log(`[sync_sea_tracking] tabelas c/ container detectadas:`, tablesWithContainer.join(' | '));
+
           const pickCol = (table: string, candidates: string[]): string | null => {
             const set = cols[table];
             if (!set) return null;
             for (const c of candidates) if (set.has(c.toLowerCase())) return c;
             return null;
           };
+
+
 
           const SOURCES: Array<{ name: string; sql: string }> = [];
 
