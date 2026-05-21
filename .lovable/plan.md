@@ -1,99 +1,77 @@
 ## Objetivo
 
-Reduzir drasticamente os MBLs presos como "Aguardando container" / "NAO_ENCONTRADO" expandindo as fontes consultadas no backfill antes de cair para chamadas de API externa.
+Aproveitar as APIs de armadores já implementadas na tela **Draft Exportação** (`draft-track-hapag-multi`, `draft-track-msc`, `draft-track-one`) como fallback em tempo real no fluxo `enrich_sea_containers`, para encontrar containers de MBLs que hoje ficam `PENDENTE` / `NAO_ENCONTRADO` porque a JsonCargo API não responde.
 
-## Diagnóstico do que existe hoje
+## Situação atual
 
-Hoje o `sync_sea_tracking` (`supabase/functions/olimpo-proxy/index.ts`) faz backfill de container em **uma única fonte**:
-
-```sql
--- Atual (Step 6)
-FROM dados_dachser.t_master_dados md
-JOIN dados_dachser.t_tracking_sea ts ON ts.mbl_id = md.mawb
-WHERE md.tipo_processo LIKE '%SEA%'
-  AND md.container REGEXP '^[A-Z]{4}[0-9]{7}$'
-```
-
-Problemas observados:
-
-1. `t_master_dados.mawb` raramente é preenchido para SEA EXPORT — os MBLs são inseridos a partir de `t_sea_master.master` e `t_dados_maritimo.bl_number`, mas **nenhuma dessas duas tabelas é consultada para container**.
-2. O regex `^[A-Z]{4}[0-9]{7}$` rejeita silenciosamente containers que vêm com hífen, espaço, dígito verificador faltando ou minúsculas, mesmo quando são válidos depois de normalizar.
-3. Não há fallback para `ai_agente.t_dachser_sea_items` / `ai_agente.t_dachser_container` / `ai_agente.t_dachser_container_tracking`, que já têm milhares de containers casados a MBL/booking.
-4. Quando o container é descoberto via API (`enrich_sea_containers`), ele é gravado, mas **a linha PENDENTE só é deletada se o backfill estrutural rodar depois** — então a UI ainda mostra duas linhas (uma com container e outra como AGD) durante uma janela.
-
-## Mudanças propostas (somente backend, sem schema)
-
-Arquivo: `supabase/functions/olimpo-proxy/index.ts`, dentro do bloco `action === 'sync_sea_tracking'`, **substituir** a Step 6 atual por um pipeline em cascata. **Nada mais é tocado** — Step 5 (insert), Step 7 (delete PENDENTE), Step 8 (shipping_line) continuam iguais.
-
-### Step 6 novo: cascata de fontes
-
-Para cada MBL ativo em `t_tracking_sea` cujo `container IS NULL OR container IN ('PENDENTE','NAO_ENCONTRADO','')`, tentar na ordem e **parar na primeira que devolver um container válido**:
-
-```text
-1. t_sea_master.master   → coluna container/cntr_no se existir nessa tabela
-2. t_dados_maritimo.bl_number → colunas container / container_number / num_container
-3. t_master_dados.mawb   → fonte atual (mantida)
-4. ai_agente.t_dachser_sea_items (container, mbl/bol)
-5. ai_agente.t_dachser_container_tracking (container, mbl_reference)
-```
-
-A consulta vai ser uma única query com `LEFT JOIN` em todas e `COALESCE` na ordem acima, devolvendo `(mbl_id, container, source)`. Normalização aplicada antes de comparar com regex:
+Já existe a edge function `sea-carrier-fallback` (chamada pelo Passo 4 do `sea-tracking-cron`) cobrindo HAPAG, HAMBURG SUD, MSC e ONE. Hoje ela só roda em lote no cron geral; o `enrich_sea_containers` (acionado MBL a MBL) **não** consome esse fallback, então um MBL Hapag/MSC/ONE que falha na JsonCargo precisa esperar o próximo ciclo do cron.
 
 ```ts
-const norm = (c: string) => c.toUpperCase().replace(/[^A-Z0-9]/g, '');
-// aceitar se norm tem 10-11 chars e bate ^[A-Z]{4}[0-9]{6,7}$
+// CARRIER_CONFIG atual (mantido como está)
+HAPAG_LLOYD: { fn: 'draft-track-hapag-multi', shortName: 'HAPAG' },
+HAMBURG_SUD: { fn: 'draft-track-hapag-multi', shortName: 'HAMBURG SUD' },
+MSC:         { fn: 'draft-track-msc',         shortName: 'MSC' },
+ONE:         { fn: 'draft-track-one',         shortName: 'ONE' },
 ```
 
-### Sub-etapa 6B: dedup determinístico
+Demais armadores (MAERSK, CMA, COSCO, EVERGREEN, etc.) **não** entram nesta fase — fica para um próximo ciclo.
 
-Após inserir o container real, executar **na mesma transação** o DELETE que hoje vive na Step 7, expandido para também limpar `NAO_ENCONTRADO`:
+## Escopo
 
-```sql
-DELETE FROM t_tracking_sea
-WHERE container IN ('PENDENTE','NAO_ENCONTRADO','')
-  AND mbl_id IN (<mbls com container real>)
-```
+Mudanças apenas em backend, sem novos armadores e sem usar `draft-track-navigator`/Firecrawl:
 
-Assim acabamos com a janela de "duas linhas para o mesmo MBL".
+- `supabase/functions/sea-carrier-fallback/index.ts` — aceitar query `?single_mbl=<MBL>` para processar um MBL específico.
+- `supabase/functions/olimpo-proxy/index.ts` — em `enrich_sea_containers`, chamar `sea-carrier-fallback?single_mbl=...` como **último recurso** por MBL, depois de JsonCargo + Hapag fallback falharem.
 
-### Sub-etapa 6C: descoberta de schema defensiva
+Sem mudanças em frontend, schema, `CARRIER_CONFIG`, `draft-track-*` ou no Passo 4 do `sea-tracking-cron` (segue rodando em lote como hoje).
 
-Antes de rodar a query, executar uma única vez por invocação:
+## Mudanças detalhadas
 
-```sql
-SELECT TABLE_NAME, COLUMN_NAME
-FROM INFORMATION_SCHEMA.COLUMNS
-WHERE TABLE_SCHEMA IN ('dados_dachser','ai_agente')
-  AND TABLE_NAME IN ('t_sea_master','t_dados_maritimo','t_dachser_sea_items','t_dachser_container_tracking')
-  AND COLUMN_NAME REGEXP 'container|cntr'
-```
+### 1. `sea-carrier-fallback` — modo single-MBL
 
-Só monta o `LEFT JOIN` para tabelas/colunas que realmente existirem — evita quebrar o sync se uma das fontes mudar nome ou for removida.
+- Ler `const singleMbl = url.searchParams.get('single_mbl')`.
+- Quando presente, **pular** a query SQL `SELECT DISTINCT mbl_id ... LIMIT 40` e usar `pendingRows = [{ mbl_id: singleMbl }]`.
+- Restante do loop (sanitização, `detectCarrierFromMbl`, chamada `draft-track-*`, INSERT/UPDATE em `t_tracking_sea`, marcação `NAO_ENCONTRADO`, `last_check`) permanece igual.
+- Retorno mantém o mesmo formato (`stats`); inclui `single_mbl_mode: true` quando aplicável para facilitar diagnóstico.
 
-### Resposta da action
+### 2. `olimpo-proxy` → `enrich_sea_containers` — terceiro estágio por MBL
 
-Adicionar contadores por fonte no JSON de retorno:
+Hoje a sequência por MBL é:
 
-```json
-"backfill_by_source": {
-  "t_sea_master": 0,
-  "t_dados_maritimo": 0,
-  "t_master_dados": 0,
-  "t_dachser_sea_items": 0,
-  "t_dachser_container_tracking": 0
-}
-```
+1. JsonCargo (várias variações de MBL).
+2. Fallback Hapag (apenas se `effectiveShippingLine === 'HAPAG_LLOYD'`).
 
-Útil para medir a eficácia depois do deploy.
+Adicionar:
 
-## Validação
+3. **Carrier fallback dedicado por MBL**: se `containers.length === 0` após (1) e (2), chamar
+   `fetch(${supabaseUrl}/functions/v1/sea-carrier-fallback?single_mbl=<MBL>)` com `Authorization: Bearer ${SUPABASE_ANON_KEY}`.
+   - Só dispara para armadores cobertos por `CARRIER_CONFIG` (HAPAG, HAMBURG_SUD, MSC, ONE) — verificar com `detectShippingLineFromMbl` antes de chamar; se não bater, pular.
+   - Se o fallback retornar `discovered > 0`, considerar o MBL enriquecido (`enriched++`).
+   - Contabilizar em novo contador `recovered_by_carrier_fallback` no retorno do enrich.
 
-1. Rodar `sync_sea_tracking` manualmente e ler `backfill_by_source` no response.
-2. Comparar contagem de AGD no dashboard `/sea/tracking` antes e depois.
-3. Para os MBLs que **continuarem** sem container após a cascata, o pipeline já existente `enrich_sea_containers` (JsonCargo + Hapag) continua sendo o último recurso — sem mudanças.
+### 3. Diagnóstico
 
-## Fora de escopo
+- `sea-carrier-fallback` continua retornando o `stats` atual + `single_mbl_mode` quando aplicável.
+- `enrich_sea_containers` ganha no retorno:
+  - `recovered_by_carrier_fallback: number`
+  - `carrier_fallback_attempts: number` (quantas vezes acionou o fallback)
 
-- Frontend (`ContainerTracking.tsx`) — nenhuma mudança; o sub-status `AGD_NO_CT` já criado anteriormente segue válido.
-- Schema MariaDB ou Supabase.
-- `enrich_sea_containers` e o cron de retrack.
+## Não-objetivos
+
+- **Não** adicionar MAERSK, CMA_CGM, COSCO, EVERGREEN, YANG_MING, HMM, ZIM ao `CARRIER_CONFIG`.
+- **Não** usar `draft-track-navigator` / Firecrawl.
+- Não alterar `draft-track-hapag-multi`, `draft-track-msc`, `draft-track-one`.
+- Não tocar em frontend, schema MariaDB, `sync_sea_tracking`, nem na chamada em lote do `sea-tracking-cron` (Passo 4).
+- Não criar novos secrets.
+
+## Como testar
+
+1. Deploy de `sea-carrier-fallback` e `olimpo-proxy`.
+2. `POST /sea-carrier-fallback?single_mbl=<MBL_HAPAG_QUE_FALHA>` — verificar que processa apenas esse MBL.
+3. `GET /olimpo-proxy?action=enrich_sea_containers&batch_size=20` — conferir `recovered_by_carrier_fallback > 0` em MBLs Hapag/MSC/ONE que antes ficavam `NAO_ENCONTRADO`.
+4. Conferir no Container Tracking que esses MBLs agora aparecem com container real e `shipping_line` preenchido (HAPAG/MSC/ONE).
+
+## Risco
+
+- Latência extra por MBL no enrich (até +1 chamada quando JsonCargo e Hapag falham). Mitigado por só rodar para armadores cobertos e por `batch_size` / `max_time_ms` já existentes.
+- Sem risco de custo Firecrawl (escopo limitado às APIs oficiais já em uso na Draft Exportação).
