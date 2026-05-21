@@ -2301,12 +2301,8 @@ serve(async (req) => {
                 AND UPPER(LEFT(ts.mbl_id, 3)) NOT IN ('HLC', 'HLS')
               )
               AND NOT (
-                UPPER(COALESCE(MAX(ts.container_status), '')) IN ('DELIVERED', 'DLV')
-                AND MAX(ts.container) != 'PENDENTE'
-              )
-              AND NOT (
                 (
-                  UPPER(COALESCE(MAX(ts.container_status), '')) IN ('GOD', 'GATE_OUT_FULL', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
+                  UPPER(COALESCE(MAX(ts.container_status), '')) IN ('GOD', 'GATE_OUT_FULL', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY', 'DELIVERED', 'DLV')
                   OR UPPER(COALESCE(MAX(ts.last_event), '')) LIKE '%DELIVERED%'
                   OR UPPER(COALESCE(MAX(ts.last_event), '')) LIKE '%GATE OUT%'
                   OR UPPER(COALESCE(MAX(ts.last_event), '')) LIKE '%EMPTY RETURNED%'
@@ -2318,7 +2314,6 @@ serve(async (req) => {
               CASE WHEN MAX(ts.container) = 'PENDENTE' THEN 0 ELSE 1 END,
               MAX(ts.last_check) DESC, 
               ts.mbl_id
-            LIMIT 500
           `);
 
           // Post-query: resolve port codes in batch
