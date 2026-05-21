@@ -2996,10 +2996,23 @@ serve(async (req) => {
           console.log(`[sync_sea_tracking] ${pending.size} MBLs aguardando container`);
 
           const containerRegex = /^[A-Z]{4}[0-9]{6,7}$/;
-          const resolved = new Map<string, { container: string; source: string }>();
+          // mbl -> Map<container, source>  (multi-container por MBL, primeira fonte vence por container)
+          const resolved = new Map<string, Map<string, string>>();
+
+          // Extrai todos os tokens de container de uma string (json, csv, espaço, etc)
+          const extractContainers = (raw: any): string[] => {
+            if (raw == null) return [];
+            const s = String(raw);
+            const tokens = s.match(/[A-Za-z]{4}[\s\-]?[0-9]{6,7}/g) || [];
+            const out: string[] = [];
+            for (const t of tokens) {
+              const n = t.toUpperCase().replace(/[^A-Z0-9]/g, '');
+              if (containerRegex.test(n)) out.push(n);
+            }
+            return out;
+          };
 
           for (const src of SOURCES) {
-            if (pending.size === resolved.size) break;
             let rows: any[] = [];
             try {
               rows = await client.query(src.sql) as any[];
@@ -3007,21 +3020,26 @@ serve(async (req) => {
               console.warn(`[sync_sea_tracking] source ${src.name} failed:`, (e as any)?.message || e);
               continue;
             }
+            let foundThisSrc = 0;
             for (const r of rows) {
               const mbl = String(r.mbl_id || '').trim().toUpperCase();
-              const ct = String(r.container || '').trim().toUpperCase();
-              if (!mbl || !ct) continue;
-              if (!pending.has(mbl)) continue;
-              if (resolved.has(mbl)) continue;
-              if (!containerRegex.test(ct)) continue;
-              resolved.set(mbl, { container: ct, source: src.name });
+              if (!mbl || !pending.has(mbl)) continue;
+              const containers = extractContainers(r.container_raw);
+              if (containers.length === 0) continue;
+              if (!resolved.has(mbl)) resolved.set(mbl, new Map());
+              const m = resolved.get(mbl)!;
+              for (const ct of containers) {
+                if (!m.has(ct)) {
+                  m.set(ct, src.name);
+                  foundThisSrc++;
+                }
+              }
             }
-            const found = [...resolved.values()].filter(v => v.source === src.name).length;
-            console.log(`[sync_sea_tracking] source ${src.name}: +${found} resolvidos`);
+            console.log(`[sync_sea_tracking] source ${src.name}: +${foundThisSrc} (mbl,container) pares`);
           }
 
-          // Inserir os containers resolvidos
-          for (const [mbl, info] of resolved) {
+          // Inserir os containers resolvidos (uma linha por par MBL+container)
+          for (const [mbl, containerMap] of resolved) {
             const upper = mbl.toUpperCase();
             let sl: string | null = MBL_PREFIX_TO_SHIPPING_LINE[upper.substring(0, 4)] || null;
             if (!sl) {
@@ -3029,22 +3047,27 @@ serve(async (req) => {
                 if (upper.startsWith(p)) { sl = MBL_PREFIX_TO_SHIPPING_LINE[p]; break; }
               }
             }
-            try {
-              await client.execute(`
-                INSERT INTO dados_dachser.t_tracking_sea
-                  (mbl_id, tipo_processo, container, shipping_line, active)
-                VALUES (?, 'SEA EXPORT', ?, ?, 1)
-                ON DUPLICATE KEY UPDATE
-                  shipping_line = COALESCE(VALUES(shipping_line), shipping_line),
-                  active = 1
-              `, [mbl, info.container, sl]);
-              backfilledMbls.add(mbl);
-              backfilled++;
-              backfillBySource[info.source] = (backfillBySource[info.source] || 0) + 1;
-            } catch (e) {
-              console.warn(`[sync_sea_tracking] backfill failed ${mbl}/${info.container}:`, (e as any)?.message || e);
+            let mblBackfilled = false;
+            for (const [container, source] of containerMap) {
+              try {
+                await client.execute(`
+                  INSERT INTO dados_dachser.t_tracking_sea
+                    (mbl_id, tipo_processo, container, shipping_line, active)
+                  VALUES (?, 'SEA EXPORT', ?, ?, 1)
+                  ON DUPLICATE KEY UPDATE
+                    shipping_line = COALESCE(VALUES(shipping_line), shipping_line),
+                    active = 1
+                `, [mbl, container, sl]);
+                backfilled++;
+                backfillBySource[source] = (backfillBySource[source] || 0) + 1;
+                mblBackfilled = true;
+              } catch (e) {
+                console.warn(`[sync_sea_tracking] backfill failed ${mbl}/${container}:`, (e as any)?.message || e);
+              }
             }
+            if (mblBackfilled) backfilledMbls.add(mbl);
           }
+
 
           // Step 7: Drop PENDENTE/NAO_ENCONTRADO/empty rows para MBLs que agora têm container real
           if (backfilledMbls.size > 0) {
