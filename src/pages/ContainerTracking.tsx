@@ -498,6 +498,8 @@ const ContainerTracking = () => {
   const [expandedMbl, setExpandedMbl] = useState<string | null>(null);
   const [mblContainers, setMblContainers] = useState<ContainerDetail[]>([]);
   const [loadingContainers, setLoadingContainers] = useState(false);
+  const [mblEvents, setMblEvents] = useState<any[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
   const [vesselImo, setVesselImo] = useState<string | null>(null);
   const [vesselName, setVesselName] = useState<string | null>(null);
 
@@ -975,18 +977,40 @@ const ContainerTracking = () => {
     }
   };
 
+  const fetchMblEvents = async (mbl_id: string) => {
+    setLoadingEvents(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=get_tracking_history`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ mbl_id, limit: 200 })
+      });
+      const result = await res.json();
+      setMblEvents(Array.isArray(result?.history) ? result.history : []);
+    } catch (e) {
+      console.error('Error fetching events:', e);
+      setMblEvents([]);
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+
   // Toggle MBL expansion
   const handleToggleExpand = async (mbl_id: string) => {
     if (expandedMbl === mbl_id) {
       trackEvent("sea.mbl.collapse");
       setExpandedMbl(null);
       setMblContainers([]);
+      setMblEvents([]);
       setVesselImo(null);
       setVesselName(null);
     } else {
       trackEvent("sea.mbl.expand");
       setExpandedMbl(mbl_id);
-      await fetchMblContainers(mbl_id);
+      await Promise.all([fetchMblContainers(mbl_id), fetchMblEvents(mbl_id)]);
     }
   };
 
