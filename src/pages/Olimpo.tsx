@@ -569,24 +569,105 @@ function OlimpoContent() {
 
       const nowTs = Date.now();
 
+      // Fallback: known port coordinates by name (used when backend lacks lat/lon)
+      const PORT_COORDS: Record<string, [number, number]> = {
+        "SANTOS": [-23.9618, -46.3322], "SSZ": [-23.9618, -46.3322],
+        "PARANAGUA": [-25.5161, -48.5089], "PNG": [-25.5161, -48.5089],
+        "ITAJAI": [-26.9078, -48.6619], "ITJ": [-26.9078, -48.6619],
+        "NAVEGANTES": [-26.8975, -48.6536], "NVT": [-26.8975, -48.6536],
+        "ITAPOA": [-26.1133, -48.6122], "IOA": [-26.1133, -48.6122],
+        "RIO GRANDE": [-32.0350, -52.0986], "RIG": [-32.0350, -52.0986],
+        "RIO DE JANEIRO": [-22.8917, -43.1947], "RIO": [-22.8917, -43.1947],
+        "SUAPE": [-8.3950, -34.9614], "SUA": [-8.3950, -34.9614],
+        "PECEM": [-3.5447, -38.8083], "PEC": [-3.5447, -38.8083],
+        "SALVADOR": [-12.9714, -38.5108], "SSA": [-12.9714, -38.5108],
+        "VITORIA": [-20.3194, -40.3361], "VIX": [-20.3194, -40.3361],
+        "MANAUS": [-3.1339, -60.0250], "MAO": [-3.1339, -60.0250],
+        "ITAGUAI": [-22.9333, -43.8167],
+        "ROTTERDAM": [51.9244, 4.4777], "RTM": [51.9244, 4.4777],
+        "ANTWERP": [51.2602, 4.4023], "ANTWERPEN": [51.2602, 4.4023], "ANR": [51.2602, 4.4023],
+        "HAMBURG": [53.5413, 9.9836], "HAM": [53.5413, 9.9836],
+        "BREMERHAVEN": [53.5396, 8.5810], "BRV": [53.5396, 8.5810],
+        "LE HAVRE": [49.4944, 0.1079], "LEH": [49.4944, 0.1079],
+        "VALENCIA": [39.4699, -0.3763], "VLC": [39.4699, -0.3763],
+        "BARCELONA": [41.3500, 2.1500], "BCN": [41.3500, 2.1500],
+        "ALGECIRAS": [36.1300, -5.4500],
+        "GENOA": [44.4056, 8.9463], "GENOVA": [44.4056, 8.9463], "GOA": [44.4056, 8.9463],
+        "LA SPEZIA": [44.0950, 9.8200],
+        "FELIXSTOWE": [51.9542, 1.3464], "FXT": [51.9542, 1.3464],
+        "LISBON": [38.7081, -9.1361], "LISBOA": [38.7081, -9.1361], "LIS": [38.7081, -9.1361],
+        "LEIXOES": [41.1844, -8.7044],
+        "GDANSK": [54.3520, 18.6466], "GDYNIA": [54.5333, 18.5500],
+        "NEW YORK": [40.6840, -74.0480], "NYC": [40.6840, -74.0480],
+        "MIAMI": [25.7780, -80.1700], "MIA": [25.7780, -80.1700],
+        "HOUSTON": [29.7300, -95.3000], "HOU": [29.7300, -95.3000],
+        "LOS ANGELES": [33.7400, -118.2700], "LAX": [33.7400, -118.2700],
+        "LONG BEACH": [33.7550, -118.2160],
+        "SAVANNAH": [32.1300, -81.1400], "SAV": [32.1300, -81.1400],
+        "NORFOLK": [36.8800, -76.3300],
+        "CHARLESTON": [32.7833, -79.9000],
+        "MONTREAL": [45.5500, -73.5400],
+        "SHANGHAI": [31.3300, 121.5000], "SHA": [31.3300, 121.5000],
+        "NINGBO": [29.8683, 121.5440],
+        "SHENZHEN": [22.5333, 113.9333], "YANTIAN": [22.5733, 114.2767],
+        "HONG KONG": [22.3050, 114.1700], "HKG": [22.3050, 114.1700],
+        "QINGDAO": [36.0833, 120.3167],
+        "TIANJIN": [38.9833, 117.7833], "TIANJINXINGANG": [38.9833, 117.7833], "XINGANG": [38.9833, 117.7833],
+        "DALIAN": [38.9333, 121.6333],
+        "BUSAN": [35.1000, 129.0400], "PUSAN": [35.1000, 129.0400],
+        "INCHEON": [37.4500, 126.6000],
+        "TOKYO": [35.6500, 139.7500], "YOKOHAMA": [35.4500, 139.6500],
+        "OSAKA": [34.6500, 135.4333], "KOBE": [34.6800, 135.2100],
+        "SINGAPORE": [1.2640, 103.8200], "SIN": [1.2640, 103.8200],
+        "PORT KLANG": [3.0000, 101.3833], "TANJUNG PELEPAS": [1.3633, 103.5500],
+        "LAEM CHABANG": [13.0833, 100.8833], "BANGKOK": [13.6900, 100.5600],
+        "HO CHI MINH": [10.7700, 106.7000], "HAIPHONG": [20.8500, 106.6833],
+        "JAKARTA": [-6.1000, 106.8800], "TANJUNG PRIOK": [-6.1000, 106.8800],
+        "MUMBAI": [18.9500, 72.8333], "NHAVA SHEVA": [18.9500, 72.9500],
+        "CHENNAI": [13.1000, 80.3000], "COLOMBO": [6.9500, 79.8500],
+        "JIAO XIN": [29.8683, 121.5440],
+        "JEBEL ALI": [25.0167, 55.0667], "DUBAI": [25.2700, 55.3000],
+        "DAMMAM": [26.5000, 50.2000], "DOHA": [25.2867, 51.5333],
+        "DURBAN": [-29.8667, 31.0500], "DUR": [-29.8667, 31.0500],
+        "CAPE TOWN": [-33.9100, 18.4400],
+        "LAGOS": [6.4400, 3.4000], "APAPA": [6.4400, 3.4000],
+        "BUENOS AIRES": [-34.6000, -58.3667],
+        "MONTEVIDEO": [-34.9100, -56.2100],
+        "VALPARAISO": [-33.0367, -71.6300], "SAN ANTONIO": [-33.5933, -71.6200],
+        "CALLAO": [-12.0500, -77.1500], "LIMA": [-12.0500, -77.1500],
+        "GUAYAQUIL": [-2.2667, -79.9000],
+        "CARTAGENA": [10.4000, -75.5333], "BARRANQUILLA": [11.0000, -74.8000],
+        "BALBOA": [8.9500, -79.5667], "MANZANILLO": [9.3500, -79.8167],
+        "SYDNEY": [-33.8600, 151.2000], "MELBOURNE": [-37.8333, 144.9333], "BRISBANE": [-27.3833, 153.1667],
+      };
+      const lookupPort = (raw: string): [number, number] | null => {
+        if (!raw) return null;
+        const cleaned = raw.toUpperCase().trim();
+        if (PORT_COORDS[cleaned]) return PORT_COORDS[cleaned];
+        const first = cleaned.split(/[,\(]/)[0].trim();
+        if (PORT_COORDS[first]) return PORT_COORDS[first];
+        const noSuffix = first.replace(/\s+(PORT|HARBOUR|HARBOR)$/i, "").trim();
+        if (PORT_COORDS[noSuffix]) return PORT_COORDS[noSuffix];
+        for (const k of Object.keys(PORT_COORDS)) {
+          if (k.length >= 4 && (first.includes(k) || k.includes(first))) return PORT_COORDS[k];
+        }
+        return null;
+      };
+
       for (const s of seaArr) {
         const oCode = (s.porto_origem || "").toUpperCase();
         const dCode = (s.porto_destino || "").toUpperCase();
         
         if (!oCode || !dCode) continue;
 
-        // Usar coordenadas pré-salvas do banco (com fallback de portos conhecidos no backend)
-        const orig: [number, number] | null = 
-          s.origem_lat && s.origem_lon 
-            ? [Number(s.origem_lat), Number(s.origem_lon)] 
-            : null;
-        const dest: [number, number] | null = 
-          s.destino_lat && s.destino_lon 
-            ? [Number(s.destino_lat), Number(s.destino_lon)] 
-            : null;
-          
-        // Se não tem coordenadas de origem/destino, pular (backend deve fornecer via fallback de portos)
-        // Mas não bloqueamos completamente - mostramos com rota se tiver pelo menos uma coordenada
+        // Coordenadas do banco com fallback por nome de porto
+        const origDb: [number, number] | null = 
+          s.origem_lat && s.origem_lon ? [Number(s.origem_lat), Number(s.origem_lon)] : null;
+        const destDb: [number, number] | null = 
+          s.destino_lat && s.destino_lon ? [Number(s.destino_lat), Number(s.destino_lon)] : null;
+        const orig = origDb || lookupPort(oCode);
+        const dest = destDb || lookupPort(dCode);
+
         if (!orig && !dest) continue;
 
         const etaIso = s.eta ? new Date(s.eta).toISOString() : null;
