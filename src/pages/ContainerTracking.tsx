@@ -2807,12 +2807,32 @@ const ContainerTracking = () => {
                                         <tbody>
                                           {(() => {
                                             const aggStatus = getReportStatus(mbl.last_event, mbl.container_status, mbl.tipo_processo);
-                                            const latestEv = mblEvents[0];
+                                            // Dedup: mesmo evento aparece 1x por container; agregamos por (data, código, descrição, local)
+                                            const dedupKey = (e: any) => [
+                                              e.event_datetime ?? '',
+                                              (e.event_code ?? '').toUpperCase(),
+                                              (e.event_description ?? '').toUpperCase().trim(),
+                                              (e.location ?? '').toUpperCase().trim(),
+                                            ].join('|');
+                                            const dedupedEvents = (() => {
+                                              const map = new Map<string, any>();
+                                              for (const ev of mblEvents) {
+                                                const k = dedupKey(ev);
+                                                const prev = map.get(k);
+                                                if (!prev) {
+                                                  map.set(k, { ...ev, containers: ev.container ? [ev.container] : [] });
+                                                } else if (ev.container && !prev.containers.includes(ev.container)) {
+                                                  prev.containers.push(ev.container);
+                                                }
+                                              }
+                                              return Array.from(map.values());
+                                            })();
+                                            const latestEv = dedupedEvents[0];
                                             const aggDate = latestEv?.event_datetime
                                               ? formatSaoPaulo(parseMariaDBLocalDate(latestEv.event_datetime) || new Date(latestEv.event_datetime))
                                               : (mbl.last_check ? formatSaoPaulo(parseMariaDBLocalDate(mbl.last_check) || new Date(mbl.last_check)) : "—");
                                             const isHistOpen = historyExpanded === mbl.mbl_id;
-                                            const histRows = mblEvents.slice(1);
+                                            const histRows = dedupedEvents.slice(1);
                                             return (
                                               <>
                                                 <tr className="border-t border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.02)]">
@@ -2861,7 +2881,17 @@ const ContainerTracking = () => {
                                                       <td className="px-3 py-2 text-[#ffc800] whitespace-nowrap">
                                                         {ev.event_datetime ? formatSaoPaulo(parseMariaDBLocalDate(ev.event_datetime) || new Date(ev.event_datetime)) : "—"}
                                                       </td>
-                                                      <td className="px-3 py-2 font-mono text-xs text-[#f5f5f5]">{ev.container || "—"}</td>
+                                                      <td className="px-3 py-2">
+                                                        {ev.containers && ev.containers.length > 0 ? (
+                                                          <div className="flex flex-wrap gap-1">
+                                                            {ev.containers.map((c: string) => (
+                                                              <span key={c} className="font-mono text-xs text-[#f5f5f5] px-1.5 py-0.5 rounded bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.08)]">{c}</span>
+                                                            ))}
+                                                          </div>
+                                                        ) : (
+                                                          <span className="font-mono text-xs text-[#f5f5f5]">{ev.container || "—"}</span>
+                                                        )}
+                                                      </td>
                                                       <td className="px-3 py-2 text-[#aaaaaa]">{getShippingLineFromMbl(mbl.mbl_id, mbl.shipping_line)}</td>
                                                       <td className="px-3 py-2">
                                                         <span className="text-xs font-bold px-2 py-0.5 rounded" style={{
