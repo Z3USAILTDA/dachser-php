@@ -2659,6 +2659,13 @@ serve(async (req) => {
           'YMLU', 'YMMU',                   // YANG MING
           'ZIMU', 'ZCSU',                   // ZIM
         ].join('|');
+        const comparableDate = (column: string) => `COALESCE(
+          DATE(${column}),
+          DATE(STR_TO_DATE(NULLIF(TRIM(CAST(${column} AS CHAR)), ''), '%Y-%m-%d')),
+          DATE(STR_TO_DATE(NULLIF(TRIM(CAST(${column} AS CHAR)), ''), '%Y-%m-%d %H:%i:%s')),
+          DATE(STR_TO_DATE(NULLIF(TRIM(CAST(${column} AS CHAR)), ''), '%d/%m/%Y')),
+          DATE(STR_TO_DATE(NULLIF(TRIM(CAST(${column} AS CHAR)), ''), '%d/%m/%Y %H:%i:%s'))
+        )`;
         
         // OPTIMIZATION: Skip heavy stats query that causes timeout
         // Stats are nice-to-have but not essential for sync operation
@@ -2724,8 +2731,8 @@ serve(async (req) => {
           WHERE dm.bl_number IS NOT NULL
             AND TRIM(dm.bl_number) != ''
             AND (
-              dm.created_at >= '2026-02-01'
-              OR dm.master_insert >= '2026-02-01'
+              ${comparableDate('dm.created_at')} >= DATE('2026-02-01')
+              OR ${comparableDate('dm.master_insert')} >= DATE('2026-02-01')
             )
             AND (
               TRIM(dm.bl_number) REGEXP '^[A-Za-z]{4}[0-9]+$'
