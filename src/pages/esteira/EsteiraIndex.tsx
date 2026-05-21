@@ -1573,6 +1573,27 @@ const EsteiraIndex = () => {
     return [...new Set(fornecedores)].sort();
   }, [vouchers]);
 
+  // Opções únicas para os filtros multi-select "Enviado por" e "Criado por"
+  const enviadoPorOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const v of vouchers) {
+      const a = (v.enviadoPorUserName || "").trim();
+      const b = (v.criadoPorUserName || "").trim();
+      if (a) set.add(a);
+      if (b) set.add(b);
+    }
+    return Array.from(set).sort((x, y) => x.localeCompare(y, "pt-BR"));
+  }, [vouchers]);
+
+  const criadoPorOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const v of vouchers) {
+      const dfv = (v.criadoPorDfv || "").trim();
+      if (dfv) set.add(dfv);
+    }
+    return Array.from(set).sort((x, y) => x.localeCompare(y, "pt-BR"));
+  }, [vouchers]);
+
   // Block access for users without role - MUST be after all hooks
   if (roleLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-[#050608]">
