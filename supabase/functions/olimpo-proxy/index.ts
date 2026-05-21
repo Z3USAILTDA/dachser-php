@@ -2913,13 +2913,15 @@ serve(async (req) => {
           success: true,
           synced,
           reactivated,
+          backfilled_containers: backfilled,
+          backfilled_mbls: backfilledMbls.size,
           total_candidates: allCandidates.length,
           already_active: allCandidates.filter(c => activeSet.has(c.mbl_id?.trim())).length,
           sources: {
             t_sea_master: syncedFromSeaMaster,
             t_dados_maritimo: syncedFromDadosMaritimo
           },
-          message: `${synced} inseridos, ${reactivated} reativados`
+          message: `${synced} inseridos, ${reactivated} reativados, ${backfilled} containers preenchidos`
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
