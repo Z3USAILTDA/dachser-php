@@ -1,54 +1,28 @@
-## Problema
+## Ajustes na sub-tabela de histórico (Container Tracking SEA)
 
-Os eventos vêm de `t_tracking_sea_history` por container — quando um MBL tem N containers, cada evento "real" do navio aparece N vezes (mesma data/hora, mesmo `event_code`, mesma `location`, mesma `event_description`), variando só o campo `container`. Na tela isso vira a duplicação visível no print (DCH 2x, TSP 2x, ARR 2x, CRG 4x para 2 containers etc.). Além disso, a linha agregada (índice 0) e a primeira linha de histórico (índice 1) podem representar exatamente o mesmo evento de containers diferentes.
+Três correções no expandido por MBL em `src/pages/ContainerTracking.tsx`. Backend já retorna todos os campos necessários (`h.eta`, `h.created_at`) em `get_tracking_history` — só frontend muda.
 
-## Solução (frontend, cirúrgica)
+### 1. Preencher ETA Tracking, ETA Cadastrado e Última Atualização nas linhas de histórico
 
-Deduplicar `mblEvents` antes de renderizar, sem mexer em edge function nem em banco.
+Hoje as três colunas mostram `—` nas linhas de eventos anteriores (linhas 2923-2925).
 
-### Mudança única em `src/pages/ContainerTracking.tsx`
+Substituir por:
+- **ETA Tracking** → `ev.eta` formatado como `dd/MM/yyyy` (via `parseMariaDBLocalDate` + fallback `new Date`). Fallback `—`.
+- **ETA Cadastrado** → espelha `mbl.eta_master` (mesmo valor da linha agregada / último evento), formato `dd/MM/yyyy`.
+- **Última Atualização** → `ev.created_at` via `formatSaoPaulo(parseMariaDBLocalDate(ev.created_at) || new Date(ev.created_at))`. Fallback `—`.
 
-Dentro do bloco da sub-tabela expandida (linhas ~2807-2856), criar uma versão deduplicada dos eventos antes de calcular `latestEv` e `histRows`:
+Cor `text-[#aaaaaa]`, idêntica à linha agregada.
 
-```ts
-// chave de unicidade do evento (ignora o container)
-const dedupKey = (e: any) => [
-  e.event_datetime ?? '',
-  (e.event_code ?? '').toUpperCase(),
-  (e.event_description ?? '').toUpperCase().trim(),
-  (e.location ?? '').toUpperCase().trim(),
-].join('|');
+### 2. Mostrar todos os containers do MBL nas linhas de histórico
 
-const dedupedEvents = (() => {
-  const map = new Map<string, any>();
-  for (const ev of mblEvents) {
-    const k = dedupKey(ev);
-    const prev = map.get(k);
-    if (!prev) {
-      // mantém o evento + lista de containers que o produziram
-      map.set(k, { ...ev, containers: ev.container ? [ev.container] : [] });
-    } else if (ev.container && !prev.containers.includes(ev.container)) {
-      prev.containers.push(ev.container);
-    }
-  }
-  return Array.from(map.values()); // já vem ordenado DESC do backend
-})();
+Hoje cada linha de evento mostra só os containers referenciados naquele evento. Quando o MBL tem múltiplos containers, fica incompleto.
 
-const latestEv = dedupedEvents[0];
-const histRows = dedupedEvents.slice(1);
-```
+Na célula `Container` das linhas de histórico (linhas 2899-2909):
+- Se `mblContainers.length > 0` → renderizar **todos** os containers do MBL como chips (mesmo markup da linha agregada).
+- Fallback: `ev.containers` (dedup atual) se `mblContainers` ainda não carregou.
+- Fallback final: `ev.container` ou `—`.
 
-Na coluna `Container` das linhas históricas, se `ev.containers?.length > 1`, mostrar todos como chips (mesmo padrão da linha agregada), em vez do `ev.container` único. Se for apenas 1, manter o comportamento atual.
-
-### Critério de aceite
-
-- Cada evento aparece **uma única vez** na sub-tabela, mesmo quando o MBL tem múltiplos containers.
-- A coluna `Container` da linha histórica lista todos os containers que tiveram aquele evento (chips), igual à linha agregada quando aplicável.
-- A linha agregada não duplica o evento mais recente como primeira linha de histórico.
-- Ordem cronológica decrescente e todas as outras colunas permanecem iguais.
-
-### Não muda
-
-- `get_tracking_history` / `get_sea_tracking` / qualquer SQL.
-- Estrutura/colunas da sub-tabela.
-- `fetchMblContainers`, `VesselFinderMap`, paginação, filtros.
+### Fora de escopo
+- Sem alteração em SQL, dedup, ordenação ou estrutura de colunas.
+- Sem mudança no backend.
+- Sem mudança na linha agregada ou no fetch de `mblContainers`.

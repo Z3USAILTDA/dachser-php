@@ -2897,7 +2897,15 @@ const ContainerTracking = () => {
                                                         {ev.event_datetime ? formatSaoPaulo(parseMariaDBLocalDate(ev.event_datetime) || new Date(ev.event_datetime)) : "—"}
                                                       </td>
                                                       <td className="px-3 py-2">
-                                                        {ev.containers && ev.containers.length > 0 ? (
+                                                        {mblContainers.length > 0 ? (
+                                                          <div className="flex flex-wrap gap-1">
+                                                            {mblContainers.map(c => (
+                                                              <span key={c.id} className="font-mono text-xs text-[#f5f5f5] px-1.5 py-0.5 rounded bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.08)]">
+                                                                {c.container}
+                                                              </span>
+                                                            ))}
+                                                          </div>
+                                                        ) : ev.containers && ev.containers.length > 0 ? (
                                                           <div className="flex flex-wrap gap-1">
                                                             {ev.containers.map((c: string) => (
                                                               <span key={c} className="font-mono text-xs text-[#f5f5f5] px-1.5 py-0.5 rounded bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.08)]">{c}</span>
@@ -2920,9 +2928,9 @@ const ContainerTracking = () => {
                                                         {ev.event_description || "—"}
                                                         {ev.location && <span className="block text-[10px] text-[#666]">{ev.location}</span>}
                                                       </td>
-                                                      <td className="px-3 py-2 text-[#666]">—</td>
-                                                      <td className="px-3 py-2 text-[#666]">—</td>
-                                                      <td className="px-3 py-2 text-[#666]">—</td>
+                                                      <td className="px-3 py-2 text-[#aaaaaa]">{ev.eta ? (parseMariaDBLocalDate(ev.eta) || new Date(ev.eta)).toLocaleDateString('pt-BR') : "—"}</td>
+                                                      <td className="px-3 py-2 text-[#aaaaaa]">{mbl.eta_master ? new Date(mbl.eta_master).toLocaleDateString('pt-BR') : "—"}</td>
+                                                      <td className="px-3 py-2 text-[#aaaaaa]">{ev.created_at ? formatSaoPaulo(parseMariaDBLocalDate(ev.created_at) || new Date(ev.created_at)) : "—"}</td>
                                                       <td className="px-3 py-2"></td>
                                                     </tr>
                                                   );
