@@ -1025,7 +1025,7 @@ const ContainerTracking = () => {
     try {
       await fetchMblData();
       if (expandedMbl) {
-        await fetchMblContainers(expandedMbl);
+        await Promise.all([fetchMblContainers(expandedMbl), fetchMblEvents(expandedMbl)]);
       }
       toast({
         title: "Atualizado",
