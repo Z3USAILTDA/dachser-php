@@ -104,6 +104,7 @@ function formatBRLFull(value: number): string {
 export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSheetProps) {
   const [cnpjData, setCnpjData] = useState<CnpjDetail[]>([]);
   const [observacoes, setObservacoes] = useState<Record<string, string>>({});
+  const [contatos, setContatos] = useState<Record<string, Contato[]>>({});
   const [savingCnpj, setSavingCnpj] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
