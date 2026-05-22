@@ -299,6 +299,26 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                     </div>
                   )}
 
+                  {/* E-mails cadastrados */}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-medium">
+                      <Mail className="h-3 w-3" /> E-mails cadastrados
+                    </div>
+                    {(contatos[cnpj.cnpjClean]?.length ?? 0) === 0 ? (
+                      <p className="text-xs text-muted-foreground/70 italic">Nenhum e-mail cadastrado</p>
+                    ) : (
+                      <ul className="space-y-0.5">
+                        {contatos[cnpj.cnpjClean].map((c, i) => (
+                          <li key={i} className="text-xs text-foreground">
+                            {c.nome_contato && <span className="text-muted-foreground">{c.nome_contato} — </span>}
+                            <a href={`mailto:${c.email_contato}`} className="text-primary hover:underline">{c.email_contato}</a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+
                   {/* Observação */}
                   <div className="space-y-1">
                     <label className="text-[11px] text-muted-foreground font-medium">Observação</label>
