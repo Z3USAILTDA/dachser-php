@@ -407,7 +407,7 @@ export default function OlimpoCobranca() {
     ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: numCols } }];
 
     const titleCell = ws[XLSX.utils.encode_cell({ r: 0, c: 0 })];
-    if (titleCell) titleCell.s = { fill: STYLE.gold, font: { bold: true, sz: 16, color: { rgb: "000000" } }, alignment: { horizontal: "center", vertical: "center" }, border: STYLE.border };
+    if (titleCell) titleCell.s = { fill: STYLE.gold, font: { name: "Arial", bold: true, sz: 8, color: { rgb: "000000" } }, alignment: { horizontal: "center", vertical: "center" }, border: STYLE.border };
 
     for (let c = 0; c <= numCols; c++) {
       const addr = XLSX.utils.encode_cell({ r: 1, c });
@@ -483,17 +483,17 @@ export default function OlimpoCobranca() {
       },
     };
 
-    const headerStyleFn = (align: string = "center") => ({
+    const headerStyleFn = (_align: string = "center") => ({
       fill: STYLE.gold,
-      font: { bold: true, sz: 11, color: { rgb: "000000" } },
-      alignment: { horizontal: align, vertical: "center" },
+      font: { name: "Arial", bold: true, sz: 8, color: { rgb: "000000" } },
+      alignment: { horizontal: "center", vertical: "center" },
       border: STYLE.border,
     });
 
     const cellStyleFn = (fill: any, opts: any = {}) => ({
       fill,
-      font: { sz: 10, ...(opts.font || {}) },
-      alignment: { horizontal: opts.align || "right", vertical: "center" },
+      font: { name: "Arial", sz: 8, ...(opts.font || {}) },
+      alignment: { horizontal: "center", vertical: "center" },
       border: STYLE.border,
       ...(opts.numFmt ? { numFmt: opts.numFmt } : {}),
     });
@@ -598,8 +598,8 @@ export default function OlimpoCobranca() {
           const titleCell2 = ws2[XLSX.utils.encode_cell({ r: 0, c: 0 })];
           if (titleCell2) titleCell2.s = {
             fill: STYLE.gold,
-            font: { bold: true, sz: 13, color: { rgb: "000000" } },
-            alignment: { horizontal: "left", vertical: "center" },
+            font: { name: "Arial", bold: true, sz: 8, color: { rgb: "000000" } },
+            alignment: { horizontal: "center", vertical: "center" },
             border: STYLE.border,
           };
 
