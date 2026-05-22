@@ -17285,7 +17285,7 @@ Deno.serve(async (req) => {
         console.log('[get_aging_by_client_cr] Fetching aging by client from view...');
         const clientAgingSql = `
           SELECT
-            COALESCE(g.grupo, TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))) AS product,
+            TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1)) AS product,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS aging_30,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 40 THEN t.valor_nf ELSE 0 END) AS aging_40,
@@ -17308,8 +17308,6 @@ Deno.serve(async (req) => {
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_vencimento) > 365 THEN 1 ELSE 0 END) AS count_366_plus,
             GROUP_CONCAT(DISTINCT REPLACE(REPLACE(REPLACE(t.cnpj, '.', ''), '/', ''), '-', '') SEPARATOR ',') AS cnpjs
           FROM dados_dachser.v_fin_regua_contas_receber t
-          LEFT JOIN dados_dachser.t_fin_cliente_grupo g
-            ON g.razao_social COLLATE utf8mb4_unicode_ci = UPPER(TRIM(t.razao_social)) COLLATE utf8mb4_unicode_ci
           WHERE NOT EXISTS (
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
@@ -17322,7 +17320,7 @@ Deno.serve(async (req) => {
                 AND d.resolved_at IS NULL
                 AND d.deleted_at IS NULL
             )
-          GROUP BY COALESCE(g.grupo, TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1)))
+          GROUP BY TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))
           ORDER BY SUM(t.valor_nf) DESC
         `;
         const clientAgingRows = await client.query(clientAgingSql);
@@ -17368,9 +17366,7 @@ Deno.serve(async (req) => {
             MAX(t.condicao_pag) AS condicao_pagamento,
             MAX(t.nome_vendedor) AS nome_vendedor
           FROM dados_dachser.v_fin_regua_contas_receber t
-          LEFT JOIN dados_dachser.t_fin_cliente_grupo g
-            ON g.razao_social COLLATE utf8mb4_unicode_ci = UPPER(TRIM(t.razao_social)) COLLATE utf8mb4_unicode_ci
-          WHERE COALESCE(g.grupo, TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))) = ?
+          WHERE TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1)) = ?
             AND NOT EXISTS (
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
@@ -17423,6 +17419,7 @@ Deno.serve(async (req) => {
         if (!fatClientName) { result = { success: false, error: 'clientName required' }; break; }
         console.log(`[get_client_faturas_cr] client=${fatClientName} page=${fatPage} size=${fatPageSize}`);
         const offset = (fatPage - 1) * fatPageSize;
+        const likePattern = `${fatClientName} - %`;
 
         const fatSql = `
           SELECT
@@ -17454,9 +17451,7 @@ Deno.serve(async (req) => {
             ) THEN 1 ELSE 0 END AS disputa,
             COALESCE(NULLIF(t.numero_nf,''), t.documento) AS referencia_cliente
           FROM dados_dachser.v_fin_regua_contas_receber t
-          LEFT JOIN dados_dachser.t_fin_cliente_grupo g
-            ON g.razao_social COLLATE utf8mb4_unicode_ci = UPPER(TRIM(t.razao_social)) COLLATE utf8mb4_unicode_ci
-          WHERE COALESCE(g.grupo, TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))) = ?
+          WHERE (t.razao_social LIKE ? OR t.razao_social = ?)
             AND NOT EXISTS (
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
@@ -17465,21 +17460,19 @@ Deno.serve(async (req) => {
           ORDER BY t.data_vencimento DESC
           LIMIT ? OFFSET ?
         `;
-        const fatRows = await client.query(fatSql, [fatClientName, fatPageSize, offset]);
+        const fatRows = await client.query(fatSql, [likePattern, fatClientName, fatPageSize, offset]);
 
         const countSql = `
           SELECT COUNT(*) as total
           FROM dados_dachser.v_fin_regua_contas_receber t
-          LEFT JOIN dados_dachser.t_fin_cliente_grupo g
-            ON g.razao_social COLLATE utf8mb4_unicode_ci = UPPER(TRIM(t.razao_social)) COLLATE utf8mb4_unicode_ci
-          WHERE COALESCE(g.grupo, TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))) = ?
+          WHERE (t.razao_social LIKE ? OR t.razao_social = ?)
             AND NOT EXISTS (
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND sd.active = 0
             )
         `;
-        const countResult = await client.query(countSql, [fatClientName]);
+        const countResult = await client.query(countSql, [likePattern, fatClientName]);
         const total = Number(countResult[0]?.total || 0);
 
         result = { success: true, rows: fatRows, total, page: fatPage, pageSize: fatPageSize };

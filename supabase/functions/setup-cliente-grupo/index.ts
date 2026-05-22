@@ -1,113 +1,114 @@
-// Setup one-shot: cria dados_dachser.t_fin_cliente_grupo e importa o CSV de-para
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// Setup: cria dados_dachser.t_fin_cliente_grupo e importa CSV de-para
+// Uso:
+//   POST sem body  -> apenas cria a tabela
+//   POST { csv: "<texto csv>" } -> cria a tabela e importa (UPSERT)
+//     CSV esperado: cabeçalho com colunas "RAZAO SOCIAL" e "Nome para Indicador" (qualquer ordem)
+//     separador: vírgula ou ponto-e-vírgula (auto-detect)
+
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
+import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-function normalizeRaz(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toUpperCase();
-}
-function normalizeGrupo(s: string): string {
-  return s.replace(/\s+/g, " ").trim();
-}
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-
-  const client = await new Client().connect({
-    hostname: Deno.env.get("MARIADB_FIN_HOST")!,
-    port: parseInt(Deno.env.get("MARIADB_FIN_PORT") || "3306"),
-    username: Deno.env.get("MARIADB_FIN_USER")!,
-    password: Deno.env.get("MARIADB_FIN_PASSWORD")!,
-    db: Deno.env.get("MARIADB_FIN_DATABASE")!,
-    charset: "utf8mb4",
-    timeout: 60000,
-  });
-
+  let client: Client | null = null;
   try {
-    // 1) Cria tabela
+    const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
+    const csv: string | undefined = body?.csv;
+
+    client = await new Client().connect({
+      hostname: Deno.env.get('MARIADB_FIN_HOST')!,
+      port: parseInt(Deno.env.get('MARIADB_FIN_PORT') || '3306'),
+      db: Deno.env.get('MARIADB_FIN_DATABASE')!,
+      username: Deno.env.get('MARIADB_FIN_USER')!,
+      password: Deno.env.get('MARIADB_FIN_PASSWORD')!,
+      charset: 'utf8mb4',
+      timeout: 60000,
+    });
+    await client.execute("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
+
     await client.execute(`
       CREATE TABLE IF NOT EXISTS dados_dachser.t_fin_cliente_grupo (
         razao_social VARCHAR(255) NOT NULL,
-        grupo VARCHAR(255) NOT NULL,
-        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        grupo        VARCHAR(255) NOT NULL,
+        updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (razao_social),
         KEY idx_grupo (grupo)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
-    // 2) Lê CSV bundleado
-    const csvUrl = new URL("./depara.csv", import.meta.url);
-    const text = await Deno.readTextFile(csvUrl);
-    const lines = text.split(/\r?\n/);
-
-    // Header: "RAZAO SOCIAL;Nome para Indicador"
-    const rows: Array<[string, string]> = [];
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i];
-      if (!line || !line.trim()) continue;
-      const parts = line.split(";");
-      if (parts.length < 2) continue;
-      const raz = normalizeRaz(parts[0] || "");
-      const grupo = normalizeGrupo(parts.slice(1).join(";"));
-      if (!raz || !grupo) continue;
-      rows.push([raz, grupo]);
-    }
-
-    // Dedupe (último vence)
-    const dedup = new Map<string, string>();
-    for (const [r, g] of rows) dedup.set(r, g);
-    const finalRows = Array.from(dedup.entries());
-
-    // 3) Bulk upsert em lotes
-    const BATCH = 500;
-    let inserted = 0;
-    for (let i = 0; i < finalRows.length; i += BATCH) {
-      const chunk = finalRows.slice(i, i + BATCH);
-      const placeholders = chunk.map(() => "(?,?)").join(",");
-      const params: string[] = [];
-      for (const [r, g] of chunk) {
-        params.push(r, g);
+    let imported = 0;
+    let skipped = 0;
+    if (csv && csv.trim()) {
+      // Detect separator
+      const firstLine = csv.split(/\r?\n/, 1)[0] || '';
+      const sep = (firstLine.match(/;/g)?.length || 0) > (firstLine.match(/,/g)?.length || 0) ? ';' : ',';
+      const parseLine = (line: string): string[] => {
+        const out: string[] = [];
+        let cur = '', inQ = false;
+        for (let i = 0; i < line.length; i++) {
+          const c = line[i];
+          if (inQ) {
+            if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+            else if (c === '"') inQ = false;
+            else cur += c;
+          } else {
+            if (c === '"') inQ = true;
+            else if (c === sep) { out.push(cur); cur = ''; }
+            else cur += c;
+          }
+        }
+        out.push(cur);
+        return out.map(s => s.trim());
+      };
+      const lines = csv.split(/\r?\n/).filter(l => l.trim());
+      const header = parseLine(lines[0]).map(h => h.toUpperCase().replace(/\s+/g, ' ').trim());
+      const idxRazao = header.findIndex(h => h === 'RAZAO SOCIAL' || h === 'RAZÃO SOCIAL' || h === 'CLIENTE');
+      const idxGrupo = header.findIndex(h => h.includes('INDICADOR') || h === 'GRUPO' || h.includes('NOME PARA'));
+      if (idxRazao < 0 || idxGrupo < 0) {
+        throw new Error(`Cabeçalho inválido. Encontrado: ${JSON.stringify(header)}. Esperado colunas 'RAZAO SOCIAL' e 'Nome para Indicador'.`);
       }
-      await client.execute(
-        `INSERT INTO dados_dachser.t_fin_cliente_grupo (razao_social, grupo)
-         VALUES ${placeholders}
-         ON DUPLICATE KEY UPDATE grupo = VALUES(grupo)`,
-        params,
-      );
-      inserted += chunk.length;
+
+      const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
+      const rows: [string, string][] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseLine(lines[i]);
+        const razao = norm((cols[idxRazao] || '')).toUpperCase();
+        const grupo = norm(cols[idxGrupo] || '');
+        if (!razao || !grupo) { skipped++; continue; }
+        rows.push([razao, grupo]);
+      }
+
+      // Bulk upsert in batches of 500
+      const CHUNK = 500;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const slice = rows.slice(i, i + CHUNK);
+        const placeholders = slice.map(() => '(?, ?)').join(',');
+        const params: string[] = [];
+        for (const [r, g] of slice) { params.push(r, g); }
+        await client.execute(
+          `INSERT INTO dados_dachser.t_fin_cliente_grupo (razao_social, grupo)
+           VALUES ${placeholders}
+           ON DUPLICATE KEY UPDATE grupo = VALUES(grupo)`,
+          params
+        );
+        imported += slice.length;
+      }
     }
 
-    const count = await client.query(
-      `SELECT COUNT(*) AS total FROM dados_dachser.t_fin_cliente_grupo`,
-    );
+    const countRes = await client.execute(`SELECT COUNT(*) AS total FROM dados_dachser.t_fin_cliente_grupo`);
+    const total = (countRes.rows?.[0] as any)?.total ?? 0;
 
-    await client.close();
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        rows_in_csv: rows.length,
-        unique_keys: finalRows.length,
-        upserts_executed: inserted,
-        total_in_table: Number(count?.[0]?.total || 0),
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  } catch (err: any) {
-    console.error("setup-cliente-grupo error:", err);
-    try { await client.close(); } catch {}
-    return new Response(
-      JSON.stringify({ success: false, error: err?.message || String(err) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ success: true, table: 'dados_dachser.t_fin_cliente_grupo', imported, skipped, total }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (e) {
+    console.error('setup-cliente-grupo error:', e);
+    return new Response(JSON.stringify({ success: false, error: String((e as Error).message || e) }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } finally {
+    try { await client?.close(); } catch (_) {}
   }
 });
