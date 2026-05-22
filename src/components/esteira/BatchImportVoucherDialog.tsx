@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertCircle, FileText, Wand2, Search, Info, Trash2,
+  Upload, Loader2, FileSpreadsheet, CheckCircle2, AlertCircle, FileText, Wand2, Search, Info, Trash2, CalendarCheck,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -124,6 +124,34 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
   };
 
   const revalidate = (list: any[]) => markDuplicates(list.map(validate));
+
+  const handleFechamentoQuinzenal = async () => {
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "create_empty_batch_import", userId },
+      });
+      if (error) throw error;
+      if (!data?.success || !data?.batch_id) {
+        throw new Error(data?.error || "Falha ao iniciar fechamento quinzenal");
+      }
+      toast({
+        title: "Fechamento quinzenal",
+        description: "Selecione os SPOs pré-lançados e anexe os documentos.",
+      });
+      reset();
+      onOpenChange(false);
+      onCreated(data.batch_id);
+    } catch (e: any) {
+      toast({
+        title: "Erro",
+        description: e?.message || "Falha ao abrir fechamento quinzenal",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleFile = async (file: File) => {
     setBusy(true);
@@ -368,6 +396,32 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
                 Selecionar arquivo (.csv / .xlsx)
               </Button>
             </label>
+
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 flex items-start gap-3">
+              <div className="h-9 w-9 rounded-lg bg-amber-500/15 text-amber-300 flex items-center justify-center shrink-0">
+                <CalendarCheck className="h-5 w-5" />
+              </div>
+              <div className="flex-1 space-y-2">
+                <div>
+                  <div className="text-sm font-medium text-amber-200">Fechamento quinzenal</div>
+                  <div className="text-xs text-muted-foreground">
+                    Pula a importação de planilha e abre direto a vinculação em lote usando apenas SPOs pré-lançados.
+                    Use quando nenhum novo voucher precisa ser cadastrado antes.
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleFechamentoQuinzenal}
+                  disabled={busy}
+                  className="border-amber-500/40 text-amber-200 hover:bg-amber-500/10"
+                >
+                  {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CalendarCheck className="h-4 w-4 mr-2" />}
+                  Abrir vinculação de pré-lançados
+                </Button>
+              </div>
+            </div>
 
             <div className="space-y-2">
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">

@@ -498,7 +498,7 @@ Deno.serve(async (req) => {
       'bind_batch_document_to_voucher','bind_batch_document_to_master_group',
       'unbind_batch_document','delete_batch_document','get_batch_import_status',
       'finalize_batch_import','cleanup_abandoned_batch_imports',
-      'search_pre_lancamento_by_fornecedores','attach_pre_lancamento_to_batch',
+      'search_pre_lancamento_by_fornecedores','attach_pre_lancamento_to_batch','create_empty_batch_import',
       // Régua / Cobrança / Aging / Disputas
       'get_regua_counts','get_aging_overview','get_aging_by_client','get_client_cnpj_detail',
       'get_client_faturas','save_cobranca_observacao','get_budget_forecast_auto',
@@ -20067,7 +20067,8 @@ Deno.serve(async (req) => {
       case 'finalize_batch_import':
       case 'cleanup_abandoned_batch_imports':
       case 'search_pre_lancamento_by_fornecedores':
-      case 'attach_pre_lancamento_to_batch': {
+      case 'attach_pre_lancamento_to_batch':
+      case 'create_empty_batch_import': {
         // Guard: usuário autenticado (qualquer perfil)
         const requesterId = (body as any).userId ?? (body as any).user_id;
         if (!requesterId) {
@@ -20157,6 +20158,7 @@ Deno.serve(async (req) => {
           try { await client.execute(`ALTER TABLE dados_dachser.t_voucher_batch_import_item ADD COLUMN IF NOT EXISTS etapa_destino VARCHAR(30) DEFAULT NULL`); } catch (_) {}
           try { await client.execute(`ALTER TABLE dados_dachser.t_voucher_batch_documents ADD COLUMN IF NOT EXISTS is_master_group TINYINT(1) NOT NULL DEFAULT 0`); } catch (_) {}
           try { await client.execute(`ALTER TABLE dados_dachser.t_voucher_batch_documents ADD COLUMN IF NOT EXISTS master_voucher_ids JSON DEFAULT NULL`); } catch (_) {}
+          try { await client.execute(`ALTER TABLE dados_dachser.t_voucher_batch_import ADD COLUMN IF NOT EXISTS tipo VARCHAR(30) NOT NULL DEFAULT 'PLANILHA'`); } catch (_) {}
         } catch (ddlErr) {
           console.log('Batch DDL skipped:', ddlErr);
         }
@@ -21408,7 +21410,28 @@ Deno.serve(async (req) => {
           break;
         }
 
+        // ===== criar lote vazio (modo Fechamento Quinzenal — só pré-lançados) =====
+        if (action === 'create_empty_batch_import') {
+          try {
+            const cleanup = await runAbandonedCleanup({ scope: 'ALL', userId: requesterId });
+            if (cleanup.batches > 0) {
+              console.log(`[create_empty_batch_import] Auto-cleanup user=${requesterId}:`, cleanup);
+            }
+          } catch (e) {
+            console.log('[create_empty_batch_import] auto-cleanup failed:', e);
+          }
+          const batchId = crypto.randomUUID();
+          await client.execute(`
+            INSERT INTO dados_dachser.t_voucher_batch_import
+              (id, status, original_file_name, total_rows, valid_rows, error_rows, created_by_user_id, created_by_user_name, tipo)
+            VALUES (?, 'PENDING_DOCUMENTS', ?, 0, 0, 0, ?, ?, 'FECHAMENTO_QUINZENAL')
+          `, [batchId, 'FECHAMENTO_QUINZENAL', String(requesterId), adminUserName]);
+          result = { success: true, batch_id: batchId, tipo: 'FECHAMENTO_QUINZENAL' };
+          break;
+        }
+
         // ===== buscar SPOs pré-lançados de um conjunto de fornecedores =====
+
         if (action === 'search_pre_lancamento_by_fornecedores') {
           const batchIdArg: string | null = (body as any).batch_id || null;
           let fornecedores: string[] = Array.isArray((body as any).fornecedores) ? (body as any).fornecedores : [];
