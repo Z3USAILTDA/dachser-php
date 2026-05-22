@@ -369,6 +369,32 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
               </Button>
             </label>
 
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 flex items-start gap-3">
+              <div className="h-9 w-9 rounded-lg bg-amber-500/15 text-amber-300 flex items-center justify-center shrink-0">
+                <CalendarCheck className="h-5 w-5" />
+              </div>
+              <div className="flex-1 space-y-2">
+                <div>
+                  <div className="text-sm font-medium text-amber-200">Fechamento quinzenal</div>
+                  <div className="text-xs text-muted-foreground">
+                    Pula a importação de planilha e abre direto a vinculação em lote usando apenas SPOs pré-lançados.
+                    Use quando nenhum novo voucher precisa ser cadastrado antes.
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleFechamentoQuinzenal}
+                  disabled={busy}
+                  className="border-amber-500/40 text-amber-200 hover:bg-amber-500/10"
+                >
+                  {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CalendarCheck className="h-4 w-4 mr-2" />}
+                  Abrir vinculação de pré-lançados
+                </Button>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Cabeçalhos esperados
