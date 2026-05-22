@@ -125,6 +125,34 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
 
   const revalidate = (list: any[]) => markDuplicates(list.map(validate));
 
+  const handleFechamentoQuinzenal = async () => {
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "create_empty_batch_import", userId },
+      });
+      if (error) throw error;
+      if (!data?.success || !data?.batch_id) {
+        throw new Error(data?.error || "Falha ao iniciar fechamento quinzenal");
+      }
+      toast({
+        title: "Fechamento quinzenal",
+        description: "Selecione os SPOs pré-lançados e anexe os documentos.",
+      });
+      reset();
+      onOpenChange(false);
+      onCreated(data.batch_id);
+    } catch (e: any) {
+      toast({
+        title: "Erro",
+        description: e?.message || "Falha ao abrir fechamento quinzenal",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleFile = async (file: File) => {
     setBusy(true);
     try {
