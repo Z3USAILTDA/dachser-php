@@ -21410,7 +21410,28 @@ Deno.serve(async (req) => {
           break;
         }
 
+        // ===== criar lote vazio (modo Fechamento Quinzenal — só pré-lançados) =====
+        if (action === 'create_empty_batch_import') {
+          try {
+            const cleanup = await runAbandonedCleanup({ scope: 'ALL', userId: requesterId });
+            if (cleanup.batches > 0) {
+              console.log(`[create_empty_batch_import] Auto-cleanup user=${requesterId}:`, cleanup);
+            }
+          } catch (e) {
+            console.log('[create_empty_batch_import] auto-cleanup failed:', e);
+          }
+          const batchId = crypto.randomUUID();
+          await client.execute(`
+            INSERT INTO dados_dachser.t_voucher_batch_import
+              (id, status, original_file_name, total_rows, valid_rows, error_rows, created_by_user_id, created_by_user_name, tipo)
+            VALUES (?, 'PENDING_DOCUMENTS', ?, 0, 0, 0, ?, ?, 'FECHAMENTO_QUINZENAL')
+          `, [batchId, 'FECHAMENTO_QUINZENAL', String(requesterId), adminUserName]);
+          result = { success: true, batch_id: batchId, tipo: 'FECHAMENTO_QUINZENAL' };
+          break;
+        }
+
         // ===== buscar SPOs pré-lançados de um conjunto de fornecedores =====
+
         if (action === 'search_pre_lancamento_by_fornecedores') {
           const batchIdArg: string | null = (body as any).batch_id || null;
           let fornecedores: string[] = Array.isArray((body as any).fornecedores) ? (body as any).fornecedores : [];
