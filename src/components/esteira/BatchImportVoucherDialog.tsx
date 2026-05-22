@@ -406,7 +406,6 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
                   <div className="text-sm font-medium text-amber-200">Fechamento quinzenal</div>
                   <div className="text-xs text-muted-foreground">
                     Pula a importação de planilha e abre direto a vinculação em lote usando apenas SPOs pré-lançados.
-                    Use quando nenhum novo voucher precisa ser cadastrado antes.
                   </div>
                 </div>
                 <Button
