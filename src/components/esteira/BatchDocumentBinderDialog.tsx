@@ -48,6 +48,9 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
   const [preSearchLoading, setPreSearchLoading] = useState(false);
   const [preLancVouchers, setPreLancVouchers] = useState<any[]>([]);
   const [selectedPreLanc, setSelectedPreLanc] = useState<Set<string>>(new Set());
+  const [batchTipo, setBatchTipo] = useState<string>("PLANILHA");
+
+  const isFechamento = batchTipo === "FECHAMENTO_QUINZENAL";
 
   const refresh = useCallback(async () => {
     if (!batchId) return;
@@ -59,11 +62,13 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
       if (data?.success) {
         setDocs(data.documents || []);
         setChecklist(data.checklist || []);
+        setBatchTipo(data?.batch?.tipo || "PLANILHA");
       }
     } finally {
       setLoading(false);
     }
   }, [batchId, userId]);
+
 
   useEffect(() => {
     if (open && batchId) {
