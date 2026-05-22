@@ -17435,10 +17435,13 @@ Deno.serve(async (req) => {
             const placeholders = cnpjList.map(() => '?').join(',');
             const contatosRows = await client.query(
               `SELECT REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','') AS cnpj_clean,
-                      nome_contato, email_contato
+                      MAX(nome_contato) AS nome_contato,
+                      LOWER(TRIM(email_contato)) AS email_contato
                FROM dados_dachser.t_dados_financeiro_contatos
                WHERE REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','') IN (${placeholders})
-                 AND email_contato IS NOT NULL AND email_contato <> ''`,
+                 AND email_contato IS NOT NULL AND email_contato <> ''
+               GROUP BY cnpj_clean, LOWER(TRIM(email_contato))
+               ORDER BY cnpj_clean, email_contato`,
               cnpjList
             );
             contatos = (contatosRows || []).map((c: any) => ({
