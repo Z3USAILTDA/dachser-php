@@ -483,17 +483,17 @@ export default function OlimpoCobranca() {
       },
     };
 
-    const headerStyleFn = (align: string = "center") => ({
+    const headerStyleFn = (_align: string = "center") => ({
       fill: STYLE.gold,
-      font: { bold: true, sz: 11, color: { rgb: "000000" } },
-      alignment: { horizontal: align, vertical: "center" },
+      font: { name: "Arial", bold: true, sz: 8, color: { rgb: "000000" } },
+      alignment: { horizontal: "center", vertical: "center" },
       border: STYLE.border,
     });
 
     const cellStyleFn = (fill: any, opts: any = {}) => ({
       fill,
-      font: { sz: 10, ...(opts.font || {}) },
-      alignment: { horizontal: opts.align || "right", vertical: "center" },
+      font: { name: "Arial", sz: 8, ...(opts.font || {}) },
+      alignment: { horizontal: "center", vertical: "center" },
       border: STYLE.border,
       ...(opts.numFmt ? { numFmt: opts.numFmt } : {}),
     });
