@@ -92,16 +92,16 @@ async function connectWithRetry(config: mysql.ConnectionOptions, maxRetries = 3)
 // Cell styles
 const STYLES = {
   logo: {
-    font: { name: "Arial", sz: 16, bold: true, color: { rgb: "FFCC00" } },
+    font: { name: "Arial", sz: 8, bold: true, color: { rgb: "FFCC00" } },
     fill: { fgColor: { rgb: "003366" } },
     alignment: { horizontal: "center", vertical: "center" },
   },
   title: {
-    font: { name: "Arial", sz: 22, bold: true, color: { rgb: "333333" } },
+    font: { name: "Arial", sz: 8, bold: true, color: { rgb: "333333" } },
     alignment: { horizontal: "center", vertical: "center" },
   },
   boxLabel: {
-    font: { name: "Arial", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+    font: { name: "Arial", sz: 8, bold: true, color: { rgb: "FFFFFF" } },
     fill: { fgColor: { rgb: "0070C0" } },
     alignment: { horizontal: "center", vertical: "center" },
     border: {
@@ -112,7 +112,7 @@ const STYLES = {
     },
   },
   boxValue: {
-    font: { name: "Arial", sz: 14, bold: true, color: { rgb: "FF0000" } },
+    font: { name: "Arial", sz: 8, bold: true, color: { rgb: "FF0000" } },
     fill: { fgColor: { rgb: "FFFFFF" } },
     alignment: { horizontal: "center", vertical: "center" },
     border: {
@@ -123,21 +123,21 @@ const STYLES = {
     },
   },
   date: {
-    font: { name: "Arial", sz: 10, color: { rgb: "333333" } },
-    alignment: { horizontal: "right", vertical: "center" },
+    font: { name: "Arial", sz: 8, color: { rgb: "333333" } },
+    alignment: { horizontal: "center", vertical: "center" },
   },
   periodoLabel: {
-    font: { name: "Arial", sz: 11, bold: true, color: { rgb: "000000" } },
+    font: { name: "Arial", sz: 8, bold: true, color: { rgb: "000000" } },
     fill: { fgColor: { rgb: "B4C6E7" } },
-    alignment: { horizontal: "left", vertical: "center" },
+    alignment: { horizontal: "center", vertical: "center" },
   },
   periodoValue: {
-    font: { name: "Arial", sz: 11, color: { rgb: "000000" } },
+    font: { name: "Arial", sz: 8, color: { rgb: "000000" } },
     fill: { fgColor: { rgb: "B4C6E7" } },
-    alignment: { horizontal: "left", vertical: "center" },
+    alignment: { horizontal: "center", vertical: "center" },
   },
   headerBlack: {
-    font: { name: "Arial", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+    font: { name: "Arial", sz: 8, bold: true, color: { rgb: "FFFFFF" } },
     fill: { fgColor: { rgb: "000000" } },
     alignment: { horizontal: "center", vertical: "center" },
     border: {
@@ -148,7 +148,7 @@ const STYLES = {
     },
   },
   headerBlue: {
-    font: { name: "Arial", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+    font: { name: "Arial", sz: 8, bold: true, color: { rgb: "FFFFFF" } },
     fill: { fgColor: { rgb: "0070C0" } },
     alignment: { horizontal: "center", vertical: "center" },
     border: {
@@ -159,8 +159,8 @@ const STYLES = {
     },
   },
   dataCell: {
-    font: { name: "Arial", sz: 10, color: { rgb: "000000" } },
-    alignment: { horizontal: "left", vertical: "center", wrapText: true },
+    font: { name: "Arial", sz: 8, color: { rgb: "000000" } },
+    alignment: { horizontal: "center", vertical: "center", wrapText: true },
     border: {
       top: { style: "thin", color: { rgb: "D0D0D0" } },
       bottom: { style: "thin", color: { rgb: "D0D0D0" } },
@@ -169,8 +169,8 @@ const STYLES = {
     },
   },
   dataCellNumber: {
-    font: { name: "Arial", sz: 10, color: { rgb: "000000" } },
-    alignment: { horizontal: "right", vertical: "center", wrapText: true },
+    font: { name: "Arial", sz: 8, color: { rgb: "000000" } },
+    alignment: { horizontal: "center", vertical: "center", wrapText: true },
     border: {
       top: { style: "thin", color: { rgb: "D0D0D0" } },
       bottom: { style: "thin", color: { rgb: "D0D0D0" } },
@@ -179,8 +179,8 @@ const STYLES = {
     },
   },
   dataCellOverdue: {
-    font: { name: "Arial", sz: 10, color: { rgb: "FF0000" } },
-    alignment: { horizontal: "right", vertical: "center", wrapText: true },
+    font: { name: "Arial", sz: 8, color: { rgb: "FF0000" } },
+    alignment: { horizontal: "center", vertical: "center", wrapText: true },
     border: {
       top: { style: "thin", color: { rgb: "D0D0D0" } },
       bottom: { style: "thin", color: { rgb: "D0D0D0" } },
@@ -189,7 +189,7 @@ const STYLES = {
     },
   },
   empty: {
-    font: { name: "Arial", sz: 10 },
+    font: { name: "Arial", sz: 8 },
   },
 };
 

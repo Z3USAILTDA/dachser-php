@@ -1,16 +1,17 @@
 ## Objetivo
-Ajustar a exportação Excel do Aging em `src/pages/olimpo/OlimpoCobranca.tsx` para:
-1. Usar fonte **Arial tamanho 8** em todas as células (título, cabeçalho, linhas e totais) das 3 abas (Aging - Product, Aging - Client e Analítico de Clientes).
-2. Alinhamento **centralizado** (horizontal: "center", vertical: "center") em todas as células de todas as linhas.
+Aplicar os mesmos ajustes do Excel (aging) na edge function `supabase/functions/regua-send-aging/index.ts`, que gera e envia o relatório por e-mail:
+1. **Fonte Arial 8** em todas as células (logo, título, caixas, datas, período, headers, dados, totais).
+2. **Alinhamento centralizado** (horizontal: "center", vertical: "center") em todas as células.
 
 ## Alterações
-Arquivo único: `src/pages/olimpo/OlimpoCobranca.tsx`
+Arquivo único: `supabase/functions/regua-send-aging/index.ts`
 
-- **`headerStyleFn`**: `font: { name: "Arial", sz: 8, bold: true, ... }`; manter `horizontal: "center"`.
-- **`cellStyleFn`**: `font: { name: "Arial", sz: 8, ...override }`; forçar `alignment.horizontal = "center"` (ignorar parâmetro `opts.align`, ou sobrescrever para "center" sempre).
-- **Título** (linhas 410 e 599-604 do Analítico): adicionar `name: "Arial"` e `sz: 8` no font; alignment center.
-- **Aba Analítico**: nos loops de cabeçalho/linhas/total, garantir que o estilo aplicado via `cellStyleFn` resulte em centralizado (a mudança em `cellStyleFn` já cobre isso, mas remover os `align: "left"/"right"` passados como override — ou apenas neutralizá-los dentro da função).
+- No bloco `STYLES` (linhas 93-194): trocar todos os `sz: 10/11/12/14/16/22` por `sz: 8` e todos os `horizontal: "left"/"right"` por `"center"`, mantendo `name: "Arial"`, cores, fills e borders inalterados.
+- No estilo inline do "TOTAL EM ATRASO" (linhas 246-261): mesmo ajuste — `sz: 8` e `horizontal: "center"`.
+- No override de coluna 7 (linha 238): preservar a lógica (só muda cor), o `sz` virá do `STYLES.dataCell` já ajustado.
 
-Manter formatação numérica (`numFmt`), preenchimentos (`fill`), bordas, negrito dos totais, cores e larguras de coluna inalteradas.
+Manter intactos: estrutura de células, merges, larguras de coluna, alturas de linha, formatos numéricos (`z`), autofilter, lógica de dados e fluxo de envio de e-mail.
 
-Sem mudanças em backend, queries ou outras telas.
+Após editar, redeploy com `supabase--deploy_edge_functions(["regua-send-aging"])`.
+
+Sem outras alterações.
