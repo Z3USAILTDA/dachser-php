@@ -132,6 +132,12 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
         obsMap[obs.cnpj] = obs.observacao || "";
       }
       setObservacoes(obsMap);
+      const contMap: Record<string, Contato[]> = {};
+      for (const c of (data.contatos || []) as Contato[]) {
+        if (!contMap[c.cnpjClean]) contMap[c.cnpjClean] = [];
+        contMap[c.cnpjClean].push(c);
+      }
+      setContatos(contMap);
     } catch (err: any) {
       console.error("Error fetching client detail:", err);
       toast({ title: "Erro", description: err.message, variant: "destructive" });
