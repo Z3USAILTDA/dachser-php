@@ -20067,7 +20067,8 @@ Deno.serve(async (req) => {
       case 'finalize_batch_import':
       case 'cleanup_abandoned_batch_imports':
       case 'search_pre_lancamento_by_fornecedores':
-      case 'attach_pre_lancamento_to_batch': {
+      case 'attach_pre_lancamento_to_batch':
+      case 'create_empty_batch_import': {
         // Guard: usuário autenticado (qualquer perfil)
         const requesterId = (body as any).userId ?? (body as any).user_id;
         if (!requesterId) {
