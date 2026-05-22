@@ -41,6 +41,12 @@ interface Observacao {
   updated_at: string | null;
 }
 
+interface Contato {
+  cnpjClean: string;
+  nome_contato: string | null;
+  email_contato: string;
+}
+
 interface AgingRow {
   product: string;
   cnpjs?: string[];
@@ -98,6 +104,7 @@ function formatBRLFull(value: number): string {
 export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSheetProps) {
   const [cnpjData, setCnpjData] = useState<CnpjDetail[]>([]);
   const [observacoes, setObservacoes] = useState<Record<string, string>>({});
+  const [contatos, setContatos] = useState<Record<string, Contato[]>>({});
   const [savingCnpj, setSavingCnpj] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -125,6 +132,12 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
         obsMap[obs.cnpj] = obs.observacao || "";
       }
       setObservacoes(obsMap);
+      const contMap: Record<string, Contato[]> = {};
+      for (const c of (data.contatos || []) as Contato[]) {
+        if (!contMap[c.cnpjClean]) contMap[c.cnpjClean] = [];
+        contMap[c.cnpjClean].push(c);
+      }
+      setContatos(contMap);
     } catch (err: any) {
       console.error("Error fetching client detail:", err);
       toast({ title: "Erro", description: err.message, variant: "destructive" });
@@ -285,6 +298,26 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                       )}
                     </div>
                   )}
+
+                  {/* E-mails cadastrados */}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-medium">
+                      <Mail className="h-3 w-3" /> E-mails cadastrados
+                    </div>
+                    {(contatos[cnpj.cnpjClean]?.length ?? 0) === 0 ? (
+                      <p className="text-xs text-muted-foreground/70 italic">Nenhum e-mail cadastrado</p>
+                    ) : (
+                      <ul className="space-y-0.5">
+                        {contatos[cnpj.cnpjClean].map((c, i) => (
+                          <li key={i} className="text-xs text-foreground">
+                            {c.nome_contato && <span className="text-muted-foreground">{c.nome_contato} — </span>}
+                            <a href={`mailto:${c.email_contato}`} className="text-primary hover:underline">{c.email_contato}</a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
 
                   {/* Observação */}
                   <div className="space-y-1">
