@@ -1,41 +1,66 @@
-## Objetivo
+## Diagnóstico
 
-No modal **Importar SPO em Lote** (esteira de vouchers), adicionar um botão **"Fechamento quinzenal"** ao lado de "Selecionar arquivo (.csv / .xlsx)". Ao clicar, o usuário pula totalmente a etapa de importação de planilha e vai direto para o passo de **Vincular documentos em lote**, listando todos os pré-lançados ATIVOS disponíveis (sem filtrar por fornecedores de uma planilha, já que não há planilha).
+Confirmei a causa: no `mariadb-proxy/index.ts` as três ações que alimentam o Olimpo de Cobrança (visão por cliente) ainda agrupam por `TRIM(SUBSTRING_INDEX(razao_social,'-',1))` e **não consultam** a tabela `dados_dachser.t_fin_cliente_grupo` (que já está populada com 4.511 mapeamentos). Por isso "ZF PASSIVE SAFETY SYSTEM BRASIL LTDA" continua como linha separada de "ZF AUTOMOTIVE BRASIL LTDA.".
 
-Caso de uso: no fechamento quinzenal nada novo precisa ser cadastrado — só anexar faturas/boletos aos vouchers que já estão pré-lançados.
+As ações afetadas são as 6 abaixo (3 do fluxo antigo + 3 do fluxo "_cr" da view nova):
+- `get_aging_by_client` / `get_aging_by_client_cr` — produto (grupo) listado no aging
+- `get_client_cnpj_detail` / `get_client_cnpj_detail_cr` — drill por CNPJ
+- `get_client_faturas` / `get_client_faturas_cr` — faturas do cliente
 
-## Mudanças
+## O que vou fazer
 
-### 1. Frontend — `src/components/esteira/BatchImportVoucherDialog.tsx`
+Aplicar a mesma expressão de agrupamento canônica em todas as 6 queries, fazendo `LEFT JOIN` da `t_fin_cliente_grupo` por `UPPER(TRIM(razao_social))` e usando `COALESCE(grupo, fallback hifenizado)`.
 
-- No `step === "upload"` (perto do botão "Selecionar arquivo"), adicionar um segundo botão secundário **"Fechamento quinzenal"** com um ícone (ex.: `CalendarCheck`).
-- Ao clicar: chamar `mariadb-proxy` com a action nova `create_empty_batch_import` (modo "fechamento"), receber o `batchId` retornado e disparar `onCreated(batchId)` — o mesmo callback que hoje abre o `BatchDocumentBinderDialog`.
-- Fechar o próprio modal de importação.
-- Adicionar texto curto de ajuda abaixo do botão explicando que essa opção lista todos os pré-lançados sem precisar de planilha.
+### Expressão canônica (helper conceitual)
 
-### 2. Frontend — `src/components/esteira/BatchDocumentBinderDialog.tsx`
+```sql
+COALESCE(
+  g.grupo,
+  TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social,'Sem Cliente'),'-',1))
+)
+```
 
-- O binder já carrega via `get_batch_import_status` (checklist fica vazio quando o batch não tem itens) e a busca de pré-lançados via `search_pre_lancamento_by_fornecedores`.
-- Detectar o `tipo = 'FECHAMENTO_QUINZENAL'` retornado em `get_batch_import_status` e, nesse caso, mostrar um header indicando "Modo Fechamento Quinzenal" e ocultar a seção de "Vouchers do lote" (que estará vazia) — exibir apenas o painel de pré-lançados + upload/vinculação de documentos.
-- Reuso integral do restante (upload, vinculação, finalização).
+Join padrão:
+```sql
+LEFT JOIN dados_dachser.t_fin_cliente_grupo g
+  ON g.razao_social COLLATE utf8mb4_unicode_ci
+   = UPPER(TRIM(COALESCE(t.razao_social,''))) COLLATE utf8mb4_unicode_ci
+```
 
-### 3. Backend — `supabase/functions/mariadb-proxy/index.ts`
+### Mudanças por ação
 
-- Adicionar nova action `create_empty_batch_import`:
-  - Faz `INSERT` em `t_voucher_batch_import` com `tipo = 'FECHAMENTO_QUINZENAL'` (nova coluna VARCHAR, default `'PLANILHA'`), `user_id`, `created_at`. Sem itens em `t_voucher_batch_import_item`.
-  - Retorna `{ success: true, batch_id }`.
-  - Auto-cleanup de batches abandonados continua valendo.
-- Ajustar `search_pre_lancamento_by_fornecedores`:
-  - Se o batch correspondente for do tipo `FECHAMENTO_QUINZENAL` (ou se não houver fornecedores no batch), retornar **todos** os vouchers pré-lançados ATIVOS, sem filtro por fornecedor — ordenados por vencimento.
-- Ajustar `get_batch_import_status` para incluir `tipo` no payload de resposta.
-- `finalize_batch_import` permanece igual — funciona porque o que finaliza são as vinculações de pré-lançados anexados ao batch.
+1. **`get_aging_by_client`** (linhas 2798-2878) e **`get_aging_by_client_cr`** (17284-17348)
+   - Substituir o `SELECT product` e o `GROUP BY` pela expressão canônica + adicionar o `LEFT JOIN g`.
+   - Resultado: "ZF AUTOMOTIVE BRASIL LTDA" passa a consolidar todas as variações TRW/ZF/ZF PASSIVE com os CNPJs agregados.
 
-### 4. Migração SQL
+2. **`get_client_cnpj_detail`** (2881-2956) e **`get_client_cnpj_detail_cr`** (17350-17415)
+   - Substituir `WHERE TRIM(SUBSTRING_INDEX(...)) = ?` por:
+     ```sql
+     LEFT JOIN dados_dachser.t_fin_cliente_grupo g ON ...
+     WHERE COALESCE(g.grupo, TRIM(SUBSTRING_INDEX(...,'-',1))) COLLATE utf8mb4_unicode_ci
+         = ? COLLATE utf8mb4_unicode_ci
+     ```
+   - Mantém compatibilidade quando o `clientName` enviado é tanto um grupo da de-para quanto um nome derivado do fallback.
 
-- `ALTER TABLE dados_dachser.t_voucher_batch_import ADD COLUMN IF NOT EXISTS tipo VARCHAR(30) NOT NULL DEFAULT 'PLANILHA'` (executado defensivamente também no início do handler, padrão já usado no arquivo).
+3. **`get_client_faturas`** (2958-3023) e **`get_client_faturas_cr`** (17417-17480)
+   - Trocar o `(razao_social LIKE ? OR razao_social = ?)` pela mesma expressão canônica resolvida via `LEFT JOIN g`, comparando o resultado com `?` (mesmo padrão do detalhe). Aplicar no SELECT principal e no COUNT.
 
-## Fora de escopo
+### Pontos cuidadosos
 
-- Não alterar lógica de pré-lançados existentes nem o fluxo normal de importação por planilha.
-- Não criar nova tela — reuso total do `BatchDocumentBinderDialog`.
-- Não mexer em permissões/roles (mesmo perfil que hoje abre a importação).
+- **Colação**: forçar `COLLATE utf8mb4_unicode_ci` em ambos os lados do join e do filtro para evitar "Illegal mix of collations" (a conexão usa `utf8mb4_general_ci`).
+- **Normalização da chave**: o import já fez `UPPER(TRIM(razao_social))`, então `UPPER(TRIM(t.razao_social))` casa diretamente. Não vou aplicar removal de pontuação para preservar exatidão (qualquer caso não-mapeado simplesmente cai no fallback atual — sem regressão).
+- **Sem mudança de frontend**: o contrato (`product`, `cnpjs[]`, `clientName`) é preservado.
+- **Sem mudança de schema** — a tabela já existe e está populada (4.511 registros).
+- **Sem refactor**: edições cirúrgicas dentro de cada `case`, mantendo o restante do arquivo intacto.
+
+### Validação após implementação
+
+1. Recarregar `/olimpo/cobranca` (visão por cliente) e conferir que "ZF AUTOMOTIVE BRASIL LTDA" passa a englobar "ZF PASSIVE SAFETY SYSTEM..." e os CNPJs antes separados.
+2. Clicar no grupo para abrir o detalhe de CNPJs — deve listar todos os CNPJs do grupo consolidado.
+3. Abrir as faturas — deve retornar linhas de todas as razões sociais mapeadas àquele grupo.
+
+### Fora do escopo
+
+- Reimportar/atualizar o CSV de de-para (já feito).
+- UI para manutenção do de-para.
+- Outras visões (por produto, budget, etc.) que não passam por essas 6 ações.
