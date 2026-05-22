@@ -1,17 +1,31 @@
 ## Objetivo
-Aplicar os mesmos ajustes do Excel (aging) na edge function `supabase/functions/regua-send-aging/index.ts`, que gera e envia o relatório por e-mail:
-1. **Fonte Arial 8** em todas as células (logo, título, caixas, datas, período, headers, dados, totais).
-2. **Alinhamento centralizado** (horizontal: "center", vertical: "center") em todas as células.
+Exibir os e-mails cadastrados (de `t_dados_financeiro_contatos`) dentro do detalhamento por CNPJ no painel "Detalhamento por CNPJ" da página `/olimpo/cobranca`.
 
-## Alterações
-Arquivo único: `supabase/functions/regua-send-aging/index.ts`
+## Mudanças
 
-- No bloco `STYLES` (linhas 93-194): trocar todos os `sz: 10/11/12/14/16/22` por `sz: 8` e todos os `horizontal: "left"/"right"` por `"center"`, mantendo `name: "Arial"`, cores, fills e borders inalterados.
-- No estilo inline do "TOTAL EM ATRASO" (linhas 246-261): mesmo ajuste — `sz: 8` e `horizontal: "center"`.
-- No override de coluna 7 (linha 238): preservar a lógica (só muda cor), o `sz` virá do `STYLES.dataCell` já ajustado.
+### 1. Backend — `supabase/functions/mariadb-proxy/index.ts`
+Na action `get_client_cnpj_detail_cr` (linha ~17367), após obter os CNPJs, fazer uma query adicional em `dados_dachser.t_dados_financeiro_contatos` para buscar contatos por CNPJ (match pelo CNPJ limpo — sem `.`, `/`, `-`):
 
-Manter intactos: estrutura de células, merges, larguras de coluna, alturas de linha, formatos numéricos (`z`), autofilter, lógica de dados e fluxo de envio de e-mail.
+```sql
+SELECT
+  REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','') AS cnpj_clean,
+  nome_contato,
+  email_contato
+FROM dados_dachser.t_dados_financeiro_contatos
+WHERE REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','') IN (?, ?, ...)
+  AND email_contato IS NOT NULL AND email_contato <> ''
+```
 
-Após editar, redeploy com `supabase--deploy_edge_functions(["regua-send-aging"])`.
+Retornar `contatos: [{ cnpjClean, nome_contato, email_contato }]` no response, ao lado de `data` e `observacoes`. Um CNPJ pode ter múltiplos contatos — retornar todos.
 
-Sem outras alterações.
+### 2. Frontend — `src/components/olimpo/ClientDetailSheet.tsx`
+- Adicionar tipo `Contato { cnpj: string; nome_contato: string|null; email_contato: string }`.
+- Novo state `contatos: Record<string, Contato[]>` (mapa cnpjClean → lista).
+- Em `fetchDetail`, popular `contatos` a partir de `data.contatos` (agrupando por `cnpjClean`).
+- No card de cada CNPJ, abaixo de "Cond. Pagamento / Vendedor" e acima de "Observação", renderizar uma seção "E-mails cadastrados":
+  - Se houver contatos: lista com ícone `Mail`, mostrando `nome_contato — email_contato` (cada um como `mailto:` link, estilo `text-xs`).
+  - Se vazio: texto sutil "Nenhum e-mail cadastrado".
+
+## Fora de escopo
+- Edição/cadastro de contatos.
+- Mudanças no envio de e-mail automático ou no Excel de aging.
