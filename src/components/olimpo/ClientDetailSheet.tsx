@@ -41,6 +41,12 @@ interface Observacao {
   updated_at: string | null;
 }
 
+interface Contato {
+  cnpjClean: string;
+  nome_contato: string | null;
+  email_contato: string;
+}
+
 interface AgingRow {
   product: string;
   cnpjs?: string[];
