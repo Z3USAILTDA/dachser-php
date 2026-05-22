@@ -245,17 +245,17 @@ function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalVa
   const totalRow = 5 + invoices.length;
   ws[XLSX.utils.encode_cell({ r: totalRow, c: 9 })] = {
     v: "TOTAL EM ATRASO:", s: {
-      font: { name: "Arial", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+      font: { name: "Arial", sz: 8, bold: true, color: { rgb: "FFFFFF" } },
       fill: { fgColor: { rgb: "C00000" } },
-      alignment: { horizontal: "right", vertical: "center" },
+      alignment: { horizontal: "center", vertical: "center" },
       border: { top: { style: "thin", color: { rgb: "000000" } }, bottom: { style: "thin", color: { rgb: "000000" } }, left: { style: "thin", color: { rgb: "000000" } }, right: { style: "thin", color: { rgb: "000000" } } },
     }
   };
   ws[XLSX.utils.encode_cell({ r: totalRow, c: 10 })] = {
     v: totalValue, t: 'n', s: {
-      font: { name: "Arial", sz: 12, bold: true, color: { rgb: "FFFFFF" } },
+      font: { name: "Arial", sz: 8, bold: true, color: { rgb: "FFFFFF" } },
       fill: { fgColor: { rgb: "C00000" } },
-      alignment: { horizontal: "right", vertical: "center" },
+      alignment: { horizontal: "center", vertical: "center" },
       border: { top: { style: "thin", color: { rgb: "000000" } }, bottom: { style: "thin", color: { rgb: "000000" } }, left: { style: "thin", color: { rgb: "000000" } }, right: { style: "thin", color: { rgb: "000000" } } },
     }, z: '"R$ "#,##0.00'
   };
