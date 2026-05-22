@@ -407,9 +407,16 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
               <Paperclip className="h-4 w-4" />
             </span>
             Vincular documentos ao lote
+            {isFechamento && (
+              <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+                Fechamento quinzenal
+              </span>
+            )}
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            Faça upload das faturas e boletos e associe cada arquivo aos voucher(s) correspondente(s). Selecione 2 ou mais vouchers para vincular um único arquivo e gerar um voucher master automaticamente. Os vouchers só serão promovidos após todos os anexos obrigatórios e a finalização do lote.
+            {isFechamento
+              ? "Modo fechamento quinzenal: nenhum voucher novo será criado. Selecione os SPOs pré-lançados na lista ao lado e anexe os documentos."
+              : "Faça upload das faturas e boletos e associe cada arquivo aos voucher(s) correspondente(s). Selecione 2 ou mais vouchers para vincular um único arquivo e gerar um voucher master automaticamente. Os vouchers só serão promovidos após todos os anexos obrigatórios e a finalização do lote."}
           </DialogDescription>
         </DialogHeader>
 
