@@ -536,7 +536,7 @@ Deno.serve(async (req) => {
       'get_financeiro_nfs_stats_cr','compare_regua_old_vs_cr',
       // Olimpo Cobrança shadow _cr (Fase 4.1 — leitura da view nova)
       'get_aging_overview_cr','get_aging_by_client_cr','get_client_cnpj_detail_cr',
-      'get_client_faturas_cr','get_aging_analitico_cr',
+      'get_client_faturas_cr','get_aging_analitico_cr','report_cnpjs_sem_email_cr',
       // Supervisor tokens (aprovação fluxo voucher)
       'setup_supervisor_tokens_table','create_supervisor_token',
       'validate_supervisor_token','mark_supervisor_token_used',
@@ -17456,6 +17456,46 @@ Deno.serve(async (req) => {
         result = { success: true, data: mapped, observacoes, contatos };
         break;
       }
+
+      case 'report_cnpjs_sem_email_cr': {
+        console.log('[report_cnpjs_sem_email_cr] Gerando lista de CNPJs sem e-mail cadastrado...');
+        const sql = `
+          SELECT
+            t.cnpj AS cnpj,
+            REPLACE(REPLACE(REPLACE(t.cnpj,'.',''),'/',''),'-','') AS cnpj_clean,
+            MAX(t.razao_social) AS razao_social,
+            COUNT(*) AS qtd_faturas_abertas,
+            SUM(t.valor_nf) AS valor_total_aberto
+          FROM dados_dachser.v_fin_regua_contas_receber t
+          WHERE NOT EXISTS (
+              SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+              WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND sd.active = 0
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM dados_dachser.t_dados_financeiro_contatos c
+              WHERE REPLACE(REPLACE(REPLACE(c.cnpj,'.',''),'/',''),'-','') COLLATE utf8mb4_unicode_ci
+                  = REPLACE(REPLACE(REPLACE(t.cnpj,'.',''),'/',''),'-','') COLLATE utf8mb4_unicode_ci
+                AND c.email_contato IS NOT NULL
+                AND TRIM(c.email_contato) <> ''
+            )
+          GROUP BY t.cnpj
+          ORDER BY valor_total_aberto DESC
+        `;
+        const rows = await client.query(sql);
+        const data = (rows || []).map((r: any) => ({
+          cnpj: r.cnpj,
+          cnpj_clean: r.cnpj_clean,
+          razao_social: r.razao_social || '',
+          qtd_faturas_abertas: Number(r.qtd_faturas_abertas) || 0,
+          valor_total_aberto: Number(r.valor_total_aberto) || 0,
+        }));
+        console.log(`[report_cnpjs_sem_email_cr] ${data.length} CNPJs encontrados`);
+        result = { success: true, data, total: data.length };
+        break;
+      }
+
 
       case 'get_client_faturas_cr': {
         const { clientName: fatClientName, page: fatPage = 1, pageSize: fatPageSize = 20 } = body as { clientName: string; page?: number; pageSize?: number };
