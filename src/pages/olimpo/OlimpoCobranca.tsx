@@ -407,7 +407,7 @@ export default function OlimpoCobranca() {
     ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: numCols } }];
 
     const titleCell = ws[XLSX.utils.encode_cell({ r: 0, c: 0 })];
-    if (titleCell) titleCell.s = { fill: STYLE.gold, font: { bold: true, sz: 16, color: { rgb: "000000" } }, alignment: { horizontal: "center", vertical: "center" }, border: STYLE.border };
+    if (titleCell) titleCell.s = { fill: STYLE.gold, font: { name: "Arial", bold: true, sz: 8, color: { rgb: "000000" } }, alignment: { horizontal: "center", vertical: "center" }, border: STYLE.border };
 
     for (let c = 0; c <= numCols; c++) {
       const addr = XLSX.utils.encode_cell({ r: 1, c });
