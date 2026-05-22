@@ -536,7 +536,7 @@ Deno.serve(async (req) => {
       'get_financeiro_nfs_stats_cr','compare_regua_old_vs_cr',
       // Olimpo Cobrança shadow _cr (Fase 4.1 — leitura da view nova)
       'get_aging_overview_cr','get_aging_by_client_cr','get_client_cnpj_detail_cr',
-      'get_client_faturas_cr','get_aging_analitico_cr',
+      'get_client_faturas_cr','get_aging_analitico_cr','report_cnpjs_sem_email_cr',
       // Supervisor tokens (aprovação fluxo voucher)
       'setup_supervisor_tokens_table','create_supervisor_token',
       'validate_supervisor_token','mark_supervisor_token_used',
