@@ -17420,6 +17420,7 @@ Deno.serve(async (req) => {
         }));
         const cnpjList = mapped.map((m: any) => m.cnpjClean).filter(Boolean);
         let observacoes: any[] = [];
+        let contatos: any[] = [];
         if (cnpjList.length > 0) {
           try {
             const placeholders = cnpjList.map(() => '?').join(',');
@@ -17430,8 +17431,26 @@ Deno.serve(async (req) => {
           } catch (e) {
             console.warn('[get_client_cnpj_detail_cr] Could not fetch observacoes:', e);
           }
+          try {
+            const placeholders = cnpjList.map(() => '?').join(',');
+            const contatosRows = await client.query(
+              `SELECT REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','') AS cnpj_clean,
+                      nome_contato, email_contato
+               FROM dados_dachser.t_dados_financeiro_contatos
+               WHERE REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','') IN (${placeholders})
+                 AND email_contato IS NOT NULL AND email_contato <> ''`,
+              cnpjList
+            );
+            contatos = (contatosRows || []).map((c: any) => ({
+              cnpjClean: c.cnpj_clean,
+              nome_contato: c.nome_contato || null,
+              email_contato: c.email_contato,
+            }));
+          } catch (e) {
+            console.warn('[get_client_cnpj_detail_cr] Could not fetch contatos:', e);
+          }
         }
-        result = { success: true, data: mapped, observacoes };
+        result = { success: true, data: mapped, observacoes, contatos };
         break;
       }
 
