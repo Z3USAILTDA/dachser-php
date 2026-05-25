@@ -1,28 +1,27 @@
-## Problema
-No card "Detalhamento por CNPJ" os e-mails aparecem duplicados (ex.: ANA PAULA CALEGHINI listada 2x, LUANA FERREIRA 2x, etc.). A tabela `dados_dachser.t_dados_financeiro_contatos` tem múltiplas linhas com o mesmo `email_contato` para o mesmo CNPJ, e a query atual retorna todas.
+## Objetivo
 
-## Correção
+Adicionar, no modal de detalhes (olhinho) da aba **Pagamentos** (`/fin/esteira`), uma seção de **Observações** que mostra os comentários já existentes no voucher (`comentarios_operacao`, `comentarios_fiscal`, `comentarios_financeiro`), indicando claramente quando estiverem preenchidos ou vazios.
 
-### Backend — `supabase/functions/mariadb-proxy/index.ts` (action `get_client_cnpj_detail_cr`)
-Alterar a query de contatos para deduplicar por `(cnpj, email_contato)`:
+## Mudanças
 
-```sql
-SELECT
-  REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','') AS cnpj_clean,
-  MAX(nome_contato) AS nome_contato,
-  email_contato
-FROM dados_dachser.t_dados_financeiro_contatos
-WHERE REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','') IN (?, ?, ...)
-  AND email_contato IS NOT NULL AND email_contato <> ''
-GROUP BY cnpj_clean, LOWER(TRIM(email_contato))
-ORDER BY cnpj_clean, email_contato
-```
+### 1. Backend — `supabase/functions/mariadb-proxy/index.ts` (action `list_pagamentos`)
 
-Isso garante uma linha por par CNPJ + e-mail (case/whitespace-insensitive), preservando o nome do contato.
+- Adicionar `v.comentarios_operacao, v.comentarios_fiscal, v.comentarios_financeiro` no `SELECT` (linha ~11331-11337).
+- Sem alterar `WHERE`, ordenação, paginação, stats ou demais ações.
 
-### Frontend
-Sem mudanças — já agrupa por `cnpjClean` e renderiza a lista que o backend devolver.
+### 2. Frontend — `src/components/esteira/PagamentosTab.tsx`
+
+- Estender a `interface PagamentoItem` com os 3 campos opcionais (`comentarios_operacao?`, `comentarios_fiscal?`, `comentarios_financeiro?`).
+- Dentro do `Dialog` de detalhes (após o painel `DadosPagamentoPanel` e antes/depois do bloco "Documentos Anexados"), renderizar um card **"Observações"** com:
+  - Três sub-blocos rotulados: **Operação**, **Fiscal**, **Financeiro**.
+  - Cada sub-bloco com um pequeno badge ao lado do rótulo:
+    - "Preenchido" (verde) quando há texto não-vazio
+    - "Vazio" (muted) quando ausente/em branco
+  - Texto do comentário em um `<p>` com whitespace-pre-wrap; quando vazio mostrar `—` discreto.
+- Usar exclusivamente tokens semânticos do design system (sem cores cruas).
 
 ## Fora de escopo
-- Limpeza dos dados duplicados no MariaDB.
-- Mudanças no Excel/e-mail de aging.
+
+- Edição de comentários no olhinho.
+- Alterar qualquer outra aba, query ou comportamento.
+- Renomear/refatorar arquivos.
