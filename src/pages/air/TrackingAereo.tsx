@@ -475,20 +475,29 @@ const TrackingAereo = () => {
   //   }
   // }, []);
 
+  // Admin gate: somente admins carregam os processos
+  const storedUserRaw = typeof window !== "undefined"
+    ? (localStorage.getItem("user") || localStorage.getItem("dachser_user"))
+    : null;
+  const storedUserParsed = storedUserRaw ? (() => { try { return JSON.parse(storedUserRaw); } catch { return null; } })() : null;
+  const isAdminUser = !!storedUserParsed && (storedUserParsed.is_admin === 1 || storedUserParsed.is_admin === "1" || storedUserParsed.is_admin === true);
+
   const isVisible = usePageVisibility();
   useEffect(() => {
     if (!isVisible) return;
+    if (!isAdminUser) { setIsLoadingData(false); return; }
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => { clearInterval(interval); };
-  }, [isVisible, fetchData]);
+  }, [isVisible, fetchData, isAdminUser]);
 
   // ─── Alert for tracking failures ───
   useEffect(() => {
+    if (!isAdminUser) return;
     const failedAwbs = awbsData.filter(a => a.tracking_failed);
     if (failedAwbs.length === 0) return;
     supabase.functions.invoke("air-tracking-failed-alert").catch(console.error);
-  }, [awbsData]);
+  }, [awbsData, isAdminUser]);
 
   // ─── Unique analysts ───
   const uniqueAnalysts = useMemo(() => {

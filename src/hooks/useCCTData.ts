@@ -387,7 +387,8 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
  */
 // Todos os usuários autenticados podem ver dados do CCT
 
-export function useProcessosCCT() {
+export function useProcessosCCT(options: { enabled?: boolean } = {}) {
+  const { enabled = true } = options;
   return useQuery({
     queryKey: ["cct-processos"],
     queryFn: async (): Promise<ProcessoCCT[]> => {
@@ -416,9 +417,10 @@ export function useProcessosCCT() {
       console.log(`CCT: Loaded ${processos.length} processos (total: ${allProcessos.length})`);
       return processos;
     },
+    enabled,
     staleTime: 60_000,
     gcTime: 10 * 60_000,
-    refetchInterval: () => (typeof document !== "undefined" && document.visibilityState === "visible" ? 120_000 : false),
+    refetchInterval: () => (enabled && typeof document !== "undefined" && document.visibilityState === "visible" ? 120_000 : false),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
     retry: (failureCount, error: any) => {
@@ -617,7 +619,8 @@ export function useDeleteRegra() {
 /**
  * Profiles - fetch from MariaDB via mariadb-proxy
  */
-export function useProfiles() {
+export function useProfiles(options: { enabled?: boolean } = {}) {
+  const { enabled = true } = options;
   return useQuery({
     queryKey: ["cct-profiles"],
     queryFn: async (): Promise<CCTProfile[]> => {
@@ -634,6 +637,7 @@ export function useProfiles() {
 
       return data.data || [];
     },
+    enabled,
   });
 }
 
