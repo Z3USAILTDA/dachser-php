@@ -1,24 +1,21 @@
-## Objetivo
+## Ajuste no Card de Observações (Olhinho de Pagamentos)
 
-Na seção **Observações** do olhinho da aba Pagamentos, mostrar **apenas** o comentário da Operação (campo `comentarios_operacao`), removendo Fiscal e Financeiro.
+### Objetivo
+O card "Observações" no detalhe do pagamento (olhinho) deve ser **sempre visível**, indicando claramente se há ou não comentários da operação.
 
-## Mudanças
+### Alterações
 
-### Frontend — `src/components/esteira/PagamentosTab.tsx`
+1. **Remover condicional de renderização**
+   - Atualmente o card só aparece quando `comentarios_operacao` tem texto.
+   - O card deve ser renderizado incondicionalmente.
 
-- Simplificar o card "Observações" para renderizar somente quando `comentarios_operacao` tiver texto não-vazio.
-- Exibir um único `Badge` "Operação" e o texto do comentário em `<p>` com `whitespace-pre-wrap break-words`.
-- Remover a lógica que itera sobre Fiscal e Financeiro.
+2. **Dois estados visuais**
+   - **Com comentários**: mostrar o badge "Operação" + o texto do comentário (comportamento atual).
+   - **Sem comentários**: mostrar um texto indicativo como "Sem observações" em tom muted, mantendo a estrutura do card.
 
-### Backend — `supabase/functions/mariadb-proxy/index.ts`
+### Arquivo alvo
+- `src/components/esteira/PagamentosTab.tsx` — ajustar o bloco do card "Observações" (linhas ~1461-1474).
 
-- Remover `v.comentarios_fiscal` e `v.comentarios_financeiro` do `SELECT` de `list_pagamentos`, mantendo apenas `v.comentarios_operacao`.
-
-### Interface
-
-- Remover `comentarios_fiscal?` e `comentarios_financeiro?` de `PagamentoItem`, mantendo apenas `comentarios_operacao?`.
-
-## Fora de escopo
-
-- Edição do comentário no olhinho.
-- Qualquer outra aba/query/comportamento.
+### Fora de escopo
+- Sem alterações no backend (campo `comentarios_operacao` já é retornado).
+- Sem alterações em outras abas ou comportamentos.

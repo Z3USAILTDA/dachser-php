@@ -1458,20 +1458,36 @@ export const PagamentosTab = () => {
               />
 
               {/* Observações da Operação */}
-              {selectedPagamento.comentarios_operacao && String(selectedPagamento.comentarios_operacao).trim().length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <FileText className="h-4 w-4 text-primary" />
-                    <span>Observações</span>
+              {(() => {
+                const obs = selectedPagamento.comentarios_operacao;
+                const hasObs = obs && String(obs).trim().length > 0;
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <FileText className="h-4 w-4 text-primary" />
+                      <span>Observações</span>
+                      <Badge variant={hasObs ? "default" : "outline"} className="text-[10px]">
+                        {hasObs ? "Com comentários" : "Sem comentários"}
+                      </Badge>
+                    </div>
+                    <div className="rounded-lg bg-card border border-border p-4 space-y-1.5">
+                      {hasObs ? (
+                        <>
+                          <Badge variant="outline" className="text-[10px]">Operação</Badge>
+                          <p className="text-sm text-foreground whitespace-pre-wrap break-words">
+                            {obs}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-muted-foreground italic">
+                          Nenhum comentário adicionado pela operação.
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div className="rounded-lg bg-card border border-border p-4 space-y-1.5">
-                    <Badge variant="outline" className="text-[10px]">Operação</Badge>
-                    <p className="text-sm text-foreground whitespace-pre-wrap break-words">
-                      {selectedPagamento.comentarios_operacao}
-                    </p>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
+
 
 
               <div className="space-y-3">
