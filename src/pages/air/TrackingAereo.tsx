@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -125,7 +125,7 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     "729": (i,a) => `https://cargoapps.aviancacargo.com/#/e-tracking/details/${i}-${a}`,
     "881": (i,a) => `https://www.condor.com/eu/en/cargo/tracking.jsp?awb=${i}${a}`,
     "996": (i,a) => `https://uxtracking.com/tracking.asp?prefix=${i}&Serial=${a}`,
-    "086": () => `https://www.siacargo.com/e-services/quicksearch_public/`,
+    "086": (i,a) => `https://www.airnewzealandcargo.com/self-service/track-and-trace?awb=${i}-${a}`,
     "098": () => `https://cargo.airindia.com/in/en/track-shipment.html`,
     "118": () => `https://flytaag.com/en/`,
     "071": (i,a) => `https://cargo.ethiopianairlines.com/my-cargo/track-your-shipment?awbnumber=${i}-${a}`,
@@ -273,7 +273,7 @@ const airlines = [
   { code: "074", name: "KLM Cargo" },
   { code: "075", name: "IAG Cargo" },
   { code: "083", name: "South African Airways Cargo" },
-  { code: "086", name: "Singapore Airlines Cargo" },
+  { code: "086", name: "Air New Zealand Cargo" },
   { code: "098", name: "Air India Cargo" },
   { code: "118", name: "Angola Airlines (TAAG)" },
   { code: "125", name: "British Airways Cargo" },
@@ -313,7 +313,7 @@ const monitoredAirlinesData = {
     { code: "074", name: "KLM Cargo" },
     { code: "075", name: "IAG Cargo" },
     { code: "083", name: "South African Airways Cargo" },
-    { code: "086", name: "Singapore Airlines Cargo" },
+    { code: "086", name: "Air New Zealand Cargo" },
     { code: "098", name: "Air India Cargo" },
     { code: "118", name: "Angola Airlines (TAAG)" },
     { code: "125", name: "British Airways Cargo" },
@@ -337,6 +337,139 @@ const monitoredAirlinesData = {
   ],
   totalAirlines: 34,
 };
+
+// ─── Route fix helpers (mirrors server/index.js logic, applied client-side) ───
+
+const STOP_WORDS_CONN = new Set([
+  // Cargo status/event codes
+  'NIL','NIF','DIS','OFD','OFL','BUP','RDP','LAT','TKG','SCR','ECC',
+  'TFD','TRM','RFC','DMG','RET','AWB','PRE','DEP','ARR','RCF','RCS',
+  'MAN','NFD','DLV','POD','BKD','BKG','BKF','FOH','AWD','CCD','ASN',
+  'MOV','OFLD','FWB','DOC','AWR','TDE','LOF','TFS','MIS','BCBP','UNK',
+  'TRA','PRD','RCP','CAN','LRC','FSH','FSU',
+  // Common English words that match /[A-Z]{3}/ patterns in descriptions but are not airport codes
+  'AND','THE','FOR','BUT','NOT','ALL','ANY','ARE','OUR','ONE','TWO',
+  'NEW','OLD','WAY','OUT','OFF','END','NOW','WHO','HOW','ITS','HIM',
+  'HER','HIS','OWN','GET','PUT','SET','LET','HAS','HAD','USE','ACT',
+  'AGE','AIR','FAR','YET','TOP','DAY','MAY','FLT','AGT','SHT',
+]);
+
+function extractIataCode(loc: string | null): string | null {
+  if (!loc) return null;
+  const t = loc.trim();
+  const paren = t.match(/\(([A-Z]{3})\)/i);
+  if (paren) return paren[1].toUpperCase();
+  if (/^[A-Z]{3}$/i.test(t)) return t.toUpperCase();
+  return null;
+}
+
+// Extract all airport candidates from a single timeline event
+function airportsFromEvent(evt: any): string[] {
+  const candidates: string[] = [];
+  const loc = (evt.location || "").trim().toUpperCase();
+  // Direct 3-letter location
+  if (loc.length === 3 && !STOP_WORDS_CONN.has(loc)) candidates.push(loc);
+  // Parenthesised code e.g. "Frankfurt (FRA)"
+  const paren = loc.match(/\(([A-Z]{3})\)/);
+  if (paren && !STOP_WORDS_CONN.has(paren[1])) candidates.push(paren[1]);
+
+  const desc = (evt.description || "").toUpperCase();
+  // Prefix code e.g. "RCF CDG" / "DEP FRA"
+  const prefix = desc.match(/^\s*(?:DEP|ARR|RCF|RCS|MAN|NFD|DLV|TRM|TFD|FOH|AWD|POD)\s+([A-Z]{3})\b/);
+  if (prefix && !STOP_WORDS_CONN.has(prefix[1])) candidates.push(prefix[1]);
+  // Prepositions e.g. "Arrived at CDG", "Departed from FRA", "Received in GRU"
+  for (const m of desc.matchAll(/\b(?:FROM|IN|AT|DEPARTED|ARRIVED|RECEIVED|DELIVERED)\s+([A-Z]{3})\b/g)) {
+    if (!STOP_WORDS_CONN.has(m[1])) candidates.push(m[1]);
+  }
+  // Route patterns e.g. "FRA/CDG" or "FRA-CDG" or "FRA→CDG"
+  for (const m of desc.matchAll(/\b([A-Z]{3})\s*(?:\/|-|→|->)\s*([A-Z]{3})\b/g)) {
+    if (!STOP_WORDS_CONN.has(m[1])) candidates.push(m[1]);
+    if (!STOP_WORDS_CONN.has(m[2])) candidates.push(m[2]);
+  }
+  // "TO CNF" only for destination derivation (filtered out from connections)
+  const toMatch = desc.match(/\bTO\s+([A-Z]{3})\b/);
+  if (toMatch && !STOP_WORDS_CONN.has(toMatch[1])) candidates.push("TO:" + toMatch[1]);
+
+  return [...new Set(candidates)];
+}
+
+function applyRouteFix(item: any): { origin: string; destination: string; conexao: string | null } {
+  const timeline: any[] = Array.isArray(item.timeline_json) ? item.timeline_json : [];
+  let origin = (item.origin || "").trim().toUpperCase();
+  let dest   = (item.destination || "").trim().toUpperCase();
+
+  if (timeline.length > 0) {
+    // timeline[0] = most recent event; reverse → oldest first
+    const oldest = [...timeline].reverse();
+
+    // ── Step 1: find destination ───────────────────────────────────────────
+    // Priority: airport of DLV/POD/NFD event (final delivery) → most reliable
+    const FINAL_CODES = new Set(["DLV", "POD", "NFD", "AWD"]);
+    let derivedDest: string | null = null;
+
+    for (const evt of oldest) {
+      const code = (evt.status_code || evt.code || "").toUpperCase().trim();
+      const desc = (evt.description || "").toUpperCase();
+      const isFinal = FINAL_CODES.has(code)
+        || desc.includes("DELIVERED") || desc.includes("PROOF OF DELIVERY")
+        || desc.includes("NOTIFIED FOR DELIVERY") || desc.includes("AGENT NOTIFIED");
+      if (!isFinal) continue;
+      const loc = (evt.location || "").trim().toUpperCase();
+      const apt = (loc.length === 3 && !STOP_WORDS_CONN.has(loc)) ? loc : null;
+      if (apt) { derivedDest = apt; break; }
+    }
+
+    // Fallback: last valid airport seen oldest→newest (excluding "TO:" markers)
+    if (!derivedDest) {
+      for (const evt of oldest) {
+        const apts = airportsFromEvent(evt).filter(a => !a.startsWith("TO:"));
+        if (apts.length) derivedDest = apts[apts.length - 1];
+      }
+    }
+
+    // ── Step 2: find origin ────────────────────────────────────────────────
+    // First valid airport seen oldest→newest (excluding "TO:" markers)
+    let derivedOrigin: string | null = null;
+    for (const evt of oldest) {
+      const apts = airportsFromEvent(evt).filter(a => !a.startsWith("TO:"));
+      if (apts.length) { derivedOrigin = apts[0]; break; }
+    }
+
+    // Apply derived values when they form a valid route
+    if (derivedOrigin && derivedDest && derivedOrigin !== derivedDest) {
+      origin = derivedOrigin;
+      dest = derivedDest;
+    } else if (derivedOrigin && !derivedDest) {
+      origin = derivedOrigin;
+    }
+    // If derivedOrigin === derivedDest: single-location shipment, keep DB values
+  }
+
+  // ── Step 3: extract connections ─────────────────────────────────────────
+  // Walk oldest→newest; collect airports that aren't origin/dest; stop at dest
+  const seenAirports: string[] = [];
+  const seenSet = new Set<string>();
+  if (timeline.length > 0) {
+    const oldest = [...timeline].reverse();
+    let destReached = false;
+    for (const evt of oldest) {
+      if (destReached) break;
+      const loc = (evt.location || "").trim().toUpperCase();
+      const candidates = airportsFromEvent(evt).filter(a => !a.startsWith("TO:"));
+      for (const apt of candidates) {
+        if (apt === origin || apt === dest || seenSet.has(apt)) continue;
+        seenSet.add(apt); seenAirports.push(apt);
+      }
+      if (loc.length === 3 && !STOP_WORDS_CONN.has(loc) && loc === dest) destReached = true;
+    }
+  }
+
+  const conexao = seenAirports.length > 0
+    ? seenAirports.filter(c => c.length === 3 && !STOP_WORDS_CONN.has(c)).join(',') || null
+    : null;
+
+  return { origin, destination: dest, conexao };
+}
 
 // ─── Component ───
 
@@ -373,6 +506,8 @@ const TrackingAereo = () => {
   }>({ open: false, awb: "", consigneeName: "", timelineJson: [], lastEvent: "" });
 
   const itemsPerPage = 10;
+  const isFetchingRef = useRef(false);
+  const awbsDataRef  = useRef<AWBData[]>([]);
 
   // Auth
   useEffect(() => {
@@ -387,79 +522,120 @@ const TrackingAereo = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch data from edge function
-  const fetchData = useCallback(async () => {
-    setIsLoadingData(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("fetch-tracking-aereo");
-      if (error) {
-        console.error("Error fetching tracking aereo:", error);
-        return;
+  // Map raw API items to AWBData
+  const mapItems = useCallback((items: any[]): AWBData[] => {
+    const converted: AWBData[] = items.map((item: any, index: number) => {
+      const timeline = Array.isArray(item.timeline_json) ? item.timeline_json : [];
+      const lastEvent = item.last_event || "";
+      const statusCode = getStatusCode(lastEvent);
+      const route = applyRouteFix(item);
+      return {
+        id: `tracking-${index}`,
+        awb: item.awb_number || "",
+        hawb: item.hawb_number || "",
+        airline_code: (item.awb_number || "").substring(0, 3),
+        consignee_name: item.consignee_nome || "",
+        last_event: lastEvent,
+        status: statusCode,
+        nome_analista: item.clerk || "",
+        origem: route.origin || item.origin || "",
+        destino: route.destination || item.destination || "",
+        conexao: route.conexao ?? item.conexao ?? "",
+        last_event_date: item.last_event_date || null,
+        last_event_location: item.last_event_location || "",
+        penultimate_location: item.penultimate_location || "",
+        arr_destino_date: item.arr_destino_date || null,
+        hide_reason: item.hide_reason || "",
+        timeline_json: timeline,
+        pieces_discrepancy: !!item.pieces_discrepancy,
+        baseline_pieces: item.baseline_pieces ?? null,
+        has_dis_event: !!item.has_dis_event,
+        hours_in_status: item.hours_in_status != null ? Number(item.hours_in_status) : null,
+        sla_limite_horas: item.sla_limite_horas != null ? Number(item.sla_limite_horas) : null,
+        sla_ratio: item.sla_ratio != null ? Number(item.sla_ratio) : null,
+        sla_cor: item.sla_cor || null,
+        sla_tempo_formatado: item.sla_tempo_formatado || null,
+        sla_tooltip: item.sla_tooltip || null,
+        tracking_failed: !lastEvent || lastEvent === "",
+        is_critical: !!item.pieces_discrepancy || !!item.has_dis_event ||
+          ["NIL","NIF","OFLD"].includes(getStatusCode(lastEvent).toUpperCase()),
+        is_invalid: false,
+        is_ground_transport: !!item.is_ground_transport,
+      } as AWBData;
+    });
+    // Deduplicate by awb|hawb, keeping the record with the most recent last_event_date
+    return converted.reduce((acc: AWBData[], cur) => {
+      const key = `${cur.awb}|${cur.hawb || "-"}`;
+      const existingIdx = acc.findIndex(i => `${i.awb}|${i.hawb || "-"}` === key);
+      if (existingIdx === -1) {
+        acc.push(cur);
+      } else {
+        const existingDate = acc[existingIdx].last_event_date ? new Date(acc[existingIdx].last_event_date!).getTime() : 0;
+        const curDate = cur.last_event_date ? new Date(cur.last_event_date!).getTime() : 0;
+        if (curDate > existingDate) acc[existingIdx] = cur;
       }
-      if (data?.success && data?.data) {
-        const converted: AWBData[] = data.data.map((item: any, index: number) => {
-          const timeline = Array.isArray(item.timeline_json) ? item.timeline_json : [];
-          const lastEvent = item.last_event || "";
-          const statusCode = getStatusCode(lastEvent);
-
-          return {
-            id: `tracking-${index}`,
-            awb: item.awb_number || "",
-            hawb: item.hawb_number || "",
-            airline_code: (item.awb_number || "").substring(0, 3),
-            consignee_name: item.consignee_nome || "",
-            last_event: lastEvent,
-            status: statusCode,
-            nome_analista: item.clerk || "",
-            origem: item.origin || "",
-            destino: item.destination || "",
-            last_event_date: item.last_event_date || null,
-            last_event_location: item.last_event_location || "",
-            penultimate_location: item.penultimate_location || "",
-            arr_destino_date: item.arr_destino_date || null,
-            hide_reason: item.hide_reason || "",
-            timeline_json: timeline,
-            pieces_discrepancy: !!item.pieces_discrepancy,
-            baseline_pieces: item.baseline_pieces ?? null,
-            has_dis_event: !!item.has_dis_event,
-            hours_in_status: item.hours_in_status != null ? Number(item.hours_in_status) : null,
-            sla_limite_horas: item.sla_limite_horas != null ? Number(item.sla_limite_horas) : null,
-            sla_ratio: item.sla_ratio != null ? Number(item.sla_ratio) : null,
-            sla_cor: item.sla_cor || null,
-            sla_tempo_formatado: item.sla_tempo_formatado || null,
-            sla_tooltip: item.sla_tooltip || null,
-            tracking_failed: !lastEvent || lastEvent === "",
-            is_critical: !!item.pieces_discrepancy || !!item.has_dis_event || 
-              ["NIL","NIF","OFLD"].includes(getStatusCode(lastEvent).toUpperCase()),
-            is_invalid: false,
-            is_ground_transport: !!item.is_ground_transport,
-          } as AWBData;
-        });
-
-        // Deduplicate by awb|hawb, keeping the record with the most recent last_event_date
-        const deduped = converted.reduce((acc: AWBData[], cur) => {
-          const key = `${cur.awb}|${cur.hawb || "-"}`;
-          const existingIdx = acc.findIndex(i => `${i.awb}|${i.hawb || "-"}` === key);
-          if (existingIdx === -1) {
-            acc.push(cur);
-          } else {
-            const existingDate = acc[existingIdx].last_event_date ? new Date(acc[existingIdx].last_event_date!).getTime() : 0;
-            const curDate = cur.last_event_date ? new Date(cur.last_event_date!).getTime() : 0;
-            if (curDate > existingDate) {
-              acc[existingIdx] = cur;
-            }
-          }
-          return acc;
-        }, []);
-
-        setAwbsData(deduped);
-      }
-    } catch (error) {
-      console.error("Error in fetchData:", error);
-    } finally {
-      setIsLoadingData(false);
-    }
+      return acc;
+    }, []);
   }, []);
+
+  // Fetch data — tries local server first, Supabase as fallback
+  const fetchData = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    setIsLoadingData(true);
+
+    // Safety valve: always release loading after 90 s no matter what
+    const safetyTimer = setTimeout(() => {
+      setIsLoadingData(false);
+      isFetchingRef.current = false;
+    }, 90000);
+
+    try {
+      let items: any[] | null = null;
+
+      // 1) Try local server (2 s abort — fast fail so Supabase fallback starts quickly)
+      try {
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), 2000);
+        const res = await fetch("/api/tracking-aereo", { signal: controller.signal });
+        clearTimeout(tid);
+        if (res.ok) {
+          const body = await res.json();
+          if (body?.success && Array.isArray(body?.data)) items = body.data;
+        }
+      } catch {
+        // local server not running — fall through to Supabase
+      }
+
+      // 2) Fallback: Supabase edge function (original simple call that was working)
+      if (items === null) {
+        try {
+          const { data, error } = await supabase.functions.invoke("fetch-tracking-aereo");
+          if (!error && data?.success && Array.isArray(data?.data)) items = data.data;
+        } catch {
+          // Supabase also unavailable
+        }
+      }
+
+      if (items !== null) {
+        const mapped = mapItems(items);
+        awbsDataRef.current = mapped;
+        setAwbsData(mapped);
+      } else if (awbsDataRef.current.length === 0) {
+        toast({
+          title: "Erro ao carregar dados",
+          description: "Servidor local e Supabase indisponíveis. Verifique a conexão.",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("fetchData error:", err);
+    } finally {
+      clearTimeout(safetyTimer);
+      setIsLoadingData(false);
+      isFetchingRef.current = false;
+    }
+  }, [mapItems, toast]);
 
   // Discrepancy detection is now done server-side via SQL in fetch-tracking-aereo
 
@@ -818,10 +994,10 @@ const TrackingAereo = () => {
                       const isDelayed = statusCode === "DIS";
 
                       // Route highlighting logic
-                      // Priority: 1) terminal/pre-departure status by code, 2) last_event_location IATA match,
-                      // 3) status-based fallback when location doesn't map to any route segment.
-                      const conexoes = awb.conexao ? awb.conexao.split(',').map(c => c.trim()).filter(Boolean) : [];
-                      const PRE_DEPARTURE = ['BKD','PRE','MAN','DOC','RCS','RDP','RCT','LAT','TKG','SCR','ECC','FOH'];
+                      // Priority: 1) final delivery → destination; 2) match effective current airport
+                      // to a route segment; 3) status-based fallback only when no match.
+                      const IATA_EVENT_CODES = new Set(['BKD','BKG','BKF','RCS','FOH','RCF','MAN','DEP','ARR','NFD','AWD','DLV','CCD','DIS','POD','PRE','TRM','TFD','RCT','FWB','DOC','AWB','ASN','MOV','OFLD','NIL','NIF','FSU','FSH','FSA','OFD','OFL','BUP','RDP','LAT','TKG','SCR','ECC','RFC','DMG','RET','AWR','TDE','LOF','TFS','MIS','BCBP','UNK','TRA','PRD','RCP','CAN','LRC']);
+                      const conexoes = awb.conexao ? awb.conexao.split(',').map(c => c.trim()).filter(c => c.length === 3 && !IATA_EVENT_CODES.has(c.toUpperCase())) : [];
                       const FINAL_DESTINO_ONLY = ['DLV','POD','ARR - DESTINO'];
                       let highlightOrigin = false, highlightDestino = false, highlightConexaoIndex = -1;
 
@@ -835,24 +1011,38 @@ const TrackingAereo = () => {
                       const origemIata = extractIata(awb.origem);
                       const destinoIata = extractIata(awb.destino);
                       const conexoesIata = conexoes.map(c => extractIata(c));
-                      const eventIata = extractIata((awb as any).last_event_location);
 
-                      const matchSegmentByLocation = (): boolean => {
-                        if (!eventIata) return false;
-                        // Prefer connection match first (most informative)
-                        const ci = conexoesIata.findIndex(c => c && c === eventIata);
+                      // Determine the effective current airport:
+                      // 1) last_event_location if it's a real airport (not a status code)
+                      // 2) scan timeline newest-first: check location field, then "at [APT]" in description
+                      const getEffectiveAirport = (): string => {
+                        const rawLoc = extractIata((awb as any).last_event_location);
+                        if (rawLoc && !IATA_EVENT_CODES.has(rawLoc) && !STOP_WORDS_CONN.has(rawLoc)) return rawLoc;
+                        const tl: any[] = Array.isArray(awb.timeline_json) ? awb.timeline_json : [];
+                        for (const evt of tl) {
+                          const loc = (evt.location || '').trim().toUpperCase();
+                          if (loc.length === 3 && !IATA_EVENT_CODES.has(loc) && !STOP_WORDS_CONN.has(loc)) return loc;
+                          const desc = (evt.description || '').toUpperCase();
+                          const m = desc.match(/\bAT\s+([A-Z]{3})\b/);
+                          if (m && !IATA_EVENT_CODES.has(m[1]) && !STOP_WORDS_CONN.has(m[1])) return m[1];
+                        }
+                        return '';
+                      };
+                      const effectiveAirport = getEffectiveAirport();
+
+                      const matchSegment = (): boolean => {
+                        if (!effectiveAirport) return false;
+                        const ci = conexoesIata.findIndex(c => c && c === effectiveAirport);
                         if (ci >= 0) { highlightConexaoIndex = ci; return true; }
-                        if (destinoIata && eventIata === destinoIata) { highlightDestino = true; return true; }
-                        if (origemIata && eventIata === origemIata) { highlightOrigin = true; return true; }
+                        if (destinoIata && effectiveAirport === destinoIata) { highlightDestino = true; return true; }
+                        if (origemIata && effectiveAirport === origemIata) { highlightOrigin = true; return true; }
                         return false;
                       };
 
                       if (FINAL_DESTINO_ONLY.includes(statusCode)) {
                         highlightDestino = true;
-                      } else if (PRE_DEPARTURE.includes(statusCode)) {
-                        highlightOrigin = true;
-                      } else if (!matchSegmentByLocation()) {
-                        // Fallback: location didn't map to any segment of the cataloged route
+                      } else if (!matchSegment()) {
+                        // Effective airport didn't match any route segment — status-based fallback
                         if (conexoes.length > 0) {
                           if (statusCode === 'ARR - CONEXÃO' || statusCode === 'ARR - CONEXAO') {
                             highlightConexaoIndex = conexoes.length - 1;
@@ -1075,7 +1265,7 @@ const TrackingAereo = () => {
                 {isLoadingData ? "CARREGANDO DADOS..." : "NENHUM AWB ENCONTRADO"}
               </p>
               <p className="text-[0.85rem] text-[#aaaaaa] mt-2">
-                {isLoadingData ? "Buscando dados do scraper..." : "Os dados serão carregados automaticamente do banco de dados"}
+                {isLoadingData ? "Buscando em companhias aéreas..." : "Os dados serão carregados automaticamente do banco de dados"}
               </p>
             </div>
           )}

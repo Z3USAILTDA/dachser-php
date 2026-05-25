@@ -80,13 +80,44 @@ async function sendFailureEmail(failedRows: any[]) {
   }
 }
 
+const IATA_CITY_MAP: Record<string, string> = {
+  "GUARULHOS": "GRU", "SAO PAULO": "GRU", "CAMPINAS": "VCP", "VIRACOPOS": "VCP",
+  "CURITIBA": "CWB", "PORTO ALEGRE": "POA", "RIO DE JANEIRO": "GIG",
+  "BELO HORIZONTE": "CNF", "SALVADOR": "SSA", "RECIFE": "REC",
+  "FORTALEZA": "FOR", "BRASILIA": "BSB", "MANAUS": "MAO", "BELEM": "BEL",
+  "GOIANIA": "GYN", "VITORIA": "VIX", "FLORIANOPOLIS": "FLN", "NATAL": "NAT",
+  "FRANKFURT": "FRA", "PARIS": "CDG", "AMSTERDAM": "AMS", "LONDON": "LHR",
+  "MADRID": "MAD", "MILAN": "MXP", "ROME": "FCO", "LISBON": "LIS",
+  "MUNICH": "MUC", "ZURICH": "ZRH", "VIENNA": "VIE", "BRUSSELS": "BRU",
+  "BARCELONA": "BCN", "VALENCIA": "VLC", "OSLO": "OSL", "STOCKHOLM": "ARN",
+  "NEW YORK": "JFK", "MIAMI": "MIA", "CHICAGO": "ORD", "LOS ANGELES": "LAX",
+  "ATLANTA": "ATL", "DALLAS": "DFW", "HOUSTON": "IAH", "BOSTON": "BOS",
+  "TORONTO": "YYZ", "MONTREAL": "YUL", "MEXICO CITY": "MEX",
+  "BOGOTA": "BOG", "SANTIAGO": "SCL", "BUENOS AIRES": "EZE", "LIMA": "LIM",
+  "DUBAI": "DXB", "HONG KONG": "HKG", "SHANGHAI": "PVG", "BEIJING": "PEK",
+  "TOKYO": "NRT", "SINGAPORE": "SIN", "SYDNEY": "SYD", "AUCKLAND": "AKL",
+  "JOHANNESBURG": "JNB", "NAIROBI": "NBO", "ADDIS ABABA": "ADD",
+};
+
 function extractIATA(loc: string): string {
   if (!loc) return "";
   const t = loc.trim();
+  // Rule 1: IATA code in parentheses e.g. "Frankfurt Main (FRA)"
   const paren = t.match(/\(([A-Z]{3})\)/i);
   if (paren) return paren[1].toUpperCase();
+  // Rule 2: is already a bare 3-letter IATA code
   if (/^[A-Z]{3}$/i.test(t)) return t.toUpperCase();
-  return t.substring(0, 3).toUpperCase();
+  // Rule 3: city/airport name lookup (case-insensitive)
+  const upper = t.toUpperCase().replace(/[^A-Z\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (IATA_CITY_MAP[upper]) return IATA_CITY_MAP[upper];
+  const firstWord = upper.split(" ")[0];
+  if (firstWord && firstWord.length > 3 && IATA_CITY_MAP[firstWord]) return IATA_CITY_MAP[firstWord];
+  // Rule 4: ends with a 3-letter code after space or hyphen
+  const endMatch = t.match(/[\s-]([A-Z]{3})$/i);
+  if (endMatch) return endMatch[1].toUpperCase();
+  // Fallback: strip non-letters and take first 3 — last resort only
+  const letters = t.replace(/[^A-Za-z]/g, "").substring(0, 3).toUpperCase();
+  return letters;
 }
 
 serve(async (req) => {
@@ -1145,26 +1176,33 @@ serve(async (req) => {
       const lastStatusCode = row.last_status_code || "";
 
       // Sole post-SQL processing: elect the top slot by IATA hierarchy
-      // among the up to 4 returned by the SQL query.
+      // among the up to 6 returned by the SQL query.
       const top = pickTopByIATA(row);
       const codeFromTimeline = top.code;
 
-      // Determine final code
+      // Look up authoritative route entry early so ARR enrichment can use it
+      const routeKey = `${row.AWB || ""}|${row.HAWB || ""}`;
+      const routeEntry = routeMap[routeKey];
+
+      // Determine final code — check all 6 slots so DLV/POD in late slots is never missed
       let finalCode: string | null = null;
       const allCodes = [
         top.code,
         resolveCodeFromSlot(row.code1_native, row.desc1),
         resolveCodeFromSlot(row.code2_native, row.desc2),
         resolveCodeFromSlot(row.code3_native, row.desc3),
+        resolveCodeFromSlot(row.code4_native, row.desc4),
+        resolveCodeFromSlot(row.code5_native, row.desc5),
       ];
 
       // VALID_IATA whitelist already defined above (used by resolveCodeFromSlot)
       const sanitizedLastStatus = (lastStatusCode || '').toString().toUpperCase().trim();
       const safeLastStatus = VALID_IATA.has(sanitizedLastStatus) ? sanitizedLastStatus : null;
 
-      // DLV always takes priority (delivered is final)
-      if (allCodes.some(c => c === "DLV") || sanitizedLastStatus === "DLV") {
-        finalCode = "DLV";
+      // DLV and POD are terminal — always win over NFD or any other status
+      const FINAL_STATUSES = new Set(["DLV", "POD"]);
+      if (allCodes.some(c => c && FINAL_STATUSES.has(c)) || FINAL_STATUSES.has(sanitizedLastStatus)) {
+        finalCode = allCodes.some(c => c === "POD") || sanitizedLastStatus === "POD" ? "POD" : "DLV";
       } else {
         // Prefer elected timeline slot; fallback only to whitelisted last_status_code
         finalCode = codeFromTimeline || safeLastStatus || null;
@@ -1174,15 +1212,20 @@ serve(async (req) => {
       const electedLoc = top.loc || row.loc0 || "";
       const electedDate = top.date || row.date0 || "";
 
-      // Enrich ARR with destination context
+      // Enrich ARR with destination context.
+      // CONEXÃO is only set when destination is authoritatively known (routeEntry) to avoid
+      // false positives when raw DESTINO text can't be reliably parsed to an IATA code.
       if (finalCode === "ARR") {
         const loc = extractIATA(electedLoc);
-        const dest = extractIATA(row.DESTINO || "");
+        const authDest = routeEntry?.destination || null;
+        const dest = authDest || extractIATA(row.DESTINO || "");
         if (dest && loc && loc === dest) {
           finalCode = "ARR - DESTINO";
-        } else if (dest && loc && loc !== dest) {
+        } else if (authDest && loc && loc !== authDest) {
+          // Only declare a connection when we have a verified destination to compare against
           finalCode = "ARR - CONEXÃO";
         }
+        // Without routeEntry, ambiguous — leave as ARR rather than guess CONEXÃO
       }
 
       // Date for the elected slot — prefer SQL slot date, then time-augmented row.date0/time0
@@ -1199,7 +1242,7 @@ serve(async (req) => {
 
       // Scan timeline for ARR at destination (regardless of finalCode)
       let arrDestinoDate: string | null = null;
-      const destIATA = extractIATA(row.DESTINO || "");
+      const destIATA = routeEntry?.destination || extractIATA(row.DESTINO || "");
       if (destIATA && timeline && timeline.length > 0) {
         for (const evt of timeline) {
           const desc = (evt.description || "").toUpperCase();
@@ -1211,12 +1254,10 @@ serve(async (req) => {
         }
       }
 
-      const visKey = `${row.AWB || ""}|${row.HAWB || ""}`;
-      const hideReason = visibilityMap[visKey] || "";
+      const hideReason = visibilityMap[routeKey] || "";
 
       // Discrepancy lookup
-      const discKey = `${row.AWB || ""}|${row.HAWB || ""}`;
-      let disc = discrepancyMap[discKey] || { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
+      let disc = discrepancyMap[routeKey] || { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
 
       // Suppress false-positive discrepancies for whitelisted AWBs
       const SUPPRESSED_DISCREPANCY_AWBS = new Set<string>(['047-32916380']);
@@ -1225,25 +1266,67 @@ serve(async (req) => {
       }
 
       // Extract intermediate airports (conexões) from timeline
-      const originIATAforConn = extractIATA(row.ORIGEM || "");
-      const destinIATAforConn = extractIATA(row.DESTINO || "");
       const stopWordsConn = new Set([
+        // Cargo status/event codes
         'NIL','NIF','DIS','OFD','OFL','BUP','RDP','LAT','TKG','SCR','ECC',
         'TFD','TRM','RFC','DMG','RET','AWB','PRE','DEP','ARR','RCF','RCS',
-        'MAN','NFD','DLV','POD','BKD','FOH','AWD','CCD','ASN','MOV','OFLD',
+        'MAN','NFD','DLV','POD','BKD','BKG','BKF','FOH','AWD','CCD','ASN',
+        'MOV','OFLD','FWB','DOC','AWR','TDE','LOF','TFS','MIS','BCBP','UNK',
+        'TRA','PRD','RCP','CAN','LRC','FSH','FSU',
+        // Common English words that appear in cargo descriptions and are not airport codes
+        'AND','THE','FOR','BUT','NOT','ALL','ANY','ARE','OUR','ONE','TWO',
+        'NEW','OLD','WAY','OUT','OFF','END','NOW','WHO','HOW','ITS','HIM',
+        'HER','HIS','OWN','GET','PUT','SET','LET','HAS','HAD','USE','ACT',
+        'AGE','AIR','FAR','YET','TOP','DAY','MAY','FLT','AGT','SHT',
       ]);
+
+      // Determine working origin/destination — fix origin=destination data error.
+      // When t_fato_aereo stores origin = destination (e.g. both "GRU" for imports),
+      // scan the timeline chronologically to derive both:
+      //   • origin  = first valid airport in journey (oldest events)
+      //   • destination = last valid airport in journey (newest/planned events, e.g. CNF)
+      let workingOrigin = routeEntry?.origin || extractIATA(row.ORIGEM || "");
+      let workingDest   = routeEntry?.destination || extractIATA(row.DESTINO || "");
+      if (workingOrigin && workingDest && workingOrigin === workingDest && timeline?.length > 0) {
+        const chronoScan = [...timeline].reverse(); // oldest first
+        let foundAny = false;
+        let derivedDest = workingDest;
+        for (const evt of chronoScan) {
+          const loc = (evt.location || "").trim().toUpperCase();
+          // Prefer explicit location field; fall back to description keywords
+          let apt: string | null = (loc.length === 3 && !stopWordsConn.has(loc)) ? loc : null;
+          if (!apt) {
+            const d = (evt.description || "").toUpperCase();
+            // Include "TO" here so planned delivery events ("TO CNF") reveal the final destination
+            const m = d.match(/\b(?:FROM|IN|AT|DEPARTED|ARRIVED|TO)\s+([A-Z]{3})\b/);
+            if (m && !stopWordsConn.has(m[1])) apt = m[1];
+          }
+          if (!apt) continue;
+          if (!foundAny) { workingOrigin = apt; foundAny = true; } // first = origin
+          derivedDest = apt; // keep overwriting — last one wins = final destination
+        }
+        if (foundAny) workingDest = derivedDest;
+      }
+      const originIATAforConn = workingOrigin;
+      const destinIATAforConn = workingDest;
+
       const seenAirports: string[] = [];
       const seenSet = new Set<string>();
       if (timeline && timeline.length > 0) {
-        const chronological = [...timeline].reverse();
+        const chronological = [...timeline].reverse(); // oldest first
+        let destReached = false;
         for (const evt of chronological) {
+          // Stop extracting connections once the cargo reaches the destination —
+          // prevents domestic delivery airports (CNF, THE) from appearing as connections.
+          if (destReached) break;
           const candidates: string[] = [];
           const loc = extractIATA(evt.location || "");
           if (loc) candidates.push(loc);
           const desc = (evt.description || "").toUpperCase();
           const evtPrefix = desc.match(/^\s*(?:DEP|ARR|RCF|RCS|MAN|NFD|DLV|TRM|TFD|FOH|AWD)\s+([A-Z]{3})\b/);
           if (evtPrefix) candidates.push(evtPrefix[1]);
-          const prepMatch = desc.match(/\b(?:FROM|TO|IN|AT|DEPARTED|ARRIVED)\s+([A-Z]{3})\b/);
+          // Exclude "TO" — captures delivery destinations of other HAWBs (e.g. "delivered TO CNF")
+          const prepMatch = desc.match(/\b(?:FROM|IN|AT|DEPARTED|ARRIVED)\s+([A-Z]{3})\b/);
           if (prepMatch) candidates.push(prepMatch[1]);
           const routeMatches = desc.matchAll(/\b([A-Z]{3})\s*(?:->|-|→|\/)\s*([A-Z]{3})\b/g);
           for (const m of routeMatches) { candidates.push(m[1]); candidates.push(m[2]); }
@@ -1257,6 +1340,8 @@ serve(async (req) => {
             seenSet.add(apt);
             seenAirports.push(apt);
           }
+          // Mark destination reached after processing events at the destination airport
+          if (loc && !stopWordsConn.has(loc) && loc === destinIATAforConn) destReached = true;
         }
       }
       const conexao = seenAirports.length > 0 ? seenAirports.join(',') : null;
@@ -1346,16 +1431,14 @@ serve(async (req) => {
       }
 
 
-      // Override origin/destination/conexao with authoritative route map
-      // (CTE com t_iata_airports + fallback de timeline). Mantém fallback para
-      // valores brutos / extração JS quando a CTE não retornou nada.
-      const routeKey = `${row.AWB || ""}|${row.HAWB || ""}`;
-      const routeEntry = routeMap[routeKey];
-      const finalOrigin = routeEntry?.origin || row.ORIGEM || "";
-      const finalDestination = routeEntry?.destination || row.DESTINO || "";
-      const finalConexao = routeEntry
-        ? (routeEntry.conexoes || null)
-        : conexao;
+      // Override origin/destination/conexao with authoritative route map.
+      // Use workingOrigin which already corrects the origin=destination data error.
+      const finalOrigin = workingOrigin || row.ORIGEM || "";
+      const finalDestination = workingDest || row.DESTINO || "";
+      const rawConexao = routeEntry ? (routeEntry.conexoes || null) : conexao;
+      const finalConexao = rawConexao
+        ? rawConexao.split(',').map((c: string) => c.trim()).filter((c: string) => c.length === 3 && !stopWordsConn.has(c.toUpperCase())).join(',') || null
+        : null;
 
       const normalized = {
         awb_number: row.AWB || "",
