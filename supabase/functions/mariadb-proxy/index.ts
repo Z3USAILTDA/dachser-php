@@ -11335,6 +11335,7 @@ Deno.serve(async (req) => {
             v.status_integracao_rm, v.etapa_atual, v.status_baixa, v.created_at, v.updated_at,
             v.urgencia_tipo,
             v.is_master, v.nome_master, v.voucher_master_id,
+            v.comentarios_operacao, v.comentarios_fiscal, v.comentarios_financeiro,
             COALESCE(a.has_boleto_anexo, 0) AS has_boleto_anexo,
             l.user_name AS enviado_por_user_name
           FROM page_v v
