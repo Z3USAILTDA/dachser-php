@@ -118,7 +118,7 @@ Sua conta foi criada com sucesso no Z3US.AI @ Dachser (dachser.z3us.ai).
 Usuário: ${username}
 Senha temporária: ${password}
 
-Alterar senha: https://dachser.z3us.ai/change_password.php
+Alterar senha: https://dachser.z3us.ai/
 
 Por segurança, altere a senha no primeiro acesso.`;
 };

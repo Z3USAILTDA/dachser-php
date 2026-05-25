@@ -1,21 +1,40 @@
-## Ajuste no Card de Observações (Olhinho de Pagamentos)
+## 1. Corrigir link do e-mail de boas-vindas
 
-### Objetivo
-O card "Observações" no detalhe do pagamento (olhinho) deve ser **sempre visível**, indicando claramente se há ou não comentários da operação.
+Arquivo: `supabase/functions/send-welcome-email/index.ts`
 
-### Alterações
+- Linha 121 (versão texto): trocar `https://dachser.z3us.ai/change_password.php` por `https://dachser.z3us.ai/`.
+- O HTML já usa `accessUrl = "https://dachser.z3us.ai/"` (linhas 18 e 97), então nada a alterar lá.
 
-1. **Remover condicional de renderização**
-   - Atualmente o card só aparece quando `comentarios_operacao` tem texto.
-   - O card deve ser renderizado incondicionalmente.
+Após editar, fazer deploy da Edge Function `send-welcome-email`.
 
-2. **Dois estados visuais**
-   - **Com comentários**: mostrar o badge "Operação" + o texto do comentário (comportamento atual).
-   - **Sem comentários**: mostrar um texto indicativo como "Sem observações" em tom muted, mantendo a estrutura do card.
+## 2. Restringir rotas a usuários admin
 
-### Arquivo alvo
-- `src/components/esteira/PagamentosTab.tsx` — ajustar o bloco do card "Observações" (linhas ~1461-1474).
+Rotas afetadas (em `src/App.tsx`):
+- `/air/tracking-aereo` → `<TrackingAereo />`
+- `/air/cct` → `<CCTDashboard />`
+- `/sea/tracking` → `<ContainerTracking />`
 
-### Fora de escopo
-- Sem alterações no backend (campo `comentarios_operacao` já é retornado).
-- Sem alterações em outras abas ou comportamentos.
+### Abordagem
+
+Criar um componente `src/components/AdminOnlyRoute.tsx` que:
+- Lê `localStorage["user"]` (mesmo padrão usado em `useAuth` / `useDevAccess` / `adminAccess.ts`).
+- Considera admin quando `is_admin === 1` (ou `"1"`/`true`).
+- Se não for admin, redireciona via `<Navigate to="/dashboard" replace />` e dispara um `toast` informando "Acesso restrito a administradores".
+- Se admin, renderiza `children`.
+
+Envolver as 3 rotas em `App.tsx`:
+
+```tsx
+<Route path="/sea/tracking" element={<AdminOnlyRoute><ContainerTracking /></AdminOnlyRoute>} />
+<Route path="/air/cct" element={<AdminOnlyRoute><CCTDashboard /></AdminOnlyRoute>} />
+<Route path="/air/tracking-aereo" element={<AdminOnlyRoute><TrackingAereo /></AdminOnlyRoute>} />
+```
+
+Observações:
+- Escopo restrito às 3 rotas pedidas — sub-rotas (`/sea/tracking/manual`, `/sea/tracking/notificacoes`, `/air/cct/excecoes`, etc.) **não** serão alteradas, pois o pedido foi específico a essas três telas.
+- Não esconder itens do menu nesta task — apenas bloquear acesso. Posso adicionar isso depois se quiser.
+
+## Pontos a confirmar
+
+- (a) Sub-rotas devem ser restritas também? (ex.: `/air/cct/excecoes`, `/sea/tracking/notificacoes`)
+- (b) Esconder os itens correspondentes do menu lateral para não-admins, ou só bloquear a rota?
