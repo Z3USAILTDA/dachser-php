@@ -98,6 +98,9 @@ interface PagamentoItem {
   voucher_master_id?: string;
   urgencia_tipo?: string;
   has_boleto_anexo?: number;
+  comentarios_operacao?: string | null;
+  comentarios_fiscal?: string | null;
+  comentarios_financeiro?: string | null;
 }
 
 interface DadosBancarios {
