@@ -953,8 +953,19 @@ const ContainerTracking = () => {
     }
   }, [resolvePortCodes]);
 
+  // Admin gate: somente admins carregam os processos desta tela
+  const isAdminUser = (() => {
+    try {
+      const raw = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+      if (!raw) return false;
+      const p = JSON.parse(raw);
+      return p?.is_admin === 1 || p?.is_admin === "1" || p?.is_admin === true;
+    } catch { return false; }
+  })();
+
   // Cleanup orphan PENDENTE containers on initial load, then fetch data
   useEffect(() => {
+    if (!isAdminUser) { setIsLoadingData(false); return; }
     const initializeData = async () => {
       // First, cleanup orphan PENDENTE containers that shouldn't exist
       try {
@@ -972,7 +983,7 @@ const ContainerTracking = () => {
       fetchMblData();
     };
     initializeData();
-  }, [fetchMblData]);
+  }, [fetchMblData, isAdminUser]);
 
   // Fetch containers for expanded MBL
   const fetchMblContainers = async (mbl_id: string) => {
@@ -1919,14 +1930,14 @@ const ContainerTracking = () => {
   };
   const isVisibleSync = usePageVisibility();
   useEffect(() => {
-    if (!user || !isVisibleSync) return;
+    if (!user || !isVisibleSync || !isAdminUser) return;
     const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
     const interval = setInterval(() => {
       console.log('[AutoSync] 12-hour interval triggered');
       runAutoSync();
     }, TWELVE_HOURS_MS);
     return () => clearInterval(interval);
-  }, [user, isVisibleSync, runAutoSync]);
+  }, [user, isVisibleSync, runAutoSync, isAdminUser]);
 
   // Delete MBL from tracking
   const handleDeleteMbl = async (mbl_id: string) => {
