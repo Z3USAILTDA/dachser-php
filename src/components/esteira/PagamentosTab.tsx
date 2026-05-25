@@ -1460,48 +1460,35 @@ export const PagamentosTab = () => {
               />
 
               {/* Observações (comentários) */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <FileText className="h-4 w-4 text-primary" />
-                  <span>Observações</span>
-                </div>
-                <div className="rounded-lg bg-card border border-border p-4 space-y-3">
-                  {([
-                    { label: "Operação", value: selectedPagamento.comentarios_operacao },
-                    { label: "Fiscal", value: selectedPagamento.comentarios_fiscal },
-                    { label: "Financeiro", value: selectedPagamento.comentarios_financeiro },
-                  ] as const).map((c) => {
-                    const filled = !!(c.value && String(c.value).trim().length > 0);
-                    return (
-                      <div key={c.label} className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {(() => {
+                const obs = [
+                  { label: "Operação", value: selectedPagamento.comentarios_operacao },
+                  { label: "Fiscal", value: selectedPagamento.comentarios_fiscal },
+                  { label: "Financeiro", value: selectedPagamento.comentarios_financeiro },
+                ].filter((c) => c.value && String(c.value).trim().length > 0);
+                if (obs.length === 0) return null;
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <FileText className="h-4 w-4 text-primary" />
+                      <span>Observações</span>
+                    </div>
+                    <div className="rounded-lg bg-card border border-border p-4 space-y-3">
+                      {obs.map((c) => (
+                        <div key={c.label} className="space-y-1.5">
+                          <Badge variant="outline" className="text-[10px]">
                             {c.label}
-                          </span>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[9px]",
-                              filled
-                                ? "bg-green-500/20 text-green-400 border-green-500/30"
-                                : "bg-muted/40 text-muted-foreground border-border"
-                            )}
-                          >
-                            {filled ? "Preenchido" : "Vazio"}
                           </Badge>
-                        </div>
-                        {filled ? (
                           <p className="text-sm text-foreground whitespace-pre-wrap break-words">
                             {c.value}
                           </p>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">—</p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-2 text-sm font-medium">
