@@ -111,6 +111,8 @@ import AWBList from "./pages/AWBList";
 
 
 import SupervisorConfirmacao from "./pages/SupervisorConfirmacao";
+import SupervisorApproveRedirect from "./pages/SupervisorApproveRedirect";
+import SupervisorRejectRedirect from "./pages/SupervisorRejectRedirect";
 import NotFound from "./pages/NotFound";
 // Defaults globais para reduzir pressão no MariaDB:
 // - sem refetch automático ao focar a janela / reconectar
@@ -249,7 +251,10 @@ const App = () => (
           <Route path="/admin/firecrawl-monitor" element={<FirecrawlMonitor />} />
           <Route path="/admin/cron-manager" element={<CronManager />} />
           
+          <Route path="/supervisor-approve" element={<SupervisorApproveRedirect />} />
+          <Route path="/supervisor-reject" element={<SupervisorRejectRedirect />} />
           <Route path="/supervisor-confirmacao" element={<SupervisorConfirmacao />} />
+
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -304,9 +304,9 @@ async function generateSupervisorTokens(
 }
 
 function injectSupervisorButtons(html: string, approveToken: string, rejectToken: string): string {
-  const approveUrl = `https://dachser.z3us.ai/supervisor-approve.php?token=${approveToken}`;
-  const rejectUrl = `https://dachser.z3us.ai/supervisor-reject.php?token=${rejectToken}`;
-
+  const baseUrl = "https://dachser.z3us.ai";
+  const approveUrl = `${baseUrl}/supervisor-approve?token=${encodeURIComponent(approveToken)}`;
+  const rejectUrl = `${baseUrl}/supervisor-reject?token=${encodeURIComponent(rejectToken)}`;
   const buttonsHtml = `
   <tr><td style="padding:0 28px 8px" align="left">
     <div style="background:rgba(245,184,67,.08);border:1px solid rgba(245,184,67,.25);border-radius:10px;padding:16px 20px;margin-bottom:8px">
