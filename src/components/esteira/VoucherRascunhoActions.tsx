@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
 import { useNavigate } from "react-router-dom";
 import { Voucher, TipoAnexo } from "@/types/voucher";
