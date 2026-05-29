@@ -31,6 +31,7 @@ interface AlertRequest {
   alert_type?: string;
   recipient_emails: string[];
   client_name?: string;
+  cnpj_cliente?: string;
   shipment_master?: string;
   free_time_end_date?: string;
   excedente_dias?: number;
