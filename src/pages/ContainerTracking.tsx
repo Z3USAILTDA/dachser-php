@@ -438,6 +438,7 @@ interface MblTrackingData {
   container_status: string;
   last_event: string;
   last_check: string;
+  last_check_real: string | null;
   is_eta_delayed: number; // 1 se ETA passou há mais de 3 dias
   is_critico: number; // 1 se atraso >= 7 dias
   dias_atraso: number; // Dias de atraso calculados
@@ -2910,7 +2911,7 @@ const ContainerTracking = () => {
                                                   <td className="px-3 py-2 text-[#aaaaaa] max-w-[240px] truncate">{mbl.container_status || "Aguardando..."}</td>
                                                   <td className="px-3 py-2 text-[#aaaaaa]">{mbl.eta_api ? new Date(mbl.eta_api).toLocaleDateString('pt-BR') : "—"}</td>
                                                   <td className="px-3 py-2 text-[#aaaaaa]">{mbl.eta_master ? new Date(mbl.eta_master).toLocaleDateString('pt-BR') : "—"}</td>
-                                                  <td className="px-3 py-2 text-[#aaaaaa]">{mbl.last_check ? formatSaoPaulo(parseMariaDBLocalDate(mbl.last_check) || new Date(mbl.last_check)) : "—"}</td>
+                                                  <td className="px-3 py-2 text-[#aaaaaa]">{mbl.last_check_real ? formatSaoPaulo(parseMariaDBLocalDate(mbl.last_check_real) || new Date(mbl.last_check_real)) : "—"}</td>
                                                   <td className="px-3 py-2 text-right">
                                                     {histRows.length > 0 && (
                                                       <button

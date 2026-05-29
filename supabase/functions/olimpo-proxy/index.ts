@@ -2232,6 +2232,7 @@ serve(async (req) => {
               MAX(ts.container_status) as container_status,
               MAX(ts.last_event) as last_event,
               MAX(ts.last_event_timestamp) as last_check,
+              MAX(ts.last_check) as last_check_real,
               MAX(ts.active) as active,
               MAX(ts.created_at) as created_at,
               MAX(ts.updated_at) as updated_at,
