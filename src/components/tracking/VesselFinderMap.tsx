@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Ship, ExternalLink, AlertCircle, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface VesselFinderMapProps {
   vesselName?: string | null;
@@ -8,6 +9,9 @@ interface VesselFinderMapProps {
   height?: number;
   showTrack?: boolean;
 }
+
+// Session-level cache to avoid duplicate invokes for the same vessel name
+const resolvedImoCache = new Map<string, { imo?: string; mmsi?: string }>();
 
 const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
   vesselName,
@@ -18,19 +22,71 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
 }) => {
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [iframeError, setIframeError] = useState(false);
+  const [resolvedImo, setResolvedImo] = useState<string | null>(null);
+  const [resolvedMmsi, setResolvedMmsi] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(false);
+
+  // Auto-resolve IMO from vesselName when none provided
+  useEffect(() => {
+    if (imo || mmsi || !vesselName) return;
+    const key = vesselName.trim().toUpperCase();
+    if (!key || key.length < 2) return;
+
+    const cached = resolvedImoCache.get(key);
+    if (cached) {
+      setResolvedImo(cached.imo || null);
+      setResolvedMmsi(cached.mmsi || null);
+      return;
+    }
+
+    let cancelled = false;
+    setResolving(true);
+    supabase.functions.invoke('resolve-vessel-imo', { body: { vesselName } })
+      .then(({ data }) => {
+        if (cancelled) return;
+        const found = { imo: data?.imo, mmsi: data?.mmsi };
+        resolvedImoCache.set(key, found);
+        setResolvedImo(found.imo || null);
+        setResolvedMmsi(found.mmsi || null);
+      })
+      .catch((err) => {
+        console.error('resolve-vessel-imo failed:', err);
+      })
+      .finally(() => {
+        if (!cancelled) setResolving(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [vesselName, imo, mmsi]);
+
+  const effectiveImo = imo || resolvedImo;
+  const effectiveMmsi = mmsi || resolvedMmsi;
 
   // Build embed URL based on available identifiers
   const getEmbedUrl = (): string | null => {
-    if (imo) {
-      return `https://www.vesselfinder.com/aismap?imo=${imo}&zoom=6&width=100%25&height=${height}&names=true&track=${showTrack}`;
+    if (effectiveImo) {
+      return `https://www.vesselfinder.com/aismap?imo=${effectiveImo}&zoom=6&width=100%25&height=${height}&names=true&track=${showTrack}`;
     }
-    if (mmsi) {
-      return `https://www.vesselfinder.com/aismap?mmsi=${mmsi}&zoom=6&width=100%25&height=${height}&names=true&track=${showTrack}`;
+    if (effectiveMmsi) {
+      return `https://www.vesselfinder.com/aismap?mmsi=${effectiveMmsi}&zoom=6&width=100%25&height=${height}&names=true&track=${showTrack}`;
     }
     return null;
   };
 
   const embedUrl = getEmbedUrl();
+
+  // Resolving state — show spinner instead of "not found" while we look up
+  if (!embedUrl && resolving) {
+    return (
+      <div
+        className="rounded-xl border border-[rgba(255,255,255,.1)] bg-[rgba(0,0,0,.4)] flex items-center justify-center gap-3"
+        style={{ height }}
+      >
+        <Loader2 className="w-5 h-5 animate-spin text-[#ffc800]" />
+        <span className="text-sm text-[#aaaaaa]">Localizando navio…</span>
+      </div>
+    );
+  }
 
   // If no IMO/MMSI, show informative message (no manual action)
   if (!embedUrl) {
@@ -85,7 +141,7 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
           <p className="text-sm text-[#aaaaaa]">Erro ao carregar mapa</p>
           {vesselName && (
             <a
-              href={`https://www.vesselfinder.com/?imo=${imo || '0'}`}
+              href={`https://www.vesselfinder.com/?imo=${effectiveImo || '0'}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-600/20 text-blue-400 text-sm hover:bg-blue-600/30 transition"
@@ -105,7 +161,7 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
         style={{ border: 'none' }}
         onLoad={() => setIframeLoaded(true)}
         onError={() => setIframeError(true)}
-        title={`Rastreio do navio ${vesselName || imo || mmsi}`}
+        title={`Rastreio do navio ${vesselName || effectiveImo || effectiveMmsi}`}
         allow="fullscreen"
       />
 
@@ -115,14 +171,14 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
           <Ship className="w-4 h-4 text-[#ffc800]" />
           <div>
             {vesselName && <span className="text-[#f5f5f5] font-medium">{vesselName}</span>}
-            {imo && <span className="text-[#aaaaaa] ml-2">IMO: {imo}</span>}
+            {effectiveImo && <span className="text-[#aaaaaa] ml-2">IMO: {effectiveImo}</span>}
           </div>
         </div>
       </div>
 
       {/* External link */}
       <a
-        href={`https://www.vesselfinder.com/?imo=${imo || '0'}`}
+        href={`https://www.vesselfinder.com/?imo=${effectiveImo || '0'}`}
         target="_blank"
         rel="noopener noreferrer"
         className="absolute top-2 right-2 bg-[rgba(0,0,0,.7)] backdrop-blur-sm rounded-lg px-3 py-1.5 text-xs text-blue-400 hover:text-blue-300 transition flex items-center gap-1"
