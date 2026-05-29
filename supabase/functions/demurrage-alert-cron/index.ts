@@ -139,6 +139,25 @@ serve(async (req: Request) => {
 
         if (!shouldSend) continue;
 
+        // Calcular Dias em Posse e Limite de Devolução (regra inclusiva)
+        const ataStr = container.data_atracacao || container.ft_started_at || null;
+        const ataDate = ataStr ? new Date(ataStr) : null;
+        const devolucaoStr = container.data_devolucao || null;
+        const devolucaoDate = devolucaoStr ? new Date(devolucaoStr) : null;
+        const freeTime = Number(container.free_time_days || 0);
+        let limiteStr: string | null = null;
+        let diasEmPosse = 0;
+        let diasExcedidos = 0;
+        if (ataDate && freeTime > 0) {
+          const limite = new Date(ataDate);
+          limite.setDate(limite.getDate() + freeTime - 1);
+          limiteStr = limite.toISOString().slice(0, 10);
+          const end = devolucaoDate || today;
+          const ms = end.getTime() - ataDate.getTime();
+          diasEmPosse = Math.floor(ms / (1000 * 60 * 60 * 24)) + 1;
+          diasExcedidos = Math.max(0, diasEmPosse - freeTime);
+        }
+
         // Send alert
         const response = await fetch(`${SUPABASE_URL}/functions/v1/demurrage-send-alert`, {
           method: "POST",
@@ -150,11 +169,29 @@ serve(async (req: Request) => {
             container_id: container.id,
             container_number: container.numero,
             client_name: container.cliente || "N/A",
+            cnpj_cliente: container.cnpj_cliente || container.cnpj || "",
             shipment_master: container.shipment_master || container.mbl || "N/A",
+            house_bl: container.hbl || container.house_bl || "",
+            partner_id: container.partner_id || "",
+            origin_port: container.porto_origem || "",
+            destination_port: container.porto_destino || "",
             days_remaining: container.days_remaining || 0,
             expected_cost_usd: container.expected_cost_usd || container.demurrage_usd || 0,
             alert_type: alertType,
             recipient_emails: notificationEmails,
+            containers: [{
+              number: container.numero,
+              size: container.tipo_conteiner || "",
+              type: container.tipo_medida || container.tipo_conteiner || "",
+              armador: container.armador || "",
+              discharge_date: ataStr,
+              free_time_days: freeTime,
+              return_deadline: limiteStr,
+              return_date: devolucaoStr,
+              days_possession: diasEmPosse,
+              days_incident: diasExcedidos,
+              total_usd: container.expected_cost_usd || 0,
+            }],
           }),
         });
 

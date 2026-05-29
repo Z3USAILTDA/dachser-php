@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { DemurrageContainer, PreInvoice, PreInvoiceItem } from "@/hooks/useDemurrageData";
+import { calculateImportDemurrage, formatDateBR as fmtDateBR, resolveAta } from "@/utils/demurrageCalc";
 
 const formatCurrency = (value: number | undefined): string => {
   if (value === undefined || value === null || value === 0) return "-";
@@ -70,45 +71,45 @@ export const exportDemurrageReportPDF = (data: DemurrageContainer[]) => {
   const totalDemurrage = data.reduce((sum, c) => sum + (c.expected_cost_usd || 0), 0);
   doc.text(`Demurrage Total: ${formatCurrency(totalDemurrage)}`, 200, 22);
 
-  // Main Table
-  const tableData = data.map((c) => [
-    c.numero,
-    c.mbl,
-    c.cliente || "-",
-    c.partner_id || "-",
-    c.armador || "-",
-    c.tipo_conteiner || "-",
-    c.free_time_days.toString(),
-    c.days_remaining !== null ? c.days_remaining.toString() : "-",
-    c.excedente_dias > 0 ? c.excedente_dias.toString() : "-",
-    getRiskLabel(c.risk_status),
-    formatCurrency(c.expected_cost_usd),
-    formatDate(c.eta),
-    c.pi_status_info || "-",
-    c.pi_misk || "-",
-    c.pi_othello_registro || "-",
-    c.pi_observacao || "-",
-  ]);
+  // Main Table — nova ordem alinhada ao Excel/e-mail
+  const tableData = data.map((c) => {
+    const ata = resolveAta(c as any);
+    const calc = calculateImportDemurrage({
+      armador: c.armador, ata, devolucao: c.data_devolucao, freeTime: c.free_time_days,
+    });
+    const cnpj = (c as any).cnpj_cliente || (c as any).cnpj || "-";
+    return [
+      c.armador || "-",
+      c.mbl,
+      c.hbl || "-",
+      c.tipo_processo || "-",
+      c.partner_id || "-",
+      c.cliente || "-",
+      c.numero,
+      c.tipo_conteiner || "-",
+      (c as any).tipo_medida || c.tipo_conteiner || "-",
+      cnpj,
+      ata ? fmtDateBR(ata) : "ATA n/ encontrada",
+      fmtDateBR(c.data_devolucao),
+      fmtDateBR(calc.limiteDevolucaoDate),
+      c.free_time_days.toString(),
+      calc.diasEmPosse != null ? calc.diasEmPosse.toString() : "-",
+      calc.diasExcedidos != null ? calc.diasExcedidos.toString() : "-",
+      getRiskLabel(c.risk_status),
+      c.last_event || "-",
+      c.porto_origem || "-",
+      c.porto_destino || "-",
+    ];
+  });
 
   autoTable(doc, {
     startY: 35,
     head: [[
-      "Container",
-      "MBL",
-      "Cliente",
-      "Partner ID",
-      "Armador",
-      "Tipo",
-      "FT (dias)",
-      "Restantes",
-      "Excedidos",
-      "Status",
-      "Demurrage",
-      "ETA",
-      "Status Info",
-      "MISK",
-      "Reg. Othello",
-      "Observação",
+      "Armador", "MBL", "HBL", "Tipo Operação", "Partner ID", "Cliente",
+      "Container", "Tipo Container", "Tipo", "CNPJ Cliente",
+      "ATA", "Devolução", "Limite Devolução", "Free Time",
+      "Dias em Posse", "Dias Excedidos", "Status Risco",
+      "Último Evento", "Porto Origem", "Porto Destino",
     ]],
     body: tableData,
     theme: "grid",
@@ -116,33 +117,15 @@ export const exportDemurrageReportPDF = (data: DemurrageContainer[]) => {
       fillColor: [255, 200, 0],
       textColor: [0, 0, 0],
       fontStyle: "bold",
-      fontSize: 8,
+      fontSize: 7,
       halign: "center",
     },
     bodyStyles: {
-      fontSize: 7,
-      cellPadding: 2,
+      fontSize: 6.5,
+      cellPadding: 1.5,
     },
     alternateRowStyles: {
       fillColor: [245, 245, 245],
-    },
-    columnStyles: {
-      0: { cellWidth: 16, fontStyle: "bold", halign: "center" },
-      1: { cellWidth: 20 },
-      2: { cellWidth: 22 },
-      3: { cellWidth: 14 },
-      4: { cellWidth: 14 },
-      5: { cellWidth: 12, halign: "center" },
-      6: { cellWidth: 11, halign: "center" },
-      7: { cellWidth: 12, halign: "center" },
-      8: { cellWidth: 12, halign: "center" },
-      9: { cellWidth: 14, halign: "center" },
-      10: { cellWidth: 16, halign: "right" },
-      11: { cellWidth: 16, halign: "center" },
-      12: { cellWidth: 18 },
-      13: { cellWidth: 14 },
-      14: { cellWidth: 16 },
-      15: { cellWidth: 24 },
     },
     didParseCell: (cellData) => {
       if (cellData.section === "body") {
