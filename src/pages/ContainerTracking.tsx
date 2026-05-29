@@ -2841,7 +2841,7 @@ const ContainerTracking = () => {
                                         </thead>
                                         <tbody>
                                           {(() => {
-                                            const aggStatus = getReportStatus(mbl.last_event, mbl.container_status, mbl.tipo_processo, mbl.container_count);
+                                            const aggStatus = getReportStatus(mbl.container_status ?? mbl.last_event, mbl.container_status, mbl.tipo_processo, mbl.container_count);
                                             // Dedup: agrega por (código, descrição, local) — ignora timestamp para evitar
                                             // repetições do mesmo evento emitido várias vezes em poucos minutos pelo armador.
                                             // Mantém o evento MAIS RECENTE e agrega containers afetados.
