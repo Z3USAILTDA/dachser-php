@@ -2906,7 +2906,7 @@ const ContainerTracking = () => {
                                                       {aggStatus.code}
                                                     </span>
                                                   </td>
-                                                  <td className="px-3 py-2 text-[#aaaaaa] max-w-[240px] truncate">{mbl.last_event || "Aguardando..."}</td>
+                                                  <td className="px-3 py-2 text-[#aaaaaa] max-w-[240px] truncate">{mbl.container_status || "Aguardando..."}</td>
                                                   <td className="px-3 py-2 text-[#aaaaaa]">{mbl.eta_api ? new Date(mbl.eta_api).toLocaleDateString('pt-BR') : "—"}</td>
                                                   <td className="px-3 py-2 text-[#aaaaaa]">{mbl.eta_master ? new Date(mbl.eta_master).toLocaleDateString('pt-BR') : "—"}</td>
                                                   <td className="px-3 py-2 text-[#aaaaaa]">{mbl.last_check ? formatSaoPaulo(parseMariaDBLocalDate(mbl.last_check) || new Date(mbl.last_check)) : "—"}</td>
