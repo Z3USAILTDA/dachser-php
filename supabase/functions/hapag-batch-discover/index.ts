@@ -50,7 +50,7 @@ serve(async (req) => {
 
       const [pendingRows] = await conn.query(`
         SELECT DISTINCT t.mbl_id, t.consignee, t.tipo_processo, t.email_analista, t.email_cliente
-        FROM dados_dachser.t_tracking_sea t
+        FROM dados_dachser.t_sea_tracking_current t
         WHERE t.active = 1
           AND t.container IN ('PENDENTE', '')
           AND (t.mbl_id LIKE 'HLCU%' OR t.mbl_id LIKE 'HLXU%' OR t.mbl_id LIKE 'HLBU%' OR t.mbl_id LIKE 'SAHL%' OR t.mbl_id LIKE 'GLNL%')
@@ -199,13 +199,13 @@ serve(async (req) => {
               const cleanContainer = ctrNo.replace(/[^A-Z0-9]/gi, '').toUpperCase();
 
               const [existing] = await conn.query(
-                `SELECT id FROM dados_dachser.t_tracking_sea WHERE mbl_id = ? AND container = ? LIMIT 1`,
+                `SELECT id FROM dados_dachser.t_sea_tracking_current WHERE mbl_id = ? AND container = ? LIMIT 1`,
                 [mblId, cleanContainer]
               ) as any[];
 
               if (existing.length > 0) {
                 await conn.execute(`
-                  UPDATE dados_dachser.t_tracking_sea
+                  UPDATE dados_dachser.t_sea_tracking_current
                   SET container_status = ?, origem = COALESCE(?, origem), destino = COALESCE(?, destino),
                       eta = ?, navio = COALESCE(?, navio), vessel_imo = COALESCE(?, vessel_imo),
                       last_event = ?, shipping_line = 'HAPAG-LLOYD',
@@ -214,7 +214,7 @@ serve(async (req) => {
                 `, [cStatus, origem, destino, eta, vessel, vesselImo, lastEvt, mblId, cleanContainer]);
               } else {
                 await conn.execute(`
-                  INSERT INTO dados_dachser.t_tracking_sea 
+                  INSERT INTO dados_dachser.t_sea_tracking_current 
                     (mbl_id, container, consignee, shipping_line, tipo_processo, email_analista, email_cliente,
                      container_status, origem, destino, eta, navio, vessel_imo, last_event, last_check, active, created_at, updated_at)
                   VALUES (?, ?, ?, 'HAPAG-LLOYD', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 1, NOW(), NOW())
@@ -229,7 +229,7 @@ serve(async (req) => {
                   const evtLoc = evt.eventLocation?.locationName || evt.transportCall?.location?.locationName || '';
                   const evtVessel = evt.transportCall?.vessel?.vesselName || null;
                   await conn.execute(`
-                    INSERT IGNORE INTO dados_dachser.t_tracking_sea_history 
+                    INSERT IGNORE INTO dados_dachser.t_sea_tracking_history 
                       (mbl_id, container, event_date, event_code, event_description, location, vessel, source, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, 'HAPAG_API', NOW())
                   `, [mblId, cleanContainer, evtDate, evtType, `${evtType} - ${evtLoc}`, evtLoc, evtVessel]);
@@ -241,19 +241,19 @@ serve(async (req) => {
 
             // Remove PENDENTE placeholder
             await conn.execute(`
-              DELETE FROM dados_dachser.t_tracking_sea 
+              DELETE FROM dados_dachser.t_sea_tracking_current 
               WHERE mbl_id = ? AND container IN ('PENDENTE', '')
             `, [mblId]);
 
             // Update parent MBL summary
             const [containerCountResult] = await conn.query(
-              `SELECT COUNT(*) as cnt FROM dados_dachser.t_tracking_sea WHERE mbl_id = ? AND container NOT IN ('PENDENTE', '') AND active = 1`,
+              `SELECT COUNT(*) as cnt FROM dados_dachser.t_sea_tracking_current WHERE mbl_id = ? AND container NOT IN ('PENDENTE', '') AND active = 1`,
               [mblId]
             ) as any[];
             const containerCount = containerCountResult[0]?.cnt || 0;
             const [latestContainer] = await conn.query(
               `SELECT container_status, last_event, last_check, navio, vessel_imo, eta, origem, destino 
-               FROM dados_dachser.t_tracking_sea WHERE mbl_id = ? AND container NOT IN ('PENDENTE', '') AND active = 1 
+               FROM dados_dachser.t_sea_tracking_current WHERE mbl_id = ? AND container NOT IN ('PENDENTE', '') AND active = 1 
                ORDER BY last_check DESC LIMIT 1`,
               [mblId]
             ) as any[];

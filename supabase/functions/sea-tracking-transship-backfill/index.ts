@@ -35,7 +35,7 @@ serve(async (req) => {
 
   try {
     // ═══════════════════════════════════════════════════════════════
-    // PASSO 1: Detectar transbordo via last_event na t_tracking_sea
+    // PASSO 1: Detectar transbordo via last_event na t_sea_tracking_current
     // ═══════════════════════════════════════════════════════════════
     const previewLastEventQuery = `
       SELECT 
@@ -46,7 +46,7 @@ serve(async (req) => {
         ts.destino,
         ts.transshipment_port,
         UPPER(TRIM(SUBSTRING_INDEX(ts.last_event, ' - ', -1))) as detected_port
-      FROM dados_dachser.t_tracking_sea ts
+      FROM dados_dachser.t_sea_tracking_current ts
       WHERE ts.active = 1
         AND ts.last_event LIKE '% - %'
         -- Eventos de trânsito
@@ -94,7 +94,7 @@ serve(async (req) => {
     let step1Updated = 0;
     if (!dryRun && previewLastEvent.length > 0) {
       const updateLastEventQuery = `
-        UPDATE dados_dachser.t_tracking_sea ts
+        UPDATE dados_dachser.t_sea_tracking_current ts
         SET ts.transshipment_port = CASE
           WHEN ts.transshipment_port IS NULL OR ts.transshipment_port = '' 
             THEN UPPER(TRIM(SUBSTRING_INDEX(ts.last_event, ' - ', -1)))
@@ -143,7 +143,7 @@ serve(async (req) => {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // PASSO 2: Detectar transbordo via t_tracking_sea_history 
+    // PASSO 2: Detectar transbordo via t_sea_tracking_history 
     //          (keywords TRANSSHIP/T/S com location)
     // ═══════════════════════════════════════════════════════════════
     const previewHistoryQuery = `
@@ -154,8 +154,8 @@ serve(async (req) => {
         h.location as history_location,
         h.event_description,
         h.container_status
-      FROM dados_dachser.t_tracking_sea ts
-      INNER JOIN dados_dachser.t_tracking_sea_history h ON h.mbl_id = ts.mbl_id
+      FROM dados_dachser.t_sea_tracking_current ts
+      INNER JOIN dados_dachser.t_sea_tracking_history h ON h.mbl_id = ts.mbl_id
       WHERE ts.active = 1
         AND h.location IS NOT NULL AND h.location != ''
         AND (
@@ -202,7 +202,7 @@ serve(async (req) => {
         if (!loc) continue;
 
         const updateHistoryQuery = `
-          UPDATE dados_dachser.t_tracking_sea
+          UPDATE dados_dachser.t_sea_tracking_current
           SET transshipment_port = CASE
             WHEN transshipment_port IS NULL OR transshipment_port = '' THEN ?
             WHEN UPPER(transshipment_port) LIKE CONCAT('%', ?, '%') THEN transshipment_port
@@ -222,7 +222,7 @@ serve(async (req) => {
     // ═══════════════════════════════════════════════════════════════
     const verifyQuery = `
       SELECT COUNT(*) as total_with_transshipment
-      FROM dados_dachser.t_tracking_sea
+      FROM dados_dachser.t_sea_tracking_current
       WHERE active = 1
         AND transshipment_port IS NOT NULL 
         AND transshipment_port != ''

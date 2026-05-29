@@ -78,7 +78,7 @@ serve(async (req) => {
 
       pendingRows = await client.query(`
         SELECT DISTINCT ts.mbl_id
-        FROM dados_dachser.t_tracking_sea ts
+        FROM dados_dachser.t_sea_tracking_current ts
         WHERE ts.active = 1
           AND ts.container IN ('PENDENTE', 'NAO_ENCONTRADO', '')
           AND (
@@ -119,7 +119,7 @@ serve(async (req) => {
         try {
           client = await getMariaClient();
           await client.execute(
-            `UPDATE dados_dachser.t_tracking_sea SET last_check = NOW() WHERE mbl_id = ? AND container IN ('PENDENTE', 'NAO_ENCONTRADO', '')`,
+            `UPDATE dados_dachser.t_sea_tracking_current SET last_check = NOW() WHERE mbl_id = ? AND container IN ('PENDENTE', 'NAO_ENCONTRADO', '')`,
             [mblId]
           );
           await client.close();
@@ -160,7 +160,7 @@ serve(async (req) => {
           const errMsg = `Armador ${carrierConfig.shortName} retornou vazio em ${new Date().toISOString()}`;
           client = await getMariaClient();
           await client.execute(
-            `UPDATE dados_dachser.t_tracking_sea SET last_check = NOW(), container = 'NAO_ENCONTRADO', last_error = ? WHERE mbl_id = ? AND container IN ('PENDENTE', 'NAO_ENCONTRADO', '')`,
+            `UPDATE dados_dachser.t_sea_tracking_current SET last_check = NOW(), container = 'NAO_ENCONTRADO', last_error = ? WHERE mbl_id = ? AND container IN ('PENDENTE', 'NAO_ENCONTRADO', '')`,
             [errMsg.substring(0, 250), mblId]
           );
           await client.close();
@@ -170,7 +170,7 @@ serve(async (req) => {
           continue;
         }
 
-        // 4. Insert discovered containers into t_tracking_sea
+        // 4. Insert discovered containers into t_sea_tracking_current
         const containers = trackData.containers;
         const bookingInfo = trackData.bookingInfo || {};
 
@@ -180,7 +180,7 @@ serve(async (req) => {
 
         // Get existing row data for tipo_processo, email_analista, etc.
         const existingRows: any[] = await client.query(
-          `SELECT tipo_processo, email_analista, email_cliente, consignee FROM dados_dachser.t_tracking_sea WHERE mbl_id = ? LIMIT 1`,
+          `SELECT tipo_processo, email_analista, email_cliente, consignee FROM dados_dachser.t_sea_tracking_current WHERE mbl_id = ? LIMIT 1`,
           [mblId]
         );
         const templateRow = existingRows[0] || {};
@@ -196,13 +196,13 @@ serve(async (req) => {
 
           // Check if this container already exists for this mbl_id
           const existing: any[] = await client.query(
-            `SELECT id FROM dados_dachser.t_tracking_sea WHERE mbl_id = ? AND container = ?`,
+            `SELECT id FROM dados_dachser.t_sea_tracking_current WHERE mbl_id = ? AND container = ?`,
             [mblId, containerNo]
           );
 
           if (existing.length > 0) {
             await client.execute(
-              `UPDATE dados_dachser.t_tracking_sea 
+              `UPDATE dados_dachser.t_sea_tracking_current 
                SET container_status = ?, last_event = ?, last_check = NOW(),
                    navio = COALESCE(?, navio), eta = COALESCE(?, eta),
                    origem = COALESCE(?, origem), destino = COALESCE(?, destino),
@@ -217,7 +217,7 @@ serve(async (req) => {
             );
           } else {
             await client.execute(
-              `INSERT INTO dados_dachser.t_tracking_sea 
+              `INSERT INTO dados_dachser.t_sea_tracking_current 
                (mbl_id, tipo_processo, container, shipping_line, consignee, origem, destino,
                 navio, eta, last_event, container_status, last_check, email_analista, email_cliente, active)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, 1)`,
@@ -242,7 +242,7 @@ serve(async (req) => {
 
         // 5. Remove PENDENTE/NAO_ENCONTRADO placeholders for this mbl_id
         await client.execute(
-          `DELETE FROM dados_dachser.t_tracking_sea WHERE mbl_id = ? AND container IN ('PENDENTE', 'NAO_ENCONTRADO', '')`,
+          `DELETE FROM dados_dachser.t_sea_tracking_current WHERE mbl_id = ? AND container IN ('PENDENTE', 'NAO_ENCONTRADO', '')`,
           [mblId]
         );
 
