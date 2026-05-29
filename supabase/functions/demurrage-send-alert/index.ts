@@ -238,6 +238,7 @@ function calculatePeriods(daysIncident: number, armador: string, containerType: 
 
 function generateDemonstrativoXlsx(params: {
   client_name?: string;
+  cnpj_cliente?: string;
   house_bl?: string;
   partner_id?: string;
   shipment_master?: string;
@@ -251,7 +252,7 @@ function generateDemonstrativoXlsx(params: {
   containerPeriods?: Map<string, PeriodData[]>;
   maxPeriods?: number;
 }): string {
-  const { client_name, house_bl, partner_id, shipment_master,
+  const { client_name, cnpj_cliente, house_bl, partner_id, shipment_master,
     origin_port, destination_port, issue_date,
     exchange_rate, total_usd, total_brl, containers,
     containerPeriods, maxPeriods: rawMaxPeriods } = params;
