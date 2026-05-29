@@ -341,8 +341,8 @@ function generateDemonstrativoXlsx(params: {
   ws[XLSX.utils.encode_cell({ r, c: 0 })] = { v: "Partner ID:", t: "s", s: { font: { bold: true, sz: 9 }, border: { left: THIN_BORDER } } };
   ws[XLSX.utils.encode_cell({ r, c: 1 })] = { v: partner_id || "", t: "s", s: { font: { sz: 9 } } };
   merges.push({ s: { r, c: 1 }, e: { r, c: 5 } });
-  ws[XLSX.utils.encode_cell({ r, c: 7 })] = { v: "Shipment:", t: "s", s: { font: { bold: true, sz: 9 } } };
-  ws[XLSX.utils.encode_cell({ r, c: 8 })] = { v: shipment_master || "", t: "s", s: { font: { sz: 9 }, border: { right: THIN_BORDER } } };
+  ws[XLSX.utils.encode_cell({ r, c: 7 })] = { v: "CNPJ Cliente:", t: "s", s: { font: { bold: true, sz: 9 } } };
+  ws[XLSX.utils.encode_cell({ r, c: 8 })] = { v: cnpj_cliente || "", t: "s", s: { font: { sz: 9 }, border: { right: THIN_BORDER } } };
   merges.push({ s: { r, c: 8 }, e: { r, c: lastCol } });
   r++;
 
