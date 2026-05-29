@@ -502,7 +502,7 @@ const ContainerTracking = () => {
   const [filterSyncHoje, setFilterSyncHoje] = useState(false); // Filtro: sincronizados hoje (desativado por padrão)
   const [mblList, setMblList] = useState<MblTrackingData[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const {
     toast
