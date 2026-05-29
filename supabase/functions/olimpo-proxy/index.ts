@@ -2206,7 +2206,7 @@ serve(async (req) => {
                   ELSE 'SEA EXPORT'
                 END
               ) as tipo_processo,
-              MAX(ts.consignee_nome) as consignee,
+              COALESCE(NULLIF(TRIM(MAX(ts.consignee_nome)), ''), NULLIF(TRIM(MAX(ts.consignee)), ''), NULLIF(TRIM(MAX(mdn.cliente)), '')) as consignee,
               MAX(ts.shipping_line) as shipping_line,
               MAX(ts.origem) as origem,
               MAX(ts.destino) as destino,
