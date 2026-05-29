@@ -2993,7 +2993,11 @@ const ContainerTracking = () => {
                 </span>
                 <TablePagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
               </div>
-            </> : <div className="flex flex-col items-center justify-center py-12 text-[#666]">
+            </> : isLoadingData ? <div className="flex flex-col items-center justify-center py-12 text-[#ffc800]">
+              <Loader2 className="w-10 h-10 mb-3 animate-spin" />
+              <p className="text-lg">Buscando MBLs...</p>
+              <p className="text-sm mt-1 text-[#aaa]">Sincronizando com os armadores</p>
+            </div> : <div className="flex flex-col items-center justify-center py-12 text-[#666]">
               <Ship className="w-12 h-12 mb-4 opacity-50" />
               <p className="text-lg">Nenhum MBL encontrado</p>
               <p className="text-sm mt-1">Ajuste os filtros ou aguarde a sincronização</p>

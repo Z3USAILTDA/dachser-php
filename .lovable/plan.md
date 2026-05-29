@@ -1,22 +1,21 @@
-## Problema
+## Objetivo
 
-Após a mudança recente onde a coluna "Último evento" e o badge de status passaram a refletir `container_status` (vindo de `t_sea_tracking_current`), os cards do topo (Em Trânsito, Em Alerta, Crítico, Entregues) continuaram lendo `mbl.last_event`. Como `last_event` está vazio/diferente para a maioria dos MBLs, todas as classificações caem fora dos códigos esperados (CRG/DEP/TSP/ARR/DCH/GOD/DLV) e os cards mostram 0. Só "Total MBLS" funciona porque é uma contagem bruta da lista.
+Substituir o estado "Nenhum MBL encontrado" exibido durante o fetch inicial por um indicador de carregamento ("Buscando MBLs...").
 
-## Correção (somente frontend)
+## Mudança
 
-Arquivo: `src/pages/ContainerTracking.tsx`
+Arquivo: `src/pages/ContainerTracking.tsx`, bloco do empty state (linha ~2996–3000).
 
-1. Em `isEmTransito` e `isEntregue`, usar `container_status` como fonte primária, com fallback para `last_event`:
-   - Trocar a chamada para `getReportStatus(m.container_status ?? m.last_event, m.container_status, m.tipo_processo)` (mesma forma usada no badge da coluna SITUAÇÃO).
-2. Em `isEmAlerta`, manter a regra de `is_eta_delayed`, e na verificação textual usar `container_status || last_event` (assim mantém DELAYED/CANCELLED/HOLD se aparecer em qualquer dos campos).
-3. Atualizar as chamadas em:
-   - `useMemo` que calcula `stats` (linhas 2096–2099)
-   - O filtro por card (`activeCardFilter`, linhas 2057–2063)
-   - Qualquer uso na renderização da tabela (linha 2746–2747) para manter consistência com os cards.
-4. Sem mudanças em backend, edge functions ou esquema. Sem novas dependências.
+Hoje, quando `filteredMbls.length === 0` o componente já mostra o card "Nenhum MBL encontrado" — mesmo enquanto a primeira busca ainda está rodando (`isLoadingData === true`), o que confunde o usuário.
 
-## Validação
+Alterar a renderização para:
 
-- Recarregar `/sea/tracking`: cards passam a refletir as mesmas categorias mostradas no badge da coluna SITUAÇÃO (DEP, GIO, CLT, CRG, etc.) — DEP/CRG entram em "Em Trânsito", GOD/DLV em "Entregues", e MBLs com `is_eta_delayed`/`is_critico` em "Alerta"/"Crítico".
-- Clicar em cada card filtra a tabela corretamente.
-- Total MBLS continua igual.
+- Se `isLoadingData` (ou ainda sem dados carregados) → mostrar bloco "Buscando MBLs..." com `Loader2` animado e cor dourada (`#ffc800`), seguindo o tema DACHSER.
+- Caso contrário (fetch concluído e lista vazia) → manter o "Nenhum MBL encontrado" atual.
+
+## Detalhes técnicos
+
+- Reaproveitar `isLoadingData` (já existe em `useState`, linhas 505/935/954/970) — sem novos estados.
+- Usar `Loader2 className="w-10 h-10 mb-3 animate-spin text-[#ffc800]"` + texto "Buscando MBLs..." e subtítulo "Sincronizando com os armadores".
+- Edição surgical: apenas o `else` do ternário na linha ~2996. Nada de refatoração.
+- Sem mudanças em edge functions, SQL ou cards superiores (os zeros nos cards são naturais durante o load e ficam consistentes com a tabela vazia + spinner).
