@@ -2331,13 +2331,6 @@ const Index = () => {
             @{user?.email?.split("@")[0] || "admin"}
           </div>
           <button
-            onClick={() => setRegrasDialogOpen(true)}
-            className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
-            title="Regras de notificação"
-          >
-            <Settings className="h-4 w-4" />
-          </button>
-          <button
             onClick={() => navigate("/air/tracking/manual")}
             className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
             title="Manual do usuário"
