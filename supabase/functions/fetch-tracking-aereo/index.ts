@@ -1243,7 +1243,6 @@ serve(async (req) => {
       const safeLastStatus = VALID_IATA.has(sanitizedLastStatus) ? sanitizedLastStatus : null;
 
       // DLV and POD are terminal — always win over NFD or any other status
-      const FINAL_STATUSES = new Set(["DLV", "POD"]);
       if (allCodes.some(c => c && FINAL_STATUSES.has(c)) || FINAL_STATUSES.has(sanitizedLastStatus)) {
         finalCode = allCodes.some(c => c === "POD") || sanitizedLastStatus === "POD" ? "POD" : "DLV";
       } else {
