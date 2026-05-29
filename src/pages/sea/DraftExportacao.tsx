@@ -43,10 +43,23 @@ const DraftExportacao = () => {
   const storedUser = localStorage.getItem("user");
   const user = storedUser ? JSON.parse(storedUser) : null;
 
-  // Fetch SEA EXPORT stats from t_master_dados
+  // Fetch SEA EXPORT stats — Supabase primary, Express fallback
   const fetchSeaDbStats = useCallback(async () => {
     setIsLoadingDbStats(true);
     try {
+      // 1) Supabase edge function
+      try {
+        const { data, error } = await supabase.functions.invoke('fetch-sea-master-dados-stats');
+        if (!error && data?.success && data?.stats) {
+          setSeaDbStats(data.stats);
+          return;
+        }
+        console.warn('[DraftExportacao] Stats Supabase falhou, fallback Express', error);
+      } catch (e) {
+        console.warn('[DraftExportacao] Stats Supabase indisponível, fallback Express:', e);
+      }
+
+      // 2) Fallback Express
       const response = await fetch('/api/sea/draft-exportacao/stats');
       if (!response.ok) {
         console.error('Error fetching sea db stats: HTTP', response.status);
