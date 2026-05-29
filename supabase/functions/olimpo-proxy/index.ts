@@ -2216,13 +2216,13 @@ serve(async (req) => {
                 (SELECT vi.vessel_imo FROM dados_dachser.t_sea_tracking_current vi WHERE vi.mbl_id = ts.mbl_id AND vi.vessel_imo IS NOT NULL AND vi.vessel_imo != '' LIMIT 1)
               ) as vessel_imo,
               COALESCE(MAX(md.eta), MAX(mdn.eta), MAX(ts.eta)) as eta,
-              COALESCE(MAX(md.eta), MAX(mdn.eta)) as eta_master,
+              MAX(md.eta) as eta_master,
               COALESCE(
                 NULLIF(TRIM(MAX(md.nome_analista)), ''),
                 NULLIF(TRIM(MAX(mdn.nome_analista)), ''),
                 NULLIF(TRIM(MAX(ts.email_analista)), '')
               ) as nome_analista,
-              MAX(ts.eta) as eta_api,
+              MAX(ts.eta_source) as eta_api,
               COALESCE(MAX(md.hbl), MAX(mdn.hawb)) as hbl,
               COALESCE(MAX(md.etd), MAX(mdn.etd)) as etd,
               COALESCE(MAX(mdn.cliente), MAX(ts.consignee)) as cliente,
