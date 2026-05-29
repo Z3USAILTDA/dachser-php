@@ -1373,36 +1373,6 @@ serve(async (req) => {
       }
       const conexao = seenAirports.length > 0 ? seenAirports.join(',') : null;
 
-      // Detect ground transport (RFS) — sufixo -T, X/D literal e códigos legados com X ou D após dígitos
-      const normalizeGroundCandidate = (val: string): string => (
-        (val || "")
-          .toUpperCase()
-          .replace(/\\\//g, '/')
-          .trim()
-          .replace(/[,;]\s*$/, '')
-          .replace(/\s+/g, ' ')
-      );
-      const hasGroundFlightPattern = (val: string): boolean => {
-        const clean = normalizeGroundCandidate(val);
-        if (!clean) return false;
-        // Apenas sinais inequívocos de RFS: sufixo -T explícito ou notação literal X/D
-        if (/\b[A-Z]{2,3}\s?\d{2,5}-T\b/.test(clean)) return true;
-        if (/\b[A-Z]{2,3}\s?\d{2,5}\s*X\s*\/\s*D\b/.test(clean)) return true;
-        return false;
-      };
-      const isGroundFlight = (val: string): boolean => hasGroundFlightPattern(val);
-      const extractFlightsFromText = (text: string): string[] => {
-        if (!text) return [];
-        const flights: string[] = [];
-        let m: RegExpExecArray | null;
-        const flightPattern = /Flight\s+([A-Z]{2,3}[\s-]?\d{2,5}(?:-T|\s*X\s*\/\s*D)?)/g;
-        while ((m = flightPattern.exec(text)) !== null) flights.push(m[1]);
-        const dashTPattern = /\b([A-Z]{2,3}\s?\d{2,5}-T)\b/g;
-        while ((m = dashTPattern.exec(text)) !== null) flights.push(m[1]);
-        const slashXDPattern = /\b([A-Z]{2,3}[\s-]?\d{2,5}\s*X\s*\/\s*D)\b/g;
-        while ((m = slashXDPattern.exec(text)) !== null) flights.push(m[1]);
-        return flights;
-      };
       // RFS detection scoped EXCLUSIVELY to the elected slot (top.idx via pickTopByIATA).
       // Sufixo -T ou X/D em eventos antigos da timeline NÃO classifica o processo como
       // rodoviário. Campos LAST_FLIGHT e desc0..desc3 não são usados como fallback.
