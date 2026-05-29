@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { DemurrageContainer, PreInvoice, PreInvoiceItem } from "@/hooks/useDemurrageData";
+import { calculateImportDemurrage, formatDateBR as fmtDateBR, resolveAta } from "@/utils/demurrageCalc";
 
 const formatCurrency = (value: number | undefined): string => {
   if (value === undefined || value === null || value === 0) return "-";
