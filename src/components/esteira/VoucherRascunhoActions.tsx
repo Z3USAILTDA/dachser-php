@@ -439,7 +439,9 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
           <p className="text-sm text-muted-foreground">
             {canEnviar 
               ? "Anexos completos! Você pode enviar o voucher/SPO." 
-              : "Adicione os anexos obrigatórios para enviar."}
+              : boletoRequired 
+                ? "Adicione fatura e boleto para enviar." 
+                : "Adicione a fatura/demonstrativo para enviar."}
           </p>
         </div>
       </div>
