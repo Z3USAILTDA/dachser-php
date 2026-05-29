@@ -2095,8 +2095,8 @@ const ContainerTracking = () => {
   const stats = useMemo(() => {
     const total = filteredMblListByCarrier.length;
     const criticos = filteredMblListByCarrier.filter(m => isEmCritico(m.is_critico)).length;
-    const emTransito = filteredMblListByCarrier.filter(m => isEmTransito(m.last_event) && !isEntregue(m) && !isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
-    const emAlerta = filteredMblListByCarrier.filter(m => isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
+    const emTransito = filteredMblListByCarrier.filter(m => isEmTransito(m) && !isEntregue(m) && !isEmAlerta(m) && !isEmCritico(m.is_critico)).length;
+    const emAlerta = filteredMblListByCarrier.filter(m => isEmAlerta(m) && !isEmCritico(m.is_critico)).length;
     const entregues = filteredMblListByCarrier.filter(m => isEntregue(m)).length;
     return {
       total,
