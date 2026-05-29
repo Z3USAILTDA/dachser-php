@@ -72,17 +72,54 @@ function formatDateBR(dateStr: string | undefined | null): string {
   } catch { return String(dateStr); }
 }
 
-function generateNotificationHtml(params: { testMode?: boolean; client_name?: string; house_bl?: string; shipment_master?: string }): string {
-  const { testMode, client_name, house_bl, shipment_master } = params;
+function generateNotificationHtml(params: {
+  testMode?: boolean;
+  client_name?: string;
+  cnpj_cliente?: string;
+  house_bl?: string;
+  shipment_master?: string;
+  containers?: ContainerDetail[];
+}): string {
+  const { testMode, client_name, cnpj_cliente, house_bl, shipment_master, containers } = params;
   const testBanner = testMode
     ? `<div style="background:#ffc800;color:#000;text-align:center;padding:8px;font-size:13px;font-weight:bold;margin-bottom:16px;">⚠️ E-MAIL DE TESTE — NÃO ENCAMINHAR</div>`
     : '';
 
   const detalhamento = `<table style="border-collapse:collapse;margin:12px 0;font-size:13px;">
 <tr><td style="padding:4px 12px 4px 0;font-weight:bold;">Cliente:</td><td>${client_name || 'N/A'}</td></tr>
+<tr><td style="padding:4px 12px 4px 0;font-weight:bold;">CNPJ Cliente:</td><td>${cnpj_cliente || 'N/A'}</td></tr>
 <tr><td style="padding:4px 12px 4px 0;font-weight:bold;">House BL:</td><td>${house_bl || 'N/A'}</td></tr>
 <tr><td style="padding:4px 12px 4px 0;font-weight:bold;">MBL:</td><td>${shipment_master || 'N/A'}</td></tr>
 </table>`;
+
+  const ctrs = containers || [];
+  const detalheContainers = ctrs.length > 0 ? `
+<table style="border-collapse:collapse;margin:12px 0;font-size:12px;width:100%;">
+  <thead>
+    <tr style="background:#003369;color:#fff;">
+      <th style="padding:6px 8px;border:1px solid #000;text-align:left;">Container</th>
+      <th style="padding:6px 8px;border:1px solid #000;text-align:center;">Tipo</th>
+      <th style="padding:6px 8px;border:1px solid #000;text-align:center;">ATA</th>
+      <th style="padding:6px 8px;border:1px solid #000;text-align:center;">Devolução</th>
+      <th style="padding:6px 8px;border:1px solid #000;text-align:center;">Limite Devolução</th>
+      <th style="padding:6px 8px;border:1px solid #000;text-align:center;">Free Time</th>
+      <th style="padding:6px 8px;border:1px solid #000;text-align:center;">Dias em Posse</th>
+      <th style="padding:6px 8px;border:1px solid #000;text-align:center;">Dias Excedidos</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${ctrs.map(c => `<tr>
+      <td style="padding:5px 8px;border:1px solid #ccc;">${c.number || '-'}</td>
+      <td style="padding:5px 8px;border:1px solid #ccc;text-align:center;">${c.type || c.size || '-'}</td>
+      <td style="padding:5px 8px;border:1px solid #ccc;text-align:center;">${formatDateBR(c.discharge_date) || 'ATA n/ encontrada'}</td>
+      <td style="padding:5px 8px;border:1px solid #ccc;text-align:center;">${formatDateBR(c.return_date) || '-'}</td>
+      <td style="padding:5px 8px;border:1px solid #ccc;text-align:center;">${formatDateBR(c.return_deadline) || '-'}</td>
+      <td style="padding:5px 8px;border:1px solid #ccc;text-align:center;">${c.free_time_days ?? '-'}</td>
+      <td style="padding:5px 8px;border:1px solid #ccc;text-align:center;">${c.days_possession ?? '-'}</td>
+      <td style="padding:5px 8px;border:1px solid #ccc;text-align:center;">${c.days_incident ?? '-'}</td>
+    </tr>`).join('')}
+  </tbody>
+</table>` : '';
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:20px;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#fff;color:#333;font-size:14px;line-height:1.6;">
@@ -92,6 +129,7 @@ ${testBanner}
 <p>Identificamos custos de D&amp;D – Sobreestadia de Contêineres referentes ao(s) embarque(s) mencionado(s) abaixo:</p>
 
 ${detalhamento}
+${detalheContainers}
 
 <p>Caso haja alguma divergência, solicitamos que seja sinalizada com a devida evidência no prazo de 48 horas a contar desta data.<br/>
 Após este período, os custos serão considerados válidos e será emitida Nota de Débito para pagamento.</p>
