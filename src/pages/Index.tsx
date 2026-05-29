@@ -3424,7 +3424,7 @@ const Index = () => {
         </div>
       )}
 
-      <EmailClienteRegrasDialog open={regrasDialogOpen} onOpenChange={setRegrasDialogOpen} />
+      
 
       {/* Modal de Timeline por AWB */}
       <AwbTimelineModal
