@@ -1415,7 +1415,7 @@ serve(async (req) => {
             if (extracted.some(isGroundFlight)) { isGroundTransport = true; break; }
           }
           if (!isGroundTransport) {
-            for (const textField of ['status', 'Status', 'Description', 'description', 'details', 'title', 'event_description', 'evento', 'descricao', 'remarks']) {
+            for (const textField of TEXT_FIELDS) {
               const text = (electedEvt as any)[textField];
               if (!text) continue;
               if (hasGroundFlightPattern(String(text))) { isGroundTransport = true; break; }
