@@ -459,7 +459,7 @@ const Index = () => {
   const [cadastroNovaOpen, setCadastroNovaOpen] = useState(false);
   const [dbStats, setDbStats] = useState<DbStats | null>(null);
   const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
-  const [regrasDialogOpen, setRegrasDialogOpen] = useState(false);
+  
   const [timelineModal, setTimelineModal] = useState<{ open: boolean; awb: string; consigneeName: string; etd?: string | null }>({
     open: false,
     awb: "",
