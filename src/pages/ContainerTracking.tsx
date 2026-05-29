@@ -2822,7 +2822,14 @@ const ContainerTracking = () => {
                                       Containers do MBL {mbl.mbl_id}
                                     </div>
                                     
-                                    {/* VesselFinder Map temporariamente ocultado */}
+                                    {/* Mapa do navio (oculto após DCH) */}
+                                    {shouldShowVesselMap(mbl.container_status ?? mbl.last_event) && (mbl.navio || mbl.vessel_imo) && (
+                                      <VesselFinderMap
+                                        shipperName={mbl.navio}
+                                        imo={mbl.vessel_imo}
+                                        height={320}
+                                      />
+                                    )}
                                     
                                     {/* Sub-tabela: linha agregada do último evento + histórico expansível */}
                                     <div className="overflow-x-auto">
