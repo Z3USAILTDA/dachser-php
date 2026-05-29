@@ -66,45 +66,42 @@ const getFtSourceLabel = (source: string | null): string => {
   }
 };
 
-const mapContainerToRow = (c: DemurrageContainer) => ({
-  "Container": c.numero,
-  "MBL": c.mbl,
-  "HBL": c.hbl || "-",
-  "Tipo Operação": c.tipo_processo || "-",
-  "Cliente": c.cliente || "-",
-  "Partner ID": c.partner_id || "-",
-  "Armador": c.armador || "-",
-  "Tipo Container": c.tipo_conteiner || "-",
-  "Status Cronos": c.cronos_status || "-",
-  "Free Time (Dias)": c.free_time_days,
-  "Origem Free Time": getFtSourceLabel(c.ft_source),
-  "Início Free Time": formatDate(c.ft_started_at),
-  "Fim Free Time": formatDate(c.free_time_end_date),
-  "Dias Restantes": c.days_remaining ?? "-",
-  "Dias Excedidos": c.excedente_dias ?? "-",
-  "Custo Estimado (USD)": formatCurrency(c.expected_cost_usd),
-  "Status Risco": getRiskLabel(c.risk_status),
-  "Último Evento": c.last_event || "-",
-  "Porto Origem": c.porto_origem || "-",
-  "Porto Destino": c.porto_destino || "-",
-  "ETA": formatDate(c.eta),
-  "Data Gate Out": formatDate(c.data_gate_out),
-  "Status Info": c.pi_status_info || "-",
-  "MISK": c.pi_misk || "-",
-  "Reg. Othello": c.pi_othello_registro || "-",
-  "Observação": c.pi_observacao || "-",
-  "Data Criação": formatDateTime(c.created_at),
-  "Última Atualização": formatDateTime(c.updated_at),
-});
-
-const DATA_COL_WIDTHS = [
-  { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 70 },
-  { wch: 28 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
-  { wch: 15 }, { wch: 13 }, { wch: 13 }, { wch: 12 }, { wch: 12 },
-  { wch: 20 }, { wch: 12 }, { wch: 25 }, { wch: 14 }, { wch: 14 },
-  { wch: 12 }, { wch: 13 }, { wch: 16 }, { wch: 12 }, { wch: 14 },
-  { wch: 25 }, { wch: 15 }, { wch: 15 },
-];
+const mapContainerToRow = (c: DemurrageContainer) => {
+  const ata = resolveAta(c as any);
+  const calc = calculateImportDemurrage({
+    armador: c.armador,
+    ata,
+    devolucao: c.data_devolucao,
+    freeTime: c.free_time_days,
+  });
+  const cnpj = (c as any).cnpj_cliente || (c as any).cnpj || "-";
+  const costCenter = (c as any).cost_center || (c as any).centro_custo || "-";
+  const incidencia = (c as any).incidencia || (calc.diasExcedidos != null && calc.diasExcedidos > 0 ? "Sim" : "Não");
+  return {
+    "Armador": c.armador || "-",
+    "MBL": c.mbl,
+    "HBL": c.hbl || "-",
+    "Tipo Operação": c.tipo_processo || "-",
+    "Partner ID": c.partner_id || "-",
+    "Cliente": c.cliente || "-",
+    "Container": c.numero,
+    "Tipo Container": c.tipo_conteiner || "-",
+    "Tipo": (c as any).tipo_medida || c.tipo_conteiner || "-",
+    "CNPJ Cliente": cnpj,
+    "ATA": ata ? fmtDateBR(ata) : "ATA não encontrada",
+    "Devolução": fmtDateBR(c.data_devolucao),
+    "Limite de Devolução": fmtDateBR(calc.limiteDevolucaoDate),
+    "Free Time (Dias)": c.free_time_days,
+    "Dias em Posse": calc.diasEmPosse ?? "-",
+    "Dias Excedidos": calc.diasExcedidos ?? "-",
+    "Status Risco": getRiskLabel(c.risk_status),
+    "Último Evento": c.last_event || "-",
+    "Porto Origem": c.porto_origem || "-",
+    "Porto Destino": c.porto_destino || "-",
+    "Incidência": incidencia,
+    "Cost Center": costCenter,
+  };
+};
 
 const styleSheet = (ws: XLSX.WorkSheet, containers: DemurrageContainer[]) => {
   const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
