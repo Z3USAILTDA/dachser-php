@@ -81,7 +81,8 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
   // Verificar anexos
   const hasFatura = voucher.anexos.some(a => a.tipo === "FATURA_DEMONSTRATIVO" || a.tipo === "FATURA");
   const hasBoleto = voucher.anexos.some(a => a.tipo === "BOLETO_INSTRUCOES" || a.tipo === "BOLETO");
-  const canEnviar = hasFatura && hasBoleto;
+  const boletoRequired = voucher.formaPagamento === "BOLETO";
+  const canEnviar = hasFatura && (!boletoRequired || hasBoleto);
 
   // Função para adicionar novo anexo
   const handleFileUpload = async (fileUrl: string, fileName: string, fileSize: number) => {
