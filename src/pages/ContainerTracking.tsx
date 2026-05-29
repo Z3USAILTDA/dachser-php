@@ -838,20 +838,21 @@ const ContainerTracking = () => {
     };
   }, [filteredMblListByCarrier]);
 
-  // Status categorization
-  const isEmTransito = (lastEvent: string | null): boolean => {
-    const status = getReportStatus(lastEvent);
+  // Status categorization (usa container_status como fonte primária, com fallback para last_event)
+  const isEmTransito = (m: MblTrackingData): boolean => {
+    const status = getReportStatus(m.container_status ?? m.last_event, m.container_status, m.tipo_processo);
     return ['CRG', 'DEP', 'TSP', 'ARR', 'DCH'].includes(status.code);
   };
-  const isEmAlerta = (lastEvent: string | null, isEtaDelayed?: number): boolean => {
+  const isEmAlerta = (m: MblTrackingData): boolean => {
     // Verificação via campo calculado do backend (ETA passou há mais de 3 dias)
-    if (isEtaDelayed === 1) return true;
-    if (!lastEvent) return false;
-    const upper = lastEvent.toUpperCase().replace(/[_\s-]/g, "");
+    if (m.is_eta_delayed === 1) return true;
+    const source = (m.container_status || m.last_event || "");
+    if (!source) return false;
+    const upper = source.toUpperCase().replace(/[_\s-]/g, "");
     return upper.includes("DELAYED") || upper.includes("DELAY") || upper.includes("CANCELLED") || upper.includes("CANCEL") || upper.includes("CUSTOMSHOLD") || upper.includes("MISSED");
   };
   const isEntregue = (m: MblTrackingData): boolean => {
-    const status = getReportStatus(m.last_event, m.container_status, m.tipo_processo);
+    const status = getReportStatus(m.container_status ?? m.last_event, m.container_status, m.tipo_processo);
     return ['GOD', 'DLV'].includes(status.code);
   };
 
