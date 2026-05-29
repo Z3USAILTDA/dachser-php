@@ -128,10 +128,7 @@ export const useDraftData = () => {
     setError(null);
 
     try {
-      const [mblList, trackingMap] = await Promise.all([
-        fetchMBLs(),
-        fetchTrackingStatus()
-      ]);
+      const { mbls: mblList, trackingMap } = await fetchCombined();
 
       setMbls(mblList);
       setTrackingStatus(trackingMap);
@@ -146,7 +143,8 @@ export const useDraftData = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [fetchMBLs, fetchTrackingStatus, combineData, calculateStats]);
+  }, [fetchCombined, combineData, calculateStats]);
+
 
   useEffect(() => {
     refetch();
