@@ -129,6 +129,7 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     "098": () => `https://cargo.airindia.com/in/en/track-shipment.html`,
     "118": () => `https://flytaag.com/en/`,
     "071": (i,a) => `https://cargo.ethiopianairlines.com/my-cargo/track-your-shipment?awbnumber=${i}-${a}`,
+    "873": (i,a) => `https://aerounion-icargo.ibsplc.aero/icargoauportal/portal/trackshipments?trkTxnValue=${i}${a}`,
   };
   const builder = urlBuilders[airlineCode];
   return builder ? builder(airlineCode, awbNumber) : null;
