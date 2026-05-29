@@ -2823,6 +2823,11 @@ const ContainerTracking = () => {
                                       <VesselFinderMap
                                         shipperName={mbl.navio}
                                         imo={mbl.vessel_imo}
+                                        latitude={mbl.latitude}
+                                        longitude={mbl.longitude}
+                                        lastEvent={mbl.last_event}
+                                        eta={mbl.eta}
+                                        destino={mbl.destino}
                                         height={320}
                                       />
                                     )}
