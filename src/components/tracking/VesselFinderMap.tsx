@@ -178,7 +178,7 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
 
       {/* External link */}
       <a
-        href={`https://www.vesselfinder.com/?imo=${imo || '0'}`}
+        href={`https://www.vesselfinder.com/?imo=${effectiveImo || '0'}`}
         target="_blank"
         rel="noopener noreferrer"
         className="absolute top-2 right-2 bg-[rgba(0,0,0,.7)] backdrop-blur-sm rounded-lg px-3 py-1.5 text-xs text-blue-400 hover:text-blue-300 transition flex items-center gap-1"
