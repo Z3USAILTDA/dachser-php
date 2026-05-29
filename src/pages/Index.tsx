@@ -37,7 +37,7 @@ import {
   MapPin,
   ArrowLeftRight,
 } from "lucide-react";
-import { EmailClienteRegrasDialog } from "@/components/air/EmailClienteRegrasDialog";
+
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -459,7 +459,7 @@ const Index = () => {
   const [cadastroNovaOpen, setCadastroNovaOpen] = useState(false);
   const [dbStats, setDbStats] = useState<DbStats | null>(null);
   const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
-  const [regrasDialogOpen, setRegrasDialogOpen] = useState(false);
+  
   const [timelineModal, setTimelineModal] = useState<{ open: boolean; awb: string; consigneeName: string; etd?: string | null }>({
     open: false,
     awb: "",
@@ -2331,13 +2331,6 @@ const Index = () => {
             @{user?.email?.split("@")[0] || "admin"}
           </div>
           <button
-            onClick={() => setRegrasDialogOpen(true)}
-            className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
-            title="Regras de notificação"
-          >
-            <Settings className="h-4 w-4" />
-          </button>
-          <button
             onClick={() => navigate("/air/tracking/manual")}
             className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
             title="Manual do usuário"
@@ -3431,7 +3424,7 @@ const Index = () => {
         </div>
       )}
 
-      <EmailClienteRegrasDialog open={regrasDialogOpen} onOpenChange={setRegrasDialogOpen} />
+      
 
       {/* Modal de Timeline por AWB */}
       <AwbTimelineModal

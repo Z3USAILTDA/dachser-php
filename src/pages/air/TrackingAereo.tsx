@@ -33,7 +33,7 @@ import type { User, Session } from "@supabase/supabase-js";
 import DashboardCards, { CardFilterType } from "@/components/DashboardCards";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
-import { EmailClienteRegrasDialog } from "@/components/air/EmailClienteRegrasDialog";
+
 import { CadastroNovaModal } from "@/components/air/CadastroNovaModal";
 import { AwbTimelineModalScraper } from "@/components/air/AwbTimelineModalScraper";
 import { formatDateTimeBR, parseDBDate } from "@/utils/timezone";
@@ -495,7 +495,7 @@ const TrackingAereo = () => {
   const [cardFilter, setCardFilter] = useState<CardFilterType>("all");
   const [showMonitoredModal, setShowMonitoredModal] = useState(false);
   const [cadastroNovaOpen, setCadastroNovaOpen] = useState(false);
-  const [regrasDialogOpen, setRegrasDialogOpen] = useState(false);
+  
   // const [dbStats, setDbStats] = useState<DbStats | null>(null);
   // const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
   const [timelineModal, setTimelineModal] = useState<{
@@ -852,9 +852,6 @@ const TrackingAereo = () => {
           <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[220px] truncate">
             @{user?.email?.split("@")[0] || "admin"}
           </div>
-          <button onClick={() => setRegrasDialogOpen(true)} className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors" title="Regras de notificação">
-            <Settings className="h-4 w-4" />
-          </button>
           <button onClick={() => navigate("/air/tracking/manual")} className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors" title="Manual do usuário">
             <HelpCircle className="h-4 w-4" />
           </button>
@@ -1308,8 +1305,6 @@ const TrackingAereo = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Regras de Notificação */}
-      <EmailClienteRegrasDialog open={regrasDialogOpen} onOpenChange={setRegrasDialogOpen} />
 
       {/* Timeline Modal (Scraper version) */}
       <AwbTimelineModalScraper
