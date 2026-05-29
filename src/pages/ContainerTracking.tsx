@@ -2075,8 +2075,8 @@ const ContainerTracking = () => {
 
     // Ordenar: MBLs com status "Aguardando" (AGD/AGD_NO_CT/SIA) por último
     mbls.sort((a, b) => {
-      const statusA = getReportStatus(a.last_event, a.container_status, a.tipo_processo, a.container_count);
-      const statusB = getReportStatus(b.last_event, b.container_status, b.tipo_processo, b.container_count);
+      const statusA = getReportStatus(a.container_status ?? a.last_event, a.container_status, a.tipo_processo, a.container_count);
+      const statusB = getReportStatus(b.container_status ?? b.last_event, b.container_status, b.tipo_processo, b.container_count);
       const bottomCodes = ['AGD', 'AGD_NO_CT', 'SIA'];
       const aIsBottom = bottomCodes.includes(statusA.code);
       const bIsBottom = bottomCodes.includes(statusB.code);
@@ -2521,10 +2521,10 @@ const ContainerTracking = () => {
                   </thead>
                   <tbody>
                     {currentMbls.map((mbl, idx) => {
-                    const reportStatus = getReportStatus(mbl.last_event, mbl.container_status, mbl.tipo_processo, mbl.container_count);
+                    const reportStatus = getReportStatus(mbl.container_status ?? mbl.last_event, mbl.container_status, mbl.tipo_processo, mbl.container_count);
                     const statusCode = reportStatus.code;
                     const isSIA = statusCode === 'SIA';
-                    const progress = isSIA ? 0 : getTimelineProgress(mbl.last_event, mbl.container_status, mbl.tipo_processo);
+                    const progress = isSIA ? 0 : getTimelineProgress(mbl.container_status ?? mbl.last_event, mbl.container_status, mbl.tipo_processo);
                   const statusColor = reportStatus.color;
                   const isExpanded = expandedMbl === mbl.mbl_id;
                   return <Fragment key={`${mbl.mbl_id}-${idx}`}>
@@ -2841,7 +2841,7 @@ const ContainerTracking = () => {
                                         </thead>
                                         <tbody>
                                           {(() => {
-                                            const aggStatus = getReportStatus(mbl.last_event, mbl.container_status, mbl.tipo_processo, mbl.container_count);
+                                            const aggStatus = getReportStatus(mbl.container_status ?? mbl.last_event, mbl.container_status, mbl.tipo_processo, mbl.container_count);
                                             // Dedup: agrega por (código, descrição, local) — ignora timestamp para evitar
                                             // repetições do mesmo evento emitido várias vezes em poucos minutos pelo armador.
                                             // Mantém o evento MAIS RECENTE e agrega containers afetados.
