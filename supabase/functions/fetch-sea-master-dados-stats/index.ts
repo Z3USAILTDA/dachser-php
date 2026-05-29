@@ -6,6 +6,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const SHIPPING_LINES: Array<{ code: string; name: string; prefixes: string[] }> = [
+  { code: 'HLC',  name: 'Hapag-Lloyd', prefixes: ['HLC'] },
+  { code: 'MSC',  name: 'MSC',         prefixes: ['MSC', 'MEDU'] },
+  { code: 'ONE',  name: 'ONE',         prefixes: ['ONEY', 'ONEU', 'EBKG', 'NYKU', 'MOLU', 'KKFU', 'MOAU', 'KKLU'] },
+];
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -26,20 +32,11 @@ serve(async (req) => {
     }
 
     client = await new Client().connect({
-      hostname: host,
-      port,
-      db: database,
-      username,
-      password,
+      hostname: host, port, db: database, username, password,
     });
 
-    const totalRows = await client.query(
-      `SELECT COUNT(*) AS total FROM t_master_dados
-       WHERE active = 1 AND tipo_processo = 'SEA EXPORT'`
-    );
-
-    const eligibleRows = await client.query(`
-      SELECT COUNT(*) AS eligible FROM t_master_dados m
+    const totalRows = await client.query(`
+      SELECT COUNT(*) AS total FROM t_master_dados m
       WHERE m.active = 1
         AND m.tipo_processo = 'SEA EXPORT'
         AND m.mawb IS NOT NULL AND TRIM(m.mawb) != ''
@@ -52,16 +49,34 @@ serve(async (req) => {
         AND (m.etd >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH) OR m.etd IS NULL)
     `);
 
-    const lastInsertRows = await client.query(
-      `SELECT MAX(data_insert) AS last_insert FROM t_master_dados WHERE tipo_processo = 'SEA EXPORT'`
+    const lastRows = await client.query(
+      `SELECT MAX(data_insert) AS last_update FROM t_master_dados WHERE tipo_processo = 'SEA EXPORT'`
     );
+
+    const shippingLineBreakdown: Array<{ code: string; name: string; count: number }> = [];
+    for (const line of SHIPPING_LINES) {
+      const likeClauses = line.prefixes.map(p => `m.mawb LIKE '${p}%'`).join(' OR ');
+      const rows = await client.query(`
+        SELECT COUNT(*) AS count FROM t_master_dados m
+        WHERE m.active = 1
+          AND m.tipo_processo = 'SEA EXPORT'
+          AND m.mawb IS NOT NULL AND TRIM(m.mawb) != ''
+          AND (${likeClauses})
+          AND (m.etd >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH) OR m.etd IS NULL)
+      `);
+      shippingLineBreakdown.push({
+        code: line.code,
+        name: line.name,
+        count: Number((rows as any[])[0]?.count ?? 0),
+      });
+    }
 
     await client.close();
 
     const stats = {
-      total: (totalRows as any[])[0]?.total ?? 0,
-      eligible: (eligibleRows as any[])[0]?.eligible ?? 0,
-      lastInsert: (lastInsertRows as any[])[0]?.last_insert ?? null,
+      lastUpdate: (lastRows as any[])[0]?.last_update ?? null,
+      totalRecords: Number((totalRows as any[])[0]?.total ?? 0),
+      shippingLineBreakdown,
     };
 
     return new Response(JSON.stringify({ success: true, stats }), {
