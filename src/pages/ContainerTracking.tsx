@@ -2075,8 +2075,8 @@ const ContainerTracking = () => {
 
     // Ordenar: MBLs com status "Aguardando" (AGD/AGD_NO_CT/SIA) por último
     mbls.sort((a, b) => {
-      const statusA = getReportStatus(a.last_event, a.container_status, a.tipo_processo, a.container_count);
-      const statusB = getReportStatus(b.last_event, b.container_status, b.tipo_processo, b.container_count);
+      const statusA = getReportStatus(a.container_status ?? a.last_event, a.container_status, a.tipo_processo, a.container_count);
+      const statusB = getReportStatus(b.container_status ?? b.last_event, b.container_status, b.tipo_processo, b.container_count);
       const bottomCodes = ['AGD', 'AGD_NO_CT', 'SIA'];
       const aIsBottom = bottomCodes.includes(statusA.code);
       const bIsBottom = bottomCodes.includes(statusB.code);
