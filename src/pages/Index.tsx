@@ -37,7 +37,7 @@ import {
   MapPin,
   ArrowLeftRight,
 } from "lucide-react";
-import { EmailClienteRegrasDialog } from "@/components/air/EmailClienteRegrasDialog";
+
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
