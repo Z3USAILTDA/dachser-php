@@ -2823,7 +2823,7 @@ const ContainerTracking = () => {
                                     </div>
                                     
                                     {/* Mapa do navio (oculto após DCH) */}
-                                    {shouldShowVesselMap(mbl.container_status ?? mbl.last_event) && (mbl.navio || mbl.vessel_imo) && (
+                                    {shouldShowVesselMap(mbl.container_status ?? mbl.last_event) && (
                                       <VesselFinderMap
                                         shipperName={mbl.navio}
                                         imo={mbl.vessel_imo}
