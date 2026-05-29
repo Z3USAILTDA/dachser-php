@@ -1,47 +1,74 @@
-## Contexto
-
-O AWB `045-20656764` aparece na tela como `FRA → GRU` (sem conexão, com status `RCF`). Você confirmou que o **valor correto em `t_fato_aereo` é `FRA → LIS → GRU`**.
-
-Diagnóstico feito até agora:
-
-- A edge function `fetch-tracking-aereo` lê de `t_fato_aereo` (`tdaf`) e, para este AWB, está devolvendo: `origin=FRA`, `destination=GRU`, `conexao=LIS`, `route_status=null`, `last_event=RCF`, `last_event_location=GRU`.
-- O `route_status=null` indica que o "route map" autoritativo (CTE SQL pesada que roda em background) ainda não classificou esta rota — por isso caiu no fallback que usa `tdaf.origin`/`tdaf.destination` direto.
-- Em `src/pages/air/TrackingAereo.tsx` existe uma segunda camada (`applyRouteFix`, linhas 396–472) que recalcula origem/destino a partir da `timeline_json` no cliente. Para este AWB a timeline mais antiga começa em `LIS` (eventos "Booking Confirmed"), então essa função pode estar sobrescrevendo o `FRA` autoritativo do banco por algo derivado da timeline — e/ou eliminando a conexão.
-- A coluna "conexão" aparentemente não está sendo exibida na linha da tabela (o screenshot mostra só origin/destination).
-
-Ou seja, há duas camadas de "correção de rota" rodando em sequência (SQL no servidor + `applyRouteFix` no cliente). Quando o backend já entrega o valor correto vindo de `t_fato_aereo`, a camada client está deturpando.
 
 ## Objetivo
 
-Garantir que a tela Tracking Aéreo exiba **exatamente** o que está em `t_fato_aereo` (origin, destino, conexão e status), respeitando a regra "Tracking Truth: dados devem espelhar o DB precisamente".
+Para Demurrage de Importação, abandonar ETA como base de cálculo e usar a ATA efetiva extraída do tracking do armador. Realinhar relatório baixado, anexo do e-mail e corpo do e-mail (mesma função de cálculo, mesmos campos, mesma nomenclatura).
 
-## Mudanças
+## Regra de cálculo (Importação)
 
-1. **Frontend — `src/pages/air/TrackingAereo.tsx`**
-   - Remover/neutralizar a sobrescrita do `applyRouteFix` quando o backend já trouxe `origin` e `destination` válidos (i.e., não vazios). Manter o cálculo apenas como *fallback* para registros sem origin/dest no DB.
-   - Em `mapItems` (linhas ~526–578), inverter a precedência:
-     ```ts
-     origem: item.origin || route.origin || "",
-     destino: item.destination || route.destination || "",
-     conexao: item.conexao ?? route.conexao ?? "",
-     ```
-   - Não tocar em status: `last_event` já vem do backend e segue intacto.
+```text
+Limite Devolução = ATA + FreeTime - 1
+Dias em Posse    = (Devolução || Hoje) - ATA + 1   (inclusivo)
+Dias Excedidos   = max(0, Dias em Posse - FreeTime)
+```
 
-2. **Backend — `supabase/functions/fetch-tracking-aereo/index.ts`**
-   - Confirmar que o fallback de leitura prefere `tdaf.origin`/`tdaf.destination` quando estão preenchidos (já é o caso: linha 1282–1283). Nenhuma mudança necessária aqui se o teste manual mostrar `FRA/GRU/LIS` consistentemente após o redeploy.
+- Sem ATA efetiva: não calcular, marcar "ATA não encontrada", pendente de revisão. Nunca cair em ETA.
+- Sem Devolução: contar até hoje, status em aberto.
 
-3. **Validação manual**
-   - Após deploy, abrir a tela `Tracking Aéreo`, localizar `045-20656764` e confirmar `FRA / LIS / GRU` com status real do último evento.
-   - Rodar um varredor pontual em alguns AWBs onde `tdaf.origin` e o "primeiro evento da timeline" são aeroportos diferentes (ex.: outros impostos com pré-rota terrestre/ferry) para confirmar que não introduzimos regressão. Vou comparar via console log temporário no cliente listando `awb / item.origin / route.origin / item.destination / route.destination` durante uma carga e remover o log no fim.
+## Mapeamento de eventos por armador
 
-## Aspectos técnicos
+Helper único `carrierEvents` com regras (normalize lowercase + includes):
 
-- A função `applyRouteFix` foi originalmente criada para corrigir AWBs onde `t_fato_aereo` gravava `origin == destination` (caso documentado em comentário no edge function, linha 1278). Esse caso vai continuar sendo corrigido pelo backend (linhas 1284–1303 da edge function fazem exatamente isso). Portanto, podemos desativar com segurança o `applyRouteFix` do cliente quando o backend já entrega valores válidos.
-- Nenhuma migration de banco. Nenhuma mudança em RLS. Mudança cirúrgica conforme a memória de projeto.
-- Sem alteração no SQL pesado da CTE de `routeSql` (esse continua útil para AWBs com `tdaf.origin = tdaf.destination` ou nulos).
+| Armador | ATA | Devolução |
+|---|---|---|
+| HAPAG-LLOYD | vessel arrival | gate in empty |
+| MSC | import | empty |
+| CMA-CGM | vessel arrival | empty in depot |
+| ZIM | vessel arrival to port of discharge | empty container gate in |
+| MAERSK | vessel arrival | empty container return |
+| HMM | vessel arrival at pod | import empty container returned |
+| ONE | vessel arrival at port of discharge | empty container returned from customer |
+| COSCO | ata | empty return |
+
+OOCL / EVERGREEN ficam sem regra (retornam "ATA não encontrada") até confirmação.
+
+## Arquivos
+
+**Novos (compartilháveis frontend + edge):**
+- `src/utils/demurrageCalc.ts` — `parseDateOnly`, `addDays`, `diffDaysInclusive`, `calculateImportDemurrage`, `normalizeCarrier`, `isAtaEvent`, `isReturnEvent`, `extractDemurrageDatesFromEvents`.
+- `supabase/functions/_shared/demurrageCalc.ts` — espelho da mesma lógica (Deno).
+
+**Alterar (frontend):**
+- `src/utils/demurrageExcelExport.ts` — substituir colunas pela ordem solicitada (Armador, MBL, HBL, Tipo Operação, Partner ID, Cliente, Container, Tipo Container, Tipo, CNPJ Cliente, ATA, Devolução, Limite Devolução, Free Time, Dias em Posse, Dias Excedidos, Status Risco, Último Evento, Porto Origem, Porto Destino, Incidência, Cost Center). Remover Shipment. Renomear "Tipo Medida" → "Tipo". Calcular ATA/Devolução/Limite/Dias via `demurrageCalc.ts`.
+- `src/utils/demurragePdfExport.ts` — mesmas mudanças.
+- `src/pages/demurrage/DemurrageMonitor.tsx` — passar `eventos`/histórico para o exporter (necessário para resolver ATA real); ajustar cabeçalhos visíveis se exibirem "Tipo Medida" ou "Shipment".
+
+**Alterar (backend):**
+- `supabase/functions/demurrage-send-alert/index.ts`:
+  - Subject: 1 container → `Demurrage - Container <numero>`; N>1 → `Demurrage - N containers em acompanhamento`.
+  - Corpo: trocar Shipment→CNPJ Cliente, Tipo Medida→Tipo, adicionar ATA, Devolução, Limite Devolução, Dias em Posse, Dias Excedidos.
+  - Anexo: gerar com os mesmos campos/ordem do exporter frontend (porta para Deno do `demurrageCalc.ts`).
+- `supabase/functions/demurrage-alert-cron/index.ts` — garantir que o payload enviado ao `send-alert` carregue eventos/histórico do container e CNPJ do cliente.
+- `supabase/functions/demurrage-recalc/index.ts` — quando recalcular containers de importação, derivar `ft_started_at` (=ATA) e `data_devolucao` a partir dos eventos do tracking (via `extractDemurrageDatesFromEvents`), nunca de ETA. Se ATA ausente: `risk_status='pending_review'`, não calcular custo. Recalcular `days_remaining`/`excedente_dias` com regra inclusiva (`FreeTime-1`, `+1`).
+
+## Origem dos eventos
+
+Buscar histórico do container em `dados_dachser.t_tracking_sea` (campos `last_event`, `container_status`) e na tabela de histórico de eventos usada pelo monitor marítimo (a função `sea-get-history` já expõe). Para o cron de recalc, adicionar uma query auxiliar no `mariadb-proxy` (`demurrage_get_container_events`) que retorne eventos ordenados por data para os containers ativos — sem mudar schema.
+
+## Consistência
+
+Relatório da tela, anexo e corpo do e-mail consomem a MESMA função `calculateImportDemurrage` + a mesma lista de colunas (constante exportada `DEMURRAGE_REPORT_COLUMNS`) para garantir paridade.
+
+## Fora de escopo
+
+Login/RLS, módulos FIN/Esteira, tracking marítimo geral, schema do banco. Exportação atual (`DemurrageExportacaoPdfExport`) só será tocada se compartilhar utilitário.
 
 ## Critérios de aceite
 
-- `045-20656764` aparece na tela com `FRA / LIS / GRU` e status reflectindo o último evento real (`RCF` ou o que estiver em `t_fato_aereo`/timeline).
-- Nenhum AWB que antes tinha rota correta passa a exibir rota errada (verificação por amostragem via console).
-- Não exibimos banner/erro de conexão; comportamento silencioso preservado.
+1. Nenhum campo do relatório/e-mail usa ETA como ATA.
+2. ATA e Devolução vêm dos eventos mapeados por armador.
+3. Limite de Devolução exibido em relatório, anexo e e-mail.
+4. Dias em Posse / Dias Excedidos calculados de forma inclusiva.
+5. "Shipment" removido, "CNPJ Cliente" presente; "Tipo Medida" renomeado para "Tipo".
+6. Assunto do e-mail usa Container (ou contagem se múltiplos).
+7. Anexo e corpo do e-mail iguais ao relatório baixado pela tela.
+8. Containers sem ATA aparecem como "ATA não encontrada" e não são cobrados.
