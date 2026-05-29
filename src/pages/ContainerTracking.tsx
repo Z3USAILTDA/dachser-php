@@ -2745,7 +2745,7 @@ const ContainerTracking = () => {
                             <td className="px-3 py-3 text-center">
                               {(() => {
                           const critico = isEmCritico(mbl.is_critico);
-                          const emAtraso = isEmAlerta(mbl.last_event, mbl.is_eta_delayed);
+                          const emAtraso = isEmAlerta(mbl);
                           if (critico) {
                             return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-red-600/30 text-red-400 border border-red-500/50 animate-pulse">
                                       <Clock className="w-3 h-3" />
