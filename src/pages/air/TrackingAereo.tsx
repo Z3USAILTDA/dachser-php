@@ -495,7 +495,7 @@ const TrackingAereo = () => {
   const [cardFilter, setCardFilter] = useState<CardFilterType>("all");
   const [showMonitoredModal, setShowMonitoredModal] = useState(false);
   const [cadastroNovaOpen, setCadastroNovaOpen] = useState(false);
-  const [regrasDialogOpen, setRegrasDialogOpen] = useState(false);
+  
   // const [dbStats, setDbStats] = useState<DbStats | null>(null);
   // const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
   const [timelineModal, setTimelineModal] = useState<{
