@@ -955,15 +955,9 @@ const ContainerTracking = () => {
     }
   }, [resolvePortCodes]);
 
-  // Admin gate: somente admins carregam os processos desta tela
-  const isAdminUser = (() => {
-    try {
-      const raw = localStorage.getItem("user") || localStorage.getItem("dachser_user");
-      if (!raw) return false;
-      const p = JSON.parse(raw);
-      return p?.is_admin === 1 || p?.is_admin === "1" || p?.is_admin === true;
-    } catch { return false; }
-  })();
+  // Acesso liberado a todos os usuários para carregamento dos processos desta tela
+  const isAdminUser = true;
+
 
   // Cleanup orphan PENDENTE containers on initial load, then fetch data
   useEffect(() => {
