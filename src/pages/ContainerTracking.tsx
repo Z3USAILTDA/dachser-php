@@ -438,6 +438,7 @@ interface MblTrackingData {
   container_status: string;
   last_event: string;
   last_check: string;
+  last_check_real: string | null;
   is_eta_delayed: number; // 1 se ETA passou há mais de 3 dias
   is_critico: number; // 1 se atraso >= 7 dias
   dias_atraso: number; // Dias de atraso calculados
