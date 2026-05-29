@@ -47,14 +47,12 @@ const DraftExportacao = () => {
   const fetchSeaDbStats = useCallback(async () => {
     setIsLoadingDbStats(true);
     try {
-      const {
-        data,
-        error
-      } = await supabase.functions.invoke("fetch-sea-master-dados-stats");
-      if (error) {
-        console.error("Error fetching sea db stats:", error);
+      const response = await fetch('/api/sea/draft-exportacao/stats');
+      if (!response.ok) {
+        console.error('Error fetching sea db stats: HTTP', response.status);
         return;
       }
+      const data = await response.json();
       if (data?.success && data?.stats) {
         setSeaDbStats(data.stats);
       }
@@ -64,6 +62,7 @@ const DraftExportacao = () => {
       setIsLoadingDbStats(false);
     }
   }, []);
+
   useEffect(() => {
     fetchSeaDbStats();
   }, [fetchSeaDbStats]);

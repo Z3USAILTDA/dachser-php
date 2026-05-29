@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { 
   MBLRecord, 
   TrackingData, 
@@ -7,7 +6,7 @@ import {
   DraftStats,
   SyncStatus 
 } from '@/types/draft';
-import { toast } from 'sonner';
+
 
 export const useDraftData = () => {
   const [mbls, setMbls] = useState<MBLRecord[]>([]);
@@ -48,43 +47,28 @@ export const useDraftData = () => {
     return 'Unknown';
   };
 
-  const fetchMBLs = useCallback(async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke('draft-fetch-mariadb');
-      
-      if (error) throw error;
-      
-      if (data?.success && Array.isArray(data.data)) {
-        return data.data as MBLRecord[];
-      }
-      
-      return [];
-    } catch (err) {
-      console.error('Erro ao buscar MBLs:', err);
-      throw err;
+  const fetchCombined = useCallback(async (): Promise<{
+    mbls: MBLRecord[];
+    trackingMap: Map<string, TrackingData>;
+  }> => {
+    const response = await fetch('/api/sea/draft-exportacao');
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
     }
+    const data = await response.json();
+    if (!data?.success) {
+      throw new Error(data?.error || 'Resposta inválida do servidor');
+    }
+
+    const mbls: MBLRecord[] = Array.isArray(data.mbls) ? data.mbls : [];
+    const trackingMap = new Map<string, TrackingData>();
+    const trackingSource = data.trackingStatus ?? data.trackingMap ?? {};
+    Object.entries(trackingSource).forEach(([mblId, trackingData]) => {
+      trackingMap.set(mblId, trackingData as TrackingData);
+    });
+    return { mbls, trackingMap };
   }, []);
 
-  const fetchTrackingStatus = useCallback(async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke('draft-fetch-tracking-status');
-      
-      if (error) throw error;
-      
-      if (data?.success && data.data) {
-        const trackingMap = new Map<string, TrackingData>();
-        Object.entries(data.data).forEach(([mblId, trackingData]) => {
-          trackingMap.set(mblId, trackingData as TrackingData);
-        });
-        return trackingMap;
-      }
-      
-      return new Map<string, TrackingData>();
-    } catch (err) {
-      console.error('Erro ao buscar status de tracking:', err);
-      throw err;
-    }
-  }, []);
 
   const combineData = useCallback((
     mblList: MBLRecord[], 
@@ -144,10 +128,7 @@ export const useDraftData = () => {
     setError(null);
 
     try {
-      const [mblList, trackingMap] = await Promise.all([
-        fetchMBLs(),
-        fetchTrackingStatus()
-      ]);
+      const { mbls: mblList, trackingMap } = await fetchCombined();
 
       setMbls(mblList);
       setTrackingStatus(trackingMap);
@@ -162,7 +143,8 @@ export const useDraftData = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [fetchMBLs, fetchTrackingStatus, combineData, calculateStats]);
+  }, [fetchCombined, combineData, calculateStats]);
+
 
   useEffect(() => {
     refetch();
