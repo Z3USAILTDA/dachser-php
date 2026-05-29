@@ -353,7 +353,7 @@ async function findVesselImo(vesselName: string, dbClient?: any): Promise<string
   const lookupImoInDb = async (client: any): Promise<string | null> => {
     const existingRows = await client.query(`
       SELECT vessel_imo
-      FROM dados_dachser.t_tracking_sea
+      FROM dados_dachser.t_sea_tracking_current
       WHERE vessel_imo IS NOT NULL
         AND TRIM(vessel_imo) <> ''
         AND (
@@ -1018,7 +1018,7 @@ serve(async (req) => {
         // Buscar containers ativos sem latitude/longitude (limitado para evitar timeout)
         const rows = await client.query(`
           SELECT ts.mbl_id, ts.container, ts.navio, ts.origem, ts.destino, ts.shipping_line
-          FROM dados_dachser.t_tracking_sea ts
+          FROM dados_dachser.t_sea_tracking_current ts
           WHERE ts.active = 1
             AND (ts.latitude IS NULL OR ts.latitude = '' OR ts.longitude IS NULL OR ts.longitude = '')
           ORDER BY ts.eta ASC
@@ -1056,7 +1056,7 @@ serve(async (req) => {
             const lon = destinoCoords?.lon || origemCoords?.lon;
             
             await client.execute(`
-              UPDATE dados_dachser.t_tracking_sea 
+              UPDATE dados_dachser.t_sea_tracking_current 
               SET latitude = ?, longitude = ?
               WHERE mbl_id = ? AND (latitude IS NULL OR latitude = '')
             `, [String(lat), String(lon), mblId]);
@@ -1148,7 +1148,7 @@ serve(async (req) => {
 
             if (bestLat && bestLon) {
               await client.execute(`
-                UPDATE dados_dachser.t_tracking_sea 
+                UPDATE dados_dachser.t_sea_tracking_current 
                 SET latitude = ?, longitude = ?
                 WHERE mbl_id = ? AND (latitude IS NULL OR latitude = '')
               `, [String(bestLat), String(bestLon), item.mblId]);
@@ -1755,7 +1755,7 @@ serve(async (req) => {
       }
     }
 
-    // ===== SEA TRACKING: Debug stats for t_tracking_sea table =====
+    // ===== SEA TRACKING: Debug stats for t_sea_tracking_current table =====
     if (action === 'debug_tracking_stats') {
       const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
       const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
@@ -1784,7 +1784,7 @@ serve(async (req) => {
             active,
             COUNT(*) as total_rows,
             COUNT(DISTINCT mbl_id) as distinct_mbls
-          FROM dados_dachser.t_tracking_sea
+          FROM dados_dachser.t_sea_tracking_current
           GROUP BY active
         `);
 
@@ -1797,7 +1797,7 @@ serve(async (req) => {
             SUM(CASE WHEN container IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '') OR container IS NULL THEN 1 ELSE 0 END) as invalid_containers,
             SUM(CASE WHEN container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '') AND container IS NOT NULL THEN 1 ELSE 0 END) as valid_containers,
             MAX(last_error) as last_error
-          FROM dados_dachser.t_tracking_sea
+          FROM dados_dachser.t_sea_tracking_current
           WHERE active = 1
           GROUP BY mbl_id, active
           HAVING valid_containers = 0
@@ -1807,7 +1807,7 @@ serve(async (req) => {
         // Sample of inactive MBLs
         const inactiveMbls = await client.query(`
           SELECT DISTINCT mbl_id, active, last_error, container
-          FROM dados_dachser.t_tracking_sea
+          FROM dados_dachser.t_sea_tracking_current
           WHERE active = 0
           LIMIT 20
         `);
@@ -1834,7 +1834,7 @@ serve(async (req) => {
       }
     }
 
-    // ===== SEA TRACKING: Get MBL tracking data from t_tracking_sea (grouped by MBL) =====
+    // ===== SEA TRACKING: Get MBL tracking data from t_sea_tracking_current (grouped by MBL) =====
     // ===== SETUP SEA TRACKING INDEXES =====
     // Creates optimized indexes for the get_sea_tracking query
     if (action === 'setup_sea_tracking_indexes') {
@@ -1860,11 +1860,11 @@ serve(async (req) => {
 
       const results: string[] = [];
       try {
-        // Index 1: t_tracking_sea(mbl_id, active) - Principal para GROUP BY
+        // Index 1: t_sea_tracking_current(mbl_id, active) - Principal para GROUP BY
         try {
           await client.execute(`
             CREATE INDEX IF NOT EXISTS idx_tracking_sea_mbl_active 
-            ON dados_dachser.t_tracking_sea(mbl_id, active)
+            ON dados_dachser.t_sea_tracking_current(mbl_id, active)
           `);
           results.push('✓ idx_tracking_sea_mbl_active criado');
         } catch (e: any) {
@@ -1872,11 +1872,11 @@ serve(async (req) => {
           results.push('○ idx_tracking_sea_mbl_active já existe');
         }
 
-        // Index 2: t_tracking_sea(mbl_id, last_check) - Para ordenação e navio recente
+        // Index 2: t_sea_tracking_current(mbl_id, last_check) - Para ordenação e navio recente
         try {
           await client.execute(`
             CREATE INDEX IF NOT EXISTS idx_tracking_sea_mbl_lastcheck 
-            ON dados_dachser.t_tracking_sea(mbl_id, last_check DESC)
+            ON dados_dachser.t_sea_tracking_current(mbl_id, last_check DESC)
           `);
           results.push('✓ idx_tracking_sea_mbl_lastcheck criado');
         } catch (e: any) {
@@ -1896,11 +1896,11 @@ serve(async (req) => {
           results.push('○ idx_master_dados_mawb_active já existe');
         }
 
-        // Index 4: t_tracking_sea_history(mbl_id, event_code) - Para CTE transship
+        // Index 4: t_sea_tracking_history(mbl_id, event_code) - Para CTE transship
         try {
           await client.execute(`
             CREATE INDEX IF NOT EXISTS idx_tracking_history_mbl_event 
-            ON dados_dachser.t_tracking_sea_history(mbl_id, event_code)
+            ON dados_dachser.t_sea_tracking_history(mbl_id, event_code)
           `);
           results.push('✓ idx_tracking_history_mbl_event criado');
         } catch (e: any) {
@@ -2024,17 +2024,17 @@ serve(async (req) => {
                   navio,
                   vessel_imo,
                   ROW_NUMBER() OVER (PARTITION BY mbl_id ORDER BY last_check DESC) as rn
-                FROM dados_dachser.t_tracking_sea
+                FROM dados_dachser.t_sea_tracking_current
                 WHERE active = 1 AND navio IS NOT NULL AND navio != ''
               ),
-              -- CTE 3: Transshipment direto do t_tracking_sea (com filtro de destino/origem)
+              -- CTE 3: Transshipment direto do t_sea_tracking_current (com filtro de destino/origem)
               transship_direct AS (
                 SELECT ts_td.mbl_id, MAX(ts_td.transshipment_port) as transshipment_port
-                FROM dados_dachser.t_tracking_sea ts_td
+                FROM dados_dachser.t_sea_tracking_current ts_td
                 WHERE ts_td.transshipment_port IS NOT NULL AND ts_td.transshipment_port != ''
                   -- Excluir se transshipment_port contém o nome da cidade de destino
                   AND NOT EXISTS (
-                    SELECT 1 FROM dados_dachser.t_tracking_sea ts_ref
+                    SELECT 1 FROM dados_dachser.t_sea_tracking_current ts_ref
                     WHERE ts_ref.mbl_id = ts_td.mbl_id
                       AND ts_ref.destino IS NOT NULL
                       AND (
@@ -2048,7 +2048,7 @@ serve(async (req) => {
               ),
                -- CTE 4: Transshipment via troca de navio com detalhes (vessel_from, vessel_to, date)
                 -- Detecta vessels independente da location
-                -- Porto: prefere location diferente de destino/origem, senão usa loading_port do t_tracking_sea
+                -- Porto: prefere location diferente de destino/origem, senão usa loading_port do t_sea_tracking_current
                 transship_vessel_change AS (
                   SELECT 
                     ts.mbl_id,
@@ -2102,8 +2102,8 @@ serve(async (req) => {
                     END) as transshipment_vessel_to,
                     -- Data do transbordo
                     MAX(tsh.event_datetime) as transshipment_date
-                  FROM dados_dachser.t_tracking_sea ts
-                  LEFT JOIN dados_dachser.t_tracking_sea_history tsh ON tsh.mbl_id = ts.mbl_id
+                  FROM dados_dachser.t_sea_tracking_current ts
+                  LEFT JOIN dados_dachser.t_sea_tracking_history tsh ON tsh.mbl_id = ts.mbl_id
                   WHERE (
                       UPPER(tsh.event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED')
                       OR UPPER(tsh.event_description) LIKE '%TRANSSHIP%'
@@ -2121,8 +2121,8 @@ serve(async (req) => {
                   SELECT 
                     tsh2.mbl_id,
                     GROUP_CONCAT(DISTINCT tsh2.location ORDER BY tsh2.location SEPARATOR ', ') as transshipment_port
-                  FROM dados_dachser.t_tracking_sea_history tsh2
-                  LEFT JOIN dados_dachser.t_tracking_sea ts2 ON ts2.mbl_id = tsh2.mbl_id
+                  FROM dados_dachser.t_sea_tracking_history tsh2
+                  LEFT JOIN dados_dachser.t_sea_tracking_current ts2 ON ts2.mbl_id = tsh2.mbl_id
                   WHERE (
                     UPPER(tsh2.event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED')
                     OR UPPER(tsh2.event_description) LIKE '%TRANSSHIP%'
@@ -2156,7 +2156,7 @@ serve(async (req) => {
                 SELECT 
                   ts_le.mbl_id,
                   MAX(UPPER(TRIM(SUBSTRING_INDEX(ts_le.last_event, ' - ', -1)))) as transshipment_port
-                FROM dados_dachser.t_tracking_sea ts_le
+                FROM dados_dachser.t_sea_tracking_current ts_le
                 WHERE ts_le.active = 1
                   AND ts_le.last_event LIKE '% - %'
                   AND (ts_le.transshipment_port IS NULL OR ts_le.transshipment_port = '')
@@ -2213,7 +2213,7 @@ serve(async (req) => {
               MAX(lv.navio) as navio,
               COALESCE(
                 NULLIF(MAX(lv.vessel_imo), ''),
-                (SELECT vi.vessel_imo FROM dados_dachser.t_tracking_sea vi WHERE vi.mbl_id = ts.mbl_id AND vi.vessel_imo IS NOT NULL AND vi.vessel_imo != '' LIMIT 1)
+                (SELECT vi.vessel_imo FROM dados_dachser.t_sea_tracking_current vi WHERE vi.mbl_id = ts.mbl_id AND vi.vessel_imo IS NOT NULL AND vi.vessel_imo != '' LIMIT 1)
               ) as vessel_imo,
               COALESCE(MAX(md.eta), MAX(mdn.eta), MAX(ts.eta)) as eta,
               COALESCE(MAX(md.eta), MAX(mdn.eta)) as eta_master,
@@ -2271,7 +2271,7 @@ serve(async (req) => {
               END as has_free_time,
               MAX(ts.origem) as origem_raw,
               MAX(ts.destino) as destino_raw
-            FROM dados_dachser.t_tracking_sea ts
+            FROM dados_dachser.t_sea_tracking_current ts
             LEFT JOIN master_data md ON md.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN master_dados_new mdn ON mdn.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN latest_vessel lv ON lv.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci AND lv.rn = 1
@@ -2553,7 +2553,7 @@ serve(async (req) => {
             ) as eta, 
             COALESCE(ts.navio, (
               SELECT t2.navio 
-              FROM dados_dachser.t_tracking_sea t2 
+              FROM dados_dachser.t_sea_tracking_current t2 
               WHERE BINARY t2.mbl_id = BINARY ts.mbl_id
                 AND t2.navio IS NOT NULL 
                 AND t2.navio != ''
@@ -2562,14 +2562,14 @@ serve(async (req) => {
             )) as navio,
             COALESCE(ts.vessel_imo, (
               SELECT t2.vessel_imo 
-              FROM dados_dachser.t_tracking_sea t2 
+              FROM dados_dachser.t_sea_tracking_current t2 
               WHERE BINARY t2.mbl_id = BINARY ts.mbl_id
                 AND t2.vessel_imo IS NOT NULL 
               ORDER BY t2.last_check DESC 
               LIMIT 1
             )) as vessel_imo, 
             ts.origem, ts.destino, ts.consignee
-          FROM dados_dachser.t_tracking_sea ts
+          FROM dados_dachser.t_sea_tracking_current ts
           WHERE BINARY ts.mbl_id = BINARY ?
           ORDER BY ts.container
         `, [mbl_id]);
@@ -2591,7 +2591,7 @@ serve(async (req) => {
             if (!resolvedImo) continue;
 
             await client.execute(`
-              UPDATE dados_dachser.t_tracking_sea
+              UPDATE dados_dachser.t_sea_tracking_current
               SET vessel_imo = ?
               WHERE UPPER(TRIM(navio)) = ?
                 AND (vessel_imo IS NULL OR TRIM(vessel_imo) = '')
@@ -2620,7 +2620,7 @@ serve(async (req) => {
       }
     }
 
-    // ===== SEA TRACKING: Sync from t_master_dados to t_tracking_sea =====
+    // ===== SEA TRACKING: Sync from t_master_dados to t_sea_tracking_current =====
     if (action === 'sync_sea_tracking') {
       const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
       const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
@@ -2685,7 +2685,7 @@ serve(async (req) => {
         // OPTIMIZATION: Use a two-step approach to avoid timeout
         // Step 1: Get list of existing MBLs in tracking table (fast indexed lookup)
         const existingMbls = await client.query(`
-          SELECT mbl_id, active FROM dados_dachser.t_tracking_sea
+          SELECT mbl_id, active FROM dados_dachser.t_sea_tracking_current
         `);
         const activeSet = new Set<string>();
         const inactiveSet = new Set<string>();
@@ -2770,7 +2770,7 @@ serve(async (req) => {
           const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, 1)').join(', ');
           const values = chunk.flatMap((row: any) => [row.mbl_id, row.tipo_processo, row.container, row.consignee, row.email_analista, row.email_cliente]);
           await client.execute(`
-            INSERT INTO dados_dachser.t_tracking_sea (
+            INSERT INTO dados_dachser.t_sea_tracking_current (
               mbl_id, tipo_processo, container, consignee, email_analista, email_cliente, active
             ) VALUES ${placeholders}
             ON DUPLICATE KEY UPDATE active = 1, email_analista = COALESCE(VALUES(email_analista), email_analista)
@@ -2799,7 +2799,7 @@ serve(async (req) => {
         for (const row of toReactivate) {
           try {
             await client.execute(`
-              UPDATE dados_dachser.t_tracking_sea
+              UPDATE dados_dachser.t_sea_tracking_current
               SET active = 1,
                   email_analista = COALESCE(?, email_analista)
               WHERE mbl_id = ?
@@ -2985,7 +2985,7 @@ serve(async (req) => {
           // Conjunto de MBLs que precisam de container
           const pendingRows = await client.query(`
             SELECT DISTINCT TRIM(mbl_id) AS mbl_id
-            FROM dados_dachser.t_tracking_sea
+            FROM dados_dachser.t_sea_tracking_current
             WHERE active = 1
               AND (container IS NULL OR container IN ('PENDENTE','NAO_ENCONTRADO',''))
               AND mbl_id IS NOT NULL AND TRIM(mbl_id) <> ''
@@ -3059,7 +3059,7 @@ serve(async (req) => {
             for (const [container, source] of containerMap) {
               try {
                 await client.execute(`
-                  INSERT INTO dados_dachser.t_tracking_sea
+                  INSERT INTO dados_dachser.t_sea_tracking_current
                     (mbl_id, tipo_processo, container, shipping_line, active)
                   VALUES (?, 'SEA EXPORT', ?, ?, 1)
                   ON DUPLICATE KEY UPDATE
@@ -3081,12 +3081,12 @@ serve(async (req) => {
           if (backfilledMbls.size > 0) {
             const placeholders = [...backfilledMbls].map(() => '?').join(',');
             await client.execute(`
-              DELETE FROM dados_dachser.t_tracking_sea
+              DELETE FROM dados_dachser.t_sea_tracking_current
               WHERE container IN ('PENDENTE','NAO_ENCONTRADO','')
                 AND mbl_id IN (${placeholders})
                 AND mbl_id IN (
                   SELECT mbl_id FROM (
-                    SELECT mbl_id FROM dados_dachser.t_tracking_sea
+                    SELECT mbl_id FROM dados_dachser.t_sea_tracking_current
                     WHERE container REGEXP '^[A-Z]{4}[0-9]{6,7}$'
                   ) v
                 )
@@ -3102,7 +3102,7 @@ serve(async (req) => {
             .map(p => `WHEN UPPER(mbl_id) LIKE '${p}%' THEN '${MBL_PREFIX_TO_SHIPPING_LINE[p]}'`)
             .join(' ');
           await client.execute(`
-            UPDATE dados_dachser.t_tracking_sea
+            UPDATE dados_dachser.t_sea_tracking_current
             SET shipping_line = CASE ${cases} ELSE shipping_line END
             WHERE (shipping_line IS NULL OR shipping_line = '') AND active = 1
           `);
@@ -3144,7 +3144,7 @@ serve(async (req) => {
       }
     }
 
-    // ===== SEA TRACKING: Refresh containers in t_tracking_sea (BATCH PROCESSING) =====
+    // ===== SEA TRACKING: Refresh containers in t_sea_tracking_current (BATCH PROCESSING) =====
     if (action === 'refresh_sea_tracking') {
       const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
       const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
@@ -3207,19 +3207,19 @@ serve(async (req) => {
         // Ensure last_error, needs_manual_review, latitude, longitude columns exist
         try {
           await client.execute(`
-            ALTER TABLE dados_dachser.t_tracking_sea 
+            ALTER TABLE dados_dachser.t_sea_tracking_current 
             ADD COLUMN IF NOT EXISTS last_error VARCHAR(255) DEFAULT NULL
           `);
           await client.execute(`
-            ALTER TABLE dados_dachser.t_tracking_sea 
+            ALTER TABLE dados_dachser.t_sea_tracking_current 
             ADD COLUMN IF NOT EXISTS needs_manual_review TINYINT(1) DEFAULT 0
           `);
           await client.execute(`
-            ALTER TABLE dados_dachser.t_tracking_sea 
+            ALTER TABLE dados_dachser.t_sea_tracking_current 
             ADD COLUMN IF NOT EXISTS latitude DECIMAL(10,6) DEFAULT NULL
           `);
           await client.execute(`
-            ALTER TABLE dados_dachser.t_tracking_sea 
+            ALTER TABLE dados_dachser.t_sea_tracking_current 
             ADD COLUMN IF NOT EXISTS longitude DECIMAL(10,6) DEFAULT NULL
           `);
         } catch (alterErr: any) {
@@ -3245,7 +3245,7 @@ serve(async (req) => {
           // Step 1: Get one representative container per MBL (preferring non-leasing)
           const allRepresentatives = await client.query(`
             SELECT t.id, t.mbl_id, t.container, t.shipping_line, t.navio, t.last_error
-            FROM dados_dachser.t_tracking_sea t
+            FROM dados_dachser.t_sea_tracking_current t
             INNER JOIN (
               SELECT 
                 mbl_id,
@@ -3255,7 +3255,7 @@ serve(async (req) => {
                     ELSE CONCAT('1_', id)
                   END
                 ) as priority_id
-              FROM dados_dachser.t_tracking_sea
+              FROM dados_dachser.t_sea_tracking_current
               WHERE active = 1
                 AND container IS NOT NULL
                 AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
@@ -3309,7 +3309,7 @@ serve(async (req) => {
           // Force refresh: get one representative container per MBL (preferring non-leasing)
           containers = await client.query(`
             SELECT t.id, t.mbl_id, t.container, t.shipping_line, t.navio, t.last_error
-            FROM dados_dachser.t_tracking_sea t
+            FROM dados_dachser.t_sea_tracking_current t
             INNER JOIN (
               SELECT 
                 mbl_id,
@@ -3319,7 +3319,7 @@ serve(async (req) => {
                     ELSE CONCAT('1_', id)
                   END
                 ) as priority_id
-              FROM dados_dachser.t_tracking_sea
+              FROM dados_dachser.t_sea_tracking_current
               WHERE active = 1
                 AND container IS NOT NULL
                 AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
@@ -3357,7 +3357,7 @@ serve(async (req) => {
           
           containers = await client.query(`
             SELECT t.id, t.mbl_id, t.container, t.shipping_line, t.navio, t.last_error
-            FROM dados_dachser.t_tracking_sea t
+            FROM dados_dachser.t_sea_tracking_current t
             INNER JOIN (
               SELECT 
                 mbl_id,
@@ -3367,7 +3367,7 @@ serve(async (req) => {
                     ELSE CONCAT('1_', id)
                   END
                 ) as priority_id
-              FROM dados_dachser.t_tracking_sea
+              FROM dados_dachser.t_sea_tracking_current
               WHERE active = 1
                 AND container IS NOT NULL
                 AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
@@ -3419,7 +3419,7 @@ serve(async (req) => {
         // Count how many containers we skipped due to MBL optimization
         const totalPendingResult = await client.query(`
           SELECT COUNT(*) as total
-          FROM dados_dachser.t_tracking_sea 
+          FROM dados_dachser.t_sea_tracking_current 
           WHERE active = 1
             AND container IS NOT NULL
             AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
@@ -3453,7 +3453,7 @@ serve(async (req) => {
         // ONE-TIME CLEANUP: Limpar falsos positivos onde transshipment_port == origem
         try {
           const cleanupResult = await client.execute(`
-            UPDATE dados_dachser.t_tracking_sea
+            UPDATE dados_dachser.t_sea_tracking_current
             SET transshipment_port = NULL
             WHERE transshipment_port IS NOT NULL
               AND UPPER(TRIM(SUBSTRING_INDEX(transshipment_port, ' ', 1))) = 
@@ -3646,7 +3646,7 @@ serve(async (req) => {
             console.log(`[refresh_sea_tracking] Cannot identify carrier for ${containerId} (prefix: ${containerPrefix}, isLeasing: ${isLeasingContainer}, MBL: ${mblId}, MBL prefix: ${mblPrefix})`);
             
             await client.execute(`
-              UPDATE dados_dachser.t_tracking_sea 
+              UPDATE dados_dachser.t_sea_tracking_current 
               SET last_check = NOW(), last_error = ?, needs_manual_review = 1
               WHERE id = ?
             `, [`armador_nao_identificado: container=${containerPrefix} mbl=${mblPrefix} leasing=${isLeasingContainer}`, row.id]);
@@ -3884,7 +3884,7 @@ serve(async (req) => {
             // Update main tracking table including vessel_imo, transshipment_port and loading_port
             const currentLoadingPort = data.loading_port || data.shipped_from || null;
             await client.execute(`
-              UPDATE dados_dachser.t_tracking_sea 
+              UPDATE dados_dachser.t_sea_tracking_current 
               SET 
                 container_status = ?,
                 origem = COALESCE(?, origem),
@@ -3949,7 +3949,7 @@ serve(async (req) => {
                   
                   // Insert with IGNORE to avoid duplicates
                   await client.execute(`
-                    INSERT IGNORE INTO dados_dachser.t_tracking_sea_history 
+                    INSERT IGNORE INTO dados_dachser.t_sea_tracking_history 
                     (mbl_id, container, event_code, event_description, event_datetime, location, vessel_name, voyage, container_status, eta, source, raw_data)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'API', ?)
                   `, [
@@ -3979,7 +3979,7 @@ serve(async (req) => {
                    : (data.discharging_port || data.shipped_to || null);
                  
                  await client.execute(`
-                   INSERT IGNORE INTO dados_dachser.t_tracking_sea_history 
+                   INSERT IGNORE INTO dados_dachser.t_sea_tracking_history 
                    (mbl_id, container, event_code, event_description, event_datetime, location, vessel_name, voyage, container_status, eta, source, raw_data)
                    VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, 'API', ?)
                  `, [
@@ -4007,7 +4007,7 @@ serve(async (req) => {
             if (mblId && mblId.length >= 4) {
               try {
                 const sibPropResult = await client.execute(`
-                  UPDATE dados_dachser.t_tracking_sea 
+                  UPDATE dados_dachser.t_sea_tracking_current 
                   SET 
                     container_status = ?,
                     navio = COALESCE(?, navio),
@@ -4106,7 +4106,7 @@ serve(async (req) => {
             
             // Update last_check and save error to last_error column
             await client.execute(`
-              UPDATE dados_dachser.t_tracking_sea 
+              UPDATE dados_dachser.t_sea_tracking_current 
               SET last_check = NOW(), last_error = ?
               WHERE id = ?
             `, [errorMsg, row.id]);
@@ -4127,7 +4127,7 @@ serve(async (req) => {
               mbl_id,
               SUM(CASE WHEN container_status IS NOT NULL AND container_status != '' AND (last_error IS NULL OR last_error = '') THEN 1 ELSE 0 END) as with_data,
               SUM(CASE WHEN container_status IS NULL OR container_status = '' OR (last_error IS NOT NULL AND last_error != '') THEN 1 ELSE 0 END) as without_data
-            FROM dados_dachser.t_tracking_sea
+            FROM dados_dachser.t_sea_tracking_current
             WHERE active = 1
               AND mbl_id IS NOT NULL 
               AND mbl_id != ''
@@ -4144,7 +4144,7 @@ serve(async (req) => {
             const bestContainers = await client.query(`
               SELECT 
                 container_status, navio, vessel_imo, eta, last_event, origem, destino, shipping_line
-              FROM dados_dachser.t_tracking_sea
+              FROM dados_dachser.t_sea_tracking_current
               WHERE active = 1
                 AND mbl_id = ?
                 AND container_status IS NOT NULL
@@ -4160,7 +4160,7 @@ serve(async (req) => {
             
             // Atualizar containers pendentes deste MBL - SOBRESCREVER quando há erro (não apenas COALESCE)
             const updateResult = await client.execute(`
-              UPDATE dados_dachser.t_tracking_sea 
+              UPDATE dados_dachser.t_sea_tracking_current 
               SET 
                 container_status = ?,
                 navio = COALESCE(?, navio),
@@ -4204,7 +4204,7 @@ serve(async (req) => {
         // Count remaining containers that still need update
         const remainingResult = await client.query(`
           SELECT COUNT(*) as cnt
-          FROM dados_dachser.t_tracking_sea 
+          FROM dados_dachser.t_sea_tracking_current 
           WHERE active = 1
             AND container IS NOT NULL
             AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
@@ -4285,7 +4285,7 @@ serve(async (req) => {
           SELECT 
             SUBSTRING_INDEX(last_error, ':', 1) as error_type,
             COUNT(*) as count
-          FROM dados_dachser.t_tracking_sea 
+          FROM dados_dachser.t_sea_tracking_current 
           WHERE active = 1 
             AND last_error IS NOT NULL
           GROUP BY SUBSTRING_INDEX(last_error, ':', 1)
@@ -4297,7 +4297,7 @@ serve(async (req) => {
           SELECT 
             id, container, mbl_id, shipping_line, last_error, last_check,
             consignee, tipo_processo
-          FROM dados_dachser.t_tracking_sea 
+          FROM dados_dachser.t_sea_tracking_current 
           WHERE active = 1 
             AND last_error IS NOT NULL
           ORDER BY last_check DESC
@@ -4308,7 +4308,7 @@ serve(async (req) => {
         const noShippingLine = await client.query(`
           SELECT 
             id, container, mbl_id, last_error, last_check
-          FROM dados_dachser.t_tracking_sea 
+          FROM dados_dachser.t_sea_tracking_current 
           WHERE active = 1 
             AND (shipping_line IS NULL OR shipping_line = '')
             AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
@@ -4321,7 +4321,7 @@ serve(async (req) => {
           SELECT 
             UPPER(SUBSTRING(container, 1, 4)) as prefix,
             COUNT(*) as count
-          FROM dados_dachser.t_tracking_sea 
+          FROM dados_dachser.t_sea_tracking_current 
           WHERE active = 1 
             AND (shipping_line IS NULL OR shipping_line = '')
             AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
@@ -4336,7 +4336,7 @@ serve(async (req) => {
             SUM(CASE WHEN last_error IS NOT NULL THEN 1 ELSE 0 END) as with_errors,
             SUM(CASE WHEN last_error IS NULL AND container_status IS NOT NULL THEN 1 ELSE 0 END) as tracked_ok,
             SUM(CASE WHEN shipping_line IS NULL OR shipping_line = '' THEN 1 ELSE 0 END) as no_shipping_line
-          FROM dados_dachser.t_tracking_sea 
+          FROM dados_dachser.t_sea_tracking_current 
           WHERE active = 1
             AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
         `);
@@ -4412,7 +4412,7 @@ serve(async (req) => {
         if (!imo) {
           // 1. Verificar se já existe IMO no banco para esse navio
           const existingRows = await client.query(`
-            SELECT vessel_imo FROM dados_dachser.t_tracking_sea 
+            SELECT vessel_imo FROM dados_dachser.t_sea_tracking_current 
             WHERE UPPER(navio) = UPPER(?) AND vessel_imo IS NOT NULL AND vessel_imo != ''
             LIMIT 1
           `, [vessel_name.trim()]);
@@ -4444,7 +4444,7 @@ serve(async (req) => {
         }
 
         const result = await client.execute(`
-          UPDATE dados_dachser.t_tracking_sea 
+          UPDATE dados_dachser.t_sea_tracking_current 
           SET vessel_imo = ? 
           WHERE UPPER(navio) LIKE UPPER(?) AND (vessel_imo IS NULL OR vessel_imo = '')
         `, [imo, `%${vessel_name.trim()}%`]);
@@ -4588,7 +4588,7 @@ serve(async (req) => {
         // Ensure enrich_timeout_count column exists
         try {
           await client.execute(`
-            ALTER TABLE dados_dachser.t_tracking_sea 
+            ALTER TABLE dados_dachser.t_sea_tracking_current 
             ADD COLUMN IF NOT EXISTS enrich_timeout_count INT DEFAULT 0
           `);
         } catch (e) {
@@ -4599,7 +4599,7 @@ serve(async (req) => {
         const forceRetry = url.searchParams.get('force_retry') === 'true';
         const pendingMbls = await client.query(`
           SELECT DISTINCT mbl_id, consignee, email_analista, email_cliente, tipo_processo
-          FROM dados_dachser.t_tracking_sea
+          FROM dados_dachser.t_sea_tracking_current
           WHERE active = 1 AND (
             container = 'PENDENTE' OR container IS NULL OR container = ''
             OR (container = 'NAO_ENCONTRADO' AND (
@@ -4646,7 +4646,7 @@ serve(async (req) => {
             console.log(`[enrich_sea_containers] Skipping ${mblId}: ${skipCheck.reason}`);
             // Marcar como IGNORADO para não reprocessar
             await client.execute(`
-              UPDATE dados_dachser.t_tracking_sea 
+              UPDATE dados_dachser.t_sea_tracking_current 
               SET container = 'IGNORADO'
               WHERE mbl_id = ? AND (container = 'PENDENTE' OR container IS NULL OR container = '')
             `, [mblId]);
@@ -4717,7 +4717,7 @@ serve(async (req) => {
                 console.log(`[enrich_sea_containers] Timeout detected for MBL ${mblId}, incrementing timeout counter`);
                 try {
                   await client.execute(`
-                    UPDATE dados_dachser.t_tracking_sea
+                    UPDATE dados_dachser.t_sea_tracking_current
                     SET enrich_timeout_count = COALESCE(enrich_timeout_count, 0) + 1, last_error = ?
                     WHERE mbl_id = ? AND active = 1
                   `, [lastApiError, mblId]);
@@ -4860,14 +4860,14 @@ serve(async (req) => {
                       if (!cleanContainer || cleanContainer.length < 4) continue;
                       
                       const existing = await client.query(
-                        `SELECT id FROM dados_dachser.t_tracking_sea WHERE mbl_id = ? AND container = ? LIMIT 1`,
+                        `SELECT id FROM dados_dachser.t_sea_tracking_current WHERE mbl_id = ? AND container = ? LIMIT 1`,
                         [mblId, cleanContainer]
                       );
                       
                       if (existing.length > 0) {
                         // Container exists, update tracking data
                         await client.execute(`
-                          UPDATE dados_dachser.t_tracking_sea
+                          UPDATE dados_dachser.t_sea_tracking_current
                           SET container_status = ?, origem = COALESCE(?, origem), destino = COALESCE(?, destino),
                               eta = ?, navio = COALESCE(?, navio), last_event = ?, shipping_line = 'HAPAG-LLOYD',
                               last_check = NOW(), last_error = NULL, updated_at = NOW()
@@ -4876,13 +4876,13 @@ serve(async (req) => {
                       } else {
                         // Insert new container with tracking data
                         await client.execute(`
-                          INSERT INTO dados_dachser.t_tracking_sea 
+                          INSERT INTO dados_dachser.t_sea_tracking_current 
                             (mbl_id, container, consignee, shipping_line, tipo_processo, email_analista, email_cliente,
                              container_status, origem, destino, eta, navio, last_event, last_check, last_error, active, created_at, updated_at)
                           SELECT 
                             mbl_id, ?, consignee, 'HAPAG-LLOYD', tipo_processo, email_analista, email_cliente,
                             ?, ?, ?, ?, ?, ?, NOW(), NULL, 1, NOW(), NOW()
-                          FROM dados_dachser.t_tracking_sea 
+                          FROM dados_dachser.t_sea_tracking_current 
                           WHERE mbl_id = ? 
                           LIMIT 1
                         `, [cleanContainer, hc.status, hc.origem, hc.destino, hc.eta, hc.vessel, hc.lastEvent, mblId]);
@@ -4891,7 +4891,7 @@ serve(async (req) => {
                     
                     // Remove PENDENTE placeholder
                     await client.execute(`
-                      DELETE FROM dados_dachser.t_tracking_sea 
+                      DELETE FROM dados_dachser.t_sea_tracking_current 
                       WHERE mbl_id = ? AND container IN ('PENDENTE', '')
                     `, [mblId]);
                     
@@ -4940,7 +4940,7 @@ serve(async (req) => {
                       recoveredByCarrierFallback++;
                       enriched++;
                       details.push({ mbl: mblId, status: 'enriched_via_carrier_fallback', discovered });
-                      // sea-carrier-fallback já inseriu/atualizou as linhas em t_tracking_sea
+                      // sea-carrier-fallback já inseriu/atualizou as linhas em t_sea_tracking_current
                       await new Promise(r => setTimeout(r, 500));
                       continue;
                     }
@@ -4961,7 +4961,7 @@ serve(async (req) => {
               console.log(`[enrich_sea_containers] No containers found for MBL ${mblId} after trying ${mblVariations.length} variations`);
               // Marcar como NAO_ENCONTRADO para não reprocessar (atualiza updated_at para controle de retry)
               await client.execute(`
-                UPDATE dados_dachser.t_tracking_sea 
+                UPDATE dados_dachser.t_sea_tracking_current 
                 SET container = 'NAO_ENCONTRADO', updated_at = NOW()
                 WHERE mbl_id = ? AND (container = 'PENDENTE' OR container IS NULL OR container = '' OR container = 'NAO_ENCONTRADO')
               `, [mblId]);
@@ -4979,7 +4979,7 @@ serve(async (req) => {
               
               // Check if container already exists for this MBL
               const existing = await client.query(
-                `SELECT id FROM dados_dachser.t_tracking_sea WHERE mbl_id = ? AND container = ? LIMIT 1`,
+                `SELECT id FROM dados_dachser.t_sea_tracking_current WHERE mbl_id = ? AND container = ? LIMIT 1`,
                 [mblId, cleanContainer]
               );
               
@@ -4990,11 +4990,11 @@ serve(async (req) => {
 
               // Insert new container row (copy MBL metadata)
               await client.execute(`
-                INSERT INTO dados_dachser.t_tracking_sea 
+                INSERT INTO dados_dachser.t_sea_tracking_current 
                   (mbl_id, container, consignee, shipping_line, tipo_processo, email_analista, email_cliente, active, created_at, updated_at)
                 SELECT 
                   mbl_id, ?, consignee, shipping_line, tipo_processo, email_analista, email_cliente, 1, NOW(), NOW()
-                FROM dados_dachser.t_tracking_sea 
+                FROM dados_dachser.t_sea_tracking_current 
                 WHERE mbl_id = ? 
                 LIMIT 1
               `, [cleanContainer, mblId]);
@@ -5002,7 +5002,7 @@ serve(async (req) => {
 
             // Remove PENDENTE placeholder if real containers were added
             await client.execute(`
-              DELETE FROM dados_dachser.t_tracking_sea 
+              DELETE FROM dados_dachser.t_sea_tracking_current 
               WHERE mbl_id = ? AND container IN ('PENDENTE', '')
             `, [mblId]);
 
@@ -5077,14 +5077,14 @@ serve(async (req) => {
         
         if (mblId) {
           result = await client.execute(`
-            UPDATE dados_dachser.t_tracking_sea
+            UPDATE dados_dachser.t_sea_tracking_current
             SET enrich_timeout_count = 0
             WHERE mbl_id = ? AND active = 1
           `, [mblId]);
           console.log(`[reset_timeout_count] Reset timeout count for MBL ${mblId}`);
         } else {
           result = await client.execute(`
-            UPDATE dados_dachser.t_tracking_sea
+            UPDATE dados_dachser.t_sea_tracking_current
             SET enrich_timeout_count = 0
             WHERE active = 1
           `);
@@ -5143,7 +5143,7 @@ serve(async (req) => {
 
       try {
         const result = await client.execute(`
-          UPDATE dados_dachser.t_tracking_sea 
+          UPDATE dados_dachser.t_sea_tracking_current 
           SET transshipment_port = ?
           WHERE mbl_id = ? AND active = 1
         `, [transshipment_port, mbl_id]);
@@ -5251,7 +5251,7 @@ serve(async (req) => {
         // 1. Get existing MBL data for tipo_processo, consignee, etc.
         const existingRows = await client.query(`
           SELECT mbl_id, tipo_processo, consignee, email_analista, email_cliente, shipping_line
-          FROM dados_dachser.t_tracking_sea
+          FROM dados_dachser.t_sea_tracking_current
           WHERE mbl_id = ?
           LIMIT 1
         `, [mblId]);
@@ -5261,7 +5261,7 @@ serve(async (req) => {
 
         // 2. Delete PENDENTE/NAO_ENCONTRADO/empty records for this MBL
         const deleteResult = await client.execute(`
-          DELETE FROM dados_dachser.t_tracking_sea 
+          DELETE FROM dados_dachser.t_sea_tracking_current 
           WHERE mbl_id = ? 
             AND (container IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '') OR container IS NULL)
         `, [mblId]);
@@ -5273,7 +5273,7 @@ serve(async (req) => {
         let updated = 0;
         for (const container of validContainers) {
           const result = await client.execute(`
-            INSERT INTO dados_dachser.t_tracking_sea 
+            INSERT INTO dados_dachser.t_sea_tracking_current 
               (mbl_id, container, tipo_processo, consignee, email_analista, email_cliente, active, shipping_line)
             VALUES (?, ?, ?, ?, ?, ?, 1, ?)
             ON DUPLICATE KEY UPDATE
@@ -5302,8 +5302,8 @@ serve(async (req) => {
 
         // 4. Remove any duplicate container rows for this MBL (keep lowest id)
         const dedupResult = await client.execute(`
-          DELETE t1 FROM dados_dachser.t_tracking_sea t1
-          INNER JOIN dados_dachser.t_tracking_sea t2
+          DELETE t1 FROM dados_dachser.t_sea_tracking_current t1
+          INNER JOIN dados_dachser.t_sea_tracking_current t2
           ON t1.mbl_id = t2.mbl_id AND t1.container = t2.container AND t1.id > t2.id
           WHERE t1.mbl_id = ?
         `, [mblId]);
@@ -5360,7 +5360,7 @@ serve(async (req) => {
       try {
         // 1. Deactivate booking references (EBKG, GLNL, GLSL, etc.) that shouldn't be tracked
         const bookingResult = await client.execute(`
-          UPDATE dados_dachser.t_tracking_sea
+          UPDATE dados_dachser.t_sea_tracking_current
           SET active = 0, last_error = 'Booking reference - não rastreável'
           WHERE active = 1
           AND (
@@ -5374,10 +5374,10 @@ serve(async (req) => {
 
         // 2. Deactivate MBLs that only have invalid containers (no valid container format)
         const invalidResult = await client.execute(`
-          UPDATE dados_dachser.t_tracking_sea t1
+          UPDATE dados_dachser.t_sea_tracking_current t1
           INNER JOIN (
             SELECT mbl_id
-            FROM dados_dachser.t_tracking_sea
+            FROM dados_dachser.t_sea_tracking_current
             WHERE active = 1
             GROUP BY mbl_id
             HAVING SUM(CASE 
@@ -5441,12 +5441,12 @@ serve(async (req) => {
         // Delete PENDENTE containers from MBLs that already have at least one valid container
         // A valid container is one that is NOT 'PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', empty, or null
         const result = await client.execute(`
-          DELETE FROM dados_dachser.t_tracking_sea
+          DELETE FROM dados_dachser.t_sea_tracking_current
           WHERE container IN ('PENDENTE', '')
           AND mbl_id IN (
             SELECT DISTINCT mbl_id FROM (
               SELECT mbl_id 
-              FROM dados_dachser.t_tracking_sea 
+              FROM dados_dachser.t_sea_tracking_current 
               WHERE container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '') 
               AND container IS NOT NULL
               AND container REGEXP '^[A-Z]{4}[0-9]{7}$'
@@ -5476,7 +5476,7 @@ serve(async (req) => {
       }
     }
 
-    // ===== SEA TRACKING: Track single container and update t_tracking_sea =====
+    // ===== SEA TRACKING: Track single container and update t_sea_tracking_current =====
     if (action === 'track_sea_container') {
       const containerId = url.searchParams.get('container') || '';
       let shippingLine = url.searchParams.get('shipping_line') || '';
@@ -5570,7 +5570,7 @@ serve(async (req) => {
 
         try {
           await client.execute(`
-            UPDATE dados_dachser.t_tracking_sea 
+            UPDATE dados_dachser.t_sea_tracking_current 
             SET 
               container_status = ?,
               origem = COALESCE(?, origem),
@@ -5633,7 +5633,7 @@ serve(async (req) => {
 
       try {
         await client.execute(`
-          UPDATE dados_dachser.t_tracking_sea SET active = 0 WHERE mbl_id = ?
+          UPDATE dados_dachser.t_sea_tracking_current SET active = 0 WHERE mbl_id = ?
         `, [mbl_id]);
 
         await client.close();
@@ -5681,7 +5681,7 @@ serve(async (req) => {
             SUM(CASE WHEN mbl_id REGEXP '^BR[A-Za-z]{3}' THEN 1 ELSE 0 END) as mbl_hawb,
             SUM(CASE WHEN container IS NULL OR TRIM(container) = '' OR container = 'PENDENTE' THEN 1 ELSE 0 END) as container_vazio,
             SUM(CASE WHEN container IS NOT NULL AND TRIM(container) != '' AND container != 'PENDENTE' AND container NOT REGEXP '^[A-Za-z]{4}[0-9]{7}$' THEN 1 ELSE 0 END) as container_formato_invalido
-          FROM dados_dachser.t_tracking_sea
+          FROM dados_dachser.t_sea_tracking_current
           WHERE active = 1
         `);
 
@@ -5690,7 +5690,7 @@ serve(async (req) => {
 
         // Marcar como inativos os registros que não atendem aos novos critérios
         const result = await client.execute(`
-          UPDATE dados_dachser.t_tracking_sea 
+          UPDATE dados_dachser.t_sea_tracking_current 
           SET active = 0
           WHERE active = 1
             AND (
@@ -5711,7 +5711,7 @@ serve(async (req) => {
 
         // Contar registros válidos restantes
         const countAfter = await client.query(`
-          SELECT COUNT(*) as total_ativos FROM dados_dachser.t_tracking_sea WHERE active = 1
+          SELECT COUNT(*) as total_ativos FROM dados_dachser.t_sea_tracking_current WHERE active = 1
         `);
         const remaining = countAfter[0]?.total_ativos || 0;
 
@@ -6605,9 +6605,9 @@ serve(async (req) => {
       try {
         // Create the history table
         await client.execute(`
-          CREATE TABLE IF NOT EXISTS dados_dachser.t_tracking_sea_history (
+          CREATE TABLE IF NOT EXISTS dados_dachser.t_sea_tracking_history (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            mbl_id VARCHAR(100) NOT NULL COMMENT 'FK to t_tracking_sea.mbl_id',
+            mbl_id VARCHAR(100) NOT NULL COMMENT 'FK to t_sea_tracking_current.mbl_id',
             container VARCHAR(50) NOT NULL,
             event_code VARCHAR(50) NULL COMMENT 'Normalized event code (ARR, DEP, BKG, etc)',
             event_description VARCHAR(500) NULL,
@@ -6636,19 +6636,19 @@ serve(async (req) => {
         const columns = await client.query(`
           SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_COMMENT
           FROM INFORMATION_SCHEMA.COLUMNS 
-          WHERE TABLE_SCHEMA = 'dados_dachser' AND TABLE_NAME = 't_tracking_sea_history'
+          WHERE TABLE_SCHEMA = 'dados_dachser' AND TABLE_NAME = 't_sea_tracking_history'
           ORDER BY ORDINAL_POSITION
         `);
 
         // Get current row count
         const countResult = await client.query(`
-          SELECT COUNT(*) as total FROM dados_dachser.t_tracking_sea_history
+          SELECT COUNT(*) as total FROM dados_dachser.t_sea_tracking_history
         `);
 
         await client.close();
         return new Response(JSON.stringify({ 
           success: true, 
-          message: 'Tabela t_tracking_sea_history criada/verificada com sucesso',
+          message: 'Tabela t_sea_tracking_history criada/verificada com sucesso',
           columns,
           totalRows: countResult[0]?.total || 0
         }), {
@@ -6715,8 +6715,8 @@ serve(async (req) => {
             t.consignee,
             t.tipo_processo,
             t.shipping_line
-          FROM dados_dachser.t_tracking_sea_history h
-          LEFT JOIN dados_dachser.t_tracking_sea t ON h.mbl_id = t.mbl_id
+          FROM dados_dachser.t_sea_tracking_history h
+          LEFT JOIN dados_dachser.t_sea_tracking_current t ON h.mbl_id = t.mbl_id
           WHERE 1=1
         `;
         const params: any[] = [];
@@ -6742,7 +6742,7 @@ serve(async (req) => {
             MIN(event_datetime) as first_event,
             MAX(event_datetime) as last_event,
             COUNT(DISTINCT event_code) as unique_event_types
-          FROM dados_dachser.t_tracking_sea_history
+          FROM dados_dachser.t_sea_tracking_history
           WHERE 1=1
         `;
         const statsParams: any[] = [];
@@ -6808,7 +6808,7 @@ serve(async (req) => {
             MAX(event_datetime) as latest_event,
             MIN(created_at) as first_record,
             MAX(created_at) as last_record
-          FROM dados_dachser.t_tracking_sea_history
+          FROM dados_dachser.t_sea_tracking_history
         `);
 
         // Events by type
@@ -6816,7 +6816,7 @@ serve(async (req) => {
           SELECT 
             COALESCE(event_code, 'UNKNOWN') as event_code,
             COUNT(*) as count
-          FROM dados_dachser.t_tracking_sea_history
+          FROM dados_dachser.t_sea_tracking_history
           GROUP BY event_code
           ORDER BY count DESC
         `);
@@ -6826,7 +6826,7 @@ serve(async (req) => {
           SELECT 
             DATE(created_at) as date,
             COUNT(*) as count
-          FROM dados_dachser.t_tracking_sea_history
+          FROM dados_dachser.t_sea_tracking_history
           WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
           GROUP BY DATE(created_at)
           ORDER BY date DESC
@@ -6839,7 +6839,7 @@ serve(async (req) => {
             mbl_id,
             COUNT(*) as event_count,
             MAX(event_datetime) as last_event
-          FROM dados_dachser.t_tracking_sea_history
+          FROM dados_dachser.t_sea_tracking_history
           GROUP BY container, mbl_id
           ORDER BY event_count DESC
           LIMIT 20
@@ -6892,16 +6892,16 @@ serve(async (req) => {
         const columns = await client.query(`
           SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
           WHERE TABLE_SCHEMA = 'dados_dachser' 
-          AND TABLE_NAME = 't_tracking_sea' 
+          AND TABLE_NAME = 't_sea_tracking_current' 
           AND COLUMN_NAME = 'vessel_imo'
         `);
 
         if (columns.length === 0) {
           await client.execute(`
-            ALTER TABLE dados_dachser.t_tracking_sea 
+            ALTER TABLE dados_dachser.t_sea_tracking_current 
             ADD COLUMN vessel_imo VARCHAR(20) NULL AFTER navio
           `);
-          console.log('[setup_vessel_imo_column] Column vessel_imo added to t_tracking_sea');
+          console.log('[setup_vessel_imo_column] Column vessel_imo added to t_sea_tracking_current');
         } else {
           console.log('[setup_vessel_imo_column] Column vessel_imo already exists');
         }
@@ -6958,7 +6958,7 @@ serve(async (req) => {
         // Get vessel_imo from the first container of this MBL that has it
         const rows = await client.query(`
           SELECT vessel_imo, navio 
-          FROM dados_dachser.t_tracking_sea
+          FROM dados_dachser.t_sea_tracking_current
           WHERE mbl_id = ? AND active = 1
           LIMIT 1
         `, [mbl_id]);
@@ -6994,7 +6994,7 @@ serve(async (req) => {
 
     }
 
-    // ===== SETUP: Add sibling sync columns to t_tracking_sea =====
+    // ===== SETUP: Add sibling sync columns to t_sea_tracking_current =====
     if (action === 'setup_sibling_sync_columns') {
       const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
       const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
@@ -7017,7 +7017,7 @@ serve(async (req) => {
           SELECT COLUMN_NAME 
           FROM INFORMATION_SCHEMA.COLUMNS 
           WHERE TABLE_SCHEMA = 'dados_dachser' 
-            AND TABLE_NAME = 't_tracking_sea'
+            AND TABLE_NAME = 't_sea_tracking_current'
             AND COLUMN_NAME IN ('sibling_synced', 'sibling_synced_at')
         `);
         
@@ -7026,7 +7026,7 @@ serve(async (req) => {
         
         if (!existingCols.includes('sibling_synced')) {
           await client.execute(`
-            ALTER TABLE dados_dachser.t_tracking_sea 
+            ALTER TABLE dados_dachser.t_sea_tracking_current 
             ADD COLUMN sibling_synced TINYINT(1) DEFAULT 0 AFTER last_error
           `);
           results.push('sibling_synced column added');
@@ -7036,7 +7036,7 @@ serve(async (req) => {
         
         if (!existingCols.includes('sibling_synced_at')) {
           await client.execute(`
-            ALTER TABLE dados_dachser.t_tracking_sea 
+            ALTER TABLE dados_dachser.t_sea_tracking_current 
             ADD COLUMN sibling_synced_at DATETIME NULL AFTER sibling_synced
           `);
           results.push('sibling_synced_at column added');
@@ -7088,7 +7088,7 @@ serve(async (req) => {
         // Buscar navios únicos que têm nome mas não têm IMO
         const vessels = await client.query(`
           SELECT DISTINCT navio
-          FROM dados_dachser.t_tracking_sea
+          FROM dados_dachser.t_sea_tracking_current
           WHERE active = 1
             AND navio IS NOT NULL AND navio != ''
             AND (vessel_imo IS NULL OR vessel_imo = '')
@@ -7115,7 +7115,7 @@ serve(async (req) => {
           
           if (imo) {
             const result = await client.execute(`
-              UPDATE dados_dachser.t_tracking_sea 
+              UPDATE dados_dachser.t_sea_tracking_current 
               SET vessel_imo = ?
               WHERE navio = ? AND (vessel_imo IS NULL OR vessel_imo = '')
             `, [imo, vesselName]);
@@ -7132,7 +7132,7 @@ serve(async (req) => {
         // Contar navios restantes sem IMO
         const remainingResult = await client.query(`
           SELECT COUNT(DISTINCT navio) as remaining
-          FROM dados_dachser.t_tracking_sea
+          FROM dados_dachser.t_sea_tracking_current
           WHERE active = 1
             AND navio IS NOT NULL AND navio != ''
             AND (vessel_imo IS NULL OR vessel_imo = '')
@@ -7180,7 +7180,7 @@ serve(async (req) => {
 
       try {
         const result = await client.execute(`
-          UPDATE dados_dachser.t_tracking_sea 
+          UPDATE dados_dachser.t_sea_tracking_current 
           SET last_event = REPLACE(last_event, 'Sibling sync: ', '')
           WHERE last_event LIKE 'Sibling sync:%'
         `);
@@ -7203,7 +7203,7 @@ serve(async (req) => {
       }
     }
 
-    // ===== OLIMPO SEA FROM MONITORING: Buscar dados de t_tracking_sea com coordenadas de t_olimpo_tracking =====
+    // ===== OLIMPO SEA FROM MONITORING: Buscar dados de t_sea_tracking_current com coordenadas de t_olimpo_tracking =====
     if (action === 'olimpo_sea_from_monitoring') {
       const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
       const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
@@ -7256,7 +7256,7 @@ serve(async (req) => {
             MAX(ot.current_lat) as current_lat,
             MAX(ot.current_lon) as current_lon,
             MAX(ot.last_api_update) as last_api_update
-          FROM dados_dachser.t_tracking_sea ts
+          FROM dados_dachser.t_sea_tracking_current ts
           LEFT JOIN dados_dachser.t_olimpo_tracking ot 
             ON ot.mode = 'sea' AND ot.asset COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
           LEFT JOIN dados_dachser.t_sea_master sm
@@ -7325,7 +7325,7 @@ serve(async (req) => {
         });
 
         await client.close();
-        console.log(`[olimpo_sea_from_monitoring] Returning ${out.length} MBLs from t_tracking_sea`);
+        console.log(`[olimpo_sea_from_monitoring] Returning ${out.length} MBLs from t_sea_tracking_current`);
         
         return new Response(JSON.stringify({ 
           data: out,
@@ -7343,7 +7343,7 @@ serve(async (req) => {
       }
     }
 
-    // ===== SYNC OLIMPO FROM MONITORING: Popular t_olimpo_tracking com dados do t_tracking_sea =====
+    // ===== SYNC OLIMPO FROM MONITORING: Popular t_olimpo_tracking com dados do t_sea_tracking_current =====
     if (action === 'sync_olimpo_from_monitoring') {
       const mariadbHost = Deno.env.get('MARIADB_OPS_HOST');
       const mariadbPort = Deno.env.get('MARIADB_OPS_PORT') || '3306';
@@ -7373,7 +7373,7 @@ serve(async (req) => {
             MODIFY COLUMN destino_code VARCHAR(255) DEFAULT NULL
         `);
 
-        // Inserir/atualizar MBLs ativos do t_tracking_sea no t_olimpo_tracking
+        // Inserir/atualizar MBLs ativos do t_sea_tracking_current no t_olimpo_tracking
         // Truncar origem_code e destino_code para evitar erro de coluna muito longa
         const result = await client.execute(`
           INSERT INTO dados_dachser.t_olimpo_tracking (
@@ -7400,7 +7400,7 @@ serve(async (req) => {
             ts.shipping_line,
             NOW() AS updated_at,
             TRUE AS active
-          FROM dados_dachser.t_tracking_sea ts
+          FROM dados_dachser.t_sea_tracking_current ts
           WHERE ts.active = 1
           GROUP BY ts.mbl_id
           ON DUPLICATE KEY UPDATE
@@ -7424,7 +7424,7 @@ serve(async (req) => {
           WHERE ot.mode = 'sea'
             AND ot.active = TRUE
             AND ot.asset COLLATE utf8mb4_unicode_ci NOT IN (
-              SELECT ts.mbl_id COLLATE utf8mb4_unicode_ci FROM dados_dachser.t_tracking_sea ts WHERE ts.active = 1
+              SELECT ts.mbl_id COLLATE utf8mb4_unicode_ci FROM dados_dachser.t_sea_tracking_current ts WHERE ts.active = 1
             )
         `);
 
@@ -7881,7 +7881,7 @@ serve(async (req) => {
         // Buscar todos os containers ativos com nome de navio
         const rows = await client.query(`
           SELECT DISTINCT id, container, navio, vessel_imo, mbl_id
-          FROM dados_dachser.t_tracking_sea 
+          FROM dados_dachser.t_sea_tracking_current 
           WHERE active = 1 
             AND navio IS NOT NULL 
             AND navio != ''
@@ -7907,7 +7907,7 @@ serve(async (req) => {
             if (foundImo && foundImo !== currentImo) {
               // Atualizar com nova IMO
               await client.execute(`
-                UPDATE dados_dachser.t_tracking_sea 
+                UPDATE dados_dachser.t_sea_tracking_current 
                 SET vessel_imo = ?, updated_at = NOW()
                 WHERE id = ?
               `, [foundImo, row.id]);
@@ -7989,13 +7989,13 @@ serve(async (req) => {
           SELECT COLUMN_NAME 
           FROM INFORMATION_SCHEMA.COLUMNS 
           WHERE TABLE_SCHEMA = '${database}' 
-            AND TABLE_NAME = 't_tracking_sea' 
+            AND TABLE_NAME = 't_sea_tracking_current' 
             AND COLUMN_NAME = 'transshipment_port'
         `);
         
         if (columns.length === 0) {
           await client.execute(`
-            ALTER TABLE ${database}.t_tracking_sea 
+            ALTER TABLE ${database}.t_sea_tracking_current 
             ADD COLUMN transshipment_port VARCHAR(500) NULL 
             COMMENT 'Porto(s) de transbordo extraído da API JSONCargo'
           `);
@@ -8051,13 +8051,13 @@ serve(async (req) => {
           SELECT COLUMN_NAME 
           FROM INFORMATION_SCHEMA.COLUMNS 
           WHERE TABLE_SCHEMA = '${database}' 
-            AND TABLE_NAME = 't_tracking_sea' 
+            AND TABLE_NAME = 't_sea_tracking_current' 
             AND COLUMN_NAME = 'tipo_carga'
         `);
         
         if (tipoCargaExists.length === 0) {
           await client.execute(`
-            ALTER TABLE ${database}.t_tracking_sea 
+            ALTER TABLE ${database}.t_sea_tracking_current 
             ADD COLUMN tipo_carga ENUM('FCL', 'LCL') DEFAULT 'FCL' 
             COMMENT 'Tipo de carga: FCL ou LCL (manual)'
           `);
@@ -8071,13 +8071,13 @@ serve(async (req) => {
           SELECT COLUMN_NAME 
           FROM INFORMATION_SCHEMA.COLUMNS 
           WHERE TABLE_SCHEMA = '${database}' 
-            AND TABLE_NAME = 't_tracking_sea' 
+            AND TABLE_NAME = 't_sea_tracking_current' 
             AND COLUMN_NAME = 'coloader'
         `);
         
         if (coloaderExists.length === 0) {
           await client.execute(`
-            ALTER TABLE ${database}.t_tracking_sea 
+            ALTER TABLE ${database}.t_sea_tracking_current 
             ADD COLUMN coloader VARCHAR(255) NULL 
             COMMENT 'Nome do coloader/consolidador (apenas para LCL)'
           `);
@@ -8245,7 +8245,7 @@ serve(async (req) => {
 
         // Insert the LCL container with tipo_carga = 'LCL' and coloader set
         await client.execute(`
-          INSERT INTO ${database}.t_tracking_sea (
+          INSERT INTO ${database}.t_sea_tracking_current (
             mbl_id, container, coloader, tipo_carga, consignee, eta, transshipment_port, 
             active, tipo_processo, created_at, last_check
           ) VALUES (?, ?, ?, 'LCL', ?, ?, ?, 1, 'SEA IMPORT', NOW(), NOW())
@@ -8284,7 +8284,7 @@ serve(async (req) => {
       const body = bodyData || await req.clone().json().catch(() => ({}));
       const mblId = body.mbl_id;
       const containerId = body.container;
-      const rowId = body.row_id; // optional: t_tracking_sea.id for direct update
+      const rowId = body.row_id; // optional: t_sea_tracking_current.id for direct update
       const maxContainers = body.max || 10; // max containers to process in batch mode
 
       const hapagClientId = Deno.env.get('HAPAG_CLIENT_ID');
@@ -8324,7 +8324,7 @@ serve(async (req) => {
           // Auto-discover: find Hapag MBLs with Prefix not found errors
           const rows = await client.query(`
             SELECT id, mbl_id, container
-            FROM ${mariadbDatabase}.t_tracking_sea
+            FROM ${mariadbDatabase}.t_sea_tracking_current
             WHERE active = 1
               AND last_error LIKE '%Prefix not found%'
               AND UPPER(LEFT(mbl_id, 3)) IN ('HLC', 'HLS')
@@ -8341,7 +8341,7 @@ serve(async (req) => {
           } else {
             const rows = await client.query(`
               SELECT id, mbl_id, container
-              FROM ${mariadbDatabase}.t_tracking_sea
+              FROM ${mariadbDatabase}.t_sea_tracking_current
               WHERE container = ? AND active = 1
               LIMIT 1
             `, [containerId]);
@@ -8353,7 +8353,7 @@ serve(async (req) => {
           // All containers for a specific MBL
           const rows = await client.query(`
             SELECT id, mbl_id, container
-            FROM ${mariadbDatabase}.t_tracking_sea
+            FROM ${mariadbDatabase}.t_sea_tracking_current
             WHERE mbl_id = ? AND active = 1
               AND last_error LIKE '%Prefix not found%'
               AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
@@ -8531,9 +8531,9 @@ serve(async (req) => {
 
             console.log(`[hapag_fallback_track] ${target.container}: status=${containerStatus}, vessel=${vesselName}, eta=${eta}, origem=${origem}, destino=${destino}`);
 
-            // --- Update t_tracking_sea ---
+            // --- Update t_sea_tracking_current ---
             await client.execute(`
-              UPDATE ${mariadbDatabase}.t_tracking_sea 
+              UPDATE ${mariadbDatabase}.t_sea_tracking_current 
               SET 
                 container_status = ?,
                 origem = COALESCE(?, origem),
@@ -8574,7 +8574,7 @@ serve(async (req) => {
                 } catch { eventDatetime = null; }
 
                 await client.execute(`
-                  INSERT IGNORE INTO ${mariadbDatabase}.t_tracking_sea_history 
+                  INSERT IGNORE INTO ${mariadbDatabase}.t_sea_tracking_history 
                   (mbl_id, container, event_code, event_description, event_datetime, location, vessel_name, voyage, container_status, eta, source, raw_data)
                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'HAPAG_API', ?)
                 `, [
@@ -9438,7 +9438,7 @@ serve(async (req) => {
         // Helper to insert event
         const insertEvent = async (mbl: string, container: string, eventCode: string, eventDesc: string, eventDatetime: string, location: string, vessel: string, voyage: string) => {
           await client.execute(
-            `INSERT IGNORE INTO dados_dachser.t_tracking_sea_history 
+            `INSERT IGNORE INTO dados_dachser.t_sea_tracking_history 
              (mbl_id, container, event_code, event_description, event_datetime, location, vessel_name, voyage, source, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'MANUAL', NOW())`,
             [mbl, container, eventCode, eventDesc, eventDatetime, location, vessel, voyage]
@@ -9451,7 +9451,7 @@ serve(async (req) => {
           const values = Object.values(updates);
           values.push(mbl);
           await client.execute(
-            `UPDATE dados_dachser.t_tracking_sea SET ${setClauses}, updated_at = NOW() WHERE mbl_id = ?`,
+            `UPDATE dados_dachser.t_sea_tracking_current SET ${setClauses}, updated_at = NOW() WHERE mbl_id = ?`,
             values
           );
         };
@@ -9460,7 +9460,7 @@ serve(async (req) => {
 
         // --- HLCUGDY251224616 (correction with new container) ---
         await updateMain('HLCUGDY251224616', { container: 'HAMU4780384', origem: 'GDYNIA', destino: 'SANTOS' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUGDY251224616'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCUGDY251224616'`);
         await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'GOE', 'Gate out empty', '2025-12-11 12:05:00', 'POZNAN', 'Truck', '');
         await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'ARR', 'Arrival in', '2025-12-15 11:51:00', 'GDYNIA', 'Truck', '');
         await insertEvent('HLCUGDY251224616', 'HAMU4780384', 'CRG', 'Loaded', '2025-12-23 16:38:00', 'GDYNIA', 'LITTLE ATHINA', '2550W');
@@ -9486,7 +9486,7 @@ serve(async (req) => {
 
         // --- HLCULE1251247412 ---
         await updateMain('HLCULE1251247412', { container: 'HAMU2871211', origem: 'ATHUS', destino: 'SANTOS' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULE1251247412'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCULE1251247412'`);
         await insertEvent('HLCULE1251247412', 'HAMU2871211', 'GOE', 'Gate out empty', '2026-01-09 15:33:00', 'ATHUS', 'Truck', '');
         await insertEvent('HLCULE1251247412', 'HAMU2871211', 'ARR', 'Arrival in', '2026-01-12 13:08:00', 'ATHUS', 'Truck', '');
         await insertEvent('HLCULE1251247412', 'HAMU2871211', 'DEP', 'Departure from', '2026-01-13 17:44:00', 'ATHUS', 'Rail', '');
@@ -9502,7 +9502,7 @@ serve(async (req) => {
 
         // --- HLCULE1251248185 ---
         await updateMain('HLCULE1251248185', { container: 'HLBU1517780', origem: 'PARIS', destino: 'SANTOS' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULE1251248185'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCULE1251248185'`);
         await insertEvent('HLCULE1251248185', 'HLBU1517780', 'GOE', 'Gate out empty', '2026-01-09 12:05:00', 'PARIS', 'Truck', '');
         await insertEvent('HLCULE1251248185', 'HLBU1517780', 'ARR', 'Arrival in', '2026-01-09 15:51:00', 'LE HAVRE', 'Truck', '');
         await insertEvent('HLCULE1251248185', 'HLBU1517780', 'CRG', 'Loaded', '2026-01-21 06:47:00', 'LE HAVRE', 'XIAMEN EXPRESS', 'NA601A');
@@ -9516,7 +9516,7 @@ serve(async (req) => {
 
         // --- HLCULE1260135948 ---
         await updateMain('HLCULE1260135948', { container: 'FANU3458056', origem: 'ATHUS', destino: 'SANTOS' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULE1260135948'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCULE1260135948'`);
         await insertEvent('HLCULE1260135948', 'FANU3458056', 'GOE', 'Gate out empty', '2026-01-23 14:21:00', 'ATHUS', 'Truck', '');
         await insertEvent('HLCULE1260135948', 'FANU3458056', 'ARR', 'Arrival in', '2026-01-26 09:07:00', 'ATHUS', 'Truck', '');
         await insertEvent('HLCULE1260135948', 'FANU3458056', 'DEP', 'Departure from', '2026-01-26 12:56:00', 'ATHUS', 'Rail', '');
@@ -9532,7 +9532,7 @@ serve(async (req) => {
 
         // --- HLCULE1260206102 ---
         await updateMain('HLCULE1260206102', { container: 'FANU1636502', origem: 'ATHUS', destino: 'SANTOS', eta: '2026-03-10' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULE1260206102'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCULE1260206102'`);
         await insertEvent('HLCULE1260206102', 'FANU1636502', 'GOE', 'Gate out empty', '2026-02-09 05:47:00', 'ATHUS', 'Truck', '');
         await insertEvent('HLCULE1260206102', 'FANU1636502', 'ARR', 'Arrival in', '2026-02-09 11:40:00', 'ATHUS', 'Truck', '');
         await insertEvent('HLCULE1260206102', 'FANU1636502', 'DEP', 'Departure from', '2026-02-10 08:35:00', 'ATHUS', 'Rail', '');
@@ -9544,7 +9544,7 @@ serve(async (req) => {
 
         // --- HLCULE1260212660 ---
         await updateMain('HLCULE1260212660', { container: 'FANU1632750', origem: 'PARIS', destino: 'SANTOS', eta: '2026-03-18' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULE1260212660'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCULE1260212660'`);
         await insertEvent('HLCULE1260212660', 'FANU1632750', 'GOE', 'Gate out empty', '2026-02-09 12:05:00', 'PARIS', 'Truck', '');
         await insertEvent('HLCULE1260212660', 'FANU1632750', 'ARR', 'Arrival in', '2026-02-10 16:31:00', 'ANTWERP', 'Truck', '');
         await insertEvent('HLCULE1260212660', 'FANU1632750', 'CRG', 'Loaded', '2026-02-27 01:47:00', 'ANTWERP', 'MSC ADELE', 'NA607A');
@@ -9554,7 +9554,7 @@ serve(async (req) => {
 
         // --- HLCULE1260214465 ---
         await updateMain('HLCULE1260214465', { container: 'UACU3896599', origem: 'LE HAVRE', destino: 'SANTOS', eta: '2026-03-18' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULE1260214465'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCULE1260214465'`);
         await insertEvent('HLCULE1260214465', 'UACU3896599', 'GOE', 'Gate out empty', '2026-02-19 09:35:00', 'LE HAVRE', 'Truck', '');
         await insertEvent('HLCULE1260214465', 'UACU3896599', 'ARR', 'Arrival in', '2026-02-20 13:00:00', 'LE HAVRE', 'Truck', '');
         await insertEvent('HLCULE1260214465', 'UACU3896599', 'CRG', 'Loaded', '2026-03-01 10:16:00', 'LE HAVRE', 'MSC ADELE', 'NA607A');
@@ -9566,7 +9566,7 @@ serve(async (req) => {
 
         // --- HLCULE1260214476 ---
         await updateMain('HLCULE1260214476', { container: 'HAMU1106861', origem: 'LE HAVRE', destino: 'SANTOS', eta: '2026-03-18' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULE1260214476'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCULE1260214476'`);
         await insertEvent('HLCULE1260214476', 'HAMU1106861', 'GOE', 'Gate out empty', '2026-02-19 09:35:00', 'LE HAVRE', 'Truck', '');
         await insertEvent('HLCULE1260214476', 'HAMU1106861', 'ARR', 'Arrival in', '2026-02-20 12:58:00', 'LE HAVRE', 'Truck', '');
         await insertEvent('HLCULE1260214476', 'HAMU1106861', 'CRG', 'Loaded', '2026-03-01 10:16:00', 'LE HAVRE', 'MSC ADELE', 'NA607A');
@@ -9576,7 +9576,7 @@ serve(async (req) => {
 
         // --- HLCULE1260254270 ---
         await updateMain('HLCULE1260254270', { container: 'FANU3250571', origem: 'ATHUS', destino: 'SANTOS', eta: '2026-03-31' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULE1260254270'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCULE1260254270'`);
         await insertEvent('HLCULE1260254270', 'FANU3250571', 'GOE', 'Gate out empty', '2026-03-02 06:08:00', 'ATHUS', 'Truck', '');
         await insertEvent('HLCULE1260254270', 'FANU3250571', 'ARR', 'Arrival in', '2026-03-02 13:21:00', 'ATHUS', 'Truck', '');
         await insertEvent('HLCULE1260254270', 'FANU3250571', 'DEP', 'Departure from', '2026-03-05 15:43:00', 'ATHUS', 'Rail', '');
@@ -9586,7 +9586,7 @@ serve(async (req) => {
 
         // --- HLCULE1260300835 ---
         await updateMain('HLCULE1260300835', { container: 'HAMU2388348', origem: 'ATHUS', destino: 'SANTOS', eta: '2026-03-31' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULE1260300835'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCULE1260300835'`);
         await insertEvent('HLCULE1260300835', 'HAMU2388348', 'GOE', 'Gate out empty', '2026-03-04 06:20:00', 'ATHUS', 'Truck', '');
         await insertEvent('HLCULE1260300835', 'HAMU2388348', 'ARR', 'Arrival in', '2026-03-04 16:46:00', 'ANTWERP', 'Truck', '');
         await updateMain('HLCULE1260300835', { last_event: 'Arrival in - ANTWERP', container_status: 'TSP' });
@@ -9594,7 +9594,7 @@ serve(async (req) => {
 
         // --- HLCULGB251206484 ---
         await updateMain('HLCULGB251206484', { container: 'FANU3290511', origem: 'HOUSTON, TX', destino: 'SANTOS' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCULGB251206484'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCULGB251206484'`);
         await insertEvent('HLCULGB251206484', 'FANU3290511', 'GOE', 'Gate out empty', '2025-12-10 10:41:00', 'HOUSTON, TX', 'Truck', '');
         await insertEvent('HLCULGB251206484', 'FANU3290511', 'ARR', 'Arrival in', '2025-12-11 12:40:00', 'HOUSTON, TX', 'Truck', '');
         await insertEvent('HLCULGB251206484', 'FANU3290511', 'CRG', 'Loaded', '2025-12-17 20:45:00', 'HOUSTON, TX', 'PALENA', '2550S');
@@ -9608,7 +9608,7 @@ serve(async (req) => {
 
         // --- HLCUME3251242629 ---
         await updateMain('HLCUME3251242629', { container: 'BEAU4198993', origem: 'ALTAMIRA, TAM', destino: 'SANTOS' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUME3251242629'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCUME3251242629'`);
         await insertEvent('HLCUME3251242629', 'BEAU4198993', 'GOE', 'Gate out empty', '2025-12-19 10:11:00', 'ALTAMIRA, TAM', 'Truck', '');
         await insertEvent('HLCUME3251242629', 'BEAU4198993', 'ARR', 'Arrival in', '2025-12-22 17:52:00', 'ALTAMIRA, TAM', 'Truck', '');
         await insertEvent('HLCUME3251242629', 'BEAU4198993', 'CRG', 'Loaded', '2025-12-28 00:33:00', 'ALTAMIRA, TAM', 'LE HAVRE EXPRESS', '2552S');
@@ -9622,7 +9622,7 @@ serve(async (req) => {
 
         // --- HLCUNG12511SBPJ1 ---
         await updateMain('HLCUNG12511SBPJ1', { container: 'TCLU3398637', origem: 'NINGBO', destino: 'SANTOS' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUNG12511SBPJ1'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCUNG12511SBPJ1'`);
         await insertEvent('HLCUNG12511SBPJ1', 'TCLU3398637', 'GOE', 'Gate out empty', '2025-12-17 06:43:00', 'NINGBO', 'Truck', '');
         await insertEvent('HLCUNG12511SBPJ1', 'TCLU3398637', 'ARR', 'Arrival in', '2025-12-17 12:39:00', 'NINGBO', 'Truck', '');
         await insertEvent('HLCUNG12511SBPJ1', 'TCLU3398637', 'CRG', 'Loaded', '2025-12-23 07:03:00', 'NINGBO', 'MSC AINO', 'FI549A');
@@ -9636,7 +9636,7 @@ serve(async (req) => {
 
         // --- HLCUNG12512SWAJ0 ---
         await updateMain('HLCUNG12512SWAJ0', { container: 'HAMU2243792', origem: 'NINGBO', destino: 'SANTOS' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUNG12512SWAJ0'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCUNG12512SWAJ0'`);
         await insertEvent('HLCUNG12512SWAJ0', 'HAMU2243792', 'GOE', 'Gate out empty', '2026-01-13 18:21:00', 'NINGBO', 'Truck', '');
         await insertEvent('HLCUNG12512SWAJ0', 'HAMU2243792', 'ARR', 'Arrival in', '2026-01-16 13:10:00', 'NINGBO', 'Truck', '');
         await insertEvent('HLCUNG12512SWAJ0', 'HAMU2243792', 'CRG', 'Loaded', '2026-01-20 17:48:00', 'NINGBO', 'CAPE ARTEMISIO', 'FI602A');
@@ -9650,7 +9650,7 @@ serve(async (req) => {
 
         // --- HLCUNG12512TCIS4 ---
         await updateMain('HLCUNG12512TCIS4', { container: 'RFSU3000784', origem: 'NINGBO', destino: 'SANTOS', eta: '2026-03-25' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUNG12512TCIS4'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCUNG12512TCIS4'`);
         await insertEvent('HLCUNG12512TCIS4', 'RFSU3000784', 'GOE', 'Gate out empty', '2026-02-09 06:14:00', 'NINGBO', 'Truck', '');
         await insertEvent('HLCUNG12512TCIS4', 'RFSU3000784', 'ARR', 'Arrival in', '2026-02-09 21:25:00', 'NINGBO', 'Truck', '');
         await insertEvent('HLCUNG12512TCIS4', 'RFSU3000784', 'CRG', 'Loaded', '2026-02-22 10:20:00', 'NINGBO', 'MSC AVNI', 'FI607A');
@@ -9664,7 +9664,7 @@ serve(async (req) => {
 
         // --- HLCURI4260112706 ---
         await updateMain('HLCURI4260112706', { container: 'DFSU1073392', origem: 'RIO GRANDE', destino: 'HAMBURG', eta: '2026-03-31' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCURI4260112706'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCURI4260112706'`);
         await insertEvent('HLCURI4260112706', 'DFSU1073392', 'GOE', 'Gate out empty', '2026-02-04 13:21:00', 'RIO GRANDE', 'Truck', '');
         await insertEvent('HLCURI4260112706', 'DFSU1073392', 'ARR', 'Arrival in', '2026-02-18 20:16:00', 'RIO GRANDE', 'Truck', '');
         await insertEvent('HLCURI4260112706', 'DFSU1073392', 'CRG', 'Loaded', '2026-02-23 10:59:00', 'RIO GRANDE', 'XIAMEN EXPRESS', 'NA608R');
@@ -9674,7 +9674,7 @@ serve(async (req) => {
 
         // --- HLCUSHA2512AWTO1 ---
         await updateMain('HLCUSHA2512AWTO1', { container: 'HLBU1408352', origem: 'SHANGHAI', destino: 'SANTOS' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSHA2512AWTO1'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCUSHA2512AWTO1'`);
         await insertEvent('HLCUSHA2512AWTO1', 'HLBU1408352', 'GOE', 'Gate out empty', '2025-12-17 04:01:00', 'SHANGHAI', 'Truck', '');
         await insertEvent('HLCUSHA2512AWTO1', 'HLBU1408352', 'ARR', 'Arrival in', '2025-12-17 18:45:00', 'SHANGHAI', 'Truck', '');
         await insertEvent('HLCUSHA2512AWTO1', 'HLBU1408352', 'CRG', 'Loaded', '2025-12-23 03:05:00', 'SHANGHAI', 'SAO PAULO EXPRESS', '2550W');
@@ -9688,7 +9688,7 @@ serve(async (req) => {
 
         // --- HLCUSHA260175038 ---
         await updateMain('HLCUSHA260175038', { container: 'UACU8461768', origem: 'SHANGHAI', destino: 'SANTOS' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSHA260175038'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCUSHA260175038'`);
         await insertEvent('HLCUSHA260175038', 'UACU8461768', 'GOE', 'Gate out empty', '2026-01-15 13:49:00', 'SHANGHAI', 'Truck', '');
         await insertEvent('HLCUSHA260175038', 'UACU8461768', 'ARR', 'Arrival in', '2026-01-17 06:40:00', 'SHANGHAI', 'Truck', '');
         await insertEvent('HLCUSHA260175038', 'UACU8461768', 'CRG', 'Loaded', '2026-01-19 20:15:00', 'SHANGHAI', 'SEASPAN BELIEF', '2603W');
@@ -9702,7 +9702,7 @@ serve(async (req) => {
 
         // --- HLCUSS5251256911 ---
         await updateMain('HLCUSS5251256911', { container: 'HAMU3974240', origem: 'SANTOS', destino: 'HAMBURG' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5251256911'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCUSS5251256911'`);
         await insertEvent('HLCUSS5251256911', 'HAMU3974240', 'GOE', 'Gate out empty', '2026-01-07 12:49:00', 'SANTOS', 'Truck', '');
         await insertEvent('HLCUSS5251256911', 'HAMU3974240', 'ARR', 'Arrival in', '2026-01-17 06:04:00', 'SANTOS', 'Truck', '');
         await insertEvent('HLCUSS5251256911', 'HAMU3974240', 'CRG', 'Loaded', '2026-01-22 15:10:00', 'SANTOS', 'MSC ADELE', 'NA602R');
@@ -9716,7 +9716,7 @@ serve(async (req) => {
 
         // --- HLCUSS5251266739 ---
         await updateMain('HLCUSS5251266739', { container: 'HAMU3061935', origem: 'SANTOS', destino: 'HAMBURG' });
-        await client.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = 'HLCUSS5251266739'`);
+        await client.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = 'HLCUSS5251266739'`);
         await insertEvent('HLCUSS5251266739', 'HAMU3061935', 'GOE', 'Gate out empty', '2026-01-23 23:11:00', 'SANTOS', 'Truck', '');
         await insertEvent('HLCUSS5251266739', 'HAMU3061935', 'ARR', 'Arrival in', '2026-02-13 17:30:00', 'SANTOS', 'Truck', '');
         await insertEvent('HLCUSS5251266739', 'HAMU3061935', 'CRG', 'Loaded', '2026-02-23 16:36:00', 'SANTOS', 'MSC MUGE', 'NA607R');
@@ -9802,7 +9802,7 @@ serve(async (req) => {
         const prefixList = allPrefixes.map(p => `'${p}'`).join(',');
         const rows = await client.query(`
           SELECT mbl_id, container, container_status, navio, last_event, last_check, shipping_line
-          FROM dados_dachser.t_tracking_sea
+          FROM dados_dachser.t_sea_tracking_current
           WHERE active = 1
             AND container IS NOT NULL
             AND container NOT IN ('PENDENTE','NAO_ENCONTRADO','IGNORADO','')
@@ -9883,7 +9883,7 @@ serve(async (req) => {
         const whereMbl = mblId ? 'AND mbl_id = ?' : '';
         const params = mblId ? [mblId] : [];
         const result: any = await client.execute(
-          `UPDATE dados_dachser.t_tracking_sea
+          `UPDATE dados_dachser.t_sea_tracking_current
            SET container = 'PENDENTE', updated_at = NOW()
            WHERE container = 'NAO_ENCONTRADO' ${whereMbl}`,
           params

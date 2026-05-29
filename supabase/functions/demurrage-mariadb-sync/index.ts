@@ -62,7 +62,7 @@ serve(async (req) => {
     client = await new Client().connect(mariaConfig);
     console.log("✓ Connected to MariaDB");
 
-    // Query joining t_tracking_sea and t_consulta_armador
+    // Query joining t_sea_tracking_current and t_consulta_armador
     const query = `
       SELECT 
         t.id,
@@ -86,7 +86,7 @@ serve(async (req) => {
         c.eta as eta_confirmado,
         c.voyage,
         c.status_armador
-      FROM dados_dachser.t_tracking_sea t
+      FROM dados_dachser.t_sea_tracking_current t
       LEFT JOIN dados_dachser.t_consulta_armador c 
         ON t.mbl_id COLLATE utf8mb4_general_ci = c.mbl_id COLLATE utf8mb4_general_ci
       WHERE t.active = 1
@@ -141,7 +141,7 @@ serve(async (req) => {
         const etd = row.etd ? formatDate(row.etd) : null;
         const eta = row.eta_confirmado ? formatDate(row.eta_confirmado) : (row.eta ? formatDate(row.eta) : null);
 
-        // Fetch historical dates from t_tracking_sea_history
+        // Fetch historical dates from t_sea_tracking_history
         const historicalDates = await fetchHistoricalDates(client, numero);
         console.log(`[${numero}] Historical dates: discharge=${historicalDates.discharge_date}, gate_out=${historicalDates.gate_out_date}, return=${historicalDates.return_date}`);
 
@@ -361,7 +361,7 @@ function formatDate(date: Date | string): string {
   return date.toISOString().split('T')[0];
 }
 
-// Fetch historical dates from t_tracking_sea_history
+// Fetch historical dates from t_sea_tracking_history
 async function fetchHistoricalDates(client: Client, container: string): Promise<{
   discharge_date: string | null;
   gate_out_date: string | null;
@@ -373,7 +373,7 @@ async function fetchHistoricalDates(client: Client, container: string): Promise<
       SELECT event_type, MIN(event_datetime) as event_datetime
       FROM (
         SELECT 'discharge' as event_type, event_datetime
-        FROM dados_dachser.t_tracking_sea_history 
+        FROM dados_dachser.t_sea_tracking_history 
         WHERE container = ?
           AND (
             event_description LIKE '%Discharged%' 
@@ -386,7 +386,7 @@ async function fetchHistoricalDates(client: Client, container: string): Promise<
         UNION ALL
         
         SELECT 'gate_out' as event_type, event_datetime
-        FROM dados_dachser.t_tracking_sea_history 
+        FROM dados_dachser.t_sea_tracking_history 
         WHERE container = ?
           AND (
             event_description LIKE '%Gate out%'
@@ -399,7 +399,7 @@ async function fetchHistoricalDates(client: Client, container: string): Promise<
         UNION ALL
         
         SELECT 'return' as event_type, event_datetime
-        FROM dados_dachser.t_tracking_sea_history 
+        FROM dados_dachser.t_sea_tracking_history 
         WHERE container = ?
           AND (
             event_description LIKE '%Empty%returned%'

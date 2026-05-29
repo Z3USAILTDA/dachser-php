@@ -328,7 +328,7 @@ serve(async (req) => {
         // Mark as NAO_ENCONTRADO instead of skipping
         try {
           await conn.execute(
-            `UPDATE dados_dachser.t_tracking_sea SET container_status = 'NAO_ENCONTRADO', last_event = 'Sem informação no armador', updated_at = NOW() WHERE mbl_id = ?`,
+            `UPDATE dados_dachser.t_sea_tracking_current SET container_status = 'NAO_ENCONTRADO', last_event = 'Sem informação no armador', updated_at = NOW() WHERE mbl_id = ?`,
             [mbl.mbl]
           );
           results.push({ mbl: mbl.mbl, status: 'ok_sia', reason: 'sem informação → NAO_ENCONTRADO' });
@@ -351,20 +351,20 @@ serve(async (req) => {
         const containerStatus = resolveContainerStatus(mbl.events);
 
         // 1. Delete existing history for this MBL
-        await conn.execute(`DELETE FROM dados_dachser.t_tracking_sea_history WHERE mbl_id = ?`, [mbl.mbl]);
+        await conn.execute(`DELETE FROM dados_dachser.t_sea_tracking_history WHERE mbl_id = ?`, [mbl.mbl]);
 
         // 2. Insert all events (use first container for all events, or iterate containers)
         for (const evt of mbl.events) {
           const ctr = container; // Use first container
           await conn.execute(
-            `INSERT IGNORE INTO dados_dachser.t_tracking_sea_history 
+            `INSERT IGNORE INTO dados_dachser.t_sea_tracking_history 
              (mbl_id, container, event_code, event_description, event_datetime, location, vessel_name, voyage, source, created_at) 
              VALUES (?,?,?,?,?,?,?,?,'MANUAL',NOW())`,
             [mbl.mbl, ctr, evt.code, evt.description, evt.date, evt.location, evt.vessel, evt.voyage]
           );
         }
 
-        // 3. Update t_tracking_sea
+        // 3. Update t_sea_tracking_current
         const updateFields: Record<string, any> = {
           container: container,
           container_status: containerStatus,
@@ -377,7 +377,7 @@ serve(async (req) => {
 
         const sets = Object.keys(updateFields).map(k => `${k} = ?`).join(', ');
         const vals = [...Object.values(updateFields), mbl.mbl];
-        await conn.execute(`UPDATE dados_dachser.t_tracking_sea SET ${sets}, updated_at = NOW() WHERE mbl_id = ?`, vals);
+        await conn.execute(`UPDATE dados_dachser.t_sea_tracking_current SET ${sets}, updated_at = NOW() WHERE mbl_id = ?`, vals);
 
         results.push({ 
           mbl: mbl.mbl, 

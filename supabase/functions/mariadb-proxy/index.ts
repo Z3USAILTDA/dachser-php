@@ -14345,7 +14345,7 @@ Deno.serve(async (req) => {
                 c.eta as eta_confirmado,
                 c.voyage,
                 c.status_armador
-              FROM dados_dachser.t_tracking_sea t
+              FROM dados_dachser.t_sea_tracking_current t
               LEFT JOIN dados_dachser.t_consulta_armador c 
                 ON t.mbl_id COLLATE utf8mb4_general_ci = c.mbl_id COLLATE utf8mb4_general_ci
               WHERE TRIM(UPPER(t.mbl_id)) = TRIM(UPPER(?))
@@ -14372,13 +14372,13 @@ Deno.serve(async (req) => {
                 try {
                   const histRows = await queryWithRetry(() => client.query(
                     `SELECT event_type, MIN(event_datetime) as event_datetime FROM (
-                      SELECT 'discharge' as event_type, event_datetime FROM dados_dachser.t_tracking_sea_history 
+                      SELECT 'discharge' as event_type, event_datetime FROM dados_dachser.t_sea_tracking_history 
                       WHERE container = ? AND (event_description LIKE '%Discharged%' OR event_description = 'Discharge' OR event_description LIKE '%Unloaded from Vessel%' OR event_description LIKE '%Import Discharged%' OR event_description LIKE '%Descarga%')
                       UNION ALL
-                      SELECT 'gate_out' as event_type, event_datetime FROM dados_dachser.t_tracking_sea_history 
+                      SELECT 'gate_out' as event_type, event_datetime FROM dados_dachser.t_sea_tracking_history 
                       WHERE container = ? AND (event_description LIKE '%Gate out%' OR event_description LIKE '%Gate-out%' OR event_description = 'Import to consignee' OR event_description LIKE '%Saída%' OR event_description LIKE '%Saida%')
                       UNION ALL
-                      SELECT 'return' as event_type, event_datetime FROM dados_dachser.t_tracking_sea_history 
+                      SELECT 'return' as event_type, event_datetime FROM dados_dachser.t_sea_tracking_history 
                       WHERE container = ? AND (event_description LIKE '%Empty%returned%' OR event_description LIKE '%Gate in%' OR event_description LIKE '%Devolução%' OR event_description LIKE '%Devolvido%' OR event_description LIKE '%Empty to shipper%')
                     ) AS events GROUP BY event_type`,
                     [numero, numero, numero]
@@ -14439,14 +14439,14 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Step 3b: Fallback - discover containers from t_tracking_sea_history
+        // Step 3b: Fallback - discover containers from t_sea_tracking_history
         if (!mblContainers || mblContainers.length === 0) {
-          console.log(`[demurrage_get_containers_by_mbl] Step 3b: Trying t_tracking_sea_history for MBL: ${mbl}`);
+          console.log(`[demurrage_get_containers_by_mbl] Step 3b: Trying t_sea_tracking_history for MBL: ${mbl}`);
           try {
             const histDiscovery = await queryWithRetry(() => client.query(
               `SELECT DISTINCT h.container, h.mbl_id,
-                (SELECT h2.event_description FROM dados_dachser.t_tracking_sea_history h2 WHERE h2.container = h.container AND h2.mbl_id = h.mbl_id ORDER BY h2.event_datetime DESC LIMIT 1) as last_event
-              FROM dados_dachser.t_tracking_sea_history h
+                (SELECT h2.event_description FROM dados_dachser.t_sea_tracking_history h2 WHERE h2.container = h.container AND h2.mbl_id = h.mbl_id ORDER BY h2.event_datetime DESC LIMIT 1) as last_event
+              FROM dados_dachser.t_sea_tracking_history h
               WHERE TRIM(UPPER(h.mbl_id)) = TRIM(UPPER(?))
                 AND h.container IS NOT NULL AND h.container != ''
               GROUP BY h.container, h.mbl_id`,
@@ -14467,13 +14467,13 @@ Deno.serve(async (req) => {
                 try {
                   const histRows = await queryWithRetry(() => client.query(
                     `SELECT event_type, MIN(event_datetime) as event_datetime FROM (
-                      SELECT 'discharge' as event_type, event_datetime FROM dados_dachser.t_tracking_sea_history 
+                      SELECT 'discharge' as event_type, event_datetime FROM dados_dachser.t_sea_tracking_history 
                       WHERE container = ? AND (event_description LIKE '%Discharged%' OR event_description = 'Discharge' OR event_description LIKE '%Unloaded from Vessel%' OR event_description LIKE '%Import Discharged%' OR event_description LIKE '%Descarga%')
                       UNION ALL
-                      SELECT 'gate_out' as event_type, event_datetime FROM dados_dachser.t_tracking_sea_history 
+                      SELECT 'gate_out' as event_type, event_datetime FROM dados_dachser.t_sea_tracking_history 
                       WHERE container = ? AND (event_description LIKE '%Gate out%' OR event_description LIKE '%Gate-out%' OR event_description = 'Import to consignee' OR event_description LIKE '%Saída%' OR event_description LIKE '%Saida%')
                       UNION ALL
-                      SELECT 'return' as event_type, event_datetime FROM dados_dachser.t_tracking_sea_history 
+                      SELECT 'return' as event_type, event_datetime FROM dados_dachser.t_sea_tracking_history 
                       WHERE container = ? AND (event_description LIKE '%Empty%returned%' OR event_description LIKE '%Gate in%' OR event_description LIKE '%Devolução%' OR event_description LIKE '%Devolvido%' OR event_description LIKE '%Empty to shipper%')
                     ) AS events GROUP BY event_type`,
                     [numero, numero, numero]
@@ -14847,7 +14847,7 @@ Deno.serve(async (req) => {
             eta,
             source,
             created_at
-          FROM dados_dachser.t_tracking_sea_history
+          FROM dados_dachser.t_sea_tracking_history
           WHERE ${evtWhereConditions.join(' AND ')}
           ORDER BY event_datetime DESC, created_at DESC
           LIMIT ?
@@ -19340,7 +19340,7 @@ Deno.serve(async (req) => {
         const searchKey = mbl_id || ctnr;
         const etaRows = await client.query(
           `SELECT DISTINCT eta, MIN(event_datetime) as first_seen
-           FROM dados_dachser.t_tracking_sea_history
+           FROM dados_dachser.t_sea_tracking_history
            WHERE (mbl_id = ? OR container = ?)
              AND eta IS NOT NULL AND eta != ''
            GROUP BY eta
@@ -19352,7 +19352,7 @@ Deno.serve(async (req) => {
       }
 
       case 'demurrage_sync_from_tracking': {
-        console.log('[DEMURRAGE-SYNC] Starting sync from t_tracking_sea...');
+        console.log('[DEMURRAGE-SYNC] Starting sync from t_sea_tracking_current...');
         const syncResults = {
           total_records: 0,
           created: 0,
@@ -19361,7 +19361,7 @@ Deno.serve(async (req) => {
           error_details: [] as string[],
         };
 
-        // Query source data from t_tracking_sea + t_consulta_armador
+        // Query source data from t_sea_tracking_current + t_consulta_armador
         const sourceRows = await client.query(`
           SELECT 
             t.id,
@@ -19385,7 +19385,7 @@ Deno.serve(async (req) => {
             c.eta as eta_confirmado,
             c.voyage,
             c.status_armador
-          FROM dados_dachser.t_tracking_sea t
+          FROM dados_dachser.t_sea_tracking_current t
           LEFT JOIN dados_dachser.t_consulta_armador c 
             ON t.mbl_id COLLATE utf8mb4_general_ci = c.mbl_id COLLATE utf8mb4_general_ci
           WHERE t.active = 1
@@ -19461,13 +19461,13 @@ Deno.serve(async (req) => {
             try {
               const histRows = await client.query(`
                 SELECT event_type, MIN(event_datetime) as event_datetime FROM (
-                  SELECT 'discharge' as event_type, event_datetime FROM dados_dachser.t_tracking_sea_history 
+                  SELECT 'discharge' as event_type, event_datetime FROM dados_dachser.t_sea_tracking_history 
                   WHERE container = ? AND (event_description LIKE '%Discharged%' OR event_description = 'Discharge' OR event_description LIKE '%Unloaded from Vessel%' OR event_description LIKE '%Import Discharged%' OR event_description LIKE '%Descarga%')
                   UNION ALL
-                  SELECT 'gate_out' as event_type, event_datetime FROM dados_dachser.t_tracking_sea_history 
+                  SELECT 'gate_out' as event_type, event_datetime FROM dados_dachser.t_sea_tracking_history 
                   WHERE container = ? AND (event_description LIKE '%Gate out%' OR event_description LIKE '%Gate-out%' OR event_description = 'Import to consignee' OR event_description LIKE '%Saída%' OR event_description LIKE '%Saida%')
                   UNION ALL
-                  SELECT 'return' as event_type, event_datetime FROM dados_dachser.t_tracking_sea_history 
+                  SELECT 'return' as event_type, event_datetime FROM dados_dachser.t_sea_tracking_history 
                   WHERE container = ? AND (event_description LIKE '%Empty%returned%' OR event_description LIKE '%Gate in%' OR event_description LIKE '%Devolução%' OR event_description LIKE '%Devolvido%' OR event_description LIKE '%Empty to shipper%')
                 ) AS events GROUP BY event_type
               `, [numero, numero, numero]);
