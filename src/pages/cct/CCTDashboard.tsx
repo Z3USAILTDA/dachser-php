@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, LayoutDashboard, BarChart3, AlertTriangle, Bell, Settings, HelpCircle, LogOut, Radio, RefreshCw, Database, Package, AlertCircle, Clock, Plane, List, CheckCircle2, Eye, CheckCircle, Download, FlaskConical } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, BarChart3, AlertTriangle, Bell, Settings, HelpCircle, LogOut, Radio, RefreshCw, Database, Package, AlertCircle, Clock, Plane, List, CheckCircle2, Eye, CheckCircle, Download, FlaskConical, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { exportCCTWithoutDepDateToExcel } from "@/utils/cctExcelExport";
 import dachserBg from "@/assets/dachser-background.jpg";
@@ -359,7 +359,11 @@ export default function CCTDashboard() {
 
               {/* Table */}
               {isLoading ? (
-                <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+                <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] flex flex-col items-center justify-center">
+                  <Loader2 className="w-10 h-10 mb-3 animate-spin text-[#ffc800]" />
+                  <p className="text-[#f5f5f5] uppercase tracking-[0.15em] font-medium">CARREGANDO DADOS...</p>
+                  <p className="text-[0.85rem] text-[#aaaaaa] mt-2">Buscando atualizações</p>
+                </div>
               ) : (
                 <ProcessosTable processos={processos} onAssignAnalista={handleOpenAssignDialog} metricFilter={metricFilter} />
               )}
