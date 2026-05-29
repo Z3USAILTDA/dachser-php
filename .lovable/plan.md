@@ -1,31 +1,22 @@
-## 1. Corrigir link do e-mail de boas-vindas
+## Problema
 
-`supabase/functions/send-welcome-email/index.ts` linha 121 — trocar `https://dachser.z3us.ai/change_password.php` por `https://dachser.z3us.ai/`. Em seguida fazer deploy da function `send-welcome-email`. (HTML já usa a URL correta nas linhas 18/97.)
+Após a mudança recente onde a coluna "Último evento" e o badge de status passaram a refletir `container_status` (vindo de `t_sea_tracking_current`), os cards do topo (Em Trânsito, Em Alerta, Crítico, Entregues) continuaram lendo `mbl.last_event`. Como `last_event` está vazio/diferente para a maioria dos MBLs, todas as classificações caem fora dos códigos esperados (CRG/DEP/TSP/ARR/DCH/GOD/DLV) e os cards mostram 0. Só "Total MBLS" funciona porque é uma contagem bruta da lista.
 
-## 2. Carregar processos apenas para admins nas 3 telas
+## Correção (somente frontend)
 
-**Mudança de escopo vs. plano anterior:** as telas continuam abertas a todos (não há redirect/bloqueio de rota). O que muda é que o **carregamento dos processos** só acontece se `is_admin` for verdadeiro; para os demais, a tela renderiza vazia com uma mensagem informativa ("Visualização disponível apenas para administradores").
+Arquivo: `src/pages/ContainerTracking.tsx`
 
-Critério de admin (igual ao já usado em `CCTDashboard.tsx` e `adminAccess.ts`): `localStorage["user"].is_admin === 1 | "1" | true`.
+1. Em `isEmTransito` e `isEntregue`, usar `container_status` como fonte primária, com fallback para `last_event`:
+   - Trocar a chamada para `getReportStatus(m.container_status ?? m.last_event, m.container_status, m.tipo_processo)` (mesma forma usada no badge da coluna SITUAÇÃO).
+2. Em `isEmAlerta`, manter a regra de `is_eta_delayed`, e na verificação textual usar `container_status || last_event` (assim mantém DELAYED/CANCELLED/HOLD se aparecer em qualquer dos campos).
+3. Atualizar as chamadas em:
+   - `useMemo` que calcula `stats` (linhas 2096–2099)
+   - O filtro por card (`activeCardFilter`, linhas 2057–2063)
+   - Qualquer uso na renderização da tabela (linha 2746–2747) para manter consistência com os cards.
+4. Sem mudanças em backend, edge functions ou esquema. Sem novas dependências.
 
-### 2.1 `/sea/tracking` — `src/pages/ContainerTracking.tsx`
-- Ler `isAdmin` no topo do componente.
-- No `useEffect` de inicialização (linha ~957) que chama `cleanup_orphan_pendentes` + `fetchMblData()`, envolver o bloco com `if (!isAdmin) { setIsLoading(false); return; }` — nem cleanup nem fetch são disparados.
-- Em qualquer auto-refresh / re-fetch existente do mesmo escopo, aplicar o mesmo gate.
-- Onde a lista é renderizada, quando `!isAdmin` mostrar um estado vazio: "Esta visualização está disponível apenas para administradores."
+## Validação
 
-### 2.2 `/air/tracking-aereo` — `src/pages/air/TrackingAereo.tsx`
-- Ler `isAdmin` no topo.
-- No `useEffect` da linha ~479 que chama `fetchData()` e cria `setInterval(fetchData, 30000)`, gate com `if (!isAdmin) { setIsLoading(false); return; }`. Não disparar fetch nem agendar o polling.
-- No `useEffect` da linha ~487 (alerta `air-tracking-failed-alert`), também gate por admin — não enviar alerta para usuários não-admin.
-- Estado vazio com a mesma mensagem na área da tabela.
-
-### 2.3 `/air/cct` — `src/pages/cct/CCTDashboard.tsx` + `src/hooks/useCCTData.ts`
-- O hook `useProcessosCCT` (react-query) hoje não aceita opções. Adicionar parâmetro opcional `{ enabled?: boolean } = {}` e repassar para `useQuery({ ..., enabled })`. Mesma alteração em `useProfiles` e `useExcecoes` para não fazer chamadas desnecessárias quando não-admin.
-- Em `CCTDashboard.tsx` chamar `useProcessosCCT({ enabled: isAdmin })`, `useProfiles({ enabled: isAdmin })`, `useExcecoes({ enabled: isAdmin })`. A variável `isAdmin` já existe no arquivo.
-- Quando `!isAdmin`, exibir o estado vazio na área de processos com a mesma mensagem. Métricas/contadores ficam zerados (já dependem de `processos`).
-
-### Observações
-- Sub-rotas (ex.: `/sea/tracking/notificacoes`, `/air/cct/excecoes`, `/air/cct/processo/:id`) **não** são alteradas — escopo restrito às 3 telas pedidas.
-- Não esconder itens de menu — apenas o carregamento de dados é gateado.
-- Nenhuma alteração de RLS / banco — gate é client-side, consistente com o restante do app (auth via MariaDB).
+- Recarregar `/sea/tracking`: cards passam a refletir as mesmas categorias mostradas no badge da coluna SITUAÇÃO (DEP, GIO, CLT, CRG, etc.) — DEP/CRG entram em "Em Trânsito", GOD/DLV em "Entregues", e MBLs com `is_eta_delayed`/`is_critico` em "Alerta"/"Crítico".
+- Clicar em cada card filtra a tabela corretamente.
+- Total MBLS continua igual.
