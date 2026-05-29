@@ -838,20 +838,21 @@ const ContainerTracking = () => {
     };
   }, [filteredMblListByCarrier]);
 
-  // Status categorization
-  const isEmTransito = (lastEvent: string | null): boolean => {
-    const status = getReportStatus(lastEvent);
+  // Status categorization (usa container_status como fonte primária, com fallback para last_event)
+  const isEmTransito = (m: MblTrackingData): boolean => {
+    const status = getReportStatus(m.container_status ?? m.last_event, m.container_status, m.tipo_processo);
     return ['CRG', 'DEP', 'TSP', 'ARR', 'DCH'].includes(status.code);
   };
-  const isEmAlerta = (lastEvent: string | null, isEtaDelayed?: number): boolean => {
+  const isEmAlerta = (m: MblTrackingData): boolean => {
     // Verificação via campo calculado do backend (ETA passou há mais de 3 dias)
-    if (isEtaDelayed === 1) return true;
-    if (!lastEvent) return false;
-    const upper = lastEvent.toUpperCase().replace(/[_\s-]/g, "");
+    if (m.is_eta_delayed === 1) return true;
+    const source = (m.container_status || m.last_event || "");
+    if (!source) return false;
+    const upper = source.toUpperCase().replace(/[_\s-]/g, "");
     return upper.includes("DELAYED") || upper.includes("DELAY") || upper.includes("CANCELLED") || upper.includes("CANCEL") || upper.includes("CUSTOMSHOLD") || upper.includes("MISSED");
   };
   const isEntregue = (m: MblTrackingData): boolean => {
-    const status = getReportStatus(m.last_event, m.container_status, m.tipo_processo);
+    const status = getReportStatus(m.container_status ?? m.last_event, m.container_status, m.tipo_processo);
     return ['GOD', 'DLV'].includes(status.code);
   };
 
@@ -2054,9 +2055,9 @@ const ContainerTracking = () => {
       const matchesCoordenador = filterCoordenador === "all" || (m.nome_analista || "-") === filterCoordenador;
       let matchesCardFilter = true;
       if (activeCardFilter === "transito") {
-        matchesCardFilter = isEmTransito(m.last_event) && !isEntregue(m) && !isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico);
+        matchesCardFilter = isEmTransito(m) && !isEntregue(m) && !isEmAlerta(m) && !isEmCritico(m.is_critico);
       } else if (activeCardFilter === "alerta") {
-        matchesCardFilter = isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico);
+        matchesCardFilter = isEmAlerta(m) && !isEmCritico(m.is_critico);
       } else if (activeCardFilter === "critico") {
         matchesCardFilter = isEmCritico(m.is_critico);
       } else if (activeCardFilter === "entregues") {
@@ -2094,8 +2095,8 @@ const ContainerTracking = () => {
   const stats = useMemo(() => {
     const total = filteredMblListByCarrier.length;
     const criticos = filteredMblListByCarrier.filter(m => isEmCritico(m.is_critico)).length;
-    const emTransito = filteredMblListByCarrier.filter(m => isEmTransito(m.last_event) && !isEntregue(m) && !isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
-    const emAlerta = filteredMblListByCarrier.filter(m => isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
+    const emTransito = filteredMblListByCarrier.filter(m => isEmTransito(m) && !isEntregue(m) && !isEmAlerta(m) && !isEmCritico(m.is_critico)).length;
+    const emAlerta = filteredMblListByCarrier.filter(m => isEmAlerta(m) && !isEmCritico(m.is_critico)).length;
     const entregues = filteredMblListByCarrier.filter(m => isEntregue(m)).length;
     return {
       total,
@@ -2744,7 +2745,7 @@ const ContainerTracking = () => {
                             <td className="px-3 py-3 text-center">
                               {(() => {
                           const critico = isEmCritico(mbl.is_critico);
-                          const emAtraso = isEmAlerta(mbl.last_event, mbl.is_eta_delayed);
+                          const emAtraso = isEmAlerta(mbl);
                           if (critico) {
                             return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-red-600/30 text-red-400 border border-red-500/50 animate-pulse">
                                       <Clock className="w-3 h-3" />
