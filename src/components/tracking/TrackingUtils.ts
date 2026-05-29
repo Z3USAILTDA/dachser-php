@@ -22,6 +22,7 @@ export const airlineTrackingLinks: Record<string, string> = {
   "147": "https://ebooking.champ.aero/trace/AT/trace.asp",
   "605": "https://cargo.skyairline.com/rastreo",
   "996": "https://uxtracking.com/tracking.asp?prefix=996&Serial=${awb}",
+  "999": "https://www.airchinacargo.com/cargo_en/gzcx/hkyd/list/index_pc.html?waybillPrefix=${pr}&waybillContent=${awb}",
    "139": "https://amcargo.aeromexico.com/seguimiento/resultado/${formattedAwb}",
    "172": "https://www.cargolux.com/track-and-Trace#numbers=${pr}-${awb}",
   "001": "https://www.aacargo.com/mobile/tracking-details.html?awb=${pr}${awb}",
