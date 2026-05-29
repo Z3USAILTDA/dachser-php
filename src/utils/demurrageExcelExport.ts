@@ -2,6 +2,7 @@ import * as XLSX from "xlsx-js-style";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { DemurrageContainer } from "@/hooks/useDemurrageData";
+import { calculateImportDemurrage, formatDateBR as fmtDateBR, resolveAta } from "@/utils/demurrageCalc";
 
 const COLORS = {
   header: { fgColor: { rgb: "FFC800" } }, // Dachser yellow
