@@ -73,12 +73,14 @@ serve(async (req) => {
   let client: Client | null = null;
   try {
     const body = await req.json().catch(() => ({}));
-    const vesselName = typeof body?.vesselName === 'string' ? body.vesselName : '';
-    if (!vesselName || vesselName.trim().length < 2) {
-      return new Response(JSON.stringify({ error: 'vesselName required (min 2 chars)' }), {
+    const shipperName = typeof body?.shipperName === 'string' ? body.shipperName
+      : (typeof body?.vesselName === 'string' ? body.vesselName : '');
+    if (!shipperName || shipperName.trim().length < 2) {
+      return new Response(JSON.stringify({ error: 'shipperName required (min 2 chars)' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    const vesselName = shipperName;
 
     const normalized = normalize(vesselName);
     client = await getClient();

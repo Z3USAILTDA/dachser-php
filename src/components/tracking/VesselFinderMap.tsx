@@ -3,18 +3,18 @@ import { Ship, ExternalLink, AlertCircle, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface VesselFinderMapProps {
-  vesselName?: string | null;
+  shipperName?: string | null;
   imo?: string | null;
   mmsi?: string | null;
   height?: number;
   showTrack?: boolean;
 }
 
-// Session-level cache to avoid duplicate invokes for the same vessel name
+// Session-level cache to avoid duplicate invokes for the same shipper/vessel name
 const resolvedImoCache = new Map<string, { imo?: string; mmsi?: string }>();
 
 const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
-  vesselName,
+  shipperName,
   imo,
   mmsi,
   height = 350,
@@ -26,10 +26,10 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
   const [resolvedMmsi, setResolvedMmsi] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
 
-  // Auto-resolve IMO from vesselName when none provided
+  // Auto-resolve IMO from shipperName when none provided
   useEffect(() => {
-    if (imo || mmsi || !vesselName) return;
-    const key = vesselName.trim().toUpperCase();
+    if (imo || mmsi || !shipperName) return;
+    const key = shipperName.trim().toUpperCase();
     if (!key || key.length < 2) return;
 
     const cached = resolvedImoCache.get(key);
@@ -41,7 +41,7 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
 
     let cancelled = false;
     setResolving(true);
-    supabase.functions.invoke('resolve-vessel-imo', { body: { vesselName } })
+    supabase.functions.invoke('resolve-vessel-imo', { body: { shipperName } })
       .then(({ data }) => {
         if (cancelled) return;
         const found = { imo: data?.imo, mmsi: data?.mmsi };
@@ -57,7 +57,7 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
       });
 
     return () => { cancelled = true; };
-  }, [vesselName, imo, mmsi]);
+  }, [shipperName, imo, mmsi]);
 
   const effectiveImo = imo || resolvedImo;
   const effectiveMmsi = mmsi || resolvedMmsi;
@@ -99,7 +99,7 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
           <Ship className="w-8 h-8 text-[#ffc800]/50" />
           <div className="text-center">
             <p className="text-sm font-medium text-[#f5f5f5]">
-              {vesselName || "Navio não identificado"}
+              {shipperName || "Navio não identificado"}
             </p>
             <p className="text-xs text-[#666] mt-1">
               IMO não disponível para rastreio em tempo real
@@ -107,15 +107,15 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
           </div>
         </div>
 
-        {vesselName && (
+        {shipperName && (
           <a
-            href={`https://www.vesselfinder.com/?imo=0&name=${encodeURIComponent(vesselName)}`}
+            href={`https://www.vesselfinder.com/?imo=0&name=${encodeURIComponent(shipperName)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-600/20 text-blue-400 text-sm hover:bg-blue-600/30 transition"
           >
             <ExternalLink className="w-4 h-4" />
-            Buscar "{vesselName}" no VesselFinder
+            Buscar "{shipperName}" no VesselFinder
           </a>
         )}
       </div>
@@ -139,7 +139,7 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-[rgba(0,0,0,.6)] z-10 gap-3">
           <AlertCircle className="w-8 h-8 text-red-400" />
           <p className="text-sm text-[#aaaaaa]">Erro ao carregar mapa</p>
-          {vesselName && (
+          {shipperName && (
             <a
               href={`https://www.vesselfinder.com/?imo=${effectiveImo || '0'}`}
               target="_blank"
@@ -161,7 +161,7 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
         style={{ border: 'none' }}
         onLoad={() => setIframeLoaded(true)}
         onError={() => setIframeError(true)}
-        title={`Rastreio do navio ${vesselName || effectiveImo || effectiveMmsi}`}
+        title={`Rastreio do navio ${shipperName || effectiveImo || effectiveMmsi}`}
         allow="fullscreen"
       />
 
@@ -170,7 +170,7 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
         <div className="flex items-center gap-2">
           <Ship className="w-4 h-4 text-[#ffc800]" />
           <div>
-            {vesselName && <span className="text-[#f5f5f5] font-medium">{vesselName}</span>}
+            {shipperName && <span className="text-[#f5f5f5] font-medium">{shipperName}</span>}
             {effectiveImo && <span className="text-[#aaaaaa] ml-2">IMO: {effectiveImo}</span>}
           </div>
         </div>
