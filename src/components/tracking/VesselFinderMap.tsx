@@ -171,7 +171,7 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
           <Ship className="w-4 h-4 text-[#ffc800]" />
           <div>
             {vesselName && <span className="text-[#f5f5f5] font-medium">{vesselName}</span>}
-            {imo && <span className="text-[#aaaaaa] ml-2">IMO: {imo}</span>}
+            {effectiveImo && <span className="text-[#aaaaaa] ml-2">IMO: {effectiveImo}</span>}
           </div>
         </div>
       </div>
