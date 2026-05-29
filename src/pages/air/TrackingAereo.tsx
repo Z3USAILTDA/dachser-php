@@ -538,9 +538,11 @@ const TrackingAereo = () => {
         last_event: lastEvent,
         status: statusCode,
         nome_analista: item.clerk || "",
-        origem: route.origin || item.origin || "",
-        destino: route.destination || item.destination || "",
-        conexao: route.conexao ?? item.conexao ?? "",
+        // Tracking Truth: prioriza valores autoritativos do backend (t_fato_aereo).
+        // applyRouteFix fica apenas como fallback para registros sem origin/destino no DB.
+        origem: item.origin || route.origin || "",
+        destino: item.destination || route.destination || "",
+        conexao: (item.conexao ?? route.conexao) ?? "",
         last_event_date: item.last_event_date || null,
         last_event_location: item.last_event_location || "",
         penultimate_location: item.penultimate_location || "",
