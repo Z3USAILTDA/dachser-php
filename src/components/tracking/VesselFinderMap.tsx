@@ -161,7 +161,7 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
         style={{ border: 'none' }}
         onLoad={() => setIframeLoaded(true)}
         onError={() => setIframeError(true)}
-        title={`Rastreio do navio ${vesselName || imo || mmsi}`}
+        title={`Rastreio do navio ${vesselName || effectiveImo || effectiveMmsi}`}
         allow="fullscreen"
       />
 
