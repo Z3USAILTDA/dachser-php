@@ -1302,25 +1302,10 @@ serve(async (req) => {
       let disc = discrepancyMap[routeKey] || { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
 
       // Suppress false-positive discrepancies for whitelisted AWBs
-      const SUPPRESSED_DISCREPANCY_AWBS = new Set<string>(['047-32916380']);
       if (SUPPRESSED_DISCREPANCY_AWBS.has(String(row.AWB || '').trim())) {
         disc = { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
       }
 
-      // Extract intermediate airports (conexões) from timeline
-      const stopWordsConn = new Set([
-        // Cargo status/event codes
-        'NIL','NIF','DIS','OFD','OFL','BUP','RDP','LAT','TKG','SCR','ECC',
-        'TFD','TRM','RFC','DMG','RET','AWB','PRE','DEP','ARR','RCF','RCS',
-        'MAN','NFD','DLV','POD','BKD','BKG','BKF','FOH','AWD','CCD','ASN',
-        'MOV','OFLD','FWB','DOC','AWR','TDE','LOF','TFS','MIS','BCBP','UNK',
-        'TRA','PRD','RCP','CAN','LRC','FSH','FSU',
-        // Common English words that appear in cargo descriptions and are not airport codes
-        'AND','THE','FOR','BUT','NOT','ALL','ANY','ARE','OUR','ONE','TWO',
-        'NEW','OLD','WAY','OUT','OFF','END','NOW','WHO','HOW','ITS','HIM',
-        'HER','HIS','OWN','GET','PUT','SET','LET','HAS','HAD','USE','ACT',
-        'AGE','AIR','FAR','YET','TOP','DAY','MAY','FLT','AGT','SHT',
-      ]);
 
       // Determine working origin/destination — fix origin=destination data error.
       // When t_fato_aereo stores origin = destination (e.g. both "GRU" for imports),
