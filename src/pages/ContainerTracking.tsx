@@ -2055,9 +2055,9 @@ const ContainerTracking = () => {
       const matchesCoordenador = filterCoordenador === "all" || (m.nome_analista || "-") === filterCoordenador;
       let matchesCardFilter = true;
       if (activeCardFilter === "transito") {
-        matchesCardFilter = isEmTransito(m.last_event) && !isEntregue(m) && !isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico);
+        matchesCardFilter = isEmTransito(m) && !isEntregue(m) && !isEmAlerta(m) && !isEmCritico(m.is_critico);
       } else if (activeCardFilter === "alerta") {
-        matchesCardFilter = isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico);
+        matchesCardFilter = isEmAlerta(m) && !isEmCritico(m.is_critico);
       } else if (activeCardFilter === "critico") {
         matchesCardFilter = isEmCritico(m.is_critico);
       } else if (activeCardFilter === "entregues") {
