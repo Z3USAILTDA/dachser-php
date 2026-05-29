@@ -157,7 +157,8 @@ export const useDraftData = () => {
       setStats(calculateStats(combined));
     } catch (err) {
       setError(err as Error);
-      toast.error('Erro ao carregar dados do MariaDB');
+      console.error('[useDraftData] Erro ao carregar dados do MariaDB:', err);
+
     } finally {
       setIsLoading(false);
     }
