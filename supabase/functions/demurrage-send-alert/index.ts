@@ -492,7 +492,7 @@ serve(async (req) => {
 
     const {
       container_id, container_number, recipient_emails,
-      client_name, shipment_master, expected_cost_usd, risk_score, days_remaining,
+      client_name, cnpj_cliente, shipment_master, expected_cost_usd, risk_score, days_remaining,
       test_mode, house_bl, partner_id, origin_port, destination_port,
       exchange_rate, total_usd, total_brl, containers, issue_date,
     } = body;
@@ -534,20 +534,32 @@ serve(async (req) => {
 
     console.log(`[Demurrage Alert] Max periods detected: ${maxPeriods}`);
 
-    const html = generateNotificationHtml({ testMode: test_mode, client_name, house_bl, shipment_master });
+    const html = generateNotificationHtml({
+      testMode: test_mode, client_name, cnpj_cliente, house_bl, shipment_master, containers,
+    });
     const testPrefix = test_mode ? '[TESTE] ' : '';
-    const subject = `${testPrefix}Notificação de sobreestadia BL ${house_bl || shipment_master || container_number || 'N/A'}`;
+
+    // Subject — priorizar Container (regra atualizada)
+    const ctrCount = (containers || []).length;
+    let subjectCore: string;
+    if (ctrCount > 1) {
+      subjectCore = `Demurrage - ${ctrCount} containers em acompanhamento`;
+    } else {
+      const ctrNum = containers?.[0]?.number || container_number || house_bl || shipment_master || 'N/A';
+      subjectCore = `Demurrage - Container ${ctrNum}`;
+    }
+    const subject = `${testPrefix}${subjectCore}`;
 
     // Generate XLSX attachment
     let attachments: Array<{ filename: string; content: string }> = [];
     try {
       const xlsxBase64 = generateDemonstrativoXlsx({
-        client_name, house_bl, partner_id, shipment_master,
+        client_name, cnpj_cliente, house_bl, partner_id, shipment_master,
         origin_port, destination_port, issue_date,
         exchange_rate, total_usd, total_brl, containers,
         containerPeriods, maxPeriods,
       });
-      const filename = `Demonstrativo_Demurrage_${(shipment_master || container_number || 'N_A').replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
+      const filename = `Demonstrativo_Demurrage_${(containers?.[0]?.number || container_number || shipment_master || 'N_A').replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
       attachments = [{ filename, content: xlsxBase64 }];
       console.log(`[Demurrage Alert] XLSX generated: ${filename} (${xlsxBase64.length} chars)`);
     } catch (xlsxErr) {
