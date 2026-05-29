@@ -1406,8 +1406,7 @@ serve(async (req) => {
           return null;
         })();
         if (electedEvt) {
-          const flightFields = ['Flight', 'flight', 'voo', 'Voo', 'flight_number', 'flightNumber', 'numero_voo'];
-          for (const field of flightFields) {
+          for (const field of FLIGHT_FIELDS) {
             const v = (electedEvt as any)[field];
             if (!v) continue;
             const s = String(v);
