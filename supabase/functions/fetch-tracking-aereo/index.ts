@@ -348,379 +348,366 @@ serve(async (req) => {
       console.warn("Could not load t_air_process_visibility (may not exist yet):", err);
     }
 
-    // Step 3d: Load discrepancy data via SQL (pieces divergence + DIS events)
-    let discrepancyMap: Record<string, { pieces_discrepancy: boolean; baseline_pieces: number | null; has_dis_event: boolean }> = {};
-
-    // Cache curto para reduzir CPU em chamadas concorrentes (polling da página)
-    if (discrepancyCache && Date.now() - discrepancyCache.at < DISCREPANCY_CACHE_TTL_MS) {
-      discrepancyMap = discrepancyCache.data;
-      console.log(`Reused discrepancy cache (${Object.keys(discrepancyMap).length} records, age=${Math.round((Date.now() - discrepancyCache.at) / 1000)}s)`);
-    } else try {
-      // Restringe o universo da query aos AWBs realmente em tela (reduz drasticamente o JSON_TABLE)
-      const activeAwbs = [...new Set(
+    // Step 3d: Discrepancy data (pieces divergence + DIS events + prefix 996).
+    // ALWAYS serve from cache (fresh or stale) to avoid blowing the 2s CPU budget.
+    // Refresh happens in background via EdgeRuntime.waitUntil below when stale/missing.
+    let discrepancyMap: Record<string, { pieces_discrepancy: boolean; baseline_pieces: number | null; has_dis_event: boolean }> =
+      discrepancyCache?.data ?? {};
+    const discCacheStale = !discrepancyCache || (Date.now() - discrepancyCache.at >= DISCREPANCY_CACHE_TTL_MS);
+    if (discrepancyCache) {
+      console.log(`[DISC] Using ${discCacheStale ? "stale" : "fresh"} cache (${Object.keys(discrepancyMap).length} records, age=${Math.round((Date.now() - discrepancyCache.at) / 1000)}s)`);
+    } else {
+      console.log("[DISC] Cold start — empty discrepancy this poll, will populate in background");
+    }
+    if (discCacheStale) {
+      // Snapshot of AWBs in this poll — narrows the JSON_TABLE universe dramatically.
+      const activeAwbsDisc = [...new Set(
         (rows || [])
           .map((r: any) => (r.AWB || "").toString().trim())
           .filter((a: string) => a.length > 0)
       )] as string[];
-      const awbInClause = activeAwbs.length > 0
-        ? `AND tda.awb_number IN (${activeAwbs.map(a => `'${a.replace(/'/g, "''")}'`).join(",")})`
-        : "AND 1=0";
-      const discrepancySql = `
-        WITH base_disc AS (
-          SELECT
-            tda.awb_number AS awb,
-            tda.hawb_number AS hawb,
-            tdaf.timeline_json
-          FROM dados_dachser.t_dados_aereo tda
-          INNER JOIN dados_dachser.t_fato_aereo tdaf
-            ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
-           AND JSON_VALID(tdaf.hawbs_json)
-           AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
-          WHERE (tda.master_insert >= '2026-03-20' OR tda.created_at >= '2026-03-20')
-            ${awbInClause}
-            AND tdaf.timeline_json IS NOT NULL
-            AND JSON_VALID(tdaf.timeline_json)
-        ),
-        eventos_disc AS (
-          SELECT
-            b.awb,
-            b.hawb,
-            jt.ordem,
-            jt.description,
-            CASE
-              -- Ignore booking/reservation events: pieces shown are flight capacity, not actual cargo
-              WHEN UPPER(COALESCE(jt.description, '')) REGEXP '(^|[^A-Z])(BOOKED|BOOKING)([^A-Z]|$)'
-                THEN NULL
-              WHEN UPPER(COALESCE(jt.description, '')) REGEXP 'OFFLOADED|OFLD'
-                   AND (
-                       UPPER(jt.description) REGEXP '(^|[^0-9])0[[:space:]]+PIECES?([^A-Z]|$)'
-                       OR UPPER(jt.description) REGEXP 'QTY:[[:space:]]*0([^0-9]|$)'
-                       OR UPPER(jt.description) REGEXP 'PIECES?:[[:space:]]*0([^0-9]|$)'
-                   )
-              THEN NULL
-              WHEN UPPER(jt.description) REGEXP 'QTY:[[:space:]]*[1-9][0-9]*'
-                THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), 'QTY:[[:space:]]*[1-9][0-9]*'), '[1-9][0-9]*') AS UNSIGNED)
-              WHEN UPPER(jt.description) REGEXP 'PIECES?:[[:space:]]*[1-9][0-9]*'
-                THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), 'PIECES?:[[:space:]]*[1-9][0-9]*'), '[1-9][0-9]*') AS UNSIGNED)
-              WHEN UPPER(jt.description) REGEXP '[1-9][0-9]*[[:space:]]+PIECE\\\\(S\\\\)'
-                THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), '[1-9][0-9]*[[:space:]]+PIECE\\\\(S\\\\)'), '[1-9][0-9]*') AS UNSIGNED)
-              WHEN UPPER(jt.description) REGEXP '[1-9][0-9]*[[:space:]]+PIECES?'
-                THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), '[1-9][0-9]*[[:space:]]+PIECES?'), '[1-9][0-9]*') AS UNSIGNED)
-              WHEN UPPER(jt.description) REGEXP '[1-9][0-9]*[[:space:]]*/[[:space:]]*[0-9]+([.,][0-9]+)?[[:space:]]*(KGS|KG|LBS|LB)'
-                THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), '[1-9][0-9]*[[:space:]]*/[[:space:]]*[0-9]+([.,][0-9]+)?[[:space:]]*(KGS|KG|LBS|LB)'), '[1-9][0-9]*') AS UNSIGNED)
-              ELSE NULL
-            END AS pieces_extraidas,
-            CASE
-              WHEN UPPER(COALESCE(jt.description, '')) REGEXP '(^|[^A-Z])(DISCREP|DIS)([^A-Z]|$)' THEN 1
-              ELSE 0
-            END AS is_dis_event
-          FROM base_disc b
-          JOIN JSON_TABLE(
-            b.timeline_json,
-            '$[*]' COLUMNS (
-              ordem FOR ORDINALITY,
-              description VARCHAR(1000) PATH '$.description'
-            )
-          ) jt
-        ),
-        baseline_pieces AS (
-          SELECT awb, hawb, pieces_extraidas AS baseline_pecas
-          FROM (
-            SELECT
-              e.*,
-              ROW_NUMBER() OVER (PARTITION BY e.awb, e.hawb ORDER BY e.ordem) AS rn
-            FROM eventos_disc e
-            WHERE e.pieces_extraidas IS NOT NULL
-              AND e.pieces_extraidas > 0
-          ) x
-          WHERE x.rn = 1
-        ),
-        ultimo_evento_absoluto AS (
-          SELECT
-            awb,
-            hawb,
-            is_dis_event AS ultimo_is_dis_event
-          FROM (
-            SELECT
-              e.*,
-              ROW_NUMBER() OVER (PARTITION BY e.awb, e.hawb ORDER BY e.ordem DESC) AS rn
-            FROM eventos_disc e
-          ) x
-          WHERE x.rn = 1
-        ),
-        eventos_validos_pecas AS (
-          SELECT
-            e.awb,
-            e.hawb,
-            e.ordem,
-            e.pieces_extraidas,
-            ROW_NUMBER() OVER (
-              PARTITION BY e.awb, e.hawb
-              ORDER BY e.ordem DESC
-            ) AS rn_desc,
-            SUM(e.pieces_extraidas) OVER (
-              PARTITION BY e.awb, e.hawb
-              ORDER BY e.ordem DESC
-              ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-            ) AS soma_pecas_desc
-          FROM eventos_disc e
-          WHERE e.pieces_extraidas IS NOT NULL
-            AND e.pieces_extraidas > 0
-        ),
-        ultimo_evento_pecas AS (
-          SELECT
-            awb,
-            hawb,
-            pieces_extraidas AS ultimo_evento_pecas
-          FROM eventos_validos_pecas
-          WHERE rn_desc = 1
-        ),
-        normalizado_por_soma_final AS (
-          SELECT
-            v.awb,
-            v.hawb,
-            MAX(
-              CASE
-                WHEN bp.baseline_pecas IS NOT NULL
-                 AND v.rn_desc >= 2
-                 AND v.soma_pecas_desc = bp.baseline_pecas
-                THEN 1
-                ELSE 0
-              END
-            ) AS normalizado_soma_final
-          FROM eventos_validos_pecas v
-          LEFT JOIN baseline_pieces bp
-            ON bp.awb = v.awb
-           AND bp.hawb = v.hawb
-          GROUP BY v.awb, v.hawb
-        ),
-        agregado_disc AS (
-          SELECT
-            ev.awb,
-            ev.hawb,
-            MIN(CASE WHEN ev.pieces_extraidas IS NOT NULL AND ev.pieces_extraidas > 0 THEN ev.pieces_extraidas END) AS min_pieces,
-            MAX(CASE WHEN ev.pieces_extraidas IS NOT NULL AND ev.pieces_extraidas > 0 THEN ev.pieces_extraidas END) AS max_pieces
-          FROM eventos_disc ev
-          GROUP BY ev.awb, ev.hawb
-        ),
-        final_classificacao AS (
-          SELECT
-            a.awb,
-            a.hawb,
-            bp.baseline_pecas,
-            up.ultimo_evento_pecas,
-            CASE
-              WHEN bp.baseline_pecas IS NOT NULL
-               AND a.min_pieces IS NOT NULL
-               AND a.max_pieces IS NOT NULL
-               AND a.min_pieces <> a.max_pieces
-               AND NOT (
-                 up.ultimo_evento_pecas IS NOT NULL
-                 AND up.ultimo_evento_pecas = bp.baseline_pecas
-               )
-               AND COALESCE(ns.normalizado_soma_final, 0) = 0
-              THEN 1
-              ELSE 0
-            END AS pieces_discrepancy,
-            CASE
-              WHEN ua.ultimo_is_dis_event = 1 THEN 1
-              ELSE 0
-            END AS has_dis_event,
-            CASE
-              WHEN ua.ultimo_is_dis_event = 1 THEN 'DIS_ULTIMO_EVENTO'
-              WHEN bp.baseline_pecas IS NOT NULL
-               AND a.min_pieces IS NOT NULL
-               AND a.max_pieces IS NOT NULL
-               AND a.min_pieces <> a.max_pieces
-               AND NOT (
-                 up.ultimo_evento_pecas IS NOT NULL
-                 AND up.ultimo_evento_pecas = bp.baseline_pecas
-               )
-               AND COALESCE(ns.normalizado_soma_final, 0) = 0
-              THEN 'DISCREPANCIA_REAL'
-              ELSE 'SEM_DISCREPANCIA'
-            END AS status_final
-          FROM agregado_disc a
-          LEFT JOIN baseline_pieces bp
-            ON bp.awb = a.awb
-           AND bp.hawb = a.hawb
-          LEFT JOIN ultimo_evento_pecas up
-            ON up.awb = a.awb
-           AND up.hawb = a.hawb
-          LEFT JOIN ultimo_evento_absoluto ua
-            ON ua.awb = a.awb
-           AND ua.hawb = a.hawb
-          LEFT JOIN normalizado_por_soma_final ns
-            ON ns.awb = a.awb
-           AND ns.hawb = a.hawb
-        )
-        SELECT
-          awb AS AWB,
-          hawb AS HAWB,
-          baseline_pecas AS BASELINE_PECAS,
-          ultimo_evento_pecas AS ULTIMO_EVENTO_PECAS,
-          pieces_discrepancy AS PIECES_DISCREPANCY,
-          has_dis_event AS HAS_DIS_EVENT,
-          status_final AS STATUS_FINAL
-        FROM final_classificacao
-        WHERE status_final IN ('DIS_ULTIMO_EVENTO', 'DISCREPANCIA_REAL')
-      `;
-      console.log("Executing discrepancy query...");
-      const discRows = await queryWithRetry(client, discrepancySql);
-      for (const dr of discRows || []) {
-        const key = `${dr.AWB || ""}|${dr.HAWB || ""}`;
-        discrepancyMap[key] = {
-          pieces_discrepancy: Number(dr.PIECES_DISCREPANCY) === 1,
-          baseline_pieces: dr.BASELINE_PECAS != null ? Number(dr.BASELINE_PECAS) : null,
-          has_dis_event: Number(dr.HAS_DIS_EVENT) === 1,
-        };
-      }
-      console.log(`Loaded ${Object.keys(discrepancyMap).length} discrepancy records (filtered to ${activeAwbs.length} active AWBs)`);
-      discrepancyCache = { at: Date.now(), data: discrepancyMap };
-    } catch (err) {
-      console.warn("Could not load discrepancy data:", err);
-      // Em caso de erro, usar cache antigo se existir (mesmo expirado), em vez de zerar
-      if (discrepancyCache) {
-        discrepancyMap = discrepancyCache.data;
-        console.warn(`Falling back to stale discrepancy cache (${Object.keys(discrepancyMap).length} records)`);
-      }
-    }
 
-    // Step 3d-bis: Discrepancy detection for prefix 996 (Air Europa via uxtracking)
-    // Reads t_fato_aereo.timeline_json (same source as Step 3d) but parses in JS to
-    // recognize uxtracking-specific patterns: "10/2757 KGS" and DIS keywords like
-    // DISCREPANCY/IRREGULAR/MISSING/SHORT SHIPPED/OVERAGE.
-    try {
-      const sql996 = `
-        SELECT tda.awb_number AS awb, tda.hawb_number AS hawb, tdaf.timeline_json
-        FROM dados_dachser.t_dados_aereo tda
-        INNER JOIN dados_dachser.t_fato_aereo tdaf
-          ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
-         AND JSON_VALID(tdaf.hawbs_json)
-         AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
-        WHERE tda.awb_number LIKE '996-%'
-          AND (tda.master_insert >= '2026-03-20' OR tda.created_at >= '2026-03-20')
-          AND tdaf.timeline_json IS NOT NULL
-          AND JSON_VALID(tdaf.timeline_json)
-      `;
-      console.log("[996-DISC] Executing 996 discrepancy query (t_fato_aereo)...");
-      const rows996 = await queryWithRetry(client, sql996);
-      console.log(`[996-DISC] Loaded ${rows996?.length || 0} candidate AWBs from t_fato_aereo`);
-
-      // Helper: extract pieces from a single description (uxtracking format)
-      const extractPieces996 = (text: string): number | null => {
-        if (!text) return null;
-        const upper = text.toUpperCase();
-        // Suppress when explicit zero pieces in offload
-        if (/(OFLD|OFFLOAD|OFFLOADED)/i.test(upper) && /(^|[^0-9])0\s+PIECES?([^A-Z]|$)/i.test(upper)) {
-          return null;
-        }
-        // Pattern: "Pcs/Wt: 10/27,3" (uxtracking real format, no unit suffix) — priority
-        const pcsWtMatch = upper.match(/PCS\s*\/\s*WT\s*[:=]?\s*(\d+)\s*\/\s*[\d.,]+/);
-        if (pcsWtMatch) {
-          const v = parseInt(pcsWtMatch[1], 10);
-          if (v > 0) return v;
-        }
-        // Pattern: "10/2757 KGS" or "10 / 2757K"
-        const slashMatch = upper.match(/(\d+)\s*\/\s*[\d.,]+\s*(KGS?|LBS?|K)\b/);
-        if (slashMatch) {
-          const v = parseInt(slashMatch[1], 10);
-          if (v > 0) return v;
-        }
-        // Pattern: "Pieces: 10" / "PIECES=10"
-        const piecesKv = upper.match(/PIECES?\s*[:=]\s*(\d+)/);
-        if (piecesKv) {
-          const v = parseInt(piecesKv[1], 10);
-          if (v > 0) return v;
-        }
-        // Pattern: "Qty: 10"
-        const qty = upper.match(/QTY\s*[:=]\s*(\d+)/);
-        if (qty) {
-          const v = parseInt(qty[1], 10);
-          if (v > 0) return v;
-        }
-        // Pattern: "10 PIECE(S)" / "10 PIECES"
-        const piecesSuffix = upper.match(/(\d+)\s+PIECE(?:S|\(S\))?\b/);
-        if (piecesSuffix) {
-          const v = parseInt(piecesSuffix[1], 10);
-          if (v > 0) return v;
-        }
-        return null;
-      };
-
-      const isDisEvent996 = (text: string): boolean => {
-        if (!text) return false;
-        if (/(^|[^A-Z])(DISCREP|DIS)([^A-Z]|$)/i.test(text)) return true;
-        if (/\b(DISCREPANCY|IRREGULAR|MISSING|SHORT\s+SHIPPED|OVERAGE)\b/i.test(text)) return true;
-        return false;
-      };
-
-      let added996 = 0;
-      for (const r of rows996 || []) {
-        const awb = r.awb || "";
-        const hawb = r.hawb || "";
-        if (!awb) continue;
-        let timeline: any[] = [];
+      const discBgTask = (async () => {
+        let bgClient: Client | null = null;
         try {
-          timeline = typeof r.timeline_json === "string" ? JSON.parse(r.timeline_json) : (r.timeline_json || []);
-        } catch {
-          continue;
-        }
-        if (!Array.isArray(timeline) || timeline.length === 0) continue;
+          bgClient = await new Client().connect({
+            hostname: Deno.env.get("MARIADB_AIR_HOST") || "",
+            port: parseInt(Deno.env.get("MARIADB_AIR_PORT") || "3306"),
+            username: Deno.env.get("MARIADB_AIR_USER") || "",
+            password: Deno.env.get("MARIADB_AIR_PASSWORD") || "",
+            db: Deno.env.get("MARIADB_AIR_DATABASE") || "dados_dachser",
+            timeout: 30000,
+          });
 
-        const piecesValues: number[] = [];
-        let hasDis = false;
-        for (const ev of timeline) {
-          // Accept both uxtracking format (Description/Status capitalized) and standard (description)
-          const desc = String(ev?.Description || ev?.description || ev?.Status || ev?.status || "");
-          // Native Pieces field
-          const nativePieces = ev?.Pieces ?? ev?.pieces ?? ev?.Quantity ?? ev?.quantity;
-          if (nativePieces != null && !isNaN(Number(nativePieces)) && Number(nativePieces) > 0) {
-            piecesValues.push(Number(nativePieces));
-          } else {
-            const p = extractPieces996(desc);
-            if (p != null) piecesValues.push(p);
+          const awbInClause = activeAwbsDisc.length > 0
+            ? `AND tda.awb_number IN (${activeAwbsDisc.map(a => `'${a.replace(/'/g, "''")}'`).join(",")})`
+            : "AND 1=0";
+
+          const discrepancySql = `
+            WITH base_disc AS (
+              SELECT
+                tda.awb_number AS awb,
+                tda.hawb_number AS hawb,
+                tdaf.timeline_json
+              FROM dados_dachser.t_dados_aereo tda
+              INNER JOIN dados_dachser.t_fato_aereo tdaf
+                ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
+               AND JSON_VALID(tdaf.hawbs_json)
+               AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
+              WHERE (tda.master_insert >= '2026-03-20' OR tda.created_at >= '2026-03-20')
+                ${awbInClause}
+                AND tdaf.timeline_json IS NOT NULL
+                AND JSON_VALID(tdaf.timeline_json)
+            ),
+            eventos_disc AS (
+              SELECT
+                b.awb,
+                b.hawb,
+                jt.ordem,
+                jt.description,
+                CASE
+                  -- Ignore booking/reservation events: pieces shown are flight capacity, not actual cargo
+                  WHEN UPPER(COALESCE(jt.description, '')) REGEXP '(^|[^A-Z])(BOOKED|BOOKING)([^A-Z]|$)'
+                    THEN NULL
+                  WHEN UPPER(COALESCE(jt.description, '')) REGEXP 'OFFLOADED|OFLD'
+                       AND (
+                           UPPER(jt.description) REGEXP '(^|[^0-9])0[[:space:]]+PIECES?([^A-Z]|$)'
+                           OR UPPER(jt.description) REGEXP 'QTY:[[:space:]]*0([^0-9]|$)'
+                           OR UPPER(jt.description) REGEXP 'PIECES?:[[:space:]]*0([^0-9]|$)'
+                       )
+                  THEN NULL
+                  WHEN UPPER(jt.description) REGEXP 'QTY:[[:space:]]*[1-9][0-9]*'
+                    THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), 'QTY:[[:space:]]*[1-9][0-9]*'), '[1-9][0-9]*') AS UNSIGNED)
+                  WHEN UPPER(jt.description) REGEXP 'PIECES?:[[:space:]]*[1-9][0-9]*'
+                    THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), 'PIECES?:[[:space:]]*[1-9][0-9]*'), '[1-9][0-9]*') AS UNSIGNED)
+                  WHEN UPPER(jt.description) REGEXP '[1-9][0-9]*[[:space:]]+PIECE\\\\(S\\\\)'
+                    THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), '[1-9][0-9]*[[:space:]]+PIECE\\\\(S\\\\)'), '[1-9][0-9]*') AS UNSIGNED)
+                  WHEN UPPER(jt.description) REGEXP '[1-9][0-9]*[[:space:]]+PIECES?'
+                    THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), '[1-9][0-9]*[[:space:]]+PIECES?'), '[1-9][0-9]*') AS UNSIGNED)
+                  WHEN UPPER(jt.description) REGEXP '[1-9][0-9]*[[:space:]]*/[[:space:]]*[0-9]+([.,][0-9]+)?[[:space:]]*(KGS|KG|LBS|LB)'
+                    THEN CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(UPPER(jt.description), '[1-9][0-9]*[[:space:]]*/[[:space:]]*[0-9]+([.,][0-9]+)?[[:space:]]*(KGS|KG|LBS|LB)'), '[1-9][0-9]*') AS UNSIGNED)
+                  ELSE NULL
+                END AS pieces_extraidas,
+                CASE
+                  WHEN UPPER(COALESCE(jt.description, '')) REGEXP '(^|[^A-Z])(DISCREP|DIS)([^A-Z]|$)' THEN 1
+                  ELSE 0
+                END AS is_dis_event
+              FROM base_disc b
+              JOIN JSON_TABLE(
+                b.timeline_json,
+                '$[*]' COLUMNS (
+                  ordem FOR ORDINALITY,
+                  description VARCHAR(1000) PATH '$.description'
+                )
+              ) jt
+            ),
+            baseline_pieces AS (
+              SELECT awb, hawb, pieces_extraidas AS baseline_pecas
+              FROM (
+                SELECT
+                  e.*,
+                  ROW_NUMBER() OVER (PARTITION BY e.awb, e.hawb ORDER BY e.ordem) AS rn
+                FROM eventos_disc e
+                WHERE e.pieces_extraidas IS NOT NULL
+                  AND e.pieces_extraidas > 0
+              ) x
+              WHERE x.rn = 1
+            ),
+            ultimo_evento_absoluto AS (
+              SELECT
+                awb,
+                hawb,
+                is_dis_event AS ultimo_is_dis_event
+              FROM (
+                SELECT
+                  e.*,
+                  ROW_NUMBER() OVER (PARTITION BY e.awb, e.hawb ORDER BY e.ordem DESC) AS rn
+                FROM eventos_disc e
+              ) x
+              WHERE x.rn = 1
+            ),
+            eventos_validos_pecas AS (
+              SELECT
+                e.awb,
+                e.hawb,
+                e.ordem,
+                e.pieces_extraidas,
+                ROW_NUMBER() OVER (
+                  PARTITION BY e.awb, e.hawb
+                  ORDER BY e.ordem DESC
+                ) AS rn_desc,
+                SUM(e.pieces_extraidas) OVER (
+                  PARTITION BY e.awb, e.hawb
+                  ORDER BY e.ordem DESC
+                  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                ) AS soma_pecas_desc
+              FROM eventos_disc e
+              WHERE e.pieces_extraidas IS NOT NULL
+                AND e.pieces_extraidas > 0
+            ),
+            ultimo_evento_pecas AS (
+              SELECT
+                awb,
+                hawb,
+                pieces_extraidas AS ultimo_evento_pecas
+              FROM eventos_validos_pecas
+              WHERE rn_desc = 1
+            ),
+            normalizado_por_soma_final AS (
+              SELECT
+                v.awb,
+                v.hawb,
+                MAX(
+                  CASE
+                    WHEN bp.baseline_pecas IS NOT NULL
+                     AND v.rn_desc >= 2
+                     AND v.soma_pecas_desc = bp.baseline_pecas
+                    THEN 1
+                    ELSE 0
+                  END
+                ) AS normalizado_soma_final
+              FROM eventos_validos_pecas v
+              LEFT JOIN baseline_pieces bp
+                ON bp.awb = v.awb
+               AND bp.hawb = v.hawb
+              GROUP BY v.awb, v.hawb
+            ),
+            agregado_disc AS (
+              SELECT
+                ev.awb,
+                ev.hawb,
+                MIN(CASE WHEN ev.pieces_extraidas IS NOT NULL AND ev.pieces_extraidas > 0 THEN ev.pieces_extraidas END) AS min_pieces,
+                MAX(CASE WHEN ev.pieces_extraidas IS NOT NULL AND ev.pieces_extraidas > 0 THEN ev.pieces_extraidas END) AS max_pieces
+              FROM eventos_disc ev
+              GROUP BY ev.awb, ev.hawb
+            ),
+            final_classificacao AS (
+              SELECT
+                a.awb,
+                a.hawb,
+                bp.baseline_pecas,
+                up.ultimo_evento_pecas,
+                CASE
+                  WHEN bp.baseline_pecas IS NOT NULL
+                   AND a.min_pieces IS NOT NULL
+                   AND a.max_pieces IS NOT NULL
+                   AND a.min_pieces <> a.max_pieces
+                   AND NOT (
+                     up.ultimo_evento_pecas IS NOT NULL
+                     AND up.ultimo_evento_pecas = bp.baseline_pecas
+                   )
+                   AND COALESCE(ns.normalizado_soma_final, 0) = 0
+                  THEN 1
+                  ELSE 0
+                END AS pieces_discrepancy,
+                CASE
+                  WHEN ua.ultimo_is_dis_event = 1 THEN 1
+                  ELSE 0
+                END AS has_dis_event,
+                CASE
+                  WHEN ua.ultimo_is_dis_event = 1 THEN 'DIS_ULTIMO_EVENTO'
+                  WHEN bp.baseline_pecas IS NOT NULL
+                   AND a.min_pieces IS NOT NULL
+                   AND a.max_pieces IS NOT NULL
+                   AND a.min_pieces <> a.max_pieces
+                   AND NOT (
+                     up.ultimo_evento_pecas IS NOT NULL
+                     AND up.ultimo_evento_pecas = bp.baseline_pecas
+                   )
+                   AND COALESCE(ns.normalizado_soma_final, 0) = 0
+                  THEN 'DISCREPANCIA_REAL'
+                  ELSE 'SEM_DISCREPANCIA'
+                END AS status_final
+              FROM agregado_disc a
+              LEFT JOIN baseline_pieces bp
+                ON bp.awb = a.awb
+               AND bp.hawb = a.hawb
+              LEFT JOIN ultimo_evento_pecas up
+                ON up.awb = a.awb
+               AND up.hawb = a.hawb
+              LEFT JOIN ultimo_evento_absoluto ua
+                ON ua.awb = a.awb
+               AND ua.hawb = a.hawb
+              LEFT JOIN normalizado_por_soma_final ns
+                ON ns.awb = a.awb
+               AND ns.hawb = a.hawb
+            )
+            SELECT
+              awb AS AWB,
+              hawb AS HAWB,
+              baseline_pecas AS BASELINE_PECAS,
+              ultimo_evento_pecas AS ULTIMO_EVENTO_PECAS,
+              pieces_discrepancy AS PIECES_DISCREPANCY,
+              has_dis_event AS HAS_DIS_EVENT,
+              status_final AS STATUS_FINAL
+            FROM final_classificacao
+            WHERE status_final IN ('DIS_ULTIMO_EVENTO', 'DISCREPANCIA_REAL')
+          `;
+
+          const sql996 = `
+            SELECT tda.awb_number AS awb, tda.hawb_number AS hawb, tdaf.timeline_json
+            FROM dados_dachser.t_dados_aereo tda
+            INNER JOIN dados_dachser.t_fato_aereo tdaf
+              ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
+             AND JSON_VALID(tdaf.hawbs_json)
+             AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
+            WHERE tda.awb_number LIKE '996-%'
+              AND (tda.master_insert >= '2026-03-20' OR tda.created_at >= '2026-03-20')
+              AND tdaf.timeline_json IS NOT NULL
+              AND JSON_VALID(tdaf.timeline_json)
+          `;
+
+          console.log("[DISC-BG] Executing discrepancy + 996 queries in parallel...");
+          const [discRows, rows996] = await Promise.all([
+            queryWithRetry(bgClient, discrepancySql).catch((e: any) => { console.warn("[DISC-BG] 3d failed:", e?.message); return []; }),
+            queryWithRetry(bgClient, sql996).catch((e: any) => { console.warn("[DISC-BG] 996 failed:", e?.message); return []; }),
+          ]);
+
+          const fresh: typeof discrepancyMap = {};
+          for (const dr of discRows || []) {
+            const key = `${dr.AWB || ""}|${dr.HAWB || ""}`;
+            fresh[key] = {
+              pieces_discrepancy: Number(dr.PIECES_DISCREPANCY) === 1,
+              baseline_pieces: dr.BASELINE_PECAS != null ? Number(dr.BASELINE_PECAS) : null,
+              has_dis_event: Number(dr.HAS_DIS_EVENT) === 1,
+            };
           }
-          if (isDisEvent996(desc)) hasDis = true;
-        }
 
-        if (piecesValues.length === 0 && !hasDis) continue;
-        const uniquePieces = [...new Set(piecesValues)];
-        const minP = uniquePieces.length > 0 ? Math.min(...uniquePieces) : null;
-        const maxP = uniquePieces.length > 0 ? Math.max(...uniquePieces) : null;
-        const piecesDisc = minP != null && maxP != null && minP !== maxP;
-
-        if (!piecesDisc && !hasDis) continue;
-
-        const key = `${awb}|${hawb}`;
-        const existing = discrepancyMap[key];
-        if (!existing) {
-          discrepancyMap[key] = {
-            pieces_discrepancy: piecesDisc,
-            baseline_pieces: piecesDisc ? minP : null,
-            has_dis_event: hasDis,
+          // Helpers: extract pieces / detect DIS for uxtracking-format (prefix 996)
+          const extractPieces996 = (text: string): number | null => {
+            if (!text) return null;
+            const upper = text.toUpperCase();
+            if (/(OFLD|OFFLOAD|OFFLOADED)/i.test(upper) && /(^|[^0-9])0\s+PIECES?([^A-Z]|$)/i.test(upper)) {
+              return null;
+            }
+            const pcsWtMatch = upper.match(/PCS\s*\/\s*WT\s*[:=]?\s*(\d+)\s*\/\s*[\d.,]+/);
+            if (pcsWtMatch) { const v = parseInt(pcsWtMatch[1], 10); if (v > 0) return v; }
+            const slashMatch = upper.match(/(\d+)\s*\/\s*[\d.,]+\s*(KGS?|LBS?|K)\b/);
+            if (slashMatch) { const v = parseInt(slashMatch[1], 10); if (v > 0) return v; }
+            const piecesKv = upper.match(/PIECES?\s*[:=]\s*(\d+)/);
+            if (piecesKv) { const v = parseInt(piecesKv[1], 10); if (v > 0) return v; }
+            const qty = upper.match(/QTY\s*[:=]\s*(\d+)/);
+            if (qty) { const v = parseInt(qty[1], 10); if (v > 0) return v; }
+            const piecesSuffix = upper.match(/(\d+)\s+PIECE(?:S|\(S\))?\b/);
+            if (piecesSuffix) { const v = parseInt(piecesSuffix[1], 10); if (v > 0) return v; }
+            return null;
           };
-          added996++;
-        } else {
-          // Merge: enrich existing entry with 996-specific findings (don't downgrade)
-          const merged = {
-            pieces_discrepancy: existing.pieces_discrepancy || piecesDisc,
-            baseline_pieces: existing.baseline_pieces ?? (piecesDisc ? minP : null),
-            has_dis_event: existing.has_dis_event || hasDis,
+          const isDisEvent996 = (text: string): boolean => {
+            if (!text) return false;
+            if (/(^|[^A-Z])(DISCREP|DIS)([^A-Z]|$)/i.test(text)) return true;
+            if (/\b(DISCREPANCY|IRREGULAR|MISSING|SHORT\s+SHIPPED|OVERAGE)\b/i.test(text)) return true;
+            return false;
           };
-          if (
-            merged.pieces_discrepancy !== existing.pieces_discrepancy ||
-            merged.has_dis_event !== existing.has_dis_event ||
-            merged.baseline_pieces !== existing.baseline_pieces
-          ) {
-            discrepancyMap[key] = merged;
-            added996++;
+
+          let added996 = 0;
+          for (const r of rows996 || []) {
+            const awb = r.awb || "";
+            const hawb = r.hawb || "";
+            if (!awb) continue;
+            let timeline: any[] = [];
+            try {
+              timeline = typeof r.timeline_json === "string" ? JSON.parse(r.timeline_json) : (r.timeline_json || []);
+            } catch { continue; }
+            if (!Array.isArray(timeline) || timeline.length === 0) continue;
+
+            const piecesValues: number[] = [];
+            let hasDis = false;
+            for (const ev of timeline) {
+              const desc = String(ev?.Description || ev?.description || ev?.Status || ev?.status || "");
+              const nativePieces = ev?.Pieces ?? ev?.pieces ?? ev?.Quantity ?? ev?.quantity;
+              if (nativePieces != null && !isNaN(Number(nativePieces)) && Number(nativePieces) > 0) {
+                piecesValues.push(Number(nativePieces));
+              } else {
+                const p = extractPieces996(desc);
+                if (p != null) piecesValues.push(p);
+              }
+              if (isDisEvent996(desc)) hasDis = true;
+            }
+            if (piecesValues.length === 0 && !hasDis) continue;
+            const uniquePieces = [...new Set(piecesValues)];
+            const minP = uniquePieces.length > 0 ? Math.min(...uniquePieces) : null;
+            const maxP = uniquePieces.length > 0 ? Math.max(...uniquePieces) : null;
+            const piecesDisc = minP != null && maxP != null && minP !== maxP;
+            if (!piecesDisc && !hasDis) continue;
+
+            const key = `${awb}|${hawb}`;
+            const existing = fresh[key];
+            if (!existing) {
+              fresh[key] = {
+                pieces_discrepancy: piecesDisc,
+                baseline_pieces: piecesDisc ? minP : null,
+                has_dis_event: hasDis,
+              };
+              added996++;
+            } else {
+              const merged = {
+                pieces_discrepancy: existing.pieces_discrepancy || piecesDisc,
+                baseline_pieces: existing.baseline_pieces ?? (piecesDisc ? minP : null),
+                has_dis_event: existing.has_dis_event || hasDis,
+              };
+              if (
+                merged.pieces_discrepancy !== existing.pieces_discrepancy ||
+                merged.has_dis_event !== existing.has_dis_event ||
+                merged.baseline_pieces !== existing.baseline_pieces
+              ) {
+                fresh[key] = merged;
+                added996++;
+              }
+            }
           }
+          discrepancyCache = { at: Date.now(), data: fresh };
+          console.log(`[DISC-BG] Cache refreshed: ${Object.keys(fresh).length} records (+${added996} enriched from prefix 996)`);
+        } catch (err) {
+          console.warn("[DISC-BG] Failed:", err);
+        } finally {
+          if (bgClient) { try { await bgClient.close(); } catch {} }
         }
+      })();
+      // @ts-ignore - EdgeRuntime is provided by Supabase runtime
+      if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(discBgTask);
       }
-      console.log(`[996-DISC] Added/enriched ${added996} discrepancy records for prefix 996`);
-    } catch (err) {
-      console.warn("[996-DISC] Could not load 996 discrepancy data:", err);
     }
 
     // Step 3e: Load authoritative ROUTE map (origin/destination/conexoes) using
