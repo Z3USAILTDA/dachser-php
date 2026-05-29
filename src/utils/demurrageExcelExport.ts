@@ -138,7 +138,14 @@ const styleSheet = (ws: XLSX.WorkSheet, containers: DemurrageContainer[]) => {
     }
   }
 
-  ws["!cols"] = DATA_COL_WIDTHS;
+  // 22 colunas na nova ordem
+  ws["!cols"] = [
+    { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 14 },
+    { wch: 30 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 18 },
+    { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 10 }, { wch: 12 },
+    { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 14 }, { wch: 14 },
+    { wch: 12 }, { wch: 14 },
+  ];
   const rowHeights: { hpt: number }[] = [{ hpt: 25 }];
   for (let row = 1; row <= range.e.r; row++) rowHeights[row] = { hpt: 18 };
   ws["!rows"] = rowHeights;
