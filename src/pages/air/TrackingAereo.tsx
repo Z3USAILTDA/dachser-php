@@ -33,7 +33,7 @@ import type { User, Session } from "@supabase/supabase-js";
 import DashboardCards, { CardFilterType } from "@/components/DashboardCards";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
-import { EmailClienteRegrasDialog } from "@/components/air/EmailClienteRegrasDialog";
+
 import { CadastroNovaModal } from "@/components/air/CadastroNovaModal";
 import { AwbTimelineModalScraper } from "@/components/air/AwbTimelineModalScraper";
 import { formatDateTimeBR, parseDBDate } from "@/utils/timezone";
