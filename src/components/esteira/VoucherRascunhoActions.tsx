@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
 import { useNavigate } from "react-router-dom";
 import { Voucher, TipoAnexo } from "@/types/voucher";
@@ -60,6 +60,12 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
   // Estado para vencimento editável no envio
   const initialVencimento = voucher.vencimento instanceof Date ? voucher.vencimento : undefined;
   const [vencimentoEnvio, setVencimentoEnvio] = useState<Date | undefined>(initialVencimento || undefined);
+
+  // Sincroniza vencimentoEnvio quando o voucher é recarregado (ex.: após edição de vencimento em outro form)
+  useEffect(() => {
+    const v = voucher.vencimento instanceof Date ? voucher.vencimento : undefined;
+    setVencimentoEnvio(v);
+  }, [voucher.vencimento?.getTime()]);
 
   // Verificar se vencimento está expirado
   const today = new Date();
