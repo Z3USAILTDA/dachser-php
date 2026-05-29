@@ -365,7 +365,8 @@ serve(async (req) => {
     } else {
       console.log("[DISC] Cold start — empty discrepancy this poll, will populate in background");
     }
-    if (discCacheStale) {
+    const allowBackgroundRefresh = false;
+    if (discCacheStale && allowBackgroundRefresh) {
       // Snapshot of AWBs in this poll — narrows the JSON_TABLE universe dramatically.
       const activeAwbsDisc = [...new Set(
         (rows || [])
@@ -733,7 +734,7 @@ serve(async (req) => {
     } else {
       console.log("[ROUTE] Cold start — routeMap empty this poll, will populate in background");
     }
-    if (routeCacheStale) try {
+    if (routeCacheStale && allowBackgroundRefresh) try {
       const activeAwbsRoute = [...new Set(
         (rows || [])
           .map((r: any) => (r.AWB || "").toString().trim())
@@ -1470,10 +1471,8 @@ serve(async (req) => {
       data.push(normalized);
     }
 
-    // Send failure email async
-    if (failed.length > 0) {
-      sendFailureEmail(failed).catch((e) => console.error("sendFailureEmail error:", e));
-    }
+    // Alerting is handled by air-tracking-failed-alert. Do not send email from
+    // the dashboard fallback to keep this function inside Edge CPU limits.
 
     // Filter out hidden AWBs (air_hidden_awbs table in Supabase)
     let filteredData = data;
