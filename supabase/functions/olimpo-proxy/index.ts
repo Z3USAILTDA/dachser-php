@@ -2271,7 +2271,9 @@ serve(async (req) => {
                 ELSE 0
               END as has_free_time,
               MAX(ts.origem) as origem_raw,
-              MAX(ts.destino) as destino_raw
+              MAX(ts.destino) as destino_raw,
+              MAX(ts.latitude) as latitude,
+              MAX(ts.longitude) as longitude
             FROM dados_dachser.t_sea_tracking_current ts
             LEFT JOIN master_data md ON md.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN master_dados_new mdn ON mdn.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
