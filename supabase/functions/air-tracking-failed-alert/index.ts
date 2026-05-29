@@ -33,41 +33,87 @@ async function getConnection() {
   });
 }
 
-async function fetchTrackingData(): Promise<any[]> {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-  const maxRetries = 2;
+const VALID_STATUS_CODES = new Set([
+  "ARR", "ARR - DESTINO", "ARR - CONEXAO", "ARR - CONEXÃO", "RCF", "NFD", "AWD", "AWR", "CCD", "DLV", "POD",
+  "BKD", "BKG", "RCS", "MAN", "PRE", "DEP", "FOH", "FWB", "RDP", "RFC", "RCT", "TRM", "TFD", "DIS", "OFLD",
+  "NIL", "NIF", "UNK", "DOC", "TRA",
+]);
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 55000);
-
-      const resp = await fetch(`${supabaseUrl}/functions/v1/fetch-tracking-aereo`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${anonKey}`,
-        },
-        body: JSON.stringify({}),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(`fetch-tracking-aereo returned ${resp.status}: ${text}`);
-      }
-
-      const data = await resp.json();
-      return data?.data || data || [];
-    } catch (err: any) {
-      console.warn(`[air-tracking-failed-alert] fetch attempt ${attempt}/${maxRetries} failed:`, err.message);
-      if (attempt === maxRetries) throw err;
-      await new Promise((r) => setTimeout(r, 2000));
-    }
+function resolveLightweightStatus(row: any): { status: string | null; info: string | null } {
+  const nativeCandidates = [row.last_status_code, row.code0_native, row.code1_native, row.code2_native, row.code3_native, row.code4_native, row.code5_native];
+  for (const candidate of nativeCandidates) {
+    const code = String(candidate || "").trim().toUpperCase();
+    if (VALID_STATUS_CODES.has(code)) return { status: code, info: null };
   }
-  return [];
+
+  const descriptions = [row.desc0, row.desc1, row.desc2, row.desc3, row.desc4, row.desc5]
+    .map((d) => String(d || "").trim())
+    .filter(Boolean);
+
+  for (const desc of descriptions) {
+    const upper = desc.toUpperCase();
+    if (upper.includes("OFFLOADED")) return { status: "OFLD", info: null };
+    if (upper.includes("READY FOR PICK-UP") || upper.includes("AGENT NOTIFIED") || upper.includes("NOTIFIED FOR DELIVERY")) return { status: "NFD", info: null };
+    if (upper.includes("DOCUMENTS DELIVERED")) return { status: "AWD", info: null };
+    if (upper.includes("RECEIVED FROM FLIGHT")) return { status: "RCF", info: null };
+    if (upper.includes("RECEIVED FROM CARRIER")) return { status: "RCT", info: null };
+    if (upper.includes("RECEIVED FROM SHIPPER") || upper.includes("READY FOR CARRIAGE")) return { status: "RCS", info: null };
+    if (upper.includes("FREIGHT ON HAND")) return { status: "FOH", info: null };
+    if (upper.includes("MANIFESTED")) return { status: "MAN", info: null };
+    if (upper.includes("DEPARTED")) return { status: "DEP", info: null };
+    if (upper.includes("ARRIVED")) return { status: "ARR", info: null };
+    if (upper.includes("DELIVERED")) return { status: "DLV", info: null };
+  }
+
+  return { status: null, info: descriptions[0] ? `Descrição não mapeada: ${descriptions[0].slice(0, 160)}` : null };
+}
+
+async function fetchFailedAwbs(conn: any, database: string): Promise<FailedAWB[]> {
+  const [rows] = await conn.execute(`
+    SELECT
+      tda.awb_number AS awb,
+      tda.hawb_number AS hawb,
+      tda.consignee_nome AS destinatario,
+      tdaf.origin AS origem,
+      tdaf.destination AS destino,
+      tdaf.last_status_code,
+      JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[0].description')) AS desc0,
+      JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[1].description')) AS desc1,
+      JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[2].description')) AS desc2,
+      JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[3].description')) AS desc3,
+      JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[4].description')) AS desc4,
+      JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[5].description')) AS desc5,
+      JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[0].status_code')) AS code0_native,
+      JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[1].status_code')) AS code1_native,
+      JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[2].status_code')) AS code2_native,
+      JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[3].status_code')) AS code3_native,
+      JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[4].status_code')) AS code4_native,
+      JSON_UNQUOTE(JSON_EXTRACT(tdaf.timeline_json, '$[5].status_code')) AS code5_native,
+      DATE_FORMAT(COALESCE(tda.master_insert, tda.created_at), '%Y-%m-%dT%H:%i:%s') AS ultima_atualizacao
+    FROM ${database}.t_dados_aereo tda
+    LEFT JOIN ${database}.t_fato_aereo tdaf
+      ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
+     AND JSON_VALID(tdaf.hawbs_json)
+     AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
+    WHERE (tda.master_insert >= '2026-03-20' OR tda.created_at >= '2026-03-20')
+  `) as any[];
+
+  return (rows || [])
+    .map((row: any) => {
+      const resolved = resolveLightweightStatus(row);
+      return {
+        awb: row.awb || "?",
+        hawb: row.hawb || null,
+        destinatario: row.destinatario || null,
+        origem: row.origem || null,
+        destino: row.destino || null,
+        ultimo_status: resolved.status,
+        status_info: resolved.info,
+        ultima_atualizacao: row.ultima_atualizacao || null,
+        failure_reason: resolved.status ? "" : classifyFailureReason({ ultimo_status: resolved.status, status_info: resolved.info }),
+      } as FailedAWB;
+    })
+    .filter((item: FailedAWB) => !item.ultimo_status);
 }
 
 function classifyFailureReason(item: any): string {
