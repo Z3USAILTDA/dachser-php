@@ -456,6 +456,8 @@ interface MblTrackingData {
   cliente: string | null; // Cliente do t_master_dados
   origem_code: string | null; // UN/LOCODE da origem
   destino_code: string | null; // UN/LOCODE do destino
+  latitude: string | null; // Posição atual do navio (último evento)
+  longitude: string | null;
 }
 
 // Container detail interface (expanded view)
@@ -2821,6 +2823,11 @@ const ContainerTracking = () => {
                                       <VesselFinderMap
                                         shipperName={mbl.navio}
                                         imo={mbl.vessel_imo}
+                                        latitude={mbl.latitude}
+                                        longitude={mbl.longitude}
+                                        lastEvent={mbl.last_event}
+                                        eta={mbl.eta}
+                                        destino={mbl.destino}
                                         height={320}
                                       />
                                     )}
