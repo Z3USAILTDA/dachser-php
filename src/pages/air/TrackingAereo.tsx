@@ -654,12 +654,9 @@ const TrackingAereo = () => {
   //   }
   // }, []);
 
-  // Admin gate: somente admins carregam os processos
-  const storedUserRaw = typeof window !== "undefined"
-    ? (localStorage.getItem("user") || localStorage.getItem("dachser_user"))
-    : null;
-  const storedUserParsed = storedUserRaw ? (() => { try { return JSON.parse(storedUserRaw); } catch { return null; } })() : null;
-  const isAdminUser = !!storedUserParsed && (storedUserParsed.is_admin === 1 || storedUserParsed.is_admin === "1" || storedUserParsed.is_admin === true);
+  // Acesso liberado a todos os usuários para carregamento dos processos desta tela
+  const isAdminUser = true;
+
 
   const isVisible = usePageVisibility();
   useEffect(() => {
