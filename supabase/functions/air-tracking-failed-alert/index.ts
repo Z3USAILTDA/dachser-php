@@ -210,37 +210,15 @@ Deno.serve(async (req) => {
     try { body = await req.json(); } catch {}
     const isTest = body.test === true;
 
-    // 1. Fetch current tracking data
-    console.log("[air-tracking-failed-alert] Fetching tracking data...");
-    const allItems = await fetchTrackingData();
-
-    // 2. Filter tracking_failed items
-    const failedItems: FailedAWB[] = allItems
-      .filter((item: any) => item.tracking_failed === true)
-      .map((item: any) => ({
-        awb: item.awb || "?",
-        hawb: item.hawb || null,
-        destinatario: item['destinatário'] || item.destinatario || null,
-        origem: item.origem || null,
-        destino: item.destino || null,
-        ultimo_status: item['último_status'] || item.ultimo_status || null,
-        status_info: item.status_info || null,
-        ultima_atualizacao: item['última atualização'] || item.ultima_atualizacao || null,
-        failure_reason: classifyFailureReason(item),
-      }));
-
-    console.log(`[air-tracking-failed-alert] Found ${failedItems.length} failed AWBs, test=${isTest}`);
-
-    if (failedItems.length === 0 && !isTest) {
-      return new Response(
-        JSON.stringify({ failedCount: 0, newAlerts: 0, resolved: 0, action: "healthy" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // 3. Connect to MariaDB for deduplication
+    // 1. Connect to MariaDB and compute alert scope directly.
+    // Do not invoke fetch-tracking-aereo here: that endpoint prepares the full dashboard
+    // payload and can exceed Edge CPU limits when called by scheduled alerts.
     conn = await getConnection();
     const database = (Deno.env.get("MARIADB_AIR_DATABASE") || Deno.env.get("MARIADB_OPS_DATABASE")) || "dados_dachser";
+
+    console.log("[air-tracking-failed-alert] Fetching failed AWBs directly from MariaDB...");
+    const failedItems = await fetchFailedAwbs(conn, database);
+    console.log(`[air-tracking-failed-alert] Found ${failedItems.length} failed AWBs, test=${isTest}`);
 
     await conn.execute(`
       CREATE TABLE IF NOT EXISTS ${database}.t_air_tracking_failed_alerts (
@@ -255,7 +233,29 @@ Deno.serve(async (req) => {
       )
     `);
 
-    // 4. Resolve alerts for AWBs no longer failed
+    if (failedItems.length === 0 && !isTest) {
+      const [openAlerts] = await conn.execute(`
+        SELECT id FROM ${database}.t_air_tracking_failed_alerts
+        WHERE resolved = FALSE
+      `) as any[];
+
+      const ids = (openAlerts || []).map((a: any) => a.id);
+      if (ids.length > 0) {
+        await conn.execute(
+          `UPDATE ${database}.t_air_tracking_failed_alerts SET resolved = TRUE, resolved_at = NOW() WHERE id IN (${ids.map(() => "?").join(",")})`,
+          ids
+        );
+      }
+
+      await conn.end();
+      conn = null;
+      return new Response(
+        JSON.stringify({ failedCount: 0, newAlerts: 0, resolved: ids.length, action: "healthy" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // 2. Resolve alerts for AWBs no longer failed
     const [openAlerts] = await conn.execute(`
       SELECT id, awb FROM ${database}.t_air_tracking_failed_alerts
       WHERE resolved = FALSE
@@ -273,7 +273,7 @@ Deno.serve(async (req) => {
       console.log(`[air-tracking-failed-alert] Resolved ${toResolve.length} alerts`);
     }
 
-    // 5. Filter out already-alerted AWBs
+    // 3. Filter out already-alerted AWBs
     const openAwbs = new Set(
       (openAlerts || [])
         .filter((a: any) => failedAwbSet.has(a.awb))
@@ -282,7 +282,7 @@ Deno.serve(async (req) => {
 
     const newItems = failedItems.filter((f) => !openAwbs.has(f.awb));
 
-    // 6. Send email
+    // 4. Send email
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     if (!resendApiKey) {
       await conn.end();
