@@ -1305,8 +1305,6 @@ const TrackingAereo = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Regras de Notificação */}
-      <EmailClienteRegrasDialog open={regrasDialogOpen} onOpenChange={setRegrasDialogOpen} />
 
       {/* Timeline Modal (Scraper version) */}
       <AwbTimelineModalScraper
