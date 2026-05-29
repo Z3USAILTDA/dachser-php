@@ -1159,6 +1159,55 @@ serve(async (req) => {
     const data: any[] = [];
     const failed: any[] = [];
 
+    // Hoisted constants/helpers — previously re-created per row (1.6k+ iterations).
+    const FINAL_STATUSES = new Set(["DLV", "POD"]);
+    const SUPPRESSED_DISCREPANCY_AWBS = new Set<string>(['047-32916380']);
+    const stopWordsConn = new Set([
+      'NIL','NIF','DIS','OFD','OFL','BUP','RDP','LAT','TKG','SCR','ECC',
+      'TFD','TRM','RFC','DMG','RET','AWB','PRE','DEP','ARR','RCF','RCS',
+      'MAN','NFD','DLV','POD','BKD','BKG','BKF','FOH','AWD','CCD','ASN',
+      'MOV','OFLD','FWB','DOC','AWR','TDE','LOF','TFS','MIS','BCBP','UNK',
+      'TRA','PRD','RCP','CAN','LRC','FSH','FSU',
+      'AND','THE','FOR','BUT','NOT','ALL','ANY','ARE','OUR','ONE','TWO',
+      'NEW','OLD','WAY','OUT','OFF','END','NOW','WHO','HOW','ITS','HIM',
+      'HER','HIS','OWN','GET','PUT','SET','LET','HAS','HAD','USE','ACT',
+      'AGE','AIR','FAR','YET','TOP','DAY','MAY','FLT','AGT','SHT',
+    ]);
+    const RE_GROUND_DASH_T = /\b[A-Z]{2,3}\s?\d{2,5}-T\b/;
+    const RE_GROUND_XD = /\b[A-Z]{2,3}\s?\d{2,5}\s*X\s*\/\s*D\b/;
+    const normalizeGroundCandidate = (val: string): string => (
+      (val || "")
+        .toUpperCase()
+        .replace(/\\\//g, '/')
+        .trim()
+        .replace(/[,;]\s*$/, '')
+        .replace(/\s+/g, ' ')
+    );
+    const hasGroundFlightPattern = (val: string): boolean => {
+      const clean = normalizeGroundCandidate(val);
+      if (!clean) return false;
+      if (RE_GROUND_DASH_T.test(clean)) return true;
+      if (RE_GROUND_XD.test(clean)) return true;
+      return false;
+    };
+    const isGroundFlight = (val: string): boolean => hasGroundFlightPattern(val);
+    const extractFlightsFromText = (text: string): string[] => {
+      if (!text) return [];
+      const flights: string[] = [];
+      let m: RegExpExecArray | null;
+      const flightPattern = /Flight\s+([A-Z]{2,3}[\s-]?\d{2,5}(?:-T|\s*X\s*\/\s*D)?)/g;
+      while ((m = flightPattern.exec(text)) !== null) flights.push(m[1]);
+      const dashTPattern = /\b([A-Z]{2,3}\s?\d{2,5}-T)\b/g;
+      while ((m = dashTPattern.exec(text)) !== null) flights.push(m[1]);
+      const slashXDPattern = /\b([A-Z]{2,3}[\s-]?\d{2,5}\s*X\s*\/\s*D)\b/g;
+      while ((m = slashXDPattern.exec(text)) !== null) flights.push(m[1]);
+      return flights;
+    };
+    const FLIGHT_FIELDS = ['Flight', 'flight', 'voo', 'Voo', 'flight_number', 'flightNumber', 'numero_voo'];
+    const TEXT_FIELDS = ['status', 'Status', 'Description', 'description', 'details', 'title', 'event_description', 'evento', 'descricao', 'remarks'];
+
+
+
     for (const row of rows || []) {
       let timeline: any[] = [];
       try {
