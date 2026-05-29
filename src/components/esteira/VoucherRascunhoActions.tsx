@@ -387,11 +387,14 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${hasBoleto ? 'bg-green-500/20 text-green-500' : 'bg-muted text-muted-foreground'}`}>
-              {hasBoleto ? '✓' : '○'}
+            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${hasBoleto ? 'bg-green-500/20 text-green-500' : boletoRequired ? 'bg-muted text-muted-foreground' : 'bg-muted/50 text-muted-foreground'}`}>
+              {hasBoleto ? '✓' : boletoRequired ? '○' : '—'}
             </div>
             <span className={hasBoleto ? 'text-foreground' : 'text-muted-foreground'}>
               Boleto / Instruções de Pagamento
+              {!boletoRequired && (
+                <span className="ml-2 text-xs italic">(opcional — forma de pagamento {voucher.formaPagamento || "não é boleto"})</span>
+              )}
             </span>
           </div>
         </CardContent>
