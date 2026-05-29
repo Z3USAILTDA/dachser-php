@@ -203,12 +203,19 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // DISABLED: envio de email "AWBs com Falha no Rastreio" desativado a pedido do usuário.
+  return new Response(
+    JSON.stringify({ disabled: true, action: "skipped", reason: "alert disabled by user" }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+
   let conn: any = null;
 
   try {
     let body: any = {};
     try { body = await req.json(); } catch {}
     const isTest = body.test === true;
+
 
     // 1. Connect to MariaDB and compute alert scope directly.
     // Do not invoke fetch-tracking-aereo here: that endpoint prepares the full dashboard
