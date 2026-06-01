@@ -86,6 +86,39 @@ async function persistCacheToDb(key: "discrepancy" | "route", data: Record<strin
     console.warn(`[CACHE] Persist ${key} threw:`, (err as any)?.message);
   }
 }
+async function hydratePayloadCacheFromDb(): Promise<void> {
+  if (!supabaseAdmin || payloadHydrateTried || payloadCache) return;
+  payloadHydrateTried = true;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("air_tracking_cache")
+      .select("data, updated_at")
+      .eq("cache_key", "payload")
+      .maybeSingle();
+    if (error || !data) return;
+    const at = new Date(data.updated_at).getTime();
+    const body = typeof data.data === "string" ? data.data : JSON.stringify(data.data);
+    payloadCache = { at, body };
+    console.log(`[PAYLOAD] Hydrated from DB, age=${Math.round((Date.now() - at) / 1000)}s, bytes=${body.length}`);
+  } catch (err) {
+    console.warn("[PAYLOAD] Hydrate failed:", (err as any)?.message);
+  }
+}
+
+async function persistPayloadToDb(body: string): Promise<void> {
+  if (!supabaseAdmin) return;
+  try {
+    let parsed: unknown;
+    try { parsed = JSON.parse(body); } catch { parsed = { raw: body }; }
+    const { error } = await supabaseAdmin
+      .from("air_tracking_cache")
+      .upsert({ cache_key: "payload", data: parsed as any, updated_at: new Date().toISOString() }, { onConflict: "cache_key" });
+    if (error) console.warn("[PAYLOAD] Persist failed:", error.message);
+  } catch (err) {
+    console.warn("[PAYLOAD] Persist threw:", (err as any)?.message);
+  }
+}
+
 
 async function queryWithRetry(client: Client, sql: string, params: any[] = [], maxRetries = 3): Promise<any> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
