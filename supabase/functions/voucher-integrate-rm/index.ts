@@ -70,7 +70,7 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { voucherId, numeroVoucherRM, action, limit = 50, mode = "dry" }: IntegrateRMRequest = await req.json();
+    const { voucherId, numeroVoucherRM, action, limit = 50, mode = "dry", nds = [] }: IntegrateRMRequest = await req.json();
 
     console.log(`[voucher-integrate-rm] Action: ${action}, VoucherID: ${voucherId}, RM Number: ${numeroVoucherRM}, Limit: ${limit}, Mode: ${mode}`);
 
