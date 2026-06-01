@@ -20594,9 +20594,12 @@ Deno.serve(async (req) => {
                         valor_nf, moeda, cnpj, razao_social, detalhes`;
           try {
             const placeholders = normalized.map(() => '?').join(',');
-            // Match em numero_processo OU em qualquer token de detalhes (via FIND_IN_SET após troca de ';' por ',').
+            // Match em numero_processo OU em qualquer token de detalhes.
+            // Normaliza detalhes substituindo separadores comuns (; , \n \r \t |) por vírgula
+            // e removendo espaços, para que FIND_IN_SET funcione independente do formato.
+            const detalhesNormSql = `UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(detalhes, CHAR(13), ','), CHAR(10), ','), CHAR(9), ','), '|', ','), ';', ','), ' ', ''))`;
             const findInSetClauses = normalized
-              .map(() => `FIND_IN_SET(?, UPPER(REPLACE(REPLACE(detalhes, ' ', ''), ';', ','))) > 0`)
+              .map(() => `FIND_IN_SET(?, ${detalhesNormSql}) > 0`)
               .join(' OR ');
             const params: any[] = [
               ...normalized,
@@ -20612,10 +20615,10 @@ Deno.serve(async (req) => {
               // Indexa pelo numero_processo principal
               const main = normProcesso(r.numero_processo);
               if (main && !byProcesso[main]) byProcesso[main] = r;
-              // Indexa também por cada token de detalhes
+              // Indexa também por cada token de detalhes (separadores tolerantes)
               if (r.detalhes) {
                 String(r.detalhes)
-                  .split(';')
+                  .split(/[;,\n\r\t|]/)
                   .map((t) => normProcesso(t))
                   .filter(Boolean)
                   .forEach((tok) => {
@@ -20623,6 +20626,7 @@ Deno.serve(async (req) => {
                   });
               }
             }
+
           } catch (e) {
             console.log('fetchSpoByProcesso error:', e);
           }
@@ -20679,9 +20683,15 @@ Deno.serve(async (req) => {
           const dfvFilial = dfv?.nome_cobranca || null;
           const dfvTipoDoc = dfv?.tipo_pag ? String(dfv.tipo_pag).toUpperCase() : null;
 
+          const dfvSpo = dfv?.nd ? String(dfv.nd).trim() : null;
+          const resolvedSpo = (sheet.spo && String(sheet.spo).trim()) || dfvSpo || null;
+          if (!sheet.spo && dfvSpo) origin['spo'] = 'DFV';
+          else if (sheet.spo) origin['spo'] = 'PLANILHA';
+          else origin['spo'] = null;
+
           const merged = {
             row_index: sheet.row_index,
-            spo: sheet.spo,
+            spo: resolvedSpo,
             id_rm: dfv?.id_rm ?? null,
             processo: pick(sheet.processo, dfvProcesso, 'processo'),
             origem_processo: (() => { origin['origem_processo'] = 'PLANILHA'; return sheet.origem_processo || 'CHB'; })(),
@@ -20719,6 +20729,7 @@ Deno.serve(async (req) => {
           merged.validation_message = errors.length ? errors.join('; ') : null;
           return merged;
         };
+
 
         const buildPreviewItems = async (rows: any[]) => {
           const sheetRows = rows.map((r, i) => parseSheetRow(r, i));
