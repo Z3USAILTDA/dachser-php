@@ -20626,6 +20626,32 @@ Deno.serve(async (req) => {
           } catch (e) {
             console.log('fetchSpoByProcesso error:', e);
           }
+
+          // Fallback: processos não encontrados em SPO → buscar em t_dados_financeiro_voucher
+          // pelo mesmo numero_processo. Cobre processos legados/voucher que não estão na
+          // tabela SPO. Prioridade permanece SPO > Voucher.
+          const missing = normalized.filter((p) => !byProcesso[p]);
+          if (missing.length > 0) {
+            try {
+              const ph = missing.map(() => '?').join(',');
+              const dfvRows = await client.query(
+                `SELECT id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
+                        modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
+                        valor_nf, moeda, cnpj, razao_social
+                   FROM dados_dachser.t_dados_financeiro_voucher
+                  WHERE UPPER(REPLACE(TRIM(numero_processo), ' ', '')) COLLATE utf8mb4_unicode_ci IN (${ph})`,
+                missing
+              );
+              for (const r of (dfvRows || [])) {
+                const key = normProcesso(r.numero_processo);
+                if (key && !byProcesso[key]) byProcesso[key] = { ...r, detalhes: null };
+              }
+              console.log(`[fetchSpoByProcesso] fallback voucher: ${missing.length} solicitados, ${(dfvRows || []).length} encontrados`);
+            } catch (e) {
+              console.log('fetchSpoByProcesso voucher-fallback error:', e);
+            }
+          }
+
           return { byProcesso };
         };
 
