@@ -1669,16 +1669,13 @@ async function computePayload(): Promise<string> {
     }
 
     console.log(`[PERF] fetch-tracking-aereo done in ${Date.now() - __t0}ms (coldStart=${__coldStart})`);
-    return new Response(JSON.stringify({ success: true, data: filteredData, failed_count: failed.length }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    const body = JSON.stringify({ success: true, data: filteredData, failed_count: failed.length });
+    payloadCache = { at: Date.now(), body };
+    return body;
   } catch (error) {
     console.error(`fetch-tracking-aereo error after ${Date.now() - __t0}ms (coldStart=${__coldStart}):`, error);
-    return new Response(
-      JSON.stringify({ success: false, error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    throw error;
   } finally {
     if (client) { try { await client.close(); } catch (_) {} }
   }
-});
+}
