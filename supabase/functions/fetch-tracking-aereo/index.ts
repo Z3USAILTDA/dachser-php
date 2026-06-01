@@ -1483,7 +1483,7 @@ serve(async (req) => {
       // Use workingOrigin which already corrects the origin=destination data error.
       const finalOrigin = workingOrigin || row.ORIGEM || "";
       const finalDestination = workingDest || row.DESTINO || "";
-      const rawConexao = routeEntry ? (routeEntry.conexoes || null) : conexao;
+      const rawConexao = (routeEntry?.conexoes) || conexao;
       const finalConexao = rawConexao
         ? rawConexao.split(',').map((c: string) => c.trim()).filter((c: string) => c.length === 3 && !stopWordsConn.has(c.toUpperCase())).join(',') || null
         : null;
