@@ -7202,6 +7202,38 @@ Deno.serve(async (req) => {
           isMaster,
           filhosSposJson
         ]);
+
+        // Verificação pós-INSERT: confirma que a linha está mesmo na tabela.
+        // Se algo silencioso impediu (constraint, replicação), retornamos 500
+        // para o front mostrar erro de verdade em vez de "Upload concluído"
+        // enganoso e o usuário ficar travado no gate "anexe a fatura".
+        try {
+          const verify = await client.query(
+            `SELECT id FROM dados_dachser.t_voucher_anexos WHERE id = ? LIMIT 1`,
+            [anexoId]
+          );
+          if (!verify || verify.length === 0) {
+            console.error('[save_voucher_anexo] INSERT silencioso falhou — linha não encontrada após insert:', anexoId);
+            return new Response(
+              JSON.stringify({
+                success: false,
+                error: 'Falha ao confirmar o anexo no banco. Tente novamente.',
+                anexoId,
+              }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        } catch (verifyErr) {
+          console.error('[save_voucher_anexo] verificação pós-insert falhou:', verifyErr);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'Falha ao confirmar o anexo no banco. Tente novamente.',
+              details: String((verifyErr as any)?.message || verifyErr),
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
         
         // Se o anexo é do tipo FATURA ou FATURA_DEMONSTRATIVO, e o voucher é ADF, 
         // atualizar status_documento_fiscal para ANEXADO
