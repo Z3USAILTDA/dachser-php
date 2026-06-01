@@ -15,6 +15,21 @@ const DISCREPANCY_CACHE_TTL_MS = 5 * 60_000;
 let routeCache: { at: number; data: Record<string, { origin: string | null; destination: string | null; conexoes: string | null; status: string }> } | null = null;
 const ROUTE_CACHE_TTL_MS = 5 * 60_000;
 
+// Auxiliary lookup caches (TTL 5min) — reused across invocations to avoid
+// re-querying small dictionary tables on every poll. Survive within a warm
+// isolate; on cold start they are rebuilt once.
+const LOOKUP_TTL_MS = 5 * 60_000;
+let eventsLookupCache: {
+  at: number;
+  eventMap: Record<string, { id: number; descricao_en: string }>;
+  EXACT_MAP: Map<string, string>;
+  KEYWORD_INDEX: Array<{ needle: string; code: string }>;
+  descLookup: Array<{ code: string; description: string }>;
+} | null = null;
+let visibilityCache: { at: number; data: Record<string, string> } | null = null;
+let masterClientesCache: { at: number; data: Record<string, string> } | null = null;
+let hiddenAwbsCache: { at: number; data: Set<string> } | null = null;
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
@@ -175,6 +190,8 @@ serve(async (req) => {
   }
 
   let client: Client | null = null;
+  const __t0 = Date.now();
+  let __coldStart = !eventsLookupCache;
 
   try {
     const host = (Deno.env.get("MARIADB_AIR_HOST") || Deno.env.get("MARIADB_OPS_HOST"));
@@ -322,59 +339,80 @@ serve(async (req) => {
       from sla_calc s
     `;
 
-    // Step 2: Kick off all 3 queries in PARALLEL — main + 2 lookup tables.
-    // Saves ~2s of wall-clock vs sequential. Lookups (eventsRows/descRows) are small
-    // dictionary tables; main query is the heavy CTE.
-    console.log("Executing tracking aereo query (v3 parallel) + lookups...");
-    const [eventsRows, descRows, rows] = await Promise.all([
-      queryWithRetry(client, `SELECT id, code, descricao_en FROM dados_dachser.t_eventos_awb`),
-      queryWithRetry(client, `SELECT code, description FROM dados_dachser.t_description_eventos`),
-      queryWithRetry(client, sql),
-    ]);
+    // Step 2: Query main rows. Lookup dictionaries (events/desc/visibility) are
+    // cached in module scope with TTL 5min — only re-fetched on cold start or expiry.
+    const lookupsStale = !eventsLookupCache || (Date.now() - eventsLookupCache.at >= LOOKUP_TTL_MS);
+    const visStale = !visibilityCache || (Date.now() - visibilityCache.at >= LOOKUP_TTL_MS);
+    console.log(`Executing tracking aereo query (lookups: events=${lookupsStale ? 'MISS' : 'HIT'}, vis=${visStale ? 'MISS' : 'HIT'})...`);
+
+    const queries: Promise<any>[] = [queryWithRetry(client, sql)];
+    if (lookupsStale) {
+      queries.push(queryWithRetry(client, `SELECT id, code, descricao_en FROM dados_dachser.t_eventos_awb`));
+      queries.push(queryWithRetry(client, `SELECT code, description FROM dados_dachser.t_description_eventos`));
+    }
+    if (visStale) {
+      queries.push(queryWithRetry(client, `SELECT awb, hawb, hide_reason FROM dados_dachser.t_air_process_visibility`).catch((e: any) => { console.warn("vis load failed:", e?.message); return []; }));
+    }
+    const results = await Promise.all(queries);
+    const rows = results[0];
+    let qi = 1;
+    const eventsRows = lookupsStale ? results[qi++] : null;
+    const descRows = lookupsStale ? results[qi++] : null;
+    const visRows = visStale ? results[qi++] : null;
     console.log(`Query returned ${rows?.length || 0} rows`);
 
-    // Step 3: Build event codes lookup from eventsRows.
-    // t_eventos_awb has 'descricao_en' (English description per IATA code)
-    const eventMap: Record<string, { id: number; descricao_en: string }> = {};
-    const EXACT_MAP: Map<string, string> = new Map();
-    const KEYWORD_INDEX: Array<{ needle: string; code: string }> = [];
-    for (const e of eventsRows || []) {
-      const code = (e.code || "").toString().trim().toUpperCase();
-      if (!code) continue;
-      eventMap[code] = { id: Number(e.id), descricao_en: e.descricao_en || "" };
-      const desc = normalizeDesc(e.descricao_en || "");
-      if (desc) {
+    // Step 3: Build/reuse event codes + description lookups
+    let eventMap: Record<string, { id: number; descricao_en: string }>;
+    let EXACT_MAP: Map<string, string>;
+    let KEYWORD_INDEX: Array<{ needle: string; code: string }>;
+    let descLookup: Array<{ code: string; description: string }>;
+    if (lookupsStale) {
+      eventMap = {};
+      EXACT_MAP = new Map();
+      KEYWORD_INDEX = [];
+      for (const e of eventsRows || []) {
+        const code = (e.code || "").toString().trim().toUpperCase();
+        if (!code) continue;
+        eventMap[code] = { id: Number(e.id), descricao_en: e.descricao_en || "" };
+        const desc = normalizeDesc(e.descricao_en || "");
+        if (desc) {
+          if (!EXACT_MAP.has(desc)) EXACT_MAP.set(desc, code);
+          KEYWORD_INDEX.push({ needle: desc, code });
+        }
+      }
+      descLookup = (descRows || []).map((d: any) => ({
+        code: d.code || "",
+        description: (d.description || "").toUpperCase(),
+      }));
+      for (const d of descRows || []) {
+        const code = (d.code || "").toString().trim().toUpperCase();
+        const desc = normalizeDesc(d.description || "");
+        if (!code || !desc) continue;
         if (!EXACT_MAP.has(desc)) EXACT_MAP.set(desc, code);
         KEYWORD_INDEX.push({ needle: desc, code });
       }
+      KEYWORD_INDEX.sort((a, b) => b.needle.length - a.needle.length);
+      eventsLookupCache = { at: Date.now(), eventMap, EXACT_MAP, KEYWORD_INDEX, descLookup };
+      console.log(`Loaded ${EXACT_MAP.size} exact descriptions, ${KEYWORD_INDEX.length} keyword needles (cached)`);
+    } else {
+      eventMap = eventsLookupCache!.eventMap;
+      EXACT_MAP = eventsLookupCache!.EXACT_MAP;
+      KEYWORD_INDEX = eventsLookupCache!.KEYWORD_INDEX;
+      descLookup = eventsLookupCache!.descLookup;
     }
 
-    // Step 4: Build description_eventos lookup — authoritative description→code mapping
-    const descLookup: Array<{ code: string; description: string }> = (descRows || []).map((d: any) => ({
-      code: d.code || "",
-      description: (d.description || "").toUpperCase(),
-    }));
-    for (const d of descRows || []) {
-      const code = (d.code || "").toString().trim().toUpperCase();
-      const desc = normalizeDesc(d.description || "");
-      if (!code || !desc) continue;
-      if (!EXACT_MAP.has(desc)) EXACT_MAP.set(desc, code);
-      KEYWORD_INDEX.push({ needle: desc, code });
-    }
-    // Sort needles by length DESC — longer/more specific needle wins
-    KEYWORD_INDEX.sort((a, b) => b.needle.length - a.needle.length);
-    console.log(`Loaded ${EXACT_MAP.size} exact descriptions, ${KEYWORD_INDEX.length} keyword needles`);
-
-    // Step 3b: For rows with empty CLIENTE, fetch from t_master_dados
+    // Step 3b: For rows with empty CLIENTE, fetch from t_master_dados (cached by HAWB)
+    const cachedClientes = (masterClientesCache && (Date.now() - masterClientesCache.at < LOOKUP_TTL_MS))
+      ? masterClientesCache.data
+      : (masterClientesCache = { at: Date.now(), data: {} }).data;
     const missingClienteHawbs = (rows || [])
       .filter((r: any) => !r.CLIENTE || r.CLIENTE.toString().trim() === "")
       .map((r: any) => r.HAWB)
-      .filter((h: string) => h && h !== "NI");
+      .filter((h: string) => h && h !== "NI" && !(h in cachedClientes));
 
-    const clienteMap: Record<string, string> = {};
+    const clienteMap: Record<string, string> = { ...cachedClientes };
     if (missingClienteHawbs.length > 0) {
       const uniqueHawbs = [...new Set(missingClienteHawbs)] as string[];
-      // Batch lookup in chunks of 100
       for (let i = 0; i < uniqueHawbs.length; i += 100) {
         const chunk = uniqueHawbs.slice(i, i + 100);
         const placeholders = chunk.map(() => "?").join(",");
@@ -384,23 +422,27 @@ serve(async (req) => {
           chunk
         );
         for (const mr of masterRows || []) {
-          if (mr.hawb && mr.cliente) clienteMap[mr.hawb] = mr.cliente;
+          if (mr.hawb && mr.cliente) {
+            clienteMap[mr.hawb] = mr.cliente;
+            cachedClientes[mr.hawb] = mr.cliente;
+          }
         }
       }
-      console.log(`Fetched ${Object.keys(clienteMap).length} client names from t_master_dados for ${uniqueHawbs.length} missing`);
+      console.log(`Fetched ${missingClienteHawbs.length} new client names; cache size=${Object.keys(cachedClientes).length}`);
     }
 
-    // Step 3c: Load visibility table
-    let visibilityMap: Record<string, string> = {};
-    try {
-      const visRows = await queryWithRetry(client, `SELECT awb, hawb, hide_reason FROM dados_dachser.t_air_process_visibility`);
+    // Step 3c: Visibility map — from cache or freshly loaded
+    let visibilityMap: Record<string, string>;
+    if (visStale) {
+      visibilityMap = {};
       for (const v of visRows || []) {
         const key = `${v.awb || ""}|${v.hawb || ""}`;
         visibilityMap[key] = v.hide_reason || "";
       }
-      console.log(`Loaded ${Object.keys(visibilityMap).length} visibility records`);
-    } catch (err) {
-      console.warn("Could not load t_air_process_visibility (may not exist yet):", err);
+      visibilityCache = { at: Date.now(), data: visibilityMap };
+      console.log(`Loaded ${Object.keys(visibilityMap).length} visibility records (cached)`);
+    } else {
+      visibilityMap = visibilityCache!.data;
     }
 
     // Step 3d: Discrepancy data (pieces divergence + DIS events + prefix 996).
@@ -1544,37 +1586,46 @@ serve(async (req) => {
     // Alerting is handled by air-tracking-failed-alert. Do not send email from
     // the dashboard fallback to keep this function inside Edge CPU limits.
 
-    // Filter out hidden AWBs (air_hidden_awbs table in Supabase)
+    // Filter out hidden AWBs (air_hidden_awbs table in Supabase) — cached 5min
     let filteredData = data;
     try {
-      const supaUrl = Deno.env.get("SUPABASE_URL");
-      const supaKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY");
-      if (supaUrl && supaKey) {
-        const resp = await fetch(`${supaUrl}/rest/v1/air_hidden_awbs?select=awb`, {
-          headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` },
-        });
-        if (resp.ok) {
-          const hidden = await resp.json();
-          const hiddenSet = new Set<string>((hidden || []).map((h: any) => String(h.awb).trim()));
-          if (hiddenSet.size > 0) {
-            filteredData = data.filter((d: any) => !hiddenSet.has(String(d.awb_number).trim()));
-            console.log(`Hidden AWBs filtered: ${data.length - filteredData.length} of ${data.length}`);
+      const hiddenStale = !hiddenAwbsCache || (Date.now() - hiddenAwbsCache.at >= LOOKUP_TTL_MS);
+      if (hiddenStale) {
+        const supaUrl = Deno.env.get("SUPABASE_URL");
+        const supaKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY");
+        if (supaUrl && supaKey) {
+          const resp = await fetch(`${supaUrl}/rest/v1/air_hidden_awbs?select=awb`, {
+            headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` },
+          });
+          if (resp.ok) {
+            const hidden = await resp.json();
+            hiddenAwbsCache = {
+              at: Date.now(),
+              data: new Set<string>((hidden || []).map((h: any) => String(h.awb).trim())),
+            };
           }
         }
+      }
+      const hiddenSet = hiddenAwbsCache?.data;
+      if (hiddenSet && hiddenSet.size > 0) {
+        filteredData = data.filter((d: any) => !hiddenSet.has(String(d.awb_number).trim()));
+        console.log(`Hidden AWBs filtered: ${data.length - filteredData.length} of ${data.length} (cache ${hiddenStale ? 'MISS' : 'HIT'})`);
       }
     } catch (e) {
       console.error("Error fetching hidden AWBs:", e);
     }
 
+    console.log(`[PERF] fetch-tracking-aereo done in ${Date.now() - __t0}ms (coldStart=${__coldStart})`);
     return new Response(JSON.stringify({ success: true, data: filteredData, failed_count: failed.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("fetch-tracking-aereo error:", error);
-    if (client) { try { await client.close(); } catch (_) {} }
+    console.error(`fetch-tracking-aereo error after ${Date.now() - __t0}ms (coldStart=${__coldStart}):`, error);
     return new Response(
       JSON.stringify({ success: false, error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
+  } finally {
+    if (client) { try { await client.close(); } catch (_) {} }
   }
 });
