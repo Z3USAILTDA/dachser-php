@@ -625,7 +625,11 @@ const TrackingAereo = () => {
         awbsDataRef.current = mapped;
         setAwbsData(mapped);
       } else if (awbsDataRef.current.length === 0) {
-        console.warn("[TrackingAereo] Servidor local e Supabase indisponíveis (banner suprimido por regra).");
+        toast({
+          title: "Erro ao carregar dados",
+          description: "Servidor local e Supabase indisponíveis. Verifique a conexão.",
+          variant: "destructive",
+        });
       }
     } catch (err) {
       console.error("fetchData error:", err);
