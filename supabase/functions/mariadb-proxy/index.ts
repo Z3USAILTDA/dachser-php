@@ -475,7 +475,7 @@ Deno.serve(async (req) => {
     const FIN_ACTIONS = new Set<string>([
       // Vouchers / Esteira
       'save_voucher_esteira','save_voucher_anexo','update_voucher_esteira','update_voucher_by_numero_spo','cleanup_duplicate_vouchers',
-      'audit_voucher_diff','revert_voucher_field',
+      'audit_voucher_diff','audit_anexos_etapas_op','revert_voucher_field',
       'cleanup_invalid_vouchers','fix_sync_vouchers_to_a_processar','delete_sync_duplicates',
       'admin_bulk_update_etapa','admin_reset_all_to_a_processar','admin_reset_stale_to_a_processar',
       'get_vouchers_esteira','get_voucher_by_id','get_voucher_responsaveis_emails',
