@@ -401,8 +401,8 @@ serve(async (req) => {
     }
 
     // Step 3d: Discrepancy data (pieces divergence + DIS events + prefix 996).
-    // ALWAYS serve from cache (fresh or stale) to avoid blowing the 2s CPU budget.
-    // Refresh happens in background via EdgeRuntime.waitUntil below when stale/missing.
+    // Hydrate from persistent DB cache before reading in-memory cache (sobrevive a reciclagem de isolates).
+    await hydrateCachesFromDb();
     let discrepancyMap: Record<string, { pieces_discrepancy: boolean; baseline_pieces: number | null; has_dis_event: boolean }> =
       discrepancyCache?.data ?? {};
     const discCacheStale = !discrepancyCache || (Date.now() - discrepancyCache.at >= DISCREPANCY_CACHE_TTL_MS);
