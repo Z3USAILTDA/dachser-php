@@ -9,26 +9,19 @@ const corsHeaders = {
 };
 
 // Stage → roles mapping (mirrors src/utils/esteiraNotifications.ts)
+// REGRA: nenhum e-mail desta função pode ir para mais de 1 destinatário.
+// Roles aqui só são usadas como último recurso pelo fluxo de URGENCIA_SOLICITADA
+// (resolver supervisor quando o supervisor direto do solicitante não está mapeado).
 const STAGE_TO_ROLES: Record<string, string[]> = {
   OPERACAO: [],
-  AJUSTE_OPERACAO: ["__OPERACAO_FIXED__"], // special: uses fixed email list
-  FISCAL: ["FISCAL", "GESTOR_FISCAL"],
-  AJUSTE_FISCAL: ["FISCAL", "GESTOR_FISCAL"],
+  AJUSTE_OPERACAO: [], // sem broadcast — resolvido individualmente via creator_email + log fallback
+  FISCAL: [],
+  AJUSTE_FISCAL: [], // sem broadcast — resolvido via responsavel_fiscal + log fallback
   SUPERVISOR: ["SUPERVISOR", "GESTOR_SUPERVISOR"],
-  FINANCEIRO: ["FINANCEIRO", "GESTOR_FINANCEIRO"],
-  ROBO: ["FINANCEIRO", "GESTOR_FINANCEIRO"],
+  FINANCEIRO: [],
+  ROBO: [],
   CONCLUIDO: [],
 };
-
-// Fixed recipients for AJUSTE_OPERACAO (adjustment requests back to Operação)
-const OPERACAO_FIXED_EMAILS = [
-  "beatriz.tozzi@dachser.com",
-  "cleiciane.faconi@dachser.com",
-  "julia.stanguerlin@dachser.com",
-  "laura.estevam@dachser.com",
-  "leandro.geraldo@dachser.com",
-  "priscila.neves-external@dachser.com",
-];
 
 interface NotificationRequest {
   type: "AJUSTE_SOLICITADO" | "URGENCIA_SOLICITADA" | "URGENCIA_SOLICITADA_CONFIRMACAO" | "URGENCIA_APROVADA" | "URGENCIA_REJEITADA";
