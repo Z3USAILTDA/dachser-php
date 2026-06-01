@@ -225,7 +225,7 @@ const handler = async (req: Request): Promise<Response> => {
           );
 
           const baixas: any = await mariaClient.query(
-            `SELECT b.IdLancamentoRM, b.DataBaixa, b.Valor
+            `SELECT b.IdLancamentoRM
              FROM dados_dachser.tbaixas b
              WHERE b.IdLancamentoRM IN (
                SELECT id_rm FROM dados_dachser.t_dados_financeiro_voucher
