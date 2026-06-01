@@ -13293,16 +13293,35 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Anti-duplicação: busca por numero_spo OU id_rm (qualquer sync_status)
-        // Resolve id_rm a partir do RM antes de checar
-        const rmLookup = await client.query(
-          `SELECT id_rm FROM dados_dachser.t_dados_financeiro_voucher
+        // Roteamento por tipo: SPO (nd começa com filial-dígito + "-") usa t_dados_financeiro_spo;
+        // demais usam t_dados_financeiro_voucher. Em caso de ambiguidade, SPO tem prioridade.
+        const ndPrefix = String(nd).trim().split(/\s+/)[0] || '';
+        const isSpoLike = /^[0-9]{2,4}-/.test(ndPrefix);
+
+        const lookupSql = (table: string) =>
+          `SELECT id_rm FROM dados_dachser.${table}
             WHERE SUBSTRING_INDEX(TRIM(nd), ' ', 1) COLLATE utf8mb4_unicode_ci
                 = SUBSTRING_INDEX(TRIM(?), ' ', 1) COLLATE utf8mb4_unicode_ci
-            LIMIT 1`,
-          [nd]
-        );
-        const lookupIdRm = rmLookup?.[0]?.id_rm || null;
+            LIMIT 1`;
+
+        const tablesOrdered = isSpoLike
+          ? ['t_dados_financeiro_spo', 't_dados_financeiro_voucher']
+          : ['t_dados_financeiro_voucher', 't_dados_financeiro_spo'];
+
+        let lookupIdRm: number | null = null;
+        let sourceTable: string | null = null;
+        for (const tbl of tablesOrdered) {
+          try {
+            const r = await client.query(lookupSql(tbl), [nd]);
+            if (r && r.length > 0) {
+              lookupIdRm = r[0]?.id_rm ?? null;
+              sourceTable = tbl;
+              break;
+            }
+          } catch (e) {
+            console.warn(`[import_voucher_from_rm] lookup falhou em ${tbl}:`, (e as Error).message);
+          }
+        }
 
         const existingVoucher = await client.query(`
           SELECT id, etapa_atual, id_rm, numero_spo
@@ -13332,23 +13351,26 @@ Deno.serve(async (req) => {
           break;
         }
 
-        // Buscar dados do RM
+        // Buscar dados do RM na tabela correta (SPO inclui coluna detalhes)
+        const fetchTable = sourceTable || (isSpoLike ? 't_dados_financeiro_spo' : 't_dados_financeiro_voucher');
+        const includeDetalhes = fetchTable === 't_dados_financeiro_spo';
         const rmData = await client.query(`
           SELECT 
             id_rm, nd, documento, nome_beneficiario, nome_cobranca, numero_nf,
             numero_processo, modal, tipo_pag, forma_pag, data_emissao,
-            data_vencimento, valor_nf, moeda, cnpj, razao_social
-          FROM dados_dachser.t_dados_financeiro_voucher
+            data_vencimento, valor_nf, moeda, cnpj, razao_social${includeDetalhes ? ', detalhes' : ''}
+          FROM dados_dachser.${fetchTable}
           WHERE nd = ?
           LIMIT 1
         `, [nd]);
 
         if (!rmData || rmData.length === 0) {
           return new Response(
-            JSON.stringify({ error: 'Voucher não encontrado no RM' }),
+            JSON.stringify({ error: 'Registro não encontrado no RM (SPO/Voucher)' }),
             { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
+
 
         const rm = rmData[0];
         const voucherId = crypto.randomUUID();
