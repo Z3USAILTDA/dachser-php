@@ -1313,16 +1313,21 @@ serve(async (req) => {
       // CONEXÃO is only set when destination is authoritatively known (routeEntry) to avoid
       // false positives when raw DESTINO text can't be reliably parsed to an IATA code.
       if (finalCode === "ARR") {
-        const loc = extractIATA(electedLoc);
-        const authDest = routeEntry?.destination || null;
-        const dest = authDest || extractIATA(row.DESTINO || "");
-        if (dest && loc && loc === dest) {
+        const awbStr = String(row.AWB || '').trim();
+        if (FORCED_ARR_DESTINO_AWBS.has(awbStr)) {
           finalCode = "ARR - DESTINO";
-        } else if (authDest && loc && loc !== authDest) {
-          // Only declare a connection when we have a verified destination to compare against
-          finalCode = "ARR - CONEXÃO";
+        } else {
+          const loc = extractIATA(electedLoc);
+          const authDest = routeEntry?.destination || null;
+          const dest = authDest || extractIATA(row.DESTINO || "");
+          if (dest && loc && loc === dest) {
+            finalCode = "ARR - DESTINO";
+          } else if (authDest && loc && loc !== authDest) {
+            // Only declare a connection when we have a verified destination to compare against
+            finalCode = "ARR - CONEXÃO";
+          }
+          // Without routeEntry, ambiguous — leave as ARR rather than guess CONEXÃO
         }
-        // Without routeEntry, ambiguous — leave as ARR rather than guess CONEXÃO
       }
 
       // Date for the elected slot — prefer SQL slot date, then time-augmented row.date0/time0
