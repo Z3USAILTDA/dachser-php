@@ -13044,41 +13044,99 @@ Deno.serve(async (req) => {
 
       // ==================== GET VOUCHERS PENDENTES RM ====================
       case 'get_vouchers_pendentes_rm': {
-        // Busca TODOS os vouchers da t_dados_financeiro_voucher que não existem na t_vouchers
-        // Excluindo apenas registros onde nome_beneficiario contém "dachser"
-        console.log('Fetching ALL pending RM vouchers not yet in esteira (excluding Dachser beneficiaries)...');
+        // Fontes:
+        // - t_dados_financeiro_spo (source='SPO')
+        // - t_dados_financeiro_voucher (source='VOUCHER')
+        // Quando o mesmo numero_processo existir em ambas, SPO tem prioridade.
+        // Excluindo registros onde nome_beneficiario contém "dachser" e modal = 'ADM'.
+        console.log('Fetching ALL pending RM entries (SPO + Voucher) not yet in esteira...');
 
-        const pendentes = await client.query(`
-          SELECT 
-            dfv.id_rm,
-            dfv.nd,
-            dfv.documento,
-            dfv.nome_beneficiario,
-            dfv.nome_cobranca,
-            dfv.numero_nf,
-            dfv.numero_processo,
-            dfv.modal,
-            dfv.tipo_pag,
-            dfv.forma_pag,
-            dfv.data_emissao,
-            dfv.data_vencimento,
-            dfv.valor_nf,
-            dfv.moeda,
-            dfv.cnpj,
-            dfv.razao_social,
-            dfv.created_by
-          FROM dados_dachser.t_dados_financeiro_voucher dfv
-          LEFT JOIN dados_dachser.t_vouchers v ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_unicode_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci
-          LEFT JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
-          WHERE v.id IS NULL
-            AND b.IdLancamentoRM IS NULL
-            AND (dfv.nome_beneficiario IS NULL OR LOWER(dfv.nome_beneficiario) NOT LIKE '%dachser%')
-            AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')
-          ORDER BY dfv.data_vencimento ASC
-        `);
+        const sql = `
+          WITH spo AS (
+            SELECT 'SPO' AS source, dfs.id_rm, dfs.nd, dfs.documento, dfs.nome_beneficiario,
+                   dfs.nome_cobranca, dfs.numero_nf, dfs.numero_processo, dfs.modal,
+                   dfs.tipo_pag, dfs.forma_pag, dfs.data_emissao, dfs.data_vencimento,
+                   dfs.valor_nf, dfs.moeda, dfs.cnpj, dfs.razao_social, dfs.created_by,
+                   dfs.detalhes
+              FROM dados_dachser.t_dados_financeiro_spo dfs
+             WHERE (dfs.nome_beneficiario IS NULL OR LOWER(dfs.nome_beneficiario) NOT LIKE '%dachser%')
+               AND (dfs.modal IS NULL OR dfs.modal <> 'ADM')
+          ),
+          voucher AS (
+            SELECT 'VOUCHER' AS source, dfv.id_rm, dfv.nd, dfv.documento, dfv.nome_beneficiario,
+                   dfv.nome_cobranca, dfv.numero_nf, dfv.numero_processo, dfv.modal,
+                   dfv.tipo_pag, dfv.forma_pag, dfv.data_emissao, dfv.data_vencimento,
+                   dfv.valor_nf, dfv.moeda, dfv.cnpj, dfv.razao_social, dfv.created_by,
+                   NULL AS detalhes
+              FROM dados_dachser.t_dados_financeiro_voucher dfv
+             WHERE (dfv.nome_beneficiario IS NULL OR LOWER(dfv.nome_beneficiario) NOT LIKE '%dachser%')
+               AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')
+          ),
+          unified AS (
+            SELECT * FROM spo
+            UNION ALL
+            SELECT v.* FROM voucher v
+             WHERE NOT EXISTS (
+               SELECT 1 FROM spo s
+                WHERE s.numero_processo IS NOT NULL
+                  AND s.numero_processo COLLATE utf8mb4_unicode_ci
+                    = v.numero_processo COLLATE utf8mb4_unicode_ci
+             )
+          )
+          SELECT u.*
+            FROM unified u
+            LEFT JOIN dados_dachser.t_vouchers v
+                   ON SUBSTRING_INDEX(TRIM(u.nd),' ',1) COLLATE utf8mb4_unicode_ci
+                    = SUBSTRING_INDEX(TRIM(v.numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+            LEFT JOIN dados_dachser.tbaixas b ON u.id_rm = b.IdLancamentoRM
+           WHERE v.id IS NULL AND b.IdLancamentoRM IS NULL
+           ORDER BY u.data_vencimento ASC
+        `;
 
-        console.log(`Found ${pendentes?.length || 0} pending RM vouchers (excluding Dachser)`);
-        result = { success: true, data: pendentes || [], count: pendentes?.length || 0 };
+        let pendentes: any[] = [];
+        try {
+          pendentes = await client.query(sql);
+        } catch (e) {
+          console.warn('[get_vouchers_pendentes_rm] Falha no UNION (SPO+Voucher). Fallback para apenas Voucher:', (e as Error).message);
+          pendentes = await client.query(`
+            SELECT 'VOUCHER' AS source, dfv.id_rm, dfv.nd, dfv.documento, dfv.nome_beneficiario,
+                   dfv.nome_cobranca, dfv.numero_nf, dfv.numero_processo, dfv.modal,
+                   dfv.tipo_pag, dfv.forma_pag, dfv.data_emissao, dfv.data_vencimento,
+                   dfv.valor_nf, dfv.moeda, dfv.cnpj, dfv.razao_social, dfv.created_by,
+                   NULL AS detalhes
+              FROM dados_dachser.t_dados_financeiro_voucher dfv
+              LEFT JOIN dados_dachser.t_vouchers v
+                     ON SUBSTRING_INDEX(TRIM(dfv.nd),' ',1) COLLATE utf8mb4_unicode_ci
+                      = SUBSTRING_INDEX(TRIM(v.numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+              LEFT JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
+             WHERE v.id IS NULL AND b.IdLancamentoRM IS NULL
+               AND (dfv.nome_beneficiario IS NULL OR LOWER(dfv.nome_beneficiario) NOT LIKE '%dachser%')
+               AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')
+             ORDER BY dfv.data_vencimento ASC
+          `);
+        }
+
+        // Normaliza processos_associados a partir de `detalhes` (apenas SPO).
+        const normalized = (pendentes || []).map((row: any) => {
+          let processos_associados: string[] = [];
+          if (row.source === 'SPO' && row.detalhes) {
+            const seen = new Set<string>();
+            processos_associados = String(row.detalhes)
+              .split(';')
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0)
+              .filter((s) => {
+                const k = s.toUpperCase();
+                if (seen.has(k)) return false;
+                seen.add(k);
+                return true;
+              });
+          }
+          return { ...row, processos_associados };
+        });
+
+        console.log(`Found ${normalized.length} pending entries (SPO+Voucher merged)`);
+        result = { success: true, data: normalized, count: normalized.length };
         break;
       }
 
