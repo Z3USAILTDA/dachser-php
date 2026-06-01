@@ -365,7 +365,7 @@ serve(async (req) => {
     } else {
       console.log("[DISC] Cold start — empty discrepancy this poll, will populate in background");
     }
-    const allowBackgroundRefresh = false;
+    const allowBackgroundRefresh = true;
     if (discCacheStale && allowBackgroundRefresh) {
       // Snapshot of AWBs in this poll — narrows the JSON_TABLE universe dramatically.
       const activeAwbsDisc = [...new Set(
