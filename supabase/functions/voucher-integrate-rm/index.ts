@@ -11,9 +11,10 @@ const corsHeaders = {
 interface IntegrateRMRequest {
   voucherId?: string;
   numeroVoucherRM?: string;
-  action: "fetch" | "integrate" | "list" | "import" | "cleanup-spo-open";
+  action: "fetch" | "integrate" | "list" | "import" | "cleanup-spo-open" | "diagnose-nd";
   limit?: number;
   mode?: "dry" | "execute";
+  nds?: string[];
 }
 
 
@@ -69,7 +70,7 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { voucherId, numeroVoucherRM, action, limit = 50, mode = "dry" }: IntegrateRMRequest = await req.json();
+    const { voucherId, numeroVoucherRM, action, limit = 50, mode = "dry", nds = [] }: IntegrateRMRequest = await req.json();
 
     console.log(`[voucher-integrate-rm] Action: ${action}, VoucherID: ${voucherId}, RM Number: ${numeroVoucherRM}, Limit: ${limit}, Mode: ${mode}`);
 
@@ -182,6 +183,102 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
 
+
+    // ACTION: DIAGNOSE-ND - inspect why specific NDs aren't in t_vouchers
+    if (action === "diagnose-nd") {
+      const targets = (nds || []).map((s) => String(s).trim()).filter(Boolean);
+      if (targets.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: "nds[] obrigatório" }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+      let mariaClient: Client | null = null;
+      try {
+        mariaClient = await getMariaDBClient();
+        const report: any[] = [];
+
+        const cursorRows: any = await mariaClient.query(
+          `SELECT last_sync_datetime, last_sync_id_rm, records_synced, total_records
+           FROM dados_dachser.t_sync_control WHERE sync_type='voucher_rm'`
+        );
+        const cursor = cursorRows?.[0] || null;
+
+        for (const nd of targets) {
+          const dfv: any = await mariaClient.query(
+            `SELECT id_rm, nd, documento, nome_beneficiario, nome_cobranca, modal,
+                    forma_pag, data_emissao, data_vencimento, valor_nf, moeda, cnpj,
+                    numero_processo, data_insert
+             FROM dados_dachser.t_dados_financeiro_voucher
+             WHERE SUBSTRING_INDEX(TRIM(nd),' ',1) COLLATE utf8mb4_unicode_ci = ?
+             ORDER BY data_insert DESC LIMIT 5`,
+            [nd]
+          );
+
+          const inVouchers: any = await mariaClient.query(
+            `SELECT id, numero_spo, etapa_atual, sync_status, criado_por_user_id,
+                    id_rm, fornecedor, valor, created_at, updated_at
+             FROM dados_dachser.t_vouchers
+             WHERE SUBSTRING_INDEX(TRIM(numero_spo),' ',1) COLLATE utf8mb4_unicode_ci = ?
+             ORDER BY created_at DESC LIMIT 5`,
+            [nd]
+          );
+
+          const baixas: any = await mariaClient.query(
+            `SELECT b.IdLancamentoRM
+             FROM dados_dachser.tbaixas b
+             WHERE b.IdLancamentoRM IN (
+               SELECT id_rm FROM dados_dachser.t_dados_financeiro_voucher
+               WHERE SUBSTRING_INDEX(TRIM(nd),' ',1) COLLATE utf8mb4_unicode_ci = ?
+             )
+             LIMIT 5`,
+            [nd]
+          );
+
+          // Diagnose why incremental skipped it
+          const reasons: string[] = [];
+          if (!dfv || dfv.length === 0) {
+            reasons.push("AUSENTE em t_dados_financeiro_voucher");
+          } else {
+            const row = dfv[0];
+            const ben = String(row.nome_beneficiario || "").toLowerCase();
+            if (ben.includes("dachser")) reasons.push("beneficiario contém 'dachser' (filtro)");
+            if (String(row.modal || "").toUpperCase() === "ADM") reasons.push("modal = 'ADM' (filtro)");
+            if (cursor?.last_sync_datetime) {
+              const cur = new Date(cursor.last_sync_datetime).getTime();
+              const di = new Date(row.data_insert).getTime();
+              if (di <= cur) reasons.push(`data_insert (${row.data_insert}) <= cursor (${cursor.last_sync_datetime})`);
+            }
+            if (baixas && baixas.length > 0) reasons.push(`existe em tbaixas (${baixas.length}) - filtro b.IdLancamentoRM IS NULL exclui`);
+            if (inVouchers && inVouchers.length > 0) {
+              const statuses = inVouchers.map((v: any) => `${v.sync_status}/${v.etapa_atual}`).join(",");
+              reasons.push(`já existe em t_vouchers [${statuses}]`);
+            }
+            if (reasons.length === 0) reasons.push("nenhum filtro óbvio - investigar manualmente");
+          }
+
+          report.push({
+            nd,
+            in_t_dados_financeiro_voucher: dfv,
+            in_t_vouchers: inVouchers,
+            in_tbaixas: baixas,
+            probable_reasons: reasons,
+          });
+        }
+
+        await mariaClient.close();
+        return new Response(
+          JSON.stringify({ success: true, cursor, report }),
+          { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      } catch (e: any) {
+        if (mariaClient) try { await mariaClient.close(); } catch {}
+        return new Response(
+          JSON.stringify({ success: false, error: e.message }),
+          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+    }
 
     // ACTION: IMPORT - Importar vouchers do MariaDB para Supabase
     if (action === "import") {
