@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Download,
   RefreshCw,
@@ -20,6 +21,7 @@ import {
   Package,
   AlertCircle,
   CheckCircle2,
+  Layers,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -43,6 +45,9 @@ interface PendingVoucher {
   moeda: string | null;
   cnpj: string | null;
   razao_social: string | null;
+  source?: "SPO" | "VOUCHER";
+  detalhes?: string | null;
+  processos_associados?: string[];
 }
 
 interface BacklogTabProps {
@@ -293,14 +298,65 @@ export const BacklogTab = ({ onVoucherImported }: BacklogTabProps) => {
                       <span className="inline-flex items-center gap-2">
                         {voucher.nd}
                         <MoedaBadge moeda={voucher.moeda} />
+                        {voucher.source === "SPO" ? (
+                          <Badge
+                            variant="outline"
+                            className="rounded-full border-[#ffc800]/40 bg-[rgba(255,200,0,0.10)] text-[10px] text-[#ffc800] px-2 py-0"
+                          >
+                            SPO
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="rounded-full border-white/15 bg-white/5 text-[10px] text-[#aaaaaa] px-2 py-0"
+                          >
+                            Voucher
+                          </Badge>
+                        )}
                       </span>
                     </TableCell>
                     <TableCell className="text-white max-w-[200px] truncate">
                       {voucher.nome_beneficiario || voucher.razao_social || "-"}
                     </TableCell>
                     <TableCell className="text-[#aaaaaa]">
-                      {voucher.numero_processo || "-"}
+                      <div className="inline-flex items-center gap-2">
+                        <span>{voucher.numero_processo || "-"}</span>
+                        {voucher.source === "SPO" &&
+                          (voucher.processos_associados?.length ?? 0) > 1 && (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-1 rounded-full border border-[#ffc800]/30 bg-[rgba(255,200,0,0.08)] px-2 py-0.5 text-[10px] text-[#ffc800] hover:bg-[rgba(255,200,0,0.15)]"
+                                  title="Ver todos os processos associados"
+                                >
+                                  <Layers className="h-3 w-3" />
+                                  +{(voucher.processos_associados!.length) - 1} processos
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                align="start"
+                                className="w-72 max-h-72 overflow-auto bg-[#0a0a0a] border-white/10 text-white"
+                              >
+                                <div className="text-xs text-[#aaaaaa] mb-2">
+                                  Processos associados ({voucher.processos_associados!.length})
+                                </div>
+                                <ul className="space-y-1 font-mono text-xs">
+                                  {voucher.processos_associados!.map((p) => (
+                                    <li
+                                      key={p}
+                                      className="px-2 py-1 rounded bg-white/5 text-white break-all"
+                                    >
+                                      {p}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </PopoverContent>
+                            </Popover>
+                          )}
+                      </div>
                     </TableCell>
+
                     <TableCell className="text-white">
                       {voucher.moeda || "BRL"}{" "}
                       {voucher.valor_nf?.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) ||

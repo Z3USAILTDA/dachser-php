@@ -13044,41 +13044,99 @@ Deno.serve(async (req) => {
 
       // ==================== GET VOUCHERS PENDENTES RM ====================
       case 'get_vouchers_pendentes_rm': {
-        // Busca TODOS os vouchers da t_dados_financeiro_voucher que não existem na t_vouchers
-        // Excluindo apenas registros onde nome_beneficiario contém "dachser"
-        console.log('Fetching ALL pending RM vouchers not yet in esteira (excluding Dachser beneficiaries)...');
+        // Fontes:
+        // - t_dados_financeiro_spo (source='SPO')
+        // - t_dados_financeiro_voucher (source='VOUCHER')
+        // Quando o mesmo numero_processo existir em ambas, SPO tem prioridade.
+        // Excluindo registros onde nome_beneficiario contém "dachser" e modal = 'ADM'.
+        console.log('Fetching ALL pending RM entries (SPO + Voucher) not yet in esteira...');
 
-        const pendentes = await client.query(`
-          SELECT 
-            dfv.id_rm,
-            dfv.nd,
-            dfv.documento,
-            dfv.nome_beneficiario,
-            dfv.nome_cobranca,
-            dfv.numero_nf,
-            dfv.numero_processo,
-            dfv.modal,
-            dfv.tipo_pag,
-            dfv.forma_pag,
-            dfv.data_emissao,
-            dfv.data_vencimento,
-            dfv.valor_nf,
-            dfv.moeda,
-            dfv.cnpj,
-            dfv.razao_social,
-            dfv.created_by
-          FROM dados_dachser.t_dados_financeiro_voucher dfv
-          LEFT JOIN dados_dachser.t_vouchers v ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_unicode_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci
-          LEFT JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
-          WHERE v.id IS NULL
-            AND b.IdLancamentoRM IS NULL
-            AND (dfv.nome_beneficiario IS NULL OR LOWER(dfv.nome_beneficiario) NOT LIKE '%dachser%')
-            AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')
-          ORDER BY dfv.data_vencimento ASC
-        `);
+        const sql = `
+          WITH spo AS (
+            SELECT 'SPO' AS source, dfs.id_rm, dfs.nd, dfs.documento, dfs.nome_beneficiario,
+                   dfs.nome_cobranca, dfs.numero_nf, dfs.numero_processo, dfs.modal,
+                   dfs.tipo_pag, dfs.forma_pag, dfs.data_emissao, dfs.data_vencimento,
+                   dfs.valor_nf, dfs.moeda, dfs.cnpj, dfs.razao_social, dfs.created_by,
+                   dfs.detalhes
+              FROM dados_dachser.t_dados_financeiro_spo dfs
+             WHERE (dfs.nome_beneficiario IS NULL OR LOWER(dfs.nome_beneficiario) NOT LIKE '%dachser%')
+               AND (dfs.modal IS NULL OR dfs.modal <> 'ADM')
+          ),
+          voucher AS (
+            SELECT 'VOUCHER' AS source, dfv.id_rm, dfv.nd, dfv.documento, dfv.nome_beneficiario,
+                   dfv.nome_cobranca, dfv.numero_nf, dfv.numero_processo, dfv.modal,
+                   dfv.tipo_pag, dfv.forma_pag, dfv.data_emissao, dfv.data_vencimento,
+                   dfv.valor_nf, dfv.moeda, dfv.cnpj, dfv.razao_social, dfv.created_by,
+                   NULL AS detalhes
+              FROM dados_dachser.t_dados_financeiro_voucher dfv
+             WHERE (dfv.nome_beneficiario IS NULL OR LOWER(dfv.nome_beneficiario) NOT LIKE '%dachser%')
+               AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')
+          ),
+          unified AS (
+            SELECT * FROM spo
+            UNION ALL
+            SELECT v.* FROM voucher v
+             WHERE NOT EXISTS (
+               SELECT 1 FROM spo s
+                WHERE s.numero_processo IS NOT NULL
+                  AND s.numero_processo COLLATE utf8mb4_unicode_ci
+                    = v.numero_processo COLLATE utf8mb4_unicode_ci
+             )
+          )
+          SELECT u.*
+            FROM unified u
+            LEFT JOIN dados_dachser.t_vouchers v
+                   ON SUBSTRING_INDEX(TRIM(u.nd),' ',1) COLLATE utf8mb4_unicode_ci
+                    = SUBSTRING_INDEX(TRIM(v.numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+            LEFT JOIN dados_dachser.tbaixas b ON u.id_rm = b.IdLancamentoRM
+           WHERE v.id IS NULL AND b.IdLancamentoRM IS NULL
+           ORDER BY u.data_vencimento ASC
+        `;
 
-        console.log(`Found ${pendentes?.length || 0} pending RM vouchers (excluding Dachser)`);
-        result = { success: true, data: pendentes || [], count: pendentes?.length || 0 };
+        let pendentes: any[] = [];
+        try {
+          pendentes = await client.query(sql);
+        } catch (e) {
+          console.warn('[get_vouchers_pendentes_rm] Falha no UNION (SPO+Voucher). Fallback para apenas Voucher:', (e as Error).message);
+          pendentes = await client.query(`
+            SELECT 'VOUCHER' AS source, dfv.id_rm, dfv.nd, dfv.documento, dfv.nome_beneficiario,
+                   dfv.nome_cobranca, dfv.numero_nf, dfv.numero_processo, dfv.modal,
+                   dfv.tipo_pag, dfv.forma_pag, dfv.data_emissao, dfv.data_vencimento,
+                   dfv.valor_nf, dfv.moeda, dfv.cnpj, dfv.razao_social, dfv.created_by,
+                   NULL AS detalhes
+              FROM dados_dachser.t_dados_financeiro_voucher dfv
+              LEFT JOIN dados_dachser.t_vouchers v
+                     ON SUBSTRING_INDEX(TRIM(dfv.nd),' ',1) COLLATE utf8mb4_unicode_ci
+                      = SUBSTRING_INDEX(TRIM(v.numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+              LEFT JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
+             WHERE v.id IS NULL AND b.IdLancamentoRM IS NULL
+               AND (dfv.nome_beneficiario IS NULL OR LOWER(dfv.nome_beneficiario) NOT LIKE '%dachser%')
+               AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')
+             ORDER BY dfv.data_vencimento ASC
+          `);
+        }
+
+        // Normaliza processos_associados a partir de `detalhes` (apenas SPO).
+        const normalized = (pendentes || []).map((row: any) => {
+          let processos_associados: string[] = [];
+          if (row.source === 'SPO' && row.detalhes) {
+            const seen = new Set<string>();
+            processos_associados = String(row.detalhes)
+              .split(';')
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0)
+              .filter((s) => {
+                const k = s.toUpperCase();
+                if (seen.has(k)) return false;
+                seen.add(k);
+                return true;
+              });
+          }
+          return { ...row, processos_associados };
+        });
+
+        console.log(`Found ${normalized.length} pending entries (SPO+Voucher merged)`);
+        result = { success: true, data: normalized, count: normalized.length };
         break;
       }
 
@@ -13235,16 +13293,35 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Anti-duplicação: busca por numero_spo OU id_rm (qualquer sync_status)
-        // Resolve id_rm a partir do RM antes de checar
-        const rmLookup = await client.query(
-          `SELECT id_rm FROM dados_dachser.t_dados_financeiro_voucher
+        // Roteamento por tipo: SPO (nd começa com filial-dígito + "-") usa t_dados_financeiro_spo;
+        // demais usam t_dados_financeiro_voucher. Em caso de ambiguidade, SPO tem prioridade.
+        const ndPrefix = String(nd).trim().split(/\s+/)[0] || '';
+        const isSpoLike = /^[0-9]{2,4}-/.test(ndPrefix);
+
+        const lookupSql = (table: string) =>
+          `SELECT id_rm FROM dados_dachser.${table}
             WHERE SUBSTRING_INDEX(TRIM(nd), ' ', 1) COLLATE utf8mb4_unicode_ci
                 = SUBSTRING_INDEX(TRIM(?), ' ', 1) COLLATE utf8mb4_unicode_ci
-            LIMIT 1`,
-          [nd]
-        );
-        const lookupIdRm = rmLookup?.[0]?.id_rm || null;
+            LIMIT 1`;
+
+        const tablesOrdered = isSpoLike
+          ? ['t_dados_financeiro_spo', 't_dados_financeiro_voucher']
+          : ['t_dados_financeiro_voucher', 't_dados_financeiro_spo'];
+
+        let lookupIdRm: number | null = null;
+        let sourceTable: string | null = null;
+        for (const tbl of tablesOrdered) {
+          try {
+            const r = await client.query(lookupSql(tbl), [nd]);
+            if (r && r.length > 0) {
+              lookupIdRm = r[0]?.id_rm ?? null;
+              sourceTable = tbl;
+              break;
+            }
+          } catch (e) {
+            console.warn(`[import_voucher_from_rm] lookup falhou em ${tbl}:`, (e as Error).message);
+          }
+        }
 
         const existingVoucher = await client.query(`
           SELECT id, etapa_atual, id_rm, numero_spo
@@ -13274,23 +13351,26 @@ Deno.serve(async (req) => {
           break;
         }
 
-        // Buscar dados do RM
+        // Buscar dados do RM na tabela correta (SPO inclui coluna detalhes)
+        const fetchTable = sourceTable || (isSpoLike ? 't_dados_financeiro_spo' : 't_dados_financeiro_voucher');
+        const includeDetalhes = fetchTable === 't_dados_financeiro_spo';
         const rmData = await client.query(`
           SELECT 
             id_rm, nd, documento, nome_beneficiario, nome_cobranca, numero_nf,
             numero_processo, modal, tipo_pag, forma_pag, data_emissao,
-            data_vencimento, valor_nf, moeda, cnpj, razao_social
-          FROM dados_dachser.t_dados_financeiro_voucher
+            data_vencimento, valor_nf, moeda, cnpj, razao_social${includeDetalhes ? ', detalhes' : ''}
+          FROM dados_dachser.${fetchTable}
           WHERE nd = ?
           LIMIT 1
         `, [nd]);
 
         if (!rmData || rmData.length === 0) {
           return new Response(
-            JSON.stringify({ error: 'Voucher não encontrado no RM' }),
+            JSON.stringify({ error: 'Registro não encontrado no RM (SPO/Voucher)' }),
             { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
+
 
         const rm = rmData[0];
         const voucherId = crypto.randomUUID();
@@ -20502,61 +20582,53 @@ Deno.serve(async (req) => {
           const m = n.match(/^(\d{2,4}-\d{4,})/);
           return m ? m[1] : n;
         };
-        // Retorna { byFull, byPrefix } indexando DFVs encontrados por nd exato e por prefixo numérico.
-        const fetchDfvBySpo = async (spos: string[]): Promise<{ byFull: Record<string, any>; byPrefix: Record<string, any> }> => {
-          const byFull: Record<string, any> = {};
-          const byPrefix: Record<string, any> = {};
-          const normalized = Array.from(new Set(spos.map(normSpo).filter(Boolean)));
-          if (normalized.length === 0) return { byFull, byPrefix };
+        // Lookup SPO em t_dados_financeiro_spo por numero_processo (e por cada processo
+        // listado na coluna `detalhes`, separada por ';'). Retorna índice byProcesso.
+        const normProcesso = (s: any): string => String(s ?? '').trim().replace(/\s+/g, '').toUpperCase();
+        const fetchSpoByProcesso = async (processos: string[]): Promise<{ byProcesso: Record<string, any> }> => {
+          const byProcesso: Record<string, any> = {};
+          const normalized = Array.from(new Set(processos.map(normProcesso).filter(Boolean)));
+          if (normalized.length === 0) return { byProcesso };
           const cols = `id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
                         modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
-                        valor_nf, moeda, cnpj, razao_social`;
+                        valor_nf, moeda, cnpj, razao_social, detalhes`;
           try {
             const placeholders = normalized.map(() => '?').join(',');
+            // Match em numero_processo OU em qualquer token de detalhes (via FIND_IN_SET após troca de ';' por ',').
+            const findInSetClauses = normalized
+              .map(() => `FIND_IN_SET(?, UPPER(REPLACE(REPLACE(detalhes, ' ', ''), ';', ','))) > 0`)
+              .join(' OR ');
+            const params: any[] = [
+              ...normalized,
+              ...normalized,
+            ];
             const rows = await client.query(
-              `SELECT ${cols} FROM dados_dachser.t_dados_financeiro_voucher
-                WHERE UPPER(TRIM(nd)) IN (${placeholders})`,
-              normalized
+              `SELECT ${cols} FROM dados_dachser.t_dados_financeiro_spo
+                WHERE UPPER(REPLACE(TRIM(numero_processo), ' ', '')) COLLATE utf8mb4_unicode_ci IN (${placeholders})
+                   OR (${findInSetClauses})`,
+              params
             );
             for (const r of (rows || [])) {
-              if (r.nd) {
-                byFull[normSpo(r.nd)] = r;
-                byPrefix[spoPrefix(r.nd)] = r;
+              // Indexa pelo numero_processo principal
+              const main = normProcesso(r.numero_processo);
+              if (main && !byProcesso[main]) byProcesso[main] = r;
+              // Indexa também por cada token de detalhes
+              if (r.detalhes) {
+                String(r.detalhes)
+                  .split(';')
+                  .map((t) => normProcesso(t))
+                  .filter(Boolean)
+                  .forEach((tok) => {
+                    if (!byProcesso[tok]) byProcesso[tok] = r;
+                  });
               }
             }
           } catch (e) {
-            console.log('fetchDfvBySpo (exact) error:', e);
+            console.log('fetchSpoByProcesso error:', e);
           }
-          // Segunda passada: para SPOs sem match exato, tentar via prefixo numérico (ambos os sentidos)
-          const missingPrefixes = Array.from(new Set(
-            normalized
-              .filter(n => !byFull[n])
-              .map(n => spoPrefix(n))
-              .filter(p => /^\d{2,4}-\d{4,}$/.test(p) && !byPrefix[p])
-          ));
-          if (missingPrefixes.length > 0) {
-            try {
-              const likeClauses = missingPrefixes.map(() => '(UPPER(TRIM(nd)) = ? OR UPPER(TRIM(nd)) LIKE ?)').join(' OR ');
-              const params: any[] = [];
-              for (const p of missingPrefixes) { params.push(p, `${p} %`); }
-              const rows = await client.query(
-                `SELECT ${cols} FROM dados_dachser.t_dados_financeiro_voucher
-                  WHERE ${likeClauses}`,
-                params
-              );
-              for (const r of (rows || [])) {
-                if (r.nd) {
-                  byFull[normSpo(r.nd)] = r;
-                  const pfx = spoPrefix(r.nd);
-                  if (!byPrefix[pfx]) byPrefix[pfx] = r;
-                }
-              }
-            } catch (e) {
-              console.log('fetchDfvBySpo (prefix) error:', e);
-            }
-          }
-          return { byFull, byPrefix };
+          return { byProcesso };
         };
+
 
         // Merge sheet row + DFV. Returns resolved fields with origin per field.
         const mergeWithDfv = (sheet: any, dfv: any | null) => {
@@ -20624,29 +20696,17 @@ Deno.serve(async (req) => {
 
         const buildPreviewItems = async (rows: any[]) => {
           const sheetRows = rows.map((r, i) => parseSheetRow(r, i));
-          const spos = sheetRows.map(s => s.spo).filter(Boolean) as string[];
-          const { byFull, byPrefix } = await fetchDfvBySpo(spos);
-          return sheetRows.map(s => {
-            if (!s.spo) return mergeWithDfv(s, null);
-            const nf = normSpo(s.spo);
-            let dfv = byFull[nf] || null;
-            if (!dfv) {
-              const pfx = spoPrefix(s.spo);
-              if (/^\d{2,4}-\d{4,}$/.test(pfx)) {
-                const cand = byPrefix[pfx];
-                if (cand) {
-                  dfv = cand;
-                  // Canonicaliza SPO usando o nd completo do DFV
-                  if (cand.nd && normSpo(cand.nd) !== nf) {
-                    console.log(`[batch] SPO matched by prefix: ${s.spo} → ${cand.nd}`);
-                    s.spo = String(cand.nd);
-                  }
-                }
-              }
-            }
+          // Chave de busca agora é o PROCESSO da planilha (não o SPO).
+          const processos = sheetRows.map((s) => s.processo).filter(Boolean) as string[];
+          const { byProcesso } = await fetchSpoByProcesso(processos);
+          return sheetRows.map((s) => {
+            if (!s.processo) return mergeWithDfv(s, null);
+            const np = normProcesso(s.processo);
+            const dfv = byProcesso[np] || null;
             return mergeWithDfv(s, dfv);
           });
         };
+
 
         const prettyEtapa = (raw: any): string => {
           const s = String(raw || '').trim().toUpperCase();
