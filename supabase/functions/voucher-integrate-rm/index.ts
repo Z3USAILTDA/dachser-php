@@ -81,8 +81,9 @@ const handler = async (req: Request): Promise<Response> => {
 
         const whereClause = `
           numero_spo REGEXP '^[0-9]+-[0-9]+'
-          AND etapa_atual IN ('OPERACIONAL','FISCAL')
+          AND etapa_atual IN ('OPERACAO','FISCAL')
         `;
+
 
         // Sample + count
         const sample = await mariaClient.query(
