@@ -232,43 +232,82 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Detect force-refresh: browser sends Cache-Control: no-cache / Pragma: no-cache
+  // on hard reload (F5 / Ctrl+R). Also accept ?force=1 explicit param.
+  const cc = (req.headers.get("cache-control") || "").toLowerCase();
+  const pragma = (req.headers.get("pragma") || "").toLowerCase();
+  let force = false;
+  try {
+    const url = new URL(req.url);
+    if (url.searchParams.get("force") === "1") force = true;
+  } catch (_) {}
+  if (cc.includes("no-cache") || cc.includes("no-store") || pragma.includes("no-cache")) {
+    force = true;
+  }
+
+  // Cold isolate: try to hydrate from persistent DB cache before deciding.
+  if (!payloadCache) {
+    await hydratePayloadCacheFromDb();
+  }
+
   const now = Date.now();
 
-  // Cache HIT (fresh): return immediately, zero CPU.
-  if (payloadCache && now - payloadCache.at < PAYLOAD_TTL_MS) {
-    return new Response(payloadCache.body, {
-      headers: { ...corsHeaders, "Content-Type": "application/json", "x-cache": "fresh" },
-    });
-  }
-
-  // Cache HIT (stale but usable): serve stale, refresh in background.
-  if (payloadCache && now - payloadCache.at < PAYLOAD_MAX_STALE_MS) {
-    if (!refreshInFlight) {
-      refreshInFlight = computePayload()
-        .then(() => {})
-        .catch((e) => { console.error("[BG-REFRESH] failed:", e); })
-        .finally(() => { refreshInFlight = null; });
-      try { (globalThis as any).EdgeRuntime?.waitUntil?.(refreshInFlight); } catch (_) {}
+  if (!force) {
+    // Cache HIT (fresh, < 30min): return immediately, zero CPU.
+    if (payloadCache && now - payloadCache.at < PAYLOAD_TTL_MS) {
+      return new Response(payloadCache.body, {
+        headers: { ...corsHeaders, "Content-Type": "application/json", "x-cache": "fresh" },
+      });
     }
-    return new Response(payloadCache.body, {
-      headers: { ...corsHeaders, "Content-Type": "application/json", "x-cache": "stale" },
-    });
+
+    // Cache HIT (stale but < 2h): serve stale, refresh in background.
+    if (payloadCache && now - payloadCache.at < PAYLOAD_MAX_STALE_MS) {
+      if (!refreshInFlight) {
+        console.log(`[BG-REFRESH] age=${Math.round((now - payloadCache.at) / 1000)}s, triggering refresh`);
+        refreshInFlight = computePayload()
+          .then(() => {})
+          .catch((e) => { console.error("[BG-REFRESH] failed:", e); })
+          .finally(() => { refreshInFlight = null; });
+        try { (globalThis as any).EdgeRuntime?.waitUntil?.(refreshInFlight); } catch (_) {}
+      }
+      return new Response(payloadCache.body, {
+        headers: { ...corsHeaders, "Content-Type": "application/json", "x-cache": "stale" },
+      });
+    }
+  } else {
+    console.log("[FORCE] Bypassing cache (no-cache header or ?force=1)");
   }
 
-  // Cold start or cache too stale: compute synchronously.
+  // Force-refresh OR cold start / cache > 2h: compute synchronously.
+  // Concurrency lock: if a refresh is already running, await it and serve.
   try {
+    if (refreshInFlight && !force) {
+      await refreshInFlight;
+      if (payloadCache) {
+        return new Response(payloadCache.body, {
+          headers: { ...corsHeaders, "Content-Type": "application/json", "x-cache": "awaited" },
+        });
+      }
+    }
     const body = await computePayload();
     return new Response(body, {
-      headers: { ...corsHeaders, "Content-Type": "application/json", "x-cache": "miss" },
+      headers: { ...corsHeaders, "Content-Type": "application/json", "x-cache": force ? "forced" : "miss" },
     });
   } catch (error) {
     console.error("fetch-tracking-aereo error:", error);
+    // Last-resort fallback: serve any stale cache we still have rather than 5xx.
+    if (payloadCache) {
+      return new Response(payloadCache.body, {
+        headers: { ...corsHeaders, "Content-Type": "application/json", "x-cache": "stale-fallback" },
+      });
+    }
     return new Response(
       JSON.stringify({ success: false, error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
+
 
 async function computePayload(): Promise<string> {
   let client: Client | null = null;
