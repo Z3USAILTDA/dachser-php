@@ -475,7 +475,7 @@ Deno.serve(async (req) => {
     const FIN_ACTIONS = new Set<string>([
       // Vouchers / Esteira
       'save_voucher_esteira','save_voucher_anexo','update_voucher_esteira','update_voucher_by_numero_spo','cleanup_duplicate_vouchers',
-      'audit_voucher_diff','revert_voucher_field',
+      'audit_voucher_diff','audit_anexos_etapas_op','revert_voucher_field',
       'cleanup_invalid_vouchers','fix_sync_vouchers_to_a_processar','delete_sync_duplicates',
       'admin_bulk_update_etapa','admin_reset_all_to_a_processar','admin_reset_stale_to_a_processar',
       'get_vouchers_esteira','get_voucher_by_id','get_voucher_responsaveis_emails',
@@ -7545,6 +7545,62 @@ Deno.serve(async (req) => {
         result = { success: true, voucher: v, espelho_rm: rmRow, logs };
         break;
       }
+
+      // ===== Auditoria read-only de anexos/logs por etapa OPERACAO / AJUSTE_OPERACAO =====
+      case 'audit_anexos_etapas_op': {
+        const etapas = ['OPERACAO', 'AJUSTE_OPERACAO'];
+        const out: any = {};
+        for (const etapa of etapas) {
+          const totals = await client.query(`
+            SELECT
+              COUNT(*) AS total_vouchers,
+              SUM(CASE WHEN EXISTS (SELECT 1 FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id) THEN 1 ELSE 0 END) AS com_anexos,
+              SUM(CASE WHEN EXISTS (SELECT 1 FROM dados_dachser.t_voucher_logs l  WHERE l.voucher_id = v.id) THEN 1 ELSE 0 END) AS com_logs,
+              SUM(CASE WHEN (v.criado_por_user_id = 'SISTEMA_SYNC' OR (v.id_rm IS NOT NULL AND v.id_rm <> '')) THEN 1 ELSE 0 END) AS origem_rm,
+              SUM(CASE WHEN NOT (v.criado_por_user_id = 'SISTEMA_SYNC' OR (v.id_rm IS NOT NULL AND v.id_rm <> '')) THEN 1 ELSE 0 END) AS origem_front
+            FROM dados_dachser.t_vouchers v
+            WHERE v.etapa_atual = ?
+              AND v.sync_status = 'ATIVO'
+              AND (v.voucher_master_id IS NULL OR v.voucher_master_id = '')
+          `, [etapa]);
+
+          const semAnexosFront = await client.query(`
+            SELECT v.id, v.numero_spo, v.criado_por_user_id, v.id_rm, v.created_at, v.updated_at,
+              EXISTS (SELECT 1 FROM dados_dachser.t_voucher_logs l WHERE l.voucher_id = v.id) AS tem_logs
+            FROM dados_dachser.t_vouchers v
+            WHERE v.etapa_atual = ?
+              AND v.sync_status = 'ATIVO'
+              AND (v.voucher_master_id IS NULL OR v.voucher_master_id = '')
+              AND NOT (v.criado_por_user_id = 'SISTEMA_SYNC' OR (v.id_rm IS NOT NULL AND v.id_rm <> ''))
+              AND NOT EXISTS (SELECT 1 FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id)
+            ORDER BY v.updated_at DESC
+            LIMIT 10
+          `, [etapa]);
+
+          const semAnexosRm = await client.query(`
+            SELECT v.id, v.numero_spo, v.criado_por_user_id, v.id_rm, v.created_at, v.updated_at,
+              EXISTS (SELECT 1 FROM dados_dachser.t_voucher_logs l WHERE l.voucher_id = v.id) AS tem_logs
+            FROM dados_dachser.t_vouchers v
+            WHERE v.etapa_atual = ?
+              AND v.sync_status = 'ATIVO'
+              AND (v.voucher_master_id IS NULL OR v.voucher_master_id = '')
+              AND (v.criado_por_user_id = 'SISTEMA_SYNC' OR (v.id_rm IS NOT NULL AND v.id_rm <> ''))
+              AND NOT EXISTS (SELECT 1 FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id)
+            ORDER BY v.updated_at DESC
+            LIMIT 5
+          `, [etapa]);
+
+          out[etapa] = {
+            totals: totals?.[0] || {},
+            amostra_sem_anexos_front: semAnexosFront || [],
+            amostra_sem_anexos_rm: semAnexosRm || [],
+          };
+        }
+        result = { success: true, data: out };
+        break;
+      }
+
+
 
       // ===== Reversão administrativa controlada (ADMIN-only) =====
       case 'revert_voucher_field': {
