@@ -1,33 +1,42 @@
-## Mudança
+## Diagnóstico
 
-Hoje, em `src/pages/air/TrackingAereo.tsx` (linha 727), processos com `hide_reason` (vindos da `t_air_process_visibility`) só são ocultados quando **não há** termo de busca. Qualquer texto digitado já os revela — inclusive um pedaço do número (ex.: `001-234`).
+A query de discrepância está escrita corretamente, mas **nunca é executada**. Em `supabase/functions/fetch-tracking-aereo/index.ts`:
 
-A nova regra: processos ocultos só devem aparecer quando o termo de busca for **igual** ao número completo do AWB ou do HAWB.
+- Linha 368: `const allowBackgroundRefresh = false;` — flag hardcoded em `false`.
+- Linhas 369 e 737: tanto o refresh em background da **discrepância** quanto do **routeMap** estão gated por essa flag, então o bloco `EdgeRuntime.waitUntil(discBgTask)` **nunca roda**.
+- O cache em memória (`discrepancyCache`, `routeCache`) por isso nunca é populado, e os logs confirmam em todo poll:
+  ```
+  [DISC] Cold start — empty discrepancy this poll, will populate in background
+  [ROUTE] Cold start — routeMap empty this poll, will populate in background
+  ```
+- `discrepancyMap` sempre fica `{}`, então `pieces_discrepancy`, `has_dis_event` e `baseline_pieces` saem sempre `false/null` para todos os AWBs.
 
-## Implementação
+Foi desativado em algum ponto para evitar `CPU Time exceeded` (visto também no log atual), mas isso quebrou o cálculo de discrepância na tela.
 
-Arquivo único: `src/pages/air/TrackingAereo.tsx`
+## Correção
 
-1. **`filteredAwbs` (linha 727)** — substituir
+Arquivo único: `supabase/functions/fetch-tracking-aereo/index.ts`
+
+1. **Religar o refresh em background** (linha 368): trocar
    ```ts
-   if (!searchTerm && awb.hide_reason) return false;
+   const allowBackgroundRefresh = false;
    ```
-   por uma checagem de match exato:
+   por
    ```ts
-   if (awb.hide_reason) {
-     const term = searchTerm.trim().toLowerCase();
-     const awbNum = (awb.awb || "").trim().toLowerCase();
-     const hawbNum = (awb.hawb || "").trim().toLowerCase();
-     // Aceita com ou sem o traço do AWB (001-23496686 ou 00123496686)
-     const awbNoDash = awbNum.replace(/-/g, "");
-     const termNoDash = term.replace(/-/g, "");
-     const isFullMatch =
-       term.length > 0 &&
-       (term === awbNum || term === hawbNum || termNoDash === awbNoDash);
-     if (!isFullMatch) return false;
-   }
+   const allowBackgroundRefresh = true;
    ```
+   O refresh roda via `EdgeRuntime.waitUntil(...)` **após** a resposta ser enviada, então não bloqueia o request e o usuário recebe os dados rápido; o cache em memória é preenchido para os polls seguintes.
 
-2. **Contadores dos cards (linha 703)** — manter `if (awb.hide_reason) return;` como está, para que processos ocultos **nunca** entrem nas contagens de Total/Trânsito/Alerta/Crítico, mesmo quando estiverem visíveis por busca exata (mantém o comportamento atual dos cards).
+2. **Aumentar o TTL dos caches** (linhas 11 e 14) de 60s para 5 minutos, para limitar a frequência da query pesada e evitar o `CPU Time exceeded` que motivou a desativação original:
+   ```ts
+   const DISCREPANCY_CACHE_TTL_MS = 5 * 60_000;
+   const ROUTE_CACHE_TTL_MS = 5 * 60_000;
+   ```
+   - O front segue chamando a cada 30s, mas o refresh pesado só dispara uma vez a cada 5 min (ou quando o isolate é reciclado e o cache zera). Nos demais polls usa cache stale, o que mantém os dados frescos o bastante para discrepância (que muda em escala de horas/dias, não segundos).
 
-Nenhuma mudança no backend (`fetch-tracking-aereo`) nem na tabela `t_air_process_visibility` — apenas filtro de UI.
+3. **Sem mudanças** na query SQL nem no front — a query já está correta; ela só precisa voltar a rodar.
+
+## Verificação após deploy
+
+- Conferir nos logs de `fetch-tracking-aereo` a presença de `[DISC-BG] Cache refreshed: N records` e desaparecimento do `Cold start — empty discrepancy` em polls subsequentes.
+- Na tela `tracking-aereo`, processos com divergência de peças voltam a aparecer com badge de discrepância / card "Críticos" populado.
