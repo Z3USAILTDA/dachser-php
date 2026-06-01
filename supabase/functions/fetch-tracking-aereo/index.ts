@@ -30,6 +30,13 @@ let visibilityCache: { at: number; data: Record<string, string> } | null = null;
 let masterClientesCache: { at: number; data: Record<string, string> } | null = null;
 let hiddenAwbsCache: { at: number; data: Set<string> } | null = null;
 
+// Full-payload cache — serves warm polls instantly so we don't re-run the
+// heavy 1609-row compute on every request (was triggering WORKER_RESOURCE_LIMIT).
+const PAYLOAD_TTL_MS = 20_000;          // fresh window
+const PAYLOAD_MAX_STALE_MS = 5 * 60_000; // serve stale up to 5min while refreshing
+let payloadCache: { at: number; body: string } | null = null;
+let refreshInFlight: Promise<void> | null = null;
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
