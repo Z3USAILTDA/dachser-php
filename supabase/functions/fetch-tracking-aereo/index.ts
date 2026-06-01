@@ -750,6 +750,7 @@ serve(async (req) => {
           }
           discrepancyCache = { at: Date.now(), data: fresh };
           console.log(`[DISC-BG] Cache refreshed: ${Object.keys(fresh).length} records (+${added996} enriched from prefix 996)`);
+          await persistCacheToDb("discrepancy", fresh);
         } catch (err) {
           console.warn("[DISC-BG] Failed:", err);
         } finally {
