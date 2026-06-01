@@ -23,9 +23,12 @@ const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
 
 async function hydrateCachesFromDb(): Promise<void> {
   if (!supabaseAdmin) return;
-  const discFresh = discrepancyCache && Date.now() - discrepancyCache.at < DISCREPANCY_CACHE_TTL_MS;
-  const routeFresh = routeCache && Date.now() - routeCache.at < ROUTE_CACHE_TTL_MS;
-  if (discFresh && routeFresh) return;
+  // Só hidrata se a memória estiver vazia (cold isolate). Se já existir cache em
+  // memória — mesmo stale — serve direto e deixa o BG refresh atualizar, evitando
+  // somar latência da Postgres ao caminho síncrono (CPU budget de 2s).
+  const needDisc = !discrepancyCache;
+  const needRoute = !routeCache;
+  if (!needDisc && !needRoute) return;
   try {
     const { data, error } = await supabaseAdmin
       .from("air_tracking_cache")
