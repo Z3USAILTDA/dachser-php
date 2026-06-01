@@ -30,6 +30,13 @@ let visibilityCache: { at: number; data: Record<string, string> } | null = null;
 let masterClientesCache: { at: number; data: Record<string, string> } | null = null;
 let hiddenAwbsCache: { at: number; data: Set<string> } | null = null;
 
+// Full-payload cache — serves warm polls instantly so we don't re-run the
+// heavy 1609-row compute on every request (was triggering WORKER_RESOURCE_LIMIT).
+const PAYLOAD_TTL_MS = 20_000;          // fresh window
+const PAYLOAD_MAX_STALE_MS = 5 * 60_000; // serve stale up to 5min while refreshing
+let payloadCache: { at: number; body: string } | null = null;
+let refreshInFlight: Promise<void> | null = null;
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
@@ -189,6 +196,45 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const now = Date.now();
+
+  // Cache HIT (fresh): return immediately, zero CPU.
+  if (payloadCache && now - payloadCache.at < PAYLOAD_TTL_MS) {
+    return new Response(payloadCache.body, {
+      headers: { ...corsHeaders, "Content-Type": "application/json", "x-cache": "fresh" },
+    });
+  }
+
+  // Cache HIT (stale but usable): serve stale, refresh in background.
+  if (payloadCache && now - payloadCache.at < PAYLOAD_MAX_STALE_MS) {
+    if (!refreshInFlight) {
+      refreshInFlight = computePayload()
+        .then(() => {})
+        .catch((e) => { console.error("[BG-REFRESH] failed:", e); })
+        .finally(() => { refreshInFlight = null; });
+      try { (globalThis as any).EdgeRuntime?.waitUntil?.(refreshInFlight); } catch (_) {}
+    }
+    return new Response(payloadCache.body, {
+      headers: { ...corsHeaders, "Content-Type": "application/json", "x-cache": "stale" },
+    });
+  }
+
+  // Cold start or cache too stale: compute synchronously.
+  try {
+    const body = await computePayload();
+    return new Response(body, {
+      headers: { ...corsHeaders, "Content-Type": "application/json", "x-cache": "miss" },
+    });
+  } catch (error) {
+    console.error("fetch-tracking-aereo error:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error instanceof Error ? error.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+});
+
+async function computePayload(): Promise<string> {
   let client: Client | null = null;
   const __t0 = Date.now();
   let __coldStart = !eventsLookupCache;
@@ -203,6 +249,8 @@ serve(async (req) => {
     if (!host || !database || !username || !password) {
       throw new Error("MariaDB credentials not configured");
     }
+
+
 
     client = await new Client().connect({
       hostname: host,
@@ -1616,16 +1664,13 @@ serve(async (req) => {
     }
 
     console.log(`[PERF] fetch-tracking-aereo done in ${Date.now() - __t0}ms (coldStart=${__coldStart})`);
-    return new Response(JSON.stringify({ success: true, data: filteredData, failed_count: failed.length }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    const body = JSON.stringify({ success: true, data: filteredData, failed_count: failed.length });
+    payloadCache = { at: Date.now(), body };
+    return body;
   } catch (error) {
     console.error(`fetch-tracking-aereo error after ${Date.now() - __t0}ms (coldStart=${__coldStart}):`, error);
-    return new Response(
-      JSON.stringify({ success: false, error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    throw error;
   } finally {
     if (client) { try { await client.close(); } catch (_) {} }
   }
-});
+}
