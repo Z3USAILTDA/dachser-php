@@ -9,26 +9,19 @@ const corsHeaders = {
 };
 
 // Stage → roles mapping (mirrors src/utils/esteiraNotifications.ts)
+// REGRA: nenhum e-mail desta função pode ir para mais de 1 destinatário.
+// Roles aqui só são usadas como último recurso pelo fluxo de URGENCIA_SOLICITADA
+// (resolver supervisor quando o supervisor direto do solicitante não está mapeado).
 const STAGE_TO_ROLES: Record<string, string[]> = {
   OPERACAO: [],
-  AJUSTE_OPERACAO: ["__OPERACAO_FIXED__"], // special: uses fixed email list
-  FISCAL: ["FISCAL", "GESTOR_FISCAL"],
-  AJUSTE_FISCAL: ["FISCAL", "GESTOR_FISCAL"],
+  AJUSTE_OPERACAO: [], // sem broadcast — resolvido individualmente via creator_email + log fallback
+  FISCAL: [],
+  AJUSTE_FISCAL: [], // sem broadcast — resolvido via responsavel_fiscal + log fallback
   SUPERVISOR: ["SUPERVISOR", "GESTOR_SUPERVISOR"],
-  FINANCEIRO: ["FINANCEIRO", "GESTOR_FINANCEIRO"],
-  ROBO: ["FINANCEIRO", "GESTOR_FINANCEIRO"],
+  FINANCEIRO: [],
+  ROBO: [],
   CONCLUIDO: [],
 };
-
-// Fixed recipients for AJUSTE_OPERACAO (adjustment requests back to Operação)
-const OPERACAO_FIXED_EMAILS = [
-  "beatriz.tozzi@dachser.com",
-  "cleiciane.faconi@dachser.com",
-  "julia.stanguerlin@dachser.com",
-  "laura.estevam@dachser.com",
-  "leandro.geraldo@dachser.com",
-  "priscila.neves-external@dachser.com",
-];
 
 interface NotificationRequest {
   type: "AJUSTE_SOLICITADO" | "URGENCIA_SOLICITADA" | "URGENCIA_SOLICITADA_CONFIRMACAO" | "URGENCIA_APROVADA" | "URGENCIA_REJEITADA";
@@ -404,19 +397,24 @@ const handler = async (req: Request): Promise<Response> => {
       // E-mail informativo para o solicitante. Sem CC, sem botões.
       if (responsaveis?.creator_email) toEmails = [responsaveis.creator_email];
     } else if (data.type === "URGENCIA_APROVADA" || data.type === "URGENCIA_REJEITADA") {
-      // Resposta automática ao solicitante (TO) com supervisor em CC
+      // Resposta automática SOMENTE ao solicitante. Supervisor já agiu (clique no
+      // botão Aprovar/Rejeitar) e não precisa receber cópia — regra 1:1.
       if (responsaveis?.creator_email) toEmails = [responsaveis.creator_email];
-      if (responsaveis?.creator_supervisor_email) ccEmails = [responsaveis.creator_supervisor_email];
-      if (toEmails.length === 0 && ccEmails.length > 0) {
-        toEmails = ccEmails;
-        ccEmails = [];
-      }
     } else if (data.type === "AJUSTE_SOLICITADO") {
       if (data.toStage === "AJUSTE_OPERACAO") {
         if (responsaveis?.creator_email) {
           toEmails = [responsaveis.creator_email];
         } else {
-          toEmails = OPERACAO_FIXED_EMAILS;
+          // NUNCA fazer broadcast para a lista da Operação. Se o criador não pôde
+          // ser identificado (voucher veio da sync sem criado_por_user_id e nem
+          // o fallback de log resolveu), abortar silenciosamente.
+          console.warn(
+            `[AJUSTE_SOLICITADO/AJUSTE_OPERACAO] Nenhum destinatário específico para voucher ${data.voucherId}. Abortando envio (sem broadcast).`
+          );
+          return new Response(
+            JSON.stringify({ success: true, sent: 0, reason: "no_specific_operacao_recipient" }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
         }
       } else if (data.toStage === "AJUSTE_FISCAL") {
         if (responsaveis?.fiscal_email) {
@@ -440,6 +438,20 @@ const handler = async (req: Request): Promise<Response> => {
     // Deduplicate and remove cc entries already present in to
     toEmails = [...new Set(toEmails.filter(Boolean))];
     ccEmails = [...new Set(ccEmails.filter((e) => e && !toEmails.includes(e)))];
+
+    // GUARD 1:1 — Esta função NUNCA pode enviar para mais de uma pessoa.
+    // Relatórios broadcast (mensal/diário) usam edge functions dedicadas
+    // (voucher-monthly-report etc.), não passam por aqui.
+    if (toEmails.length > 1) {
+      console.warn(
+        `[GUARD_1_TO_1] type=${data.type} resolveu ${toEmails.length} destinatários (${toEmails.join(", ")}). Truncando para o primeiro.`
+      );
+      toEmails = [toEmails[0]];
+    }
+    if (ccEmails.length > 0) {
+      console.warn(`[GUARD_1_TO_1] type=${data.type} tinha CC (${ccEmails.join(", ")}). Removendo CC.`);
+      ccEmails = [];
+    }
 
     if (toEmails.length === 0) {
       console.log("No recipients resolved — skipping send");
