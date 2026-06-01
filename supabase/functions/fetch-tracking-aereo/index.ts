@@ -196,12 +196,58 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const now = Date.now();
+
+  // Cache HIT (fresh): return immediately, zero CPU.
+  if (payloadCache && now - payloadCache.at < PAYLOAD_TTL_MS) {
+    return new Response(payloadCache.body, {
+      headers: { ...corsHeaders, "Content-Type": "application/json", "x-cache": "fresh" },
+    });
+  }
+
+  // Cache HIT (stale but usable): serve stale, refresh in background.
+  if (payloadCache && now - payloadCache.at < PAYLOAD_MAX_STALE_MS) {
+    if (!refreshInFlight) {
+      refreshInFlight = computePayload()
+        .catch((e) => { console.error("[BG-REFRESH] failed:", e); })
+        .finally(() => { refreshInFlight = null; });
+      try { (globalThis as any).EdgeRuntime?.waitUntil?.(refreshInFlight); } catch (_) {}
+    }
+    return new Response(payloadCache.body, {
+      headers: { ...corsHeaders, "Content-Type": "application/json", "x-cache": "stale" },
+    });
+  }
+
+  // Cold start or cache too stale: compute synchronously.
+  try {
+    const body = await computePayload();
+    return new Response(body, {
+      headers: { ...corsHeaders, "Content-Type": "application/json", "x-cache": "miss" },
+    });
+  } catch (error) {
+    console.error("fetch-tracking-aereo error:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error instanceof Error ? error.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+});
+
+async function computePayload(): Promise<string> {
   let client: Client | null = null;
   const __t0 = Date.now();
   let __coldStart = !eventsLookupCache;
 
   try {
     const host = (Deno.env.get("MARIADB_AIR_HOST") || Deno.env.get("MARIADB_OPS_HOST"));
+    const port = parseInt((Deno.env.get("MARIADB_AIR_PORT") || Deno.env.get("MARIADB_OPS_PORT")) || "3306");
+    const database = (Deno.env.get("MARIADB_AIR_DATABASE") || Deno.env.get("MARIADB_OPS_DATABASE"));
+    const username = (Deno.env.get("MARIADB_AIR_USER") || Deno.env.get("MARIADB_OPS_USER"));
+    const password = (Deno.env.get("MARIADB_AIR_PASSWORD") || Deno.env.get("MARIADB_OPS_PASSWORD"));
+
+    if (!host || !database || !username || !password) {
+      throw new Error("MariaDB credentials not configured");
+    }
     const port = parseInt((Deno.env.get("MARIADB_AIR_PORT") || Deno.env.get("MARIADB_OPS_PORT")) || "3306");
     const database = (Deno.env.get("MARIADB_AIR_DATABASE") || Deno.env.get("MARIADB_OPS_DATABASE"));
     const username = (Deno.env.get("MARIADB_AIR_USER") || Deno.env.get("MARIADB_OPS_USER"));
