@@ -20582,61 +20582,53 @@ Deno.serve(async (req) => {
           const m = n.match(/^(\d{2,4}-\d{4,})/);
           return m ? m[1] : n;
         };
-        // Retorna { byFull, byPrefix } indexando DFVs encontrados por nd exato e por prefixo numérico.
-        const fetchDfvBySpo = async (spos: string[]): Promise<{ byFull: Record<string, any>; byPrefix: Record<string, any> }> => {
-          const byFull: Record<string, any> = {};
-          const byPrefix: Record<string, any> = {};
-          const normalized = Array.from(new Set(spos.map(normSpo).filter(Boolean)));
-          if (normalized.length === 0) return { byFull, byPrefix };
+        // Lookup SPO em t_dados_financeiro_spo por numero_processo (e por cada processo
+        // listado na coluna `detalhes`, separada por ';'). Retorna índice byProcesso.
+        const normProcesso = (s: any): string => String(s ?? '').trim().replace(/\s+/g, '').toUpperCase();
+        const fetchSpoByProcesso = async (processos: string[]): Promise<{ byProcesso: Record<string, any> }> => {
+          const byProcesso: Record<string, any> = {};
+          const normalized = Array.from(new Set(processos.map(normProcesso).filter(Boolean)));
+          if (normalized.length === 0) return { byProcesso };
           const cols = `id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
                         modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
-                        valor_nf, moeda, cnpj, razao_social`;
+                        valor_nf, moeda, cnpj, razao_social, detalhes`;
           try {
             const placeholders = normalized.map(() => '?').join(',');
+            // Match em numero_processo OU em qualquer token de detalhes (via FIND_IN_SET após troca de ';' por ',').
+            const findInSetClauses = normalized
+              .map(() => `FIND_IN_SET(?, UPPER(REPLACE(REPLACE(detalhes, ' ', ''), ';', ','))) > 0`)
+              .join(' OR ');
+            const params: any[] = [
+              ...normalized,
+              ...normalized,
+            ];
             const rows = await client.query(
-              `SELECT ${cols} FROM dados_dachser.t_dados_financeiro_voucher
-                WHERE UPPER(TRIM(nd)) IN (${placeholders})`,
-              normalized
+              `SELECT ${cols} FROM dados_dachser.t_dados_financeiro_spo
+                WHERE UPPER(REPLACE(TRIM(numero_processo), ' ', '')) COLLATE utf8mb4_unicode_ci IN (${placeholders})
+                   OR (${findInSetClauses})`,
+              params
             );
             for (const r of (rows || [])) {
-              if (r.nd) {
-                byFull[normSpo(r.nd)] = r;
-                byPrefix[spoPrefix(r.nd)] = r;
+              // Indexa pelo numero_processo principal
+              const main = normProcesso(r.numero_processo);
+              if (main && !byProcesso[main]) byProcesso[main] = r;
+              // Indexa também por cada token de detalhes
+              if (r.detalhes) {
+                String(r.detalhes)
+                  .split(';')
+                  .map((t) => normProcesso(t))
+                  .filter(Boolean)
+                  .forEach((tok) => {
+                    if (!byProcesso[tok]) byProcesso[tok] = r;
+                  });
               }
             }
           } catch (e) {
-            console.log('fetchDfvBySpo (exact) error:', e);
+            console.log('fetchSpoByProcesso error:', e);
           }
-          // Segunda passada: para SPOs sem match exato, tentar via prefixo numérico (ambos os sentidos)
-          const missingPrefixes = Array.from(new Set(
-            normalized
-              .filter(n => !byFull[n])
-              .map(n => spoPrefix(n))
-              .filter(p => /^\d{2,4}-\d{4,}$/.test(p) && !byPrefix[p])
-          ));
-          if (missingPrefixes.length > 0) {
-            try {
-              const likeClauses = missingPrefixes.map(() => '(UPPER(TRIM(nd)) = ? OR UPPER(TRIM(nd)) LIKE ?)').join(' OR ');
-              const params: any[] = [];
-              for (const p of missingPrefixes) { params.push(p, `${p} %`); }
-              const rows = await client.query(
-                `SELECT ${cols} FROM dados_dachser.t_dados_financeiro_voucher
-                  WHERE ${likeClauses}`,
-                params
-              );
-              for (const r of (rows || [])) {
-                if (r.nd) {
-                  byFull[normSpo(r.nd)] = r;
-                  const pfx = spoPrefix(r.nd);
-                  if (!byPrefix[pfx]) byPrefix[pfx] = r;
-                }
-              }
-            } catch (e) {
-              console.log('fetchDfvBySpo (prefix) error:', e);
-            }
-          }
-          return { byFull, byPrefix };
+          return { byProcesso };
         };
+
 
         // Merge sheet row + DFV. Returns resolved fields with origin per field.
         const mergeWithDfv = (sheet: any, dfv: any | null) => {
