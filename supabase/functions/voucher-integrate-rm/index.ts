@@ -98,12 +98,21 @@ const handler = async (req: Request): Promise<Response> => {
         const total = Number((countRes?.[0] as any)?.total || 0);
 
         if (mode === "dry") {
+          // Diagnóstico: distribuição por etapa_atual de SPOs
+          const dist = await mariaClient.query(
+            `SELECT etapa_atual, COUNT(*) AS qtd
+               FROM dados_dachser.t_vouchers
+              WHERE numero_spo REGEXP '^[0-9]+-[0-9]+'
+              GROUP BY etapa_atual
+              ORDER BY qtd DESC`
+          );
           await mariaClient.close();
           return new Response(
-            JSON.stringify({ success: true, mode: "dry", total, sample }),
+            JSON.stringify({ success: true, mode: "dry", total, sample, distribuicao_etapas_spo: dist }),
             { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
           );
         }
+
 
         // EXECUTE
         const idsRes = await mariaClient.query(
