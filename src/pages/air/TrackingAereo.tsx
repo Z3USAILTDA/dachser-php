@@ -723,8 +723,22 @@ const TrackingAereo = () => {
       const isDLV = code === "DLV" || code === "POD";
       // Hide DLV unless actively searching
       if (isDLV && !searchTerm) return false;
-      // Hide processes with persisted hide_reason (from backend scan)
-      if (!searchTerm && awb.hide_reason) return false;
+      // Hide processes with persisted hide_reason — só revela em busca pelo número COMPLETO (AWB ou HAWB)
+      if (awb.hide_reason) {
+        const term = searchTerm.trim().toLowerCase();
+        const awbNum = (awb.awb || "").trim().toLowerCase();
+        const hawbNum = (awb.hawb || "").trim().toLowerCase();
+        const termNoDash = term.replace(/-/g, "");
+        const awbNoDash = awbNum.replace(/-/g, "");
+        const hawbNoDash = hawbNum.replace(/-/g, "");
+        const isFullMatch =
+          term.length > 0 &&
+          (term === awbNum ||
+            term === hawbNum ||
+            (awbNoDash.length > 0 && termNoDash === awbNoDash) ||
+            (hawbNoDash.length > 0 && termNoDash === hawbNoDash));
+        if (!isFullMatch) return false;
+      }
       // Hide processes where ARR at destination happened > 5 days ago (fallback)
       if (!searchTerm && awb.arr_destino_date) {
         const arrDate = parseDBDate(awb.arr_destino_date);
