@@ -335,8 +335,7 @@ const handler = async (req: Request): Promise<Response> => {
             `SELECT ${selectCols}
                FROM dados_dachser.t_dados_financeiro_spo
               WHERE nd IN (${ndPlaceholders})
-                 OR SUBSTRING_INDEX(TRIM(nd),' ',1) COLLATE utf8mb4_unicode_ci
-                    = ? COLLATE utf8mb4_unicode_ci
+                 OR SUBSTRING_INDEX(TRIM(nd),' ',1) = ?
               LIMIT 1`,
             [...ndCandidates, ndBase]
           );
@@ -346,8 +345,7 @@ const handler = async (req: Request): Promise<Response> => {
             `SELECT ${selectCols}
                FROM dados_dachser.t_dados_financeiro_voucher
               WHERE nd IN (${ndPlaceholders})
-                 OR SUBSTRING_INDEX(TRIM(nd),' ',1) COLLATE utf8mb4_unicode_ci
-                    = ? COLLATE utf8mb4_unicode_ci
+                 OR SUBSTRING_INDEX(TRIM(nd),' ',1) = ?
               LIMIT 1`,
             [...ndCandidates, ndBase]
           );
