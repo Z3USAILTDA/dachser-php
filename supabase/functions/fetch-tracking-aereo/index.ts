@@ -1213,7 +1213,7 @@ serve(async (req) => {
 
     // Hoisted constants/helpers — previously re-created per row (1.6k+ iterations).
     const FINAL_STATUSES = new Set(["DLV", "POD"]);
-    const SUPPRESSED_DISCREPANCY_AWBS = new Set<string>(['047-32916380']);
+    const SUPPRESSED_DISCREPANCY_AWBS = new Set<string>(['047-32916380', '047-33946636']);
     const stopWordsConn = new Set([
       'NIL','NIF','DIS','OFD','OFL','BUP','RDP','LAT','TKG','SCR','ECC',
       'TFD','TRM','RFC','DMG','RET','AWB','PRE','DEP','ARR','RCF','RCS',
