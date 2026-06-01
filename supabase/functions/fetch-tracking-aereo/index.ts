@@ -248,14 +248,8 @@ async function computePayload(): Promise<string> {
     if (!host || !database || !username || !password) {
       throw new Error("MariaDB credentials not configured");
     }
-    const port = parseInt((Deno.env.get("MARIADB_AIR_PORT") || Deno.env.get("MARIADB_OPS_PORT")) || "3306");
-    const database = (Deno.env.get("MARIADB_AIR_DATABASE") || Deno.env.get("MARIADB_OPS_DATABASE"));
-    const username = (Deno.env.get("MARIADB_AIR_USER") || Deno.env.get("MARIADB_OPS_USER"));
-    const password = (Deno.env.get("MARIADB_AIR_PASSWORD") || Deno.env.get("MARIADB_OPS_PASSWORD"));
 
-    if (!host || !database || !username || !password) {
-      throw new Error("MariaDB credentials not configured");
-    }
+
 
     client = await new Client().connect({
       hostname: host,
