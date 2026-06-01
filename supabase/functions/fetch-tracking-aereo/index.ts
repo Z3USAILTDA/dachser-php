@@ -1317,8 +1317,8 @@ serve(async (req) => {
       // Enrich ARR with destination context.
       // CONEXÃO is only set when destination is authoritatively known (routeEntry) to avoid
       // false positives when raw DESTINO text can't be reliably parsed to an IATA code.
+      const awbStr = String(row.AWB || '').trim();
       if (finalCode === "ARR") {
-        const awbStr = String(row.AWB || '').trim();
         if (FORCED_ARR_DESTINO_AWBS.has(awbStr)) {
           finalCode = "ARR - DESTINO";
         } else {
