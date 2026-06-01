@@ -1,62 +1,93 @@
 ## Diagnóstico
 
-A tela alterna entre carregar e falhar porque a Edge Function `fetch-tracking-aereo` está no teto de CPU/memória do Edge Runtime do Supabase. Evidências:
+O `WORKER_RESOURCE_LIMIT` persiste porque a mesma Edge Function da tela ainda é a responsável por recalcular o payload (~1.609 linhas + CTEs `JSON_TABLE` em rota/discrepância). `EdgeRuntime.waitUntil` evita bloquear a resposta, mas **não aumenta o orçamento de CPU do worker** — no cold start ou quando o cache expira, o cálculo entra no caminho síncrono e o worker morre.
 
-- Sucessos: **8.000–13.600 ms** por invocação
-- Falhas: HTTP **546 `WORKER_RESOURCE_LIMIT`** (`"Function failed due to not having enough compute resources"`)
-- Padrão alternado (200, 200, 546, 200, 546…) — clássico de função no limite do worker
+## Objetivo
 
-Causas que coincidem nas invocações que estouram:
-1. Reciclagem de isolate → caches em memória zerados → hidrata tudo do Postgres no caminho síncrono
-2. Refresh de cache stale (`JSON_TABLE` pesado em `t_status_aereo`) sendo `await`ado dentro do mesmo request
-3. Lookups extras (`t_master_dados`, `t_air_process_visibility`, `air_hidden_awbs`) executados a cada poll
-4. Processamento de ~1.609 linhas com regex/normalização recriados por invocação
+Manter o comportamento atual (mesma tela, mesmos campos, mesmo formato de payload), mas:
 
-## Plano (cirúrgico, sem mudar nada exibido)
+- recalcular **no máximo 1× a cada 30 minutos**;
+- recalcular **sob demanda quando o usuário forçar atualização da página** (F5 / reload), bypassando o cache;
+- nas demais requisições, servir leitura leve do cache persistido em `air_tracking_cache`.
 
-Objetivo único: **reduzir CPU/memória da Edge Function**. Nenhuma função removida, nenhum campo do payload alterado, nenhuma lógica de tracking modificada.
+## Plano cirúrgico
 
-### 1. Refresh pesado fora do caminho síncrono
-- Mover o refresh stale de `discrepancyCache` e `routeCache` para `EdgeRuntime.waitUntil(...)` (fire-and-forget). O request já serve cache stale hoje — apenas para de bloquear nele.
-- Se o cache estiver **ausente** (cold start), mantém `await` para garantir dados.
-- Resultado visível ao usuário: idêntico — discrepância/rota já vinham desse cache.
+Arquivo único alterado: `supabase/functions/fetch-tracking-aereo/index.ts`. Sem mudanças em frontend, SQL, schema, RLS ou demais funções.
 
-### 2. Cachear lookups auxiliares em memória de módulo (TTL 5 min)
-- `t_air_process_visibility` (795 linhas)
-- `t_master_dados` para CLIENTE vazio (1.294 linhas)
-- `air_hidden_awbs` (REST Supabase)
+### 1. Persistir o payload completo no cache existente
 
-Mesmo padrão de cache já usado para discrepância/rota: hidrata uma vez, serve em memória nos polls seguintes. Hit em isolate quente vira `O(1)`.
+Reaproveitar `public.air_tracking_cache` (já existe, RLS pública), adicionando a chave `payload` ao lado de `discrepancy` e `route`:
 
-### 3. Reaproveitar estruturas estáticas entre invocações
-- `EXACT_MAP` e `KEYWORD_INDEX` (186 + 190 entradas) hoje são reconstruídos a cada request. Manter no escopo do módulo e só reconstruir quando vazios ou após TTL. Idêntico resultado, sem custo de CPU recorrente.
+```text
+cache_key = 'payload'
+data      = { success, data, failed_count }   // payload final
+updated_at = timestamp do último cálculo
+```
 
-### 4. Garantir `client.close()` em `finally`
-- Evitar conexão MariaDB pendurada no isolate em caminhos de erro — também consome memória do worker.
+Nada de nova tabela, nada de nova migração.
 
-### 5. Log de execução
-- Logar `execution_time_ms` e flag de cold start no fim do handler para validar a melhora após deploy.
+### 2. Janela de validade de 30 minutos
 
-## Detalhes técnicos
+Constantes na função:
 
-Arquivo único alterado:
-- `supabase/functions/fetch-tracking-aereo/index.ts`
+- `PAYLOAD_TTL_MS = 30 * 60_000` (30 min) — janela fresca
+- `PAYLOAD_HARD_TTL_MS = 2 * 60 * 60_000` (2 h) — limite para servir stale enquanto recalcula
 
-Sem mudanças em:
-- Frontend (`/air/tracking-aereo` continua chamando `supabase.functions.invoke('fetch-tracking-aereo')`)
-- SQL principal de `t_status_aereo` / `t_aereo_ws`
-- Eleição IATA, ARR Destino/Conexão, `FORCED_ARR_DESTINO_AWBS`, `FORCED_CONNECTIONS_AWBS`, RFS, discrepância, hide_reason, SLA
-- Payload `{ success, data, failed_count }` — mesmos campos por linha
+Fluxo do handler ao receber request:
+
+1. Lê cache (memória → fallback `air_tracking_cache.payload`).
+2. Se idade < 30 min e **sem force**: retorna cache (`x-cache: fresh`).
+3. Se idade ≥ 30 min e < 2 h e **sem force**: retorna cache stale imediatamente (`x-cache: stale`) e dispara recálculo em background com lock de concorrência (`refreshInFlight`).
+4. Se não há cache ou idade ≥ 2 h: recalcula no caminho síncrono (cold start raro).
+
+### 3. Force refresh quando o usuário recarregar a página
+
+Sem mudar a UI nem o `fetchData` da tela, detectar reload via cabeçalhos HTTP padrão que o browser já envia:
+
+- `Cache-Control: no-cache` ou
+- `Pragma: no-cache`
+
+Esses cabeçalhos são enviados automaticamente pelo browser quando o usuário aperta F5/reload "duro" no Chromium/Firefox. Quando presentes:
+
+- Ignora o cache;
+- Recalcula no caminho síncrono;
+- Persiste o novo payload em `air_tracking_cache.payload`;
+- Marca resposta com `x-cache: forced`.
+
+Também aceitamos um parâmetro explícito `?force=1` para o frontend usar caso queira disparar manualmente no futuro — sem mexer no frontend agora.
+
+### 4. Lock de concorrência para o recálculo
+
+`refreshInFlight` global garante que só **uma** execução pesada ocorre por vez, mesmo com múltiplos polls simultâneos. Demais requests aguardam o cache atualizado ou recebem o stale corrente.
+
+### 5. Mantém todo o restante intacto
+
+- Mesmo SQL principal e CTEs de rota/discrepância.
+- Mesma eleição IATA, ARR Destino/Conexão, RFS, overrides, SLA.
+- Mesmo payload `{ success, data, failed_count }` por linha.
+- Mesma tabela, mesma RLS pública.
+- Nenhuma alteração em `server/index.js` ou no `TrackingAereo.tsx`.
+
+## Comportamento resultante
+
+| Cenário | O que acontece |
+|---|---|
+| Poll normal dentro de 30 min | Cache fresh — resposta instantânea, zero CPU pesada |
+| Poll após 30 min | Stale servido na hora + 1 recálculo em background |
+| Reload da página (F5) | Cabeçalho `no-cache` detectado → recálculo síncrono e cache atualizado |
+| Cold start raro (cache > 2 h) | Recálculo síncrono — único momento que ainda usa CPU pesada |
+| 5 usuários polling juntos | Apenas 1 recálculo roda; demais recebem cache |
 
 ## Garantias
 
-- **Nenhuma função removida.** Toda lógica e todo lookup continuam existindo; só passam por cache em memória.
-- **Mesmo universo de dados.** Continua processando todas as ~1.609 linhas.
-- **Mesma tela.** O usuário vê exatamente o mesmo conteúdo, na mesma ordem, com os mesmos status.
-- **Tracking-truth preservado.** Manual overrides e mirroring do banco continuam tendo prioridade absoluta.
+- Sem mudanças visíveis na tela.
+- Sem perda de dados ou campos.
+- Tracking-truth e manual overrides preservados.
+- `WORKER_RESOURCE_LIMIT` deixa de acontecer no tráfego normal — só pode reaparecer se o recálculo único pesado estourar CPU, e nesse caso o cache stale anterior continua sendo servido aos usuários sem erro visível.
 
-## Resultado esperado
+## Validação após deploy
 
-- Fim do 546 intermitente em tráfego normal
-- Tempo médio cai de 8–13 s para ~3–5 s em isolate quente
-- Cold start mais leve, dentro do orçamento do worker
+- Invocar `fetch-tracking-aereo` várias vezes seguidas → todas 200, `x-cache: fresh` ou `stale`.
+- Aguardar 30 min e invocar → `x-cache: stale` + log de `[BG-REFRESH]`.
+- Forçar reload no `/air/tracking-aereo` → `x-cache: forced` no log e payload regenerado.
+- Conferir `air_tracking_cache.payload.updated_at` avançando.
