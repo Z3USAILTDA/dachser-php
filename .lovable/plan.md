@@ -1,58 +1,62 @@
-## Diagnóstico (confirmado nos logs)
+## Diagnóstico
 
-O deploy funcionou e a query está rodando — os logs mostram:
-```
-[DISC-BG] Cache refreshed: 185 records (+35 enriched from prefix 996)
-```
+A tela alterna entre carregar e falhar porque a Edge Function `fetch-tracking-aereo` está no teto de CPU/memória do Edge Runtime do Supabase. Evidências:
 
-**Mas em todo poll seguinte ainda aparece `[DISC] Cold start — empty discrepancy this poll`**.
+- Sucessos: **8.000–13.600 ms** por invocação
+- Falhas: HTTP **546 `WORKER_RESOURCE_LIMIT`** (`"Function failed due to not having enough compute resources"`)
+- Padrão alternado (200, 200, 546, 200, 546…) — clássico de função no limite do worker
 
-Motivo: o cache (`discrepancyCache` e `routeCache`) é uma variável **em memória do isolate Deno**. O Supabase Edge Runtime distribui requisições entre múltiplos isolates e os recicla com frequência. Cada poll (de 30 em 30s) cai num isolate diferente e/ou frio, então o cache populado nunca é reaproveitado. A query roda em background, popula um isolate que ninguém mais consulta, e o ciclo recomeça.
+Causas que coincidem nas invocações que estouram:
+1. Reciclagem de isolate → caches em memória zerados → hidrata tudo do Postgres no caminho síncrono
+2. Refresh de cache stale (`JSON_TABLE` pesado em `t_status_aereo`) sendo `await`ado dentro do mesmo request
+3. Lookups extras (`t_master_dados`, `t_air_process_visibility`, `air_hidden_awbs`) executados a cada poll
+4. Processamento de ~1.609 linhas com regex/normalização recriados por invocação
 
-Resultado prático: `pieces_discrepancy` chega sempre `false` no front, mesmo havendo 185 AWBs com discrepância no DB.
+## Plano (cirúrgico, sem mudar nada exibido)
 
-## Correção
+Objetivo único: **reduzir CPU/memória da Edge Function**. Nenhuma função removida, nenhum campo do payload alterado, nenhuma lógica de tracking modificada.
 
-Persistir o cache de discrepância (e o de rota) numa tabela do Supabase, compartilhada entre todos os isolates.
+### 1. Refresh pesado fora do caminho síncrono
+- Mover o refresh stale de `discrepancyCache` e `routeCache` para `EdgeRuntime.waitUntil(...)` (fire-and-forget). O request já serve cache stale hoje — apenas para de bloquear nele.
+- Se o cache estiver **ausente** (cold start), mantém `await` para garantir dados.
+- Resultado visível ao usuário: idêntico — discrepância/rota já vinham desse cache.
 
-### 1. Migration
+### 2. Cachear lookups auxiliares em memória de módulo (TTL 5 min)
+- `t_air_process_visibility` (795 linhas)
+- `t_master_dados` para CLIENTE vazio (1.294 linhas)
+- `air_hidden_awbs` (REST Supabase)
 
-Criar tabela `public.air_tracking_cache`:
-```sql
-CREATE TABLE public.air_tracking_cache (
-  cache_key text PRIMARY KEY,             -- 'discrepancy' | 'route'
-  data jsonb NOT NULL DEFAULT '{}'::jsonb,
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+Mesmo padrão de cache já usado para discrepância/rota: hidrata uma vez, serve em memória nos polls seguintes. Hit em isolate quente vira `O(1)`.
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.air_tracking_cache TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.air_tracking_cache TO anon;
-GRANT ALL ON public.air_tracking_cache TO service_role;
+### 3. Reaproveitar estruturas estáticas entre invocações
+- `EXACT_MAP` e `KEYWORD_INDEX` (186 + 190 entradas) hoje são reconstruídos a cada request. Manter no escopo do módulo e só reconstruir quando vazios ou após TTL. Idêntico resultado, sem custo de CPU recorrente.
 
-ALTER TABLE public.air_tracking_cache ENABLE ROW LEVEL SECURITY;
+### 4. Garantir `client.close()` em `finally`
+- Evitar conexão MariaDB pendurada no isolate em caminhos de erro — também consome memória do worker.
 
-CREATE POLICY "Public can manage air_tracking_cache"
-  ON public.air_tracking_cache FOR ALL
-  TO anon, authenticated
-  USING (true) WITH CHECK (true);
-```
+### 5. Log de execução
+- Logar `execution_time_ms` e flag de cold start no fim do handler para validar a melhora após deploy.
 
-### 2. `supabase/functions/fetch-tracking-aereo/index.ts`
+## Detalhes técnicos
 
-- No topo, criar um client Supabase com `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
-- Substituir a lógica de cache em memória dos blocos `[DISC]` e `[ROUTE]` por:
-  - **Leitura**: no início, fazer um único `SELECT data, updated_at FROM air_tracking_cache WHERE cache_key IN ('discrepancy','route')` para popular `discrepancyMap` / `routeMap`. Calcular `stale = age > TTL`.
-  - **Escrita**: no final do bg task, em vez de `discrepancyCache = { … }`, fazer `upsert` em `air_tracking_cache` (`cache_key='discrepancy'`, `data=fresh`, `updated_at=now()`).
-  - Manter a flag `allowBackgroundRefresh = true` e o disparo via `EdgeRuntime.waitUntil`.
-- Manter `DISCREPANCY_CACHE_TTL_MS = 5 * 60_000` (mesmo TTL) — agora compartilhado entre isolates, ele realmente vai durar 5 min.
-- Manter o cache em memória como fast path secundário (opcional): se o módulo já tem em memória e é fresh, usa direto; senão lê da tabela.
+Arquivo único alterado:
+- `supabase/functions/fetch-tracking-aereo/index.ts`
 
-### 3. Sem mudança no front
+Sem mudanças em:
+- Frontend (`/air/tracking-aereo` continua chamando `supabase.functions.invoke('fetch-tracking-aereo')`)
+- SQL principal de `t_status_aereo` / `t_aereo_ws`
+- Eleição IATA, ARR Destino/Conexão, `FORCED_ARR_DESTINO_AWBS`, `FORCED_CONNECTIONS_AWBS`, RFS, discrepância, hide_reason, SLA
+- Payload `{ success, data, failed_count }` — mesmos campos por linha
 
-O contrato da resposta (`pieces_discrepancy`, `has_dis_event`, `baseline_pieces`) permanece igual; só o backend passa a ter dados reais.
+## Garantias
 
-## Verificação
+- **Nenhuma função removida.** Toda lógica e todo lookup continuam existindo; só passam por cache em memória.
+- **Mesmo universo de dados.** Continua processando todas as ~1.609 linhas.
+- **Mesma tela.** O usuário vê exatamente o mesmo conteúdo, na mesma ordem, com os mesmos status.
+- **Tracking-truth preservado.** Manual overrides e mirroring do banco continuam tendo prioridade absoluta.
 
-- Após o primeiro poll que rodar a query (≈10s depois), todos os polls subsequentes (em qualquer isolate) devem ler a linha `discrepancy` da tabela e popular `discrepancyMap` com 185 registros.
-- Na tela `tracking-aereo`, o card "Críticos" e os badges de discrepância voltam a aparecer.
-- Nos logs, esperar ver `[DISC] Loaded N records from persistent cache` ao invés do `Cold start` repetido.
+## Resultado esperado
+
+- Fim do 546 intermitente em tráfego normal
+- Tempo médio cai de 8–13 s para ~3–5 s em isolate quente
+- Cold start mais leve, dentro do orçamento do worker
