@@ -20679,9 +20679,15 @@ Deno.serve(async (req) => {
           const dfvFilial = dfv?.nome_cobranca || null;
           const dfvTipoDoc = dfv?.tipo_pag ? String(dfv.tipo_pag).toUpperCase() : null;
 
+          const dfvSpo = dfv?.nd ? String(dfv.nd).trim() : null;
+          const resolvedSpo = (sheet.spo && String(sheet.spo).trim()) || dfvSpo || null;
+          if (!sheet.spo && dfvSpo) origin['spo'] = 'DFV';
+          else if (sheet.spo) origin['spo'] = 'PLANILHA';
+          else origin['spo'] = null;
+
           const merged = {
             row_index: sheet.row_index,
-            spo: sheet.spo,
+            spo: resolvedSpo,
             id_rm: dfv?.id_rm ?? null,
             processo: pick(sheet.processo, dfvProcesso, 'processo'),
             origem_processo: (() => { origin['origem_processo'] = 'PLANILHA'; return sheet.origem_processo || 'CHB'; })(),
@@ -20719,6 +20725,7 @@ Deno.serve(async (req) => {
           merged.validation_message = errors.length ? errors.join('; ') : null;
           return merged;
         };
+
 
         const buildPreviewItems = async (rows: any[]) => {
           const sheetRows = rows.map((r, i) => parseSheetRow(r, i));
