@@ -1,17 +1,63 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Cache em memória (escopo do módulo) — TTL 60s para reduzir CPU em chamadas concorrentes.
+// Cache em memória (escopo do módulo) — TTL 5min. Persistido em public.air_tracking_cache
+// para sobreviver à reciclagem de isolates do Edge Runtime.
 let discrepancyCache: { at: number; data: Record<string, { pieces_discrepancy: boolean; baseline_pieces: number | null; has_dis_event: boolean }> } | null = null;
 const DISCREPANCY_CACHE_TTL_MS = 5 * 60_000;
 
 let routeCache: { at: number; data: Record<string, { origin: string | null; destination: string | null; conexoes: string | null; status: string }> } | null = null;
 const ROUTE_CACHE_TTL_MS = 5 * 60_000;
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
+  : null;
+
+async function hydrateCachesFromDb(): Promise<void> {
+  if (!supabaseAdmin) return;
+  const discFresh = discrepancyCache && Date.now() - discrepancyCache.at < DISCREPANCY_CACHE_TTL_MS;
+  const routeFresh = routeCache && Date.now() - routeCache.at < ROUTE_CACHE_TTL_MS;
+  if (discFresh && routeFresh) return;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("air_tracking_cache")
+      .select("cache_key, data, updated_at")
+      .in("cache_key", ["discrepancy", "route"]);
+    if (error || !data) return;
+    for (const row of data) {
+      const at = new Date(row.updated_at).getTime();
+      if (row.cache_key === "discrepancy" && !discFresh) {
+        discrepancyCache = { at, data: (row.data as any) || {} };
+        console.log(`[DISC] Hydrated from DB: ${Object.keys(discrepancyCache.data).length} records, age=${Math.round((Date.now() - at) / 1000)}s`);
+      } else if (row.cache_key === "route" && !routeFresh) {
+        routeCache = { at, data: (row.data as any) || {} };
+        console.log(`[ROUTE] Hydrated from DB: ${Object.keys(routeCache.data).length} records, age=${Math.round((Date.now() - at) / 1000)}s`);
+      }
+    }
+  } catch (err) {
+    console.warn("[CACHE] Hydrate failed:", (err as any)?.message);
+  }
+}
+
+async function persistCacheToDb(key: "discrepancy" | "route", data: Record<string, unknown>): Promise<void> {
+  if (!supabaseAdmin) return;
+  try {
+    const { error } = await supabaseAdmin
+      .from("air_tracking_cache")
+      .upsert({ cache_key: key, data, updated_at: new Date().toISOString() }, { onConflict: "cache_key" });
+    if (error) console.warn(`[CACHE] Persist ${key} failed:`, error.message);
+  } catch (err) {
+    console.warn(`[CACHE] Persist ${key} threw:`, (err as any)?.message);
+  }
+}
 
 async function queryWithRetry(client: Client, sql: string, params: any[] = [], maxRetries = 3): Promise<any> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -355,8 +401,8 @@ serve(async (req) => {
     }
 
     // Step 3d: Discrepancy data (pieces divergence + DIS events + prefix 996).
-    // ALWAYS serve from cache (fresh or stale) to avoid blowing the 2s CPU budget.
-    // Refresh happens in background via EdgeRuntime.waitUntil below when stale/missing.
+    // Hydrate from persistent DB cache before reading in-memory cache (sobrevive a reciclagem de isolates).
+    await hydrateCachesFromDb();
     let discrepancyMap: Record<string, { pieces_discrepancy: boolean; baseline_pieces: number | null; has_dis_event: boolean }> =
       discrepancyCache?.data ?? {};
     const discCacheStale = !discrepancyCache || (Date.now() - discrepancyCache.at >= DISCREPANCY_CACHE_TTL_MS);
@@ -704,6 +750,7 @@ serve(async (req) => {
           }
           discrepancyCache = { at: Date.now(), data: fresh };
           console.log(`[DISC-BG] Cache refreshed: ${Object.keys(fresh).length} records (+${added996} enriched from prefix 996)`);
+          await persistCacheToDb("discrepancy", fresh);
         } catch (err) {
           console.warn("[DISC-BG] Failed:", err);
         } finally {
@@ -953,6 +1000,8 @@ serve(async (req) => {
             };
           }
           routeCache = { at: Date.now(), data: fresh };
+          console.log(`[ROUTE-BG] Cache refreshed: ${Object.keys(fresh).length} records`);
+          await persistCacheToDb("route", fresh);
         } catch (err) {
           console.warn("[ROUTE-BG] Could not load route map:", err);
         } finally {
