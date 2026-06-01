@@ -1,93 +1,149 @@
-## Diagnóstico
-
-O `WORKER_RESOURCE_LIMIT` persiste porque a mesma Edge Function da tela ainda é a responsável por recalcular o payload (~1.609 linhas + CTEs `JSON_TABLE` em rota/discrepância). `EdgeRuntime.waitUntil` evita bloquear a resposta, mas **não aumenta o orçamento de CPU do worker** — no cold start ou quando o cache expira, o cálculo entra no caminho síncrono e o worker morre.
 
 ## Objetivo
 
-Manter o comportamento atual (mesma tela, mesmos campos, mesmo formato de payload), mas:
+Dividir a origem de dados da esteira em duas fontes distintas no MariaDB, considerando a coluna `detalhes` (lista de processos associados) presente em `t_dados_financeiro_spo`:
 
-- recalcular **no máximo 1× a cada 30 minutos**;
-- recalcular **sob demanda quando o usuário forçar atualização da página** (F5 / reload), bypassando o cache;
-- nas demais requisições, servir leitura leve do cache persistido em `air_tracking_cache`.
+- `t_dados_financeiro_spo` → registros do tipo **SPO** (nd no formato `XXX-...`, onde `XXX` é a filial). Pode conter múltiplos processos em `detalhes`, separados por `;`.
+- `t_dados_financeiro_voucher` → registros do tipo **Voucher** (demais).
 
-## Plano cirúrgico
+E ajustar a importação em lote de SPO para buscar pelo **processo** contra `t_dados_financeiro_spo.numero_processo` (com fallback em `detalhes`), em vez do número do SPO da planilha contra `nd`.
 
-Arquivo único alterado: `supabase/functions/fetch-tracking-aereo/index.ts`. Sem mudanças em frontend, SQL, schema, RLS ou demais funções.
+## Premissa
 
-### 1. Persistir o payload completo no cache existente
+`t_dados_financeiro_spo` já existe no MariaDB com colunas equivalentes às de `t_dados_financeiro_voucher` (`id_rm, nd, documento, nome_beneficiario, nome_cobranca, numero_nf, numero_processo, modal, tipo_pag, forma_pag, data_emissao, data_vencimento, valor_nf, moeda, cnpj, razao_social, created_by`), **acrescida da coluna `detalhes`** (TEXT, lista de processos separada por `;`, ex.: `BSSZDEX26050112;BSSZDEX26050113;...`).
 
-Reaproveitar `public.air_tracking_cache` (já existe, RLS pública), adicionando a chave `payload` ao lado de `discrepancy` e `route`:
+Regra de tipo (usada em todas as queries):
 
-```text
-cache_key = 'payload'
-data      = { success, data, failed_count }   // payload final
-updated_at = timestamp do último cálculo
+```sql
+-- SPO: nd começa com prefixo "NN-", "NNN-" ou "NNNN-" (filial + hífen)
+SUBSTRING_INDEX(TRIM(nd), ' ', 1) REGEXP '^[0-9]{2,4}-'
 ```
 
-Nada de nova tabela, nada de nova migração.
+---
 
-### 2. Janela de validade de 30 minutos
+## 1. Aba "A processar" — `get_vouchers_pendentes_rm`
 
-Constantes na função:
+Arquivo: `supabase/functions/mariadb-proxy/index.ts` (case `get_vouchers_pendentes_rm`).
 
-- `PAYLOAD_TTL_MS = 30 * 60_000` (30 min) — janela fresca
-- `PAYLOAD_HARD_TTL_MS = 2 * 60 * 60_000` (2 h) — limite para servir stale enquanto recalcula
+Trocar a query única atual por um `UNION ALL` das duas fontes, com **prioridade ao SPO** quando o mesmo processo existir em ambas. Trazer `detalhes` no SELECT do SPO (e `NULL AS detalhes` no voucher) para a UI poder expandir os processos associados.
 
-Fluxo do handler ao receber request:
+```sql
+WITH spo AS (
+  SELECT 'SPO' AS source, dfs.id_rm, dfs.nd, dfs.documento, dfs.nome_beneficiario,
+         dfs.nome_cobranca, dfs.numero_nf, dfs.numero_processo, dfs.modal,
+         dfs.tipo_pag, dfs.forma_pag, dfs.data_emissao, dfs.data_vencimento,
+         dfs.valor_nf, dfs.moeda, dfs.cnpj, dfs.razao_social, dfs.created_by,
+         dfs.detalhes
+    FROM dados_dachser.t_dados_financeiro_spo dfs
+   WHERE (dfs.nome_beneficiario IS NULL OR LOWER(dfs.nome_beneficiario) NOT LIKE '%dachser%')
+     AND (dfs.modal IS NULL OR dfs.modal <> 'ADM')
+),
+voucher AS (
+  SELECT 'VOUCHER' AS source, dfv.id_rm, dfv.nd, ... , NULL AS detalhes
+    FROM dados_dachser.t_dados_financeiro_voucher dfv
+   WHERE (dfv.nome_beneficiario IS NULL OR LOWER(dfv.nome_beneficiario) NOT LIKE '%dachser%')
+     AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')
+),
+unified AS (
+  SELECT * FROM spo
+  UNION ALL
+  SELECT v.* FROM voucher v
+   WHERE NOT EXISTS (
+     SELECT 1 FROM spo s
+      WHERE s.numero_processo IS NOT NULL
+        AND s.numero_processo COLLATE utf8mb4_unicode_ci
+          = v.numero_processo COLLATE utf8mb4_unicode_ci
+   )
+)
+SELECT u.*
+  FROM unified u
+  LEFT JOIN dados_dachser.t_vouchers v
+         ON SUBSTRING_INDEX(TRIM(u.nd),' ',1) COLLATE utf8mb4_unicode_ci
+          = SUBSTRING_INDEX(TRIM(v.numero_spo),' ',1) COLLATE utf8mb4_unicode_ci
+  LEFT JOIN dados_dachser.tbaixas b ON u.id_rm = b.IdLancamentoRM
+ WHERE v.id IS NULL AND b.IdLancamentoRM IS NULL
+ ORDER BY u.data_vencimento ASC;
+```
 
-1. Lê cache (memória → fallback `air_tracking_cache.payload`).
-2. Se idade < 30 min e **sem force**: retorna cache (`x-cache: fresh`).
-3. Se idade ≥ 30 min e < 2 h e **sem force**: retorna cache stale imediatamente (`x-cache: stale`) e dispara recálculo em background com lock de concorrência (`refreshInFlight`).
-4. Se não há cache ou idade ≥ 2 h: recalcula no caminho síncrono (cold start raro).
+No backend, normalizar a resposta para incluir:
+- `source: 'SPO' | 'VOUCHER'`
+- `processos_associados: string[]` — derivado de `detalhes.split(';')` (trim + filter vazios + dedupe), apenas para `source='SPO'`.
 
-### 3. Force refresh quando o usuário recarregar a página
+---
 
-Sem mudar a UI nem o `fetchData` da tela, detectar reload via cabeçalhos HTTP padrão que o browser já envia:
+## 2. UI da aba "A processar" — `BacklogTab.tsx`
 
-- `Cache-Control: no-cache` ou
-- `Pragma: no-cache`
+Mudanças mínimas, sem alterar layout geral:
 
-Esses cabeçalhos são enviados automaticamente pelo browser quando o usuário aperta F5/reload "duro" no Chromium/Firefox. Quando presentes:
+- Adicionar um badge discreto "SPO" / "Voucher" ao lado do `nd` (usa `source`).
+- Quando `source='SPO'` e `processos_associados.length > 1`, exibir um ícone/contador clicável (ex.: `+N processos`) que abre um pequeno popover/expansão na linha listando todos os processos da coluna `detalhes`. O `numero_processo` principal continua sendo mostrado na coluna atual.
+- Nenhuma mudança nas colunas existentes nem nas estatísticas do topo.
 
-- Ignora o cache;
-- Recalcula no caminho síncrono;
-- Persiste o novo payload em `air_tracking_cache.payload`;
-- Marca resposta com `x-cache: forced`.
+---
 
-Também aceitamos um parâmetro explícito `?force=1` para o frontend usar caso queira disparar manualmente no futuro — sem mexer no frontend agora.
+## 3. `import_voucher_from_rm` (botão "Importar" do backlog)
 
-### 4. Lock de concorrência para o recálculo
+Arquivo: `mariadb-proxy/index.ts`.
 
-`refreshInFlight` global garante que só **uma** execução pesada ocorre por vez, mesmo com múltiplos polls simultâneos. Demais requests aguardam o cache atualizado ou recebem o stale corrente.
+Hoje resolve `id_rm` e busca `rmData` somente em `t_dados_financeiro_voucher`. Trocar por roteamento por tipo:
 
-### 5. Mantém todo o restante intacto
+- Se `nd` casa com regex SPO → buscar em `t_dados_financeiro_spo` (selecionando também `detalhes`).
+- Senão → buscar em `t_dados_financeiro_voucher`.
+- Tie-breaker (nd ambíguo): aplicar mesma prioridade — SPO primeiro, voucher como fallback.
 
-- Mesmo SQL principal e CTEs de rota/discrepância.
-- Mesma eleição IATA, ARR Destino/Conexão, RFS, overrides, SLA.
-- Mesmo payload `{ success, data, failed_count }` por linha.
-- Mesma tabela, mesma RLS pública.
-- Nenhuma alteração em `server/index.js` ou no `TrackingAereo.tsx`.
+O insert em `t_vouchers` permanece igual. Se vier de SPO e `detalhes` tiver múltiplos processos, gravar a lista em `t_vouchers.processos_associados` (campo JSON/TEXT já existente ou criado via migration separada se ausente — confirmar antes de executar; fora deste plano se exigir schema change). Caso não exista hoje, gravar apenas o `numero_processo` principal e manter `detalhes` acessível via re-leitura da fonte.
 
-## Comportamento resultante
+---
 
-| Cenário | O que acontece |
-|---|---|
-| Poll normal dentro de 30 min | Cache fresh — resposta instantânea, zero CPU pesada |
-| Poll após 30 min | Stale servido na hora + 1 recálculo em background |
-| Reload da página (F5) | Cabeçalho `no-cache` detectado → recálculo síncrono e cache atualizado |
-| Cold start raro (cache > 2 h) | Recálculo síncrono — único momento que ainda usa CPU pesada |
-| 5 usuários polling juntos | Apenas 1 recálculo roda; demais recebem cache |
+## 4. Importação em lote de SPO (planilha)
 
-## Garantias
+Arquivos:
+- `supabase/functions/mariadb-proxy/index.ts` — `fetchDfvBySpo` e `buildPreviewItems`.
+- `src/components/esteira/BatchImportVoucherDialog.tsx` (apenas rótulos/mensagens se necessário).
 
-- Sem mudanças visíveis na tela.
-- Sem perda de dados ou campos.
-- Tracking-truth e manual overrides preservados.
-- `WORKER_RESOURCE_LIMIT` deixa de acontecer no tráfego normal — só pode reaparecer se o recálculo único pesado estourar CPU, e nesse caso o cache stale anterior continua sendo servido aos usuários sem erro visível.
+**Mudança de chave de busca**: hoje normaliza `sheet.spo` e busca `WHERE UPPER(TRIM(nd)) IN (...)` em `t_dados_financeiro_voucher`. Trocar para buscar em `t_dados_financeiro_spo` pelo **processo da planilha** contra `numero_processo` **e** contra cada token de `detalhes`:
 
-## Validação após deploy
+```sql
+SELECT id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
+       modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
+       valor_nf, moeda, cnpj, razao_social, detalhes
+  FROM dados_dachser.t_dados_financeiro_spo
+ WHERE UPPER(TRIM(numero_processo)) COLLATE utf8mb4_unicode_ci
+       IN (UPPER(TRIM(?)) COLLATE utf8mb4_unicode_ci, ...)
+    OR EXISTS (
+      SELECT 1
+        FROM JSON_TABLE(
+          CONCAT('["', REPLACE(detalhes, ';', '","'), '"]'),
+          '$[*]' COLUMNS (p VARCHAR(64) PATH '$')
+        ) jt
+       WHERE UPPER(TRIM(jt.p)) COLLATE utf8mb4_unicode_ci
+             IN (UPPER(TRIM(?)) COLLATE utf8mb4_unicode_ci, ...)
+    )
+```
 
-- Invocar `fetch-tracking-aereo` várias vezes seguidas → todas 200, `x-cache: fresh` ou `stale`.
-- Aguardar 30 min e invocar → `x-cache: stale` + log de `[BG-REFRESH]`.
-- Forçar reload no `/air/tracking-aereo` → `x-cache: forced` no log e payload regenerado.
-- Conferir `air_tracking_cache.payload.updated_at` avançando.
+Alternativa mais simples e portável (sem `JSON_TABLE`): usar `FIND_IN_SET` após substituir `;` por `,`:
+
+```sql
+... OR FIND_IN_SET(
+        UPPER(TRIM(?)) COLLATE utf8mb4_unicode_ci,
+        UPPER(REPLACE(detalhes, ';', ',')) COLLATE utf8mb4_unicode_ci
+      ) > 0
+```
+
+Indexar `byProcesso[normProcesso(...)] = r` cobrindo tanto `numero_processo` quanto cada token de `detalhes`. Em `buildPreviewItems`, o lookup passa a usar `sheet.processo` como chave (não mais `sheet.spo`). O campo SPO da planilha continua sendo gravado como `numero_spo` do voucher resultante.
+
+Remover a segunda passada por prefixo `spoPrefix` — desnecessária com casamento direto por processo. Validações da planilha continuam exigindo SPO e processo; apenas o **lookup** muda.
+
+---
+
+## 5. Fora de escopo
+
+- Sem alteração de schema (assume-se que `t_dados_financeiro_spo` e a coluna `detalhes` já existem).
+- Demais ações (`get_historico_baixas`, `get_baixas_sem_voucher`, sync incremental, etc.) continuam lendo de `t_dados_financeiro_voucher`.
+
+## 6. Validação
+
+- Aba "A processar": registros SPO trazem badge "SPO"; com `detalhes` populado, mostram contador de processos expansível.
+- Processo presente em ambas as fontes aparece uma única vez, vindo do SPO.
+- Importar item SPO do backlog → cria voucher em `t_vouchers` com dados de `t_dados_financeiro_spo`; lista de `detalhes` preservada/exibível.
+- Importar planilha SPO → cada linha casa contra `t_dados_financeiro_spo.numero_processo` **ou** contra qualquer processo de `detalhes`.
