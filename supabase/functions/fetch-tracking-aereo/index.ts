@@ -1436,7 +1436,10 @@ serve(async (req) => {
           if (loc && !stopWordsConn.has(loc) && loc === destinIATAforConn) destReached = true;
         }
       }
-      const conexao = seenAirports.length > 0 ? seenAirports.join(',') : null;
+      let conexao = seenAirports.length > 0 ? seenAirports.join(',') : null;
+      if (FORCED_CONNECTIONS_AWBS[awbStr]) {
+        conexao = FORCED_CONNECTIONS_AWBS[awbStr];
+      }
 
       // RFS detection scoped EXCLUSIVELY to the elected slot (top.idx via pickTopByIATA).
       // Sufixo -T ou X/D em eventos antigos da timeline NÃO classifica o processo como
