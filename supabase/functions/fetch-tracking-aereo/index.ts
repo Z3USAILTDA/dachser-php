@@ -8,10 +8,10 @@ const corsHeaders = {
 
 // Cache em memória (escopo do módulo) — TTL 60s para reduzir CPU em chamadas concorrentes.
 let discrepancyCache: { at: number; data: Record<string, { pieces_discrepancy: boolean; baseline_pieces: number | null; has_dis_event: boolean }> } | null = null;
-const DISCREPANCY_CACHE_TTL_MS = 60_000;
+const DISCREPANCY_CACHE_TTL_MS = 5 * 60_000;
 
 let routeCache: { at: number; data: Record<string, { origin: string | null; destination: string | null; conexoes: string | null; status: string }> } | null = null;
-const ROUTE_CACHE_TTL_MS = 60_000;
+const ROUTE_CACHE_TTL_MS = 5 * 60_000;
 
 async function queryWithRetry(client: Client, sql: string, params: any[] = [], maxRetries = 3): Promise<any> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
