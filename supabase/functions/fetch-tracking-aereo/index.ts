@@ -190,6 +190,8 @@ serve(async (req) => {
   }
 
   let client: Client | null = null;
+  const __t0 = Date.now();
+  let __coldStart = !eventsLookupCache;
 
   try {
     const host = (Deno.env.get("MARIADB_AIR_HOST") || Deno.env.get("MARIADB_OPS_HOST"));
