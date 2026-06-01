@@ -20696,29 +20696,17 @@ Deno.serve(async (req) => {
 
         const buildPreviewItems = async (rows: any[]) => {
           const sheetRows = rows.map((r, i) => parseSheetRow(r, i));
-          const spos = sheetRows.map(s => s.spo).filter(Boolean) as string[];
-          const { byFull, byPrefix } = await fetchDfvBySpo(spos);
-          return sheetRows.map(s => {
-            if (!s.spo) return mergeWithDfv(s, null);
-            const nf = normSpo(s.spo);
-            let dfv = byFull[nf] || null;
-            if (!dfv) {
-              const pfx = spoPrefix(s.spo);
-              if (/^\d{2,4}-\d{4,}$/.test(pfx)) {
-                const cand = byPrefix[pfx];
-                if (cand) {
-                  dfv = cand;
-                  // Canonicaliza SPO usando o nd completo do DFV
-                  if (cand.nd && normSpo(cand.nd) !== nf) {
-                    console.log(`[batch] SPO matched by prefix: ${s.spo} → ${cand.nd}`);
-                    s.spo = String(cand.nd);
-                  }
-                }
-              }
-            }
+          // Chave de busca agora é o PROCESSO da planilha (não o SPO).
+          const processos = sheetRows.map((s) => s.processo).filter(Boolean) as string[];
+          const { byProcesso } = await fetchSpoByProcesso(processos);
+          return sheetRows.map((s) => {
+            if (!s.processo) return mergeWithDfv(s, null);
+            const np = normProcesso(s.processo);
+            const dfv = byProcesso[np] || null;
             return mergeWithDfv(s, dfv);
           });
         };
+
 
         const prettyEtapa = (raw: any): string => {
           const s = String(raw || '').trim().toUpperCase();
