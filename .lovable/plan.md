@@ -1,31 +1,52 @@
-Diagnóstico:
 
-- O backend já tenta buscar por `processo` na `t_dados_financeiro_spo`, mas o resultado encontrado não é copiado para o campo `spo`.
-- Na mesclagem atual, `spo` fica sempre vindo somente da planilha (`spo: sheet.spo`).
-- Como a planilha da imagem não tem coluna/valor de SPO, o processo é encontrado parcialmente, mas a linha continua inválida com `SPO obrigatório`.
-- Há um segundo risco: a busca em `detalhes` usa `FIND_IN_SET` direto no texto completo. Se `detalhes` vier com quebras de linha, vírgulas, espaços incomuns ou separadores diferentes, alguns processos podem não casar.
+## Objetivo
 
-Plano de correção:
+Remover da `t_vouchers` (MariaDB) todos os vouchers SPO que estão **em aberto** (etapa OPERACIONAL ou FISCAL) para que sejam recriados corretamente a partir da nova fonte (`t_dados_financeiro_spo`, com prefix-match tolerante a sufixos tipo " DIM-BY", " SAN").
 
-1. Ajustar `mergeWithDfv` no `mariadb-proxy` para preencher `spo` a partir do registro encontrado:
-   - usar `sheet.spo` se a planilha trouxe SPO;
-   - senão usar `dfv.nd`/`dfs.nd` da fonte encontrada pelo processo;
-   - marcar a origem do campo como `DFV` quando vier da tabela financeira.
+## Critério final
 
-2. Reforçar a busca por processo na `t_dados_financeiro_spo`:
-   - manter busca por `numero_processo`;
-   - manter busca por `detalhes`;
-   - normalizar melhor `detalhes` para tolerar `;`, vírgula, quebras de linha, tabs e espaços.
+Excluir vouchers em `dados_dachser.t_vouchers` que atendam **todas** as condições:
+- `numero_spo REGEXP '^[0-9]+-[0-9]+'` (formato SPO, ignora NDs puras)
+- `etapa_atual IN ('OPERACIONAL','FISCAL')`
 
-3. Ajustar validação do frontend no modal de importação em lote:
-   - manter SPO obrigatório somente depois da tentativa de enriquecimento;
-   - quando o backend devolver `spo` preenchido, a linha deve ficar válida sem edição manual.
+Não tocar em vouchers em `ROBO`, `SUPERVISOR`, `CONCLUIDO`, `A_PROCESSAR` etc.
 
-4. Validar com os processos do print:
-   - `BVCPDIM26050265`, `BVCPDIM26050251`, `BSSZDEX26050364`, etc.;
-   - confirmar que o preview retorna `spo` preenchido, `dfv_found=true` e sem erro de `SPO obrigatório` quando existir associação na tabela SPO ou no fallback Voucher.
+## Passos
 
-Arquivos previstos:
+1. **Dry-run** — nova ação `cleanup-spo-open` (modo `dry`) na edge `voucher-integrate-rm`:
+   - `SELECT id, numero_spo, fornecedor, etapa_atual, valor, created_at FROM t_vouchers WHERE ...` com o critério acima.
+   - Retorna contagem + amostra (até 100) para o usuário conferir.
 
-- `supabase/functions/mariadb-proxy/index.ts`
-- `src/components/esteira/BatchImportVoucherDialog.tsx` somente se a validação local ainda sobrescrever o retorno correto do backend.
+2. **Execução** (modo `execute`, após confirmação do usuário) dentro de transação:
+   - Coleta `ids` alvo.
+   - `DELETE FROM t_voucher_anexos WHERE voucher_id IN (ids)`
+   - `DELETE FROM t_log_entries WHERE voucher_id IN (ids)`
+   - `DELETE FROM t_dados_financeiro_voucher_espelho WHERE voucher_id IN (ids)` (se existir)
+   - `DELETE FROM t_vouchers WHERE id IN (ids)`
+   - Log da contagem removida por tabela.
+
+3. **Reimportação automática** ao final do execute:
+   - Chama internamente `action: "import"` da mesma edge, que agora prioriza `t_dados_financeiro_spo` via prefix-match (`SUBSTRING_INDEX(TRIM(nd),' ',1)`).
+
+4. **Validação**:
+   - Conferir que SPOs como `105-294424` (armazenado como `105-294424 DIM-BY`) reaparecem ligados corretamente.
+   - Logs no console da edge function mostrando antes/depois.
+
+## UI
+
+Botão "Limpar SPOs em aberto e reimportar" no painel admin de Esteira (ou modal já existente de importação em lote), com:
+- Botão "Pré-visualizar" → roda dry-run e mostra contagem/amostra.
+- Botão "Confirmar exclusão e reimportar" → habilitado após o dry-run.
+
+Se preferir sem UI, executo direto via call manual da edge e reporto resultado.
+
+## Confirmações necessárias
+
+1. Confirmar que `OPERACIONAL` + `FISCAL` cobre tudo que você considera "em aberto" (deixar `ROBO`/`SUPERVISOR` intactos).
+2. Anexos vinculados podem ser apagados junto (serão recriados na reimportação)?
+3. Quer botão na UI ou execução direta agora?
+
+## Arquivos previstos
+
+- `supabase/functions/voucher-integrate-rm/index.ts` — nova ação `cleanup-spo-open` com modos `dry`/`execute`.
+- (opcional) `src/pages/esteira/EsteiraManual.tsx` ou similar — botão de disparo.

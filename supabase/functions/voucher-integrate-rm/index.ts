@@ -11,9 +11,11 @@ const corsHeaders = {
 interface IntegrateRMRequest {
   voucherId?: string;
   numeroVoucherRM?: string;
-  action: "fetch" | "integrate" | "list" | "import";
+  action: "fetch" | "integrate" | "list" | "import" | "cleanup-spo-open";
   limit?: number;
+  mode?: "dry" | "execute";
 }
+
 
 interface RMVoucherData {
   idRM: string;
@@ -67,9 +69,119 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { voucherId, numeroVoucherRM, action, limit = 50 }: IntegrateRMRequest = await req.json();
+    const { voucherId, numeroVoucherRM, action, limit = 50, mode = "dry" }: IntegrateRMRequest = await req.json();
 
-    console.log(`[voucher-integrate-rm] Action: ${action}, VoucherID: ${voucherId}, RM Number: ${numeroVoucherRM}, Limit: ${limit}`);
+    console.log(`[voucher-integrate-rm] Action: ${action}, VoucherID: ${voucherId}, RM Number: ${numeroVoucherRM}, Limit: ${limit}, Mode: ${mode}`);
+
+    // ACTION: CLEANUP-SPO-OPEN - Remove SPO vouchers em OPERACIONAL/FISCAL
+    if (action === "cleanup-spo-open") {
+      let mariaClient: Client | null = null;
+      try {
+        mariaClient = await getMariaDBClient();
+
+        const whereClause = `
+          numero_spo REGEXP '^[0-9]+-[0-9]+'
+          AND etapa_atual IN ('OPERACAO','FISCAL')
+        `;
+
+
+        // Sample + count
+        const sample = await mariaClient.query(
+          `SELECT id, numero_spo, fornecedor, etapa_atual, valor, created_at
+             FROM dados_dachser.t_vouchers
+            WHERE ${whereClause}
+            ORDER BY created_at DESC
+            LIMIT 100`
+        );
+        const countRes = await mariaClient.query(
+          `SELECT COUNT(*) AS total FROM dados_dachser.t_vouchers WHERE ${whereClause}`
+        );
+        const total = Number((countRes?.[0] as any)?.total || 0);
+
+        if (mode === "dry") {
+          // Diagnóstico: distribuição por etapa_atual de SPOs
+          const dist = await mariaClient.query(
+            `SELECT etapa_atual, COUNT(*) AS qtd
+               FROM dados_dachser.t_vouchers
+              WHERE numero_spo REGEXP '^[0-9]+-[0-9]+'
+              GROUP BY etapa_atual
+              ORDER BY qtd DESC`
+          );
+          await mariaClient.close();
+          return new Response(
+            JSON.stringify({ success: true, mode: "dry", total, sample, distribuicao_etapas_spo: dist }),
+            { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+          );
+        }
+
+
+        // EXECUTE
+        const idsRes = await mariaClient.query(
+          `SELECT id FROM dados_dachser.t_vouchers WHERE ${whereClause}`
+        );
+        const ids = (idsRes as any[]).map((r) => r.id);
+        console.log(`[cleanup-spo-open] Excluindo ${ids.length} vouchers`);
+
+        let deletedAnexos = 0, deletedLogs = 0, deletedEspelho = 0, deletedVouchers = 0;
+
+        if (ids.length > 0) {
+          const placeholders = ids.map(() => '?').join(',');
+
+          try {
+            const r = await mariaClient.execute(
+              `DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id IN (${placeholders})`,
+              ids
+            );
+            deletedAnexos = r.affectedRows || 0;
+          } catch (e: any) { console.warn(`[cleanup] anexos:`, e.message); }
+
+          try {
+            const r = await mariaClient.execute(
+              `DELETE FROM dados_dachser.t_log_entries WHERE voucher_id IN (${placeholders})`,
+              ids
+            );
+            deletedLogs = r.affectedRows || 0;
+          } catch (e: any) { console.warn(`[cleanup] logs:`, e.message); }
+
+          try {
+            const r = await mariaClient.execute(
+              `DELETE FROM dados_dachser.t_dados_financeiro_voucher_espelho WHERE voucher_id IN (${placeholders})`,
+              ids
+            );
+            deletedEspelho = r.affectedRows || 0;
+          } catch (e: any) { console.warn(`[cleanup] espelho (pode não existir):`, e.message); }
+
+          const r = await mariaClient.execute(
+            `DELETE FROM dados_dachser.t_vouchers WHERE id IN (${placeholders})`,
+            ids
+          );
+          deletedVouchers = r.affectedRows || 0;
+        }
+
+        await mariaClient.close();
+
+        console.log(`[cleanup-spo-open] Concluído: vouchers=${deletedVouchers}, anexos=${deletedAnexos}, logs=${deletedLogs}, espelho=${deletedEspelho}`);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            mode: "execute",
+            deleted: { vouchers: deletedVouchers, anexos: deletedAnexos, logs: deletedLogs, espelho: deletedEspelho },
+            total_targets: ids.length,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      } catch (e: any) {
+        console.error(`[cleanup-spo-open] Erro:`, e);
+        if (mariaClient) try { await mariaClient.close(); } catch {}
+        return new Response(
+          JSON.stringify({ success: false, error: e.message }),
+          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+    }
+
+
 
     // ACTION: IMPORT - Importar vouchers do MariaDB para Supabase
     if (action === "import") {
