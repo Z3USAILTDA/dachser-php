@@ -20594,9 +20594,12 @@ Deno.serve(async (req) => {
                         valor_nf, moeda, cnpj, razao_social, detalhes`;
           try {
             const placeholders = normalized.map(() => '?').join(',');
-            // Match em numero_processo OU em qualquer token de detalhes (via FIND_IN_SET após troca de ';' por ',').
+            // Match em numero_processo OU em qualquer token de detalhes.
+            // Normaliza detalhes substituindo separadores comuns (; , \n \r \t |) por vírgula
+            // e removendo espaços, para que FIND_IN_SET funcione independente do formato.
+            const detalhesNormSql = `UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(detalhes, CHAR(13), ','), CHAR(10), ','), CHAR(9), ','), '|', ','), ';', ','), ' ', ''))`;
             const findInSetClauses = normalized
-              .map(() => `FIND_IN_SET(?, UPPER(REPLACE(REPLACE(detalhes, ' ', ''), ';', ','))) > 0`)
+              .map(() => `FIND_IN_SET(?, ${detalhesNormSql}) > 0`)
               .join(' OR ');
             const params: any[] = [
               ...normalized,
@@ -20612,10 +20615,10 @@ Deno.serve(async (req) => {
               // Indexa pelo numero_processo principal
               const main = normProcesso(r.numero_processo);
               if (main && !byProcesso[main]) byProcesso[main] = r;
-              // Indexa também por cada token de detalhes
+              // Indexa também por cada token de detalhes (separadores tolerantes)
               if (r.detalhes) {
                 String(r.detalhes)
-                  .split(';')
+                  .split(/[;,\n\r\t|]/)
                   .map((t) => normProcesso(t))
                   .filter(Boolean)
                   .forEach((tok) => {
@@ -20623,6 +20626,7 @@ Deno.serve(async (req) => {
                   });
               }
             }
+
           } catch (e) {
             console.log('fetchSpoByProcesso error:', e);
           }
