@@ -209,6 +209,7 @@ serve(async (req) => {
   if (payloadCache && now - payloadCache.at < PAYLOAD_MAX_STALE_MS) {
     if (!refreshInFlight) {
       refreshInFlight = computePayload()
+        .then(() => {})
         .catch((e) => { console.error("[BG-REFRESH] failed:", e); })
         .finally(() => { refreshInFlight = null; });
       try { (globalThis as any).EdgeRuntime?.waitUntil?.(refreshInFlight); } catch (_) {}
