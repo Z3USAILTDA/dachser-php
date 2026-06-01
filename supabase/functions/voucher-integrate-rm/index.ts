@@ -11,7 +11,7 @@ const corsHeaders = {
 interface IntegrateRMRequest {
   voucherId?: string;
   numeroVoucherRM?: string;
-  action: "fetch" | "integrate" | "list" | "import" | "cleanup-spo-open" | "diagnose-nd";
+  action: "fetch" | "integrate" | "list" | "import" | "cleanup-spo-open" | "diagnose-nd" | "force-import-nds";
   limit?: number;
   mode?: "dry" | "execute";
   nds?: string[];
