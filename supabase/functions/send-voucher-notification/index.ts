@@ -397,19 +397,24 @@ const handler = async (req: Request): Promise<Response> => {
       // E-mail informativo para o solicitante. Sem CC, sem botões.
       if (responsaveis?.creator_email) toEmails = [responsaveis.creator_email];
     } else if (data.type === "URGENCIA_APROVADA" || data.type === "URGENCIA_REJEITADA") {
-      // Resposta automática ao solicitante (TO) com supervisor em CC
+      // Resposta automática SOMENTE ao solicitante. Supervisor já agiu (clique no
+      // botão Aprovar/Rejeitar) e não precisa receber cópia — regra 1:1.
       if (responsaveis?.creator_email) toEmails = [responsaveis.creator_email];
-      if (responsaveis?.creator_supervisor_email) ccEmails = [responsaveis.creator_supervisor_email];
-      if (toEmails.length === 0 && ccEmails.length > 0) {
-        toEmails = ccEmails;
-        ccEmails = [];
-      }
     } else if (data.type === "AJUSTE_SOLICITADO") {
       if (data.toStage === "AJUSTE_OPERACAO") {
         if (responsaveis?.creator_email) {
           toEmails = [responsaveis.creator_email];
         } else {
-          toEmails = OPERACAO_FIXED_EMAILS;
+          // NUNCA fazer broadcast para a lista da Operação. Se o criador não pôde
+          // ser identificado (voucher veio da sync sem criado_por_user_id e nem
+          // o fallback de log resolveu), abortar silenciosamente.
+          console.warn(
+            `[AJUSTE_SOLICITADO/AJUSTE_OPERACAO] Nenhum destinatário específico para voucher ${data.voucherId}. Abortando envio (sem broadcast).`
+          );
+          return new Response(
+            JSON.stringify({ success: true, sent: 0, reason: "no_specific_operacao_recipient" }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
         }
       } else if (data.toStage === "AJUSTE_FISCAL") {
         if (responsaveis?.fiscal_email) {
