@@ -12,12 +12,18 @@ A Esteira de Vouchers opera com APENAS 3 alertas por e-mail. Todos os demais (SL
 - **Disparo:** `voucherReturnNotification.ts` → `send-voucher-notification` com `type: "AJUSTE_SOLICITADO"`.
 - **Regra inviolável — 1:1, NUNCA broadcast:** ajuste é uma devolução direcionada ao indivíduo que tocou a etapa anterior. NÃO disparar para a área inteira sob nenhuma hipótese.
 - **Destinatário (1):**
-  - `AJUSTE_OPERACAO` → criador (`creator_email` via `get_voucher_responsaveis_emails`). Fallback: `OPERACAO_FIXED_EMAILS` (lista curta — Operação opera em pool, mantida intencionalmente).
+  - `AJUSTE_OPERACAO` → criador (`creator_email` via `get_voucher_responsaveis_emails`). Fallback: último `user_id` em `t_voucher_logs` com ação `VOUCHER_ENVIADO/RASCUNHO_ENVIADO/MASTER_APROVADO_OPERACAO/REENVIO_APOS_AJUSTE/VOUCHER_CRIADO/RASCUNHO_CRIADO`, resolvendo `email` em `t_users_dachser`. Se nenhum resolver, **abortar silenciosamente** com `{ sent: 0, reason: "no_specific_operacao_recipient" }` — `OPERACAO_FIXED_EMAILS` foi REMOVIDO (era broadcast para 6 pessoas e violava a regra 1:1).
   - `AJUSTE_FISCAL` → último fiscal (`fiscal_email`). Resolução em duas camadas em `mariadb-proxy → get_voucher_responsaveis_emails`:
     1. Primário: `t_vouchers.responsavel_fiscal_user_id` (persistido em `update_voucher_esteira` quando o fiscal aprova/devolve).
     2. Fallback: último `user_id` do log com ação `APROVADO_FISCAL` ou `REENVIO_APOS_AJUSTE` em `t_voucher_logs`, resolvendo `email` em `t_users_dachser`.
   - Se ambas as camadas falharem (voucher legado sem nenhum log fiscal), `send-voucher-notification` aborta com `{ sent: 0, reason: "no_specific_fiscal_recipient" }`. **Nunca** cai em `getRecipientEmails(["FISCAL","GESTOR_FISCAL"])` — esse broadcast foi removido.
 - **Conteúdo:** número, etapa origem→destino, motivo, link.
+
+## Regra-mestra 1:1 (guard final)
+
+`send-voucher-notification` aplica um GUARD antes do `resend.emails.send`: se `toEmails.length > 1`, trunca para o primeiro e zera `cc`. Qualquer e-mail desta função vai para EXATAMENTE 1 destinatário. A única exceção autorizada é o relatório mensal, que usa edge function dedicada (`voucher-monthly-report`) e não passa por aqui.
+
+`URGENCIA_APROVADA` e `URGENCIA_REJEITADA` mandam **somente** ao solicitante. O supervisor já tomou a decisão clicando no link e não recebe CC.
 
 ## Alerta 2 — Urgência manual solicitada → Supervisor direto (+ confirmação ao solicitante)
 
