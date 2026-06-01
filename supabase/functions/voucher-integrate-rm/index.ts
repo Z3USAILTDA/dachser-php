@@ -11,7 +11,7 @@ const corsHeaders = {
 interface IntegrateRMRequest {
   voucherId?: string;
   numeroVoucherRM?: string;
-  action: "fetch" | "integrate" | "list" | "import" | "cleanup-spo-open" | "diagnose-nd";
+  action: "fetch" | "integrate" | "list" | "import" | "cleanup-spo-open" | "diagnose-nd" | "force-import-nds";
   limit?: number;
   mode?: "dry" | "execute";
   nds?: string[];
@@ -269,6 +269,114 @@ const handler = async (req: Request): Promise<Response> => {
         await mariaClient.close();
         return new Response(
           JSON.stringify({ success: true, cursor, report }),
+          { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      } catch (e: any) {
+        if (mariaClient) try { await mariaClient.close(); } catch {}
+        return new Response(
+          JSON.stringify({ success: false, error: e.message }),
+          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+    }
+
+    // ACTION: FORCE-IMPORT-NDS - Inserir vouchers específicos do DFV em t_vouchers, ignorando cursor
+    if (action === "force-import-nds") {
+      const targets = (nds || []).map((s) => String(s).trim()).filter(Boolean);
+      if (targets.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: "nds[] obrigatório" }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+      let mariaClient: Client | null = null;
+      try {
+        mariaClient = await getMariaDBClient();
+        const inserted: any[] = [];
+        const skipped: any[] = [];
+        const errors: any[] = [];
+
+        for (const nd of targets) {
+          const rows: any = await mariaClient.query(
+            `SELECT dfv.id_rm, dfv.nd, dfv.documento, dfv.nome_beneficiario, dfv.nome_cobranca,
+                    dfv.numero_nf, dfv.numero_processo, dfv.modal, dfv.forma_pag,
+                    dfv.data_emissao, dfv.data_vencimento, dfv.valor_nf, dfv.moeda, dfv.cnpj,
+                    dfv.razao_social, dfv.data_insert
+             FROM dados_dachser.t_dados_financeiro_voucher dfv
+             WHERE SUBSTRING_INDEX(TRIM(dfv.nd),' ',1) COLLATE utf8mb4_unicode_ci = ?
+             ORDER BY dfv.data_insert DESC LIMIT 1`,
+            [nd]
+          );
+          if (!rows || rows.length === 0) {
+            skipped.push({ nd, reason: "não encontrado em t_dados_financeiro_voucher" });
+            continue;
+          }
+          const rm = rows[0];
+
+          const existing: any = await mariaClient.query(
+            `SELECT id FROM dados_dachser.t_vouchers
+             WHERE SUBSTRING_INDEX(TRIM(numero_spo),' ',1) COLLATE utf8mb4_unicode_ci = ?
+                OR CAST(id_rm AS UNSIGNED) = ?
+             LIMIT 1`,
+            [nd, rm.id_rm]
+          );
+          if (existing && existing.length > 0) {
+            skipped.push({ nd, reason: "já existe em t_vouchers", voucher_id: existing[0].id });
+            continue;
+          }
+
+          const mapFormaPag = (fp: string | null): string => {
+            const m: Record<string, string> = {
+              BOL: "BOLETO", BOLETO: "BOLETO", PIX: "TRANSFERENCIA_PIX",
+              TED: "TRANSFERENCIA_PIX", TRANSF: "TRANSFERENCIA_PIX",
+              DEBITO: "DEBITO", CAMBIO: "CAMBIO", DARF: "BOLETO", GPS: "BOLETO",
+            };
+            return m[(fp || "").toUpperCase()] || "BOLETO";
+          };
+          const toDate = (d: any): string | null => {
+            if (!d) return null;
+            const s = String(d).trim();
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+            if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.split("T")[0];
+            if (/^\d{4}-\d{2}-\d{2} /.test(s)) return s.split(" ")[0];
+            return null;
+          };
+
+          try {
+            const voucherId = crypto.randomUUID();
+            await mariaClient.execute(
+              `INSERT INTO dados_dachser.t_vouchers (
+                 id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda,
+                 vencimento, data_emissao_documento, cobranca_em_nome_de, forma_pagamento,
+                 etapa_atual, status_baixa, criado_por_user_id, id_rm, data_insert_rm, sync_status,
+                 processo_id, origem_processo, tipo_execucao_pagamento, filial
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'A_PROCESSAR', 'PENDENTE', 'SISTEMA_SYNC', ?, ?, 'ATIVO', ?, 'RM', 'A_DEFINIR', ?)`,
+              [
+                voucherId,
+                rm.nd || rm.documento,
+                rm.nome_beneficiario || rm.razao_social || "",
+                rm.cnpj || "",
+                rm.valor_nf || 0,
+                rm.moeda || "BRL",
+                toDate(rm.data_vencimento) || new Date().toISOString().split("T")[0],
+                toDate(rm.data_emissao),
+                rm.nome_cobranca === "CLIENTE" ? "CLIENTE" : "DACHSER",
+                mapFormaPag(rm.forma_pag),
+                rm.id_rm,
+                rm.data_insert,
+                rm.numero_processo || null,
+                rm.nome_cobranca || null,
+              ]
+            );
+            inserted.push({ nd, voucher_id: voucherId, id_rm: rm.id_rm, fornecedor: rm.nome_beneficiario, valor: rm.valor_nf });
+          } catch (insErr: any) {
+            errors.push({ nd, error: insErr.message });
+          }
+        }
+
+        await mariaClient.close();
+        return new Response(
+          JSON.stringify({ success: true, inserted, skipped, errors }),
           { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
         );
       } catch (e: any) {
