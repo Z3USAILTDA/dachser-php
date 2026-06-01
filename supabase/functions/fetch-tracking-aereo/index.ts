@@ -1741,6 +1741,8 @@ async function computePayload(): Promise<string> {
     console.log(`[PERF] fetch-tracking-aereo done in ${Date.now() - __t0}ms (coldStart=${__coldStart})`);
     const body = JSON.stringify({ success: true, data: filteredData, failed_count: failed.length });
     payloadCache = { at: Date.now(), body };
+    // Persist to DB so cold isolates skip the heavy compute and serve from cache.
+    try { (globalThis as any).EdgeRuntime?.waitUntil?.(persistPayloadToDb(body)); } catch (_) { persistPayloadToDb(body).catch(() => {}); }
     return body;
   } catch (error) {
     console.error(`fetch-tracking-aereo error after ${Date.now() - __t0}ms (coldStart=${__coldStart}):`, error);
