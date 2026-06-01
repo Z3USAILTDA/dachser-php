@@ -43,6 +43,9 @@ interface PendingVoucher {
   moeda: string | null;
   cnpj: string | null;
   razao_social: string | null;
+  source?: "SPO" | "VOUCHER";
+  detalhes?: string | null;
+  processos_associados?: string[];
 }
 
 interface BacklogTabProps {
