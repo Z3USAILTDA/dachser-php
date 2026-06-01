@@ -313,40 +313,70 @@ const handler = async (req: Request): Promise<Response> => {
         
         // Normalização: aceitar "105-292964" e "105-292964 DIM-BY"
         const ndRaw = numeroVoucherRM.trim();
-        const ndCandidates = Array.from(new Set([ndRaw, ndRaw.split(/\s+/)[0]].filter(Boolean)));
+        const ndBase = ndRaw.split(/\s+/)[0];
+        const ndCandidates = Array.from(new Set([ndRaw, ndBase].filter(Boolean)));
         const ndPlaceholders = ndCandidates.map(() => '?').join(', ');
-        const result = await mariaClient.query(
-          `SELECT 
-            id_rm,
-            nd,
-            documento,
-            nome_beneficiario,
-            nome_cobranca,
-            numero_nf,
-            numero_processo,
-            modal,
-            tipo_pag,
-            forma_pag,
-            data_emissao,
-            data_vencimento,
-            valor_nf,
-            moeda,
-            cnpj,
-            razao_social
-          FROM dados_dachser.t_dados_financeiro_voucher
-          WHERE nd IN (${ndPlaceholders})
-          LIMIT 1`,
-          ndCandidates
-        );
-        
-        console.log("[voucher-integrate-rm] Query result:", result);
+
+        const selectCols = `
+          id_rm, nd, documento, nome_beneficiario, nome_cobranca,
+          numero_nf, numero_processo, modal, tipo_pag, forma_pag,
+          data_emissao, data_vencimento, valor_nf, moeda, cnpj, razao_social
+        `;
+
+        // SPO format: filial-numero (ex: "105-294424"). Buscar primeiro em
+        // t_dados_financeiro_spo (prioridade) com prefix-match para tolerar
+        // sufixos tipo "105-294424 DIM-BY". Fallback para t_dados_financeiro_voucher.
+        let result: any[] = [];
+        let sourceTable = 't_dados_financeiro_spo';
+        const isSpoLike = /^\d+-/.test(ndBase);
+
+        const trySpo = async () => {
+          return await mariaClient!.query(
+            `SELECT ${selectCols}
+               FROM dados_dachser.t_dados_financeiro_spo
+              WHERE nd IN (${ndPlaceholders})
+                 OR SUBSTRING_INDEX(TRIM(nd),' ',1) COLLATE utf8mb4_unicode_ci
+                    = ? COLLATE utf8mb4_unicode_ci
+              LIMIT 1`,
+            [...ndCandidates, ndBase]
+          );
+        };
+        const tryVoucher = async () => {
+          return await mariaClient!.query(
+            `SELECT ${selectCols}
+               FROM dados_dachser.t_dados_financeiro_voucher
+              WHERE nd IN (${ndPlaceholders})
+                 OR SUBSTRING_INDEX(TRIM(nd),' ',1) COLLATE utf8mb4_unicode_ci
+                    = ? COLLATE utf8mb4_unicode_ci
+              LIMIT 1`,
+            [...ndCandidates, ndBase]
+          );
+        };
+
+        if (isSpoLike) {
+          result = await trySpo();
+          if (!result || result.length === 0) {
+            console.log(`[voucher-integrate-rm] Não encontrado em SPO, tentando voucher...`);
+            result = await tryVoucher();
+            sourceTable = 't_dados_financeiro_voucher';
+          }
+        } else {
+          result = await tryVoucher();
+          sourceTable = 't_dados_financeiro_voucher';
+          if (!result || result.length === 0) {
+            result = await trySpo();
+            sourceTable = 't_dados_financeiro_spo';
+          }
+        }
+
+        console.log(`[voucher-integrate-rm] Lookup nd="${ndRaw}" source=${sourceTable} hits=${result?.length || 0}`);
 
         if (!result || result.length === 0) {
           await mariaClient.close();
           return new Response(
             JSON.stringify({
               success: false,
-              error: `Voucher com nd "${numeroVoucherRM}" não encontrado na tabela t_dados_financeiro_voucher`,
+              error: `Voucher/SPO com nd "${numeroVoucherRM}" não encontrado em t_dados_financeiro_spo nem em t_dados_financeiro_voucher`,
             }),
             {
               status: 404,
