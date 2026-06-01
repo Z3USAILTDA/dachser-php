@@ -1217,6 +1217,11 @@ serve(async (req) => {
     // Manual override: force ARR to be classified as DESTINO (bypass loc !== authDest check).
     // Use when routeMap destination is wrong or carrier reported the final ARR at a leg airport.
     const FORCED_ARR_DESTINO_AWBS = new Set<string>(['016-83237055', '369-92002945']);
+    // Manual override: force the connection list (comma-separated IATA codes) for specific AWBs.
+    // Use when timeline/routeMap fails to surface the real transit airport(s).
+    const FORCED_CONNECTIONS_AWBS: Record<string, string> = {
+      '873-20395233': 'BOG',
+    };
     const stopWordsConn = new Set([
       'NIL','NIF','DIS','OFD','OFL','BUP','RDP','LAT','TKG','SCR','ECC',
       'TFD','TRM','RFC','DMG','RET','AWB','PRE','DEP','ARR','RCF','RCS',
