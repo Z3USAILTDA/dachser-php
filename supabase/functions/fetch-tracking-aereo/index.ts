@@ -1214,6 +1214,9 @@ serve(async (req) => {
     // Hoisted constants/helpers — previously re-created per row (1.6k+ iterations).
     const FINAL_STATUSES = new Set(["DLV", "POD"]);
     const SUPPRESSED_DISCREPANCY_AWBS = new Set<string>(['047-32916380', '047-33946636']);
+    // Manual override: force ARR to be classified as DESTINO (bypass loc !== authDest check).
+    // Use when routeMap destination is wrong or carrier reported the final ARR at a leg airport.
+    const FORCED_ARR_DESTINO_AWBS = new Set<string>(['016-83237055']);
     const stopWordsConn = new Set([
       'NIL','NIF','DIS','OFD','OFL','BUP','RDP','LAT','TKG','SCR','ECC',
       'TFD','TRM','RFC','DMG','RET','AWB','PRE','DEP','ARR','RCF','RCS',
@@ -1310,16 +1313,21 @@ serve(async (req) => {
       // CONEXÃO is only set when destination is authoritatively known (routeEntry) to avoid
       // false positives when raw DESTINO text can't be reliably parsed to an IATA code.
       if (finalCode === "ARR") {
-        const loc = extractIATA(electedLoc);
-        const authDest = routeEntry?.destination || null;
-        const dest = authDest || extractIATA(row.DESTINO || "");
-        if (dest && loc && loc === dest) {
+        const awbStr = String(row.AWB || '').trim();
+        if (FORCED_ARR_DESTINO_AWBS.has(awbStr)) {
           finalCode = "ARR - DESTINO";
-        } else if (authDest && loc && loc !== authDest) {
-          // Only declare a connection when we have a verified destination to compare against
-          finalCode = "ARR - CONEXÃO";
+        } else {
+          const loc = extractIATA(electedLoc);
+          const authDest = routeEntry?.destination || null;
+          const dest = authDest || extractIATA(row.DESTINO || "");
+          if (dest && loc && loc === dest) {
+            finalCode = "ARR - DESTINO";
+          } else if (authDest && loc && loc !== authDest) {
+            // Only declare a connection when we have a verified destination to compare against
+            finalCode = "ARR - CONEXÃO";
+          }
+          // Without routeEntry, ambiguous — leave as ARR rather than guess CONEXÃO
         }
-        // Without routeEntry, ambiguous — leave as ARR rather than guess CONEXÃO
       }
 
       // Date for the elected slot — prefer SQL slot date, then time-augmented row.date0/time0
