@@ -1000,6 +1000,8 @@ serve(async (req) => {
             };
           }
           routeCache = { at: Date.now(), data: fresh };
+          console.log(`[ROUTE-BG] Cache refreshed: ${Object.keys(fresh).length} records`);
+          await persistCacheToDb("route", fresh);
         } catch (err) {
           console.warn("[ROUTE-BG] Could not load route map:", err);
         } finally {
