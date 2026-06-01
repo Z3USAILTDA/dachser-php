@@ -35,6 +35,24 @@ export type Database = {
         }
         Relationships: []
       }
+      air_tracking_cache: {
+        Row: {
+          cache_key: string
+          data: Json
+          updated_at: string
+        }
+        Insert: {
+          cache_key: string
+          data?: Json
+          updated_at?: string
+        }
+        Update: {
+          cache_key?: string
+          data?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       analise_documental_historico: {
         Row: {
           analysis: Json | null
