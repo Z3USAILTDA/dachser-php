@@ -1586,37 +1586,46 @@ serve(async (req) => {
     // Alerting is handled by air-tracking-failed-alert. Do not send email from
     // the dashboard fallback to keep this function inside Edge CPU limits.
 
-    // Filter out hidden AWBs (air_hidden_awbs table in Supabase)
+    // Filter out hidden AWBs (air_hidden_awbs table in Supabase) — cached 5min
     let filteredData = data;
     try {
-      const supaUrl = Deno.env.get("SUPABASE_URL");
-      const supaKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY");
-      if (supaUrl && supaKey) {
-        const resp = await fetch(`${supaUrl}/rest/v1/air_hidden_awbs?select=awb`, {
-          headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` },
-        });
-        if (resp.ok) {
-          const hidden = await resp.json();
-          const hiddenSet = new Set<string>((hidden || []).map((h: any) => String(h.awb).trim()));
-          if (hiddenSet.size > 0) {
-            filteredData = data.filter((d: any) => !hiddenSet.has(String(d.awb_number).trim()));
-            console.log(`Hidden AWBs filtered: ${data.length - filteredData.length} of ${data.length}`);
+      const hiddenStale = !hiddenAwbsCache || (Date.now() - hiddenAwbsCache.at >= LOOKUP_TTL_MS);
+      if (hiddenStale) {
+        const supaUrl = Deno.env.get("SUPABASE_URL");
+        const supaKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY");
+        if (supaUrl && supaKey) {
+          const resp = await fetch(`${supaUrl}/rest/v1/air_hidden_awbs?select=awb`, {
+            headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` },
+          });
+          if (resp.ok) {
+            const hidden = await resp.json();
+            hiddenAwbsCache = {
+              at: Date.now(),
+              data: new Set<string>((hidden || []).map((h: any) => String(h.awb).trim())),
+            };
           }
         }
+      }
+      const hiddenSet = hiddenAwbsCache?.data;
+      if (hiddenSet && hiddenSet.size > 0) {
+        filteredData = data.filter((d: any) => !hiddenSet.has(String(d.awb_number).trim()));
+        console.log(`Hidden AWBs filtered: ${data.length - filteredData.length} of ${data.length} (cache ${hiddenStale ? 'MISS' : 'HIT'})`);
       }
     } catch (e) {
       console.error("Error fetching hidden AWBs:", e);
     }
 
+    console.log(`[PERF] fetch-tracking-aereo done in ${Date.now() - __t0}ms (coldStart=${__coldStart})`);
     return new Response(JSON.stringify({ success: true, data: filteredData, failed_count: failed.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("fetch-tracking-aereo error:", error);
-    if (client) { try { await client.close(); } catch (_) {} }
+    console.error(`fetch-tracking-aereo error after ${Date.now() - __t0}ms (coldStart=${__coldStart}):`, error);
     return new Response(
       JSON.stringify({ success: false, error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
+  } finally {
+    if (client) { try { await client.close(); } catch (_) {} }
   }
 });
