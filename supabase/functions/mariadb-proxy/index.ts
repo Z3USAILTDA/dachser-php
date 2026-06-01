@@ -16835,7 +16835,7 @@ Deno.serve(async (req) => {
         // Filtro de mês só restringe vouchers fora dessas etapas (ex.: CONCLUIDO, CANCELADO, ROBO, RASCUNHO, AJUSTE_*).
         const ativosMonthClause = hasMonthFilter
           ? `AND (
-              v.etapa_atual IN ('OPERACAO','FISCAL','SUPERVISOR','FINANCEIRO','AJUSTE_OPERACAO','AJUSTE_FISCAL','CANCELADO','PRE_LANCAMENTO')
+              v.etapa_atual IN ('A_PROCESSAR','OPERACAO','FISCAL','SUPERVISOR','FINANCEIRO','AJUSTE_OPERACAO','AJUSTE_FISCAL','CANCELADO','PRE_LANCAMENTO')
               OR (dfv.data_emissao >= ? AND dfv.data_emissao < ?)
               OR (dfv.data_emissao IS NULL
                   AND v.data_emissao_documento >= ? AND v.data_emissao_documento < ?)
