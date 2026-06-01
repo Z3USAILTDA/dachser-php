@@ -439,6 +439,20 @@ const handler = async (req: Request): Promise<Response> => {
     toEmails = [...new Set(toEmails.filter(Boolean))];
     ccEmails = [...new Set(ccEmails.filter((e) => e && !toEmails.includes(e)))];
 
+    // GUARD 1:1 — Esta função NUNCA pode enviar para mais de uma pessoa.
+    // Relatórios broadcast (mensal/diário) usam edge functions dedicadas
+    // (voucher-monthly-report etc.), não passam por aqui.
+    if (toEmails.length > 1) {
+      console.warn(
+        `[GUARD_1_TO_1] type=${data.type} resolveu ${toEmails.length} destinatários (${toEmails.join(", ")}). Truncando para o primeiro.`
+      );
+      toEmails = [toEmails[0]];
+    }
+    if (ccEmails.length > 0) {
+      console.warn(`[GUARD_1_TO_1] type=${data.type} tinha CC (${ccEmails.join(", ")}). Removendo CC.`);
+      ccEmails = [];
+    }
+
     if (toEmails.length === 0) {
       console.log("No recipients resolved — skipping send");
       return new Response(
