@@ -23,9 +23,12 @@ const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
 
 async function hydrateCachesFromDb(): Promise<void> {
   if (!supabaseAdmin) return;
-  const discFresh = discrepancyCache && Date.now() - discrepancyCache.at < DISCREPANCY_CACHE_TTL_MS;
-  const routeFresh = routeCache && Date.now() - routeCache.at < ROUTE_CACHE_TTL_MS;
-  if (discFresh && routeFresh) return;
+  // Só hidrata se a memória estiver vazia (cold isolate). Se já existir cache em
+  // memória — mesmo stale — serve direto e deixa o BG refresh atualizar, evitando
+  // somar latência da Postgres ao caminho síncrono (CPU budget de 2s).
+  const needDisc = !discrepancyCache;
+  const needRoute = !routeCache;
+  if (!needDisc && !needRoute) return;
   try {
     const { data, error } = await supabaseAdmin
       .from("air_tracking_cache")
@@ -34,10 +37,10 @@ async function hydrateCachesFromDb(): Promise<void> {
     if (error || !data) return;
     for (const row of data) {
       const at = new Date(row.updated_at).getTime();
-      if (row.cache_key === "discrepancy" && !discFresh) {
+      if (row.cache_key === "discrepancy" && needDisc) {
         discrepancyCache = { at, data: (row.data as any) || {} };
         console.log(`[DISC] Hydrated from DB: ${Object.keys(discrepancyCache.data).length} records, age=${Math.round((Date.now() - at) / 1000)}s`);
-      } else if (row.cache_key === "route" && !routeFresh) {
+      } else if (row.cache_key === "route" && needRoute) {
         routeCache = { at, data: (row.data as any) || {} };
         console.log(`[ROUTE] Hydrated from DB: ${Object.keys(routeCache.data).length} records, age=${Math.round((Date.now() - at) / 1000)}s`);
       }
