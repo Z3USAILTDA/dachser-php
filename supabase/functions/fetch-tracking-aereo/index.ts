@@ -37,10 +37,10 @@ async function hydrateCachesFromDb(): Promise<void> {
     if (error || !data) return;
     for (const row of data) {
       const at = new Date(row.updated_at).getTime();
-      if (row.cache_key === "discrepancy" && !discFresh) {
+      if (row.cache_key === "discrepancy" && needDisc) {
         discrepancyCache = { at, data: (row.data as any) || {} };
         console.log(`[DISC] Hydrated from DB: ${Object.keys(discrepancyCache.data).length} records, age=${Math.round((Date.now() - at) / 1000)}s`);
-      } else if (row.cache_key === "route" && !routeFresh) {
+      } else if (row.cache_key === "route" && needRoute) {
         routeCache = { at, data: (row.data as any) || {} };
         console.log(`[ROUTE] Hydrated from DB: ${Object.keys(routeCache.data).length} records, age=${Math.round((Date.now() - at) / 1000)}s`);
       }
