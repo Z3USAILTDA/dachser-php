@@ -8299,10 +8299,42 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Fallback equivalente para creator_email: se o voucher não tem criado_por_user_id
+        // (típico de vouchers vindos da sync), resolver pelo último log de envio/criação
+        // feito por usuário humano da Operação.
+        let creatorEmail: string | null = r.creator_email || null;
+        let creatorUsername: string | null = r.creator_username || null;
+        if (!creatorEmail) {
+          try {
+            const logRows = await client.query(`
+              SELECT u.email AS email, u.username AS username
+              FROM dados_dachser.t_voucher_logs l
+              JOIN ai_agente.t_users_dachser u
+                ON CAST(u.id AS CHAR) COLLATE utf8mb4_unicode_ci = CAST(l.user_id AS CHAR) COLLATE utf8mb4_unicode_ci
+              WHERE l.voucher_id = ?
+                AND l.acao IN ('VOUCHER_ENVIADO','RASCUNHO_ENVIADO','MASTER_APROVADO_OPERACAO','REENVIO_APOS_AJUSTE','VOUCHER_CRIADO','RASCUNHO_CRIADO')
+                AND l.user_id IS NOT NULL
+                AND l.user_id <> '0'
+                AND l.user_id <> ''
+                AND u.email IS NOT NULL
+                AND u.email <> ''
+              ORDER BY l.data_hora DESC
+              LIMIT 1
+            `, [voucher_id]);
+            if (logRows?.[0]?.email) {
+              creatorEmail = String(logRows[0].email);
+              creatorUsername = creatorUsername || String(logRows[0].username || '');
+              console.log(`[get_voucher_responsaveis_emails] creator_email resolved via log fallback for voucher ${voucher_id}: ${creatorEmail}`);
+            }
+          } catch (logFallbackErr) {
+            console.warn('[get_voucher_responsaveis_emails] creator log fallback failed:', logFallbackErr);
+          }
+        }
+
         result = {
           success: true,
-          creator_email: r.creator_email || null,
-          creator_username: r.creator_username || null,
+          creator_email: creatorEmail,
+          creator_username: creatorUsername,
           fiscal_email: fiscalEmail,
           supervisor_resp_email: r.supervisor_resp_email || null,
           financeiro_email: r.financeiro_email || null,
