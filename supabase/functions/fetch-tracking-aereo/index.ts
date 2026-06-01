@@ -15,6 +15,21 @@ const DISCREPANCY_CACHE_TTL_MS = 5 * 60_000;
 let routeCache: { at: number; data: Record<string, { origin: string | null; destination: string | null; conexoes: string | null; status: string }> } | null = null;
 const ROUTE_CACHE_TTL_MS = 5 * 60_000;
 
+// Auxiliary lookup caches (TTL 5min) — reused across invocations to avoid
+// re-querying small dictionary tables on every poll. Survive within a warm
+// isolate; on cold start they are rebuilt once.
+const LOOKUP_TTL_MS = 5 * 60_000;
+let eventsLookupCache: {
+  at: number;
+  eventMap: Record<string, { id: number; descricao_en: string }>;
+  EXACT_MAP: Map<string, string>;
+  KEYWORD_INDEX: Array<{ needle: string; code: string }>;
+  descLookup: Array<{ code: string; description: string }>;
+} | null = null;
+let visibilityCache: { at: number; data: Record<string, string> } | null = null;
+let masterClientesCache: { at: number; data: Record<string, string> } | null = null;
+let hiddenAwbsCache: { at: number; data: Set<string> } | null = null;
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
