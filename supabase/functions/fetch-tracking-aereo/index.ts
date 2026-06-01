@@ -1216,7 +1216,7 @@ serve(async (req) => {
     const SUPPRESSED_DISCREPANCY_AWBS = new Set<string>(['047-32916380', '047-33946636']);
     // Manual override: force ARR to be classified as DESTINO (bypass loc !== authDest check).
     // Use when routeMap destination is wrong or carrier reported the final ARR at a leg airport.
-    const FORCED_ARR_DESTINO_AWBS = new Set<string>(['016-83237055']);
+    const FORCED_ARR_DESTINO_AWBS = new Set<string>(['016-83237055', '369-92002945']);
     const stopWordsConn = new Set([
       'NIL','NIF','DIS','OFD','OFL','BUP','RDP','LAT','TKG','SCR','ECC',
       'TFD','TRM','RFC','DMG','RET','AWB','PRE','DEP','ARR','RCF','RCS',
