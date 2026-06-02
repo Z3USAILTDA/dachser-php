@@ -496,7 +496,7 @@ export const PagamentosTab = () => {
     if (isReady && !tipoExecucao) {
       toast({ 
         title: "Tipo de execução obrigatório", 
-        description: "Defina o tipo de execução (Manual ou Remessa) antes de marcar como pronto",
+        description: "Defina o tipo de execução (Manual, Remessa ou Pago em ADF) antes de marcar como pronto",
         variant: "destructive" 
       });
       return;
@@ -506,10 +506,24 @@ export const PagamentosTab = () => {
     if (isReady && tipoExecucao === "A_DEFINIR") {
       toast({ 
         title: "Defina o tipo de execução", 
-        description: "'Pendente' não é permitido para marcar como pronto. Selecione Manual ou Remessa.",
+        description: "'Pendente' não é permitido para marcar como pronto. Selecione Manual, Remessa ou Pago em ADF.",
         variant: "destructive" 
       });
       return;
+    }
+
+    // PAGO_ADF: exige comprovante anexado/validado
+    if (isReady && tipoExecucao === "PAGO_ADF") {
+      const pag = pagamentos.find(p => p.id === id);
+      const sc = pag?.status_comprovante;
+      if (sc !== "ANEXADO" && sc !== "VALIDADO") {
+        toast({
+          title: "Comprovante obrigatório",
+          description: "Anexe o comprovante de pagamento antes de marcar como pronto.",
+          variant: "destructive"
+        });
+        return;
+      }
     }
 
     setProcessingAction(prev => ({ ...prev, [id]: true }));
@@ -517,13 +531,15 @@ export const PagamentosTab = () => {
     setPagamentos(prev => prev.map(p => p.id === id ? { ...p, is_pronto_para_robo: isReady } : p));
     try {
       const pagamento = isReady ? pagamentos.find(p => p.id === id) : null;
+      const isPagoAdf = tipoExecucao === "PAGO_ADF";
 
       // Rodar marcação + atualização do tipo_exec em PARALELO (era sequencial)
+      // PAGO_ADF não envia para RM (não passa pelo robô)
       const [readyRes, rmRes] = await Promise.all([
         supabase.functions.invoke("mariadb-proxy", {
           body: { action: "set_ready_for_robo", id, is_pronto: isReady }
         }),
-        isReady && pagamento
+        isReady && pagamento && !isPagoAdf
           ? supabase.functions.invoke("mariadb-proxy", {
               body: {
                 action: "update_tipo_exec_dados_rm",
@@ -535,16 +551,26 @@ export const PagamentosTab = () => {
           : Promise.resolve({ error: null } as any),
       ]);
 
-      if (readyRes.error) throw readyRes.error;
+      // Detectar erro COMPROVANTE_OBRIGATORIO retornado pelo backend
+      const readyErrMsg = (readyRes as any)?.error?.message || (readyRes as any)?.data?.error;
+      if (readyRes.error || readyErrMsg === "COMPROVANTE_OBRIGATORIO") {
+        if (readyErrMsg === "COMPROVANTE_OBRIGATORIO") {
+          throw new Error("Anexe o comprovante de pagamento antes de marcar como pronto.");
+        }
+        throw readyRes.error;
+      }
       if (rmRes && (rmRes as any).error) {
         console.error("Erro ao atualizar tipo_exec em t_dados_rm:", (rmRes as any).error);
       }
 
       const isDebito = String((pagamento as any)?.forma_pagamento || "").toUpperCase() === "DEBITO";
-      const autoConcluded = isReady && (isDebito || (readyRes as any)?.data?.auto_concluded);
+      const autoReason = (readyRes as any)?.data?.reason;
+      const autoConcluded = isReady && (isDebito || isPagoAdf || (readyRes as any)?.data?.auto_concluded);
       toast({ 
         title: autoConcluded
-          ? "Voucher concluído (Débito automático)"
+          ? (autoReason === "PAGO_ADF" || isPagoAdf
+              ? "Voucher concluído (Pago em ADF)"
+              : "Voucher concluído (Débito automático)")
           : (isReady ? "Marcado como pronto" : "Desmarcado")
       });
     } catch (error: unknown) {
