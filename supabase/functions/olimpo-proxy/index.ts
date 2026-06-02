@@ -2017,6 +2017,22 @@ serve(async (req) => {
                   AND TRIM(bl_number) != ''
                 GROUP BY TRIM(bl_number)
               ),
+              -- CTE 1C: Nome do cliente resolvido via t_clientes_base usando customer_no de t_sea_master
+              master_customer AS (
+                SELECT
+                  TRIM(sm.master) AS mbl_id,
+                  MAX(cb.nome_cliente) AS cliente_nome
+                FROM dados_dachser.t_sea_master sm
+                LEFT JOIN dados_dachser.t_clientes_base cb
+                  ON cb.dchr_customer_number COLLATE utf8mb4_unicode_ci
+                   = sm.customer_no COLLATE utf8mb4_unicode_ci
+                  AND cb.ativo = 1
+                WHERE sm.master IS NOT NULL
+                  AND TRIM(sm.master) != ''
+                  AND sm.customer_no IS NOT NULL
+                  AND TRIM(sm.customer_no) != ''
+                GROUP BY TRIM(sm.master)
+              ),
               -- CTE 2: Navio/vessel_imo mais recente por mbl (ranking)
               latest_vessel AS (
                 SELECT 
@@ -2206,7 +2222,13 @@ serve(async (req) => {
                   ELSE 'SEA EXPORT'
                 END
               ) as tipo_processo,
-              COALESCE(NULLIF(TRIM(MAX(ts.consignee_nome)), ''), NULLIF(TRIM(MAX(ts.consignee)), ''), NULLIF(TRIM(MAX(mdn.cliente)), '')) as consignee,
+              COALESCE(
+                NULLIF(TRIM(MAX(ts.consignee_nome)), ''),
+                CASE WHEN MAX(ts.consignee) REGEXP '^[0-9]+$' THEN NULL
+                     ELSE NULLIF(TRIM(MAX(ts.consignee)), '') END,
+                NULLIF(TRIM(MAX(mdn.cliente)), ''),
+                NULLIF(TRIM(MAX(mc.cliente_nome)), '')
+              ) as consignee,
               MAX(ts.shipping_line) as shipping_line,
               MAX(ts.origem) as origem,
               MAX(ts.destino) as destino,
@@ -2225,7 +2247,7 @@ serve(async (req) => {
               MAX(ts.eta_source) as eta_api,
               COALESCE(MAX(md.hbl), MAX(mdn.hawb)) as hbl,
               COALESCE(MAX(md.etd), MAX(mdn.etd)) as etd,
-              COALESCE(MAX(mdn.cliente), MAX(ts.consignee)) as cliente,
+              COALESCE(MAX(mdn.cliente), NULLIF(TRIM(MAX(mc.cliente_nome)), ''), MAX(ts.consignee)) as cliente,
               MAX(ts.email_analista) as email_analista,
               MAX(ts.email_cliente) as email_cliente,
               COUNT(DISTINCT CASE WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', '') AND ts.container IS NOT NULL THEN ts.container END) as container_count,
@@ -2277,6 +2299,7 @@ serve(async (req) => {
             FROM dados_dachser.t_sea_tracking_current ts
             LEFT JOIN master_data md ON md.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN master_dados_new mdn ON mdn.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
+            LEFT JOIN master_customer mc ON mc.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN latest_vessel lv ON lv.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci AND lv.rn = 1
             LEFT JOIN transship_vessel_change tvc ON tvc.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN transship_direct td ON td.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
