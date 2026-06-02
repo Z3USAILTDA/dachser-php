@@ -11520,7 +11520,9 @@ Deno.serve(async (req) => {
           filterFilial,
           filterMoeda,
           filterFormaPagamento,
-          filterStatusIntegracaoRm
+          filterStatusIntegracaoRm,
+          filterDataVencimentoInicio,
+          filterDataVencimentoFim
         } = body as {
           page?: number;
           perPage?: number;
@@ -11534,7 +11536,10 @@ Deno.serve(async (req) => {
           filterMoeda?: string;
           filterFormaPagamento?: string;
           filterStatusIntegracaoRm?: string;
+          filterDataVencimentoInicio?: string;
+          filterDataVencimentoFim?: string;
         };
+
 
         const offset = (page - 1) * perPage;
         // Filtrar apenas FINANCEIRO para manter a mesma contagem da aba Processos, e excluir modal ADM
