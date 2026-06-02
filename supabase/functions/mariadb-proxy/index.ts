@@ -11652,7 +11652,7 @@ Deno.serve(async (req) => {
             v.vencimento, v.forma_pagamento, v.tipo_documento, v.cobranca_em_nome_de,
             v.filial, v.linha_digitavel, v.codigo_barras, v.status_pagamento,
             v.tipo_execucao_pagamento, v.is_pronto_para_robo, v.lote_remessa_id,
-            v.status_integracao_rm, v.etapa_atual, v.status_baixa, v.created_at, v.updated_at,
+            v.status_integracao_rm, v.etapa_atual, v.status_baixa, v.status_comprovante, v.created_at, v.updated_at,
             v.urgencia_tipo,
             v.is_master, v.nome_master, v.voucher_master_id,
             v.comentarios_operacao,
