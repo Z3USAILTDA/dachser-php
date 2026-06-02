@@ -86,7 +86,6 @@ export const DatasAntigasBell = () => {
         }
       >
         <Bell className={`h-4 w-4 ${hasAlerts ? "text-[#ef4444]" : ""}`} />
-        <span className="hidden sm:inline">Alertas</span>
         {hasAlerts && (
           <span className="ml-0.5 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[#ef4444] text-white text-[0.7rem] font-semibold">
             {total > 999 ? "999+" : total}
