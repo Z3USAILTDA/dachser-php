@@ -169,6 +169,18 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
       const it = data.items || [];
       setItems(markDuplicates(it));
       const missing = detectMissingColumns(it);
+      if (it.length === 0) {
+        toast({
+          title: "Nenhuma linha encontrada na planilha",
+          description: "Verifique se a planilha tem dados e se a coluna 'Processo' (ou 'SPO') está preenchida.",
+          variant: "destructive",
+        });
+      } else if (missing.length) {
+        toast({
+          title: `${it.length} ${it.length === 1 ? "linha carregada" : "linhas carregadas"}`,
+          description: `Preencha ${missing.map(m => m.label).join(" e ")} para continuar.`,
+        });
+      }
       setStep(missing.length ? "fill" : "preview");
     } catch (e: any) {
       toast({ title: "Erro lendo planilha", description: e.message, variant: "destructive" });
