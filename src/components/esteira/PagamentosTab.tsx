@@ -1177,7 +1177,7 @@ export const PagamentosTab = () => {
                   />
                 </th>
                 <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("numero_spo")}>
-                  <span className="flex items-center">SPO{getSortIcon("numero_spo")}</span>
+                  <span className="flex items-center">Voucher/SPO{getSortIcon("numero_spo")}</span>
                 </th>
                 <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("fornecedor")}>
                   <span className="flex items-center">Fornecedor{getSortIcon("fornecedor")}</span>
