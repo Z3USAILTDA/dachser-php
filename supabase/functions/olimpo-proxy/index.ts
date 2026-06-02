@@ -2222,7 +2222,13 @@ serve(async (req) => {
                   ELSE 'SEA EXPORT'
                 END
               ) as tipo_processo,
-              COALESCE(NULLIF(TRIM(MAX(ts.consignee_nome)), ''), NULLIF(TRIM(MAX(ts.consignee)), ''), NULLIF(TRIM(MAX(mdn.cliente)), '')) as consignee,
+              COALESCE(
+                NULLIF(TRIM(MAX(ts.consignee_nome)), ''),
+                CASE WHEN MAX(ts.consignee) REGEXP '^[0-9]+$' THEN NULL
+                     ELSE NULLIF(TRIM(MAX(ts.consignee)), '') END,
+                NULLIF(TRIM(MAX(mdn.cliente)), ''),
+                NULLIF(TRIM(MAX(mc.cliente_nome)), '')
+              ) as consignee,
               MAX(ts.shipping_line) as shipping_line,
               MAX(ts.origem) as origem,
               MAX(ts.destino) as destino,
