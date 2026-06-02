@@ -8183,6 +8183,47 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // Reverte para A_PROCESSAR vouchers em OPERACAO que nunca tiveram log
+      // (sinal de que nunca foram efetivamente enviados/manipulados pelo usuário).
+      case 'reset_operacao_sem_logs_para_a_processar': {
+        const afetados = await client.query(`
+          SELECT v.id, v.numero_spo, v.criado_por_user_id
+            FROM dados_dachser.t_vouchers v
+           WHERE v.etapa_atual = 'OPERACAO'
+             AND NOT EXISTS (
+               SELECT 1 FROM dados_dachser.t_voucher_logs l WHERE l.voucher_id = v.id
+             )
+        `);
+        const total = afetados?.length || 0;
+        if (total > 0) {
+          const ids = afetados.map((r: any) => `'${r.id}'`).join(',');
+          await client.execute(`
+            UPDATE dados_dachser.t_vouchers
+               SET etapa_atual = 'A_PROCESSAR', updated_at = NOW()
+             WHERE id IN (${ids})
+          `);
+          for (const r of afetados) {
+            try {
+              await client.execute(`
+                INSERT INTO dados_dachser.t_voucher_logs (
+                  id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+                ) VALUES (?, ?, NULL, 'Sistema', 'ETAPA_ALTERADA_SISTEMA', ?, NOW())
+              `, [
+                crypto.randomUUID(),
+                r.id,
+                'Voucher movido de OPERACAO para A_PROCESSAR — sem histórico de ações (correção retroativa: nunca foi enviado pelo usuário).',
+              ]);
+            } catch (e) {
+              console.error('log reset_operacao_sem_logs falhou para', r.id, e);
+            }
+          }
+        }
+        result = { success: true, total, samples: (afetados || []).slice(0, 20) };
+        break;
+      }
+
+
+
 
 
       case 'get_vouchers_esteira': {

@@ -1,70 +1,25 @@
-## Regra confirmada
-Nenhum voucher pode sair de `OPERACAO` nem de `A_PROCESSAR` (robô) sem ter ≥ 1 anexo em `t_voucher_anexos`.
+## Objetivo
 
-## Diagnóstico (já confirmado por query)
-- **Nada é apagado** de `t_voucher_anexos` (0 casos de log `ANEXO_ADICIONADO` com anexos = 0 hoje; ação `ANEXO_REMOVIDO` nem existe).
-- Os casos reportados ("sumiu") são vouchers que **nunca tiveram anexo** e mesmo assim chegaram em FISCAL. Duas portas:
-  - Sync RM cria direto em `FISCAL` sem PDFs (7 SPOs identificados).
-  - Form de entrada manual aceita salvar em `FISCAL` sem anexo (SPO `20261883825`, julia, hoje).
+Reverter para `A_PROCESSAR` todos os vouchers que estão hoje em `OPERACAO` mas **não possuem nenhum registro** em `t_voucher_logs` — sinal claro de que nunca foram efetivamente enviados/manipulados pelo usuário (como o exemplo `105-260050 DIM-BY` da imagem, com histórico vazio).
 
-## Fix (cirúrgico, só backend)
+## O que será feito
 
-Tudo em `supabase/functions/mariadb-proxy/index.ts`.
+1. **Nova action no `mariadb-proxy`** (`reset_operacao_sem_logs_para_a_processar`):
+   - `SELECT v.id, v.numero_spo, v.criado_por_user_id` em `t_vouchers` onde `etapa_atual = 'OPERACAO'` e `NOT EXISTS (SELECT 1 FROM t_voucher_logs l WHERE l.voucher_id = v.id)`.
+   - `UPDATE t_vouchers SET etapa_atual = 'A_PROCESSAR', updated_at = NOW()` nos ids encontrados.
+   - Insere um log por voucher em `t_voucher_logs` com `acao = 'ETAPA_ALTERADA_SISTEMA'` e detalhe `"Voucher movido de OPERACAO para A_PROCESSAR — sem histórico de ações (correção retroativa: nunca foi enviado pelo usuário)."`.
+   - Retorna `{ success, total, samples }` (padrão idêntico ao `backfill_vouchers_sem_anexo_para_operacao` já existente em `mariadb-proxy/index.ts:8149`).
 
-### 1) Helper de validação
-```ts
-async function assertVoucherTemAnexos(voucherId: string, etapaDestino: string) {
-  const ETAPAS_QUE_EXIGEM = ['FISCAL','FINANCEIRO','PAGAMENTO','CONCLUIDO',
-    'AGUARDA_APROV_SUPERVISOR','AGUARDA_APROV_GERENTE','AJUSTE_OPERACAO'];
-  if (!ETAPAS_QUE_EXIGEM.includes(etapaDestino)) return;
-  const r = await mariadbQuery(
-    `SELECT COUNT(*) c FROM dados_dachser.t_voucher_anexos WHERE voucher_id = ?`,
-    [voucherId]);
-  if (Number(r[0]?.c || 0) === 0) {
-    throw new Error('ANEXOS_OBRIGATORIOS: Anexe ao menos 1 documento antes de avançar.');
-  }
-}
-```
+2. **Execução única**: chamar a action via `supabase--curl_edge_functions` para aplicar a correção imediatamente na base. O resultado mostra a contagem de vouchers movidos e uma amostra para validação.
 
-### 2) Chamar em toda transição de etapa
-Aplicar em todas as actions que rodam `UPDATE t_vouchers SET etapa_atual = ?`:
-- `update_voucher_esteira`
-- `advance_voucher_stage`
-- `bulk_advance_vouchers` (se existir)
-- `process_robo_match` / qualquer promoção que tira voucher de `A_PROCESSAR`
-- Cron de status automation (`auto_advance_vouchers` / etc.) — antes de promover de `A_PROCESSAR` ou `OPERACAO`, validar.
+## Escopo / não-escopo
 
-Erro retorna `{ success:false, error:'ANEXOS_OBRIGATORIOS', message:'…' }`. O front já mostra toast de erro via `useVoucherInlineSave` / hooks de avanço.
+- **Apenas** `etapa_atual = 'OPERACAO'`. Não toca em `AJUSTE_OPERACAO`, `FISCAL`, `SUPERVISOR`, `FINANCEIRO`, `CONCLUIDO`, `CANCELADO`, `RASCUNHO`, `A_PROCESSAR`.
+- Critério de "sem logs" = zero linhas em `t_voucher_logs` para aquele `voucher_id`. Vouchers com qualquer log (mesmo `VOUCHER_CRIADO`) permanecem em OPERACAO.
+- Não altera anexos, dados financeiros, sync_status, criado_por_user_id.
+- Action permanente: pode ser reexecutada a qualquer momento; também serve como mecanismo de auto-correção pontual.
 
-### 3) Sync RM cria em `OPERACAO`, não em `FISCAL`
-Na action que insere vouchers vindos do RM (`sync_vouchers_from_rm` ou equivalente), trocar `etapa_atual='FISCAL'` por `etapa_atual='OPERACAO'`. Combinado com o item 2, o cron de promoção automática só sobe quando houver anexo.
+## Verificação pós-execução
 
-### 4) Form de entrada manual no front
-No componente de criação manual (provavelmente `EsteiraVoucherDetails` ou modal de "Novo voucher"), forçar `etapa_atual = 'OPERACAO'` no payload de criação. Se já estiver, OK — o gate do backend cobre. Confirmar caminho exato na implementação e ajustar só se necessário (mudança de 1 linha).
-
-## Backfill (uma única operação)
-Vouchers ativos sem anexo voltam para `OPERACAO`:
-```sql
-UPDATE dados_dachser.t_vouchers v
-SET etapa_atual='OPERACAO', updated_at=NOW()
-WHERE etapa_atual IN ('FISCAL','FINANCEIRO','PAGAMENTO',
-                      'AGUARDA_APROV_SUPERVISOR','AGUARDA_APROV_GERENTE',
-                      'A_PROCESSAR','AJUSTE_OPERACAO')
-  AND NOT EXISTS (SELECT 1 FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id);
-```
-+ log `ETAPA_ALTERADA_SISTEMA` para cada: "Movido para OPERACAO — voucher sem anexo (correção retroativa)". Vouchers `CONCLUIDO` ficam intocados.
-
-## O que NÃO faço
-- Não toco em `t_voucher_anexos` (intacto)
-- Não refatoro UI, não crio etapa nova
-- Não mexo em master/filhos, robô matching, comprovantes
-
-## Arquivos tocados
-- `supabase/functions/mariadb-proxy/index.ts` — helper + chamadas + mudança na etapa inicial do sync RM
-- `mem://vouchers/etapa-advance-requires-anexos` — nova memória com a regra
-- Operação de backfill via insert tool
-
-## Validação
-1. `curl` tentando avançar voucher sem anexo → retorna `ANEXOS_OBRIGATORIOS`
-2. `SELECT COUNT(*) FROM t_vouchers WHERE etapa_atual NOT IN ('OPERACAO','CANCELADO','CONCLUIDO') AND NOT EXISTS(anexos)` → 0
-3. Próximo sync RM: vouchers novos caem em OPERACAO
+- Abrir o voucher `105-260050 DIM-BY` (exemplo da imagem) — deve aparecer com badge `A_PROCESSAR` em vez de `OPERACAO`, e o histórico passa a ter 1 linha (`ETAPA_ALTERADA_SISTEMA`).
+- Resposta da action lista `total` e `samples` para conferência rápida.
