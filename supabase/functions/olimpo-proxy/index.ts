@@ -2247,7 +2247,7 @@ serve(async (req) => {
               MAX(ts.eta_source) as eta_api,
               COALESCE(MAX(md.hbl), MAX(mdn.hawb)) as hbl,
               COALESCE(MAX(md.etd), MAX(mdn.etd)) as etd,
-              COALESCE(MAX(mdn.cliente), MAX(ts.consignee)) as cliente,
+              COALESCE(MAX(mdn.cliente), NULLIF(TRIM(MAX(mc.cliente_nome)), ''), MAX(ts.consignee)) as cliente,
               MAX(ts.email_analista) as email_analista,
               MAX(ts.email_cliente) as email_cliente,
               COUNT(DISTINCT CASE WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', '') AND ts.container IS NOT NULL THEN ts.container END) as container_count,
