@@ -83,7 +83,7 @@ export type UserRole =
 
 // New types for Pagamentos module
 // Simplificado para MANUAL ou REMESSA (10h ou 15h)
-export type TipoExecucaoPagamento = "MANUAL" | "REMESSA" | "REMESSA_10H" | "REMESSA_15H" | "A_DEFINIR";
+export type TipoExecucaoPagamento = "MANUAL" | "REMESSA" | "REMESSA_10H" | "REMESSA_15H" | "A_DEFINIR" | "PAGO_ADF";
 
 export type StatusPagamento = "PENDENTE_DADOS" | "PRONTO" | "EM_REMESSA" | "PAGO" | "ERRO";
 
