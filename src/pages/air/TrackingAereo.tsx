@@ -784,23 +784,7 @@ const TrackingAereo = () => {
       // Hide tracking failed unless actively searching by AWB
       if (awb.tracking_failed && !searchTerm) return false;
 
-      const sl = searchTerm.toLowerCase();
-      const matchesSearch = !searchTerm ||
-        awb.awb.toLowerCase().includes(sl) ||
-        (awb.hawb && awb.hawb.toLowerCase().includes(sl)) ||
-        awb.consignee_name.toLowerCase().includes(sl) ||
-        (awb.nome_analista && awb.nome_analista.toLowerCase().includes(sl));
-      const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
-      const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
-
-      const BR_AIRPORTS = ['GRU','VCP','CGH','GIG','SDU','BSB','CNF','POA','CWB','REC','SSA','FOR','BEL','MAO','NAT','MCZ','FLN','VIX','CGB','GYN','SLZ','THE','AJU','JPA','PMW','PVH','RBR','BVB','MCP','CGR','LDB','MGF','IGU','NVT','JOI','XAP','UDI','RAO','SJP','PPB','BAU','CPQ','QPS','SOD','MAB','STM','SJK','PNZ'];
-      const destCode = (awb.destino || '').toUpperCase().trim();
-      const isImport = BR_AIRPORTS.includes(destCode);
-      const matchesType = filterProcessType === "all" ||
-        (filterProcessType === "import" && isImport) ||
-        (filterProcessType === "export" && !isImport);
-
-      return matchesSearch && matchesAirline && matchesAnalyst && matchesType;
+      return applyTopFilters(awb);
     });
 
     // Card filter
@@ -810,7 +794,7 @@ const TrackingAereo = () => {
         switch (cardFilter) {
           case "transito": return ["DEP", "MAN", "RCF", "ARR", "ARR - DESTINO", "ARR - CONEXÃO"].includes(code);
           case "alerta": return code === "DIS" || (awb.has_dis_event && !awb.pieces_discrepancy);
-          case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy;
+          case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy || isStaleAwb(awb);
           default: return true;
         }
       });
