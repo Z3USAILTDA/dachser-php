@@ -688,13 +688,44 @@ const TrackingAereo = () => {
   const handleAnalystSort = () => { setSortAwb(null); setSortClient(null); setSortLastCheck(null); setSortAnalyst(prev => prev === null ? "asc" : prev === "asc" ? "desc" : null); };
   const handleLastCheckSort = () => { setSortAwb(null); setSortClient(null); setSortAnalyst(null); setSortLastCheck(prev => prev === null ? "asc" : prev === "asc" ? "desc" : null); };
 
-  // ─── Card counts ───
+  // ─── Stale helper (>30 dias sem atualização do último evento) ───
+  const isStaleAwb = useCallback((awb: AwbData): boolean => {
+    if (!awb.last_event_date) return false;
+    const code = getStatusCode(awb.last_event).toUpperCase();
+    if (code === "DLV" || code === "POD" || code === "ARR - DESTINO") return false;
+    if (awb.is_invalid || awb.tracking_failed || awb.hide_reason) return false;
+    const d = parseDBDate(awb.last_event_date);
+    if (!d) return false;
+    return (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24) > 30;
+  }, []);
+
+  // ─── Top filters (search, airline, analyst, processType) — usado em cards e tabela ───
+  const applyTopFilters = useCallback((awb: AwbData): boolean => {
+    const sl = searchTerm.toLowerCase();
+    const matchesSearch = !searchTerm ||
+      awb.awb.toLowerCase().includes(sl) ||
+      (awb.hawb && awb.hawb.toLowerCase().includes(sl)) ||
+      awb.consignee_name.toLowerCase().includes(sl) ||
+      (awb.nome_analista && awb.nome_analista.toLowerCase().includes(sl));
+    const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
+    const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
+    const BR_AIRPORTS = ['GRU','VCP','CGH','GIG','SDU','BSB','CNF','POA','CWB','REC','SSA','FOR','BEL','MAO','NAT','MCZ','FLN','VIX','CGB','GYN','SLZ','THE','AJU','JPA','PMW','PVH','RBR','BVB','MCP','CGR','LDB','MGF','IGU','NVT','JOI','XAP','UDI','RAO','SJP','PPB','BAU','CPQ','QPS','SOD','MAB','STM','SJK','PNZ'];
+    const destCode = (awb.destino || '').toUpperCase().trim();
+    const isImport = BR_AIRPORTS.includes(destCode);
+    const matchesType = filterProcessType === "all" ||
+      (filterProcessType === "import" && isImport) ||
+      (filterProcessType === "export" && !isImport);
+    return matchesSearch && matchesAirline && matchesAnalyst && matchesType;
+  }, [searchTerm, filterAirline, filterAnalyst, filterProcessType]);
+
+  // ─── Card counts (respeitam filtros de topo, mas não o cardFilter) ───
   const cardCounts = useMemo(() => {
     const inTransitCodes = new Set(["DEP", "MAN", "RCF", "ARR"]);
     const criticalCodes = new Set(["NIL", "NIF", "OFLD"]);
 
     let total = 0, transit = 0, alert = 0, critical = 0;
     awbsData.forEach(awb => {
+      if (!applyTopFilters(awb)) return;
       if (awb.is_invalid) return;
       if (awb.tracking_failed) return;
       const code = getStatusCode(awb.last_event).toUpperCase();
@@ -708,13 +739,14 @@ const TrackingAereo = () => {
           if (diffDays > 5) return;
         }
       }
+      const stale = isStaleAwb(awb);
       total++;
       if (inTransitCodes.has(code)) transit++;
       if (code === "DIS" || (awb.has_dis_event && !awb.pieces_discrepancy)) alert++;
-      if (criticalCodes.has(code) || awb.pieces_discrepancy) critical++;
+      if (criticalCodes.has(code) || awb.pieces_discrepancy || stale) critical++;
     });
     return { total, transit, alert, critical };
-  }, [awbsData]);
+  }, [awbsData, applyTopFilters, isStaleAwb]);
 
   // ─── Filtered & sorted data ───
   const filteredAwbs = useMemo(() => {
