@@ -1,21 +1,40 @@
-## Ajustes em /air/tracking-aereo
+# Busca unificada na aba Pagamentos (Esteira)
 
-Edição única em `src/pages/air/TrackingAereo.tsx`. Sem mudanças em schema, edge functions ou outras telas.
+Atualmente o campo de busca da aba Pagamentos filtra apenas por `fornecedor`. O objetivo é transformá-lo em uma busca genérica que case com o **número do Voucher/SPO** OU com o **nome do Fornecedor**, e ajustar o rótulo da coluna correspondente.
 
-### 1. Lógica — "Sem atualizações" (>30 dias) entra como Crítico
+## Mudanças
 
-- Criar helper `isStale(awb)`: `last_event_date` existe e a diferença `(agora - parseDBDate(last_event_date)) / 86400000 > 30`. Excluir processos já finalizados/ocultos (DLV, POD, `hide_reason`, `arr_destino_date` > 5 dias, `is_invalid`, `tracking_failed`) — mesmas exclusões já usadas em `cardCounts`.
-- **Coluna "Último Evento"** (linhas ~1154-1166): ao lado do código (ex.: `DEP`), quando `isStale`, renderizar badge `⚠ Sem atualizações` (estilo amber/vermelho, mesmo padrão visual dos demais badges da coluna).
-- **Coluna "Situação"** (linhas ~1171-1210): quando `isStale` e não for Inválido/Falha/DIS/Discrepância, exibir badge vermelho "Crítico - Sem atualizações".
-- **`cardCounts.critical`** (linhas ~692-717): somar `isStale` ao critical (junto com NIL/NIF/OFLD e `pieces_discrepancy`).
-- **`cardFilter === "criticos"`** (linha ~781): incluir `isStale(awb)` na condição, para que clicar no card Críticos mostre também esses processos.
+### 1. Frontend — `src/components/esteira/PagamentosTab.tsx`
 
-### 2. Visual — Cards refletem filtros ativos
+- **Input de busca (linha ~772-778):**
+  - Trocar `placeholder="Buscar por fornecedor..."` por `placeholder="Buscar por Voucher/SPO ou Fornecedor..."`.
+  - Manter o estado `filterFornecedor` / debounce (sem renomear para evitar refactor amplo); apenas passar o valor ao backend num parâmetro novo mais semântico.
+- **Chamada `loadPagamentos` (linha ~314):**
+  - Substituir `filterFornecedor: ...` por `filterBusca: filterFornecedorDebounced.trim() || undefined` (mantém o input/debounce existente, só renomeia a chave enviada ao backend). Compatibilidade: também enviar `filterFornecedor` com o mesmo valor para não quebrar deploys parciais.
+- **Cabeçalho da coluna (linha ~1179):**
+  - Trocar o texto `SPO` por `Voucher/SPO` (mantendo o ícone de ordenação).
 
-Hoje `cardCounts` (linhas ~692-717) é calculado sobre `awbsData` cru, ignorando os filtros de topo.
+### 2. Backend — `supabase/functions/mariadb-proxy/index.ts` (action `list_pagamentos`)
 
-- Extrair os filtros de topo (search, airline, analyst, processType) do `useMemo` de `filteredAwbs` para uma função `applyTopFilters(awb)` reutilizável.
-- Recalcular `cardCounts` sobre `awbsData.filter(applyTopFilters)` em vez de `awbsData`.
-- **Importante**: `cardFilter` em si NÃO entra nessa base (senão os outros cards zerariam ao clicar em um). Apenas search/airline/analyst/processType afetam os contadores.
+- Adicionar `filterBusca` ao destructuring e à interface do payload (linhas ~11517 e ~11529).
+- Substituir o bloco atual (linhas ~11577-11580):
+  ```ts
+  if (filterFornecedor) {
+    conditions.push("v.fornecedor LIKE ?");
+    params.push(`%${filterFornecedor}%`);
+  }
+  ```
+  por uma condição unificada que aceita `filterBusca` (preferencial) ou faz fallback para `filterFornecedor`:
+  ```ts
+  const termoBusca = (filterBusca ?? filterFornecedor)?.trim();
+  if (termoBusca) {
+    conditions.push("(v.numero_spo LIKE ? OR v.fornecedor LIKE ?)");
+    params.push(`%${termoBusca}%`, `%${termoBusca}%`);
+  }
+  ```
 
-Resultado: ao escolher analista, airline, tipo de processo ou digitar busca, os 4 cards (Total / Em trânsito / Em alerta / Críticos) passam a contar apenas os processos visíveis sob esses filtros — e Críticos já incluirá os "Sem atualizações".
+## Fora de escopo
+
+- Nenhuma alteração em outras abas (Backlog, Comprovantes, Faturas, Robô).
+- Nenhum refactor de nomes de estado/variáveis além do mínimo descrito.
+- Nenhuma mudança em ordenação, paginação, RLS ou schema.
