@@ -823,7 +823,7 @@ const TrackingAereo = () => {
     }
 
     return awbs;
-  }, [awbsData, searchTerm, filterAirline, filterAnalyst, filterProcessType, cardFilter, sortAwb, sortClient, sortAnalyst, sortLastCheck]);
+  }, [awbsData, searchTerm, applyTopFilters, isStaleAwb, cardFilter, sortAwb, sortClient, sortAnalyst, sortLastCheck]);
 
   const totalPages = Math.ceil(filteredAwbs.length / itemsPerPage);
   const currentAwbs = filteredAwbs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
