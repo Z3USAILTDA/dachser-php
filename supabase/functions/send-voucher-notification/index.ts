@@ -384,14 +384,19 @@ const handler = async (req: Request): Promise<Response> => {
     const responsaveis = data.voucherId ? await getVoucherResponsaveis(data.voucherId) : null;
 
     if (data.type === "URGENCIA_SOLICITADA") {
-      // TO: supervisor direto do solicitante. Solicitante NÃO entra em CC
-      // (recebe e-mail informativo separado via URGENCIA_SOLICITADA_CONFIRMACAO),
-      // garantindo que apenas o supervisor possua os tokens de Aprovar/Rejeitar.
+      // TO: supervisor direto do solicitante. Solicitante NÃO entra em CC.
+      // Se o solicitante não possui supervisor cadastrado, NÃO fazer broadcast
+      // para todos os supervisores — abortar silenciosamente.
       if (responsaveis?.creator_supervisor_email) {
         toEmails = [responsaveis.creator_supervisor_email];
       } else {
-        // Fallback: todos os SUPERVISOR / GESTOR_SUPERVISOR ativos
-        toEmails = await getRecipientEmails(STAGE_TO_ROLES["SUPERVISOR"] || []);
+        console.warn(
+          `[URGENCIA_SOLICITADA] Solicitante sem supervisor cadastrado para voucher ${data.voucherId}. Abortando envio (sem broadcast).`
+        );
+        return new Response(
+          JSON.stringify({ success: true, sent: 0, reason: "no_creator_supervisor" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
     } else if (data.type === "URGENCIA_SOLICITADA_CONFIRMACAO") {
       // E-mail informativo para o solicitante. Sem CC, sem botões.
