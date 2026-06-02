@@ -2299,6 +2299,7 @@ serve(async (req) => {
             FROM dados_dachser.t_sea_tracking_current ts
             LEFT JOIN master_data md ON md.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN master_dados_new mdn ON mdn.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
+            LEFT JOIN master_customer mc ON mc.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN latest_vessel lv ON lv.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci AND lv.rn = 1
             LEFT JOIN transship_vessel_change tvc ON tvc.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN transship_direct td ON td.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
