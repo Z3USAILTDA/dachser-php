@@ -260,8 +260,9 @@ serve(async (req) => {
       });
     }
 
-    // Cache HIT (stale but < 2h): serve stale, refresh in background.
-    if (payloadCache && now - payloadCache.at < PAYLOAD_MAX_STALE_MS) {
+    // Cache HIT (stale, any age): serve stale, refresh in background.
+    // Never compute synchronously when we have ANY cached payload — síncrono estoura CPU limit.
+    if (payloadCache) {
       if (!refreshInFlight) {
         console.log(`[BG-REFRESH] age=${Math.round((now - payloadCache.at) / 1000)}s, triggering refresh`);
         refreshInFlight = computePayload()
