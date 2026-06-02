@@ -769,13 +769,13 @@ export const PagamentosTab = () => {
         </div>
         
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Filtro por fornecedor */}
+          {/* Busca por Voucher/SPO ou Fornecedor */}
           <div className="relative">
             <Input
               value={filterFornecedor}
               onChange={(e) => setFilterFornecedor(e.target.value)}
-              placeholder="Buscar por fornecedor..."
-              className="w-[220px] bg-card border-border rounded-full pl-3"
+              placeholder="Buscar por Voucher/SPO ou Fornecedor..."
+              className="w-[280px] bg-card border-border rounded-full pl-3"
             />
           </div>
 
