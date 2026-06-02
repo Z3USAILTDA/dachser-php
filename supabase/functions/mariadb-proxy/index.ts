@@ -8222,6 +8222,39 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // Sino de alerta: linhas em t_dados_financeiro_voucher/_spo com
+      // data_emissao ou data_vencimento em 2024 ou anteriores.
+      case 'get_datas_emissao_vencimento_antigas': {
+        const rows = await client.query(`
+          SELECT 'VOUCHER' AS origem,
+                 dfv.nd AS nd,
+                 dfv.data_emissao,
+                 dfv.data_vencimento,
+                 dfv.data_insert
+            FROM dados_dachser.t_dados_financeiro_voucher dfv
+           WHERE (dfv.data_emissao    IS NOT NULL AND YEAR(dfv.data_emissao)    <= 2024)
+              OR (dfv.data_vencimento IS NOT NULL AND YEAR(dfv.data_vencimento) <= 2024)
+          UNION ALL
+          SELECT 'SPO' AS origem,
+                 dfs.nd AS nd,
+                 dfs.data_emissao,
+                 dfs.data_vencimento,
+                 dfs.data_insert
+            FROM dados_dachser.t_dados_financeiro_spo dfs
+           WHERE (dfs.data_emissao    IS NOT NULL AND YEAR(dfs.data_emissao)    <= 2024)
+              OR (dfs.data_vencimento IS NOT NULL AND YEAR(dfs.data_vencimento) <= 2024)
+          ORDER BY data_insert DESC
+          LIMIT 500
+        `);
+        result = { success: true, total: rows?.length || 0, rows: rows || [] };
+        break;
+      }
+
+
+
+
+
+
 
 
 
