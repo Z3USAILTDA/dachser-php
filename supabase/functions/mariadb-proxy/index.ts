@@ -11995,7 +11995,7 @@ Deno.serve(async (req) => {
         }
 
         // Validate against allowed values (parity with set_tipo_execucao_pagamento)
-        const ALLOWED_TIPO_EXEC_BATCH = new Set(['A_DEFINIR', 'MANUAL', 'REMESSA_10H', 'REMESSA_15H']);
+        const ALLOWED_TIPO_EXEC_BATCH = new Set(['A_DEFINIR', 'MANUAL', 'REMESSA_10H', 'REMESSA_15H', 'PAGO_ADF']);
         if (!ALLOWED_TIPO_EXEC_BATCH.has(tipo_execucao_pagamento)) {
           return new Response(
             JSON.stringify({ error: `tipo_execucao_pagamento inválido: ${tipo_execucao_pagamento}` }),
@@ -12004,9 +12004,12 @@ Deno.serve(async (req) => {
         }
 
         const placeholders = voucher_ids.map(() => '?').join(',');
+        const isAdf = tipo_execucao_pagamento === 'PAGO_ADF';
         await client.execute(
-          `UPDATE dados_dachser.t_vouchers 
-           SET tipo_execucao_pagamento = ?, updated_at = NOW() 
+          `UPDATE dados_dachser.t_vouchers
+           SET tipo_execucao_pagamento = ?,
+               ${isAdf ? "etapa_atual = CASE WHEN etapa_atual = 'FINANCEIRO' THEN 'ROBO' ELSE etapa_atual END," : ''}
+               updated_at = NOW()
            WHERE id IN (${placeholders})`,
           [tipo_execucao_pagamento, ...voucher_ids]
         );
