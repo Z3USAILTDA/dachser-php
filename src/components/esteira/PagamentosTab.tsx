@@ -90,6 +90,7 @@ interface PagamentoItem {
   status_integracao_rm?: StatusIntegracaoRM;
   etapa_atual: string;
   status_baixa: string;
+  status_comprovante?: string;
   created_at: string;
   updated_at: string;
   id_rm?: string;
