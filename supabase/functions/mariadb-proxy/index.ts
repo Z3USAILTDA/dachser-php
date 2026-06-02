@@ -11515,6 +11515,7 @@ Deno.serve(async (req) => {
           filterStatusPagamento,
           filterTipoExecucao,
           filterFornecedor,
+          filterBusca,
           filterCobranca,
           filterFilial,
           filterMoeda,
@@ -11527,6 +11528,7 @@ Deno.serve(async (req) => {
           filterStatusPagamento?: string;
           filterTipoExecucao?: string;
           filterFornecedor?: string;
+          filterBusca?: string;
           filterCobranca?: string;
           filterFilial?: string;
           filterMoeda?: string;
