@@ -1957,6 +1957,7 @@ const EsteiraIndex = () => {
 
         {/* Right - Actions and user */}
         <div className="flex items-center gap-2.5 text-[0.85rem]">
+          <DatasAntigasBell />
           <FinDbStatsPanel stats={finDbStats} isLoading={isLoadingDbStats} onRefresh={fetchFinDbStats} />
 
 
