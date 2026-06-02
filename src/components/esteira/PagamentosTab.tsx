@@ -1095,6 +1095,9 @@ export const PagamentosTab = () => {
               <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("REMESSA_15H")}>
                 Remessa 15h
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("PAGO_ADF")}>
+                Pago em ADF
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Button 
