@@ -689,7 +689,7 @@ const TrackingAereo = () => {
   const handleLastCheckSort = () => { setSortAwb(null); setSortClient(null); setSortAnalyst(null); setSortLastCheck(prev => prev === null ? "asc" : prev === "asc" ? "desc" : null); };
 
   // ─── Stale helper (>30 dias sem atualização do último evento) ───
-  const isStaleAwb = useCallback((awb: AwbData): boolean => {
+  const isStaleAwb = useCallback((awb: AWBData): boolean => {
     if (!awb.last_event_date) return false;
     const code = getStatusCode(awb.last_event).toUpperCase();
     if (code === "DLV" || code === "POD" || code === "ARR - DESTINO") return false;
@@ -700,7 +700,7 @@ const TrackingAereo = () => {
   }, []);
 
   // ─── Top filters (search, airline, analyst, processType) — usado em cards e tabela ───
-  const applyTopFilters = useCallback((awb: AwbData): boolean => {
+  const applyTopFilters = useCallback((awb: AWBData): boolean => {
     const sl = searchTerm.toLowerCase();
     const matchesSearch = !searchTerm ||
       awb.awb.toLowerCase().includes(sl) ||
