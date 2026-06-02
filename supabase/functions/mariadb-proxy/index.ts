@@ -485,7 +485,7 @@ Deno.serve(async (req) => {
       'update_user_esteira_active','update_user_supervisor','get_user_esteira_role',
       'cancelar_voucher','consolidar_vouchers','get_vouchers_agrupados','get_vouchers_filhos',
       'get_vouchers_pendentes_rm','get_vouchers_ativos','get_vouchers_combined',
-      'backfill_emissao_enviado_por',
+      'backfill_emissao_enviado_por','get_datas_emissao_vencimento_antigas',
       'get_voucher_filhos_batch','search_masters_by_child_spo','sync_vouchers_incremental',
       'sync_vouchers_baixados','get_sync_status','cleanup_auto_sync_vouchers',
       'sync_voucher_statuses','mirror_vouchers_from_dfv','dedupe_vouchers_by_spo_fornecedor_valor','search_vouchers_for_master','create_voucher_master',
@@ -8221,6 +8221,39 @@ Deno.serve(async (req) => {
         result = { success: true, total, samples: (afetados || []).slice(0, 20) };
         break;
       }
+
+      // Sino de alerta: linhas em t_dados_financeiro_voucher/_spo com
+      // data_emissao ou data_vencimento em 2024 ou anteriores.
+      case 'get_datas_emissao_vencimento_antigas': {
+        const rows = await client.query(`
+          SELECT 'VOUCHER' AS origem,
+                 dfv.nd AS nd,
+                 dfv.data_emissao,
+                 dfv.data_vencimento,
+                 dfv.data_insert
+            FROM dados_dachser.t_dados_financeiro_voucher dfv
+           WHERE (dfv.data_emissao    IS NOT NULL AND YEAR(dfv.data_emissao)    <= 2024)
+              OR (dfv.data_vencimento IS NOT NULL AND YEAR(dfv.data_vencimento) <= 2024)
+          UNION ALL
+          SELECT 'SPO' AS origem,
+                 dfs.nd AS nd,
+                 dfs.data_emissao,
+                 dfs.data_vencimento,
+                 dfs.data_insert
+            FROM dados_dachser.t_dados_financeiro_spo dfs
+           WHERE (dfs.data_emissao    IS NOT NULL AND YEAR(dfs.data_emissao)    <= 2024)
+              OR (dfs.data_vencimento IS NOT NULL AND YEAR(dfs.data_vencimento) <= 2024)
+          ORDER BY data_insert DESC
+          LIMIT 500
+        `);
+        result = { success: true, total: rows?.length || 0, rows: rows || [] };
+        break;
+      }
+
+
+
+
+
 
 
 

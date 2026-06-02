@@ -1,25 +1,62 @@
 ## Objetivo
 
-Reverter para `A_PROCESSAR` todos os vouchers que estão hoje em `OPERACAO` mas **não possuem nenhum registro** em `t_voucher_logs` — sinal claro de que nunca foram efetivamente enviados/manipulados pelo usuário (como o exemplo `105-260050 DIM-BY` da imagem, com histórico vazio).
+Adicionar um sino de notificação na esteira (header de `EsteiraIndex`), posicionado **antes** do painel `FinDbStatsPanel` ("base de dados"), que sinaliza quando existem linhas nas tabelas-fonte `t_dados_financeiro_voucher` ou `t_dados_financeiro_spo` com `data_emissao` ou `data_vencimento` no ano 2024 ou anterior. Ao clicar, abre um modal listando esses processos.
 
-## O que será feito
+## Comportamento
 
-1. **Nova action no `mariadb-proxy`** (`reset_operacao_sem_logs_para_a_processar`):
-   - `SELECT v.id, v.numero_spo, v.criado_por_user_id` em `t_vouchers` onde `etapa_atual = 'OPERACAO'` e `NOT EXISTS (SELECT 1 FROM t_voucher_logs l WHERE l.voucher_id = v.id)`.
-   - `UPDATE t_vouchers SET etapa_atual = 'A_PROCESSAR', updated_at = NOW()` nos ids encontrados.
-   - Insere um log por voucher em `t_voucher_logs` com `acao = 'ETAPA_ALTERADA_SISTEMA'` e detalhe `"Voucher movido de OPERACAO para A_PROCESSAR — sem histórico de ações (correção retroativa: nunca foi enviado pelo usuário)."`.
-   - Retorna `{ success, total, samples }` (padrão idêntico ao `backfill_vouchers_sem_anexo_para_operacao` já existente em `mariadb-proxy/index.ts:8149`).
+- **Sino**: ícone `Bell` (lucide-react), mesmo estilo arredondado dos botões vizinhos do header (`rounded-full`, border + bg preto translúcido, tema Z3US/gold).
+- **Badge**: número total de linhas detectadas, em destaque vermelho/destructive quando > 0. Quando = 0, sino fica em estilo neutro/discreto.
+- **Polling**: refetch a cada 5 min e ao clicar em "Atualizar" da esteira (reaproveitar `loadVouchers`/refresh, mas com chamada própria — sem alterar o fluxo existente).
+- **Clique** → abre `Dialog` (shadcn) com:
+  - Título: "Processos com datas anteriores a 2025"
+  - Subtítulo: "Foram enviados para a base N processos com data_emissao ou data_vencimento em 2024 ou anterior."
+  - Tabela com colunas: **Origem** (Voucher/SPO), **ND** (numero_nd/numero_spo), **data_emissao**, **data_vencimento**, **data_insert**.
+  - Ordenação: `data_insert DESC`.
+  - Sem ações de edição — apenas visualização.
 
-2. **Execução única**: chamar a action via `supabase--curl_edge_functions` para aplicar a correção imediatamente na base. O resultado mostra a contagem de vouchers movidos e uma amostra para validação.
+## Onde mexer
 
-## Escopo / não-escopo
+- **Frontend**
+  - Novo componente `src/components/esteira/DatasAntigasBell.tsx` (sino + modal + fetch próprio via `supabase.functions.invoke('mariadb-proxy', { body: { action: 'get_datas_emissao_vencimento_antigas' } })`).
+  - `src/pages/esteira/EsteiraIndex.tsx` linha 1959: inserir `<DatasAntigasBell />` **antes** do `<FinDbStatsPanel ... />`.
 
-- **Apenas** `etapa_atual = 'OPERACAO'`. Não toca em `AJUSTE_OPERACAO`, `FISCAL`, `SUPERVISOR`, `FINANCEIRO`, `CONCLUIDO`, `CANCELADO`, `RASCUNHO`, `A_PROCESSAR`.
-- Critério de "sem logs" = zero linhas em `t_voucher_logs` para aquele `voucher_id`. Vouchers com qualquer log (mesmo `VOUCHER_CRIADO`) permanecem em OPERACAO.
-- Não altera anexos, dados financeiros, sync_status, criado_por_user_id.
-- Action permanente: pode ser reexecutada a qualquer momento; também serve como mecanismo de auto-correção pontual.
+- **Backend (mariadb-proxy)**
+  - Nova action `get_datas_emissao_vencimento_antigas` em `supabase/functions/mariadb-proxy/index.ts`.
+  - Query (UNION ALL das duas fontes):
 
-## Verificação pós-execução
+```sql
+SELECT 'VOUCHER' AS origem,
+       numero_nd  AS nd,
+       data_emissao,
+       data_vencimento,
+       data_insert
+  FROM t_dados_financeiro_voucher
+ WHERE YEAR(data_emissao)    <= 2024
+    OR YEAR(data_vencimento) <= 2024
+UNION ALL
+SELECT 'SPO' AS origem,
+       numero_spo AS nd,
+       data_emissao,
+       data_vencimento,
+       data_insert
+  FROM t_dados_financeiro_spo
+ WHERE YEAR(data_emissao)    <= 2024
+    OR YEAR(data_vencimento) <= 2024
+ORDER BY data_insert DESC
+LIMIT 500;
+```
+  - Retorno: `{ success, total, rows: [...] }`.
+  - **Observação**: vou confirmar os nomes exatos das colunas `numero_nd` / `numero_spo` lendo o `mariadb-proxy` antes de escrever a action (já há queries dessas tabelas em outras actions); se diferentes, ajusto sem mudar o contrato.
 
-- Abrir o voucher `105-260050 DIM-BY` (exemplo da imagem) — deve aparecer com badge `A_PROCESSAR` em vez de `OPERACAO`, e o histórico passa a ter 1 linha (`ETAPA_ALTERADA_SISTEMA`).
-- Resposta da action lista `total` e `samples` para conferência rápida.
+## Não-objetivos
+
+- Não altera dados nas tabelas-fonte.
+- Não cria notificações por e-mail nem persiste estado de "lido".
+- Não muda o fluxo de etapas dos vouchers.
+- Sem mudanças de design fora do header da esteira.
+
+## Perguntas em aberto (assumo default abaixo se não responder)
+
+1. Cutoff "2024 ou anteriores" = `YEAR(data) <= 2024` (assumido).
+2. Listar linhas mesmo de vouchers já `CONCLUIDO`/`CANCELADO`? **Assumo: sim**, pois a regra é sobre a base, não sobre o estado do voucher.
+3. Limite de 500 linhas no modal com aviso "+N restantes" se ultrapassar — ok?
