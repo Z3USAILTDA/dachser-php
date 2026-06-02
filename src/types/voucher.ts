@@ -142,6 +142,7 @@ export const TIPO_EXECUCAO_LABELS: Record<TipoExecucaoPagamento, string> = {
   REMESSA_10H: "Remessa 10h",
   REMESSA_15H: "Remessa 15h",
   A_DEFINIR: "Pendente",
+  PAGO_ADF: "Pago em ADF",
 };
 
 export const STATUS_LOTE_REMESSA_LABELS: Record<StatusLoteRemessa, string> = {
