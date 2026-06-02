@@ -40,8 +40,8 @@ export function BatchDocumentUploadPanel({ batchId, userId, onUploaded }: Props)
           const path = `batch/${batchId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
           const { error: upErr } = await supabase.storage.from("voucher-anexos").upload(path, file);
           if (upErr) {
-            console.error(upErr);
-            toast({ title: "Falha no upload", description: file.name, variant: "destructive" });
+            console.error("[batch-upload] storage.upload falhou", { file: file.name, size: file.size, error: upErr });
+            toast({ title: "Falha no upload", description: `${file.name}: ${upErr.message}`, variant: "destructive" });
             return null;
           }
           const { data: pub } = supabase.storage.from("voucher-anexos").getPublicUrl(path);
@@ -71,23 +71,45 @@ export function BatchDocumentUploadPanel({ batchId, userId, onUploaded }: Props)
       });
       await Promise.all(workers);
 
-      // Registrar tudo num único invoke (multi-row INSERT no backend)
-      if (uploaded.length > 0) {
-        const { error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "upload_batch_document_bulk",
-            userId,
-            batch_id: batchId,
-            documents: uploaded,
-          },
+      // Nenhum arquivo subiu ao storage — não chama backend nem onUploaded
+      if (uploaded.length === 0) {
+        toast({
+          title: "Nenhum arquivo enviado",
+          description: "Todos os uploads ao storage falharam. Verifique permissões do bucket ou tamanho do arquivo.",
+          variant: "destructive",
         });
-        if (error) {
-          toast({ title: "Erro ao registrar documentos", description: error.message, variant: "destructive" });
-        }
+        return;
+      }
+
+      // Registrar tudo num único invoke (multi-row INSERT no backend)
+      const { data: insertResp, error: insertErr } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "upload_batch_document_bulk",
+          userId,
+          batch_id: batchId,
+          documents: uploaded,
+        },
+      });
+      if (insertErr || !insertResp?.success) {
+        console.error("[batch-upload] backend insert falhou", { insertErr, insertResp });
+        toast({
+          title: "Erro ao registrar documentos",
+          description: insertResp?.error || insertErr?.message || "O backend não confirmou o registro dos arquivos.",
+          variant: "destructive",
+        });
+        return;
       }
 
       onUploaded();
-      toast({ title: `Upload concluído (${uploaded.length} de ${list.length} arquivo${list.length > 1 ? "s" : ""})` });
+      const failed = list.length - uploaded.length;
+      if (failed > 0) {
+        toast({
+          title: `Upload parcial (${uploaded.length} de ${list.length})`,
+          description: `${failed} ${failed === 1 ? "arquivo falhou" : "arquivos falharam"}. Veja o console para detalhes.`,
+        });
+      } else {
+        toast({ title: `Upload concluído (${uploaded.length} de ${list.length} arquivo${list.length > 1 ? "s" : ""})` });
+      }
     } finally {
       setUploading(false);
       setProgress({ current: 0, total: 0 });

@@ -1,40 +1,50 @@
-# Busca unificada na aba Pagamentos (Esteira)
+## Reanálise após reprodução real
 
-Atualmente o campo de busca da aba Pagamentos filtra apenas por `fornecedor`. O objetivo é transformá-lo em uma busca genérica que case com o **número do Voucher/SPO** OU com o **nome do Fornecedor**, e ajustar o rótulo da coluna correspondente.
+Rodei a planilha real (7 linhas) contra `mariadb-proxy` `preview_voucher_batch_import` e o backend já retorna tudo corretamente via lookup por `numero_processo` (cobrindo também `detalhes`):
 
-## Mudanças
+```
+row 0  spo=101-294202 DIM-BY  forn=AEROPORTOS BRASIL VIRACOPOS S.A.  valor=540.50   venc=2026-06-10
+row 1  spo=101-294526 DIM-BY  forn=GEODIS  ...                       valor=553.14   venc=2026-06-10
+... (7 linhas, todas com SPO/fornecedor/CNPJ/valor/vencimento preenchidos via DFV)
+```
 
-### 1. Frontend — `src/components/esteira/PagamentosTab.tsx`
+Todas saem com `status=ERROR` **apenas porque** falta `tipo_documento` (a planilha do Z3US não tem essa coluna). O `detectMissingColumns` no dialog enxerga isso e deveria mandar para o passo `"fill"` — onde o usuário escolhe um único Tipo de Documento aplicado a todas as linhas — e depois sim para o `"preview"` com todas VÁLIDAS.
 
-- **Input de busca (linha ~772-778):**
-  - Trocar `placeholder="Buscar por fornecedor..."` por `placeholder="Buscar por Voucher/SPO ou Fornecedor..."`.
-  - Manter o estado `filterFornecedor` / debounce (sem renomear para evitar refactor amplo); apenas passar o valor ao backend num parâmetro novo mais semântico.
-- **Chamada `loadPagamentos` (linha ~314):**
-  - Substituir `filterFornecedor: ...` por `filterBusca: filterFornecedorDebounced.trim() || undefined` (mantém o input/debounce existente, só renomeia a chave enviada ao backend). Compatibilidade: também enviar `filterFornecedor` com o mesmo valor para não quebrar deploys parciais.
-- **Cabeçalho da coluna (linha ~1179):**
-  - Trocar o texto `SPO` por `Voucher/SPO` (mantendo o ícone de ordenação).
+### Problema 1 — não é "não encontrou dados"
 
-### 2. Backend — `supabase/functions/mariadb-proxy/index.ts` (action `list_pagamentos`)
+A planilha é lida e enriquecida corretamente. O que provavelmente acontece na tela:
 
-- Adicionar `filterBusca` ao destructuring e à interface do payload (linhas ~11517 e ~11529).
-- Substituir o bloco atual (linhas ~11577-11580):
-  ```ts
-  if (filterFornecedor) {
-    conditions.push("v.fornecedor LIKE ?");
-    params.push(`%${filterFornecedor}%`);
-  }
-  ```
-  por uma condição unificada que aceita `filterBusca` (preferencial) ou faz fallback para `filterFornecedor`:
-  ```ts
-  const termoBusca = (filterBusca ?? filterFornecedor)?.trim();
-  if (termoBusca) {
-    conditions.push("(v.numero_spo LIKE ? OR v.fornecedor LIKE ?)");
-    params.push(`%${termoBusca}%`, `%${termoBusca}%`);
-  }
-  ```
+a) O passo `"fill"` abre pedindo "Tipo Documento" e o usuário não percebe que precisa preencher ali, ou
+b) O dialog cai direto no `"preview"` mostrando 7 linhas **vermelhas** com `"tipo de documento obrigatório"` e a leitura é "nada foi carregado".
 
-## Fora de escopo
+A correção é melhorar a clareza do estado, não o parsing:
 
-- Nenhuma alteração em outras abas (Backlog, Comprovantes, Faturas, Robô).
-- Nenhum refactor de nomes de estado/variáveis além do mínimo descrito.
-- Nenhuma mudança em ordenação, paginação, RLS ou schema.
+- **`src/components/esteira/BatchImportVoucherDialog.tsx`** — após `handleFile`, se `items.length > 0` mas todas em `ERROR` por campos preenchíveis em massa (`tipo_documento`, `cobranca_em_nome_de`, `forma_pagamento`), exibir um toast informativo: `"7 linhas carregadas. Preencha Tipo de Documento para continuar."` e garantir entrada no step `"fill"` mesmo quando só 1 campo estiver faltando (hoje já entra, mas reforçar).
+- No `"fill"` step, deixar visível o contador `"7 linhas aguardando esses campos"`.
+- No `"preview"`, se `validCount === 0` e o motivo dominante for um campo do bulk-fill, mostrar banner `"Use 'Preencher em lote' para aplicar Tipo Documento a todas as linhas"` em vez de só listar erros.
+
+Nenhuma mudança no parser/backend é necessária para o problema 1.
+
+### Problema 2 — upload "sucesso" sem arquivos visíveis
+
+Não consegui reproduzir sem repetir a sessão do usuário, mas o código tem dois pontos cegos confirmados:
+
+- **`src/components/esteira/BatchDocumentUploadPanel.tsx`**:
+  - Toast `"Upload concluído (0 de N)"` é exibido mesmo quando todos os uploads ao storage falharam.
+  - `supabase.functions.invoke('upload_batch_document_bulk')` só checa `error` — ignora `data?.success === false`.
+
+Correções:
+
+- Se `uploaded.length === 0` → toast destrutivo `"Nenhum arquivo enviado — verifique permissões do storage"` (sem chamar `onUploaded`).
+- Se `0 < uploaded.length < list.length` → toast `default` com `"X de N enviados; Y falharam"`.
+- Após `invoke`, checar `data?.success` e exibir `data?.error` quando false.
+- `console.error` detalhado do erro de `supabase.storage.upload` (status, message, name do arquivo) para diagnóstico.
+
+Depois de aplicar, reproduzir o upload uma vez e ler `edge_function_logs(mariadb-proxy, search='upload_batch_document_bulk')` + console do browser para identificar se a falha é no `storage.upload` (RLS/tamanho) ou no INSERT do MariaDB. Ajustar a causa raiz com base nesse log.
+
+## Resumo de arquivos a tocar
+
+- `src/components/esteira/BatchImportVoucherDialog.tsx` — banner/toast quando todas linhas em ERROR por campo bulk-fillable.
+- `src/components/esteira/BatchDocumentUploadPanel.tsx` — feedback honesto + checagem de `data.success`.
+
+Nada de mudança no backend nem no parser.
