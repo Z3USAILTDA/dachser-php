@@ -1310,28 +1310,29 @@ export const PagamentosTab = () => {
                       </Badge>
                     </td>
                     <td className="p-3">
-                      <Select
-                        value={pag.tipo_execucao_pagamento || "A_DEFINIR"}
-                        onValueChange={(v) => handleSetTipoExecucao(pag.id, v as TipoExecucaoPagamento)}
-                        disabled={processingAction[pag.id]}
-                      >
-                        <SelectTrigger className="h-8 w-[120px] text-xs">
-                          <SelectValue placeholder="Pendente" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="A_DEFINIR">Pendente</SelectItem>
-                          <SelectItem value="MANUAL">Manual</SelectItem>
-                          <SelectItem value="REMESSA_10H">Remessa 10h</SelectItem>
-                          <SelectItem value="REMESSA_15H">Remessa 15h</SelectItem>
-                          <SelectItem value="PAGO_ADF">Pago em ADF</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {pag.tipo_execucao_pagamento === "PAGO_ADF" && (
-                        <div className="mt-1">
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={pag.tipo_execucao_pagamento || "A_DEFINIR"}
+                          onValueChange={(v) => handleSetTipoExecucao(pag.id, v as TipoExecucaoPagamento)}
+                          disabled={processingAction[pag.id]}
+                        >
+                          <SelectTrigger className="h-8 w-[120px] text-xs">
+                            <SelectValue placeholder="Pendente" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="A_DEFINIR">Pendente</SelectItem>
+                            <SelectItem value="MANUAL">Manual</SelectItem>
+                            <SelectItem value="REMESSA_10H">Remessa 10h</SelectItem>
+                            <SelectItem value="REMESSA_15H">Remessa 15h</SelectItem>
+                            <SelectItem value="PAGO_ADF">Pago em ADF</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {pag.tipo_execucao_pagamento === "PAGO_ADF" && (
                           <StatusComprovanteBadge status={pag.status_comprovante} />
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </td>
+
                     <td className="p-3">
                       <div className="flex items-center gap-1">
                         <Button
