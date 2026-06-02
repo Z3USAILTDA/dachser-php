@@ -7328,6 +7328,61 @@ Deno.serve(async (req) => {
           );
         }
 
+        // ============================================================
+        // GATE ANEXOS OBRIGATÓRIOS:
+        // Voucher não pode SAIR de A_PROCESSAR nem de OPERACAO sem
+        // possuir ao menos 1 anexo em t_voucher_anexos.
+        // Etapas de "permanência" ou retrocesso são liberadas.
+        // ============================================================
+        const novaEtapa = updateData?.etapa_atual as string | undefined;
+        const ETAPAS_LIVRES_DESTINO = new Set([
+          'A_PROCESSAR', 'OPERACAO', 'AJUSTE_OPERACAO',
+          'CANCELADO', 'DEVOLVIDO_FISCAL', 'RASCUNHO',
+        ]);
+        const ETAPAS_GATED_ORIGEM = new Set(['A_PROCESSAR', 'OPERACAO']);
+        if (
+          novaEtapa &&
+          currentEtapa &&
+          ETAPAS_GATED_ORIGEM.has(currentEtapa) &&
+          !ETAPAS_LIVRES_DESTINO.has(novaEtapa) &&
+          novaEtapa !== currentEtapa
+        ) {
+          const anxRows = await client.query(
+            `SELECT COUNT(*) AS c FROM dados_dachser.t_voucher_anexos WHERE voucher_id = ?`,
+            [voucher_id]
+          );
+          const totalAnexos = Number((anxRows?.[0] as any)?.c || 0);
+          if (totalAnexos === 0) {
+            try {
+              await client.execute(`
+                INSERT INTO dados_dachser.t_voucher_logs (
+                  id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+                ) VALUES (?, ?, ?, ?, 'ETAPA_BLOQUEADA_SEM_ANEXO', ?, NOW())
+              `, [
+                crypto.randomUUID(),
+                voucher_id,
+                user_id || null,
+                user_name || 'Sistema (sem identificação)',
+                `Tentativa bloqueada: ${currentEtapa} → ${novaEtapa} sem nenhum anexo em t_voucher_anexos.`,
+              ]);
+            } catch (logErr) {
+              console.error('Falha ao logar ETAPA_BLOQUEADA_SEM_ANEXO:', logErr);
+            }
+            return new Response(
+              JSON.stringify({
+                success: false,
+                error: 'ANEXOS_OBRIGATORIOS',
+                message: 'Anexe ao menos 1 documento antes de avançar o voucher.',
+                etapa_atual: currentEtapa,
+                etapa_destino: novaEtapa,
+              }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        }
+
+
+
         // Ensure status_comprovante column exists (MariaDB compatible)
         try {
           const colCheck = await client.query(`
@@ -8088,6 +8143,47 @@ Deno.serve(async (req) => {
         result = { success: true, affectedCount, vouchers: staleVouchers };
         break;
       }
+
+      // Backfill: vouchers ativos sem nenhum anexo voltam para OPERACAO.
+      // Preserva CONCLUIDO/CANCELADO. Gera log ETAPA_ALTERADA_SISTEMA por voucher.
+      case 'backfill_vouchers_sem_anexo_para_operacao': {
+        const afetados = await client.query(`
+          SELECT v.id, v.numero_spo, v.etapa_atual
+            FROM dados_dachser.t_vouchers v
+           WHERE v.etapa_atual NOT IN ('OPERACAO','A_PROCESSAR','CANCELADO','CONCLUIDO','RASCUNHO')
+             AND NOT EXISTS (
+               SELECT 1 FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id
+             )
+        `);
+        const total = afetados?.length || 0;
+        if (total > 0) {
+          const ids = afetados.map((r: any) => `'${r.id}'`).join(',');
+          await client.execute(`
+            UPDATE dados_dachser.t_vouchers
+               SET etapa_atual = 'OPERACAO', updated_at = NOW()
+             WHERE id IN (${ids})
+          `);
+          for (const r of afetados) {
+            try {
+              await client.execute(`
+                INSERT INTO dados_dachser.t_voucher_logs (
+                  id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+                ) VALUES (?, ?, NULL, 'Sistema', 'ETAPA_ALTERADA_SISTEMA', ?, NOW())
+              `, [
+                crypto.randomUUID(),
+                r.id,
+                `Voucher movido de ${r.etapa_atual} para OPERACAO — sem anexos (correção retroativa do gate ANEXOS_OBRIGATORIOS).`,
+              ]);
+            } catch (e) {
+              console.error('log backfill falhou para', r.id, e);
+            }
+          }
+        }
+        result = { success: true, total, samples: (afetados || []).slice(0, 20) };
+        break;
+      }
+
+
 
       case 'get_vouchers_esteira': {
         const { search, etapa } = body as any;
