@@ -294,8 +294,7 @@ export const PagamentosTab = () => {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
         body: { 
           action: "list_pagamentos",
-          page: 1,
-          perPage: 100,
+          perPage: "all",
           filterVencimento: filterVencimento === "todos" ? undefined : filterVencimento,
           filterStatusPagamento: filterStatusPagamento === "all" ? undefined : filterStatusPagamento,
           filterTipoExecucao: filterTipoExecucao === "all" ? undefined : filterTipoExecucao,
@@ -307,6 +306,7 @@ export const PagamentosTab = () => {
           filterDataVencimentoFim: filterDataFim ? fnsFormat(filterDataFim, "yyyy-MM-dd") : undefined
         }
       });
+
 
 
       if (reqId !== loadReqIdRef.current) return;
