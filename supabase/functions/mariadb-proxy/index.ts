@@ -7328,6 +7328,61 @@ Deno.serve(async (req) => {
           );
         }
 
+        // ============================================================
+        // GATE ANEXOS OBRIGATÓRIOS:
+        // Voucher não pode SAIR de A_PROCESSAR nem de OPERACAO sem
+        // possuir ao menos 1 anexo em t_voucher_anexos.
+        // Etapas de "permanência" ou retrocesso são liberadas.
+        // ============================================================
+        const novaEtapa = updateData?.etapa_atual as string | undefined;
+        const ETAPAS_LIVRES_DESTINO = new Set([
+          'A_PROCESSAR', 'OPERACAO', 'AJUSTE_OPERACAO',
+          'CANCELADO', 'DEVOLVIDO_FISCAL', 'RASCUNHO',
+        ]);
+        const ETAPAS_GATED_ORIGEM = new Set(['A_PROCESSAR', 'OPERACAO']);
+        if (
+          novaEtapa &&
+          currentEtapa &&
+          ETAPAS_GATED_ORIGEM.has(currentEtapa) &&
+          !ETAPAS_LIVRES_DESTINO.has(novaEtapa) &&
+          novaEtapa !== currentEtapa
+        ) {
+          const anxRows = await client.query(
+            `SELECT COUNT(*) AS c FROM dados_dachser.t_voucher_anexos WHERE voucher_id = ?`,
+            [voucher_id]
+          );
+          const totalAnexos = Number((anxRows?.[0] as any)?.c || 0);
+          if (totalAnexos === 0) {
+            try {
+              await client.execute(`
+                INSERT INTO dados_dachser.t_voucher_logs (
+                  id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+                ) VALUES (?, ?, ?, ?, 'ETAPA_BLOQUEADA_SEM_ANEXO', ?, NOW())
+              `, [
+                crypto.randomUUID(),
+                voucher_id,
+                user_id || null,
+                user_name || 'Sistema (sem identificação)',
+                `Tentativa bloqueada: ${currentEtapa} → ${novaEtapa} sem nenhum anexo em t_voucher_anexos.`,
+              ]);
+            } catch (logErr) {
+              console.error('Falha ao logar ETAPA_BLOQUEADA_SEM_ANEXO:', logErr);
+            }
+            return new Response(
+              JSON.stringify({
+                success: false,
+                error: 'ANEXOS_OBRIGATORIOS',
+                message: 'Anexe ao menos 1 documento antes de avançar o voucher.',
+                etapa_atual: currentEtapa,
+                etapa_destino: novaEtapa,
+              }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        }
+
+
+
         // Ensure status_comprovante column exists (MariaDB compatible)
         try {
           const colCheck = await client.query(`
