@@ -11619,6 +11619,17 @@ Deno.serve(async (req) => {
           params.push(filterStatusIntegracaoRm);
         }
 
+        if (filterDataVencimentoInicio) {
+          conditions.push("v.vencimento >= ?");
+          params.push(filterDataVencimentoInicio);
+        }
+
+        if (filterDataVencimentoFim) {
+          conditions.push("v.vencimento <= ?");
+          params.push(filterDataVencimentoFim);
+        }
+
+
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
         // Run count + list + stats in parallel (sem JOIN com dfv — não usa colunas dela)
