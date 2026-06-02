@@ -1213,6 +1213,11 @@ const TrackingAereo = () => {
                                   <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
                                   {awb.has_dis_event ? "DIS - Discrepância" : "Discrepância Peças"}
                                 </span>
+                              ) : stale ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                                  Crítico · Sem atualizações
+                                </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
                                   <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
