@@ -1,16 +1,21 @@
-## Problema
+## Ajustes em /air/tracking-aereo
 
-E-mails de aprovação de urgência estão sendo enviados para múltiplos supervisores em vez de apenas para o supervisor direto do criador do voucher. Dois pontos precisam ser corrigidos:
+Edição única em `src/pages/air/TrackingAereo.tsx`. Sem mudanças em schema, edge functions ou outras telas.
 
-1. **UserManagement.tsx** (linha 397) filtra `s.id !== user.id` no seletor de supervisor — um usuário supervisor não pode ser definido como o próprio supervisor.
-2. **send-voucher-notification/index.ts** (linhas 390-395) faz fallback para `getRecipientEmails(STAGE_TO_ROLES["SUPERVISOR"])` (todos os SUPERVISOR/GESTOR_SUPERVISOR ativos) quando `creator_supervisor_email` está vazio — gera broadcast para todos os supervisores.
+### 1. Lógica — "Sem atualizações" (>30 dias) entra como Crítico
 
-## Mudanças
+- Criar helper `isStale(awb)`: `last_event_date` existe e a diferença `(agora - parseDBDate(last_event_date)) / 86400000 > 30`. Excluir processos já finalizados/ocultos (DLV, POD, `hide_reason`, `arr_destino_date` > 5 dias, `is_invalid`, `tracking_failed`) — mesmas exclusões já usadas em `cardCounts`.
+- **Coluna "Último Evento"** (linhas ~1154-1166): ao lado do código (ex.: `DEP`), quando `isStale`, renderizar badge `⚠ Sem atualizações` (estilo amber/vermelho, mesmo padrão visual dos demais badges da coluna).
+- **Coluna "Situação"** (linhas ~1171-1210): quando `isStale` e não for Inválido/Falha/DIS/Discrepância, exibir badge vermelho "Crítico - Sem atualizações".
+- **`cardCounts.critical`** (linhas ~692-717): somar `isStale` ao critical (junto com NIL/NIF/OFLD e `pieces_discrepancy`).
+- **`cardFilter === "criticos"`** (linha ~781): incluir `isStale(awb)` na condição, para que clicar no card Críticos mostre também esses processos.
 
-### 1. `src/pages/admin/UserManagement.tsx` (linha 396-402)
-Remover o `.filter((s) => s.id !== user.id)`, permitindo que o próprio usuário apareça na lista de supervisores. Assim, um usuário que é supervisor pode ser atribuído como supervisor de si mesmo.
+### 2. Visual — Cards refletem filtros ativos
 
-### 2. `supabase/functions/send-voucher-notification/index.ts` (linhas 386-395)
-No bloco `URGENCIA_SOLICITADA`, remover o fallback que envia para todos os supervisores. Se `creator_supervisor_email` for nulo, abortar silenciosamente (mesmo padrão já usado em `AJUSTE_SOLICITADO/AJUSTE_OPERACAO` e `AJUSTE_FISCAL`), retornando `{ success: true, sent: 0, reason: "no_creator_supervisor" }` e logando warning.
+Hoje `cardCounts` (linhas ~692-717) é calculado sobre `awbsData` cru, ignorando os filtros de topo.
 
-Nenhuma alteração de schema, RLS ou outros fluxos. Mudanças puramente surgicais.
+- Extrair os filtros de topo (search, airline, analyst, processType) do `useMemo` de `filteredAwbs` para uma função `applyTopFilters(awb)` reutilizável.
+- Recalcular `cardCounts` sobre `awbsData.filter(applyTopFilters)` em vez de `awbsData`.
+- **Importante**: `cardFilter` em si NÃO entra nessa base (senão os outros cards zerariam ao clicar em um). Apenas search/airline/analyst/processType afetam os contadores.
+
+Resultado: ao escolher analista, airline, tipo de processo ou digitar busca, os 4 cards (Total / Em trânsito / Em alerta / Críticos) passam a contar apenas os processos visíveis sob esses filtros — e Críticos já incluirá os "Sem atualizações".
