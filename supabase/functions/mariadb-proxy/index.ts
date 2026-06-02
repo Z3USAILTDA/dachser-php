@@ -11873,15 +11873,48 @@ Deno.serve(async (req) => {
           );
         }
 
-        // First get the voucher to check tipo_execucao_pagamento and forma_pagamento
+        // First get the voucher to check tipo_execucao_pagamento, forma_pagamento e status_comprovante
         const voucherData = await client.query(
-          `SELECT tipo_execucao_pagamento, forma_pagamento FROM dados_dachser.t_vouchers WHERE id = ?`,
+          `SELECT tipo_execucao_pagamento, forma_pagamento, status_comprovante FROM dados_dachser.t_vouchers WHERE id = ?`,
           [voucherId]
         );
-        
+
         const tipoExec = voucherData?.[0]?.tipo_execucao_pagamento;
         const formaPag = String(voucherData?.[0]?.forma_pagamento || '').toUpperCase();
+        const statusComp = String(voucherData?.[0]?.status_comprovante || '').toUpperCase();
         const isDebito = formaPag === 'DEBITO';
+        const isPagoAdf = tipoExec === 'PAGO_ADF';
+
+        // PAGO_ADF: marca pronto = conclui direto (não passa pelo robô); exige comprovante anexado
+        if (is_pronto && isPagoAdf) {
+          if (statusComp !== 'ANEXADO' && statusComp !== 'VALIDADO') {
+            return new Response(
+              JSON.stringify({ error: 'COMPROVANTE_OBRIGATORIO', message: 'Anexe o comprovante antes de marcar como pronto.' }),
+              { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          await client.execute(
+            `UPDATE dados_dachser.t_vouchers
+             SET is_pronto_para_robo = 1,
+                 status_pagamento = 'PAGO',
+                 status_baixa = 'BAIXA_MANUAL',
+                 status_financeiro = 'CONCLUIDO',
+                 etapa_atual = 'CONCLUIDO',
+                 updated_at = NOW()
+             WHERE id = ?`,
+            [voucherId]
+          );
+          try {
+            await client.execute(
+              `INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+               VALUES (?, ?, ?, ?, 'CONCLUIDO_PAGO_ADF', ?, NOW())`,
+              [crypto.randomUUID(), voucherId, null, 'Sistema', 'Voucher concluído via Pago em ADF — comprovante anexado, sem passar pelo robô']
+            );
+          } catch (logErr) { console.error('[set_ready_for_robo] log PAGO_ADF error:', logErr); }
+          console.log(`[set_ready_for_robo] Voucher ${voucherId} concluído (PAGO_ADF)`);
+          result = { success: true, auto_concluded: true, reason: 'PAGO_ADF' };
+          break;
+        }
 
         if (is_pronto && isDebito) {
           // DEBITO: pular ROBO e concluir direto (sem comprovante necessário)
