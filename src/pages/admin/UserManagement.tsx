@@ -393,13 +393,11 @@ const UserManagement = () => {
                           </SelectTrigger>
                           <SelectContent className="max-h-[300px]">
                             <SelectItem value="none">Sem supervisor</SelectItem>
-                            {supervisorOptions
-                              .filter((s) => s.id !== user.id)
-                              .map((s) => (
-                                <SelectItem key={s.id} value={String(s.id)}>
-                                  @{s.username}
-                                </SelectItem>
-                              ))}
+                            {supervisorOptions.map((s) => (
+                              <SelectItem key={s.id} value={String(s.id)}>
+                                @{s.username}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </TableCell>
