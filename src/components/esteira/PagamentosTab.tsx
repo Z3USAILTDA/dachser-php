@@ -68,6 +68,7 @@ import { format as fnsFormat } from "date-fns";
 
 import { CalendarIcon } from "lucide-react";
 import { MoedaBadge } from "./MoedaBadge";
+import { StatusComprovanteBadge } from "./StatusComprovanteBadge";
 
 interface PagamentoItem {
   id: string;
