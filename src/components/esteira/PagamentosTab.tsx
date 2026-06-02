@@ -1296,8 +1296,14 @@ export const PagamentosTab = () => {
                           <SelectItem value="MANUAL">Manual</SelectItem>
                           <SelectItem value="REMESSA_10H">Remessa 10h</SelectItem>
                           <SelectItem value="REMESSA_15H">Remessa 15h</SelectItem>
+                          <SelectItem value="PAGO_ADF">Pago em ADF</SelectItem>
                         </SelectContent>
                       </Select>
+                      {pag.tipo_execucao_pagamento === "PAGO_ADF" && (
+                        <div className="mt-1">
+                          <StatusComprovanteBadge status={pag.status_comprovante} />
+                        </div>
+                      )}
                     </td>
                     <td className="p-3">
                       <div className="flex items-center gap-1">
