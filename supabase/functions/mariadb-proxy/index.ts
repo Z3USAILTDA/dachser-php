@@ -11578,8 +11578,15 @@ Deno.serve(async (req) => {
 
         const termoBusca = (filterBusca ?? filterFornecedor)?.trim();
         if (termoBusca) {
-          conditions.push("(v.numero_spo LIKE ? OR v.fornecedor LIKE ?)");
-          params.push(`%${termoBusca}%`, `%${termoBusca}%`);
+          // Se for puramente numérico, assume Voucher/SPO e usa prefix LIKE (aproveita índice).
+          // Caso contrário, busca apenas em fornecedor (contains).
+          if (/^\d+$/.test(termoBusca)) {
+            conditions.push("v.numero_spo LIKE ?");
+            params.push(`${termoBusca}%`);
+          } else {
+            conditions.push("(v.numero_spo LIKE ? OR v.fornecedor LIKE ?)");
+            params.push(`${termoBusca}%`, `%${termoBusca}%`);
+          }
         }
 
         if (filterCobranca) {
