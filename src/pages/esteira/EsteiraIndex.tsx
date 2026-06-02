@@ -30,6 +30,7 @@ import { HistoricoBaixasTab } from "@/components/esteira/HistoricoBaixasTab";
 // BacklogTab removed - RM pending vouchers now shown in main grid as A_PROCESSAR
 import { MetricCard } from "@/components/cct/MetricCard";
 import { FinDbStatsPanel, FinDbStats } from "@/components/esteira/FinDbStatsPanel";
+import { DatasAntigasBell } from "@/components/esteira/DatasAntigasBell";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
