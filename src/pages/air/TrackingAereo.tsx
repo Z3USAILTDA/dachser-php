@@ -1017,7 +1017,8 @@ const TrackingAereo = () => {
                   <tbody>
                     {currentAwbs.map((awb, index) => {
                       const statusCode = getStatusCode(awb.last_event).toUpperCase();
-                      const isCritical = awb.is_critical;
+                      const stale = isStaleAwb(awb);
+                      const isCritical = awb.is_critical || stale;
                       const isDelayed = statusCode === "DIS";
 
                       // Route highlighting logic
