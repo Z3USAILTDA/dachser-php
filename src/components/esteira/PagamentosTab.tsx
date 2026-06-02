@@ -312,9 +312,12 @@ export const PagamentosTab = () => {
           filterFormaPagamento: filterFormaPagamento === "all" ? undefined : filterFormaPagamento,
           filterStatusIntegracaoRm: filterStatusIntegracaoRm === "all" ? undefined : filterStatusIntegracaoRm,
           filterBusca: filterFornecedorDebounced.trim() || undefined,
-          filterFornecedor: filterFornecedorDebounced.trim() || undefined
+          filterFornecedor: filterFornecedorDebounced.trim() || undefined,
+          filterDataVencimentoInicio: filterDataInicio ? fnsFormat(filterDataInicio, "yyyy-MM-dd") : undefined,
+          filterDataVencimentoFim: filterDataFim ? fnsFormat(filterDataFim, "yyyy-MM-dd") : undefined
         }
       });
+
 
       if (reqId !== loadReqIdRef.current) return;
 
