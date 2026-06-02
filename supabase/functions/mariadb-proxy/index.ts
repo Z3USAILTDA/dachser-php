@@ -485,7 +485,7 @@ Deno.serve(async (req) => {
       'update_user_esteira_active','update_user_supervisor','get_user_esteira_role',
       'cancelar_voucher','consolidar_vouchers','get_vouchers_agrupados','get_vouchers_filhos',
       'get_vouchers_pendentes_rm','get_vouchers_ativos','get_vouchers_combined',
-      'backfill_emissao_enviado_por',
+      'backfill_emissao_enviado_por','get_datas_emissao_vencimento_antigas',
       'get_voucher_filhos_batch','search_masters_by_child_spo','sync_vouchers_incremental',
       'sync_vouchers_baixados','get_sync_status','cleanup_auto_sync_vouchers',
       'sync_voucher_statuses','mirror_vouchers_from_dfv','dedupe_vouchers_by_spo_fornecedor_valor','search_vouchers_for_master','create_voucher_master',
