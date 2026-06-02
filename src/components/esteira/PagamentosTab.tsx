@@ -174,20 +174,10 @@ export const PagamentosTab = () => {
       : <ArrowDown className="h-3 w-3 ml-1" />;
   };
 
-  const dateFilteredPagamentos = useMemo(() => {
-    if (!filterDataInicio && !filterDataFim) return pagamentos;
-    const ini = filterDataInicio ? new Date(filterDataInicio) : null;
-    const fim = filterDataFim ? new Date(filterDataFim) : null;
-    if (ini) ini.setHours(0, 0, 0, 0);
-    if (fim) fim.setHours(23, 59, 59, 999);
-    return pagamentos.filter(p => {
-      const d = parseDBDate(p.vencimento);
-      if (!d) return false;
-      if (ini && d < ini) return false;
-      if (fim && d > fim) return false;
-      return true;
-    });
-  }, [pagamentos, filterDataInicio, filterDataFim]);
+  // Date range filter (De/Até) is applied server-side in list_pagamentos.
+  // Keep this passthrough so downstream memos remain unchanged.
+  const dateFilteredPagamentos = pagamentos;
+
 
   const sortedPagamentos = useMemo(() => {
     if (!sortField) return dateFilteredPagamentos;
