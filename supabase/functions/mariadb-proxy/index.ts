@@ -11806,7 +11806,7 @@ Deno.serve(async (req) => {
         }
 
         // Validate against allowed values; persist raw subtype (no destructive map)
-        const ALLOWED_TIPO_EXEC = new Set(['A_DEFINIR', 'MANUAL', 'REMESSA_10H', 'REMESSA_15H']);
+        const ALLOWED_TIPO_EXEC = new Set(['A_DEFINIR', 'MANUAL', 'REMESSA_10H', 'REMESSA_15H', 'PAGO_ADF']);
         if (!ALLOWED_TIPO_EXEC.has(tipo_execucao_pagamento)) {
           return new Response(
             JSON.stringify({ error: `tipo_execucao_pagamento inválido: ${tipo_execucao_pagamento}` }),
@@ -11814,10 +11814,29 @@ Deno.serve(async (req) => {
           );
         }
 
-        await client.execute(
-          `UPDATE dados_dachser.t_vouchers SET tipo_execucao_pagamento = ?, updated_at = NOW() WHERE id = ?`,
-          [tipo_execucao_pagamento, voucherId]
-        );
+        // PAGO_ADF: também move FINANCEIRO -> ROBO (sem marcar pronto)
+        if (tipo_execucao_pagamento === 'PAGO_ADF') {
+          await client.execute(
+            `UPDATE dados_dachser.t_vouchers
+             SET tipo_execucao_pagamento = ?,
+                 etapa_atual = CASE WHEN etapa_atual = 'FINANCEIRO' THEN 'ROBO' ELSE etapa_atual END,
+                 updated_at = NOW()
+             WHERE id = ?`,
+            [tipo_execucao_pagamento, voucherId]
+          );
+          try {
+            await client.execute(
+              `INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+               VALUES (?, ?, ?, ?, 'TIPO_EXEC_PAGO_ADF', ?, NOW())`,
+              [crypto.randomUUID(), voucherId, null, 'Sistema', 'Tipo de execução definido como Pago em ADF — etapa movida para ROBO']
+            );
+          } catch (logErr) { console.error('[set_tipo_execucao_pagamento] log error:', logErr); }
+        } else {
+          await client.execute(
+            `UPDATE dados_dachser.t_vouchers SET tipo_execucao_pagamento = ?, updated_at = NOW() WHERE id = ?`,
+            [tipo_execucao_pagamento, voucherId]
+          );
+        }
 
         // Post-update verification: detect schema mismatch (e.g. legacy ENUM truncating value)
         const verify = await client.query(
