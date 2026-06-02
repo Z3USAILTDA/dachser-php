@@ -311,6 +311,7 @@ export const PagamentosTab = () => {
           filterTipoExecucao: filterTipoExecucao === "all" ? undefined : filterTipoExecucao,
           filterFormaPagamento: filterFormaPagamento === "all" ? undefined : filterFormaPagamento,
           filterStatusIntegracaoRm: filterStatusIntegracaoRm === "all" ? undefined : filterStatusIntegracaoRm,
+          filterBusca: filterFornecedorDebounced.trim() || undefined,
           filterFornecedor: filterFornecedorDebounced.trim() || undefined
         }
       });
