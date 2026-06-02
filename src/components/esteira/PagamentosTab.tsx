@@ -1353,9 +1353,22 @@ export const PagamentosTab = () => {
                           variant={pag.is_pronto_para_robo ? "default" : "outline"}
                           size="sm"
                           className="h-8 text-xs"
-                          disabled={processingAction[pag.id]}
+                          disabled={
+                            processingAction[pag.id] ||
+                            (pag.tipo_execucao_pagamento === "PAGO_ADF" &&
+                              !pag.is_pronto_para_robo &&
+                              pag.status_comprovante !== "ANEXADO" &&
+                              pag.status_comprovante !== "VALIDADO")
+                          }
                           onClick={() => handleSetReady(pag.id, !pag.is_pronto_para_robo, pag.tipo_execucao_pagamento)}
-                          title={pag.is_pronto_para_robo ? "Desmarcar pronto" : "Marcar como pronto para baixa"}
+                          title={
+                            pag.tipo_execucao_pagamento === "PAGO_ADF" &&
+                            !pag.is_pronto_para_robo &&
+                            pag.status_comprovante !== "ANEXADO" &&
+                            pag.status_comprovante !== "VALIDADO"
+                              ? "Anexe o comprovante antes de marcar como pronto"
+                              : pag.is_pronto_para_robo ? "Desmarcar pronto" : "Marcar como pronto para baixa"
+                          }
                         >
                           <Check className="h-4 w-4 mr-1" />
                           {pag.is_pronto_para_robo ? "Pronto" : "Marcar Pronto"}
