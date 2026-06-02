@@ -74,7 +74,7 @@ export const DatasAntigasBell = () => {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`relative flex items-center gap-2 px-3 py-2 rounded-full border backdrop-blur-sm transition text-[0.8rem] ${
+        className={`relative inline-flex items-center gap-2 h-9 px-3 rounded-full border backdrop-blur-sm transition text-[0.8rem] ${
           hasAlerts
             ? "border-[rgba(239,68,68,.55)] bg-[rgba(0,0,0,.70)] text-[#fecaca] hover:bg-[rgba(0,0,0,.85)] hover:border-[rgba(239,68,68,.85)]"
             : "border-[rgba(255,255,255,.18)] bg-[rgba(0,0,0,.70)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)]"
