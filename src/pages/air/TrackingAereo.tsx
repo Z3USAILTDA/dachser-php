@@ -1179,6 +1179,11 @@ const TrackingAereo = () => {
                                 if (sc === "ARR - CONEXÃO" || sc === "ARR - CONEXAO") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-500/20 text-orange-400 border border-orange-500/40"><ArrowLeftRight className="h-3 w-3" />Conexão</span>;
                                 return <span className="text-sm font-bold" style={{ color: "hsl(120 100% 35%)" }}>{getStatusCode(awb.last_event)}</span>;
                               })()}
+                              {stale && !awb.is_invalid && !awb.tracking_failed && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-red-600/20 text-red-400 border border-red-500/40" title="Último evento há mais de 30 dias">
+                                  <AlertTriangle className="h-3 w-3" />Sem atualizações
+                                </span>
+                              )}
                             </div>
                           </td>
                           {/* Data/Hora */}
