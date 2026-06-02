@@ -16876,7 +16876,7 @@ Deno.serve(async (req) => {
                 vencimento, data_emissao_documento, cobranca_em_nome_de, forma_pagamento,
                 etapa_atual, status_baixa, criado_por_user_id, id_rm, data_insert_rm, sync_status,
                 processo_id, origem_processo, tipo_execucao_pagamento, filial
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'SISTEMA_SYNC', ?, ?, 'ATIVO', ?, 'RM', 'A_DEFINIR', ?)
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'A_PROCESSAR', 'PENDENTE', 'SISTEMA_SYNC', ?, ?, 'ATIVO', ?, 'RM', 'A_DEFINIR', ?)
             `, [
               voucherId,
               rm.nd || rm.documento,
