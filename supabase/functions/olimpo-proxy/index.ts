@@ -2017,6 +2017,22 @@ serve(async (req) => {
                   AND TRIM(bl_number) != ''
                 GROUP BY TRIM(bl_number)
               ),
+              -- CTE 1C: Nome do cliente resolvido via t_clientes_base usando customer_no de t_sea_master
+              master_customer AS (
+                SELECT
+                  TRIM(sm.master) AS mbl_id,
+                  MAX(cb.nome_cliente) AS cliente_nome
+                FROM dados_dachser.t_sea_master sm
+                LEFT JOIN dados_dachser.t_clientes_base cb
+                  ON cb.dchr_customer_number COLLATE utf8mb4_unicode_ci
+                   = sm.customer_no COLLATE utf8mb4_unicode_ci
+                  AND cb.ativo = 1
+                WHERE sm.master IS NOT NULL
+                  AND TRIM(sm.master) != ''
+                  AND sm.customer_no IS NOT NULL
+                  AND TRIM(sm.customer_no) != ''
+                GROUP BY TRIM(sm.master)
+              ),
               -- CTE 2: Navio/vessel_imo mais recente por mbl (ranking)
               latest_vessel AS (
                 SELECT 
