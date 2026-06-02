@@ -20530,6 +20530,7 @@ Deno.serve(async (req) => {
       case 'preview_voucher_batch_import':
       case 'create_voucher_batch_import':
       case 'upload_batch_document':
+      case 'upload_batch_document_bulk':
       case 'bind_batch_document_to_voucher':
       case 'bind_batch_document_to_master_group':
       case 'unbind_batch_document':
