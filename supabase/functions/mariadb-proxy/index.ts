@@ -7261,11 +7261,57 @@ Deno.serve(async (req) => {
             console.log('Could not update status_documento_fiscal:', updateErr);
           }
         }
-        
+
+        // Se o anexo é COMPROVANTE e o voucher é PAGO_ADF em ROBO,
+        // marcar comprovante anexado e devolver para FINANCEIRO para
+        // que o usuário possa marcar como pronto (CONCLUIDO).
+        if (anexoData.tipo === 'COMPROVANTE') {
+          try {
+            const vrows: any = await client.query(
+              `SELECT tipo_execucao_pagamento, etapa_atual
+                 FROM dados_dachser.t_vouchers WHERE id = ? LIMIT 1`,
+              [anexoData.voucher_id]
+            );
+            const v = vrows?.[0];
+            const tipoExec = String(v?.tipo_execucao_pagamento || '').toUpperCase();
+            const etapa = String(v?.etapa_atual || '').toUpperCase();
+            if (tipoExec === 'PAGO_ADF' && etapa === 'ROBO') {
+              await client.execute(
+                `UPDATE dados_dachser.t_vouchers
+                    SET status_comprovante = 'ANEXADO',
+                        etapa_atual = 'FINANCEIRO',
+                        updated_at = NOW()
+                  WHERE id = ?`,
+                [anexoData.voucher_id]
+              );
+              await client.execute(
+                `INSERT INTO dados_dachser.t_voucher_logs
+                   (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+                 VALUES (?, ?, ?, ?, 'PAGO_ADF_COMPROVANTE_ANEXADO',
+                         'Comprovante anexado — voucher PAGO_ADF retornado para FINANCEIRO aguardando marcação de pronto', NOW())`,
+                [crypto.randomUUID(), anexoData.voucher_id, anexoData.user_id || null, anexoData.user_name || 'Sistema']
+              );
+              console.log('PAGO_ADF voucher returned to FINANCEIRO after comprovante anexado:', anexoData.voucher_id);
+            } else if (tipoExec === 'PAGO_ADF') {
+              // Garantir status_comprovante=ANEXADO mesmo se já estiver em FINANCEIRO
+              await client.execute(
+                `UPDATE dados_dachser.t_vouchers
+                    SET status_comprovante = CASE WHEN status_comprovante = 'VALIDADO' THEN 'VALIDADO' ELSE 'ANEXADO' END,
+                        updated_at = NOW()
+                  WHERE id = ?`,
+                [anexoData.voucher_id]
+              );
+            }
+          } catch (adfErr) {
+            console.log('PAGO_ADF comprovante post-hook failed:', adfErr);
+          }
+        }
+
         console.log('Anexo saved to MariaDB t_voucher_anexos, ID:', anexoId);
         result = { success: true, anexoId };
         break;
       }
+
 
       case 'update_voucher_esteira': {
         const { voucher_id, updates: updatesObj, user_id, user_name, ...directFields } = body as any;
