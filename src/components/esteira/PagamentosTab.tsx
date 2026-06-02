@@ -882,6 +882,7 @@ export const PagamentosTab = () => {
               <SelectItem value="MANUAL">Manual</SelectItem>
               <SelectItem value="REMESSA_10H">Remessa 10h</SelectItem>
               <SelectItem value="REMESSA_15H">Remessa 15h</SelectItem>
+              <SelectItem value="PAGO_ADF">Pago em ADF</SelectItem>
             </SelectContent>
           </Select>
 
