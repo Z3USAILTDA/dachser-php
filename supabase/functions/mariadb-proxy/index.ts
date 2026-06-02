@@ -11525,7 +11525,7 @@ Deno.serve(async (req) => {
           filterDataVencimentoFim
         } = body as {
           page?: number;
-          perPage?: number;
+          perPage?: number | 'all';
           filterVencimento?: 'hoje' | 'vencidos' | 'proximos7' | 'todos' | 'a_vencer';
           filterStatusPagamento?: string;
           filterTipoExecucao?: string;
@@ -11541,7 +11541,8 @@ Deno.serve(async (req) => {
         };
 
 
-        const offset = (page - 1) * perPage;
+        const offset = typeof perPage === 'number' && perPage > 0 ? (page - 1) * perPage : 0;
+
         // Filtrar apenas FINANCEIRO para manter a mesma contagem da aba Processos, e excluir modal ADM
         // Usa NOT EXISTS para evitar JOIN que duplica linhas e força DISTINCT (perf)
         const conditions: string[] = [
@@ -11635,13 +11636,16 @@ Deno.serve(async (req) => {
         // Run count + list + stats in parallel (sem JOIN com dfv — não usa colunas dela)
         const countSql = `SELECT COUNT(*) as total FROM dados_dachser.t_vouchers v ${whereClause}`;
 
+        const unlimited = perPage === undefined || perPage === null || perPage === 0 || (typeof perPage === 'number' && perPage < 0) || perPage === 'all';
+        const limitClause = unlimited ? '' : 'LIMIT ? OFFSET ?';
+
         const listSql = `
           WITH page_v AS (
             SELECT v.*
             FROM dados_dachser.t_vouchers v
             ${whereClause}
             ORDER BY v.vencimento ASC, v.created_at DESC
-            LIMIT ? OFFSET ?
+            ${limitClause}
           )
           SELECT
             v.id, v.numero_spo, v.fornecedor, v.cnpj_fornecedor, v.valor, v.moeda,
@@ -11697,9 +11701,10 @@ Deno.serve(async (req) => {
           ${whereClause}
         `;
 
+        const listParams = unlimited ? params : [...params, perPage, offset];
         const [countResult, vouchers, statsResult] = await Promise.all([
           client.query(countSql, params),
-          client.query(listSql, [...params, perPage, offset]),
+          client.query(listSql, listParams),
           client.query(statsSql, params),
         ]);
         const total = Number(countResult[0]?.total || 0);
@@ -11708,12 +11713,13 @@ Deno.serve(async (req) => {
           success: true,
           vouchers,
           total,
-          totalPages: Math.ceil(total / perPage),
-          currentPage: page,
+          totalPages: unlimited ? 1 : Math.ceil(total / (perPage as number)),
+          currentPage: unlimited ? 1 : page,
           stats: statsResult[0] || {}
         };
         break;
       }
+
 
       case 'migrate_tipo_exec_column_to_varchar': {
         // One-shot migration: convert legacy ENUM column to VARCHAR(20)
