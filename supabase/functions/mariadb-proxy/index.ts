@@ -11576,9 +11576,10 @@ Deno.serve(async (req) => {
           }
         }
 
-        if (filterFornecedor) {
-          conditions.push("v.fornecedor LIKE ?");
-          params.push(`%${filterFornecedor}%`);
+        const termoBusca = (filterBusca ?? filterFornecedor)?.trim();
+        if (termoBusca) {
+          conditions.push("(v.numero_spo LIKE ? OR v.fornecedor LIKE ?)");
+          params.push(`%${termoBusca}%`, `%${termoBusca}%`);
         }
 
         if (filterCobranca) {
