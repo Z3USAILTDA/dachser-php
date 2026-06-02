@@ -11525,7 +11525,7 @@ Deno.serve(async (req) => {
           filterDataVencimentoFim
         } = body as {
           page?: number;
-          perPage?: number;
+          perPage?: number | 'all';
           filterVencimento?: 'hoje' | 'vencidos' | 'proximos7' | 'todos' | 'a_vencer';
           filterStatusPagamento?: string;
           filterTipoExecucao?: string;
@@ -11541,7 +11541,8 @@ Deno.serve(async (req) => {
         };
 
 
-        const offset = (page - 1) * perPage;
+        const offset = typeof perPage === 'number' && perPage > 0 ? (page - 1) * perPage : 0;
+
         // Filtrar apenas FINANCEIRO para manter a mesma contagem da aba Processos, e excluir modal ADM
         // Usa NOT EXISTS para evitar JOIN que duplica linhas e força DISTINCT (perf)
         const conditions: string[] = [
