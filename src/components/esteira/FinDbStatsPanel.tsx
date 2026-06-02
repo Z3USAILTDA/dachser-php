@@ -71,7 +71,7 @@ export const FinDbStatsPanel = ({ stats, isLoading, onRefresh }: FinDbStatsPanel
         <Button 
           variant="outline" 
           size="sm" 
-          className="gap-2 bg-[rgba(0,0,0,.70)] backdrop-blur-sm border-[rgba(255,255,255,.18)] hover:bg-[rgba(0,0,0,.85)] hover:border-[#ffc800]/50 text-[#aaaaaa] hover:text-[#f5f5f5]"
+          className="gap-2 h-9 rounded-full bg-[rgba(0,0,0,.70)] backdrop-blur-sm border-[rgba(255,255,255,.18)] hover:bg-[rgba(0,0,0,.85)] hover:border-[#ffc800]/50 text-[#aaaaaa] hover:text-[#f5f5f5]"
           disabled={isLoading}
         >
           {isLoading ? (
