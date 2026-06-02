@@ -688,13 +688,44 @@ const TrackingAereo = () => {
   const handleAnalystSort = () => { setSortAwb(null); setSortClient(null); setSortLastCheck(null); setSortAnalyst(prev => prev === null ? "asc" : prev === "asc" ? "desc" : null); };
   const handleLastCheckSort = () => { setSortAwb(null); setSortClient(null); setSortAnalyst(null); setSortLastCheck(prev => prev === null ? "asc" : prev === "asc" ? "desc" : null); };
 
-  // ─── Card counts ───
+  // ─── Stale helper (>30 dias sem atualização do último evento) ───
+  const isStaleAwb = useCallback((awb: AWBData): boolean => {
+    if (!awb.last_event_date) return false;
+    const code = getStatusCode(awb.last_event).toUpperCase();
+    if (code === "DLV" || code === "POD" || code === "ARR - DESTINO") return false;
+    if (awb.is_invalid || awb.tracking_failed || awb.hide_reason) return false;
+    const d = parseDBDate(awb.last_event_date);
+    if (!d) return false;
+    return (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24) > 30;
+  }, []);
+
+  // ─── Top filters (search, airline, analyst, processType) — usado em cards e tabela ───
+  const applyTopFilters = useCallback((awb: AWBData): boolean => {
+    const sl = searchTerm.toLowerCase();
+    const matchesSearch = !searchTerm ||
+      awb.awb.toLowerCase().includes(sl) ||
+      (awb.hawb && awb.hawb.toLowerCase().includes(sl)) ||
+      awb.consignee_name.toLowerCase().includes(sl) ||
+      (awb.nome_analista && awb.nome_analista.toLowerCase().includes(sl));
+    const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
+    const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
+    const BR_AIRPORTS = ['GRU','VCP','CGH','GIG','SDU','BSB','CNF','POA','CWB','REC','SSA','FOR','BEL','MAO','NAT','MCZ','FLN','VIX','CGB','GYN','SLZ','THE','AJU','JPA','PMW','PVH','RBR','BVB','MCP','CGR','LDB','MGF','IGU','NVT','JOI','XAP','UDI','RAO','SJP','PPB','BAU','CPQ','QPS','SOD','MAB','STM','SJK','PNZ'];
+    const destCode = (awb.destino || '').toUpperCase().trim();
+    const isImport = BR_AIRPORTS.includes(destCode);
+    const matchesType = filterProcessType === "all" ||
+      (filterProcessType === "import" && isImport) ||
+      (filterProcessType === "export" && !isImport);
+    return matchesSearch && matchesAirline && matchesAnalyst && matchesType;
+  }, [searchTerm, filterAirline, filterAnalyst, filterProcessType]);
+
+  // ─── Card counts (respeitam filtros de topo, mas não o cardFilter) ───
   const cardCounts = useMemo(() => {
     const inTransitCodes = new Set(["DEP", "MAN", "RCF", "ARR"]);
     const criticalCodes = new Set(["NIL", "NIF", "OFLD"]);
 
     let total = 0, transit = 0, alert = 0, critical = 0;
     awbsData.forEach(awb => {
+      if (!applyTopFilters(awb)) return;
       if (awb.is_invalid) return;
       if (awb.tracking_failed) return;
       const code = getStatusCode(awb.last_event).toUpperCase();
@@ -708,13 +739,14 @@ const TrackingAereo = () => {
           if (diffDays > 5) return;
         }
       }
+      const stale = isStaleAwb(awb);
       total++;
       if (inTransitCodes.has(code)) transit++;
       if (code === "DIS" || (awb.has_dis_event && !awb.pieces_discrepancy)) alert++;
-      if (criticalCodes.has(code) || awb.pieces_discrepancy) critical++;
+      if (criticalCodes.has(code) || awb.pieces_discrepancy || stale) critical++;
     });
     return { total, transit, alert, critical };
-  }, [awbsData]);
+  }, [awbsData, applyTopFilters, isStaleAwb]);
 
   // ─── Filtered & sorted data ───
   const filteredAwbs = useMemo(() => {
@@ -752,23 +784,7 @@ const TrackingAereo = () => {
       // Hide tracking failed unless actively searching by AWB
       if (awb.tracking_failed && !searchTerm) return false;
 
-      const sl = searchTerm.toLowerCase();
-      const matchesSearch = !searchTerm ||
-        awb.awb.toLowerCase().includes(sl) ||
-        (awb.hawb && awb.hawb.toLowerCase().includes(sl)) ||
-        awb.consignee_name.toLowerCase().includes(sl) ||
-        (awb.nome_analista && awb.nome_analista.toLowerCase().includes(sl));
-      const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
-      const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
-
-      const BR_AIRPORTS = ['GRU','VCP','CGH','GIG','SDU','BSB','CNF','POA','CWB','REC','SSA','FOR','BEL','MAO','NAT','MCZ','FLN','VIX','CGB','GYN','SLZ','THE','AJU','JPA','PMW','PVH','RBR','BVB','MCP','CGR','LDB','MGF','IGU','NVT','JOI','XAP','UDI','RAO','SJP','PPB','BAU','CPQ','QPS','SOD','MAB','STM','SJK','PNZ'];
-      const destCode = (awb.destino || '').toUpperCase().trim();
-      const isImport = BR_AIRPORTS.includes(destCode);
-      const matchesType = filterProcessType === "all" ||
-        (filterProcessType === "import" && isImport) ||
-        (filterProcessType === "export" && !isImport);
-
-      return matchesSearch && matchesAirline && matchesAnalyst && matchesType;
+      return applyTopFilters(awb);
     });
 
     // Card filter
@@ -778,7 +794,7 @@ const TrackingAereo = () => {
         switch (cardFilter) {
           case "transito": return ["DEP", "MAN", "RCF", "ARR", "ARR - DESTINO", "ARR - CONEXÃO"].includes(code);
           case "alerta": return code === "DIS" || (awb.has_dis_event && !awb.pieces_discrepancy);
-          case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy;
+          case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy || isStaleAwb(awb);
           default: return true;
         }
       });
@@ -807,7 +823,7 @@ const TrackingAereo = () => {
     }
 
     return awbs;
-  }, [awbsData, searchTerm, filterAirline, filterAnalyst, filterProcessType, cardFilter, sortAwb, sortClient, sortAnalyst, sortLastCheck]);
+  }, [awbsData, searchTerm, applyTopFilters, isStaleAwb, cardFilter, sortAwb, sortClient, sortAnalyst, sortLastCheck]);
 
   const totalPages = Math.ceil(filteredAwbs.length / itemsPerPage);
   const currentAwbs = filteredAwbs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -1001,7 +1017,8 @@ const TrackingAereo = () => {
                   <tbody>
                     {currentAwbs.map((awb, index) => {
                       const statusCode = getStatusCode(awb.last_event).toUpperCase();
-                      const isCritical = awb.is_critical;
+                      const stale = isStaleAwb(awb);
+                      const isCritical = awb.is_critical || stale;
                       const isDelayed = statusCode === "DIS";
 
                       // Route highlighting logic
@@ -1162,6 +1179,11 @@ const TrackingAereo = () => {
                                 if (sc === "ARR - CONEXÃO" || sc === "ARR - CONEXAO") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-500/20 text-orange-400 border border-orange-500/40"><ArrowLeftRight className="h-3 w-3" />Conexão</span>;
                                 return <span className="text-sm font-bold" style={{ color: "hsl(120 100% 35%)" }}>{getStatusCode(awb.last_event)}</span>;
                               })()}
+                              {stale && !awb.is_invalid && !awb.tracking_failed && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-red-600/20 text-red-400 border border-red-500/40" title="Último evento há mais de 30 dias">
+                                  <AlertTriangle className="h-3 w-3" />Sem atualizações
+                                </span>
+                              )}
                             </div>
                           </td>
                           {/* Data/Hora */}
@@ -1190,6 +1212,11 @@ const TrackingAereo = () => {
                                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
                                   <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
                                   {awb.has_dis_event ? "DIS - Discrepância" : "Discrepância Peças"}
+                                </span>
+                              ) : stale ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                                  Crítico · Sem atualizações
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
