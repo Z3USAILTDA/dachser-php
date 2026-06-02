@@ -11515,6 +11515,7 @@ Deno.serve(async (req) => {
           filterStatusPagamento,
           filterTipoExecucao,
           filterFornecedor,
+          filterBusca,
           filterCobranca,
           filterFilial,
           filterMoeda,
@@ -11527,6 +11528,7 @@ Deno.serve(async (req) => {
           filterStatusPagamento?: string;
           filterTipoExecucao?: string;
           filterFornecedor?: string;
+          filterBusca?: string;
           filterCobranca?: string;
           filterFilial?: string;
           filterMoeda?: string;
@@ -11574,9 +11576,10 @@ Deno.serve(async (req) => {
           }
         }
 
-        if (filterFornecedor) {
-          conditions.push("v.fornecedor LIKE ?");
-          params.push(`%${filterFornecedor}%`);
+        const termoBusca = (filterBusca ?? filterFornecedor)?.trim();
+        if (termoBusca) {
+          conditions.push("(v.numero_spo LIKE ? OR v.fornecedor LIKE ?)");
+          params.push(`%${termoBusca}%`, `%${termoBusca}%`);
         }
 
         if (filterCobranca) {

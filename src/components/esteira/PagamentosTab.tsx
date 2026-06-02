@@ -311,6 +311,7 @@ export const PagamentosTab = () => {
           filterTipoExecucao: filterTipoExecucao === "all" ? undefined : filterTipoExecucao,
           filterFormaPagamento: filterFormaPagamento === "all" ? undefined : filterFormaPagamento,
           filterStatusIntegracaoRm: filterStatusIntegracaoRm === "all" ? undefined : filterStatusIntegracaoRm,
+          filterBusca: filterFornecedorDebounced.trim() || undefined,
           filterFornecedor: filterFornecedorDebounced.trim() || undefined
         }
       });
@@ -769,13 +770,13 @@ export const PagamentosTab = () => {
         </div>
         
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Filtro por fornecedor */}
+          {/* Busca por Voucher/SPO ou Fornecedor */}
           <div className="relative">
             <Input
               value={filterFornecedor}
               onChange={(e) => setFilterFornecedor(e.target.value)}
-              placeholder="Buscar por fornecedor..."
-              className="w-[220px] bg-card border-border rounded-full pl-3"
+              placeholder="Buscar por Voucher/SPO ou Fornecedor..."
+              className="w-[280px] bg-card border-border rounded-full pl-3"
             />
           </div>
 
@@ -1176,7 +1177,7 @@ export const PagamentosTab = () => {
                   />
                 </th>
                 <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("numero_spo")}>
-                  <span className="flex items-center">SPO{getSortIcon("numero_spo")}</span>
+                  <span className="flex items-center">Voucher/SPO{getSortIcon("numero_spo")}</span>
                 </th>
                 <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort("fornecedor")}>
                   <span className="flex items-center">Fornecedor{getSortIcon("fornecedor")}</span>
