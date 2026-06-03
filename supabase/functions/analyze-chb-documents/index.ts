@@ -1886,6 +1886,11 @@ function parseExtractedFields(response: string, filename: string): Record<string
           
           const normalizedKey = fieldMapping[fieldName];
           if (normalizedKey && criticalFields.includes(normalizedKey)) {
+            // Guard: campos de peso nunca podem conter moeda (proteção contra contaminação por frete)
+            if ((normalizedKey === 'peso_bruto' || normalizedKey === 'peso_liquido') &&
+                /\b(EUR|USD|BRL|GBP|R\$|US\$|€|\$)\b/i.test(value)) {
+              continue;
+            }
             fields[normalizedKey] = value;
           }
         }
