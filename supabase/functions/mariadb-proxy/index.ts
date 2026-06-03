@@ -21160,7 +21160,11 @@ Deno.serve(async (req) => {
             origem_processo: (() => { origin['origem_processo'] = 'PLANILHA'; return sheet.origem_processo || 'CHB'; })(),
             fornecedor: dfvFornecedor,
             cnpj_fornecedor: pick(sheet.cnpj_fornecedor, dfvCnpj, 'cnpj_fornecedor'),
-            valor: (() => { origin['valor'] = sheet.valor != null ? 'PLANILHA' : null; return sheet.valor; })(),
+            valor: (() => {
+              if (dfvValor != null) { origin['valor'] = 'DFV'; return dfvValor; }
+              origin['valor'] = sheet.valor != null ? 'PLANILHA' : null;
+              return sheet.valor;
+            })(),
             moeda: pick(sheet.moeda, dfvMoeda, 'moeda') || 'BRL',
             vencimento: (() => { origin['vencimento'] = sheet.vencimento ? 'PLANILHA' : null; return sheet.vencimento; })(),
             data_emissao: pick(sheet.data_emissao, dfvEmis, 'data_emissao'),
