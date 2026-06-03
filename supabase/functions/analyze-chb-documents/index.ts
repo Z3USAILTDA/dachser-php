@@ -2559,7 +2559,7 @@ O usuário CORRIGIU os seguintes valores. VOCÊ DEVE USAR ESSES VALORES CORRIGID
     // Try Anthropic first
     try {
       console.log('[BG] Attempting Anthropic API...');
-      const result = await callAnthropicAPI(prompt, files);
+      const result = await callAnthropicAPI(prompt, files, dbOcrByFilename);
       responseText = result.text;
       fileWarnings = result.warnings;
       extractedTexts = result.extractedTexts;
