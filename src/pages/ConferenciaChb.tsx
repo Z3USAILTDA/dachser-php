@@ -17,6 +17,8 @@ import { useChbFiles, useChbRuns, useChbItems, ChbFile, ChbRun } from '@/hooks/u
 import { useChbClientConfig, ChbClientConfig } from '@/hooks/useChbClientConfig';
 import { useChbCorrections } from '@/hooks/useChbCorrections';
 import { applyCorrectionsToHtml } from '@/utils/chbPdfCorrections';
+import { parseHtmlToRows } from '@/components/chb/ChbComparisonGrid';
+
 
 export default function ConferenciaChb() {
   useUsageLog({ endpoint: "/chb/conferencia" });
