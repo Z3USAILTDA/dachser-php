@@ -2331,10 +2331,12 @@ async function processAnalysisInBackground(
   itemId?: number,
   _cachedDataUnused?: unknown
 ): Promise<void> {
+  console.log(`[BG] startedAt=${new Date().toISOString()} requestId=${requestId} step=${stepId} itemId=${itemId} files=${files?.length ?? 0}`);
   const supabase = getSupabaseClient();
   
   try {
     console.log(`[BG] v2-extractions-enabled :: Starting background analysis for request ${requestId} (itemId=${itemId})`);
+
     
     // Update status to processing in MariaDB
     await callMariaDBProxy('update_chb_run', {
@@ -2867,11 +2869,19 @@ serve(async (req) => {
       );
     }
 
-    // Start background processing
+    // Start background processing (single-fire — never call twice)
+    console.log(`[SUBMIT] Dispatching background analysis for request ${requestId}`);
     // deno-lint-ignore no-explicit-any
-    (globalThis as any).EdgeRuntime?.waitUntil?.(
-      processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId)
-    ) || processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId);
+    const bgPromise = processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId)
+      .catch((bgErr) => {
+        console.error(`[SUBMIT] Background analysis crashed for ${requestId}:`, bgErr);
+      });
+    // deno-lint-ignore no-explicit-any
+    const edgeRuntime = (globalThis as any).EdgeRuntime;
+    if (edgeRuntime?.waitUntil) {
+      edgeRuntime.waitUntil(bgPromise);
+    }
+
 
 
     // Return request ID immediately
