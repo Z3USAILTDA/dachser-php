@@ -1388,26 +1388,45 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[], persis
   
   const startTime = Date.now();
   
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': anthropicApiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 64000,
-      messages: [
-        {
-          role: 'user',
-          content,
-        },
-      ],
-    }),
-  });
+  const ANTHROPIC_TIMEOUT_MS = 240_000;
+  const anthropicAbort = new AbortController();
+  const anthropicTimer = setTimeout(() => anthropicAbort.abort(), ANTHROPIC_TIMEOUT_MS);
+  console.log(`[BG] anthropic.start (timeout=${ANTHROPIC_TIMEOUT_MS}ms, files=${files.length})`);
+  
+  let response: Response;
+  try {
+    response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal: anthropicAbort.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': anthropicApiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 64000,
+        messages: [
+          {
+            role: 'user',
+            content,
+          },
+        ],
+      }),
+    });
+  } catch (fetchErr: any) {
+    clearTimeout(anthropicTimer);
+    if (fetchErr?.name === 'AbortError') {
+      console.error(`[BG] anthropic.timeout after ${Date.now() - startTime}ms`);
+      throw new Error(`LLM_TIMEOUT: Anthropic não respondeu em ${ANTHROPIC_TIMEOUT_MS / 1000}s`);
+    }
+    throw fetchErr;
+  }
+  clearTimeout(anthropicTimer);
+  console.log(`[BG] anthropic.end ms=${Date.now() - startTime} status=${response.status}`);
   
   const responseTime = Date.now() - startTime;
+
   
   if (!response.ok) {
     const errorText = await response.text();
@@ -1535,22 +1554,40 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[], persisted
   
   const startTime = Date.now();
   
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-pro',
-      messages: [{
-        role: 'user',
-        content: contentParts,
-      }],
-      max_tokens: 65536,
-      temperature: 0.1,
-    }),
-  });
+  const GEMINI_TIMEOUT_MS = 240_000;
+  const geminiAbort = new AbortController();
+  const geminiTimer = setTimeout(() => geminiAbort.abort(), GEMINI_TIMEOUT_MS);
+  console.log(`[BG] gemini.start (timeout=${GEMINI_TIMEOUT_MS}ms, files=${files.length})`);
+  
+  let response: Response;
+  try {
+    response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      signal: geminiAbort.signal,
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-pro',
+        messages: [{
+          role: 'user',
+          content: contentParts,
+        }],
+        max_tokens: 65536,
+        temperature: 0.1,
+      }),
+    });
+  } catch (fetchErr: any) {
+    clearTimeout(geminiTimer);
+    if (fetchErr?.name === 'AbortError') {
+      console.error(`[BG] gemini.timeout after ${Date.now() - startTime}ms`);
+      throw new Error(`LLM_TIMEOUT: Gemini não respondeu em ${GEMINI_TIMEOUT_MS / 1000}s`);
+    }
+    throw fetchErr;
+  }
+  clearTimeout(geminiTimer);
+  console.log(`[BG] gemini.end ms=${Date.now() - startTime} status=${response.status}`);
   
   const responseTime = Date.now() - startTime;
   
@@ -1559,6 +1596,7 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[], persisted
     console.error('AI Gateway error:', errorText);
     throw new Error(`AI Gateway error: ${response.status} - ${errorText}`);
   }
+
   
   const result = await response.json();
   
