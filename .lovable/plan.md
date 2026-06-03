@@ -1,51 +1,37 @@
-# Corrigir ordem de execução do novo fluxo síncrono CHB
-
 ## Problema
 
-O bloco "extrai → grava → relê da tabela → analisa" foi inserido **antes** da declaração de `extractedTexts` em `supabase/functions/analyze-chb-documents/index.ts`.
+Na análise CHB do item 124, a linha **"Valor Total Frete"** aparece como 🟨 Alerta mesmo com valores idênticos entre documentos:
+- Coluna A: `EUR 220,00`
+- Coluna B: `220,00 EUR`
 
-- Linha 2272: `persistRawOcrForFiles(itemId, stepId, files, extractedTexts || {})`
-- Linha 2586: `let extractedTexts: Record<string, string> | undefined;`
+Numericamente iguais (220.00 EUR em ambos), apenas com posição diferente da sigla da moeda.
 
-Isso dispara TDZ (`Cannot access 'extractedTexts' before initialization`), o `try/catch` engole o erro, `dbOcrByFilename` fica vazio e a análise cai no fallback antigo (in-memory). Confirmado nos logs do request 145.
+## Causa raiz
 
-## Correção
+Em `supabase/functions/analyze-chb-documents/index.ts`, a função `applyDivergenceStatusOverrides` (linha 1774) é **unidirecional**:
 
-1. **Remover** o bloco atual em `supabase/functions/analyze-chb-documents/index.ts` linhas 2261-2286 (comentário + bloco `let dbOcrByFilename` + try/catch).
+```ts
+const newStatus = cells[0].replace(/✅/g, '🟨').replace(/Conforme/gi, 'Alerta');
+```
 
-2. **Declarar** apenas a variável vazia nessa posição, para manter escopo visível no prompt builder:
-   ```ts
-   let dbOcrByFilename: Record<string, string> = {};
-   ```
+Ela só promove Conforme→Alerta quando `checkDivergence` retorna `true`. Não existe caminho reverso: quando o LLM marca a linha como Alerta mas os valores normalizados batem, a marcação permanece incorreta.
 
-3. **Reinserir o bloco completo logo após** o OCR rodar e `extractedTexts` estar populado (após a linha ~2605, onde `extractedTexts = result.extractedTexts` é atribuído pelo caminho de cache miss; e também garantir cobertura do caminho cache hit linha 2594). Local exato: imediatamente após o bloco `if (cachedExtraction)…else{…}` que define `extractedTexts`, e **antes** da chamada ao LLM/Anthropic.
+## Plano de correção (cirúrgico)
 
-   ```ts
-   // NOVO FLUXO: grava raw OCR em t_chb_file_extractions e relê como fonte única
-   if (itemId) {
-     try {
-       const persistResults = await persistRawOcrForFiles(itemId, stepId, files, extractedTexts || {});
-       console.log(`[BG][pre-analysis] Persisted raw OCR for ${persistResults.length} file(s)`);
-       const dbRowsResp = await callMariaDBProxy('get_chb_extractions', { itemId, etapa: String(stepId) });
-       const dbRows = dbRowsResp?.data || [];
-       for (const row of dbRows) {
-         if (row.filename && row.raw_ocr_text) dbOcrByFilename[row.filename] = row.raw_ocr_text;
-       }
-       console.log(`[BG][pre-analysis] Read back ${Object.keys(dbOcrByFilename).length} raw_ocr_text rows`);
-     } catch (e) {
-       console.error('[BG][pre-analysis] failed:', (e as Error).message);
-     }
-   }
-   ```
+Editar **apenas** `supabase/functions/analyze-chb-documents/index.ts` na função `applyDivergenceStatusOverrides` (linhas ~1786–1804):
 
-4. **Manter** o bloco do prompt (linhas ~2386+) que injeta `📚 OCR BRUTO PERSISTIDO` quando `dbOcrByFilename` tiver itens — já está correto, só estava recebendo objeto vazio.
+1. Após coletar `docValues` e antes do `return row`, calcular `isDivergent = checkDivergence(docValues, spec.type)`.
+2. Manter o comportamento atual quando `isDivergent === true` (Conforme→Alerta).
+3. **Adicionar caminho reverso**: quando `isDivergent === false` E `docValues.length >= 2` E a célula de status atual contém `🟨` ou `Alerta`, rebaixar para `✅ Conforme`:
+   - `cells[0].replace(/🟨/g, '✅').replace(/Alerta/gi, 'Conforme')`
+4. Limitar o rebaixamento aos campos numéricos/texto já listados em `fieldSpecs` (Peso Bruto, Peso Líquido, Valor Mercadoria, Valor Total Frete, NCM, Incoterm, CNPJ Consignee) — não afeta outras linhas que o LLM marcou como Alerta por motivo diferente (ex.: campo ausente).
+5. **Salvaguarda**: só rebaixar se TODAS as colunas de documento na linha tiverem valor preenchido (sem `ND`/`—`/`-`). Se houver valor ausente, manter Alerta — a divergência "presente vs ausente" é legítima.
+6. Redeploy de `analyze-chb-documents`.
 
-5. **Redeployar** `analyze-chb-documents` e rodar nova análise no item 123. Verificar logs:
-   - `[BG][raw-ocr-save] v2-all-files :: Persisting raw OCR…`
-   - `[BG][raw-ocr-save] <file> → extractionId=… status=OK`
-   - `[BG][pre-analysis] Read back N raw_ocr_text rows`
-   - SQL: `SELECT filename, LENGTH(raw_ocr_text) FROM dados_dachser.t_chb_file_extractions WHERE item_id=123 AND etapa='1'` → 1 linha por arquivo, todas com `raw_ocr_text > 0`.
+## Validação
+
+Rodar nova análise no item 124 e confirmar que a linha "Valor Total Frete" com `EUR 220,00` / `220,00 EUR` aparece como ✅ Conforme. Confirmar que linhas com valores realmente diferentes (>1% ou >R$ 1) continuam como Alerta.
 
 ## Escopo
 
-Mudança cirúrgica em 1 arquivo (`analyze-chb-documents/index.ts`). Sem alteração de schema, sem mudança de UI, sem mexer no `mariadb-proxy`.
+Nenhuma mudança no prompt do LLM, no banco, ou em outros arquivos. Apenas ~6 linhas adicionadas em `applyDivergenceStatusOverrides`.
