@@ -2115,6 +2115,97 @@ async function processAnalysisInBackground(
     });
     
     console.log(`[BG] Processing ${files.length} files for step ${stepId}`);
+
+    // =========================================================================
+    // STEP 0: PER-FILE EXTRACTION → t_chb_file_extractions (auditable truth)
+    // =========================================================================
+    let perFileExtractions: Array<{
+      filename: string;
+      docRole: string | null;
+      structured: Record<string, any> | null;
+      evidence: Record<string, any> | null;
+      model: string | null;
+      status: string;
+      extractionId: number | null;
+    }> = [];
+
+    if (itemId) {
+      try {
+        console.log(`[BG][extract] Looking up file IDs for item ${itemId}…`);
+        const filesResult = await callMariaDBProxy('get_chb_files', { itemId });
+        const dbFiles: Array<{ id: number; filename: string; doc_role?: string; etapa?: string }> = filesResult.data || [];
+        const byName = new Map<string, { id: number; doc_role?: string; etapa?: string }>();
+        for (const df of dbFiles) byName.set(df.filename, { id: df.id, doc_role: df.doc_role, etapa: df.etapa });
+
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+        const extractionPromises = files.map(async (f: any) => {
+          const dbFile = byName.get(f.name);
+          if (!dbFile) {
+            console.warn(`[BG][extract] No DB file match for ${f.name} — skipping persistence`);
+            return null;
+          }
+          try {
+            const resp = await fetch(`${supabaseUrl}/functions/v1/extract-chb-file`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseKey}` },
+              body: JSON.stringify({
+                itemId,
+                fileId: dbFile.id,
+                fileBase64: f.content,
+                mimeType: f.mimeType,
+                filename: f.name,
+                docRole: dbFile.doc_role || null,
+                etapa: dbFile.etapa || String(stepId),
+              }),
+            });
+            const json = await resp.json();
+            if (!resp.ok || !json.success) {
+              console.error(`[BG][extract] Failed for ${f.name}:`, json.error || resp.status);
+              return {
+                filename: f.name,
+                docRole: dbFile.doc_role || null,
+                structured: null,
+                evidence: null,
+                model: null,
+                status: 'ERRO',
+                extractionId: json?.extractionId || null,
+              };
+            }
+            console.log(`[BG][extract] ${f.name} → extractionId=${json.extractionId} status=${json.extractionStatus}`);
+            return {
+              filename: f.name,
+              docRole: dbFile.doc_role || null,
+              structured: json.structuredFields || null,
+              evidence: json.fieldEvidence || null,
+              model: json.extractorModel || null,
+              status: json.extractionStatus || 'OK',
+              extractionId: json.extractionId || null,
+            };
+          } catch (e) {
+            console.error(`[BG][extract] Exception extracting ${f.name}:`, e);
+            return {
+              filename: f.name,
+              docRole: dbFile.doc_role || null,
+              structured: null,
+              evidence: null,
+              model: null,
+              status: 'ERRO',
+              extractionId: null,
+            };
+          }
+        });
+
+        const settled = await Promise.all(extractionPromises);
+        perFileExtractions = settled.filter((x): x is NonNullable<typeof x> => x !== null);
+        console.log(`[BG][extract] Persisted ${perFileExtractions.length}/${files.length} extractions in t_chb_file_extractions`);
+      } catch (e) {
+        console.error('[BG][extract] Orchestration failed (analysis will continue):', e);
+      }
+    } else {
+      console.log('[BG][extract] No itemId — skipping per-file extraction persistence');
+    }
     
     // Get cached data from DB if itemId provided and no cachedData sent
     let existingCache: Record<string, { fields: Record<string, any>; rawText?: string }> = cachedData || {};
@@ -2123,6 +2214,7 @@ async function processAnalysisInBackground(
       existingCache = await getCachedExtractedData(itemId);
       console.log(`[BG] Found ${Object.keys(existingCache).length} cached documents`);
     }
+
     
     // Build cached context
     const cachedFiles: { name: string; fields: Record<string, any>; rawText?: string }[] = [];
