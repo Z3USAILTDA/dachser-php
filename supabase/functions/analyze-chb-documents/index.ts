@@ -1643,14 +1643,26 @@ function extractAwbPortugueseTotalFreight(text: string): string | null {
 function applyAwbPortugueseTotalFreightCorrection(html: string, extractedTexts?: Record<string, string>): string {
   if (!html || !extractedTexts) return html;
 
-  const totalFreight = Object.values(extractedTexts)
-    .map(extractAwbPortugueseTotalFreight)
-    .find(Boolean);
-  if (!totalFreight) return html;
+  const correction = Object.entries(extractedTexts)
+    .map(([filename, text]) => ({ filename, totalFreight: extractAwbPortugueseTotalFreight(text) }))
+    .find((item) => Boolean(item.totalFreight));
+  if (!correction?.totalFreight) return html;
 
-  return html.replace(/(<tr[^>]*>[\s\S]*?<td[^>]*>\s*Valor\s+Total\s+Frete\s*<\/td>[\s\S]*?<td[^>]*>)([\s\S]*?)(<\/td>)/i, (_match, before, value, after) => {
-    if (new RegExp(totalFreight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(value)) return `${before}${value}${after}`;
-    return `${before}${totalFreight}${after}`;
+  const tableMatch = html.match(/<table[\s\S]*?<\/table>/i);
+  const headerMatch = tableMatch?.[0]?.match(/<thead[^>]*>[\s\S]*?<tr[^>]*>([\s\S]*?)<\/tr>[\s\S]*?<\/thead>/i);
+  const headerCells = headerMatch?.[1]?.match(/<th[^>]*>[\s\S]*?<\/th>/gi) || [];
+  const targetHeader = correction.filename.toLowerCase().replace(/\.(pdf|xlsx?|png|jpe?g)$/i, '');
+  const targetColumnIndex = headerCells.findIndex((cell) => cell.replace(/<[^>]+>/g, '').trim().toLowerCase().includes(targetHeader));
+  const targetTdIndex = targetColumnIndex >= 2 ? targetColumnIndex - 2 : 0;
+
+  return html.replace(/<tr[^>]*>[\s\S]*?<td[^>]*>\s*Valor\s+Total\s+Frete\s*<\/td>[\s\S]*?<\/tr>/i, (row) => {
+    const cells = row.match(/<td[^>]*>[\s\S]*?<\/td>/gi) || [];
+    const valueCellIndex = targetTdIndex + 2;
+    if (!cells[valueCellIndex]) return row;
+    const currentValue = cells[valueCellIndex].replace(/<[^>]+>/g, '').trim();
+    if (new RegExp(correction.totalFreight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(currentValue)) return row;
+    const correctedCell = cells[valueCellIndex].replace(/(>)([\s\S]*?)(<\/td>)/i, `$1${correction.totalFreight}$3`);
+    return row.replace(cells[valueCellIndex], correctedCell);
   });
 }
 
