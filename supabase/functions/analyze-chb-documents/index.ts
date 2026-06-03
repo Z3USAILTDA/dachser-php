@@ -2073,7 +2073,7 @@ async function persistRawOcrForFiles(
       fileId: dbFile?.id ?? null,
       filename: file.name,
       docRole: dbFile?.doc_role ?? null,
-      etapa: dbFile?.etapa ?? String(stepId),
+      etapa: String(stepId),
       fileSha256: null,
       extractorModel: 'google/gemini-2.5-flash',
       extractorPromptVersion: 'main-raw-ocr-v3-auto-register',
