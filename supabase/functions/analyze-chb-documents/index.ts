@@ -2539,6 +2539,9 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
       filesAnalyzed: files.map((f: any) => f.name),
       usedFallback,
       fileWarnings: fileWarnings.length > 0 ? fileWarnings : undefined,
+      extractionIds: perFileExtractions
+        .filter(e => e.extractionId !== null)
+        .map(e => ({ filename: e.filename, extractionId: e.extractionId, status: e.status })),
     };
 
     // Update request with result in MariaDB
