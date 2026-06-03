@@ -21052,8 +21052,15 @@ Deno.serve(async (req) => {
         // Lookup SPO em t_dados_financeiro_spo por numero_processo (e por cada processo
         // listado na coluna `detalhes`, separada por ';'). Retorna índice byProcesso.
         const normProcesso = (s: any): string => String(s ?? '').trim().replace(/\s+/g, '').toUpperCase();
-        const fetchSpoByProcesso = async (processos: string[]): Promise<{ byProcesso: Record<string, any> }> => {
-          const byProcesso: Record<string, any> = {};
+        const fetchSpoByProcesso = async (processos: string[]): Promise<{ byProcesso: Record<string, any[]> }> => {
+          const byProcesso: Record<string, any[]> = {};
+          const pushUnique = (key: string, row: any) => {
+            if (!key) return;
+            const list = (byProcesso[key] ||= []);
+            // Evita duplicar a mesma linha (mesmo id_rm+nd) quando indexada via processo e via detalhes
+            const sig = `${row?.id_rm ?? ''}|${normSpo(row?.nd)}`;
+            if (!list.some((r: any) => `${r?.id_rm ?? ''}|${normSpo(r?.nd)}` === sig)) list.push(row);
+          };
           const normalized = Array.from(new Set(processos.map(normProcesso).filter(Boolean)));
           if (normalized.length === 0) return { byProcesso };
           const cols = `id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
@@ -21061,9 +21068,6 @@ Deno.serve(async (req) => {
                         valor_nf, moeda, cnpj, razao_social, detalhes`;
           try {
             const placeholders = normalized.map(() => '?').join(',');
-            // Match em numero_processo OU em qualquer token de detalhes.
-            // Normaliza detalhes substituindo separadores comuns (; , \n \r \t |) por vírgula
-            // e removendo espaços, para que FIND_IN_SET funcione independente do formato.
             const detalhesNormSql = `UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(detalhes, CHAR(13), ','), CHAR(10), ','), CHAR(9), ','), '|', ','), ';', ','), ' ', ''))`;
             const findInSetClauses = normalized
               .map(() => `FIND_IN_SET(?, ${detalhesNormSql}) > 0`)
@@ -21079,18 +21083,13 @@ Deno.serve(async (req) => {
               params
             );
             for (const r of (rows || [])) {
-              // Indexa pelo numero_processo principal
-              const main = normProcesso(r.numero_processo);
-              if (main && !byProcesso[main]) byProcesso[main] = r;
-              // Indexa também por cada token de detalhes (separadores tolerantes)
+              pushUnique(normProcesso(r.numero_processo), r);
               if (r.detalhes) {
                 String(r.detalhes)
                   .split(/[;,\n\r\t|]/)
                   .map((t) => normProcesso(t))
                   .filter(Boolean)
-                  .forEach((tok) => {
-                    if (!byProcesso[tok]) byProcesso[tok] = r;
-                  });
+                  .forEach((tok) => pushUnique(tok, r));
               }
             }
 
@@ -21099,9 +21098,7 @@ Deno.serve(async (req) => {
           }
 
           // Fallback: processos não encontrados em SPO → buscar em t_dados_financeiro_voucher
-          // pelo mesmo numero_processo. Cobre processos legados/voucher que não estão na
-          // tabela SPO. Prioridade permanece SPO > Voucher.
-          const missing = normalized.filter((p) => !byProcesso[p]);
+          const missing = normalized.filter((p) => !byProcesso[p] || byProcesso[p].length === 0);
           if (missing.length > 0) {
             try {
               const ph = missing.map(() => '?').join(',');
@@ -21114,8 +21111,7 @@ Deno.serve(async (req) => {
                 missing
               );
               for (const r of (dfvRows || [])) {
-                const key = normProcesso(r.numero_processo);
-                if (key && !byProcesso[key]) byProcesso[key] = { ...r, detalhes: null };
+                pushUnique(normProcesso(r.numero_processo), { ...r, detalhes: null });
               }
               console.log(`[fetchSpoByProcesso] fallback voucher: ${missing.length} solicitados, ${(dfvRows || []).length} encontrados`);
             } catch (e) {
