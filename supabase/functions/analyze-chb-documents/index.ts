@@ -1790,16 +1790,30 @@ function applyDivergenceStatusOverrides(html: string): string {
       const cells = row.match(/<td[^>]*>[\s\S]*?<\/td>/gi) || [];
       if (cells.length < 4) return row;
       const docValues: string[] = [];
+      let hasMissing = false;
       for (let i = 2; i < cells.length; i++) {
         const v = cells[i].replace(/<[^>]+>/g, '').trim();
-        if (!v || /^nd$/i.test(v) || v === '-') continue;
+        if (!v || /^nd$/i.test(v) || v === '-' || v === '—') {
+          hasMissing = true;
+          continue;
+        }
         docValues.push(v);
       }
       if (docValues.length < 2) return row;
-      if (!checkDivergence(docValues, spec.type)) return row;
-      const newStatus = cells[0].replace(/✅/g, '🟨').replace(/Conforme/gi, 'Alerta');
-      if (newStatus === cells[0]) return row;
-      return row.replace(cells[0], newStatus);
+      const isDivergent = checkDivergence(docValues, spec.type);
+      if (isDivergent) {
+        const newStatus = cells[0].replace(/✅/g, '🟨').replace(/Conforme/gi, 'Alerta');
+        if (newStatus === cells[0]) return row;
+        return row.replace(cells[0], newStatus);
+      }
+      // Reverse path: valores iguais após normalização → rebaixa Alerta para Conforme
+      // Apenas quando não há valores ausentes (presente vs ausente é divergência legítima)
+      if (!hasMissing && /🟨|Alerta/i.test(cells[0])) {
+        const newStatus = cells[0].replace(/🟨/g, '✅').replace(/Alerta/gi, 'Conforme');
+        if (newStatus === cells[0]) return row;
+        return row.replace(cells[0], newStatus);
+      }
+      return row;
     });
   }
   return out;
