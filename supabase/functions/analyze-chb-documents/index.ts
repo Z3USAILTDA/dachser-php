@@ -2507,47 +2507,8 @@ O usuário CORRIGIU os seguintes valores. VOCÊ DEVE USAR ESSES VALORES CORRIGID
 `;
     }
     
-    // Add cached data context
-    if (cachedFiles.length > 0) {
-      // Build list of fixed/validated fields
-      const fixedFieldsList: string[] = [];
-      for (const cached of cachedFiles) {
-        for (const [key, value] of Object.entries(cached.fields)) {
-          if (value && value !== 'ND') {
-            fixedFieldsList.push(`${cached.name} → ${key}: ${value}`);
-          }
-        }
-      }
-      
-      cachedContext += `
-═══════════════════════════════════════════════════════════════════════════════
-⚠️ VALORES JÁ EXTRAÍDOS E VALIDADOS — REGRA DE PERSISTÊNCIA
-═══════════════════════════════════════════════════════════════════════════════
+    
 
-OS SEGUINTES CAMPOS JÁ FORAM EXTRAÍDOS E VALIDADOS EM ANÁLISE ANTERIOR.
-VOCÊ DEVE MANTER ESSES VALORES NA TABELA — NÃO SUBSTITUIR POR "ND"!
-
-CAMPOS FIXADOS (NÃO ALTERAR):
-${fixedFieldsList.map(f => `  ✓ ${f}`).join('\n')}
-
-REGRA CRÍTICA DE PERSISTÊNCIA:
-1. Se um campo foi extraído e validado anteriormente → MANTER O VALOR
-2. NUNCA substituir um campo fixado por "ND" em uma re-análise
-3. Se você encontrar valor diferente no documento atual → COMPARAR com o valor fixado
-4. Divergência entre valor fixado e novo valor → 🟨 ou 🔴 conforme gravidade
-5. Campos fixados: Peso Bruto, Peso Líquido, Valor Mercadoria, Valor Total Frete, NCM, Incoterm
-
-═══════════════════════════════════════════════════════════════════════════════
-
-`;
-      for (const cached of cachedFiles) {
-        cachedContext += `[${cached.name}] Campos extraídos anteriormente:\n`;
-        for (const [key, value] of Object.entries(cached.fields)) {
-          cachedContext += `  • ${key}: ${value}\n`;
-        }
-        cachedContext += '\n';
-      }
-    }
     
     const fileNames = files.map((f: any) => f.name);
     const basePrompt = getPromptByStep(stepId, fileNames, clientConfig);
