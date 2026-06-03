@@ -19918,6 +19918,53 @@ Deno.serve(async (req) => {
           try { return d.toISOString().split('T')[0]; } catch { return null; }
         }
 
+        function normalizeCarrier(v: string | null | undefined): string | null {
+          if (!v) return null;
+          const c = String(v).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          if (c.includes('HAPAG')) return 'HAPAG-LLOYD';
+          if (c.includes('MEDITERRANEAN') || /\bMSC\b/.test(c)) return 'MSC';
+          if (c.includes('CMA')) return 'CMA-CGM';
+          if (c.includes('ZIM')) return 'ZIM';
+          if (c.includes('MAERSK')) return 'MAERSK';
+          if (c.includes('HMM') || c.includes('HYUNDAI')) return 'HMM';
+          if (c.includes('OCEAN NETWORK') || /\bONE\b/.test(c)) return 'ONE';
+          if (c.includes('COSCO')) return 'COSCO';
+          return String(v).trim().toUpperCase();
+        }
+
+        function inferTipoProcesso(t: string | null | undefined, origem: string | null | undefined, destino: string | null | undefined): string {
+          if (t && t.trim()) return t;
+          const o = String(origem || '').toUpperCase();
+          const d = String(destino || '').toUpperCase();
+          const isBR = (s: string) => /\bBR\b/.test(s) || s.includes('BRAZIL') || s.includes('BRASIL') || /\b(SANTOS|ITAJAI|ITAPOA|PARANAGUA|RIO GRANDE|MANAUS|SUAPE|SALVADOR|NAVEGANTES|PECEM|VITORIA|RIO DE JANEIRO|SAO FRANCISCO DO SUL)\b/.test(s);
+          if (isBR(d) && !isBR(o)) return 'SEA IMPORT';
+          if (isBR(o) && !isBR(d)) return 'SEA EXPORT';
+          return 'SEA IMPORT';
+        }
+
+        // Cache HBL por MBL para evitar N+1
+        const hblCache = new Map<string, string | null>();
+        async function fetchHbl(mbl: string): Promise<string | null> {
+          if (hblCache.has(mbl)) return hblCache.get(mbl) || null;
+          let hbl: string | null = null;
+          try {
+            const rows = await client.query(
+              `SELECT hawb FROM dados_dachser.t_sea_master WHERE master = ? LIMIT 1`, [mbl]
+            );
+            if (rows?.[0]?.hawb) hbl = rows[0].hawb;
+            else {
+              const md = await client.query(
+                `SELECT hawb FROM dados_dachser.t_master_dados WHERE mawb = ? LIMIT 1`, [mbl]
+              );
+              if (md?.[0]?.hawb) hbl = md[0].hawb;
+            }
+          } catch { /* ignore */ }
+          hblCache.set(mbl, hbl);
+          return hbl;
+        }
+
+
+
         for (const row of sourceRows) {
           try {
             if (!row.mbl_id || !row.container) continue;
