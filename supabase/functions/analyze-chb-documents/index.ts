@@ -2254,6 +2254,53 @@ async function processAnalysisInBackground(
     }
     
     let cachedContext = '';
+
+    // =========================================================================
+    // GROUND TRUTH — extrações persistidas em t_chb_file_extractions
+    // PRIORIDADE MÁXIMA: nunca substituir esses valores; nunca inventar "ND"
+    // =========================================================================
+    if (perFileExtractions.length > 0) {
+      const okExtractions = perFileExtractions.filter(e => e.structured && e.status !== 'ERRO');
+      if (okExtractions.length > 0) {
+        cachedContext += `
+═══════════════════════════════════════════════════════════════════════════════
+🛡️ GROUND TRUTH — VALORES EXTRAÍDOS E PERSISTIDOS POR ARQUIVO
+═══════════════════════════════════════════════════════════════════════════════
+
+Os valores abaixo foram extraídos individualmente de CADA arquivo e gravados em
+banco (dados_dachser.t_chb_file_extractions). VOCÊ DEVE usar EXATAMENTE estes
+valores na grade comparativa. NUNCA invente "ND" — se um campo está null abaixo,
+deixe a célula vazia (—) e marque a linha como Alerta 🟨 se outras colunas
+tiverem valor diferente.
+
+`;
+        for (const ex of okExtractions) {
+          cachedContext += `📄 ${ex.filename}${ex.docRole ? ` [${ex.docRole}]` : ''} (extractor=${ex.model || 'n/a'}, status=${ex.status})\n`;
+          const sf = ex.structured || {};
+          for (const [k, v] of Object.entries(sf)) {
+            if (v === null || v === undefined) {
+              cachedContext += `   • ${k}: null (campo ausente no documento)\n`;
+            } else if (typeof v === 'object') {
+              cachedContext += `   • ${k}: ${JSON.stringify(v)}\n`;
+            } else {
+              cachedContext += `   • ${k}: ${v}\n`;
+            }
+          }
+          cachedContext += '\n';
+        }
+        cachedContext += `🛡️ REGRAS DE GROUND TRUTH:
+1. Use EXATAMENTE os valores acima nas colunas correspondentes de cada arquivo.
+2. Se um campo estiver "null" → escreva "—" na célula (NÃO use "ND" ou placeholder).
+3. Se outro arquivo tiver valor para o mesmo campo (e este estiver null) → marque a linha como Alerta 🟨.
+4. Para valor_total_frete: se kind="parcial", documente isso na coluna Observações.
+5. NUNCA contradizer o ground truth. Em caso de dúvida, repita o valor acima.
+
+═══════════════════════════════════════════════════════════════════════════════
+
+`;
+      }
+    }
+
     
     // Add learned extraction rules context (helps LLM find fields based on past corrections)
     if (extractionRules.length > 0) {
