@@ -1109,12 +1109,19 @@ originais já validados na Etapa 1.
 CONTEXTO: O cliente está prestes a registrar a DI no Siscomex. Esta é a última 
 verificação antes do registro oficial.
 
+🔴 REGRA DE OURO (OBRIGATÓRIA — NÃO OMITIR NENHUM ARQUIVO):
+- A tabela DEVE conter UMA coluna para CADA arquivo listado em "ARQUIVOS FORNECIDOS NESTA ANÁLISE" (use o nome EXATO do arquivo).
+- Isso inclui TODOS os documentos da Etapa 1 (Pré-Alerta) + TODOS os novos documentos da Etapa 2 (Instrução / Draft DI).
+- Se um arquivo não contiver um determinado campo, preencha a célula com "ND" — NUNCA remova a coluna.
+- A ordem das colunas deve seguir a ordem dos arquivos fornecidos.
+
 FOCO PRINCIPAL:
 1. Comparar valores do Draft DI com Invoice + BL/AWB originais
 2. Validar NCM e CFOP estão corretos para a operação
 3. Verificar cálculo de tributos (se visível no draft)
 4. Confirmar que dados do importador/exportador estão corretos
 5. Identificar QUALQUER divergência que poderia causar multa ou retenção
+
 
 ═══════════════════════════════════════════════════════════════════════════════
 ⚠️ FOCO ADICIONAL — COMPARAÇÃO HOUSE × MASTER (PONTO 7):
