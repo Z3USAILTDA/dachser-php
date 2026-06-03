@@ -20047,6 +20047,7 @@ Deno.serve(async (req) => {
             if (existing && existing.length > 0) {
               await client.execute(`
                 UPDATE dados_dachser.t_dachser_demurrage_containers SET
+                  bl = COALESCE(?, bl),
                   booking = ?, cliente = ?, armador = ?, tipo_processo = ?,
                   porto_origem = ?, porto_destino = ?, navio = ?, vessel_imo = ?, voyage = ?,
                   etd = ?, eta = ?, last_event = ?, container_status = ?, status_armador = ?, cronos_status = ?,
@@ -20059,7 +20060,8 @@ Deno.serve(async (req) => {
                   mariadb_id = ?, last_sync_at = NOW(), updated_at = NOW()
                 WHERE id = ?
               `, [
-                null, row.consignee || null, row.shipping_line || null, row.tipo_processo || null,
+                hbl,
+                null, row.consignee || null, armadorNorm, tipoProc,
                 row.origem || null, row.destino || null, row.navio || null, row.vessel_imo || null, null,
                 etd, eta, row.last_event || null, row.container_status || null, null, cronosStatus,
                 row.email_analista || null, row.email_cliente || null,
@@ -20074,15 +20076,15 @@ Deno.serve(async (req) => {
             } else {
               await client.execute(`
                 INSERT INTO dados_dachser.t_dachser_demurrage_containers (
-                  numero, mbl, booking, cliente, armador, tipo_processo,
+                  numero, mbl, bl, booking, cliente, armador, tipo_processo,
                   porto_origem, porto_destino, navio, vessel_imo, voyage,
                   etd, eta, last_event, container_status, status_armador, cronos_status,
                   email_analista, email_cliente,
                   ft_started_at, ft_source, data_atracacao, data_gate_out, data_devolucao,
                   mariadb_id, last_sync_at, active
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 1)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 1)
               `, [
-                numero, mbl, null, row.consignee || null, row.shipping_line || null, row.tipo_processo || null,
+                numero, mbl, hbl, null, row.consignee || null, armadorNorm, tipoProc,
                 row.origem || null, row.destino || null, row.navio || null, row.vessel_imo || null, null,
                 etd, eta, row.last_event || null, row.container_status || null, null, cronosStatus,
                 row.email_analista || null, row.email_cliente || null,
@@ -20091,6 +20093,7 @@ Deno.serve(async (req) => {
               ]);
               syncResults.created++;
             }
+
 
           } catch (rowErr: any) {
             syncResults.errors++;
