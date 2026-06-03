@@ -2189,7 +2189,7 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
         
         for (const file of files) {
           // Parse fields specifically for this file from the response
-          const extractedFields = parseExtractedFields(responseText, file.name);
+          const extractedFields = parseExtractedFields(html, file.name);
           
           // Extract raw text for Excel files (useful for future reference)
           let rawText = '';
