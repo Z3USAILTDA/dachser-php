@@ -24,7 +24,7 @@ interface ChbComparisonGridProps {
 }
 
 // Parse HTML table to structured data for better rendering
-function parseHtmlToRows(html: string): { headers: string[]; rows: ComparisonRow[] } | null {
+export function parseHtmlToRows(html: string): { headers: string[]; rows: ComparisonRow[] } | null {
   try {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
