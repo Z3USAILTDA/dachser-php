@@ -14843,20 +14843,19 @@ Deno.serve(async (req) => {
                 t.container_status,
                 t.email_analista,
                 t.email_cliente,
-                c.booking,
-                c.etd,
-                c.eta as eta_confirmado,
-                c.voyage,
-                c.status_armador
+                NULL as booking,
+                NULL as etd,
+                NULL as eta_confirmado,
+                NULL as voyage,
+                NULL as status_armador
               FROM dados_dachser.t_sea_tracking_current t
-              LEFT JOIN dados_dachser.t_consulta_armador c 
-                ON t.mbl_id COLLATE utf8mb4_general_ci = c.mbl_id COLLATE utf8mb4_general_ci
               WHERE TRIM(UPPER(t.mbl_id)) = TRIM(UPPER(?))
                 AND t.container IS NOT NULL
                 AND t.container != ''
                 AND UPPER(t.container) != 'PENDENTE'
                 AND UPPER(t.container) != 'NAO_ENCONTRADO'
               ORDER BY t.id DESC`,
+
               [mbl]
             ), { label: 'demurrage_tracking_fallback', attempts: 3 });
 
@@ -19864,7 +19863,8 @@ Deno.serve(async (req) => {
           error_details: [] as string[],
         };
 
-        // Query source data from t_sea_tracking_current + t_consulta_armador
+        // Fonte única: t_sea_tracking_current (estado) + t_sea_tracking_history (eventos)
+        // Mesmas tabelas usadas pela tela /sea/tracking.
         const sourceRows = await client.query(`
           SELECT 
             t.id,
@@ -19882,15 +19882,8 @@ Deno.serve(async (req) => {
             t.container_status,
             t.email_analista,
             t.email_cliente,
-            t.active,
-            c.booking,
-            c.etd,
-            c.eta as eta_confirmado,
-            c.voyage,
-            c.status_armador
+            t.active
           FROM dados_dachser.t_sea_tracking_current t
-          LEFT JOIN dados_dachser.t_consulta_armador c 
-            ON t.mbl_id COLLATE utf8mb4_general_ci = c.mbl_id COLLATE utf8mb4_general_ci
           WHERE t.active = 1
             AND t.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
             AND t.container IS NOT NULL
@@ -19927,6 +19920,7 @@ Deno.serve(async (req) => {
           LIMIT 1000
         `);
 
+
         syncResults.total_records = sourceRows.length;
         console.log(`[DEMURRAGE-SYNC] Found ${sourceRows.length} source records`);
 
@@ -19952,12 +19946,16 @@ Deno.serve(async (req) => {
             if (!row.mbl_id || !row.container) continue;
             const numero = row.container.trim();
             const mbl = row.mbl_id.trim();
-            const cronosStatus = mapCronosStatus(row.last_event, row.status_armador, row.container_status);
-            const etd = fmtDate(row.etd);
-            const eta = row.eta_confirmado ? fmtDate(row.eta_confirmado) : fmtDate(row.eta);
+            const cronosStatus = mapCronosStatus(row.last_event, null, row.container_status);
+            const etd: string | null = null;
+            const eta = fmtDate(row.eta);
             const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-            // Fetch historical dates
+            // Datas históricas: extraídas exclusivamente de t_sea_tracking_history
+            // (mesma fonte usada pela tela /sea/tracking). Inclui padrões dos armadores
+            // suportados: HAPAG/CMA/MAERSK ("vessel arrival"), MSC ("Import"),
+            // ZIM/ONE ("vessel arrival to port of discharge"), HMM ("vessel arrival at pod"),
+            // COSCO ("ATA").
             let discharge_date: string | null = null;
             let gate_out_date: string | null = null;
             let return_date: string | null = null;
@@ -19965,15 +19963,28 @@ Deno.serve(async (req) => {
               const histRows = await client.query(`
                 SELECT event_type, MIN(event_datetime) as event_datetime FROM (
                   SELECT 'discharge' as event_type, event_datetime FROM dados_dachser.t_sea_tracking_history 
-                  WHERE container = ? AND (event_description LIKE '%Discharged%' OR event_description = 'Discharge' OR event_description LIKE '%Unloaded from Vessel%' OR event_description LIKE '%Import Discharged%' OR event_description LIKE '%Descarga%')
+                  WHERE container = ? AND (
+                    event_description LIKE '%Discharged%' OR event_description = 'Discharge'
+                    OR event_description LIKE '%Unloaded from Vessel%' OR event_description LIKE '%Import Discharged%'
+                    OR event_description LIKE '%Descarga%' OR event_description LIKE '%Descarregado%'
+                    OR event_description LIKE '%Vessel arrival%' OR event_description LIKE '%Vessel Arrival%'
+                    OR event_description LIKE '%Arrival at%' OR event_description = 'ATA' OR event_description LIKE 'Import%'
+                  )
                   UNION ALL
                   SELECT 'gate_out' as event_type, event_datetime FROM dados_dachser.t_sea_tracking_history 
                   WHERE container = ? AND (event_description LIKE '%Gate out%' OR event_description LIKE '%Gate-out%' OR event_description = 'Import to consignee' OR event_description LIKE '%Saída%' OR event_description LIKE '%Saida%')
                   UNION ALL
                   SELECT 'return' as event_type, event_datetime FROM dados_dachser.t_sea_tracking_history 
-                  WHERE container = ? AND (event_description LIKE '%Empty%returned%' OR event_description LIKE '%Gate in%' OR event_description LIKE '%Devolução%' OR event_description LIKE '%Devolvido%' OR event_description LIKE '%Empty to shipper%')
+                  WHERE container = ? AND (
+                    event_description LIKE '%Empty%returned%' OR event_description LIKE '%Empty container return%'
+                    OR event_description LIKE '%Empty container gate in%' OR event_description LIKE '%Empty in depot%'
+                    OR event_description LIKE '%Gate in empty%' OR event_description LIKE '%Empty return%'
+                    OR event_description LIKE '%Devolução%' OR event_description LIKE '%Devolvido%'
+                    OR event_description LIKE '%Empty to shipper%'
+                  )
                 ) AS events GROUP BY event_type
               `, [numero, numero, numero]);
+
               for (const hr of histRows) {
                 if (hr.event_datetime) {
                   const ds = fmtDate(hr.event_datetime);
@@ -19996,11 +20007,11 @@ Deno.serve(async (req) => {
             let dataDevolucao = existing?.[0]?.data_devolucao || null;
             let ftSource = existing?.[0]?.ft_source || null;
 
-            if (!dataAtracacao) dataAtracacao = discharge_date || (cronosStatus === 'ARRIVED' ? now.split(' ')[0] : null);
-            if (!ftStartedAt) {
-              if (discharge_date) { ftStartedAt = `${discharge_date} 00:00:00`; ftSource = 'HISTORICAL'; }
-              else if (cronosStatus === 'ARRIVED') { ftStartedAt = now; ftSource = 'SYNC'; }
-              else if (eta) { ftStartedAt = `${eta} 00:00:00`; ftSource = 'ETA'; }
+            // ATA é estritamente o evento real do histórico. Nunca cai em ETA (memory: resolveAta).
+            if (!dataAtracacao) dataAtracacao = discharge_date;
+            if (!ftStartedAt && discharge_date) {
+              ftStartedAt = `${discharge_date} 00:00:00`;
+              ftSource = 'HISTORICAL';
             }
             if (!dataGateOut) dataGateOut = gate_out_date || (cronosStatus === 'GATE_OUT' ? now.split(' ')[0] : null);
             if (!dataDevolucao) dataDevolucao = return_date || (cronosStatus === 'RETURNED' ? now.split(' ')[0] : null);
@@ -20020,9 +20031,9 @@ Deno.serve(async (req) => {
                   mariadb_id = ?, last_sync_at = NOW(), updated_at = NOW()
                 WHERE id = ?
               `, [
-                row.booking || null, row.consignee || null, row.shipping_line || null, row.tipo_processo || null,
-                row.origem || null, row.destino || null, row.navio || null, row.vessel_imo || null, row.voyage || null,
-                etd, eta, row.last_event || null, row.container_status || null, row.status_armador || null, cronosStatus,
+                null, row.consignee || null, row.shipping_line || null, row.tipo_processo || null,
+                row.origem || null, row.destino || null, row.navio || null, row.vessel_imo || null, null,
+                etd, eta, row.last_event || null, row.container_status || null, null, cronosStatus,
                 row.email_analista || null, row.email_cliente || null,
                 ftSource, ftStartedAt, ftStartedAt,
                 ftSource,
@@ -20043,15 +20054,16 @@ Deno.serve(async (req) => {
                   mariadb_id, last_sync_at, active
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 1)
               `, [
-                numero, mbl, row.booking || null, row.consignee || null, row.shipping_line || null, row.tipo_processo || null,
-                row.origem || null, row.destino || null, row.navio || null, row.vessel_imo || null, row.voyage || null,
-                etd, eta, row.last_event || null, row.container_status || null, row.status_armador || null, cronosStatus,
+                numero, mbl, null, row.consignee || null, row.shipping_line || null, row.tipo_processo || null,
+                row.origem || null, row.destino || null, row.navio || null, row.vessel_imo || null, null,
+                etd, eta, row.last_event || null, row.container_status || null, null, cronosStatus,
                 row.email_analista || null, row.email_cliente || null,
                 ftStartedAt, ftSource, dataAtracacao, dataGateOut, dataDevolucao,
                 row.id
               ]);
               syncResults.created++;
             }
+
           } catch (rowErr: any) {
             syncResults.errors++;
             syncResults.error_details.push(`${row.container}: ${rowErr.message}`);
