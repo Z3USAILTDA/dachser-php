@@ -14843,20 +14843,19 @@ Deno.serve(async (req) => {
                 t.container_status,
                 t.email_analista,
                 t.email_cliente,
-                c.booking,
-                c.etd,
-                c.eta as eta_confirmado,
-                c.voyage,
-                c.status_armador
+                NULL as booking,
+                NULL as etd,
+                NULL as eta_confirmado,
+                NULL as voyage,
+                NULL as status_armador
               FROM dados_dachser.t_sea_tracking_current t
-              LEFT JOIN dados_dachser.t_consulta_armador c 
-                ON t.mbl_id COLLATE utf8mb4_general_ci = c.mbl_id COLLATE utf8mb4_general_ci
               WHERE TRIM(UPPER(t.mbl_id)) = TRIM(UPPER(?))
                 AND t.container IS NOT NULL
                 AND t.container != ''
                 AND UPPER(t.container) != 'PENDENTE'
                 AND UPPER(t.container) != 'NAO_ENCONTRADO'
               ORDER BY t.id DESC`,
+
               [mbl]
             ), { label: 'demurrage_tracking_fallback', attempts: 3 });
 
