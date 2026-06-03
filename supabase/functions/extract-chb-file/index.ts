@@ -169,27 +169,37 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { itemId, fileId, fileUrl, filename, docRole, etapa } = body || {};
+    const { itemId, fileId, fileUrl, fileBase64, mimeType, filename, docRole, etapa } = body || {};
 
-    if (!itemId || !fileId || !fileUrl || !filename || !etapa) {
+    if (!itemId || !fileId || !filename || !etapa || (!fileUrl && !fileBase64)) {
       return new Response(JSON.stringify({
         success: false,
-        error: 'itemId, fileId, fileUrl, filename, etapa são obrigatórios',
+        error: 'itemId, fileId, filename, etapa e (fileUrl OU fileBase64) são obrigatórios',
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log(`[extract-chb-file] item=${itemId} file=${fileId} name=${filename} etapa=${etapa}`);
+    console.log(`[extract-chb-file] item=${itemId} file=${fileId} name=${filename} etapa=${etapa} via=${fileBase64 ? 'base64' : 'url'}`);
 
-    // 1) Download file
-    const fileResp = await fetch(fileUrl);
-    if (!fileResp.ok) {
-      throw new Error(`Failed to download file (${fileResp.status}): ${fileUrl}`);
+    // 1) Obtain bytes (either base64 direto ou download)
+    let base64: string;
+    let sha: string;
+    let mime: string;
+    if (fileBase64) {
+      base64 = fileBase64;
+      const bin = Uint8Array.from(atob(base64.slice(0, Math.min(base64.length, 4_000_000))), c => c.charCodeAt(0));
+      sha = await sha256Hex(bin.buffer);
+      mime = detectMime(filename, mimeType);
+    } else {
+      const fileResp = await fetch(fileUrl);
+      if (!fileResp.ok) {
+        throw new Error(`Failed to download file (${fileResp.status}): ${fileUrl}`);
+      }
+      const buf = await fileResp.arrayBuffer();
+      sha = await sha256Hex(buf);
+      base64 = arrayBufferToBase64(buf);
+      mime = detectMime(filename, fileResp.headers.get('content-type') || undefined);
+      console.log(`[extract-chb-file] downloaded ${buf.byteLength} bytes, sha=${sha.slice(0, 12)}…, mime=${mime}`);
     }
-    const buf = await fileResp.arrayBuffer();
-    const sha = await sha256Hex(buf);
-    const base64 = arrayBufferToBase64(buf);
-    const mime = detectMime(filename, fileResp.headers.get('content-type') || undefined);
-    console.log(`[extract-chb-file] downloaded ${buf.byteLength} bytes, sha=${sha.slice(0, 12)}…, mime=${mime}`);
 
     // 2) LLM extraction (Gemini Flash → Pro fallback)
     let llm: LlmExtractionResult | null = null;
