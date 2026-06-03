@@ -2244,7 +2244,7 @@ async function processAnalysisInBackground(
   files: FileForAnalysis[],
   clientConfig?: ClientConfig,
   itemId?: number,
-  cachedData?: Record<string, { fields: Record<string, any>; rawText?: string }>
+  _cachedDataUnused?: unknown
 ): Promise<void> {
   const supabase = getSupabaseClient();
   
@@ -2276,53 +2276,55 @@ async function processAnalysisInBackground(
     // This avoids racing with file registration and lets us persist the actual raw OCR text.
 
     // =========================================================================
-    // NOVO FLUXO: extrair e GRAVAR todos os arquivos em t_chb_file_extractions
-    // ANTES de chamar o LLM, e depois RELER o raw_ocr_text da tabela para
-    // alimentar a análise (fonte única de verdade).
+    // FLUXO ÚNICO: extrair → gravar em t_chb_file_extractions → reler raw_ocr_text
+    // → alimentar análise SOMENTE com o conteúdo persistido (fonte única de verdade).
+    // Sem fallback para extração em memória — se a gravação ou releitura falhar,
+    // a análise é marcada como erro.
     // =========================================================================
+    if (!itemId) {
+      console.error('[BG][pre-analysis] itemId ausente — fluxo persistido obrigatório');
+      await callMariaDBProxy('update_chb_run', {
+        runId: requestId,
+        status: 'error',
+        resultText: 'itemId obrigatório para o fluxo de extração persistida.'
+      });
+      return;
+    }
+
     let dbOcrByFilename: Record<string, string> = {};
-    if (itemId) {
-      try {
-        // NOTE: pass {} — persistRawOcrForFiles has its own fallback (extractRawTextForPersistence) that re-extracts when missing.
-        // We can't reference `extractedTexts` here (TDZ): it's only declared after the LLM call below.
-        const persistResults = await persistRawOcrForFiles(itemId, stepId, files, {});
-        console.log(`[BG][pre-analysis] Persisted raw OCR for ${persistResults.length} file(s)`);
+    try {
+      const persistResults = await persistRawOcrForFiles(itemId, stepId, files, {});
+      console.log(`[BG][pre-analysis] Persisted raw OCR for ${persistResults.length} file(s)`);
 
-        const dbRowsResp = await callMariaDBProxy('get_chb_extractions', { itemId, etapa: String(stepId) });
-        const dbRows: Array<{ filename: string; raw_ocr_text: string | null }> = dbRowsResp?.data || [];
-        for (const row of dbRows) {
-          if (row.filename && row.raw_ocr_text) {
-            dbOcrByFilename[row.filename] = row.raw_ocr_text;
-          }
+      const dbRowsResp = await callMariaDBProxy('get_chb_extractions', { itemId, etapa: String(stepId) });
+      const dbRows: Array<{ filename: string; raw_ocr_text: string | null }> = dbRowsResp?.data || [];
+      for (const row of dbRows) {
+        if (row.filename && row.raw_ocr_text) {
+          dbOcrByFilename[row.filename] = row.raw_ocr_text;
         }
-        console.log(`[BG][pre-analysis] Read back ${Object.keys(dbOcrByFilename).length} raw_ocr_text rows from t_chb_file_extractions`);
-      } catch (e) {
-        console.error('[BG][pre-analysis] Pre-extraction/read failed, will fall back to in-memory extractedTexts:', (e as Error).message);
       }
+      console.log(`[BG][pre-analysis] Read back ${Object.keys(dbOcrByFilename).length} raw_ocr_text rows from t_chb_file_extractions`);
+    } catch (e) {
+      console.error('[BG][pre-analysis] Pre-extraction/read failed — aborting analysis:', (e as Error).message);
+      await callMariaDBProxy('update_chb_run', {
+        runId: requestId,
+        status: 'error',
+        resultText: `Falha ao gravar/reler OCR persistido: ${(e as Error).message}`
+      });
+      return;
     }
 
-    // Get cached data from DB if itemId provided and no cachedData sent
-    let existingCache: Record<string, { fields: Record<string, any>; rawText?: string }> = cachedData || {};
-    if (itemId && !cachedData) {
-      console.log(`[BG] Fetching cached data for item ${itemId}...`);
-      existingCache = await getCachedExtractedData(itemId);
-      console.log(`[BG] Found ${Object.keys(existingCache).length} cached documents`);
+    if (Object.keys(dbOcrByFilename).length === 0) {
+      console.error('[BG][pre-analysis] Nenhum raw_ocr_text relido — abortando análise');
+      await callMariaDBProxy('update_chb_run', {
+        runId: requestId,
+        status: 'error',
+        resultText: 'Nenhum OCR persistido pôde ser relido de t_chb_file_extractions.'
+      });
+      return;
     }
 
 
-    
-    // Build cached context
-    const cachedFiles: { name: string; fields: Record<string, any>; rawText?: string }[] = [];
-    for (const file of files) {
-      const cached = existingCache[file.name];
-      if (cached && cached.rawText && Object.keys(cached.fields).length > 0) {
-        cachedFiles.push({
-          name: file.name,
-          fields: cached.fields,
-          rawText: cached.rawText,
-        });
-      }
-    }
     
     // Fetch user corrections if itemId provided
     let userCorrections: { filename: string; field_name: string; corrected_value: string; location_reference?: string; location_context?: string; location_confidence?: string }[] = [];
@@ -2350,51 +2352,8 @@ async function processAnalysisInBackground(
     
     let cachedContext = '';
 
-    // =========================================================================
-    // GROUND TRUTH — extrações persistidas em t_chb_file_extractions
-    // PRIORIDADE MÁXIMA: nunca substituir esses valores; nunca inventar "ND"
-    // =========================================================================
-    if (perFileExtractions.length > 0) {
-      const okExtractions = perFileExtractions.filter(e => e.structured && e.status !== 'ERRO');
-      if (okExtractions.length > 0) {
-        cachedContext += `
-═══════════════════════════════════════════════════════════════════════════════
-🛡️ GROUND TRUTH — VALORES EXTRAÍDOS E PERSISTIDOS POR ARQUIVO
-═══════════════════════════════════════════════════════════════════════════════
 
-Os valores abaixo foram extraídos individualmente de CADA arquivo e gravados em
-banco (dados_dachser.t_chb_file_extractions). VOCÊ DEVE usar EXATAMENTE estes
-valores na grade comparativa. NUNCA invente "ND" — se um campo está null abaixo,
-deixe a célula vazia (—) e marque a linha como Alerta 🟨 se outras colunas
-tiverem valor diferente.
 
-`;
-        for (const ex of okExtractions) {
-          cachedContext += `📄 ${ex.filename}${ex.docRole ? ` [${ex.docRole}]` : ''} (extractor=${ex.model || 'n/a'}, status=${ex.status})\n`;
-          const sf = ex.structured || {};
-          for (const [k, v] of Object.entries(sf)) {
-            if (v === null || v === undefined) {
-              cachedContext += `   • ${k}: null (campo ausente no documento)\n`;
-            } else if (typeof v === 'object') {
-              cachedContext += `   • ${k}: ${JSON.stringify(v)}\n`;
-            } else {
-              cachedContext += `   • ${k}: ${v}\n`;
-            }
-          }
-          cachedContext += '\n';
-        }
-        cachedContext += `🛡️ REGRAS DE GROUND TRUTH:
-1. Use EXATAMENTE os valores acima nas colunas correspondentes de cada arquivo.
-2. Se um campo estiver "null" → escreva "—" na célula (NÃO use "ND" ou placeholder).
-3. Se outro arquivo tiver valor para o mesmo campo (e este estiver null) → marque a linha como Alerta 🟨.
-4. Para valor_total_frete: se kind="parcial", documente isso na coluna Observações.
-5. NUNCA contradizer o ground truth. Em caso de dúvida, repita o valor acima.
-
-═══════════════════════════════════════════════════════════════════════════════
-
-`;
-      }
-    }
 
     // =========================================================================
     // RAW OCR PERSISTIDO — fonte única de verdade vinda de t_chb_file_extractions
@@ -2548,47 +2507,8 @@ O usuário CORRIGIU os seguintes valores. VOCÊ DEVE USAR ESSES VALORES CORRIGID
 `;
     }
     
-    // Add cached data context
-    if (cachedFiles.length > 0) {
-      // Build list of fixed/validated fields
-      const fixedFieldsList: string[] = [];
-      for (const cached of cachedFiles) {
-        for (const [key, value] of Object.entries(cached.fields)) {
-          if (value && value !== 'ND') {
-            fixedFieldsList.push(`${cached.name} → ${key}: ${value}`);
-          }
-        }
-      }
-      
-      cachedContext += `
-═══════════════════════════════════════════════════════════════════════════════
-⚠️ VALORES JÁ EXTRAÍDOS E VALIDADOS — REGRA DE PERSISTÊNCIA
-═══════════════════════════════════════════════════════════════════════════════
+    
 
-OS SEGUINTES CAMPOS JÁ FORAM EXTRAÍDOS E VALIDADOS EM ANÁLISE ANTERIOR.
-VOCÊ DEVE MANTER ESSES VALORES NA TABELA — NÃO SUBSTITUIR POR "ND"!
-
-CAMPOS FIXADOS (NÃO ALTERAR):
-${fixedFieldsList.map(f => `  ✓ ${f}`).join('\n')}
-
-REGRA CRÍTICA DE PERSISTÊNCIA:
-1. Se um campo foi extraído e validado anteriormente → MANTER O VALOR
-2. NUNCA substituir um campo fixado por "ND" em uma re-análise
-3. Se você encontrar valor diferente no documento atual → COMPARAR com o valor fixado
-4. Divergência entre valor fixado e novo valor → 🟨 ou 🔴 conforme gravidade
-5. Campos fixados: Peso Bruto, Peso Líquido, Valor Mercadoria, Valor Total Frete, NCM, Incoterm
-
-═══════════════════════════════════════════════════════════════════════════════
-
-`;
-      for (const cached of cachedFiles) {
-        cachedContext += `[${cached.name}] Campos extraídos anteriormente:\n`;
-        for (const [key, value] of Object.entries(cached.fields)) {
-          cachedContext += `  • ${key}: ${value}\n`;
-        }
-        cachedContext += '\n';
-      }
-    }
     
     const fileNames = files.map((f: any) => f.name);
     const basePrompt = getPromptByStep(stepId, fileNames, clientConfig);
@@ -2635,7 +2555,7 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
     }
 
     const parsedResult = extractHtmlAndTags(responseText, stepId);
-    const html = applyAwbPortugueseTotalFreightCorrection(parsedResult.html, extractedTexts);
+    const html = applyAwbPortugueseTotalFreightCorrection(parsedResult.html, dbOcrByFilename);
     const correctedResult = extractHtmlAndTags(`<<BEGIN_HTML>>${html}<<END_HTML>>`, stepId);
     const { tags, summary, detailedSummary, parecer } = correctedResult;
     const { modal, cliente } = parsedResult;
@@ -2674,44 +2594,6 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
 
     console.log(`[BG] Request ${requestId} completed successfully`);
 
-    // Save extracted data to cache for future steps
-    // IMPROVED: Extract fields from each file column in the HTML table
-    if (itemId) {
-      try {
-        console.log(`[BG Cache] Saving extracted data for ${files.length} files to itemId ${itemId}...`);
-        
-        for (const file of files) {
-          // Parse fields specifically for this file from the response
-          const extractedFields = parseExtractedFields(html, file.name);
-          
-          // Extract raw text for Excel files (useful for future reference)
-          let rawText = '';
-          if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || 
-              file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-            try {
-              rawText = await extractExcelText(file.content, file.name);
-            } catch (e) {
-              console.error(`[BG Cache] Error extracting excel text for ${file.name}:`, e);
-            }
-          }
-          
-          // Only save if we extracted meaningful fields
-          if (Object.keys(extractedFields).length > 0) {
-            await saveExtractedData(itemId, file.name, stepId.toString(), extractedFields, rawText);
-            console.log(`[BG Cache] Saved ${Object.keys(extractedFields).length} fields for ${file.name}`);
-          } else {
-            console.log(`[BG Cache] No fields extracted for ${file.name}, skipping save`);
-          }
-        }
-        
-        console.log(`[BG Cache] Finished saving extracted data for item ${itemId}`);
-      } catch (e) {
-        console.error('[BG Cache] Error saving extracted data:', e);
-        // Don't fail the whole analysis if caching fails
-      }
-    } else {
-      console.log('[BG Cache] No itemId provided, skipping cache save');
-    }
 
   } catch (error) {
     console.error(`[BG] Error processing analysis ${requestId}:`, error);
@@ -2793,7 +2675,7 @@ serve(async (req) => {
     // =========================================================================
     // MODE: SUBMIT - Start new analysis (async)
     // =========================================================================
-    const { stepId, files, clientConfig, itemId, cachedData } = body;
+    const { stepId, files, clientConfig, itemId } = body;
 
     if (!stepId || !files || !Array.isArray(files) || files.length === 0) {
       return new Response(
@@ -2851,8 +2733,9 @@ serve(async (req) => {
     // Start background processing
     // deno-lint-ignore no-explicit-any
     (globalThis as any).EdgeRuntime?.waitUntil?.(
-      processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId, cachedData)
-    ) || processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId, cachedData);
+      processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId)
+    ) || processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId);
+
 
     // Return request ID immediately
     return new Response(
