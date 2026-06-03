@@ -892,12 +892,14 @@ const EsteiraIndex = () => {
       return aguardandoComprovante || emExcecao;
     });
     const recentVouchers = allVouchers.filter(v => v.fonteDados !== "RM_PENDENTE" && v.updatedAt >= yesterday);
+    const rascunhos = allVouchers.filter(v => v.etapaAtual === "RASCUNHO");
 
     setMetrics({
       ativos: ativos.length,
       slaAtencao: slaAtencao.length,
       pendenciasFinanceiras: pendenciasFinanceiras.length,
-      eventos24h: recentVouchers.length
+      eventos24h: recentVouchers.length,
+      rascunhos: rascunhos.length
     });
   };
 
