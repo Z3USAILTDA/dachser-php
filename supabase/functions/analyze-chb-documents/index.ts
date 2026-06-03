@@ -1243,7 +1243,7 @@ function validateInputSize(files: FileForAnalysis[]): { isValid: boolean; estima
 }
 
 // Call Anthropic Claude API with vision capabilities
-async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promise<ApiResponse> {
+async function callAnthropicAPI(prompt: string, files: FileForAnalysis[], persistedOcr: Record<string, string> = {}): Promise<ApiResponse> {
   const anthropicApiKey = Deno.env.get('CHB_ANTHROPIC_API_KEY');
   
   if (!anthropicApiKey) {
