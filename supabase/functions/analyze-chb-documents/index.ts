@@ -1477,25 +1477,44 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[], persisted
       }
     } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') ||
                file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-      try {
-        const excelText = await extractExcelText(file.content, file.name);
-        contentParts.push({ type: 'text', text: excelText });
-      } catch (e) {
-        console.error(`Error processing Excel ${file.name}:`, e);
-        warnings.push({
-          fileName: file.name,
-          error: 'Erro ao processar arquivo Excel',
-          type: 'conversion',
-          suggestion: 'Verifique se o arquivo não está corrompido.',
+      const persisted = persistedOcr[file.name];
+      if (persisted && persisted.trim().length >= 10) {
+        contentParts.push({
+          type: 'text',
+          text: `[Arquivo Excel: ${file.name}] — conteúdo já fornecido no bloco "📚 OCR BRUTO PERSISTIDO".`,
         });
-        contentParts.push({ type: 'text', text: `[Arquivo Excel: ${file.name}] - Não foi possível extrair conteúdo` });
+        console.log(`[Gemini Fallback] Excel ${file.name}: usando OCR persistido (stub no payload, ${persisted.length} chars no bloco persistido)`);
+      } else {
+        console.warn(`[Gemini Fallback] Excel ${file.name}: persistência ausente — extração ao vivo`);
+        try {
+          const excelText = await extractExcelText(file.content, file.name);
+          contentParts.push({ type: 'text', text: excelText });
+        } catch (e) {
+          console.error(`Error processing Excel ${file.name}:`, e);
+          warnings.push({
+            fileName: file.name,
+            error: 'Erro ao processar arquivo Excel',
+            type: 'conversion',
+            suggestion: 'Verifique se o arquivo não está corrompido.',
+          });
+          contentParts.push({ type: 'text', text: `[Arquivo Excel: ${file.name}] - Não foi possível extrair conteúdo` });
+        }
       }
     } else {
-      try {
-        const textContent = atob(file.content);
-        contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}]\n${textContent}` });
-      } catch {
-        contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}] - Conteúdo binário não legível` });
+      const persisted = persistedOcr[file.name];
+      if (persisted && persisted.trim().length >= 10) {
+        contentParts.push({
+          type: 'text',
+          text: `[Arquivo: ${file.name}] — conteúdo já fornecido no bloco "📚 OCR BRUTO PERSISTIDO".`,
+        });
+        console.log(`[Gemini Fallback] ${file.name}: usando OCR persistido (stub no payload)`);
+      } else {
+        try {
+          const textContent = atob(file.content);
+          contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}]\n${textContent}` });
+        } catch {
+          contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}] - Conteúdo binário não legível` });
+        }
       }
     }
   }
