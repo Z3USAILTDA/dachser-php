@@ -2143,8 +2143,16 @@ async function processAnalysisInBackground(
         const extractionPromises = files.map(async (f: any) => {
           const dbFile = byName.get(f.name);
           if (!dbFile) {
-            console.warn(`[BG][extract] No DB file match for ${f.name} — skipping persistence`);
-            return null;
+            console.error(`[BG][extract] No DB file match for "${f.name}". DB filenames: ${Array.from(byName.keys()).join(' | ')}`);
+            return {
+              filename: f.name,
+              docRole: null,
+              structured: null,
+              evidence: null,
+              model: null,
+              status: 'ERRO',
+              extractionId: null,
+            };
           }
           try {
             const resp = await fetch(`${supabaseUrl}/functions/v1/extract-chb-file`, {
