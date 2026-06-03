@@ -41,6 +41,7 @@ interface DashboardMetrics {
   slaAtencao: number;
   pendenciasFinanceiras: number;
   eventos24h: number;
+  rascunhos: number;
 }
 type DrillDownFilter = "all" | "ativos" | "sla" | "pendencias" | "atividade";
 const CHART_COLORS = {
@@ -596,7 +597,8 @@ const EsteiraIndex = () => {
     ativos: 0,
     slaAtencao: 0,
     pendenciasFinanceiras: 0,
-    eventos24h: 0
+    eventos24h: 0,
+    rascunhos: 0
   });
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
@@ -890,12 +892,14 @@ const EsteiraIndex = () => {
       return aguardandoComprovante || emExcecao;
     });
     const recentVouchers = allVouchers.filter(v => v.fonteDados !== "RM_PENDENTE" && v.updatedAt >= yesterday);
+    const rascunhos = allVouchers.filter(v => v.etapaAtual === "RASCUNHO");
 
     setMetrics({
       ativos: ativos.length,
       slaAtencao: slaAtencao.length,
       pendenciasFinanceiras: pendenciasFinanceiras.length,
-      eventos24h: recentVouchers.length
+      eventos24h: recentVouchers.length,
+      rascunhos: rascunhos.length
     });
   };
 
@@ -1135,11 +1139,13 @@ const EsteiraIndex = () => {
 
       // Eventos 24h
       const recentVouchers = allVouchers.filter(v => v.fonteDados !== "RM_PENDENTE" && v.updatedAt >= yesterday);
+      const rascunhos = allVouchers.filter(v => v.etapaAtual === "RASCUNHO");
       setMetrics({
         ativos: ativos.length,
         slaAtencao: slaAtencao.length,
         pendenciasFinanceiras: pendenciasFinanceiras.length,
-        eventos24h: recentVouchers.length
+        eventos24h: recentVouchers.length,
+        rascunhos: rascunhos.length
       });
     } catch (error: any) {
       toast({
@@ -1271,6 +1277,7 @@ const EsteiraIndex = () => {
       etapasPermitidas.add("OPERACAO");
       etapasPermitidas.add("A_PROCESSAR");
       etapasPermitidas.add("PRE_LANCAMENTO");
+      etapasPermitidas.add("RASCUNHO" as EtapaAtual);
     }
     if (isFiscal) {
       etapasPermitidas.add("FISCAL");
@@ -1999,7 +2006,7 @@ const EsteiraIndex = () => {
       <main className="relative z-10 max-w-[95%] mx-auto px-2 pb-8">
         <div className="space-y-6">
           {/* Metric Cards */}
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className={cn("grid gap-4 md:grid-cols-2", (isAdmin || isGestor || isOperacao) ? "xl:grid-cols-5" : "xl:grid-cols-4")}>
             {loading ? <>
                 <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
                 <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
@@ -2010,8 +2017,12 @@ const EsteiraIndex = () => {
                 <MetricCard title="SLA" value={metrics.slaAtencao} icon={AlertTriangle} variant={metrics.slaAtencao > 0 ? "critical" : "warning"} subtitle="Vencendo/Vencidos" onClick={() => setDrillDownFilter(drillDownFilter === "sla" ? "all" : "sla")} active={drillDownFilter === "sla"} />
                 <MetricCard title="Pendências" value={metrics.pendenciasFinanceiras} icon={FileWarning} variant={metrics.pendenciasFinanceiras > 0 ? "warning" : "info"} subtitle="Accrual/Comprovante" onClick={() => setDrillDownFilter(drillDownFilter === "pendencias" ? "all" : "pendencias")} active={drillDownFilter === "pendencias"} />
                 <MetricCard title="Atividade 24h" value={metrics.eventos24h} icon={Clock} variant="info" subtitle="Últimas 24 horas" onClick={() => setDrillDownFilter(drillDownFilter === "atividade" ? "all" : "atividade")} active={drillDownFilter === "atividade"} />
+                {(isAdmin || isGestor || isOperacao) && (
+                  <MetricCard title="Rascunhos" value={metrics.rascunhos} icon={FileSearch} variant="info" subtitle="Aguardando envio" onClick={() => { setDrillDownFilter("all"); setFilters(prev => ({ ...prev, etapa: filters.etapa === "RASCUNHO" ? "all" : "RASCUNHO" })); }} active={filters.etapa === "RASCUNHO"} />
+                )}
               </>}
           </div>
+
 
           {/* Active filter indicator */}
           {drillDownFilter !== "all" && <span className="px-3 py-1 rounded-full bg-[rgba(255,200,0,0.15)] text-[#ffc800] border border-[#ffc800]/40 text-[0.75rem] font-mono cursor-pointer hover:bg-[rgba(255,200,0,0.25)] transition inline-flex items-center gap-2" onClick={() => setDrillDownFilter("all")}>

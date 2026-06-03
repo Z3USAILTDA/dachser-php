@@ -1,40 +1,44 @@
-## Problema
+## Objetivo
 
-No AWB/HAWB em **português** (estrutura "Totais na moeda de origem"), o LLM está capturando a linha **"Por Peso"** (EUR 25,00 — frete parcial) em vez da linha **"Total"** do rodapé (EUR 220,00 — frete + impostos + outros serviços).
+Garantir que vouchers em etapa `RASCUNHO` (como o 20261567156) sejam fáceis de encontrar na esteira, sem depender de mudar manualmente o filtro de etapa.
 
-A causa é que a Seção 14B do prompt em `supabase/functions/analyze-chb-documents/index.ts` só ensina os rótulos em inglês (Weight Charge, Total Collect, Total Prepaid). Quando o AWB é emitido em português, o LLM não reconhece a linha "Total" como equivalente a "Total Collect" e acaba usando "Por Peso" como fallback.
+## Mudanças (cirúrgicas, só frontend)
 
-## Mudança (cirúrgica, só prompt)
+**Arquivo único:** `src/pages/esteira/EsteiraIndex.tsx`
 
-Arquivo: `supabase/functions/analyze-chb-documents/index.ts`, Seção 14B (linhas ~869-898).
+### A) Incluir RASCUNHO nas etapas permitidas do role OPERACAO
 
-Adicionar mapeamento explícito da estrutura de charges em **português** (AWB BR), reforçando que apenas a linha **"Total"** do rodapé da coluna Prepaid/Collect deve ser usada:
+Em `roleFilteredVouchers` (~linha 1270), adicionar `RASCUNHO` ao `etapasPermitidas` quando `isOperacao`:
 
-```
-ESTRUTURA EM PORTUGUÊS (AWB/HAWB BR — "Totais na moeda de origem"):
-  | Linha                              | Prepaid | Collect |
-  | Por Peso                           |    -    |  25,00  | ← PARCIAL, NÃO USAR
-  | Por Valor                          |    -    |    -    | ← PARCIAL, NÃO USAR
-  | Impostos                           |    -    |    -    | ← PARCIAL, NÃO USAR
-  | Outros Serviços (Agente de Carga)  |    -    |    -    | ← PARCIAL, NÃO USAR
-  | Outros Serviços (Transportador)    |    -    |    -    | ← PARCIAL, NÃO USAR
-  | Total                              |    -    | 220,00  | ✅ USAR ESTE VALOR
-
-MAPEAMENTO PT → EN:
-  • "Por Peso"                          ≡ Weight Charge        (parcial)
-  • "Por Valor"                         ≡ Valuation Charge     (parcial)
-  • "Impostos"                          ≡ Tax                  (parcial)
-  • "Outros Serviços (Agente de Carga)" ≡ Other Charges Agent  (parcial)
-  • "Outros Serviços (Transportador)"   ≡ Other Charges Carrier(parcial)
-  • "Total" (rodapé)                    ≡ Total Prepaid / Total Collect ✅
+```ts
+if (isOperacao) {
+  etapasPermitidas.add("OPERACAO");
+  etapasPermitidas.add("A_PROCESSAR");
+  etapasPermitidas.add("PRE_LANCAMENTO");
+  etapasPermitidas.add("RASCUNHO"); // novo
+}
 ```
 
-Adicionar à regra crítica:
-- ❌ ERRADO: pegar "Por Peso" / "Por Valor" / "Impostos" como Valor Total Frete
-- ✅ CORRETO: sempre a linha **"Total"** do rodapé da coluna Prepaid ou Collect (consolidado)
+Efeito: usuários OPERACAO continuam vendo OPERACAO/A_PROCESSAR no filtro "Todos" e, se selecionarem manualmente "Rascunho", também enxergam. FISCAL/SUPERVISOR/FINANCEIRO continuam sem ver rascunhos (rascunho é responsabilidade da Operação).
+
+### B) Card/atalho "Rascunhos" no topo da esteira
+
+Adicionar um card-resumo na faixa de métricas superior (junto com "Pendentes - Operação", "Vencidos" etc.) mostrando a contagem de vouchers em `etapaAtual === "RASCUNHO"`.
+
+- **Visibilidade:** apenas para `isAdmin`, `isGestor` ou `isOperacao` (quem cria/edita rascunhos).
+- **Ação ao clicar:** seta `filters.etapa = "RASCUNHO"` e rola até a tabela (mesmo padrão dos cards existentes).
+- **Estilo:** reaproveitar o componente de MetricCard já usado, variante neutra/cinza (alinhado ao badge cinza atual `bg-gray-500/10 text-gray-400` em `VoucherTable.tsx`).
+- **Contagem:** derivada de `allVouchers.filter(v => v.etapaAtual === "RASCUNHO").length` no mesmo `useMemo` das demais métricas (~linha 348).
 
 ## Fora de escopo
-- UI, schema, pós-processamento, regex fallback, regras de validação Incoterm × Prepaid/Collect.
+
+- Backend (`get_vouchers_esteira` já retorna RASCUNHO).
+- Mudar a opção "Rascunho" do dropdown de filtro (já existe).
+- Auto-selecionar "Rascunho" como etapa padrão para qualquer role.
+- Permissões de edição/aprovação de rascunho.
 
 ## Validação
-Após editar, rodar nova conferência no processo atual (AWB com "Por Peso = 25" e "Total = 220") e confirmar que `Valor Total Frete` agora retorna **EUR 220,00**.
+
+1. Logar como usuário OPERACAO → o card "Rascunhos" aparece com a contagem; clicar nele filtra e exibe o 20261567156.
+2. Filtro em "Todos" como OPERACAO → 20261567156 listado junto com os demais.
+3. Logar como FISCAL/SUPERVISOR/FINANCEIRO → card não aparece e rascunhos seguem ocultos no auto-filtro de etapa (comportamento atual preservado).
