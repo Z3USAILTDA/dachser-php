@@ -2570,7 +2570,7 @@ O usuário CORRIGIU os seguintes valores. VOCÊ DEVE USAR ESSES VALORES CORRIGID
       
       try {
         console.log('[BG] Attempting Gemini API fallback...');
-        const result = await callGeminiAPI(prompt, files);
+        const result = await callGeminiAPI(prompt, files, dbOcrByFilename);
         responseText = result.text;
         fileWarnings = result.warnings;
         extractedTexts = result.extractedTexts;
