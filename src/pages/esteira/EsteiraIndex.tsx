@@ -597,7 +597,8 @@ const EsteiraIndex = () => {
     ativos: 0,
     slaAtencao: 0,
     pendenciasFinanceiras: 0,
-    eventos24h: 0
+    eventos24h: 0,
+    rascunhos: 0
   });
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
