@@ -682,14 +682,22 @@ REGRAS DE CONTEÚDO DA TABELA
    
     B) VALOR TOTAL FRETE (campo unificado — NÃO criar "Frete" isolado):
        - Incluir frete + taxas acessórias em uma ÚNICA linha
-       - ONDE PROCURAR:
-         → CCT/BL/AWB: Linha "Total" na coluna "Prepaid" ou "Collect"
+       - ONDE PROCURAR (regra de ouro — SEMPRE o valor consolidado no RODAPÉ da coluna):
+         → CCT/BL/AWB: SEMPRE a linha final rotulada "Total Prepaid" ou "Total Collect"
+           (rodapé da coluna), que já SOMA frete + Weight/Valuation Charge + Tax +
+           Total Other Charges Due Agent + Total Other Charges Due Carrier + packaging.
+         → ⛔ NUNCA usar a linha intermediária "Collect" / "Prepaid" / "Freight Charge" /
+           "Weight Charge" / "WT/VAL" / "Valuation Charge" sozinha — esses são PARCIAIS
+           (frete antes das taxas) e NÃO representam o valor total cobrado.
          → Packing List: geralmente não tem (ND é aceitável)
-       - Sinônimos VÁLIDOS para frete: "Total Prepaid", "Total Collect", "Total Charges",
-                    "Freight", "Frete", "Freight Charges", "Ocean Freight", "Air Freight"
+       - Sinônimos VÁLIDOS para frete (em ordem de PRIORIDADE):
+         1º (preferencial): "Total Prepaid", "Total Collect"
+         2º (fallback APENAS se não houver "Total ..."): "Total Charges", "Freight",
+            "Frete", "Freight Charges", "Ocean Freight", "Air Freight"
        - Linha da tabela: "Valor Total Frete"
        - ⚠️ Campo "Frete" isolado NÃO deve existir na tabela — usar SEMPRE "Valor Total Frete"
        - ATENÇÃO: Frete pode ser "COLLECT" ou "PREPAID" — indicar na observação
+
        
        🔴🔴🔴 REGRAS ANTI-CONFUSÃO DE FRETE (PRIORIDADE MÁXIMA):
        
@@ -867,15 +875,28 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
    
    B) EXTRAÇÃO DE "TOTAL CHARGES":
       ⚠️ NÃO existe campo literal "Total Charges" no AWB padrão IATA!
-      ONDE PROCURAR:
-      → Linha "Total" na coluna "Prepaid" → valor do frete pré-pago
-      → Linha "Total" na coluna "Collect" → valor a cobrar no destino
-      → "Total Other Charges Due Agent/Carrier" → taxas adicionais
-      
+      ONDE PROCURAR (SEMPRE o RODAPÉ da coluna — valor consolidado):
+      → Linha final "Total Prepaid" → valor TOTAL pré-pago (frete + taxas + outros)
+      → Linha final "Total Collect" → valor TOTAL a cobrar no destino (frete + taxas + outros)
+      → Essas linhas SOMAM: Weight/Valuation Charge + Tax + Total Other Charges Due Agent
+        + Total Other Charges Due Carrier (+ packaging quando houver)
+
+      ⛔ REGRA CRÍTICA — NUNCA CONFUNDIR:
+      ❌ ERRADO: pegar a linha "Collect" (frete puro, antes das taxas) como Valor Total Frete
+      ❌ ERRADO: pegar "Weight Charge" / "WT/VAL Charge" / "Valuation Charge" isolados
+      ✅ CORRETO: SEMPRE a linha "Total Collect" / "Total Prepaid" do rodapé
+
+      Exemplo numérico:
+        Weight Charge (Collect): 1.200,00
+        Tax / Other Charges:       250,00
+        ─────────────────────────────────
+        Total Collect:           1.450,00   ← USAR ESTE VALOR (1.450,00)
+
       COMO REPORTAR:
-      - Se PREPAID: Linha "Total Prepaid" com o valor
-      - Se COLLECT: Linha "Total Collect" com o valor
+      - Se PREPAID: Linha "Total Prepaid" com o valor consolidado do rodapé
+      - Se COLLECT: Linha "Total Collect" com o valor consolidado do rodapé
       - NÃO inventar "Total Charges" se não existir explicitamente
+
    
    C) COMPARAÇÃO COM CCT/BL:
       - AWB "Total Prepaid" deve bater com valor de frete no CCT
