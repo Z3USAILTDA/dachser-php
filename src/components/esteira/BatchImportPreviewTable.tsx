@@ -187,7 +187,23 @@ export function BatchImportPreviewTable({
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="py-3.5 px-3 hidden lg:table-cell text-foreground/90">{it.processo || "—"}</TableCell>
+                  <TableCell className="py-3.5 px-3 hidden lg:table-cell text-foreground/90">
+                    <div className="flex items-center gap-1.5">
+                      <span>{it.processo || "—"}</span>
+                      {it.expanded_from_processo && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal border-primary/40 text-primary">
+                              SPO {(it.source_row_index ?? 0) + 1}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Processo com múltiplos SPOs — esta linha foi expandida da linha #{(it.source_row_index ?? 0) + 1} da planilha.
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="py-3.5 px-3 hidden lg:table-cell max-w-[220px]">
                     <Tooltip>
                       <TooltipTrigger asChild>
