@@ -2006,7 +2006,7 @@ const EsteiraIndex = () => {
       <main className="relative z-10 max-w-[95%] mx-auto px-2 pb-8">
         <div className="space-y-6">
           {/* Metric Cards */}
-          <div className={cn("grid gap-4 md:grid-cols-2", (isAdmin || isGestor || isOperacao) ? "xl:grid-cols-5" : "xl:grid-cols-4")}>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {loading ? <>
                 <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
                 <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
@@ -2017,9 +2017,6 @@ const EsteiraIndex = () => {
                 <MetricCard title="SLA" value={metrics.slaAtencao} icon={AlertTriangle} variant={metrics.slaAtencao > 0 ? "critical" : "warning"} subtitle="Vencendo/Vencidos" onClick={() => setDrillDownFilter(drillDownFilter === "sla" ? "all" : "sla")} active={drillDownFilter === "sla"} />
                 <MetricCard title="Pendências" value={metrics.pendenciasFinanceiras} icon={FileWarning} variant={metrics.pendenciasFinanceiras > 0 ? "warning" : "info"} subtitle="Accrual/Comprovante" onClick={() => setDrillDownFilter(drillDownFilter === "pendencias" ? "all" : "pendencias")} active={drillDownFilter === "pendencias"} />
                 <MetricCard title="Atividade 24h" value={metrics.eventos24h} icon={Clock} variant="info" subtitle="Últimas 24 horas" onClick={() => setDrillDownFilter(drillDownFilter === "atividade" ? "all" : "atividade")} active={drillDownFilter === "atividade"} />
-                {(isAdmin || isGestor || isOperacao) && (
-                  <MetricCard title="Rascunhos" value={metrics.rascunhos} icon={FileSearch} variant="info" subtitle="Aguardando envio" onClick={() => { setDrillDownFilter("all"); setFilters(prev => ({ ...prev, etapa: filters.etapa === "RASCUNHO" ? "all" : "RASCUNHO" })); }} active={filters.etapa === "RASCUNHO"} />
-                )}
               </>}
           </div>
 
