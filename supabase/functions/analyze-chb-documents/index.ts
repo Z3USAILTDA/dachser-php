@@ -2624,14 +2624,22 @@ Eles são FONTE DE VERDADE. Reutilize-os sem reanalisar:
             } catch { payload = {}; }
             const rows: any[] = Array.isArray(payload.rows) ? payload.rows : [];
             snapBlock += `\n— ${stepName} (aprovado em ${snap.approved_at || '?'}) —\n`;
-            for (const r of rows) {
+            const MAX_ROWS = 40;
+            const MAX_VAL_LEN = 240;
+            const visible = rows.slice(0, MAX_ROWS);
+            for (const r of visible) {
               const valores = r.valores && typeof r.valores === 'object' ? r.valores : {};
-              const valStr = Object.entries(valores)
+              let valStr = Object.entries(valores)
                 .map(([k, v]) => `${k}=${v}`)
                 .join(' | ');
+              if (valStr.length > MAX_VAL_LEN) valStr = valStr.slice(0, MAX_VAL_LEN) + '…';
               snapBlock += `  • ${r.campo}: ${valStr || '(sem valor)'}\n`;
             }
+            if (rows.length > MAX_ROWS) {
+              snapBlock += `  … (+${rows.length - MAX_ROWS} campos omitidos)\n`;
+            }
           }
+
           snapBlock += `
 🔴 REGRAS PARA ETAPAS APROVADAS:
 1. Valores já aprovados são VERDADE ABSOLUTA — NÃO reanalisar nem questionar.
