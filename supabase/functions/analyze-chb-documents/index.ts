@@ -1432,7 +1432,7 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[], persis
 }
 
 // Call Gemini API directly as fallback (with OCR support for scanned PDFs)
-async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<ApiResponse> {
+async function callGeminiAPI(prompt: string, files: FileForAnalysis[], persistedOcr: Record<string, string> = {}): Promise<ApiResponse> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   
   if (!LOVABLE_API_KEY) {
