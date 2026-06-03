@@ -2380,6 +2380,29 @@ tiverem valor diferente.
       }
     }
 
+    // =========================================================================
+    // RAW OCR PERSISTIDO — fonte única de verdade vinda de t_chb_file_extractions
+    // =========================================================================
+    if (Object.keys(dbOcrByFilename).length > 0) {
+      cachedContext += `
+═══════════════════════════════════════════════════════════════════════════════
+📚 OCR BRUTO PERSISTIDO (t_chb_file_extractions) — FONTE ÚNICA DE VERDADE
+═══════════════════════════════════════════════════════════════════════════════
+
+Os textos abaixo foram extraídos de cada arquivo e gravados em banco ANTES desta
+análise. Toda informação que você usar nas células da grade deve estar contida
+neste texto. NÃO invente valores fora deste OCR.
+
+`;
+      for (const [fname, txt] of Object.entries(dbOcrByFilename)) {
+        const truncated = txt.length > 8000 ? txt.slice(0, 8000) + '\n…[truncado]' : txt;
+        cachedContext += `--- 📄 ${fname} ---\n${truncated}\n\n`;
+      }
+      cachedContext += `═══════════════════════════════════════════════════════════════════════════════\n\n`;
+    }
+
+
+
     
     // Add learned extraction rules context (helps LLM find fields based on past corrections)
     if (extractionRules.length > 0) {
