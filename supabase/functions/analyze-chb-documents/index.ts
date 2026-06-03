@@ -1243,7 +1243,7 @@ function validateInputSize(files: FileForAnalysis[]): { isValid: boolean; estima
 }
 
 // Call Anthropic Claude API with vision capabilities
-async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promise<ApiResponse> {
+async function callAnthropicAPI(prompt: string, files: FileForAnalysis[], persistedOcr: Record<string, string> = {}): Promise<ApiResponse> {
   const anthropicApiKey = Deno.env.get('CHB_ANTHROPIC_API_KEY');
   
   if (!anthropicApiKey) {
@@ -1315,39 +1315,55 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
       }
     } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || 
                file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-      // Extract text from Excel
-      try {
-        const excelText = await extractExcelText(file.content, file.name);
+      // FLUXO ÚNICO: usar somente OCR persistido (já contém o texto deste Excel).
+      const persisted = persistedOcr[file.name];
+      if (persisted && persisted.trim().length >= 10) {
         content.push({
           type: 'text',
-          text: excelText,
+          text: `[Arquivo Excel: ${file.name}] — conteúdo já fornecido no bloco "📚 OCR BRUTO PERSISTIDO".`,
         });
-      } catch (e) {
-        console.error(`Error processing Excel ${file.name}:`, e);
-        warnings.push({
-          fileName: file.name,
-          error: 'Erro ao processar arquivo Excel',
-          type: 'conversion',
-          suggestion: 'Verifique se o arquivo não está corrompido ou tente exportar como PDF.',
-        });
-        content.push({
-          type: 'text',
-          text: `[Arquivo Excel: ${file.name}] - Não foi possível extrair conteúdo`,
-        });
+        console.log(`[Anthropic] Excel ${file.name}: usando OCR persistido (stub no payload, ${persisted.length} chars no bloco persistido)`);
+      } else {
+        console.warn(`[Anthropic] Excel ${file.name}: persistência ausente — caindo para extração ao vivo`);
+        try {
+          const excelText = await extractExcelText(file.content, file.name);
+          content.push({ type: 'text', text: excelText });
+        } catch (e) {
+          console.error(`Error processing Excel ${file.name}:`, e);
+          warnings.push({
+            fileName: file.name,
+            error: 'Erro ao processar arquivo Excel',
+            type: 'conversion',
+            suggestion: 'Verifique se o arquivo não está corrompido ou tente exportar como PDF.',
+          });
+          content.push({
+            type: 'text',
+            text: `[Arquivo Excel: ${file.name}] - Não foi possível extrair conteúdo`,
+          });
+        }
       }
     } else {
-      // Text-based files
-      try {
-        const textContent = atob(file.content);
+      // Outros formatos: preferir OCR persistido; só cair no atob se não houver.
+      const persisted = persistedOcr[file.name];
+      if (persisted && persisted.trim().length >= 10) {
         content.push({
           type: 'text',
-          text: `[Arquivo: ${file.name}]\n${textContent}`,
+          text: `[Arquivo: ${file.name}] — conteúdo já fornecido no bloco "📚 OCR BRUTO PERSISTIDO".`,
         });
-      } catch {
-        content.push({
-          type: 'text',
-          text: `[Arquivo: ${file.name}] - Conteúdo binário não legível`,
-        });
+        console.log(`[Anthropic] ${file.name}: usando OCR persistido (stub no payload)`);
+      } else {
+        try {
+          const textContent = atob(file.content);
+          content.push({
+            type: 'text',
+            text: `[Arquivo: ${file.name}]\n${textContent}`,
+          });
+        } catch {
+          content.push({
+            type: 'text',
+            text: `[Arquivo: ${file.name}] - Conteúdo binário não legível`,
+          });
+        }
       }
     }
   }
@@ -1416,7 +1432,7 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
 }
 
 // Call Gemini API directly as fallback (with OCR support for scanned PDFs)
-async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<ApiResponse> {
+async function callGeminiAPI(prompt: string, files: FileForAnalysis[], persistedOcr: Record<string, string> = {}): Promise<ApiResponse> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   
   if (!LOVABLE_API_KEY) {
@@ -1461,25 +1477,44 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
       }
     } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') ||
                file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-      try {
-        const excelText = await extractExcelText(file.content, file.name);
-        contentParts.push({ type: 'text', text: excelText });
-      } catch (e) {
-        console.error(`Error processing Excel ${file.name}:`, e);
-        warnings.push({
-          fileName: file.name,
-          error: 'Erro ao processar arquivo Excel',
-          type: 'conversion',
-          suggestion: 'Verifique se o arquivo não está corrompido.',
+      const persisted = persistedOcr[file.name];
+      if (persisted && persisted.trim().length >= 10) {
+        contentParts.push({
+          type: 'text',
+          text: `[Arquivo Excel: ${file.name}] — conteúdo já fornecido no bloco "📚 OCR BRUTO PERSISTIDO".`,
         });
-        contentParts.push({ type: 'text', text: `[Arquivo Excel: ${file.name}] - Não foi possível extrair conteúdo` });
+        console.log(`[Gemini Fallback] Excel ${file.name}: usando OCR persistido (stub no payload, ${persisted.length} chars no bloco persistido)`);
+      } else {
+        console.warn(`[Gemini Fallback] Excel ${file.name}: persistência ausente — extração ao vivo`);
+        try {
+          const excelText = await extractExcelText(file.content, file.name);
+          contentParts.push({ type: 'text', text: excelText });
+        } catch (e) {
+          console.error(`Error processing Excel ${file.name}:`, e);
+          warnings.push({
+            fileName: file.name,
+            error: 'Erro ao processar arquivo Excel',
+            type: 'conversion',
+            suggestion: 'Verifique se o arquivo não está corrompido.',
+          });
+          contentParts.push({ type: 'text', text: `[Arquivo Excel: ${file.name}] - Não foi possível extrair conteúdo` });
+        }
       }
     } else {
-      try {
-        const textContent = atob(file.content);
-        contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}]\n${textContent}` });
-      } catch {
-        contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}] - Conteúdo binário não legível` });
+      const persisted = persistedOcr[file.name];
+      if (persisted && persisted.trim().length >= 10) {
+        contentParts.push({
+          type: 'text',
+          text: `[Arquivo: ${file.name}] — conteúdo já fornecido no bloco "📚 OCR BRUTO PERSISTIDO".`,
+        });
+        console.log(`[Gemini Fallback] ${file.name}: usando OCR persistido (stub no payload)`);
+      } else {
+        try {
+          const textContent = atob(file.content);
+          contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}]\n${textContent}` });
+        } catch {
+          contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}] - Conteúdo binário não legível` });
+        }
       }
     }
   }
@@ -2524,7 +2559,7 @@ O usuário CORRIGIU os seguintes valores. VOCÊ DEVE USAR ESSES VALORES CORRIGID
     // Try Anthropic first
     try {
       console.log('[BG] Attempting Anthropic API...');
-      const result = await callAnthropicAPI(prompt, files);
+      const result = await callAnthropicAPI(prompt, files, dbOcrByFilename);
       responseText = result.text;
       fileWarnings = result.warnings;
       extractedTexts = result.extractedTexts;
@@ -2535,7 +2570,7 @@ O usuário CORRIGIU os seguintes valores. VOCÊ DEVE USAR ESSES VALORES CORRIGID
       
       try {
         console.log('[BG] Attempting Gemini API fallback...');
-        const result = await callGeminiAPI(prompt, files);
+        const result = await callGeminiAPI(prompt, files, dbOcrByFilename);
         responseText = result.text;
         fileWarnings = result.warnings;
         extractedTexts = result.extractedTexts;
