@@ -717,6 +717,11 @@ REGRAS DE CONTEÚDO DA TABELA
           → Se SIM → Pode usar como frete.
        
        ERROS COMUNS QUE VOCÊ NÃO DEVE COMETER:
+        ❌ "Por Peso" / "Weight Charge" em CCT/AWB → NÃO é valor total de frete; é apenas componente parcial
+        ❌ "Por Valor" / "Valuation Charge" em CCT/AWB → NÃO é valor total de frete; é apenas componente parcial
+        ❌ "Impostos" / "Tax" em CCT/AWB → NÃO é valor total de frete; é apenas componente parcial
+        ❌ "Outros Serviços" em CCT/AWB → NÃO é valor total de frete; é apenas componente parcial
+        ✅ Se existir linha "Total" na mesma tabela Prepaid/Collect, ela tem prioridade absoluta
        ❌ "Total net" em Invoice → NÃO é frete (é total da fatura ou valor mercadoria)
        ❌ "Amount Due" em Invoice → NÃO é frete (é total a pagar da fatura)
        ❌ "Total Amount" em Invoice → NÃO é frete (é total da fatura)
