@@ -1,47 +1,52 @@
-# Padronizar fluxo persistido para Excel e demais não-PDF
+## Problema
 
-## Contexto
+Análise da etapa 2 do item 126 ficou em `processing` por mais de 10 min, estourando o timeout do cliente. Os logs da edge `analyze-chb-documents` não mostram nenhuma mensagem `[BG] ...` (Anthropic, Gemini, snapshots, Prompt length) — apenas os `[POLL]` do cliente. Isso indica que a task em background morreu silenciosamente sem atualizar o status no MariaDB, ou que a chamada ao LLM ficou pendurada até o runtime matar o processo.
 
-O fluxo único `Extrair → Gravar (t_chb_file_extractions.raw_ocr_text) → Analisar a partir do persistido` já está ativo para PDFs/imagens. Para Excel:
-
-- `extractRawTextForPersistence` (linha 1948) já cobre `.xlsx/.xls` e grava o texto em `raw_ocr_text` — então o conteúdo já entra em `dbOcrByFilename` e no bloco `📚 OCR BRUTO PERSISTIDO` do prompt.
-- **Mas** dentro de `callAnthropicAPI` (linha 1316) e `callGeminiAPI` (linha 1462), os arquivos Excel ainda são **re-extraídos ao vivo** com `extractExcelText(file.content, ...)` e enviados ao LLM em paralelo ao bloco persistido.
-- Resultado: o LLM recebe duas versões do mesmo Excel (uma persistida, outra re-extraída na hora), violando a regra de fonte única de verdade. O mesmo problema existe para arquivos "texto" tratados no `else` (atob direto).
-
-## Objetivo
-
-Garantir que, dentro das chamadas LLM, **apenas o conteúdo persistido em `t_chb_file_extractions.raw_ocr_text`** seja usado para Excel e demais formatos não-PDF/não-imagem — espelhando o que já vale para PDFs no novo fluxo.
+Causas prováveis (em ordem):
+1. **Chamada ao Anthropic/Gemini sem `AbortController`** (linha ~1391). Se o provedor demora, a request fica pendurada até o runtime da edge function matar o worker aos 300s — e o `catch` nunca roda, então `update_chb_run status=error` nunca é gravado.
+2. **Prompt inflado**: o bloco de snapshots aprovados + REGRA DE OURO + OCR completo dos arquivos da etapa 1 (já incluídos via `cachedContext`) pode estar empurrando o prompt para um tamanho onde o LLM trava ou retorna timeout.
+3. **`processAnalysisInBackground` invocado sem `EdgeRuntime.waitUntil`** em fallback (linha 2835-2836): se o `EdgeRuntime` não existir, a Promise vira fire-and-forget e pode ser cancelada quando a response inicial fecha.
 
 ## Mudanças
 
-Arquivo único: `supabase/functions/analyze-chb-documents/index.ts`
+### 1. Timeout duro nas chamadas LLM (núcleo do fix)
+Em `callAnthropicAPI` e `callGeminiAPI`:
+- Envolver o `fetch` com `AbortController` + `setTimeout(240_000)` (4 min).
+- Se abortar, lançar erro claro `LLM_TIMEOUT` para o catch externo fazer fallback ou marcar `error` no MariaDB.
 
-1. **Assinatura das funções LLM**: adicionar parâmetro opcional `persistedOcr?: Record<string,string>` em `callAnthropicAPI` (linha 1246) e `callGeminiAPI` (linha 1419).
+### 2. Garantia de gravação de erro mesmo em crash silencioso
+Em `processAnalysisInBackground`:
+- Envolver todo o corpo num `try/catch` externo que SEMPRE chama `update_chb_run status=error` com a mensagem do erro, inclusive timeouts.
+- Adicionar `console.log` no início absoluto (antes de qualquer await) para confirmar que a task arrancou.
 
-2. **`callAnthropicAPI` — bloco Excel (1316–1337)**: substituir a re-extração ao vivo por:
-   - Se `persistedOcr[file.name]` existe e tem conteúdo, empurrar apenas um stub: `[Arquivo Excel: ${file.name}] — conteúdo já fornecido no bloco "OCR BRUTO PERSISTIDO".`
-   - Caso contrário (não deveria acontecer no fluxo novo), manter fallback atual com warning explícito de "persistência ausente".
+### 3. Garantir que o background roda
+Trocar `EdgeRuntime.waitUntil(...)  ||  processAnalysisInBackground(...)` por:
+```ts
+const bg = processAnalysisInBackground(...);
+if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(bg);
+// fire-and-forget já está disparado via bg
+```
 
-3. **`callAnthropicAPI` — bloco "Text-based files" (1338–1352)**: mesma lógica — preferir `persistedOcr[file.name]`; só cair no `atob` se nada persistido.
+### 4. Reduzir bloat do prompt de snapshots
+- Limitar `snapBlock` a no máximo ~20 linhas por etapa anterior (cortar `rows` longos com `…+N campos`).
+- Não duplicar snapshots quando o `cachedContext` (correções do usuário) já cobre os mesmos campos.
 
-4. **`callGeminiAPI` — espelhar passos 2 e 3** nos blocos análogos (1462–1483).
+### 5. Logging mínimo de diagnóstico
+- Logar `[BG] startedAt`, `[BG] step0 ok`, `[BG] anthropic.start`, `[BG] anthropic.end ms=…` para que da próxima vez seja possível identificar exatamente onde travou via `edge_function_logs`.
 
-5. **Chamadores (linhas 2527 e 2538)**: passar `dbOcrByFilename` como terceiro argumento.
-   - `callAnthropicAPI(prompt, files, dbOcrByFilename)`
-   - `callGeminiAPI(prompt, files, dbOcrByFilename)`
+### 6. Mensagem amigável no front
+Em `ConferenciaChb.tsx` (linha 498), trocar a mensagem genérica de "Tempo limite excedido" por uma que oriente o usuário a tentar novamente (a análise será marcada como erro pelo backend graças ao item 2, então o retry funcionará sem ficar preso).
 
-6. **PDF/imagem**: deixar o caminho atual intocado nesta iteração (já existe re-OCR ao vivo no LLM call, mas o usuário pediu paridade focada em Excel; mexer em PDF aqui amplia o escopo). O bloco persistido continua sendo a fonte que o prompt instrui a usar.
+## Arquivos afetados
+- `supabase/functions/analyze-chb-documents/index.ts` — itens 1, 2, 3, 4, 5
+- `src/pages/ConferenciaChb.tsx` — item 6
 
-## Fora de escopo
-
-- UI, banco, prompts e qualquer função fora de `analyze-chb-documents/index.ts`.
-- Refator do caminho PDF dentro das funções LLM.
-- Mudanças em `extractRawTextForPersistence` (já cobre Excel corretamente).
+## Não faz parte deste plano
+- Mudar a tabela de snapshots.
+- Trocar provedor de LLM.
+- Mexer no `mariadb-proxy`.
 
 ## Validação
-
-Rodar nova análise em item com Excel anexado e confirmar nos logs:
-- `[BG][raw-ocr-save] <arquivo.xlsx> → status=OK`
-- `[BG][pre-analysis] Read back N raw_ocr_text rows` incluindo o `.xlsx`
-- Ausência de chamadas redundantes a `extractExcelText` dentro de `callAnthropicAPI`/`callGeminiAPI` (apenas stub no payload do LLM).
-- Resultado da análise mantém divergências/conformidades coerentes com o conteúdo do Excel.
+1. Rodar análise da etapa 2 do item 126 novamente.
+2. Conferir nos logs: `[BG] startedAt` → `[BG] anthropic.start` → `[BG] anthropic.end ms=...` → `[BG] Analysis completed`.
+3. Se ocorrer timeout, a UI deve mostrar erro em < 5 min com mensagem clara e o status no MariaDB deve estar `error` (não `processing`).

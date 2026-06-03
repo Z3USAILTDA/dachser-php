@@ -1388,26 +1388,45 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[], persis
   
   const startTime = Date.now();
   
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': anthropicApiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 64000,
-      messages: [
-        {
-          role: 'user',
-          content,
-        },
-      ],
-    }),
-  });
+  const ANTHROPIC_TIMEOUT_MS = 240_000;
+  const anthropicAbort = new AbortController();
+  const anthropicTimer = setTimeout(() => anthropicAbort.abort(), ANTHROPIC_TIMEOUT_MS);
+  console.log(`[BG] anthropic.start (timeout=${ANTHROPIC_TIMEOUT_MS}ms, files=${files.length})`);
+  
+  let response: Response;
+  try {
+    response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal: anthropicAbort.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': anthropicApiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 64000,
+        messages: [
+          {
+            role: 'user',
+            content,
+          },
+        ],
+      }),
+    });
+  } catch (fetchErr: any) {
+    clearTimeout(anthropicTimer);
+    if (fetchErr?.name === 'AbortError') {
+      console.error(`[BG] anthropic.timeout after ${Date.now() - startTime}ms`);
+      throw new Error(`LLM_TIMEOUT: Anthropic não respondeu em ${ANTHROPIC_TIMEOUT_MS / 1000}s`);
+    }
+    throw fetchErr;
+  }
+  clearTimeout(anthropicTimer);
+  console.log(`[BG] anthropic.end ms=${Date.now() - startTime} status=${response.status}`);
   
   const responseTime = Date.now() - startTime;
+
   
   if (!response.ok) {
     const errorText = await response.text();
@@ -1535,22 +1554,40 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[], persisted
   
   const startTime = Date.now();
   
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-pro',
-      messages: [{
-        role: 'user',
-        content: contentParts,
-      }],
-      max_tokens: 65536,
-      temperature: 0.1,
-    }),
-  });
+  const GEMINI_TIMEOUT_MS = 240_000;
+  const geminiAbort = new AbortController();
+  const geminiTimer = setTimeout(() => geminiAbort.abort(), GEMINI_TIMEOUT_MS);
+  console.log(`[BG] gemini.start (timeout=${GEMINI_TIMEOUT_MS}ms, files=${files.length})`);
+  
+  let response: Response;
+  try {
+    response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      signal: geminiAbort.signal,
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-pro',
+        messages: [{
+          role: 'user',
+          content: contentParts,
+        }],
+        max_tokens: 65536,
+        temperature: 0.1,
+      }),
+    });
+  } catch (fetchErr: any) {
+    clearTimeout(geminiTimer);
+    if (fetchErr?.name === 'AbortError') {
+      console.error(`[BG] gemini.timeout after ${Date.now() - startTime}ms`);
+      throw new Error(`LLM_TIMEOUT: Gemini não respondeu em ${GEMINI_TIMEOUT_MS / 1000}s`);
+    }
+    throw fetchErr;
+  }
+  clearTimeout(geminiTimer);
+  console.log(`[BG] gemini.end ms=${Date.now() - startTime} status=${response.status}`);
   
   const responseTime = Date.now() - startTime;
   
@@ -1559,6 +1596,7 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[], persisted
     console.error('AI Gateway error:', errorText);
     throw new Error(`AI Gateway error: ${response.status} - ${errorText}`);
   }
+
   
   const result = await response.json();
   
@@ -2293,10 +2331,12 @@ async function processAnalysisInBackground(
   itemId?: number,
   _cachedDataUnused?: unknown
 ): Promise<void> {
+  console.log(`[BG] startedAt=${new Date().toISOString()} requestId=${requestId} step=${stepId} itemId=${itemId} files=${files?.length ?? 0}`);
   const supabase = getSupabaseClient();
   
   try {
     console.log(`[BG] v2-extractions-enabled :: Starting background analysis for request ${requestId} (itemId=${itemId})`);
+
     
     // Update status to processing in MariaDB
     await callMariaDBProxy('update_chb_run', {
@@ -2584,14 +2624,22 @@ Eles são FONTE DE VERDADE. Reutilize-os sem reanalisar:
             } catch { payload = {}; }
             const rows: any[] = Array.isArray(payload.rows) ? payload.rows : [];
             snapBlock += `\n— ${stepName} (aprovado em ${snap.approved_at || '?'}) —\n`;
-            for (const r of rows) {
+            const MAX_ROWS = 40;
+            const MAX_VAL_LEN = 240;
+            const visible = rows.slice(0, MAX_ROWS);
+            for (const r of visible) {
               const valores = r.valores && typeof r.valores === 'object' ? r.valores : {};
-              const valStr = Object.entries(valores)
+              let valStr = Object.entries(valores)
                 .map(([k, v]) => `${k}=${v}`)
                 .join(' | ');
+              if (valStr.length > MAX_VAL_LEN) valStr = valStr.slice(0, MAX_VAL_LEN) + '…';
               snapBlock += `  • ${r.campo}: ${valStr || '(sem valor)'}\n`;
             }
+            if (rows.length > MAX_ROWS) {
+              snapBlock += `  … (+${rows.length - MAX_ROWS} campos omitidos)\n`;
+            }
           }
+
           snapBlock += `
 🔴 REGRAS PARA ETAPAS APROVADAS:
 1. Valores já aprovados são VERDADE ABSOLUTA — NÃO reanalisar nem questionar.
@@ -2696,14 +2744,20 @@ Eles são FONTE DE VERDADE. Reutilize-os sem reanalisar:
 
   } catch (error) {
     console.error(`[BG] Error processing analysis ${requestId}:`, error);
-    
-    // Update request with error in MariaDB
-    await callMariaDBProxy('update_chb_run', {
-      runId: requestId,
-      status: 'error',
-      resultText: error instanceof Error ? error.message : 'Erro desconhecido'
-    });
+    const errMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+    // Update request with error in MariaDB — never let this throw out
+    try {
+      await callMariaDBProxy('update_chb_run', {
+        runId: requestId,
+        status: 'error',
+        resultText: errMsg,
+      });
+      console.log(`[BG] Marked run ${requestId} as error`);
+    } catch (updateErr) {
+      console.error(`[BG] FAILED to mark run ${requestId} as error:`, updateErr);
+    }
   }
+
 }
 
 // =============================================================================
@@ -2829,11 +2883,19 @@ serve(async (req) => {
       );
     }
 
-    // Start background processing
+    // Start background processing (single-fire — never call twice)
+    console.log(`[SUBMIT] Dispatching background analysis for request ${requestId}`);
     // deno-lint-ignore no-explicit-any
-    (globalThis as any).EdgeRuntime?.waitUntil?.(
-      processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId)
-    ) || processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId);
+    const bgPromise = processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId)
+      .catch((bgErr) => {
+        console.error(`[SUBMIT] Background analysis crashed for ${requestId}:`, bgErr);
+      });
+    // deno-lint-ignore no-explicit-any
+    const edgeRuntime = (globalThis as any).EdgeRuntime;
+    if (edgeRuntime?.waitUntil) {
+      edgeRuntime.waitUntil(bgPromise);
+    }
+
 
 
     // Return request ID immediately

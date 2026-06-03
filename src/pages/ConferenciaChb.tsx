@@ -495,7 +495,7 @@ export default function ConferenciaChb() {
       }
 
       if (!data) {
-        throw new Error('Tempo limite excedido. A análise demorou mais de 10 minutos.');
+        throw new Error('A análise demorou mais que o esperado. O processamento foi interrompido — por favor, clique em "Fazer Análise Novamente". Se o problema persistir, tente reduzir a quantidade de arquivos.');
       }
 
       setAnalysisProgress('');
