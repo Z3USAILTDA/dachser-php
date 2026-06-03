@@ -6403,6 +6403,105 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ============================================================
+      // CHB FILE EXTRACTIONS (audit/ground-truth por arquivo)
+      // ============================================================
+      case 'insert_chb_extraction': {
+        const {
+          itemId,
+          fileId,
+          filename,
+          docRole,
+          etapa,
+          fileSha256,
+          extractorModel,
+          extractorPromptVersion,
+          extractorConfidence,
+          rawOcrText,
+          structuredFields,
+          fieldEvidence,
+          extractionStatus,
+          errorMessage,
+        } = body as any;
+
+        console.log('[CHB-EXTRACTION] Inserting extraction:', {
+          itemId, fileId, filename, docRole, etapa, extractorModel,
+          structuredKeys: structuredFields ? Object.keys(structuredFields).length : 0,
+        });
+
+        const insertResult = await client.execute(`
+          INSERT INTO dados_dachser.t_chb_file_extractions
+          (item_id, file_id, filename, doc_role, etapa, file_sha256,
+           extractor_model, extractor_prompt_version, extractor_confidence,
+           raw_ocr_text, structured_fields, field_evidence,
+           extraction_status, error_message)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          itemId,
+          fileId,
+          filename,
+          docRole || null,
+          etapa,
+          fileSha256 || null,
+          extractorModel || null,
+          extractorPromptVersion || null,
+          extractorConfidence ?? null,
+          rawOcrText || null,
+          structuredFields ? JSON.stringify(structuredFields) : null,
+          fieldEvidence ? JSON.stringify(fieldEvidence) : null,
+          extractionStatus || 'OK',
+          errorMessage || null,
+        ]);
+
+        result = { success: true, extractionId: insertResult.lastInsertId };
+        break;
+      }
+
+      case 'get_chb_extractions': {
+        const { itemId, etapa } = body as any;
+        console.log('[CHB-EXTRACTION] Fetching extractions for item:', itemId, 'etapa:', etapa);
+
+        const hasEtapa = etapa !== undefined && etapa !== null;
+        const rows = hasEtapa
+          ? await client.query(`
+              SELECT e.*
+              FROM dados_dachser.t_chb_file_extractions e
+              INNER JOIN (
+                SELECT file_id, MAX(id) AS max_id
+                FROM dados_dachser.t_chb_file_extractions
+                WHERE item_id = ? AND etapa = ?
+                GROUP BY file_id
+              ) latest ON latest.max_id = e.id
+              ORDER BY e.filename
+            `, [itemId, String(etapa)])
+          : await client.query(`
+              SELECT e.*
+              FROM dados_dachser.t_chb_file_extractions e
+              INNER JOIN (
+                SELECT file_id, MAX(id) AS max_id
+                FROM dados_dachser.t_chb_file_extractions
+                WHERE item_id = ?
+                GROUP BY file_id
+              ) latest ON latest.max_id = e.id
+              ORDER BY e.filename
+            `, [itemId]);
+
+        const parseJson = (v: any) => {
+          if (v == null) return null;
+          if (typeof v !== 'string') return v;
+          try { return JSON.parse(v); } catch { return null; }
+        };
+
+        const data = (rows || []).map((r: any) => ({
+          ...r,
+          structured_fields: parseJson(r.structured_fields),
+          field_evidence: parseJson(r.field_evidence),
+        }));
+
+        result = { success: true, data };
+        break;
+      }
+
       case 'update_chb_run_ctx': {
         const { runId, usedAsCtx } = body;
         console.log('Updating CHB run context flag:', runId);
