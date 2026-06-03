@@ -689,9 +689,18 @@ REGRAS DE CONTEÚDO DA TABELA
          → ⛔ NUNCA usar a linha intermediária "Collect" / "Prepaid" / "Freight Charge" /
            "Weight Charge" / "WT/VAL" / "Valuation Charge" sozinha — esses são PARCIAIS
            (frete antes das taxas) e NÃO representam o valor total cobrado.
+         → REGRA OBRIGATÓRIA PARA CCT/AWB EM PORTUGUÊS:
+           Quando existir tabela "Totais na moeda de origem" com colunas "Prepaid" e "Collect",
+           usar SEMPRE o valor da linha final "Total" da coluna que contém valor monetário.
+           NUNCA usar isoladamente as linhas "Por Peso", "Por Valor", "Impostos",
+           "Outros Serviços (Agente de Carga)" ou "Outros Serviços (Transportador)" —
+           todas são componentes PARCIAIS do frete.
+           Exemplo: "Por Peso" = EUR 25,00 e "Total" = EUR 220,00 →
+           Valor Total Frete DEVE ser EUR 220,00, nunca EUR 25,00.
          → Packing List: geralmente não tem (ND é aceitável)
        - Sinônimos VÁLIDOS para frete (em ordem de PRIORIDADE):
          1º (preferencial): "Total Prepaid", "Total Collect"
+            ou linha "Total" em tabela "Totais na moeda de origem" / Prepaid / Collect
          2º (fallback APENAS se não houver "Total ..."): "Total Charges", "Freight",
             "Frete", "Freight Charges", "Ocean Freight", "Air Freight"
        - Linha da tabela: "Valor Total Frete"
@@ -708,6 +717,11 @@ REGRAS DE CONTEÚDO DA TABELA
           → Se SIM → Pode usar como frete.
        
        ERROS COMUNS QUE VOCÊ NÃO DEVE COMETER:
+        ❌ "Por Peso" / "Weight Charge" em CCT/AWB → NÃO é valor total de frete; é apenas componente parcial
+        ❌ "Por Valor" / "Valuation Charge" em CCT/AWB → NÃO é valor total de frete; é apenas componente parcial
+        ❌ "Impostos" / "Tax" em CCT/AWB → NÃO é valor total de frete; é apenas componente parcial
+        ❌ "Outros Serviços" em CCT/AWB → NÃO é valor total de frete; é apenas componente parcial
+        ✅ Se existir linha "Total" na mesma tabela Prepaid/Collect, ela tem prioridade absoluta
        ❌ "Total net" em Invoice → NÃO é frete (é total da fatura ou valor mercadoria)
        ❌ "Amount Due" em Invoice → NÃO é frete (é total a pagar da fatura)
        ❌ "Total Amount" em Invoice → NÃO é frete (é total da fatura)
@@ -1198,6 +1212,7 @@ interface ChbFileError {
 interface ApiResponse {
   text: string;
   warnings: ChbFileError[];
+  extractedTexts?: Record<string, string>;
 }
 
 // Validate total input size to avoid API errors
@@ -1236,6 +1251,7 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
   }
   
   const warnings: ChbFileError[] = [];
+  const extractedTexts: Record<string, string> = {};
   
   // Build content array with files
   const content: any[] = [];
@@ -1245,6 +1261,7 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
     if (file.mimeType.startsWith('image/')) {
       // For images, try OCR extraction first for better text analysis
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
+      if (ocrResult.text) extractedTexts[file.name] = ocrResult.text;
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 50) {
         // Use OCR extracted text for better structured analysis
@@ -1271,6 +1288,7 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
     } else if (file.mimeType === 'application/pdf') {
       // For PDFs, use OCR extraction to handle both native and scanned PDFs
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
+      if (ocrResult.text) extractedTexts[file.name] = ocrResult.text;
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 100) {
         // Use OCR extracted text - works for both native and scanned PDFs
@@ -1394,7 +1412,7 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
     throw new Error('No text content in Anthropic response');
   }
   
-  return { text: textContent.text, warnings };
+        return { text: textContent.text, warnings, extractedTexts };
 }
 
 // Call Gemini API directly as fallback (with OCR support for scanned PDFs)
@@ -1406,6 +1424,7 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
   }
   
   const warnings: ChbFileError[] = [];
+  const extractedTexts: Record<string, string> = {};
   
   // Build content parts for Lovable AI Gateway
   const contentParts: any[] = [];
@@ -1413,6 +1432,7 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
   for (const file of files) {
     if (file.mimeType === 'application/pdf') {
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
+      if (ocrResult.text) extractedTexts[file.name] = ocrResult.text;
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 100) {
         contentParts.push({ type: 'text', text: ocrResult.text });
@@ -1427,6 +1447,7 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
       }
     } else if (file.mimeType.startsWith('image/')) {
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
+      if (ocrResult.text) extractedTexts[file.name] = ocrResult.text;
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 50) {
         contentParts.push({ type: 'text', text: ocrResult.text });
@@ -1500,7 +1521,7 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
     throw new Error('No text content in AI Gateway response');
   }
   
-  return { text, warnings };
+  return { text, warnings, extractedTexts };
 }
 
 // =============================================================================
@@ -1602,6 +1623,48 @@ function extractHtmlAndTags(response: string, stepId: number): {
   }
   
   return { html, tags, summary, detailedSummary, parecer, modal, cliente };
+}
+
+function extractAwbPortugueseTotalFreight(text: string): string | null {
+  if (!/totais\s+na\s+moeda\s+de\s+origem/i.test(text) || !/por\s+peso/i.test(text)) return null;
+
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const currencyValue = '([A-Z]{3}\\s*)?\\d{1,3}(?:[.,]\\d{3})*(?:[.,]\\d{2})';
+  for (const line of lines) {
+    if (/^total\b/i.test(line)) {
+      const matches = line.match(new RegExp(currencyValue, 'gi')) || [];
+      const value = matches[matches.length - 1]?.trim();
+      if (value) return value;
+    }
+  }
+  return null;
+}
+
+function applyAwbPortugueseTotalFreightCorrection(html: string, extractedTexts?: Record<string, string>): string {
+  if (!html || !extractedTexts) return html;
+
+  const correction = Object.entries(extractedTexts)
+    .map(([filename, text]) => ({ filename, totalFreight: extractAwbPortugueseTotalFreight(text) }))
+    .find((item) => Boolean(item.totalFreight));
+  if (!correction?.totalFreight) return html;
+
+  const tableMatch = html.match(/<table[\s\S]*?<\/table>/i);
+  const headerMatch = tableMatch?.[0]?.match(/<thead[^>]*>[\s\S]*?<tr[^>]*>([\s\S]*?)<\/tr>[\s\S]*?<\/thead>/i);
+  const headerCells = headerMatch?.[1]?.match(/<th[^>]*>[\s\S]*?<\/th>/gi) || [];
+  const targetHeader = correction.filename.toLowerCase().replace(/\.(pdf|xlsx?|png|jpe?g)$/i, '');
+  const targetColumnIndex = headerCells.findIndex((cell) => cell.replace(/<[^>]+>/g, '').trim().toLowerCase().includes(targetHeader));
+  if (targetColumnIndex < 2 && headerCells.length > 3) return html;
+  const targetTdIndex = targetColumnIndex >= 2 ? targetColumnIndex - 2 : 0;
+
+  return html.replace(/<tr[^>]*>[\s\S]*?<td[^>]*>\s*Valor\s+Total\s+Frete\s*<\/td>[\s\S]*?<\/tr>/i, (row) => {
+    const cells = row.match(/<td[^>]*>[\s\S]*?<\/td>/gi) || [];
+    const valueCellIndex = targetTdIndex + 2;
+    if (!cells[valueCellIndex]) return row;
+    const currentValue = cells[valueCellIndex].replace(/<[^>]+>/g, '').trim();
+    if (new RegExp(correction.totalFreight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(currentValue)) return row;
+    const correctedCell = cells[valueCellIndex].replace(/(>)([\s\S]*?)(<\/td>)/i, `$1${correction.totalFreight}$3`);
+    return row.replace(cells[valueCellIndex], correctedCell);
+  });
 }
 
 // =============================================================================
@@ -2051,6 +2114,7 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
     let responseText: string;
     let usedFallback = false;
     let fileWarnings: ChbFileError[] = [];
+    let extractedTexts: Record<string, string> | undefined;
 
     // Try Anthropic first
     try {
@@ -2058,6 +2122,7 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
       const result = await callAnthropicAPI(prompt, files);
       responseText = result.text;
       fileWarnings = result.warnings;
+      extractedTexts = result.extractedTexts;
       console.log('[BG] Anthropic API succeeded');
     } catch (anthropicError) {
       console.error('[BG] Anthropic API failed, trying Gemini API fallback:', anthropicError);
@@ -2068,6 +2133,7 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
         const result = await callGeminiAPI(prompt, files);
         responseText = result.text;
         fileWarnings = result.warnings;
+        extractedTexts = result.extractedTexts;
         console.log('[BG] Gemini API succeeded');
       } catch (geminiError) {
         console.error('[BG] Gemini API also failed:', geminiError);
@@ -2083,7 +2149,11 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
       }
     }
 
-    const { html, tags, summary, detailedSummary, parecer, modal, cliente } = extractHtmlAndTags(responseText, stepId);
+    const parsedResult = extractHtmlAndTags(responseText, stepId);
+    const html = applyAwbPortugueseTotalFreightCorrection(parsedResult.html, extractedTexts);
+    const correctedResult = extractHtmlAndTags(`<<BEGIN_HTML>>${html}<<END_HTML>>`, stepId);
+    const { tags, summary, detailedSummary, parecer } = correctedResult;
+    const { modal, cliente } = parsedResult;
 
     console.log(`[BG] Analysis completed - ${tags.map(t => t.label).join(', ')}`);
 
@@ -2122,7 +2192,7 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
         
         for (const file of files) {
           // Parse fields specifically for this file from the response
-          const extractedFields = parseExtractedFields(responseText, file.name);
+          const extractedFields = parseExtractedFields(html, file.name);
           
           // Extract raw text for Excel files (useful for future reference)
           let rawText = '';
