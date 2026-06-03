@@ -21199,12 +21199,53 @@ Deno.serve(async (req) => {
           // Chave de busca agora é o PROCESSO da planilha (não o SPO).
           const processos = sheetRows.map((s) => s.processo).filter(Boolean) as string[];
           const { byProcesso } = await fetchSpoByProcesso(processos);
-          return sheetRows.map((s) => {
-            if (!s.processo) return mergeWithDfv(s, null);
+          const results: any[] = [];
+          let nextRowIndex = sheetRows.length; // índices novos para linhas expandidas
+          for (const s of sheetRows) {
+            if (!s.processo) { results.push(mergeWithDfv(s, null)); continue; }
             const np = normProcesso(s.processo);
-            const dfv = byProcesso[np] || null;
-            return mergeWithDfv(s, dfv);
-          });
+            const candidates: any[] = byProcesso[np] || [];
+            if (candidates.length === 0) { results.push(mergeWithDfv(s, null)); continue; }
+            if (candidates.length === 1) { results.push(mergeWithDfv(s, candidates[0])); continue; }
+
+            // 2+ candidatos: match por valor da planilha (tolerância 1 centavo).
+            const sheetValor = Number(s.valor);
+            const hasValor = Number.isFinite(sheetValor) && sheetValor > 0;
+            const matches = hasValor
+              ? candidates.filter((c) => Number.isFinite(Number(c?.valor_nf)) && Math.abs(Number(c.valor_nf) - sheetValor) < 0.01)
+              : [];
+
+            if (matches.length === 1) {
+              results.push(mergeWithDfv(s, matches[0]));
+            } else if (matches.length >= 2) {
+              // Expande: 1 linha da planilha → N items, um por SPO casado.
+              matches.forEach((c, k) => {
+                const expanded = { ...s };
+                if (k > 0) expanded.row_index = nextRowIndex++;
+                const merged = mergeWithDfv(expanded, c);
+                merged.expanded_from_processo = true;
+                merged.source_row_index = s.row_index;
+                results.push(merged);
+              });
+            } else {
+              // 0 matches (ou sem valor): força ERROR informando os SPOs disponíveis.
+              const merged = mergeWithDfv(s, candidates[0]);
+              const opts = candidates
+                .map((c) => `${String(c?.nd || '').trim() || '?'} (${Number(c?.valor_nf || 0).toFixed(2)})`)
+                .join(', ');
+              const msg = hasValor
+                ? `Processo tem ${candidates.length} SPOs com valores diferentes; valor da planilha (${sheetValor.toFixed(2)}) não bate com nenhum. Disponíveis: ${opts}. Edite a linha para selecionar o SPO correto.`
+                : `Processo tem ${candidates.length} SPOs com valores diferentes; preencha o valor na planilha para casar com o SPO. Disponíveis: ${opts}.`;
+              merged.status = 'ERROR';
+              merged.ambiguous_processo = true;
+              merged.spo_candidates = candidates.map((c) => ({ nd: c?.nd, valor_nf: c?.valor_nf, id_rm: c?.id_rm }));
+              merged.validation_message = merged.validation_message
+                ? `${merged.validation_message}; ${msg}`
+                : msg;
+              results.push(merged);
+            }
+          }
+          return results;
         };
 
 
