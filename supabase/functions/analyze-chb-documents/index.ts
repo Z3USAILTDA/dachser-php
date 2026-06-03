@@ -2260,7 +2260,31 @@ async function processAnalysisInBackground(
 
     // NOTE: per-file extraction persistence moved to AFTER OCR runs (see [BG][extract] block below the LLM call).
     // This avoids racing with file registration and lets us persist the actual raw OCR text.
-    
+
+    // =========================================================================
+    // NOVO FLUXO: extrair e GRAVAR todos os arquivos em t_chb_file_extractions
+    // ANTES de chamar o LLM, e depois RELER o raw_ocr_text da tabela para
+    // alimentar a análise (fonte única de verdade).
+    // =========================================================================
+    let dbOcrByFilename: Record<string, string> = {};
+    if (itemId) {
+      try {
+        const persistResults = await persistRawOcrForFiles(itemId, stepId, files, extractedTexts || {});
+        console.log(`[BG][pre-analysis] Persisted raw OCR for ${persistResults.length} file(s)`);
+
+        const dbRowsResp = await callMariaDBProxy('get_chb_extractions', { itemId, etapa: String(stepId) });
+        const dbRows: Array<{ filename: string; raw_ocr_text: string | null }> = dbRowsResp?.data || [];
+        for (const row of dbRows) {
+          if (row.filename && row.raw_ocr_text) {
+            dbOcrByFilename[row.filename] = row.raw_ocr_text;
+          }
+        }
+        console.log(`[BG][pre-analysis] Read back ${Object.keys(dbOcrByFilename).length} raw_ocr_text rows from t_chb_file_extractions`);
+      } catch (e) {
+        console.error('[BG][pre-analysis] Pre-extraction/read failed, will fall back to in-memory extractedTexts:', (e as Error).message);
+      }
+    }
+
     // Get cached data from DB if itemId provided and no cachedData sent
     let existingCache: Record<string, { fields: Record<string, any>; rawText?: string }> = cachedData || {};
     if (itemId && !cachedData) {
@@ -2268,6 +2292,7 @@ async function processAnalysisInBackground(
       existingCache = await getCachedExtractedData(itemId);
       console.log(`[BG] Found ${Object.keys(existingCache).length} cached documents`);
     }
+
 
     
     // Build cached context
@@ -2354,6 +2379,29 @@ tiverem valor diferente.
 `;
       }
     }
+
+    // =========================================================================
+    // RAW OCR PERSISTIDO — fonte única de verdade vinda de t_chb_file_extractions
+    // =========================================================================
+    if (Object.keys(dbOcrByFilename).length > 0) {
+      cachedContext += `
+═══════════════════════════════════════════════════════════════════════════════
+📚 OCR BRUTO PERSISTIDO (t_chb_file_extractions) — FONTE ÚNICA DE VERDADE
+═══════════════════════════════════════════════════════════════════════════════
+
+Os textos abaixo foram extraídos de cada arquivo e gravados em banco ANTES desta
+análise. Toda informação que você usar nas células da grade deve estar contida
+neste texto. NÃO invente valores fora deste OCR.
+
+`;
+      for (const [fname, txt] of Object.entries(dbOcrByFilename)) {
+        const truncated = txt.length > 8000 ? txt.slice(0, 8000) + '\n…[truncado]' : txt;
+        cachedContext += `--- 📄 ${fname} ---\n${truncated}\n\n`;
+      }
+      cachedContext += `═══════════════════════════════════════════════════════════════════════════════\n\n`;
+    }
+
+
 
     
     // Add learned extraction rules context (helps LLM find fields based on past corrections)
@@ -2578,9 +2626,9 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
 
     console.log(`[BG] Analysis completed - ${tags.map(t => t.label).join(', ')}`);
 
-    const rawOcrPersistResults = itemId
-      ? await persistRawOcrForFiles(itemId, stepId, files, extractedTexts || {})
-      : [];
+    // Persistência de raw OCR agora roda ANTES da análise (ver bloco [BG][pre-analysis]).
+    const rawOcrPersistResults: Array<{ filename: string; extractionId: number | null; status: string }> = [];
+
 
     // Build result object
     const resultData = {
