@@ -1625,31 +1625,76 @@ function extractHtmlAndTags(response: string, stepId: number): {
   return { html, tags, summary, detailedSummary, parecer, modal, cliente };
 }
 
+function parseNumberBR(raw: string): number | null {
+  if (!raw) return null;
+  const cleaned = raw.replace(/[A-Za-z€$\s]/g, '').trim();
+  if (!cleaned) return null;
+  const norm = cleaned.replace(/\./g, '').replace(',', '.');
+  const n = parseFloat(norm);
+  return isNaN(n) ? null : n;
+}
+
 function extractAwbPortugueseTotalFreight(text: string): string | null {
   if (!text) return null;
-  // Heurística: documento AWB pt-BR contém "Por Peso" e ao menos uma linha "Total"
   if (!/por\s+peso/i.test(text) || !/total/i.test(text)) return null;
 
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const currencyValue = '([A-Z]{3}\\s*)?\\d{1,3}(?:[.,]\\d{3})*(?:[.,]\\d{2})';
   const valueRe = new RegExp(currencyValue, 'gi');
 
-  // Procura a ÚLTIMA linha "Total" consolidada (ignorando "Total Prepaid"/"Total Collect"/"Total Other" parciais)
-  let lastTotalValue: string | null = null;
-  for (const line of lines) {
-    if (!/^total\b/i.test(line)) continue;
-    if (/total\s+(prepaid|collect|other|charges|amount)/i.test(line)) continue;
+  const pickBestValue = (line: string): { raw: string; num: number } | null => {
     const matches = line.match(valueRe) || [];
-    // Pega o MAIOR valor numérico (Total consolidado é tipicamente o maior na linha)
     let best: { raw: string; num: number } | null = null;
     for (const m of matches) {
-      const numStr = m.replace(/[A-Z\s]/g, '').replace(/\./g, '').replace(',', '.');
-      const num = parseFloat(numStr);
-      if (!isNaN(num) && (!best || num > best.num)) best = { raw: m.trim(), num };
+      const num = parseNumberBR(m);
+      if (num != null && (!best || num > best.num)) best = { raw: m.trim(), num };
     }
+    return best;
+  };
+
+  // 1) Linha "Total" consolidada, valor na mesma linha ou nas próximas 2
+  let lastTotalValue: string | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!/^(total|total\s+geral|totais)\b/i.test(line)) continue;
+    if (/total\s+(prepaid|collect|other|charges|amount|due)/i.test(line)) continue;
+    let best = pickBestValue(line);
+    if (!best && lines[i + 1]) best = pickBestValue(lines[i + 1]);
+    if (!best && lines[i + 2]) best = pickBestValue(lines[i + 2]);
     if (best) lastTotalValue = best.raw;
   }
-  return lastTotalValue;
+  if (lastTotalValue) return lastTotalValue;
+
+  // 2) Total Prepaid / Total Collect
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!/total\s+(prepaid|collect)/i.test(line)) continue;
+    let best = pickBestValue(line);
+    if (!best && lines[i + 1]) best = pickBestValue(lines[i + 1]);
+    if (best) lastTotalValue = best.raw;
+  }
+  if (lastTotalValue) return lastTotalValue;
+
+  // 3) Soma dos componentes (Por Peso + Por Valor + Impostos + Outros)
+  const componentRe = /^(por\s+peso|por\s+valor|impostos?|outros(\s+servi[cç]os)?)/i;
+  let sum = 0;
+  let currency = '';
+  let hasAny = false;
+  for (const line of lines) {
+    if (!componentRe.test(line)) continue;
+    const best = pickBestValue(line);
+    if (best) {
+      sum += best.num;
+      hasAny = true;
+      const cur = best.raw.match(/[A-Z]{3}/);
+      if (cur && !currency) currency = cur[0];
+    }
+  }
+  if (hasAny && sum > 0) {
+    const formatted = sum.toFixed(2).replace('.', ',');
+    return currency ? `${currency} ${formatted}` : formatted;
+  }
+  return null;
 }
 
 function looksLikeMonetary(value: string): boolean {
@@ -1660,18 +1705,108 @@ function looksLikeMonetary(value: string): boolean {
 function extractAwbGrossWeight(text: string): string | null {
   if (!text) return null;
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const re = /(?:peso\s*bruto|gross\s*weight|gross\s*wt|\bgw\b)[^\d\n]{0,20}(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?)\s*(?:kg|kgs|quilos?)?/i;
-  for (const line of lines) {
-    // Pula linhas claramente monetárias para não pegar valor de frete
+  const labelRe = /(?:peso\s*bruto(?:\s*total)?|p\.\s*bruto|\bpb\b|gross\s*weight(?:\s*total)?|gross\s*wt|\bgw\b|weight\s*\(kg\))/i;
+  const numRe = /(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?)\s*(kg|kgs|quilos?)?/i;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (/(EUR|USD|BRL|GBP|R\$|US\$|€)/i.test(line)) continue;
-    const m = line.match(re);
-    if (m && m[1]) return `${m[1]} kg`;
+    if (!labelRe.test(line)) continue;
+
+    const afterLabel = line.replace(labelRe, '');
+    let m = afterLabel.match(numRe);
+    if (m && m[1]) {
+      const n = parseNumberBR(m[1]);
+      if (n != null && n > 0) return `${m[1]} kg`;
+    }
+    for (let j = 1; j <= 2; j++) {
+      const next = lines[i + j];
+      if (!next) break;
+      if (/(EUR|USD|BRL|GBP|R\$|US\$|€)/i.test(next)) continue;
+      m = next.match(numRe);
+      if (m && m[1]) {
+        const n = parseNumberBR(m[1]);
+        if (n != null && n > 0) return `${m[1]} kg`;
+      }
+    }
   }
   return null;
 }
 
+function stripParentheticalAnnotation(value: string): string {
+  if (!value) return value;
+  return value
+    .replace(/\s*\((?:por\s+peso|por\s+valor|impostos?|outros[^)]*|total[^)]*|fonte[^)]*|origem[^)]*)\)\s*/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeHeaderText(s: string): string {
+  return s.replace(/<[^>]+>/g, '').toLowerCase()
+    .replace(/[…]+/g, '')
+    .replace(/\.\.\.$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function checkDivergence(values: string[], type: 'weight' | 'money' | 'text'): boolean {
+  if (type === 'text') {
+    const normalized = values.map(v => v.replace(/[^a-z0-9]/gi, '').toUpperCase()).filter(Boolean);
+    if (normalized.length < 2) return false;
+    return new Set(normalized).size > 1;
+  }
+  const nums: number[] = [];
+  for (const v of values) {
+    const m = v.match(/\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?/);
+    if (!m) continue;
+    const n = parseNumberBR(m[0]);
+    if (n != null && n > 0) nums.push(n);
+  }
+  if (nums.length < 2) return false;
+  const max = Math.max(...nums);
+  const min = Math.min(...nums);
+  if (max === 0) return false;
+  const relDiff = (max - min) / max;
+  if (type === 'weight') return relDiff > 0.02;
+  return (max - min) > 1.0 || relDiff > 0.01;
+}
+
+function applyDivergenceStatusOverrides(html: string): string {
+  if (!html) return html;
+  const fieldSpecs: Array<{ labelRe: RegExp; type: 'weight' | 'money' | 'text' }> = [
+    { labelRe: /Peso\s+Bruto/i, type: 'weight' },
+    { labelRe: /Peso\s+L[ií]quido/i, type: 'weight' },
+    { labelRe: /Valor\s+Mercadoria/i, type: 'money' },
+    { labelRe: /Valor\s+Total\s+Frete/i, type: 'money' },
+    { labelRe: /NCM/i, type: 'text' },
+    { labelRe: /Incoterm/i, type: 'text' },
+    { labelRe: /CNPJ\s+Consignee/i, type: 'text' },
+  ];
+
+  let out = html;
+  for (const spec of fieldSpecs) {
+    const rowRe = new RegExp(`<tr[^>]*>[\\s\\S]*?<td[^>]*>\\s*${spec.labelRe.source}\\s*</td>[\\s\\S]*?</tr>`, 'i');
+    out = out.replace(rowRe, (row) => {
+      const cells = row.match(/<td[^>]*>[\s\S]*?<\/td>/gi) || [];
+      if (cells.length < 4) return row;
+      const docValues: string[] = [];
+      for (let i = 2; i < cells.length; i++) {
+        const v = cells[i].replace(/<[^>]+>/g, '').trim();
+        if (!v || /^nd$/i.test(v) || v === '-') continue;
+        docValues.push(v);
+      }
+      if (docValues.length < 2) return row;
+      if (!checkDivergence(docValues, spec.type)) return row;
+      const newStatus = cells[0].replace(/✅/g, '🟨').replace(/Conforme/gi, 'Alerta');
+      if (newStatus === cells[0]) return row;
+      return row.replace(cells[0], newStatus);
+    });
+  }
+  return out;
+}
+
 function applyAwbPortugueseTotalFreightCorrection(html: string, extractedTexts?: Record<string, string>): string {
-  if (!html || !extractedTexts) return html;
+  if (!html) return html;
 
   let corrected = html;
   const tableMatch = corrected.match(/<table[\s\S]*?<\/table>/i);
@@ -1679,52 +1814,78 @@ function applyAwbPortugueseTotalFreightCorrection(html: string, extractedTexts?:
   const headerCells = headerMatch?.[1]?.match(/<th[^>]*>[\s\S]*?<\/th>/gi) || [];
 
   const findColumnIndex = (filename: string): number => {
-    const target = filename.toLowerCase().replace(/\.(pdf|xlsx?|png|jpe?g)$/i, '');
-    const needle = target.substring(0, Math.min(target.length, 25));
-    return headerCells.findIndex((cell) =>
-      cell.replace(/<[^>]+>/g, '').trim().toLowerCase().includes(needle)
-    );
+    const target = filename.toLowerCase().replace(/\.(pdf|xlsx?|png|jpe?g)$/i, '').replace(/\s+/g, ' ').trim();
+    const prefix15 = target.substring(0, Math.min(target.length, 15));
+    return headerCells.findIndex((cell) => {
+      const h = normalizeHeaderText(cell);
+      if (!h) return false;
+      if (h.includes(target) || target.includes(h)) return true;
+      if (prefix15 && h.includes(prefix15)) return true;
+      return false;
+    });
   };
 
   const fixCellForRow = (fieldLabelRe: RegExp, colIdx: number, computeNewValue: (current: string) => string | null) => {
     if (colIdx < 2) return;
-    const tdIndex = colIdx; // headerCells inclui Status/Campo; mesmo índice serve para <td>
+    const tdIndex = colIdx;
     const rowRe = new RegExp(`<tr[^>]*>[\\s\\S]*?<td[^>]*>\\s*${fieldLabelRe.source}\\s*</td>[\\s\\S]*?</tr>`, 'i');
     corrected = corrected.replace(rowRe, (row) => {
       const cells = row.match(/<td[^>]*>[\s\S]*?<\/td>/gi) || [];
       if (!cells[tdIndex]) return row;
       const currentValue = cells[tdIndex].replace(/<[^>]+>/g, '').trim();
       const newValue = computeNewValue(currentValue);
-      if (newValue == null) return row;
+      if (newValue == null || newValue === currentValue) return row;
       const correctedCell = cells[tdIndex].replace(/(>)([\s\S]*?)(<\/td>)/i, `$1${newValue}$3`);
       return row.replace(cells[tdIndex], correctedCell);
     });
   };
 
-  for (const [filename, text] of Object.entries(extractedTexts)) {
-    const colIdx = findColumnIndex(filename);
-    if (colIdx < 2) continue;
+  // PASSO 1: por documento — usa OCR para corrigir parciais e buscar peso bruto real
+  if (extractedTexts) {
+    for (const [filename, text] of Object.entries(extractedTexts)) {
+      const colIdx = findColumnIndex(filename);
+      if (colIdx < 2) continue;
 
-    const totalFreight = extractAwbPortugueseTotalFreight(text);
-    const grossFromOcr = extractAwbGrossWeight(text);
+      const totalFreight = extractAwbPortugueseTotalFreight(text);
+      const grossFromOcr = extractAwbGrossWeight(text);
 
-    // 1) Valor Total Frete: força o total consolidado
-    if (totalFreight) {
+      // Valor Total Frete: substitui pelo total real; sempre limpa anotação parentética
       fixCellForRow(/Valor\s+Total\s+Frete/i, colIdx, (current) => {
-        const escaped = totalFreight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        if (new RegExp(escaped, 'i').test(current)) return null;
-        return totalFreight;
+        const stripped = stripParentheticalAnnotation(current);
+        if (totalFreight) {
+          const escaped = totalFreight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          if (new RegExp(escaped, 'i').test(stripped)) {
+            return stripped !== current ? stripped : null;
+          }
+          return totalFreight;
+        }
+        return stripped !== current ? stripped : null;
       });
-    }
 
-    // 2) Peso Bruto: nunca pode ser monetário nem igual ao frete total
-    fixCellForRow(/Peso\s+Bruto/i, colIdx, (current) => {
-      const isMonetary = looksLikeMonetary(current);
-      const matchesFreight = totalFreight && current.replace(/\s+/g, '').includes(totalFreight.replace(/\s+/g, ''));
-      if (!isMonetary && !matchesFreight) return null;
-      return grossFromOcr || 'ND';
-    });
+      // Peso Bruto: nunca força ND. Se OCR tem valor, usa-o (especialmente quando atual é ND/monetário/igual ao frete)
+      fixCellForRow(/Peso\s+Bruto/i, colIdx, (current) => {
+        const stripped = stripParentheticalAnnotation(current);
+        const isEmpty = !stripped || /^nd$/i.test(stripped) || stripped === '-';
+        const isMonetary = looksLikeMonetary(stripped);
+        const matchesFreight = !!(totalFreight && stripped.replace(/\s+/g, '').includes(totalFreight.replace(/\s+/g, '')));
+        if ((isEmpty || isMonetary || matchesFreight) && grossFromOcr) {
+          return grossFromOcr;
+        }
+        return stripped !== current ? stripped : null;
+      });
+
+      // Outras células: apenas limpa anotação parentética
+      for (const labelRe of [/Peso\s+L[ií]quido/i, /Valor\s+Mercadoria/i]) {
+        fixCellForRow(labelRe, colIdx, (current) => {
+          const stripped = stripParentheticalAnnotation(current);
+          return stripped !== current ? stripped : null;
+        });
+      }
+    }
   }
+
+  // PASSO 2: divergência determinística entre colunas (✅ → 🟨)
+  corrected = applyDivergenceStatusOverrides(corrected);
 
   return corrected;
 }
