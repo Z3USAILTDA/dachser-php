@@ -1179,6 +1179,11 @@ do processo para garantir consistência completa.
 CONTEXTO: A DI já foi registrada. Esta etapa identifica se há necessidade de 
 retificação ou se o processo pode seguir para liberação.
 
+🔴 REGRA DE OURO (OBRIGATÓRIA — NÃO OMITIR NENHUM ARQUIVO):
+- A tabela DEVE conter UMA coluna para CADA arquivo listado em "ARQUIVOS FORNECIDOS NESTA ANÁLISE" (nome EXATO).
+- Inclua TODOS os documentos das Etapas 1, 2 e 3. Se um arquivo não tiver o campo, use "ND" — NUNCA remova a coluna.
+- A ordem das colunas deve seguir a ordem dos arquivos fornecidos.
+
 FOCO PRINCIPAL:
 1. Comparar DI registrada com Invoice, BL/AWB, Packing List
 2. Verificar se valores bateram com a etapa 2 (se disponível)
