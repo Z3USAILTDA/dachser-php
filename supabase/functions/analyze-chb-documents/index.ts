@@ -2690,8 +2690,8 @@ serve(async (req) => {
       );
     }
 
-    console.log(`═══ CHB ANALYSIS (ASYNC) ═══`);
-    console.log(`[SUBMIT] Total files: ${files.length}`);
+    console.log(`═══ CHB ANALYSIS (ASYNC) v3-persisted-extractions ═══`);
+    console.log(`[SUBMIT] v3-persisted-extractions :: Total files: ${files.length}, itemId=${itemId}`);
     console.log(`[SUBMIT] Files: ${files.map((f: any) => `${f.name} (${f.mimeType})`).join(', ')}`);
     
     // Validate input size
