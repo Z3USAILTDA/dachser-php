@@ -2276,53 +2276,55 @@ async function processAnalysisInBackground(
     // This avoids racing with file registration and lets us persist the actual raw OCR text.
 
     // =========================================================================
-    // NOVO FLUXO: extrair e GRAVAR todos os arquivos em t_chb_file_extractions
-    // ANTES de chamar o LLM, e depois RELER o raw_ocr_text da tabela para
-    // alimentar a análise (fonte única de verdade).
+    // FLUXO ÚNICO: extrair → gravar em t_chb_file_extractions → reler raw_ocr_text
+    // → alimentar análise SOMENTE com o conteúdo persistido (fonte única de verdade).
+    // Sem fallback para extração em memória — se a gravação ou releitura falhar,
+    // a análise é marcada como erro.
     // =========================================================================
+    if (!itemId) {
+      console.error('[BG][pre-analysis] itemId ausente — fluxo persistido obrigatório');
+      await callMariaDBProxy('update_chb_run', {
+        runId: requestId,
+        status: 'error',
+        resultText: 'itemId obrigatório para o fluxo de extração persistida.'
+      });
+      return;
+    }
+
     let dbOcrByFilename: Record<string, string> = {};
-    if (itemId) {
-      try {
-        // NOTE: pass {} — persistRawOcrForFiles has its own fallback (extractRawTextForPersistence) that re-extracts when missing.
-        // We can't reference `extractedTexts` here (TDZ): it's only declared after the LLM call below.
-        const persistResults = await persistRawOcrForFiles(itemId, stepId, files, {});
-        console.log(`[BG][pre-analysis] Persisted raw OCR for ${persistResults.length} file(s)`);
+    try {
+      const persistResults = await persistRawOcrForFiles(itemId, stepId, files, {});
+      console.log(`[BG][pre-analysis] Persisted raw OCR for ${persistResults.length} file(s)`);
 
-        const dbRowsResp = await callMariaDBProxy('get_chb_extractions', { itemId, etapa: String(stepId) });
-        const dbRows: Array<{ filename: string; raw_ocr_text: string | null }> = dbRowsResp?.data || [];
-        for (const row of dbRows) {
-          if (row.filename && row.raw_ocr_text) {
-            dbOcrByFilename[row.filename] = row.raw_ocr_text;
-          }
+      const dbRowsResp = await callMariaDBProxy('get_chb_extractions', { itemId, etapa: String(stepId) });
+      const dbRows: Array<{ filename: string; raw_ocr_text: string | null }> = dbRowsResp?.data || [];
+      for (const row of dbRows) {
+        if (row.filename && row.raw_ocr_text) {
+          dbOcrByFilename[row.filename] = row.raw_ocr_text;
         }
-        console.log(`[BG][pre-analysis] Read back ${Object.keys(dbOcrByFilename).length} raw_ocr_text rows from t_chb_file_extractions`);
-      } catch (e) {
-        console.error('[BG][pre-analysis] Pre-extraction/read failed, will fall back to in-memory extractedTexts:', (e as Error).message);
       }
+      console.log(`[BG][pre-analysis] Read back ${Object.keys(dbOcrByFilename).length} raw_ocr_text rows from t_chb_file_extractions`);
+    } catch (e) {
+      console.error('[BG][pre-analysis] Pre-extraction/read failed — aborting analysis:', (e as Error).message);
+      await callMariaDBProxy('update_chb_run', {
+        runId: requestId,
+        status: 'error',
+        resultText: `Falha ao gravar/reler OCR persistido: ${(e as Error).message}`
+      });
+      return;
     }
 
-    // Get cached data from DB if itemId provided and no cachedData sent
-    let existingCache: Record<string, { fields: Record<string, any>; rawText?: string }> = cachedData || {};
-    if (itemId && !cachedData) {
-      console.log(`[BG] Fetching cached data for item ${itemId}...`);
-      existingCache = await getCachedExtractedData(itemId);
-      console.log(`[BG] Found ${Object.keys(existingCache).length} cached documents`);
+    if (Object.keys(dbOcrByFilename).length === 0) {
+      console.error('[BG][pre-analysis] Nenhum raw_ocr_text relido — abortando análise');
+      await callMariaDBProxy('update_chb_run', {
+        runId: requestId,
+        status: 'error',
+        resultText: 'Nenhum OCR persistido pôde ser relido de t_chb_file_extractions.'
+      });
+      return;
     }
 
 
-    
-    // Build cached context
-    const cachedFiles: { name: string; fields: Record<string, any>; rawText?: string }[] = [];
-    for (const file of files) {
-      const cached = existingCache[file.name];
-      if (cached && cached.rawText && Object.keys(cached.fields).length > 0) {
-        cachedFiles.push({
-          name: file.name,
-          fields: cached.fields,
-          rawText: cached.rawText,
-        });
-      }
-    }
     
     // Fetch user corrections if itemId provided
     let userCorrections: { filename: string; field_name: string; corrected_value: string; location_reference?: string; location_context?: string; location_confidence?: string }[] = [];
