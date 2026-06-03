@@ -2675,7 +2675,7 @@ serve(async (req) => {
     // =========================================================================
     // MODE: SUBMIT - Start new analysis (async)
     // =========================================================================
-    const { stepId, files, clientConfig, itemId, cachedData } = body;
+    const { stepId, files, clientConfig, itemId } = body;
 
     if (!stepId || !files || !Array.isArray(files) || files.length === 0) {
       return new Response(
