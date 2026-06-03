@@ -1629,7 +1629,7 @@ function extractAwbPortugueseTotalFreight(text: string): string | null {
   if (!/totais\s+na\s+moeda\s+de\s+origem/i.test(text) || !/por\s+peso/i.test(text)) return null;
 
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const currencyValue = '([A-Z]{3}\s*)?\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})';
+  const currencyValue = '([A-Z]{3}\\s*)?\\d{1,3}(?:[.,]\\d{3})*(?:[.,]\\d{2})';
   for (const line of lines) {
     if (/^total\b/i.test(line)) {
       const matches = line.match(new RegExp(currencyValue, 'gi')) || [];
