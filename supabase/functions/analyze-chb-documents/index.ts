@@ -2129,91 +2129,8 @@ async function processAnalysisInBackground(
       extractionId: number | null;
     }> = [];
 
-    if (itemId) {
-      try {
-        console.log(`[BG][extract] Looking up file IDs for item ${itemId}…`);
-        const filesResult = await callMariaDBProxy('get_chb_files', { itemId });
-        const dbFiles: Array<{ id: number; filename: string; doc_role?: string; etapa?: string }> = filesResult.data || [];
-        const byName = new Map<string, { id: number; doc_role?: string; etapa?: string }>();
-        for (const df of dbFiles) byName.set(df.filename, { id: df.id, doc_role: df.doc_role, etapa: df.etapa });
-
-        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-        const extractionPromises = files.map(async (f: any) => {
-          const dbFile = byName.get(f.name);
-          if (!dbFile) {
-            console.error(`[BG][extract] No DB file match for "${f.name}". DB filenames: ${Array.from(byName.keys()).join(' | ')}`);
-            return {
-              filename: f.name,
-              docRole: null,
-              structured: null,
-              evidence: null,
-              model: null,
-              status: 'ERRO',
-              extractionId: null,
-            };
-          }
-          try {
-            const resp = await fetch(`${supabaseUrl}/functions/v1/extract-chb-file`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseKey}` },
-              body: JSON.stringify({
-                itemId,
-                fileId: dbFile.id,
-                fileBase64: f.content,
-                mimeType: f.mimeType,
-                filename: f.name,
-                docRole: dbFile.doc_role || null,
-                etapa: dbFile.etapa || String(stepId),
-              }),
-            });
-            const json = await resp.json();
-            if (!resp.ok || !json.success) {
-              console.error(`[BG][extract] Failed for ${f.name}:`, json.error || resp.status);
-              return {
-                filename: f.name,
-                docRole: dbFile.doc_role || null,
-                structured: null,
-                evidence: null,
-                model: null,
-                status: 'ERRO',
-                extractionId: json?.extractionId || null,
-              };
-            }
-            console.log(`[BG][extract] ${f.name} → extractionId=${json.extractionId} status=${json.extractionStatus}`);
-            return {
-              filename: f.name,
-              docRole: dbFile.doc_role || null,
-              structured: json.structuredFields || null,
-              evidence: json.fieldEvidence || null,
-              model: json.extractorModel || null,
-              status: json.extractionStatus || 'OK',
-              extractionId: json.extractionId || null,
-            };
-          } catch (e) {
-            console.error(`[BG][extract] Exception extracting ${f.name}:`, e);
-            return {
-              filename: f.name,
-              docRole: dbFile.doc_role || null,
-              structured: null,
-              evidence: null,
-              model: null,
-              status: 'ERRO',
-              extractionId: null,
-            };
-          }
-        });
-
-        const settled = await Promise.all(extractionPromises);
-        perFileExtractions = settled.filter((x): x is NonNullable<typeof x> => x !== null);
-        console.log(`[BG][extract] Persisted ${perFileExtractions.length}/${files.length} extractions in t_chb_file_extractions`);
-      } catch (e) {
-        console.error('[BG][extract] Orchestration failed (analysis will continue):', e);
-      }
-    } else {
-      console.log('[BG][extract] No itemId — skipping per-file extraction persistence');
-    }
+    // NOTE: per-file extraction persistence moved to AFTER OCR runs (see [BG][extract] block below the LLM call).
+    // This avoids racing with file registration and lets us persist the actual raw OCR text.
     
     // Get cached data from DB if itemId provided and no cachedData sent
     let existingCache: Record<string, { fields: Record<string, any>; rawText?: string }> = cachedData || {};
@@ -2561,6 +2478,57 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
     });
 
     console.log(`[BG] Request ${requestId} completed successfully`);
+
+    // =========================================================================
+    // PRIORITY: Persist RAW OCR text per file → t_chb_file_extractions
+    // (this is the single most important artifact — structured fields can wait)
+    // =========================================================================
+    if (itemId && extractedTexts && Object.keys(extractedTexts).length > 0) {
+      try {
+        console.log(`[BG][raw-ocr-save] v1 :: Persisting raw OCR for ${Object.keys(extractedTexts).length} file(s) (item ${itemId})...`);
+        const filesResult = await callMariaDBProxy('get_chb_files', { itemId });
+        const dbFiles: Array<{ id: number; filename: string; doc_role?: string; etapa?: string }> = filesResult.data || [];
+        const byName = new Map<string, { id: number; doc_role?: string; etapa?: string }>();
+        for (const df of dbFiles) byName.set(df.filename, { id: df.id, doc_role: df.doc_role, etapa: df.etapa });
+
+        for (const file of files) {
+          const rawOcr = extractedTexts[file.name];
+          if (!rawOcr || rawOcr.length < 10) {
+            console.warn(`[BG][raw-ocr-save] No OCR text for ${file.name}, skipping`);
+            continue;
+          }
+          const dbFile = byName.get(file.name);
+          if (!dbFile) {
+            console.warn(`[BG][raw-ocr-save] No DB file match for "${file.name}" — known: ${Array.from(byName.keys()).join(' | ') || '(none)'}`);
+          }
+          try {
+            const ins = await callMariaDBProxy('insert_chb_extraction', {
+              itemId,
+              fileId: dbFile?.id ?? null,
+              filename: file.name,
+              docRole: dbFile?.doc_role ?? null,
+              etapa: dbFile?.etapa ?? String(stepId),
+              fileSha256: null,
+              extractorModel: 'google/gemini-2.5-flash',
+              extractorPromptVersion: 'main-ocr-v1',
+              extractorConfidence: null,
+              rawOcrText: rawOcr,
+              structuredFields: null,
+              fieldEvidence: null,
+              extractionStatus: 'OK',
+              errorMessage: null,
+            });
+            console.log(`[BG][raw-ocr-save] ${file.name} → extractionId=${ins.extractionId} (${rawOcr.length} chars)`);
+          } catch (e) {
+            console.error(`[BG][raw-ocr-save] Insert failed for ${file.name}:`, e instanceof Error ? e.message : e);
+          }
+        }
+      } catch (e) {
+        console.error('[BG][raw-ocr-save] Orchestration failed:', e);
+      }
+    } else {
+      console.log(`[BG][raw-ocr-save] Skipped (itemId=${itemId}, extractedTexts=${extractedTexts ? Object.keys(extractedTexts).length : 'undef'})`);
+    }
 
     // Save extracted data to cache for future steps
     // IMPROVED: Extract fields from each file column in the HTML table
