@@ -1625,6 +1625,35 @@ function extractHtmlAndTags(response: string, stepId: number): {
   return { html, tags, summary, detailedSummary, parecer, modal, cliente };
 }
 
+function extractAwbPortugueseTotalFreight(text: string): string | null {
+  if (!/totais\s+na\s+moeda\s+de\s+origem/i.test(text) || !/por\s+peso/i.test(text)) return null;
+
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const currencyValue = '([A-Z]{3}\s*)?\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})';
+  for (const line of lines) {
+    if (/^total\b/i.test(line)) {
+      const matches = line.match(new RegExp(currencyValue, 'gi')) || [];
+      const value = matches[matches.length - 1]?.trim();
+      if (value) return value;
+    }
+  }
+  return null;
+}
+
+function applyAwbPortugueseTotalFreightCorrection(html: string, extractedTexts?: Record<string, string>): string {
+  if (!html || !extractedTexts) return html;
+
+  const totalFreight = Object.values(extractedTexts)
+    .map(extractAwbPortugueseTotalFreight)
+    .find(Boolean);
+  if (!totalFreight) return html;
+
+  return html.replace(/(<tr[^>]*>[\s\S]*?<td[^>]*>\s*Valor\s+Total\s+Frete\s*<\/td>[\s\S]*?<td[^>]*>)([\s\S]*?)(<\/td>)/i, (_match, before, value, after) => {
+    if (new RegExp(totalFreight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(value)) return `${before}${value}${after}`;
+    return `${before}${totalFreight}${after}`;
+  });
+}
+
 // =============================================================================
 // DATA PERSISTENCE - Using MariaDB via mariadb-proxy
 // =============================================================================
