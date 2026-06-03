@@ -21160,7 +21160,11 @@ Deno.serve(async (req) => {
             origem_processo: (() => { origin['origem_processo'] = 'PLANILHA'; return sheet.origem_processo || 'CHB'; })(),
             fornecedor: dfvFornecedor,
             cnpj_fornecedor: pick(sheet.cnpj_fornecedor, dfvCnpj, 'cnpj_fornecedor'),
-            valor: (() => { origin['valor'] = sheet.valor != null ? 'PLANILHA' : null; return sheet.valor; })(),
+            valor: (() => {
+              if (dfvValor != null) { origin['valor'] = 'DFV'; return dfvValor; }
+              origin['valor'] = sheet.valor != null ? 'PLANILHA' : null;
+              return sheet.valor;
+            })(),
             moeda: pick(sheet.moeda, dfvMoeda, 'moeda') || 'BRL',
             vencimento: (() => { origin['vencimento'] = sheet.vencimento ? 'PLANILHA' : null; return sheet.vencimento; })(),
             data_emissao: pick(sheet.data_emissao, dfvEmis, 'data_emissao'),
@@ -21208,41 +21212,16 @@ Deno.serve(async (req) => {
             if (candidates.length === 0) { results.push(mergeWithDfv(s, null)); continue; }
             if (candidates.length === 1) { results.push(mergeWithDfv(s, candidates[0])); continue; }
 
-            // 2+ candidatos: match por valor da planilha (tolerância 1 centavo).
-            const sheetValor = Number(s.valor);
-            const hasValor = Number.isFinite(sheetValor) && sheetValor > 0;
-            const matches = hasValor
-              ? candidates.filter((c) => Number.isFinite(Number(c?.valor_nf)) && Math.abs(Number(c.valor_nf) - sheetValor) < 0.01)
-              : [];
-
-            if (matches.length === 1) {
-              // Único SPO bate exatamente com o valor da planilha.
-              results.push(mergeWithDfv(s, matches[0]));
-            } else {
-              // ≥2 matches OU 0 matches (valor diferente / ausente):
-              // expande em N linhas, uma por SPO candidato. Cada linha usa o valor_nf
-              // do próprio SPO para que a validação passe individualmente.
-              const expandList = matches.length >= 2 ? matches : candidates;
-              expandList.forEach((c, k) => {
-                const expanded = { ...s };
-                if (k > 0) expanded.row_index = nextRowIndex++;
-                // Quando o valor da planilha não bate, usa o valor_nf do SPO para a linha expandida.
-                if (matches.length < 2 && Number.isFinite(Number(c?.valor_nf))) {
-                  expanded.valor = Number(c.valor_nf);
-                }
-                const merged = mergeWithDfv(expanded, c);
-                merged.expanded_from_processo = true;
-                merged.source_row_index = s.row_index;
-                if (matches.length < 2 && hasValor) {
-                  merged.value_mismatch = true;
-                  const note = `Valor da planilha (${sheetValor.toFixed(2)}) não bate com este SPO (${Number(c?.valor_nf || 0).toFixed(2)}). Linha expandida com o valor do SPO — confira antes de criar o lote.`;
-                  merged.validation_message = merged.validation_message
-                    ? `${merged.validation_message}; ${note}`
-                    : note;
-                }
-                results.push(merged);
-              });
-            }
+            // 2+ candidatos: sempre expande em N linhas (uma por SPO).
+            // O valor é sempre o do banco (mergeWithDfv já prioriza dfv.valor_nf).
+            candidates.forEach((c, k) => {
+              const expanded = { ...s };
+              if (k > 0) expanded.row_index = nextRowIndex++;
+              const merged = mergeWithDfv(expanded, c);
+              merged.expanded_from_processo = true;
+              merged.source_row_index = s.row_index;
+              results.push(merged);
+            });
           }
           return results;
         };
