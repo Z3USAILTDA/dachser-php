@@ -2004,6 +2004,8 @@ async function persistRawOcrForFiles(
           docRole: (file as any).docRole || 'O',
           mime: (file as any).mimeType || null,
           sizeBytes: (file as any).sizeBytes || null,
+          url: '',
+          relPath: '',
           userId: null,
         });
         if (created?.fileId) {
