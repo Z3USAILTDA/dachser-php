@@ -1315,39 +1315,55 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[], persis
       }
     } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || 
                file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-      // Extract text from Excel
-      try {
-        const excelText = await extractExcelText(file.content, file.name);
+      // FLUXO ÚNICO: usar somente OCR persistido (já contém o texto deste Excel).
+      const persisted = persistedOcr[file.name];
+      if (persisted && persisted.trim().length >= 10) {
         content.push({
           type: 'text',
-          text: excelText,
+          text: `[Arquivo Excel: ${file.name}] — conteúdo já fornecido no bloco "📚 OCR BRUTO PERSISTIDO".`,
         });
-      } catch (e) {
-        console.error(`Error processing Excel ${file.name}:`, e);
-        warnings.push({
-          fileName: file.name,
-          error: 'Erro ao processar arquivo Excel',
-          type: 'conversion',
-          suggestion: 'Verifique se o arquivo não está corrompido ou tente exportar como PDF.',
-        });
-        content.push({
-          type: 'text',
-          text: `[Arquivo Excel: ${file.name}] - Não foi possível extrair conteúdo`,
-        });
+        console.log(`[Anthropic] Excel ${file.name}: usando OCR persistido (stub no payload, ${persisted.length} chars no bloco persistido)`);
+      } else {
+        console.warn(`[Anthropic] Excel ${file.name}: persistência ausente — caindo para extração ao vivo`);
+        try {
+          const excelText = await extractExcelText(file.content, file.name);
+          content.push({ type: 'text', text: excelText });
+        } catch (e) {
+          console.error(`Error processing Excel ${file.name}:`, e);
+          warnings.push({
+            fileName: file.name,
+            error: 'Erro ao processar arquivo Excel',
+            type: 'conversion',
+            suggestion: 'Verifique se o arquivo não está corrompido ou tente exportar como PDF.',
+          });
+          content.push({
+            type: 'text',
+            text: `[Arquivo Excel: ${file.name}] - Não foi possível extrair conteúdo`,
+          });
+        }
       }
     } else {
-      // Text-based files
-      try {
-        const textContent = atob(file.content);
+      // Outros formatos: preferir OCR persistido; só cair no atob se não houver.
+      const persisted = persistedOcr[file.name];
+      if (persisted && persisted.trim().length >= 10) {
         content.push({
           type: 'text',
-          text: `[Arquivo: ${file.name}]\n${textContent}`,
+          text: `[Arquivo: ${file.name}] — conteúdo já fornecido no bloco "📚 OCR BRUTO PERSISTIDO".`,
         });
-      } catch {
-        content.push({
-          type: 'text',
-          text: `[Arquivo: ${file.name}] - Conteúdo binário não legível`,
-        });
+        console.log(`[Anthropic] ${file.name}: usando OCR persistido (stub no payload)`);
+      } else {
+        try {
+          const textContent = atob(file.content);
+          content.push({
+            type: 'text',
+            text: `[Arquivo: ${file.name}]\n${textContent}`,
+          });
+        } catch {
+          content.push({
+            type: 'text',
+            text: `[Arquivo: ${file.name}] - Conteúdo binário não legível`,
+          });
+        }
       }
     }
   }
