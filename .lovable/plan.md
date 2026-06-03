@@ -1,53 +1,51 @@
-## Objetivo
+# Corrigir ordem de execução do novo fluxo síncrono CHB
 
-Mudar o fluxo do `analyze-chb-documents` para:
+## Problema
 
-1. **Extrair** OCR bruto de TODOS os arquivos
-2. **Gravar** cada extração em `dados_dachser.t_chb_file_extractions` (uma linha por arquivo)
-3. **Analisar** lendo o `raw_ocr_text` direto da tabela (fonte única de verdade)
+O bloco "extrai → grava → relê da tabela → analisa" foi inserido **antes** da declaração de `extractedTexts` em `supabase/functions/analyze-chb-documents/index.ts`.
 
-Hoje a análise roda primeiro e a persistência do OCR acontece DEPOIS (linha 2581-2583), o que causou o bug do item 122 (só um arquivo gravado, porque vinha de mapa em memória incompleto).
+- Linha 2272: `persistRawOcrForFiles(itemId, stepId, files, extractedTexts || {})`
+- Linha 2586: `let extractedTexts: Record<string, string> | undefined;`
 
-## Mudança cirúrgica
+Isso dispara TDZ (`Cannot access 'extractedTexts' before initialization`), o `try/catch` engole o erro, `dbOcrByFilename` fica vazio e a análise cai no fallback antigo (in-memory). Confirmado nos logs do request 145.
 
-Arquivo único: `supabase/functions/analyze-chb-documents/index.ts`.
+## Correção
 
-### 1. Mover `persistRawOcrForFiles` para ANTES do LLM
+1. **Remover** o bloco atual em `supabase/functions/analyze-chb-documents/index.ts` linhas 2261-2286 (comentário + bloco `let dbOcrByFilename` + try/catch).
 
-- Hoje é chamado em ~linha 2581, após o LLM responder.
-- Mover para logo após a montagem de `extractedTexts` e ANTES da chamada ao Gemini (próximo da linha 2310, no bloco que monta `cachedContext`).
-- Manter assinatura atual: ela já re-extrai OCR via `extractRawTextForPersistence` quando o mapa em memória vem vazio/curto (linha 1991-1994), garantindo que TODOS os arquivos fiquem gravados.
+2. **Declarar** apenas a variável vazia nessa posição, para manter escopo visível no prompt builder:
+   ```ts
+   let dbOcrByFilename: Record<string, string> = {};
+   ```
 
-### 2. Reler o `raw_ocr_text` da tabela para alimentar a análise
+3. **Reinserir o bloco completo logo após** o OCR rodar e `extractedTexts` estar populado (após a linha ~2605, onde `extractedTexts = result.extractedTexts` é atribuído pelo caminho de cache miss; e também garantir cobertura do caminho cache hit linha 2594). Local exato: imediatamente após o bloco `if (cachedExtraction)…else{…}` que define `extractedTexts`, e **antes** da chamada ao LLM/Anthropic.
 
-- Após `persistRawOcrForFiles`, chamar `callMariaDBProxy('get_chb_extractions', { itemId, etapa: stepId })` (ou criar action equivalente se não existir — verificar no mariadb-proxy antes; se faltar, adicionar SELECT simples).
-- Construir um mapa `dbOcrByFilename: Record<string, string>` a partir do retorno.
-- Substituir o uso de `extractedTexts` no prompt do LLM por esse mapa lido do banco. Mantém `extractedTexts` como fallback se a leitura falhar.
+   ```ts
+   // NOVO FLUXO: grava raw OCR em t_chb_file_extractions e relê como fonte única
+   if (itemId) {
+     try {
+       const persistResults = await persistRawOcrForFiles(itemId, stepId, files, extractedTexts || {});
+       console.log(`[BG][pre-analysis] Persisted raw OCR for ${persistResults.length} file(s)`);
+       const dbRowsResp = await callMariaDBProxy('get_chb_extractions', { itemId, etapa: String(stepId) });
+       const dbRows = dbRowsResp?.data || [];
+       for (const row of dbRows) {
+         if (row.filename && row.raw_ocr_text) dbOcrByFilename[row.filename] = row.raw_ocr_text;
+       }
+       console.log(`[BG][pre-analysis] Read back ${Object.keys(dbOcrByFilename).length} raw_ocr_text rows`);
+     } catch (e) {
+       console.error('[BG][pre-analysis] failed:', (e as Error).message);
+     }
+   }
+   ```
 
-### 3. Bloco "GROUND TRUTH" do prompt
+4. **Manter** o bloco do prompt (linhas ~2386+) que injeta `📚 OCR BRUTO PERSISTIDO` quando `dbOcrByFilename` tiver itens — já está correto, só estava recebendo objeto vazio.
 
-- O bloco atual (linha 2316-2356) lista `structured_fields` por arquivo. Adicionar — logo abaixo — um bloco com o `raw_ocr_text` de cada arquivo (truncado a ~8k chars/arquivo para caber no contexto), também vindo da tabela.
-- Texto introdutório: "OCR bruto persistido em `t_chb_file_extractions` — fonte única de verdade. Não invente valores fora deste texto."
+5. **Redeployar** `analyze-chb-documents` e rodar nova análise no item 123. Verificar logs:
+   - `[BG][raw-ocr-save] v2-all-files :: Persisting raw OCR…`
+   - `[BG][raw-ocr-save] <file> → extractionId=… status=OK`
+   - `[BG][pre-analysis] Read back N raw_ocr_text rows`
+   - SQL: `SELECT filename, LENGTH(raw_ocr_text) FROM dados_dachser.t_chb_file_extractions WHERE item_id=123 AND etapa='1'` → 1 linha por arquivo, todas com `raw_ocr_text > 0`.
 
-### 4. Remover dupla persistência
+## Escopo
 
-- Remover a chamada de `persistRawOcrForFiles` em ~linha 2581 (passou a rodar antes).
-- Manter `saveExtractedData` (loop linha 2615+) — é um cache separado de campos estruturados pós-análise, não conflita.
-
-## Validação
-
-1. Redeploy de `analyze-chb-documents`.
-2. Nova análise no item 122/123.
-3. Logs esperados, em ordem:
-   - `[BG][raw-ocr-save] Persisting raw OCR for N file(s)`
-   - N linhas `extractionId=… status=OK`
-   - `[BG] Reading raw OCR back from t_chb_file_extractions… N rows`
-   - `[BG] Analysis completed`
-4. SQL: `SELECT filename, LENGTH(raw_ocr_text) FROM dados_dachser.t_chb_file_extractions WHERE item_id=123` → deve retornar 1 linha por arquivo enviado, todas com `raw_ocr_text` > 10 chars.
-
-## Não-escopo
-
-- Sem alteração de schema.
-- Sem mudança em `mariadb-proxy` exceto, se necessário, adicionar `get_chb_extractions` (action SELECT simples) — confirmar antes de criar.
-- Sem mudança no frontend.
-- Sem refator do `extract-chb-file` (não está no fluxo principal do botão Analisar).
+Mudança cirúrgica em 1 arquivo (`analyze-chb-documents/index.ts`). Sem alteração de schema, sem mudança de UI, sem mexer no `mariadb-proxy`.

@@ -2269,7 +2269,9 @@ async function processAnalysisInBackground(
     let dbOcrByFilename: Record<string, string> = {};
     if (itemId) {
       try {
-        const persistResults = await persistRawOcrForFiles(itemId, stepId, files, extractedTexts || {});
+        // NOTE: pass {} — persistRawOcrForFiles has its own fallback (extractRawTextForPersistence) that re-extracts when missing.
+        // We can't reference `extractedTexts` here (TDZ): it's only declared after the LLM call below.
+        const persistResults = await persistRawOcrForFiles(itemId, stepId, files, {});
         console.log(`[BG][pre-analysis] Persisted raw OCR for ${persistResults.length} file(s)`);
 
         const dbRowsResp = await callMariaDBProxy('get_chb_extractions', { itemId, etapa: String(stepId) });
