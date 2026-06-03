@@ -884,17 +884,35 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
       ⛔ REGRA CRÍTICA — NUNCA CONFUNDIR:
       ❌ ERRADO: pegar a linha "Collect" (frete puro, antes das taxas) como Valor Total Frete
       ❌ ERRADO: pegar "Weight Charge" / "WT/VAL Charge" / "Valuation Charge" isolados
-      ✅ CORRETO: SEMPRE a linha "Total Collect" / "Total Prepaid" do rodapé
+      ❌ ERRADO: pegar "Por Peso" / "Por Valor" / "Impostos" / "Outros Serviços (...)" isolados
+      ✅ CORRETO: SEMPRE a linha "Total Collect" / "Total Prepaid" / "Total" do rodapé
 
-      Exemplo numérico:
+      Exemplo numérico (EN):
         Weight Charge (Collect): 1.200,00
         Tax / Other Charges:       250,00
         ─────────────────────────────────
         Total Collect:           1.450,00   ← USAR ESTE VALOR (1.450,00)
 
+      ESTRUTURA EM PORTUGUÊS (AWB/HAWB BR — "Totais na moeda de origem"):
+        | Linha                              | Prepaid | Collect |
+        | Por Peso                           |    -    |  25,00  | ← PARCIAL, NÃO USAR
+        | Por Valor                          |    -    |    -    | ← PARCIAL, NÃO USAR
+        | Impostos                           |    -    |    -    | ← PARCIAL, NÃO USAR
+        | Outros Serviços (Agente de Carga)  |    -    |    -    | ← PARCIAL, NÃO USAR
+        | Outros Serviços (Transportador)    |    -    |    -    | ← PARCIAL, NÃO USAR
+        | Total                              |    -    | 220,00  | ✅ USAR ESTE VALOR (220,00)
+
+      MAPEAMENTO PT → EN (todos os itens acima de "Total" são PARCIAIS):
+        • "Por Peso"                          ≡ Weight Charge          (parcial)
+        • "Por Valor"                         ≡ Valuation Charge       (parcial)
+        • "Impostos"                          ≡ Tax                    (parcial)
+        • "Outros Serviços (Agente de Carga)" ≡ Other Charges Agent    (parcial)
+        • "Outros Serviços (Transportador)"   ≡ Other Charges Carrier  (parcial)
+        • "Total" (rodapé da coluna)          ≡ Total Prepaid / Total Collect  ✅ USAR
+
       COMO REPORTAR:
-      - Se PREPAID: Linha "Total Prepaid" com o valor consolidado do rodapé
-      - Se COLLECT: Linha "Total Collect" com o valor consolidado do rodapé
+      - Se PREPAID: linha "Total Prepaid" (ou "Total" do rodapé Prepaid em AWB PT) com o valor consolidado
+      - Se COLLECT: linha "Total Collect" (ou "Total" do rodapé Collect em AWB PT) com o valor consolidado
       - NÃO inventar "Total Charges" se não existir explicitamente
 
    
