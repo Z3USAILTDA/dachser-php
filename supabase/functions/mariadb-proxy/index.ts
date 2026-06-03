@@ -6404,6 +6404,58 @@ Deno.serve(async (req) => {
       }
 
       // ============================================================
+      // CHB APPROVED SNAPSHOTS (fotografia da grid aprovada por etapa)
+      // ============================================================
+      case 'save_chb_approved_snapshot': {
+        const { itemId, etapa, runId, snapshot, resultHtml, summary, approvedBy } = body as any;
+        console.log('[CHB-SNAPSHOT] Saving approved snapshot:', { itemId, etapa, runId });
+
+        await client.execute(`
+          INSERT INTO dados_dachser.t_dachser_chb_approved_snapshots
+            (item_id, etapa, run_id, snapshot, result_html, summary, approved_by, approved_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+          ON DUPLICATE KEY UPDATE
+            run_id      = VALUES(run_id),
+            snapshot    = VALUES(snapshot),
+            result_html = VALUES(result_html),
+            summary     = VALUES(summary),
+            approved_by = VALUES(approved_by),
+            approved_at = NOW(),
+            updated_at  = NOW()
+        `, [
+          itemId,
+          String(etapa),
+          runId || null,
+          typeof snapshot === 'string' ? snapshot : JSON.stringify(snapshot ?? {}),
+          resultHtml || null,
+          summary ? (typeof summary === 'string' ? summary : JSON.stringify(summary)) : null,
+          approvedBy ?? null,
+        ]);
+
+        result = { success: true };
+        break;
+      }
+
+      case 'get_chb_approved_snapshots': {
+        const { itemId, maxEtapa } = body as any;
+        console.log('[CHB-SNAPSHOT] Fetching approved snapshots:', { itemId, maxEtapa });
+
+        const hasMax = maxEtapa !== undefined && maxEtapa !== null;
+        const rows = await client.query(`
+          SELECT etapa, run_id, snapshot, result_html, summary, approved_by, approved_at
+          FROM dados_dachser.t_dachser_chb_approved_snapshots
+          WHERE item_id = ?
+            ${hasMax ? 'AND etapa < ?' : ''}
+          ORDER BY etapa ASC
+        `, hasMax ? [itemId, String(maxEtapa)] : [itemId]);
+
+        result = { success: true, data: rows || [] };
+        break;
+      }
+
+
+
+      // ============================================================
       // CHB FILE EXTRACTIONS (audit/ground-truth por arquivo)
       // ============================================================
       case 'insert_chb_extraction': {
