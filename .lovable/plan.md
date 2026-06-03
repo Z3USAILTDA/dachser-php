@@ -1,26 +1,35 @@
-Plano para corrigir a tabela vazia pós-extração:
+## Diagnóstico
 
-1. Tornar a extração persistida obrigatória
-   - No `analyze-chb-documents`, a etapa inicial deve parar a análise se nenhuma extração for gravada.
-   - Hoje ela pode falhar/sumir e a análise continua pelo fluxo antigo, mascarando o problema.
+Logs do item 121:
+```
+[BG][raw-ocr-save] v2-all-files :: Persisting raw OCR for 4 file(s) (item 121)...
+[BG][raw-ocr-save] No DB file match for "DOCS FINAL OERLIKON - JUNDIAI ( 159 Invoice 1.pdf" — known: (none)
+ERROR mariadb-proxy: Column 'file_id' cannot be null
+```
 
-2. Garantir que a função implantada seja rastreável
-   - Adicionar marcador de versão também no início do submit (`SUBMIT`) e não apenas no background.
-   - Isso confirma nos logs se o código novo realmente está em execução.
+Causa raiz: `persistRawOcrForFiles` chama `get_chb_files(itemId=121)` → retorna `[]` (nenhuma linha em `t_dachser_chb_docs` com `is_active=1`). Como não há match, `dbFile?.id ?? null` é enviado ao `insert_chb_extraction`. A coluna `dados_dachser.t_chb_file_extractions.file_id` é `NOT NULL`, então o insert quebra para os 4 arquivos.
 
-3. Corrigir o fluxo para usar banco como fonte única
-   - Após chamar `extract-chb-file` para cada documento, buscar as extrações via `get_chb_extractions`.
-   - A análise deve seguir apenas se houver linhas retornadas da `dados_dachser.t_chb_file_extractions` para o `item_id` e etapa.
+Os arquivos vêm no payload da requisição (upload direto na análise), mas não estão registrados em `t_dachser_chb_files` / `t_dachser_chb_docs`. Por isso o lookup falha.
 
-4. Melhorar diagnóstico de falha
-   - Se houver mismatch de nome entre arquivos enviados e `t_dachser_chb_files`, registrar erro explícito com lista de nomes.
-   - Se `insert_chb_extraction` falhar, retornar erro claro para o usuário em vez de concluir análise sem gravar.
+## Plano (cirúrgico)
 
-5. Reimplantar e validar
-   - Reimplantar `analyze-chb-documents`, `extract-chb-file` e `mariadb-proxy`.
-   - Rodar nova análise no item 118.
-   - Validar nos logs:
-     - marcador `v3-persisted-extractions-required` no submit/background;
-     - chamadas reais para `extract-chb-file`;
-     - logs `[CHB-EXTRACTION] Inserting extraction` no `mariadb-proxy`.
-   - Confirmar que `dados_dachser.t_chb_file_extractions` recebe uma linha por arquivo.
+Editar apenas `supabase/functions/analyze-chb-documents/index.ts`, função `persistRawOcrForFiles`:
+
+1. Manter o lookup atual em `get_chb_files`.
+2. Quando não houver match para um arquivo (`dbFile` indefinido), chamar `create_chb_file` no `mariadb-proxy` para registrar o arquivo on-the-fly:
+   - `itemId`, `filename: file.name`, `etapa: String(stepId)`, `docRole: file.docRole ?? 'O'`, `mime: file.mimeType ?? null`, `sizeBytes`, `userId: null`.
+   - Isso insere em `t_dachser_chb_files` + `t_dachser_chb_docs` e retorna `fileId`.
+3. Usar esse `fileId` recém-criado no `insert_chb_extraction`. Assim a constraint `NOT NULL` é satisfeita e o vínculo file↔item fica consistente.
+4. Logar `[BG][raw-ocr-save] auto-registered fileId=… for "<name>"` para rastreabilidade.
+5. Se o `create_chb_file` falhar, propagar o erro (manter a regra "OCR bruto não foi gravado para todos os arquivos").
+
+Sem alterações no `mariadb-proxy`, sem migração de schema, sem mudanças no frontend.
+
+## Validação
+
+- Redeploy `analyze-chb-documents`.
+- Pedir nova análise no item 122 (novo).
+- Logs esperados:
+  - `auto-registered fileId=…` para cada arquivo novo;
+  - `extractionId=N status=OK (X chars)` para os 4 arquivos;
+  - `SELECT COUNT(*) FROM dados_dachser.t_chb_file_extractions WHERE item_id=122` = 4.
