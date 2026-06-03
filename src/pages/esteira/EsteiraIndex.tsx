@@ -41,6 +41,7 @@ interface DashboardMetrics {
   slaAtencao: number;
   pendenciasFinanceiras: number;
   eventos24h: number;
+  rascunhos: number;
 }
 type DrillDownFilter = "all" | "ativos" | "sla" | "pendencias" | "atividade";
 const CHART_COLORS = {
