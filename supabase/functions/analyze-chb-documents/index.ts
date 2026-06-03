@@ -2555,7 +2555,7 @@ O usuário CORRIGIU os seguintes valores. VOCÊ DEVE USAR ESSES VALORES CORRIGID
     }
 
     const parsedResult = extractHtmlAndTags(responseText, stepId);
-    const html = applyAwbPortugueseTotalFreightCorrection(parsedResult.html, extractedTexts);
+    const html = applyAwbPortugueseTotalFreightCorrection(parsedResult.html, dbOcrByFilename);
     const correctedResult = extractHtmlAndTags(`<<BEGIN_HTML>>${html}<<END_HTML>>`, stepId);
     const { tags, summary, detailedSummary, parecer } = correctedResult;
     const { modal, cliente } = parsedResult;
