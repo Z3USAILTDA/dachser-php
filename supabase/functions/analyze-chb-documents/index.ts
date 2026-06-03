@@ -2106,7 +2106,7 @@ async function processAnalysisInBackground(
   const supabase = getSupabaseClient();
   
   try {
-    console.log(`[BG] Starting background analysis for request ${requestId}`);
+    console.log(`[BG] v2-extractions-enabled :: Starting background analysis for request ${requestId} (itemId=${itemId})`);
     
     // Update status to processing in MariaDB
     await callMariaDBProxy('update_chb_run', {
