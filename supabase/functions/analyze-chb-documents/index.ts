@@ -1976,10 +1976,17 @@ async function persistRawOcrForFiles(
   }
 
   const persisted: Array<{ filename: string; extractionId: number | null; status: string }> = [];
+  const duplicateNames = new Set(
+    files
+      .map(file => normalizeChbFilename(file.name))
+      .filter((name, index, all) => all.indexOf(name) !== index)
+  );
 
   for (const [index, file] of files.entries()) {
     const normalizedName = normalizeChbFilename(file.name);
-    let rawOcr = extractedTexts[file.name] || textByNormalized.get(normalizedName) || '';
+    let rawOcr = duplicateNames.has(normalizedName)
+      ? ''
+      : (extractedTexts[file.name] || textByNormalized.get(normalizedName) || '');
 
     if (!rawOcr || rawOcr.trim().length < 10) {
       console.log(`[BG][raw-ocr-save] Re-extracting raw text for ${file.name} because main OCR map was missing/short`);
