@@ -21216,33 +21216,32 @@ Deno.serve(async (req) => {
               : [];
 
             if (matches.length === 1) {
+              // Único SPO bate exatamente com o valor da planilha.
               results.push(mergeWithDfv(s, matches[0]));
-            } else if (matches.length >= 2) {
-              // Expande: 1 linha da planilha → N items, um por SPO casado.
-              matches.forEach((c, k) => {
+            } else {
+              // ≥2 matches OU 0 matches (valor diferente / ausente):
+              // expande em N linhas, uma por SPO candidato. Cada linha usa o valor_nf
+              // do próprio SPO para que a validação passe individualmente.
+              const expandList = matches.length >= 2 ? matches : candidates;
+              expandList.forEach((c, k) => {
                 const expanded = { ...s };
                 if (k > 0) expanded.row_index = nextRowIndex++;
+                // Quando o valor da planilha não bate, usa o valor_nf do SPO para a linha expandida.
+                if (matches.length < 2 && Number.isFinite(Number(c?.valor_nf))) {
+                  expanded.valor = Number(c.valor_nf);
+                }
                 const merged = mergeWithDfv(expanded, c);
                 merged.expanded_from_processo = true;
                 merged.source_row_index = s.row_index;
+                if (matches.length < 2 && hasValor) {
+                  merged.value_mismatch = true;
+                  const note = `Valor da planilha (${sheetValor.toFixed(2)}) não bate com este SPO (${Number(c?.valor_nf || 0).toFixed(2)}). Linha expandida com o valor do SPO — confira antes de criar o lote.`;
+                  merged.validation_message = merged.validation_message
+                    ? `${merged.validation_message}; ${note}`
+                    : note;
+                }
                 results.push(merged);
               });
-            } else {
-              // 0 matches (ou sem valor): força ERROR informando os SPOs disponíveis.
-              const merged = mergeWithDfv(s, candidates[0]);
-              const opts = candidates
-                .map((c) => `${String(c?.nd || '').trim() || '?'} (${Number(c?.valor_nf || 0).toFixed(2)})`)
-                .join(', ');
-              const msg = hasValor
-                ? `Processo tem ${candidates.length} SPOs com valores diferentes; valor da planilha (${sheetValor.toFixed(2)}) não bate com nenhum. Disponíveis: ${opts}. Edite a linha para selecionar o SPO correto.`
-                : `Processo tem ${candidates.length} SPOs com valores diferentes; preencha o valor na planilha para casar com o SPO. Disponíveis: ${opts}.`;
-              merged.status = 'ERROR';
-              merged.ambiguous_processo = true;
-              merged.spo_candidates = candidates.map((c) => ({ nd: c?.nd, valor_nf: c?.valor_nf, id_rm: c?.id_rm }));
-              merged.validation_message = merged.validation_message
-                ? `${merged.validation_message}; ${msg}`
-                : msg;
-              results.push(merged);
             }
           }
           return results;
