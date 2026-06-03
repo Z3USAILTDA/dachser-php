@@ -19864,7 +19864,8 @@ Deno.serve(async (req) => {
           error_details: [] as string[],
         };
 
-        // Query source data from t_sea_tracking_current + t_consulta_armador
+        // Fonte única: t_sea_tracking_current (estado) + t_sea_tracking_history (eventos)
+        // Mesmas tabelas usadas pela tela /sea/tracking.
         const sourceRows = await client.query(`
           SELECT 
             t.id,
@@ -19882,15 +19883,8 @@ Deno.serve(async (req) => {
             t.container_status,
             t.email_analista,
             t.email_cliente,
-            t.active,
-            c.booking,
-            c.etd,
-            c.eta as eta_confirmado,
-            c.voyage,
-            c.status_armador
+            t.active
           FROM dados_dachser.t_sea_tracking_current t
-          LEFT JOIN dados_dachser.t_consulta_armador c 
-            ON t.mbl_id COLLATE utf8mb4_general_ci = c.mbl_id COLLATE utf8mb4_general_ci
           WHERE t.active = 1
             AND t.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
             AND t.container IS NOT NULL
@@ -19926,6 +19920,7 @@ Deno.serve(async (req) => {
           ORDER BY t.id DESC
           LIMIT 1000
         `);
+
 
         syncResults.total_records = sourceRows.length;
         console.log(`[DEMURRAGE-SYNC] Found ${sourceRows.length} source records`);
