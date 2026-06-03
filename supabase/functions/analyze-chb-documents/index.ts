@@ -2733,8 +2733,9 @@ serve(async (req) => {
     // Start background processing
     // deno-lint-ignore no-explicit-any
     (globalThis as any).EdgeRuntime?.waitUntil?.(
-      processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId, cachedData)
-    ) || processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId, cachedData);
+      processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId)
+    ) || processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId);
+
 
     // Return request ID immediately
     return new Response(
