@@ -1261,9 +1261,9 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
     if (file.mimeType.startsWith('image/')) {
       // For images, try OCR extraction first for better text analysis
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
+      if (ocrResult.text) extractedTexts[file.name] = ocrResult.text;
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 50) {
-        extractedTexts[file.name] = ocrResult.text;
         // Use OCR extracted text for better structured analysis
         content.push({
           type: 'text',
@@ -1288,9 +1288,9 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
     } else if (file.mimeType === 'application/pdf') {
       // For PDFs, use OCR extraction to handle both native and scanned PDFs
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
+      if (ocrResult.text) extractedTexts[file.name] = ocrResult.text;
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 100) {
-        extractedTexts[file.name] = ocrResult.text;
         // Use OCR extracted text - works for both native and scanned PDFs
         content.push({
           type: 'text',
