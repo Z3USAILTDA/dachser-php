@@ -1432,9 +1432,9 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
   for (const file of files) {
     if (file.mimeType === 'application/pdf') {
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
+      if (ocrResult.text) extractedTexts[file.name] = ocrResult.text;
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 100) {
-        extractedTexts[file.name] = ocrResult.text;
         contentParts.push({ type: 'text', text: ocrResult.text });
         console.log(`[Gemini Fallback] Using OCR text for PDF ${file.name}: ${ocrResult.text.length} chars`);
       } else {
@@ -1447,9 +1447,9 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
       }
     } else if (file.mimeType.startsWith('image/')) {
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
+      if (ocrResult.text) extractedTexts[file.name] = ocrResult.text;
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 50) {
-        extractedTexts[file.name] = ocrResult.text;
         contentParts.push({ type: 'text', text: ocrResult.text });
         console.log(`[Gemini Fallback] Using OCR text for image ${file.name}: ${ocrResult.text.length} chars`);
       } else {
