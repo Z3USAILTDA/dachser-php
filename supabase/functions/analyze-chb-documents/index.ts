@@ -1251,6 +1251,7 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
   }
   
   const warnings: ChbFileError[] = [];
+  const extractedTexts: Record<string, string> = {};
   
   // Build content array with files
   const content: any[] = [];
@@ -1262,6 +1263,7 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 50) {
+        extractedTexts[file.name] = ocrResult.text;
         // Use OCR extracted text for better structured analysis
         content.push({
           type: 'text',
@@ -1288,6 +1290,7 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 100) {
+        extractedTexts[file.name] = ocrResult.text;
         // Use OCR extracted text - works for both native and scanned PDFs
         content.push({
           type: 'text',
@@ -1409,7 +1412,7 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
     throw new Error('No text content in Anthropic response');
   }
   
-  return { text: textContent.text, warnings };
+        return { text: textContent.text, warnings, extractedTexts };
 }
 
 // Call Gemini API directly as fallback (with OCR support for scanned PDFs)
