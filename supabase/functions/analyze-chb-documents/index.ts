@@ -1252,6 +1252,7 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
   
   const warnings: ChbFileError[] = [];
   const extractedTexts: Record<string, string> = {};
+  const extractedTexts: Record<string, string> = {};
   
   // Build content array with files
   const content: any[] = [];
