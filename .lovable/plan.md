@@ -1,56 +1,60 @@
 ## Diagnóstico
 
-Conferi a fonte e o destino dos dados dos containers exibidos (ex.: FCIU5817713, MSDU4392569, MSCU4363443, MEDU2362172, MSCU4484790):
+No `mariadb-proxy`, a função `fetchSpoByProcesso` (action `preview_voucher_batch_import`) indexa as linhas de `t_dados_financeiro_spo` por `numero_processo` mas mantém **apenas a primeira** ocorrência:
 
-- Em `t_sea_tracking_current` o `shipping_line` **está preenchido** ("MSC", "Mediterranean Shipping Company").
-- Em `t_dachser_demurrage_containers` o `armador` está **NULL** e `last_sync_at = 2026-03-20` — ou seja, esses registros **não foram atualizados** pelo sync recente (rodado agora em junho/2026). O sync atual processou só 49 das 274 linhas exibidas.
+```ts
+if (main && !byProcesso[main]) byProcesso[main] = r;
+```
 
-A causa dos "-" na tela é uma combinação de dois fatores:
+Resultado: quando um processo tem 2+ linhas em `t_dados_financeiro_spo` com **ND (SPO) diferentes e `valor_nf` diferentes**, só uma é considerada — escolhida pela ordem natural do banco, sem checar a coluna `Valor` da planilha. As demais somem do preview.
 
-### 1. Filtro do `demurrage_sync_from_tracking` exclui a maioria dos containers
-O WHERE exige `tipo_processo IN ('SEA IMPORT','SEA EXPORT')` **e** um `container_status`/`last_event` dentro de uma lista curta (`DISCHARGED`, `ARRIVED`, `GATE-OUT`, `RETURNED`, etc.).
+## Mudança proposta (cirúrgica, só no backend)
 
-Mas no `t_sea_tracking_current` muitos containers ativos vêm com:
-- `tipo_processo = NULL` (ex.: MSCU4484790, MSDU4392569, TRHU2296101) — caem fora do filtro.
-- `container_status` fora da lista esperada: "GOD", "Empty received at CY", "Loaded on Vessel", "Full Transshipment Discharged", "Empty returned by Truck" — também caem fora.
+Arquivo: `supabase/functions/mariadb-proxy/index.ts` (ações `preview_voucher_batch_import` e `create_voucher_batch_import`).
 
-Resultado: o registro velho (com `armador=NULL`, sem datas históricas, sem HBL) permanece no Demurrage e a tela mostra "-".
+### 1. `fetchSpoByProcesso` — armazenar **todas** as linhas por processo
+Trocar o índice para `Record<string, any[]>`. Continuar indexando também por tokens de `detalhes`. Sem mudança no SQL.
 
-### 2. Os "-" restantes têm causas próprias
-- **HBL = "-"**: o sync nunca preenche `hbl` em `t_dachser_demurrage_containers` (`t_sea_tracking_current` não tem HBL — HBL vem de outra tabela MBL/HBL).
-- **Demurrage (USD) e Total BRL = "-"**: dependem de tarifa em `t_dachser_demurrage_rates` para `(armador, tipo_container, perfil)`. Sem `armador`, não há match → valor nulo.
-- **Dias Rest. = 0d**: `data_atracacao` antiga (fev/2026) + free time 14 dias já venceu → resto = 0 (cálculo correto, é só consequência do dado velho).
+```ts
+const byProcesso: Record<string, any[]> = {};
+// ...
+const main = normProcesso(r.numero_processo);
+if (main) (byProcesso[main] ||= []).push(r);
+// idem para tokens de detalhes
+```
 
-## Mudanças propostas
+O fallback em `t_dados_financeiro_voucher` continua igual (vouchers raramente são duplicados por processo, mas mantém a mesma estrutura de array para uniformidade).
 
-### A. Backend — `demurrage_sync_from_tracking` (em `supabase/functions/mariadb-proxy/index.ts`)
+### 2. `buildPreviewItems` — match por valor e expansão de linhas
+Substituir o `mergeWithDfv` único pela seguinte lógica por linha da planilha:
 
-1. **Inferir tipo_processo quando vier NULL** em `t_sea_tracking_current`:
-   - Se `origem` for porto BR e `destino` estrangeiro → `SEA EXPORT`.
-   - Se `destino` for BR → `SEA IMPORT`.
-   - Sem heurística possível → manter SEA IMPORT como default (já é o caso da maioria).
-   Aplicar antes do filtro WHERE e dentro do mapeamento de gravação.
+1. Buscar `candidates = byProcesso[np] || []`.
+2. **Se 0 candidatos** → comportamento atual (`mergeWithDfv(s, null)` → ERROR "processo não encontrado").
+3. **Se 1 candidato** → comportamento atual (`mergeWithDfv(s, candidates[0])`).
+4. **Se 2+ candidatos**:
+   - `sheetValor = Number(s.valor)` (já parseado pelo `parseSheetRow`).
+   - `matches = candidates.filter(c => Math.abs(Number(c.valor_nf) - sheetValor) < 0.01)` (tolerância 1 centavo).
+   - **1 match** → usa esse SPO único (`mergeWithDfv(s, matches[0])`).
+   - **≥2 matches** → **expande a linha da planilha em N items**, um por SPO casado. Cada item recebe `row_index` único (sufixo `.1`, `.2` ou novo índice incremental), preserva o `raw_json` original, e marca `field_origin.spo='DFV'` + flag `expanded_from_processo: true`. Todos passam pelo `mergeWithDfv` e pelas validações.
+   - **0 matches** (valor da planilha não bate com nenhum SPO) → cair em ERROR com mensagem clara: `"Processo tem N SPOs (ND: X, Y) com valores diferentes; valor da planilha não bate com nenhum. Edite a linha para selecionar o SPO correto."` (status='ERROR', já existente no fluxo).
+   - Se `sheetValor` estiver vazio/0 → tratar como "0 matches" para forçar o usuário a preencher o valor antes do match.
 
-2. **Ampliar a janela de status** para casar com o que `t_sea_tracking_current` realmente tem:
-   - IMPORT: adicionar `'GOD'`, `'FULL TRANSSHIPMENT DISCHARGED'`, `'EMPTY RECEIVED AT CY'`, `'EMPTY RETURNED'`, `'EMPTY RETURNED BY TRUCK'`, `'LOADED ON VESSEL'` (containers em trânsito que já têm demurrage potencial).
-   - EXPORT: adicionar `'LOADED ON VESSEL'`, `'EMPTY RECEIVED AT CY'`.
-   - Manter as exclusões de `PREFIX NOT FOUND` / `NAO_ENCONTRADO`.
+### 3. Garantir compatibilidade no `markDuplicates` (frontend) e `create_voucher_batch_import` (backend)
+- `row_index` precisa ser único após a expansão. Estratégia: ao expandir, atribuir `row_index` sequencial novo (continuando do total atual), preservando `source_row_index` no item para mensagens ao usuário ("linha #3 da planilha → SPO 001-123456 e 001-789012").
+- O `markDuplicates` do front já usa `id_rm + spo` como chave — como SPOs são distintos, não vão colidir. ✅
+- No `create_voucher_batch_import`, nada muda: cada item já vira um voucher independente.
 
-3. **Sempre gravar `armador`** a partir de `t_sea_tracking_current.shipping_line` (normalizando "Mediterranean Shipping Company" → "MSC", "Hapag-Lloyd" → "HAPAG-LLOYD" etc. — mesma normalização que `normalizeCarrier` em `_shared/demurrageCalc.ts`).
-
-4. **Preencher HBL** quando disponível: subquery em `dados_dachser.t_consulta_hbl` (ou tabela equivalente já usada por `/sea/tracking`) por `mbl_id` + `container`. Se não houver match, mantém vazio.
-
-5. Após o deploy, rodar `demurrage_sync_from_tracking` uma vez para realinhar os 274 containers.
-
-### B. Frontend
-Sem mudanças — `DemurrageMonitor` já consome `armador`, `hbl`, `free_time`, `dias_restantes`. Os "-" somem automaticamente quando os campos passarem a vir preenchidos.
+### 4. UI (`BatchImportPreviewTable` / `BatchImportRowEditor`)
+- Quando `expanded_from_processo === true`, mostrar um badge sutil "Expandido do processo X" para o usuário entender por que apareceram 2 linhas com o mesmo processo. Sem outras mudanças de layout/lógica.
 
 ## Fora de escopo
-- Não mexer em `t_dachser_demurrage_rates` (tarifas). Se mesmo com armador preenchido o valor seguir "-", é porque não há tarifa cadastrada para aquele `(armador, tipo_container, cliente)` — caso de cadastro, não de bug.
-- Não alterar `_shared/demurrageCalc.ts` nem as regras de ATA/devolução.
+- Não alterar regras de cálculo, validação de fornecedor, deduplicação por `id_rm+spo`, anexação de documentos, ou fluxo de pré-lançamento.
+- Não mudar o SQL de `fetchSpoByProcesso` — só a indexação em JS.
+- Não tocar em `voucher-integrate-rm` nem na criação de vouchers individuais.
 
 ## Critérios de aceite
-1. Após sync, **todos** os containers ativos da Cronos/tracking aparecem no Demurrage Monitor (não apenas 49).
-2. Coluna **Armador** preenchida (MSC, HAPAG-LLOYD, etc.) sempre que `t_sea_tracking_current.shipping_line` existir.
-3. Coluna **HBL** preenchida quando houver vínculo MBL→HBL.
-4. Demurrage USD/Total BRL passam a aparecer para containers com tarifa cadastrada (continua "-" quando não há tarifa — comportamento esperado).
+1. Processo com 1 SPO em `t_dados_financeiro_spo` → comportamento inalterado.
+2. Processo com 2+ SPOs e valores **diferentes**, planilha com 1 valor que casa com um deles → preview mostra **1 linha** com o SPO correto.
+3. Processo com 2+ SPOs e valores **iguais** que casam com a planilha → preview mostra **N linhas**, uma por SPO; ao confirmar, cria N vouchers.
+4. Processo com 2+ SPOs e nenhum valor casa → linha fica em ERROR com mensagem listando os SPOs e valores disponíveis.
+5. `markDuplicates` continua marcando colisões reais de `id_rm+spo` (sem falsos positivos para a expansão).

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
@@ -35,6 +36,8 @@ export interface PreviewItem {
   duplicate_of_row?: number | null;
   already_exists?: boolean;
   existing_etapa?: string | null;
+  expanded_from_processo?: boolean;
+  source_row_index?: number | null;
 }
 
 export type StatusFilter = "all" | "errors" | "valid";
@@ -185,7 +188,23 @@ export function BatchImportPreviewTable({
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="py-3.5 px-3 hidden lg:table-cell text-foreground/90">{it.processo || "—"}</TableCell>
+                  <TableCell className="py-3.5 px-3 hidden lg:table-cell text-foreground/90">
+                    <div className="flex items-center gap-1.5">
+                      <span>{it.processo || "—"}</span>
+                      {it.expanded_from_processo && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal border-primary/40 text-primary">
+                              SPO {(it.source_row_index ?? 0) + 1}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Processo com múltiplos SPOs — esta linha foi expandida da linha #{(it.source_row_index ?? 0) + 1} da planilha.
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="py-3.5 px-3 hidden lg:table-cell max-w-[220px]">
                     <Tooltip>
                       <TooltipTrigger asChild>

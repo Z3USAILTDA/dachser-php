@@ -21052,8 +21052,15 @@ Deno.serve(async (req) => {
         // Lookup SPO em t_dados_financeiro_spo por numero_processo (e por cada processo
         // listado na coluna `detalhes`, separada por ';'). Retorna índice byProcesso.
         const normProcesso = (s: any): string => String(s ?? '').trim().replace(/\s+/g, '').toUpperCase();
-        const fetchSpoByProcesso = async (processos: string[]): Promise<{ byProcesso: Record<string, any> }> => {
-          const byProcesso: Record<string, any> = {};
+        const fetchSpoByProcesso = async (processos: string[]): Promise<{ byProcesso: Record<string, any[]> }> => {
+          const byProcesso: Record<string, any[]> = {};
+          const pushUnique = (key: string, row: any) => {
+            if (!key) return;
+            const list = (byProcesso[key] ||= []);
+            // Evita duplicar a mesma linha (mesmo id_rm+nd) quando indexada via processo e via detalhes
+            const sig = `${row?.id_rm ?? ''}|${normSpo(row?.nd)}`;
+            if (!list.some((r: any) => `${r?.id_rm ?? ''}|${normSpo(r?.nd)}` === sig)) list.push(row);
+          };
           const normalized = Array.from(new Set(processos.map(normProcesso).filter(Boolean)));
           if (normalized.length === 0) return { byProcesso };
           const cols = `id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
@@ -21061,9 +21068,6 @@ Deno.serve(async (req) => {
                         valor_nf, moeda, cnpj, razao_social, detalhes`;
           try {
             const placeholders = normalized.map(() => '?').join(',');
-            // Match em numero_processo OU em qualquer token de detalhes.
-            // Normaliza detalhes substituindo separadores comuns (; , \n \r \t |) por vírgula
-            // e removendo espaços, para que FIND_IN_SET funcione independente do formato.
             const detalhesNormSql = `UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(detalhes, CHAR(13), ','), CHAR(10), ','), CHAR(9), ','), '|', ','), ';', ','), ' ', ''))`;
             const findInSetClauses = normalized
               .map(() => `FIND_IN_SET(?, ${detalhesNormSql}) > 0`)
@@ -21079,18 +21083,13 @@ Deno.serve(async (req) => {
               params
             );
             for (const r of (rows || [])) {
-              // Indexa pelo numero_processo principal
-              const main = normProcesso(r.numero_processo);
-              if (main && !byProcesso[main]) byProcesso[main] = r;
-              // Indexa também por cada token de detalhes (separadores tolerantes)
+              pushUnique(normProcesso(r.numero_processo), r);
               if (r.detalhes) {
                 String(r.detalhes)
                   .split(/[;,\n\r\t|]/)
                   .map((t) => normProcesso(t))
                   .filter(Boolean)
-                  .forEach((tok) => {
-                    if (!byProcesso[tok]) byProcesso[tok] = r;
-                  });
+                  .forEach((tok) => pushUnique(tok, r));
               }
             }
 
@@ -21099,9 +21098,7 @@ Deno.serve(async (req) => {
           }
 
           // Fallback: processos não encontrados em SPO → buscar em t_dados_financeiro_voucher
-          // pelo mesmo numero_processo. Cobre processos legados/voucher que não estão na
-          // tabela SPO. Prioridade permanece SPO > Voucher.
-          const missing = normalized.filter((p) => !byProcesso[p]);
+          const missing = normalized.filter((p) => !byProcesso[p] || byProcesso[p].length === 0);
           if (missing.length > 0) {
             try {
               const ph = missing.map(() => '?').join(',');
@@ -21114,8 +21111,7 @@ Deno.serve(async (req) => {
                 missing
               );
               for (const r of (dfvRows || [])) {
-                const key = normProcesso(r.numero_processo);
-                if (key && !byProcesso[key]) byProcesso[key] = { ...r, detalhes: null };
+                pushUnique(normProcesso(r.numero_processo), { ...r, detalhes: null });
               }
               console.log(`[fetchSpoByProcesso] fallback voucher: ${missing.length} solicitados, ${(dfvRows || []).length} encontrados`);
             } catch (e) {
@@ -21203,12 +21199,53 @@ Deno.serve(async (req) => {
           // Chave de busca agora é o PROCESSO da planilha (não o SPO).
           const processos = sheetRows.map((s) => s.processo).filter(Boolean) as string[];
           const { byProcesso } = await fetchSpoByProcesso(processos);
-          return sheetRows.map((s) => {
-            if (!s.processo) return mergeWithDfv(s, null);
+          const results: any[] = [];
+          let nextRowIndex = sheetRows.length; // índices novos para linhas expandidas
+          for (const s of sheetRows) {
+            if (!s.processo) { results.push(mergeWithDfv(s, null)); continue; }
             const np = normProcesso(s.processo);
-            const dfv = byProcesso[np] || null;
-            return mergeWithDfv(s, dfv);
-          });
+            const candidates: any[] = byProcesso[np] || [];
+            if (candidates.length === 0) { results.push(mergeWithDfv(s, null)); continue; }
+            if (candidates.length === 1) { results.push(mergeWithDfv(s, candidates[0])); continue; }
+
+            // 2+ candidatos: match por valor da planilha (tolerância 1 centavo).
+            const sheetValor = Number(s.valor);
+            const hasValor = Number.isFinite(sheetValor) && sheetValor > 0;
+            const matches = hasValor
+              ? candidates.filter((c) => Number.isFinite(Number(c?.valor_nf)) && Math.abs(Number(c.valor_nf) - sheetValor) < 0.01)
+              : [];
+
+            if (matches.length === 1) {
+              results.push(mergeWithDfv(s, matches[0]));
+            } else if (matches.length >= 2) {
+              // Expande: 1 linha da planilha → N items, um por SPO casado.
+              matches.forEach((c, k) => {
+                const expanded = { ...s };
+                if (k > 0) expanded.row_index = nextRowIndex++;
+                const merged = mergeWithDfv(expanded, c);
+                merged.expanded_from_processo = true;
+                merged.source_row_index = s.row_index;
+                results.push(merged);
+              });
+            } else {
+              // 0 matches (ou sem valor): força ERROR informando os SPOs disponíveis.
+              const merged = mergeWithDfv(s, candidates[0]);
+              const opts = candidates
+                .map((c) => `${String(c?.nd || '').trim() || '?'} (${Number(c?.valor_nf || 0).toFixed(2)})`)
+                .join(', ');
+              const msg = hasValor
+                ? `Processo tem ${candidates.length} SPOs com valores diferentes; valor da planilha (${sheetValor.toFixed(2)}) não bate com nenhum. Disponíveis: ${opts}. Edite a linha para selecionar o SPO correto.`
+                : `Processo tem ${candidates.length} SPOs com valores diferentes; preencha o valor na planilha para casar com o SPO. Disponíveis: ${opts}.`;
+              merged.status = 'ERROR';
+              merged.ambiguous_processo = true;
+              merged.spo_candidates = candidates.map((c) => ({ nd: c?.nd, valor_nf: c?.valor_nf, id_rm: c?.id_rm }));
+              merged.validation_message = merged.validation_message
+                ? `${merged.validation_message}; ${msg}`
+                : msg;
+              results.push(merged);
+            }
+          }
+          return results;
         };
 
 
