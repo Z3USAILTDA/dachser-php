@@ -1,45 +1,56 @@
-## Objetivo
+## Diagnóstico
 
-Os processos exibidos na tela de Demurrage passam a refletir exatamente o que está em `t_sea_tracking_current` (estado/posição) e `t_sea_tracking_history` (eventos), as mesmas fontes que `/sea/tracking` agora usa. Os parâmetros próprios do Demurrage (free time, custos, perfis de cliente, pré-faturas, disputas) continuam vindos das tabelas `t_dachser_demurrage_*` — só muda a fonte de verdade do tracking.
+Conferi a fonte e o destino dos dados dos containers exibidos (ex.: FCIU5817713, MSDU4392569, MSCU4363443, MEDU2362172, MSCU4484790):
 
-## Mudanças no backend (`supabase/functions/mariadb-proxy/index.ts`)
+- Em `t_sea_tracking_current` o `shipping_line` **está preenchido** ("MSC", "Mediterranean Shipping Company").
+- Em `t_dachser_demurrage_containers` o `armador` está **NULL** e `last_sync_at = 2026-03-20` — ou seja, esses registros **não foram atualizados** pelo sync recente (rodado agora em junho/2026). O sync atual processou só 49 das 274 linhas exibidas.
 
-### 1. `demurrage_sync_from_tracking` — fonte unificada
+A causa dos "-" na tela é uma combinação de dois fatores:
 
-- Remover o JOIN com `t_consulta_armador` como fonte de ATA/voyage/status.
-- Trazer **container, navio, IMO, origem, destino, consignee, last_event, container_status, e-mails, tipo_processo** diretamente de `t_sea_tracking_current` (já é o que /sea/tracking exibe).
-- Resolver datas operacionais via subqueries em `t_sea_tracking_history` (mesmo padrão do fallback atual):
-  - `data_atracacao` = MAX(`event_datetime`) onde `event_description` casa com regras do armador (HAPAG "vessel arrival", MSC "import", CMA "vessel arrival", ZIM "vessel arrival to port of discharge", MAERSK "vessel arrival", HMM "vessel arrival at pod", ONE "vessel arrival at port of discharge", COSCO "ata").
-  - `data_devolucao` = MAX(`event_datetime`) onde `event_description` casa com `returnEvents` do mesmo armador (`gate in empty`, `empty`, `empty in depot`, etc.), e só conta se ≥ `data_atracacao`.
-  - `data_gate_out` = MAX onde descrição contém "gate out".
-- Manter regras já existentes de filtragem (active=1, container válido, tipo_processo SEA IMPORT/EXPORT, exclusão de PREFIX NOT FOUND etc.) e janelas IMPORT/EXPORT.
+### 1. Filtro do `demurrage_sync_from_tracking` exclui a maioria dos containers
+O WHERE exige `tipo_processo IN ('SEA IMPORT','SEA EXPORT')` **e** um `container_status`/`last_event` dentro de uma lista curta (`DISCHARGED`, `ARRIVED`, `GATE-OUT`, `RETURNED`, etc.).
 
-### 2. `demurrage_get_containers_by_mbl` (fallback)
+Mas no `t_sea_tracking_current` muitos containers ativos vêm com:
+- `tipo_processo = NULL` (ex.: MSCU4484790, MSDU4392569, TRHU2296101) — caem fora do filtro.
+- `container_status` fora da lista esperada: "GOD", "Empty received at CY", "Loaded on Vessel", "Full Transshipment Discharged", "Empty returned by Truck" — também caem fora.
 
-- Mesma cadeia: ler container + eventos diretamente de `t_sea_tracking_current/history`. Remover dependência de `t_consulta_armador` para esses campos.
+Resultado: o registro velho (com `armador=NULL`, sem datas históricas, sem HBL) permanece no Demurrage e a tela mostra "-".
 
-### 3. Sem mudança de cálculo
+### 2. Os "-" restantes têm causas próprias
+- **HBL = "-"**: o sync nunca preenche `hbl` em `t_dachser_demurrage_containers` (`t_sea_tracking_current` não tem HBL — HBL vem de outra tabela MBL/HBL).
+- **Demurrage (USD) e Total BRL = "-"**: dependem de tarifa em `t_dachser_demurrage_rates` para `(armador, tipo_container, perfil)`. Sem `armador`, não há match → valor nulo.
+- **Dias Rest. = 0d**: `data_atracacao` antiga (fev/2026) + free time 14 dias já venceu → resto = 0 (cálculo correto, é só consequência do dado velho).
 
-- `_shared/demurrageCalc.ts` e `extractDemurrageDatesFromEvents` continuam intactos. ATA/devolução continuam respeitando `resolveAta()` (nunca cai em ETA).
+## Mudanças propostas
 
-## Frontend
+### A. Backend — `demurrage_sync_from_tracking` (em `supabase/functions/mariadb-proxy/index.ts`)
 
-- Nenhuma mudança na UI. `DemurrageMonitor`, `ContainerDetailsSheet`, `PreInvoicing` já consomem `data_atracacao`, `data_devolucao`, `container_status`, `last_event`, `navio`, `cliente`, `free_time`. Os campos passam a refletir as duas tabelas-fonte.
+1. **Inferir tipo_processo quando vier NULL** em `t_sea_tracking_current`:
+   - Se `origem` for porto BR e `destino` estrangeiro → `SEA EXPORT`.
+   - Se `destino` for BR → `SEA IMPORT`.
+   - Sem heurística possível → manter SEA IMPORT como default (já é o caso da maioria).
+   Aplicar antes do filtro WHERE e dentro do mapeamento de gravação.
 
-## Refresh
+2. **Ampliar a janela de status** para casar com o que `t_sea_tracking_current` realmente tem:
+   - IMPORT: adicionar `'GOD'`, `'FULL TRANSSHIPMENT DISCHARGED'`, `'EMPTY RECEIVED AT CY'`, `'EMPTY RETURNED'`, `'EMPTY RETURNED BY TRUCK'`, `'LOADED ON VESSEL'` (containers em trânsito que já têm demurrage potencial).
+   - EXPORT: adicionar `'LOADED ON VESSEL'`, `'EMPTY RECEIVED AT CY'`.
+   - Manter as exclusões de `PREFIX NOT FOUND` / `NAO_ENCONTRADO`.
 
-- O cron `demurrage-daily-monitor` continua chamando `demurrage_sync_from_tracking` + `demurrage-recalc`. Sem novos cron jobs.
-- Após o deploy, rodar 1× `demurrage_sync_from_tracking` manualmente para realinhar os containers ativos.
+3. **Sempre gravar `armador`** a partir de `t_sea_tracking_current.shipping_line` (normalizando "Mediterranean Shipping Company" → "MSC", "Hapag-Lloyd" → "HAPAG-LLOYD" etc. — mesma normalização que `normalizeCarrier` em `_shared/demurrageCalc.ts`).
+
+4. **Preencher HBL** quando disponível: subquery em `dados_dachser.t_consulta_hbl` (ou tabela equivalente já usada por `/sea/tracking`) por `mbl_id` + `container`. Se não houver match, mantém vazio.
+
+5. Após o deploy, rodar `demurrage_sync_from_tracking` uma vez para realinhar os 274 containers.
+
+### B. Frontend
+Sem mudanças — `DemurrageMonitor` já consome `armador`, `hbl`, `free_time`, `dias_restantes`. Os "-" somem automaticamente quando os campos passarem a vir preenchidos.
 
 ## Fora de escopo
-
-- Não alterar `t_dachser_demurrage_*` (rates, settings, profiles, pre_invoices, disputes, alerts).
-- Não trocar fonte do módulo de Exportação Demurrage que já tem regras próprias de PDF.
-- Não mexer em RLS nem em outras telas SEA.
+- Não mexer em `t_dachser_demurrage_rates` (tarifas). Se mesmo com armador preenchido o valor seguir "-", é porque não há tarifa cadastrada para aquele `(armador, tipo_container, cliente)` — caso de cadastro, não de bug.
+- Não alterar `_shared/demurrageCalc.ts` nem as regras de ATA/devolução.
 
 ## Critérios de aceite
-
-1. Após sync, cada linha do Demurrage Monitor traz `navio`, `last_event`, `container_status`, `data_atracacao` e `data_devolucao` idênticos aos da mesma MBL/container em `/sea/tracking`.
-2. ATA exibida nunca usa ETA — só evento real de `t_sea_tracking_history`.
-3. Devolução só aparece quando há evento de empty return ≥ ATA.
-4. Pré-faturas continuam exigindo gate-out (regra existente preservada).
+1. Após sync, **todos** os containers ativos da Cronos/tracking aparecem no Demurrage Monitor (não apenas 49).
+2. Coluna **Armador** preenchida (MSC, HAPAG-LLOYD, etc.) sempre que `t_sea_tracking_current.shipping_line` existir.
+3. Coluna **HBL** preenchida quando houver vínculo MBL→HBL.
+4. Demurrage USD/Total BRL passam a aparecer para containers com tarifa cadastrada (continua "-" quando não há tarifa — comportamento esperado).

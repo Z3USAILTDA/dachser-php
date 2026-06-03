@@ -19885,40 +19885,17 @@ Deno.serve(async (req) => {
             t.active
           FROM dados_dachser.t_sea_tracking_current t
           WHERE t.active = 1
-            AND t.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
             AND t.container IS NOT NULL
             AND t.container != ''
-            AND UPPER(t.container) != 'PENDENTE'
-            AND UPPER(t.container) != 'NAO_ENCONTRADO'
+            AND UPPER(t.container) NOT IN ('PENDENTE', 'NAO_ENCONTRADO')
             AND (t.container_status IS NULL OR UPPER(t.container_status) NOT LIKE '%NOT FOUND%')
             AND (t.container_status IS NULL OR UPPER(t.container_status) NOT LIKE '%NAO_ENCONTRADO%')
             AND (t.last_event IS NULL OR UPPER(t.last_event) NOT LIKE '%PREFIX NOT FOUND%')
             AND (t.last_event IS NULL OR UPPER(t.last_event) NOT LIKE '%NOT FOUND%')
-            AND (
-              -- IMPORT: from ARRIVED/Discharged until RETURNED/Empty returned
-              (UPPER(t.tipo_processo) = 'SEA IMPORT' AND (
-                UPPER(COALESCE(t.container_status, '')) IN ('DISCHARGED', 'ARRIVED', 'GATE-OUT', 'GATE_OUT', 'IMPORT_TO_CONSIGNEE', 'EMPTY_RETURNED', 'RETURNED')
-                OR LOWER(COALESCE(t.last_event, '')) LIKE '%arrived%'
-                OR LOWER(COALESCE(t.last_event, '')) LIKE '%discharged%'
-                OR LOWER(COALESCE(t.last_event, '')) LIKE '%gate out%'
-                OR LOWER(COALESCE(t.last_event, '')) LIKE '%return%'
-                OR LOWER(COALESCE(t.last_event, '')) LIKE '%empty%'
-                OR LOWER(COALESCE(t.last_event, '')) LIKE '%atracado%'
-                OR LOWER(COALESCE(t.last_event, '')) LIKE '%descarregado%'
-              ))
-              OR
-              -- EXPORT: from Empty pickup until Gate-in
-              (UPPER(t.tipo_processo) = 'SEA EXPORT' AND (
-                UPPER(COALESCE(t.container_status, '')) IN ('EMPTY_TO_SHIPPER', 'GATE-IN', 'GATE_IN', 'LOADED', 'IN_TRANSIT', 'DEPARTED')
-                OR LOWER(COALESCE(t.last_event, '')) LIKE '%empty to shipper%'
-                OR LOWER(COALESCE(t.last_event, '')) LIKE '%gate in%'
-                OR LOWER(COALESCE(t.last_event, '')) LIKE '%loaded%'
-                OR LOWER(COALESCE(t.last_event, '')) LIKE '%embarc%'
-              ))
-            )
           ORDER BY t.id DESC
-          LIMIT 1000
+          LIMIT 2000
         `);
+
 
 
         syncResults.total_records = sourceRows.length;
@@ -19941,6 +19918,53 @@ Deno.serve(async (req) => {
           try { return d.toISOString().split('T')[0]; } catch { return null; }
         }
 
+        function normalizeCarrier(v: string | null | undefined): string | null {
+          if (!v) return null;
+          const c = String(v).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          if (c.includes('HAPAG')) return 'HAPAG-LLOYD';
+          if (c.includes('MEDITERRANEAN') || /\bMSC\b/.test(c)) return 'MSC';
+          if (c.includes('CMA')) return 'CMA-CGM';
+          if (c.includes('ZIM')) return 'ZIM';
+          if (c.includes('MAERSK')) return 'MAERSK';
+          if (c.includes('HMM') || c.includes('HYUNDAI')) return 'HMM';
+          if (c.includes('OCEAN NETWORK') || /\bONE\b/.test(c)) return 'ONE';
+          if (c.includes('COSCO')) return 'COSCO';
+          return String(v).trim().toUpperCase();
+        }
+
+        function inferTipoProcesso(t: string | null | undefined, origem: string | null | undefined, destino: string | null | undefined): string {
+          if (t && t.trim()) return t;
+          const o = String(origem || '').toUpperCase();
+          const d = String(destino || '').toUpperCase();
+          const isBR = (s: string) => /\bBR\b/.test(s) || s.includes('BRAZIL') || s.includes('BRASIL') || /\b(SANTOS|ITAJAI|ITAPOA|PARANAGUA|RIO GRANDE|MANAUS|SUAPE|SALVADOR|NAVEGANTES|PECEM|VITORIA|RIO DE JANEIRO|SAO FRANCISCO DO SUL)\b/.test(s);
+          if (isBR(d) && !isBR(o)) return 'SEA IMPORT';
+          if (isBR(o) && !isBR(d)) return 'SEA EXPORT';
+          return 'SEA IMPORT';
+        }
+
+        // Cache HBL por MBL para evitar N+1
+        const hblCache = new Map<string, string | null>();
+        async function fetchHbl(mbl: string): Promise<string | null> {
+          if (hblCache.has(mbl)) return hblCache.get(mbl) || null;
+          let hbl: string | null = null;
+          try {
+            const rows = await client.query(
+              `SELECT hawb FROM dados_dachser.t_sea_master WHERE master = ? LIMIT 1`, [mbl]
+            );
+            if (rows?.[0]?.hawb) hbl = rows[0].hawb;
+            else {
+              const md = await client.query(
+                `SELECT hawb FROM dados_dachser.t_master_dados WHERE mawb = ? LIMIT 1`, [mbl]
+              );
+              if (md?.[0]?.hawb) hbl = md[0].hawb;
+            }
+          } catch { /* ignore */ }
+          hblCache.set(mbl, hbl);
+          return hbl;
+        }
+
+
+
         for (const row of sourceRows) {
           try {
             if (!row.mbl_id || !row.container) continue;
@@ -19950,6 +19974,10 @@ Deno.serve(async (req) => {
             const etd: string | null = null;
             const eta = fmtDate(row.eta);
             const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+            const armadorNorm = normalizeCarrier(row.shipping_line);
+            const tipoProc = inferTipoProcesso(row.tipo_processo, row.origem, row.destino);
+            const hbl = await fetchHbl(mbl);
+
 
             // Datas históricas: extraídas exclusivamente de t_sea_tracking_history
             // (mesma fonte usada pela tela /sea/tracking). Inclui padrões dos armadores
@@ -20019,6 +20047,7 @@ Deno.serve(async (req) => {
             if (existing && existing.length > 0) {
               await client.execute(`
                 UPDATE dados_dachser.t_dachser_demurrage_containers SET
+                  bl = COALESCE(?, bl),
                   booking = ?, cliente = ?, armador = ?, tipo_processo = ?,
                   porto_origem = ?, porto_destino = ?, navio = ?, vessel_imo = ?, voyage = ?,
                   etd = ?, eta = ?, last_event = ?, container_status = ?, status_armador = ?, cronos_status = ?,
@@ -20031,7 +20060,8 @@ Deno.serve(async (req) => {
                   mariadb_id = ?, last_sync_at = NOW(), updated_at = NOW()
                 WHERE id = ?
               `, [
-                null, row.consignee || null, row.shipping_line || null, row.tipo_processo || null,
+                hbl,
+                null, row.consignee || null, armadorNorm, tipoProc,
                 row.origem || null, row.destino || null, row.navio || null, row.vessel_imo || null, null,
                 etd, eta, row.last_event || null, row.container_status || null, null, cronosStatus,
                 row.email_analista || null, row.email_cliente || null,
@@ -20046,15 +20076,15 @@ Deno.serve(async (req) => {
             } else {
               await client.execute(`
                 INSERT INTO dados_dachser.t_dachser_demurrage_containers (
-                  numero, mbl, booking, cliente, armador, tipo_processo,
+                  numero, mbl, bl, booking, cliente, armador, tipo_processo,
                   porto_origem, porto_destino, navio, vessel_imo, voyage,
                   etd, eta, last_event, container_status, status_armador, cronos_status,
                   email_analista, email_cliente,
                   ft_started_at, ft_source, data_atracacao, data_gate_out, data_devolucao,
                   mariadb_id, last_sync_at, active
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 1)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 1)
               `, [
-                numero, mbl, null, row.consignee || null, row.shipping_line || null, row.tipo_processo || null,
+                numero, mbl, hbl, null, row.consignee || null, armadorNorm, tipoProc,
                 row.origem || null, row.destino || null, row.navio || null, row.vessel_imo || null, null,
                 etd, eta, row.last_event || null, row.container_status || null, null, cronosStatus,
                 row.email_analista || null, row.email_cliente || null,
@@ -20063,6 +20093,7 @@ Deno.serve(async (req) => {
               ]);
               syncResults.created++;
             }
+
 
           } catch (rowErr: any) {
             syncResults.errors++;
