@@ -2736,14 +2736,20 @@ Eles são FONTE DE VERDADE. Reutilize-os sem reanalisar:
 
   } catch (error) {
     console.error(`[BG] Error processing analysis ${requestId}:`, error);
-    
-    // Update request with error in MariaDB
-    await callMariaDBProxy('update_chb_run', {
-      runId: requestId,
-      status: 'error',
-      resultText: error instanceof Error ? error.message : 'Erro desconhecido'
-    });
+    const errMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+    // Update request with error in MariaDB — never let this throw out
+    try {
+      await callMariaDBProxy('update_chb_run', {
+        runId: requestId,
+        status: 'error',
+        resultText: errMsg,
+      });
+      console.log(`[BG] Marked run ${requestId} as error`);
+    } catch (updateErr) {
+      console.error(`[BG] FAILED to mark run ${requestId} as error:`, updateErr);
+    }
   }
+
 }
 
 // =============================================================================
