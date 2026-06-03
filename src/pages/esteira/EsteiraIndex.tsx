@@ -1277,6 +1277,7 @@ const EsteiraIndex = () => {
       etapasPermitidas.add("OPERACAO");
       etapasPermitidas.add("A_PROCESSAR");
       etapasPermitidas.add("PRE_LANCAMENTO");
+      etapasPermitidas.add("RASCUNHO" as EtapaAtual);
     }
     if (isFiscal) {
       etapasPermitidas.add("FISCAL");
