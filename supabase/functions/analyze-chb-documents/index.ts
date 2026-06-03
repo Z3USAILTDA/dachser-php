@@ -1212,6 +1212,7 @@ interface ChbFileError {
 interface ApiResponse {
   text: string;
   warnings: ChbFileError[];
+  extractedTexts?: Record<string, string>;
 }
 
 // Validate total input size to avoid API errors
