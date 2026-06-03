@@ -19974,6 +19974,10 @@ Deno.serve(async (req) => {
             const etd: string | null = null;
             const eta = fmtDate(row.eta);
             const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+            const armadorNorm = normalizeCarrier(row.shipping_line);
+            const tipoProc = inferTipoProcesso(row.tipo_processo, row.origem, row.destino);
+            const hbl = await fetchHbl(mbl);
+
 
             // Datas históricas: extraídas exclusivamente de t_sea_tracking_history
             // (mesma fonte usada pela tela /sea/tracking). Inclui padrões dos armadores
