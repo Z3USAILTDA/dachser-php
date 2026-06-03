@@ -35,6 +35,8 @@ export interface PreviewItem {
   duplicate_of_row?: number | null;
   already_exists?: boolean;
   existing_etapa?: string | null;
+  expanded_from_processo?: boolean;
+  source_row_index?: number | null;
 }
 
 export type StatusFilter = "all" | "errors" | "valid";
