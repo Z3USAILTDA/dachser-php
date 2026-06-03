@@ -2151,7 +2151,9 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
 
     const parsedResult = extractHtmlAndTags(responseText, stepId);
     const html = applyAwbPortugueseTotalFreightCorrection(parsedResult.html, extractedTexts);
-    const { tags, summary, detailedSummary, parecer, modal, cliente } = extractHtmlAndTags(`<<BEGIN_HTML>>${html}<<END_HTML>>`, stepId);
+    const correctedResult = extractHtmlAndTags(`<<BEGIN_HTML>>${html}<<END_HTML>>`, stepId);
+    const { tags, summary, detailedSummary, parecer } = correctedResult;
+    const { modal, cliente } = parsedResult;
 
     console.log(`[BG] Analysis completed - ${tags.map(t => t.label).join(', ')}`);
 
