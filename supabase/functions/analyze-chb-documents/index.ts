@@ -2626,9 +2626,9 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
 
     console.log(`[BG] Analysis completed - ${tags.map(t => t.label).join(', ')}`);
 
-    const rawOcrPersistResults = itemId
-      ? await persistRawOcrForFiles(itemId, stepId, files, extractedTexts || {})
-      : [];
+    // Persistência de raw OCR agora roda ANTES da análise (ver bloco [BG][pre-analysis]).
+    const rawOcrPersistResults: Array<{ filename: string; extractionId: number | null; status: string }> = [];
+
 
     // Build result object
     const resultData = {
