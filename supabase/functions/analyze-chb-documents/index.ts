@@ -1918,6 +1918,115 @@ async function callMariaDBProxy(action: string, params: Record<string, any> = {}
   return response.json();
 }
 
+function normalizeChbFilename(name: string): string {
+  const decoded = (() => {
+    try { return decodeURIComponent(name); } catch { return name; }
+  })();
+  return decoded
+    .split(/[\\/]/)
+    .pop()!
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+async function extractRawTextForPersistence(file: FileForAnalysis): Promise<string> {
+  if (file.mimeType === 'application/pdf' || file.mimeType.startsWith('image/')) {
+    const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
+    return ocrResult.text || '';
+  }
+
+  if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') ||
+      file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
+    const excelText = await extractExcelText(file.content, file.name);
+    return `[Arquivo: ${file.name}]\n${excelText}`;
+  }
+
+  try {
+    return `[Arquivo: ${file.name}]\n${atob(file.content)}`;
+  } catch {
+    return '';
+  }
+}
+
+async function persistRawOcrForFiles(
+  itemId: number,
+  stepId: number,
+  files: FileForAnalysis[],
+  extractedTexts: Record<string, string> = {}
+): Promise<Array<{ filename: string; extractionId: number | null; status: string }>> {
+  console.log(`[BG][raw-ocr-save] v2-all-files :: Persisting raw OCR for ${files.length} file(s) (item ${itemId})...`);
+
+  const filesResult = await callMariaDBProxy('get_chb_files', { itemId });
+  const dbFiles: Array<{ id: number; filename: string; doc_role?: string; etapa?: string }> = filesResult.data || [];
+  const dbFilesForStep = dbFiles.filter(df => String(df.etapa) === String(stepId));
+  const orderedDbFiles = dbFilesForStep.length > 0 ? dbFilesForStep : dbFiles;
+
+  const byExact = new Map<string, { id: number; doc_role?: string; etapa?: string }>();
+  const byNormalized = new Map<string, { id: number; doc_role?: string; etapa?: string }>();
+  for (const df of orderedDbFiles) {
+    byExact.set(df.filename, { id: df.id, doc_role: df.doc_role, etapa: df.etapa });
+    byNormalized.set(normalizeChbFilename(df.filename), { id: df.id, doc_role: df.doc_role, etapa: df.etapa });
+  }
+
+  const textByNormalized = new Map<string, string>();
+  for (const [filename, text] of Object.entries(extractedTexts)) {
+    textByNormalized.set(normalizeChbFilename(filename), text);
+  }
+
+  const persisted: Array<{ filename: string; extractionId: number | null; status: string }> = [];
+  const duplicateNames = new Set(
+    files
+      .map(file => normalizeChbFilename(file.name))
+      .filter((name, index, all) => all.indexOf(name) !== index)
+  );
+
+  for (const [index, file] of files.entries()) {
+    const normalizedName = normalizeChbFilename(file.name);
+    let rawOcr = duplicateNames.has(normalizedName)
+      ? ''
+      : (extractedTexts[file.name] || textByNormalized.get(normalizedName) || '');
+
+    if (!rawOcr || rawOcr.trim().length < 10) {
+      console.log(`[BG][raw-ocr-save] Re-extracting raw text for ${file.name} because main OCR map was missing/short`);
+      rawOcr = await extractRawTextForPersistence(file);
+    }
+
+    const dbFile = byExact.get(file.name) || byNormalized.get(normalizedName) || orderedDbFiles[index];
+    if (!dbFile) {
+      console.warn(`[BG][raw-ocr-save] No DB file match for "${file.name}" — known: ${orderedDbFiles.map(f => f.filename).join(' | ') || '(none)'}`);
+    }
+
+    const hasRawOcr = rawOcr.trim().length >= 10;
+    const ins = await callMariaDBProxy('insert_chb_extraction', {
+      itemId,
+      fileId: dbFile?.id ?? null,
+      filename: file.name,
+      docRole: dbFile?.doc_role ?? null,
+      etapa: dbFile?.etapa ?? String(stepId),
+      fileSha256: null,
+      extractorModel: 'google/gemini-2.5-flash',
+      extractorPromptVersion: 'main-raw-ocr-v2-all-files',
+      extractorConfidence: null,
+      rawOcrText: hasRawOcr ? rawOcr : null,
+      structuredFields: null,
+      fieldEvidence: null,
+      extractionStatus: hasRawOcr ? 'OK' : 'PARCIAL',
+      errorMessage: hasRawOcr ? null : 'OCR vazio ou insuficiente no fluxo principal e na reextração',
+    });
+
+    persisted.push({ filename: file.name, extractionId: ins.extractionId ?? null, status: hasRawOcr ? 'OK' : 'PARCIAL' });
+    console.log(`[BG][raw-ocr-save] ${file.name} → extractionId=${ins.extractionId} status=${hasRawOcr ? 'OK' : 'PARCIAL'} (${rawOcr.length} chars)`);
+  }
+
+  if (persisted.length !== files.length) {
+    throw new Error(`OCR bruto não foi gravado para todos os arquivos (${persisted.length}/${files.length})`);
+  }
+
+  return persisted;
+}
+
 async function saveExtractedData(
   itemId: number,
   filename: string,
@@ -2449,6 +2558,10 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
 
     console.log(`[BG] Analysis completed - ${tags.map(t => t.label).join(', ')}`);
 
+    const rawOcrPersistResults = itemId
+      ? await persistRawOcrForFiles(itemId, stepId, files, extractedTexts || {})
+      : [];
+
     // Build result object
     const resultData = {
       id: crypto.randomUUID(),
@@ -2464,9 +2577,7 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
       filesAnalyzed: files.map((f: any) => f.name),
       usedFallback,
       fileWarnings: fileWarnings.length > 0 ? fileWarnings : undefined,
-      extractionIds: perFileExtractions
-        .filter(e => e.extractionId !== null)
-        .map(e => ({ filename: e.filename, extractionId: e.extractionId, status: e.status })),
+      extractionIds: rawOcrPersistResults,
     };
 
     // Update request with result in MariaDB
@@ -2478,57 +2589,6 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
     });
 
     console.log(`[BG] Request ${requestId} completed successfully`);
-
-    // =========================================================================
-    // PRIORITY: Persist RAW OCR text per file → t_chb_file_extractions
-    // (this is the single most important artifact — structured fields can wait)
-    // =========================================================================
-    if (itemId && extractedTexts && Object.keys(extractedTexts).length > 0) {
-      try {
-        console.log(`[BG][raw-ocr-save] v1 :: Persisting raw OCR for ${Object.keys(extractedTexts).length} file(s) (item ${itemId})...`);
-        const filesResult = await callMariaDBProxy('get_chb_files', { itemId });
-        const dbFiles: Array<{ id: number; filename: string; doc_role?: string; etapa?: string }> = filesResult.data || [];
-        const byName = new Map<string, { id: number; doc_role?: string; etapa?: string }>();
-        for (const df of dbFiles) byName.set(df.filename, { id: df.id, doc_role: df.doc_role, etapa: df.etapa });
-
-        for (const file of files) {
-          const rawOcr = extractedTexts[file.name];
-          if (!rawOcr || rawOcr.length < 10) {
-            console.warn(`[BG][raw-ocr-save] No OCR text for ${file.name}, skipping`);
-            continue;
-          }
-          const dbFile = byName.get(file.name);
-          if (!dbFile) {
-            console.warn(`[BG][raw-ocr-save] No DB file match for "${file.name}" — known: ${Array.from(byName.keys()).join(' | ') || '(none)'}`);
-          }
-          try {
-            const ins = await callMariaDBProxy('insert_chb_extraction', {
-              itemId,
-              fileId: dbFile?.id ?? null,
-              filename: file.name,
-              docRole: dbFile?.doc_role ?? null,
-              etapa: dbFile?.etapa ?? String(stepId),
-              fileSha256: null,
-              extractorModel: 'google/gemini-2.5-flash',
-              extractorPromptVersion: 'main-ocr-v1',
-              extractorConfidence: null,
-              rawOcrText: rawOcr,
-              structuredFields: null,
-              fieldEvidence: null,
-              extractionStatus: 'OK',
-              errorMessage: null,
-            });
-            console.log(`[BG][raw-ocr-save] ${file.name} → extractionId=${ins.extractionId} (${rawOcr.length} chars)`);
-          } catch (e) {
-            console.error(`[BG][raw-ocr-save] Insert failed for ${file.name}:`, e instanceof Error ? e.message : e);
-          }
-        }
-      } catch (e) {
-        console.error('[BG][raw-ocr-save] Orchestration failed:', e);
-      }
-    } else {
-      console.log(`[BG][raw-ocr-save] Skipped (itemId=${itemId}, extractedTexts=${extractedTexts ? Object.keys(extractedTexts).length : 'undef'})`);
-    }
 
     // Save extracted data to cache for future steps
     // IMPROVED: Extract fields from each file column in the HTML table
