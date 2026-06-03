@@ -1252,6 +1252,7 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
   
   const warnings: ChbFileError[] = [];
   const extractedTexts: Record<string, string> = {};
+  const extractedTexts: Record<string, string> = {};
   
   // Build content array with files
   const content: any[] = [];
@@ -1433,6 +1434,7 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 100) {
+        extractedTexts[file.name] = ocrResult.text;
         contentParts.push({ type: 'text', text: ocrResult.text });
         console.log(`[Gemini Fallback] Using OCR text for PDF ${file.name}: ${ocrResult.text.length} chars`);
       } else {
@@ -1447,6 +1449,7 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
       const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
       
       if (ocrResult.confidence !== 'low' && ocrResult.text.length > 50) {
+        extractedTexts[file.name] = ocrResult.text;
         contentParts.push({ type: 'text', text: ocrResult.text });
         console.log(`[Gemini Fallback] Using OCR text for image ${file.name}: ${ocrResult.text.length} chars`);
       } else {
@@ -1518,7 +1521,7 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
     throw new Error('No text content in AI Gateway response');
   }
   
-  return { text, warnings };
+  return { text, warnings, extractedTexts };
 }
 
 // =============================================================================
