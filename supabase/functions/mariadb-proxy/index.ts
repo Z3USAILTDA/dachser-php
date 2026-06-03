@@ -20008,11 +20008,11 @@ Deno.serve(async (req) => {
             let dataDevolucao = existing?.[0]?.data_devolucao || null;
             let ftSource = existing?.[0]?.ft_source || null;
 
-            if (!dataAtracacao) dataAtracacao = discharge_date || (cronosStatus === 'ARRIVED' ? now.split(' ')[0] : null);
-            if (!ftStartedAt) {
-              if (discharge_date) { ftStartedAt = `${discharge_date} 00:00:00`; ftSource = 'HISTORICAL'; }
-              else if (cronosStatus === 'ARRIVED') { ftStartedAt = now; ftSource = 'SYNC'; }
-              else if (eta) { ftStartedAt = `${eta} 00:00:00`; ftSource = 'ETA'; }
+            // ATA é estritamente o evento real do histórico. Nunca cai em ETA (memory: resolveAta).
+            if (!dataAtracacao) dataAtracacao = discharge_date;
+            if (!ftStartedAt && discharge_date) {
+              ftStartedAt = `${discharge_date} 00:00:00`;
+              ftSource = 'HISTORICAL';
             }
             if (!dataGateOut) dataGateOut = gate_out_date || (cronosStatus === 'GATE_OUT' ? now.split(' ')[0] : null);
             if (!dataDevolucao) dataDevolucao = return_date || (cronosStatus === 'RETURNED' ? now.split(' ')[0] : null);
@@ -20032,9 +20032,9 @@ Deno.serve(async (req) => {
                   mariadb_id = ?, last_sync_at = NOW(), updated_at = NOW()
                 WHERE id = ?
               `, [
-                row.booking || null, row.consignee || null, row.shipping_line || null, row.tipo_processo || null,
-                row.origem || null, row.destino || null, row.navio || null, row.vessel_imo || null, row.voyage || null,
-                etd, eta, row.last_event || null, row.container_status || null, row.status_armador || null, cronosStatus,
+                null, row.consignee || null, row.shipping_line || null, row.tipo_processo || null,
+                row.origem || null, row.destino || null, row.navio || null, row.vessel_imo || null, null,
+                etd, eta, row.last_event || null, row.container_status || null, null, cronosStatus,
                 row.email_analista || null, row.email_cliente || null,
                 ftSource, ftStartedAt, ftStartedAt,
                 ftSource,
@@ -20055,15 +20055,16 @@ Deno.serve(async (req) => {
                   mariadb_id, last_sync_at, active
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 1)
               `, [
-                numero, mbl, row.booking || null, row.consignee || null, row.shipping_line || null, row.tipo_processo || null,
-                row.origem || null, row.destino || null, row.navio || null, row.vessel_imo || null, row.voyage || null,
-                etd, eta, row.last_event || null, row.container_status || null, row.status_armador || null, cronosStatus,
+                numero, mbl, null, row.consignee || null, row.shipping_line || null, row.tipo_processo || null,
+                row.origem || null, row.destino || null, row.navio || null, row.vessel_imo || null, null,
+                etd, eta, row.last_event || null, row.container_status || null, null, cronosStatus,
                 row.email_analista || null, row.email_cliente || null,
                 ftStartedAt, ftSource, dataAtracacao, dataGateOut, dataDevolucao,
                 row.id
               ]);
               syncResults.created++;
             }
+
           } catch (rowErr: any) {
             syncResults.errors++;
             syncResults.error_details.push(`${row.container}: ${rowErr.message}`);
