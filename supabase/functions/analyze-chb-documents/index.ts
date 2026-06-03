@@ -2260,7 +2260,31 @@ async function processAnalysisInBackground(
 
     // NOTE: per-file extraction persistence moved to AFTER OCR runs (see [BG][extract] block below the LLM call).
     // This avoids racing with file registration and lets us persist the actual raw OCR text.
-    
+
+    // =========================================================================
+    // NOVO FLUXO: extrair e GRAVAR todos os arquivos em t_chb_file_extractions
+    // ANTES de chamar o LLM, e depois RELER o raw_ocr_text da tabela para
+    // alimentar a análise (fonte única de verdade).
+    // =========================================================================
+    let dbOcrByFilename: Record<string, string> = {};
+    if (itemId) {
+      try {
+        const persistResults = await persistRawOcrForFiles(itemId, stepId, files, extractedTexts || {});
+        console.log(`[BG][pre-analysis] Persisted raw OCR for ${persistResults.length} file(s)`);
+
+        const dbRowsResp = await callMariaDBProxy('get_chb_extractions', { itemId, etapa: String(stepId) });
+        const dbRows: Array<{ filename: string; raw_ocr_text: string | null }> = dbRowsResp?.data || [];
+        for (const row of dbRows) {
+          if (row.filename && row.raw_ocr_text) {
+            dbOcrByFilename[row.filename] = row.raw_ocr_text;
+          }
+        }
+        console.log(`[BG][pre-analysis] Read back ${Object.keys(dbOcrByFilename).length} raw_ocr_text rows from t_chb_file_extractions`);
+      } catch (e) {
+        console.error('[BG][pre-analysis] Pre-extraction/read failed, will fall back to in-memory extractedTexts:', (e as Error).message);
+      }
+    }
+
     // Get cached data from DB if itemId provided and no cachedData sent
     let existingCache: Record<string, { fields: Record<string, any>; rawText?: string }> = cachedData || {};
     if (itemId && !cachedData) {
@@ -2268,6 +2292,7 @@ async function processAnalysisInBackground(
       existingCache = await getCachedExtractedData(itemId);
       console.log(`[BG] Found ${Object.keys(existingCache).length} cached documents`);
     }
+
 
     
     // Build cached context
