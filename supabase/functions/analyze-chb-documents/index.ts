@@ -2244,7 +2244,7 @@ async function processAnalysisInBackground(
   files: FileForAnalysis[],
   clientConfig?: ClientConfig,
   itemId?: number,
-  cachedData?: Record<string, { fields: Record<string, any>; rawText?: string }>
+  _cachedDataUnused?: unknown
 ): Promise<void> {
   const supabase = getSupabaseClient();
   
