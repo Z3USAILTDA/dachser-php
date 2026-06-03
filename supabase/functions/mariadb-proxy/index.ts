@@ -19947,12 +19947,16 @@ Deno.serve(async (req) => {
             if (!row.mbl_id || !row.container) continue;
             const numero = row.container.trim();
             const mbl = row.mbl_id.trim();
-            const cronosStatus = mapCronosStatus(row.last_event, row.status_armador, row.container_status);
-            const etd = fmtDate(row.etd);
-            const eta = row.eta_confirmado ? fmtDate(row.eta_confirmado) : fmtDate(row.eta);
+            const cronosStatus = mapCronosStatus(row.last_event, null, row.container_status);
+            const etd: string | null = null;
+            const eta = fmtDate(row.eta);
             const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-            // Fetch historical dates
+            // Datas históricas: extraídas exclusivamente de t_sea_tracking_history
+            // (mesma fonte usada pela tela /sea/tracking). Inclui padrões dos armadores
+            // suportados: HAPAG/CMA/MAERSK ("vessel arrival"), MSC ("Import"),
+            // ZIM/ONE ("vessel arrival to port of discharge"), HMM ("vessel arrival at pod"),
+            // COSCO ("ATA").
             let discharge_date: string | null = null;
             let gate_out_date: string | null = null;
             let return_date: string | null = null;
@@ -19960,15 +19964,28 @@ Deno.serve(async (req) => {
               const histRows = await client.query(`
                 SELECT event_type, MIN(event_datetime) as event_datetime FROM (
                   SELECT 'discharge' as event_type, event_datetime FROM dados_dachser.t_sea_tracking_history 
-                  WHERE container = ? AND (event_description LIKE '%Discharged%' OR event_description = 'Discharge' OR event_description LIKE '%Unloaded from Vessel%' OR event_description LIKE '%Import Discharged%' OR event_description LIKE '%Descarga%')
+                  WHERE container = ? AND (
+                    event_description LIKE '%Discharged%' OR event_description = 'Discharge'
+                    OR event_description LIKE '%Unloaded from Vessel%' OR event_description LIKE '%Import Discharged%'
+                    OR event_description LIKE '%Descarga%' OR event_description LIKE '%Descarregado%'
+                    OR event_description LIKE '%Vessel arrival%' OR event_description LIKE '%Vessel Arrival%'
+                    OR event_description LIKE '%Arrival at%' OR event_description = 'ATA' OR event_description LIKE 'Import%'
+                  )
                   UNION ALL
                   SELECT 'gate_out' as event_type, event_datetime FROM dados_dachser.t_sea_tracking_history 
                   WHERE container = ? AND (event_description LIKE '%Gate out%' OR event_description LIKE '%Gate-out%' OR event_description = 'Import to consignee' OR event_description LIKE '%Saída%' OR event_description LIKE '%Saida%')
                   UNION ALL
                   SELECT 'return' as event_type, event_datetime FROM dados_dachser.t_sea_tracking_history 
-                  WHERE container = ? AND (event_description LIKE '%Empty%returned%' OR event_description LIKE '%Gate in%' OR event_description LIKE '%Devolução%' OR event_description LIKE '%Devolvido%' OR event_description LIKE '%Empty to shipper%')
+                  WHERE container = ? AND (
+                    event_description LIKE '%Empty%returned%' OR event_description LIKE '%Empty container return%'
+                    OR event_description LIKE '%Empty container gate in%' OR event_description LIKE '%Empty in depot%'
+                    OR event_description LIKE '%Gate in empty%' OR event_description LIKE '%Empty return%'
+                    OR event_description LIKE '%Devolução%' OR event_description LIKE '%Devolvido%'
+                    OR event_description LIKE '%Empty to shipper%'
+                  )
                 ) AS events GROUP BY event_type
               `, [numero, numero, numero]);
+
               for (const hr of histRows) {
                 if (hr.event_datetime) {
                   const ds = fmtDate(hr.event_datetime);
