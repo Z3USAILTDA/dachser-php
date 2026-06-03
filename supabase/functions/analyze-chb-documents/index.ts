@@ -2113,6 +2113,7 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
     let responseText: string;
     let usedFallback = false;
     let fileWarnings: ChbFileError[] = [];
+    let extractedTexts: Record<string, string> | undefined;
 
     // Try Anthropic first
     try {
@@ -2120,6 +2121,7 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
       const result = await callAnthropicAPI(prompt, files);
       responseText = result.text;
       fileWarnings = result.warnings;
+      extractedTexts = result.extractedTexts;
       console.log('[BG] Anthropic API succeeded');
     } catch (anthropicError) {
       console.error('[BG] Anthropic API failed, trying Gemini API fallback:', anthropicError);
@@ -2130,6 +2132,7 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
         const result = await callGeminiAPI(prompt, files);
         responseText = result.text;
         fileWarnings = result.warnings;
+        extractedTexts = result.extractedTexts;
         console.log('[BG] Gemini API succeeded');
       } catch (geminiError) {
         console.error('[BG] Gemini API also failed:', geminiError);
@@ -2145,7 +2148,9 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
       }
     }
 
-    const { html, tags, summary, detailedSummary, parecer, modal, cliente } = extractHtmlAndTags(responseText, stepId);
+    const parsedResult = extractHtmlAndTags(responseText, stepId);
+    const html = applyAwbPortugueseTotalFreightCorrection(parsedResult.html, extractedTexts);
+    const { tags, summary, detailedSummary, parecer, modal, cliente } = extractHtmlAndTags(`<<BEGIN_HTML>>${html}<<END_HTML>>`, stepId);
 
     console.log(`[BG] Analysis completed - ${tags.map(t => t.label).join(', ')}`);
 
