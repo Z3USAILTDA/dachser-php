@@ -1424,6 +1424,7 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
   }
   
   const warnings: ChbFileError[] = [];
+  const extractedTexts: Record<string, string> = {};
   
   // Build content parts for Lovable AI Gateway
   const contentParts: any[] = [];
