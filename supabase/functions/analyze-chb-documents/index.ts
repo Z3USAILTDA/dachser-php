@@ -2594,44 +2594,6 @@ O usuário CORRIGIU os seguintes valores. VOCÊ DEVE USAR ESSES VALORES CORRIGID
 
     console.log(`[BG] Request ${requestId} completed successfully`);
 
-    // Save extracted data to cache for future steps
-    // IMPROVED: Extract fields from each file column in the HTML table
-    if (itemId) {
-      try {
-        console.log(`[BG Cache] Saving extracted data for ${files.length} files to itemId ${itemId}...`);
-        
-        for (const file of files) {
-          // Parse fields specifically for this file from the response
-          const extractedFields = parseExtractedFields(html, file.name);
-          
-          // Extract raw text for Excel files (useful for future reference)
-          let rawText = '';
-          if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || 
-              file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-            try {
-              rawText = await extractExcelText(file.content, file.name);
-            } catch (e) {
-              console.error(`[BG Cache] Error extracting excel text for ${file.name}:`, e);
-            }
-          }
-          
-          // Only save if we extracted meaningful fields
-          if (Object.keys(extractedFields).length > 0) {
-            await saveExtractedData(itemId, file.name, stepId.toString(), extractedFields, rawText);
-            console.log(`[BG Cache] Saved ${Object.keys(extractedFields).length} fields for ${file.name}`);
-          } else {
-            console.log(`[BG Cache] No fields extracted for ${file.name}, skipping save`);
-          }
-        }
-        
-        console.log(`[BG Cache] Finished saving extracted data for item ${itemId}`);
-      } catch (e) {
-        console.error('[BG Cache] Error saving extracted data:', e);
-        // Don't fail the whole analysis if caching fails
-      }
-    } else {
-      console.log('[BG Cache] No itemId provided, skipping cache save');
-    }
 
   } catch (error) {
     console.error(`[BG] Error processing analysis ${requestId}:`, error);
