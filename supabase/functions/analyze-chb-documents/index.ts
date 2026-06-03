@@ -1993,9 +1993,27 @@ async function persistRawOcrForFiles(
       rawOcr = await extractRawTextForPersistence(file);
     }
 
-    const dbFile = byExact.get(file.name) || byNormalized.get(normalizedName) || orderedDbFiles[index];
+    let dbFile = byExact.get(file.name) || byNormalized.get(normalizedName) || orderedDbFiles[index];
     if (!dbFile) {
-      console.warn(`[BG][raw-ocr-save] No DB file match for "${file.name}" — known: ${orderedDbFiles.map(f => f.filename).join(' | ') || '(none)'}`);
+      console.warn(`[BG][raw-ocr-save] No DB file match for "${file.name}" — auto-registering (known: ${orderedDbFiles.map(f => f.filename).join(' | ') || '(none)'})`);
+      try {
+        const created = await callMariaDBProxy('create_chb_file', {
+          itemId,
+          filename: file.name,
+          etapa: String(stepId),
+          docRole: (file as any).docRole || 'O',
+          mime: (file as any).mimeType || null,
+          sizeBytes: (file as any).sizeBytes || null,
+          userId: null,
+        });
+        if (created?.fileId) {
+          dbFile = { id: created.fileId, doc_role: (file as any).docRole || 'O', etapa: String(stepId) };
+          console.log(`[BG][raw-ocr-save] auto-registered fileId=${created.fileId} for "${file.name}"`);
+        }
+      } catch (regErr) {
+        console.error(`[BG][raw-ocr-save] Failed to auto-register "${file.name}":`, (regErr as Error).message);
+        throw regErr;
+      }
     }
 
     const hasRawOcr = rawOcr.trim().length >= 10;
@@ -2007,7 +2025,7 @@ async function persistRawOcrForFiles(
       etapa: dbFile?.etapa ?? String(stepId),
       fileSha256: null,
       extractorModel: 'google/gemini-2.5-flash',
-      extractorPromptVersion: 'main-raw-ocr-v2-all-files',
+      extractorPromptVersion: 'main-raw-ocr-v3-auto-register',
       extractorConfidence: null,
       rawOcrText: hasRawOcr ? rawOcr : null,
       structuredFields: null,
