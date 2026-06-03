@@ -2006,7 +2006,7 @@ const EsteiraIndex = () => {
       <main className="relative z-10 max-w-[95%] mx-auto px-2 pb-8">
         <div className="space-y-6">
           {/* Metric Cards */}
-          <div className={cn("grid gap-4 md:grid-cols-2", (isAdmin || isGestor || isOperacao) ? "xl:grid-cols-5" : "xl:grid-cols-4")}>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {loading ? <>
                 <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
                 <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
