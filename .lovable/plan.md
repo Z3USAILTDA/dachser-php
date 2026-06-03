@@ -1,31 +1,40 @@
-# Ajuste: usar sempre "Total Collect" (não "Collect" puro)
-
 ## Problema
-Na conferência CHB (rota `/chb/conferences/:id`), ao extrair "Valor Total Frete" de AWB/HAWB/BL, o LLM está pegando a linha **"Collect"** (frete básico, antes das taxas e packaging) em vez da linha **"Total Collect"** que aparece no rodapé da coluna e já inclui frete + taxas + embalagem.
 
-A causa é o prompt em `supabase/functions/analyze-chb-documents/index.ts`, que hoje diz apenas "linha Total na coluna Prepaid/Collect" sem deixar explícito que o rótulo correto é **"Total Collect"/"Total Prepaid"** (final da coluna), nunca um subtotal "Collect"/"Prepaid" no meio.
+No AWB/HAWB em **português** (estrutura "Totais na moeda de origem"), o LLM está capturando a linha **"Por Peso"** (EUR 25,00 — frete parcial) em vez da linha **"Total"** do rodapé (EUR 220,00 — frete + impostos + outros serviços).
 
-## Mudanças no prompt (cirúrgicas, sem refatoração)
+A causa é que a Seção 14B do prompt em `supabase/functions/analyze-chb-documents/index.ts` só ensina os rótulos em inglês (Weight Charge, Total Collect, Total Prepaid). Quando o AWB é emitido em português, o LLM não reconhece a linha "Total" como equivalente a "Total Collect" e acaba usando "Por Peso" como fallback.
 
-Arquivo único: `supabase/functions/analyze-chb-documents/index.ts`
+## Mudança (cirúrgica, só prompt)
 
-### 1) Seção 7B — "VALOR TOTAL FRETE" (linhas ~683-721)
-- Reescrever o "ONDE PROCURAR" para CCT/BL/AWB explicitando que o valor é **sempre** o da linha final rotulada `Total Prepaid` ou `Total Collect` (rodapé da coluna), que já consolida frete + taxas + packaging.
-- Adicionar regra anti-erro: **nunca usar** a linha intermediária "Collect" / "Prepaid" / "Freight Charge" / "WT/VAL" sozinha — esses são parciais e não representam o total cobrado.
-- Atualizar a lista de sinônimos VÁLIDOS para deixar `Total Prepaid` e `Total Collect` como prioritários (e marcar `Freight`, `Ocean Freight`, `Air Freight`, `Collect`, `Prepaid` como fallback **apenas** quando não houver linha "Total ...").
+Arquivo: `supabase/functions/analyze-chb-documents/index.ts`, Seção 14B (linhas ~869-898).
 
-### 2) Seção 14B — Regras AWB/HAWB (linhas ~868-878)
-- Reforçar que a linha "Total" considerada para frete é a do **rodapé** da coluna (`Total Prepaid` / `Total Collect`), que soma:
-  - Weight/Valuation Charge
-  - Tax
-  - Total Other Charges Due Agent
-  - Total Other Charges Due Carrier
-- Adicionar exemplo numérico curto mostrando que `Collect = 1.200` (frete) vs `Total Collect = 1.450` (frete + outros) → usar **1.450**.
-- Listar explicitamente como ERRADO: reportar o valor da linha "Collect"/"Weight Charge" como `Valor Total Frete`.
+Adicionar mapeamento explícito da estrutura de charges em **português** (AWB BR), reforçando que apenas a linha **"Total"** do rodapé da coluna Prepaid/Collect deve ser usada:
+
+```
+ESTRUTURA EM PORTUGUÊS (AWB/HAWB BR — "Totais na moeda de origem"):
+  | Linha                              | Prepaid | Collect |
+  | Por Peso                           |    -    |  25,00  | ← PARCIAL, NÃO USAR
+  | Por Valor                          |    -    |    -    | ← PARCIAL, NÃO USAR
+  | Impostos                           |    -    |    -    | ← PARCIAL, NÃO USAR
+  | Outros Serviços (Agente de Carga)  |    -    |    -    | ← PARCIAL, NÃO USAR
+  | Outros Serviços (Transportador)    |    -    |    -    | ← PARCIAL, NÃO USAR
+  | Total                              |    -    | 220,00  | ✅ USAR ESTE VALOR
+
+MAPEAMENTO PT → EN:
+  • "Por Peso"                          ≡ Weight Charge        (parcial)
+  • "Por Valor"                         ≡ Valuation Charge     (parcial)
+  • "Impostos"                          ≡ Tax                  (parcial)
+  • "Outros Serviços (Agente de Carga)" ≡ Other Charges Agent  (parcial)
+  • "Outros Serviços (Transportador)"   ≡ Other Charges Carrier(parcial)
+  • "Total" (rodapé)                    ≡ Total Prepaid / Total Collect ✅
+```
+
+Adicionar à regra crítica:
+- ❌ ERRADO: pegar "Por Peso" / "Por Valor" / "Impostos" como Valor Total Frete
+- ✅ CORRETO: sempre a linha **"Total"** do rodapé da coluna Prepaid ou Collect (consolidado)
 
 ## Fora de escopo
-- Nenhuma mudança em UI, schema, código de pós-processamento, fallback de regex (linhas 1700-1740 já mapeiam `total prepaid`/`total collect` corretamente).
-- Nenhuma mudança nas regras de validação cruzada Incoterm × Prepaid/Collect.
+- UI, schema, pós-processamento, regex fallback, regras de validação Incoterm × Prepaid/Collect.
 
 ## Validação
-Após editar, fazer deploy de `analyze-chb-documents` e rodar uma nova conferência num processo conhecido com AWB Collect cujo "Collect" ≠ "Total Collect" para confirmar que agora o sistema captura o valor final.
+Após editar, rodar nova conferência no processo atual (AWB com "Por Peso = 25" e "Total = 220") e confirmar que `Valor Total Frete` agora retorna **EUR 220,00**.
