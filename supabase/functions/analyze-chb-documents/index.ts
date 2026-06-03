@@ -689,9 +689,18 @@ REGRAS DE CONTEÚDO DA TABELA
          → ⛔ NUNCA usar a linha intermediária "Collect" / "Prepaid" / "Freight Charge" /
            "Weight Charge" / "WT/VAL" / "Valuation Charge" sozinha — esses são PARCIAIS
            (frete antes das taxas) e NÃO representam o valor total cobrado.
+         → REGRA OBRIGATÓRIA PARA CCT/AWB EM PORTUGUÊS:
+           Quando existir tabela "Totais na moeda de origem" com colunas "Prepaid" e "Collect",
+           usar SEMPRE o valor da linha final "Total" da coluna que contém valor monetário.
+           NUNCA usar isoladamente as linhas "Por Peso", "Por Valor", "Impostos",
+           "Outros Serviços (Agente de Carga)" ou "Outros Serviços (Transportador)" —
+           todas são componentes PARCIAIS do frete.
+           Exemplo: "Por Peso" = EUR 25,00 e "Total" = EUR 220,00 →
+           Valor Total Frete DEVE ser EUR 220,00, nunca EUR 25,00.
          → Packing List: geralmente não tem (ND é aceitável)
        - Sinônimos VÁLIDOS para frete (em ordem de PRIORIDADE):
          1º (preferencial): "Total Prepaid", "Total Collect"
+            ou linha "Total" em tabela "Totais na moeda de origem" / Prepaid / Collect
          2º (fallback APENAS se não houver "Total ..."): "Total Charges", "Freight",
             "Frete", "Freight Charges", "Ocean Freight", "Air Freight"
        - Linha da tabela: "Valor Total Frete"
