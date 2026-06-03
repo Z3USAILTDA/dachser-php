@@ -17,6 +17,8 @@ import { useChbFiles, useChbRuns, useChbItems, ChbFile, ChbRun } from '@/hooks/u
 import { useChbClientConfig, ChbClientConfig } from '@/hooks/useChbClientConfig';
 import { useChbCorrections } from '@/hooks/useChbCorrections';
 import { applyCorrectionsToHtml } from '@/utils/chbPdfCorrections';
+import { parseHtmlToRows } from '@/components/chb/ChbComparisonGrid';
+
 
 export default function ConferenciaChb() {
   useUsageLog({ endpoint: "/chb/conferencia" });
@@ -799,11 +801,43 @@ export default function ConferenciaChb() {
           status_macro: newMacroStatus,
         } as Partial<Pick<import('@/hooks/useChbData').ChbItem, 'status_macro' | 'step1_status' | 'step2_status' | 'step3_status'>>);
       }
+
+      // Save approved snapshot (fotografia da grid) for reuse in next step
+      try {
+        const parsed = parseHtmlToRows(correctedHtml);
+        const tagCounts = (correctedAnalysis.tags || []).reduce((acc: Record<string, number>, t: any) => {
+          acc[t.variant] = (acc[t.variant] || 0) + 1;
+          return acc;
+        }, {});
+        const snapshotPayload = {
+          stepId: activeStep,
+          headers: parsed?.headers || [],
+          rows: parsed?.rows || [],
+          approvedAt: new Date().toISOString(),
+        };
+        const userId = localStorage.getItem('user_id');
+        await supabase.functions.invoke('mariadb-proxy', {
+          body: {
+            action: 'save_chb_approved_snapshot',
+            itemId,
+            etapa: String(activeStep),
+            snapshot: snapshotPayload,
+            resultHtml: correctedHtml,
+            summary: { ...tagCounts, filesAnalyzed: correctedAnalysis.filesAnalyzed || [] },
+            approvedBy: userId ? parseInt(userId) : null,
+          },
+        });
+        console.log('[CHB] Approved snapshot saved for step', activeStep, '— rows:', snapshotPayload.rows.length);
+      } catch (snapErr) {
+        console.warn('[CHB] Failed to save approved snapshot (non-blocking):', snapErr);
+      }
     } catch (error) {
       console.error('Error saving run:', error);
       toast.error('Erro ao salvar aprovação');
       return;
     }
+
+
 
     // Create history entry with CORRECTED HTML content
     const historyEntry: ChbApprovedHistory = {
