@@ -1,44 +1,19 @@
-## Objetivo
+## Plano
 
-Garantir que vouchers em etapa `RASCUNHO` (como o 20261567156) sejam fáceis de encontrar na esteira, sem depender de mudar manualmente o filtro de etapa.
+1. **Fortalecer a correção determinística do frete total**
+  - Ajustar a função que lê o OCR do CCT/AWB para capturar a linha final `Total` mesmo quando o texto vem em tabela desalinhada ou com colunas `Pré-pago` / `A Cobrar`.
+  - Priorizar sempre o maior/último valor da linha `Total` da seção `Totais na moeda de origem`.
+  - Bloquear explicitamente `Por Peso`, `Por Valor`, `Impostos` e `Outros Serviços` como origem de `Valor Total Frete`.
+2. **Corrigir a contaminação do campo Peso Bruto**
+  - Adicionar pós-processamento para o documento `extrato-conhecimento-AUL246698` e similares: se `Peso Bruto` receber valor com moeda (`EUR`, `USD`, `BRL`, `R$`) ou valor igual ao frete total, substituir pelo peso real da linha explícita de peso bruto/Gross Weight no OCR.
+  - Garantir que valores monetários nunca sejam gravados como `peso_bruto` no cache extraído.
+3. **Corrigir o HTML e o cache persistido**
+  - Aplicar a correção antes de salvar `resultHtml` e antes de executar `parseExtractedFields`, para que a tabela exibida e os dados persistidos fiquem consistentes.
+  - Melhorar `parseExtractedFields` para não aceitar moeda em campos de peso.
+4. **Validar a função**
+  - Fazer checagem estática com busca direcionada para confirmar que a correção está no fluxo principal.
+  - Implantar a função `analyze-chb-documents` após a alteração para que a próxima análise use a regra corrigida.
 
-## Mudanças (cirúrgicas, só frontend)
+## Resultado esperado
 
-**Arquivo único:** `src/pages/esteira/EsteiraIndex.tsx`
-
-### A) Incluir RASCUNHO nas etapas permitidas do role OPERACAO
-
-Em `roleFilteredVouchers` (~linha 1270), adicionar `RASCUNHO` ao `etapasPermitidas` quando `isOperacao`:
-
-```ts
-if (isOperacao) {
-  etapasPermitidas.add("OPERACAO");
-  etapasPermitidas.add("A_PROCESSAR");
-  etapasPermitidas.add("PRE_LANCAMENTO");
-  etapasPermitidas.add("RASCUNHO"); // novo
-}
-```
-
-Efeito: usuários OPERACAO continuam vendo OPERACAO/A_PROCESSAR no filtro "Todos" e, se selecionarem manualmente "Rascunho", também enxergam. FISCAL/SUPERVISOR/FINANCEIRO continuam sem ver rascunhos (rascunho é responsabilidade da Operação).
-
-### B) Card/atalho "Rascunhos" no topo da esteira
-
-Adicionar um card-resumo na faixa de métricas superior (junto com "Pendentes - Operação", "Vencidos" etc.) mostrando a contagem de vouchers em `etapaAtual === "RASCUNHO"`.
-
-- **Visibilidade:** apenas para `isAdmin`, `isGestor` ou `isOperacao` (quem cria/edita rascunhos).
-- **Ação ao clicar:** seta `filters.etapa = "RASCUNHO"` e rola até a tabela (mesmo padrão dos cards existentes).
-- **Estilo:** reaproveitar o componente de MetricCard já usado, variante neutra/cinza (alinhado ao badge cinza atual `bg-gray-500/10 text-gray-400` em `VoucherTable.tsx`).
-- **Contagem:** derivada de `allVouchers.filter(v => v.etapaAtual === "RASCUNHO").length` no mesmo `useMemo` das demais métricas (~linha 348).
-
-## Fora de escopo
-
-- Backend (`get_vouchers_esteira` já retorna RASCUNHO).
-- Mudar a opção "Rascunho" do dropdown de filtro (já existe).
-- Auto-selecionar "Rascunho" como etapa padrão para qualquer role.
-- Permissões de edição/aprovação de rascunho.
-
-## Validação
-
-1. Logar como usuário OPERACAO → o card "Rascunhos" aparece com a contagem; clicar nele filtra e exibe o 20261567156.
-2. Filtro em "Todos" como OPERACAO → 20261567156 listado junto com os demais.
-3. Logar como FISCAL/SUPERVISOR/FINANCEIRO → card não aparece e rascunhos seguem ocultos no auto-filtro de etapa (comportamento atual preservado).
+Na nova análise, o documento `EXTRATO-CONHECIMENTO-AUL246698...` não deve mais colocar `EUR 220,00` em `Peso Bruto`, e `Valor Total Frete` deve usar o `Total` (`EUR 220,00`) em vez de `Por Peso` (`EUR 25,00`).
