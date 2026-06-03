@@ -1653,6 +1653,7 @@ function applyAwbPortugueseTotalFreightCorrection(html: string, extractedTexts?:
   const headerCells = headerMatch?.[1]?.match(/<th[^>]*>[\s\S]*?<\/th>/gi) || [];
   const targetHeader = correction.filename.toLowerCase().replace(/\.(pdf|xlsx?|png|jpe?g)$/i, '');
   const targetColumnIndex = headerCells.findIndex((cell) => cell.replace(/<[^>]+>/g, '').trim().toLowerCase().includes(targetHeader));
+  if (targetColumnIndex < 2 && headerCells.length > 3) return html;
   const targetTdIndex = targetColumnIndex >= 2 ? targetColumnIndex - 2 : 0;
 
   return html.replace(/<tr[^>]*>[\s\S]*?<td[^>]*>\s*Valor\s+Total\s+Frete\s*<\/td>[\s\S]*?<\/tr>/i, (row) => {
