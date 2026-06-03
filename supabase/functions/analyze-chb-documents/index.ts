@@ -2542,12 +2542,64 @@ O usuário CORRIGIU os seguintes valores. VOCÊ DEVE USAR ESSES VALORES CORRIGID
 `;
     }
     
-    
+    // === Approved snapshots from previous steps (ground-truth absoluto) ===
+    try {
+      if (itemId && Number(stepId) > 1) {
+        const snapResp = await callMariaDBProxy('get_chb_approved_snapshots', {
+          itemId,
+          maxEtapa: String(stepId),
+        });
+        const snapshots = Array.isArray(snapResp?.data) ? snapResp.data : [];
+        console.log(`[BG] Approved snapshots loaded for item ${itemId} (etapa<${stepId}):`, snapshots.length);
 
-    
+        if (snapshots.length > 0) {
+          const stepNamesPt: Record<string, string> = { '1': 'Pré-Alerta', '2': 'Instrução', '3': 'DI/Fechamento' };
+          let snapBlock = `
+═══════════════════════════════════════════════════════════════════════════════
+🔒 ETAPAS ANTERIORES JÁ APROVADAS — GROUND TRUTH ABSOLUTO
+═══════════════════════════════════════════════════════════════════════════════
+
+Os valores abaixo já foram analisados e APROVADOS pelo usuário em etapas anteriores.
+Eles são FONTE DE VERDADE. Reutilize-os sem reanalisar:
+
+`;
+          for (const snap of snapshots) {
+            const etapaKey = String(snap.etapa);
+            const stepName = stepNamesPt[etapaKey] || `Etapa ${etapaKey}`;
+            let payload: any = {};
+            try {
+              payload = typeof snap.snapshot === 'string' ? JSON.parse(snap.snapshot) : (snap.snapshot || {});
+            } catch { payload = {}; }
+            const rows: any[] = Array.isArray(payload.rows) ? payload.rows : [];
+            snapBlock += `\n— ${stepName} (aprovado em ${snap.approved_at || '?'}) —\n`;
+            for (const r of rows) {
+              const valores = r.valores && typeof r.valores === 'object' ? r.valores : {};
+              const valStr = Object.entries(valores)
+                .map(([k, v]) => `${k}=${v}`)
+                .join(' | ');
+              snapBlock += `  • ${r.campo}: ${valStr || '(sem valor)'}\n`;
+            }
+          }
+          snapBlock += `
+🔴 REGRAS PARA ETAPAS APROVADAS:
+1. Valores já aprovados são VERDADE ABSOLUTA — NÃO reanalisar nem questionar.
+2. Se o documento desta etapa divergir do valor aprovado anterior, sinalizar DIVERGÊNCIA ENTRE ETAPAS.
+3. Use os valores aprovados como referência para validar consistência da etapa atual.
+
+═══════════════════════════════════════════════════════════════════════════════
+
+`;
+          cachedContext = snapBlock + cachedContext;
+        }
+      }
+    } catch (snapErr) {
+      console.warn('[BG] Failed to load approved snapshots (non-blocking):', snapErr);
+    }
+
     const fileNames = files.map((f: any) => f.name);
     const basePrompt = getPromptByStep(stepId, fileNames, clientConfig);
     const prompt = cachedContext ? cachedContext + '\n\n' + basePrompt : basePrompt;
+
     
     console.log(`[BG] Prompt length: ${prompt.length} chars`);
     
