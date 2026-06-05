@@ -17635,9 +17635,9 @@ Deno.serve(async (req) => {
           SELECT DISTINCT voucher_master_id, numero_spo
           FROM dados_dachser.t_vouchers
           WHERE voucher_master_id IS NOT NULL
-            AND numero_spo LIKE ? COLLATE utf8mb4_unicode_ci
+            AND SUBSTRING_INDEX(TRIM(numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
           LIMIT 50
-        `, [`${spo_prefix}%`]);
+        `, [spo_prefix]);
         
         result = { success: true, data: searchResults || [] };
         break;
