@@ -1335,6 +1335,37 @@ const EsteiraIndex = () => {
     return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
   }, [filters.search]);
 
+  // Busca expandida: ao pesquisar, traz também vouchers CONCLUIDO/CANCELADO
+  // que estão ocultos pelo filtro de 24h (paridade com o módulo Aéreo/CCT).
+  const concludedSearchDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (concludedSearchDebounceRef.current) clearTimeout(concludedSearchDebounceRef.current);
+    const term = filters.search?.trim();
+    if (!term || term.length < 2) return;
+
+    concludedSearchDebounceRef.current = setTimeout(async () => {
+      try {
+        const { data } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "search_vouchers_including_concluded", search: term },
+        });
+        const rows: any[] = data?.data || [];
+        if (!rows.length) return;
+        const extras = rows.map((v: any) => mapVoucherFromDB(v));
+        setVouchers((prev) => {
+          const byId = new Map(prev.map((v) => [v.id, v]));
+          for (const e of extras) {
+            if (!byId.has(e.id)) byId.set(e.id, e);
+          }
+          return Array.from(byId.values());
+        });
+      } catch (err) {
+        console.warn("[search_vouchers_including_concluded] erro:", err);
+      }
+    }, 450);
+
+    return () => { if (concludedSearchDebounceRef.current) clearTimeout(concludedSearchDebounceRef.current); };
+  }, [filters.search]);
+
   const filterVouchers = (vouchersList: Voucher[]) => {
     const now = new Date();
     const tomorrow = new Date(now);
