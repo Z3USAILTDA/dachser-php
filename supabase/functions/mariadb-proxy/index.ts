@@ -17580,34 +17580,7 @@ Deno.serve(async (req) => {
           console.log(`[search_vouchers_including_concluded] fast-path matches=${vouchers?.length || 0}`);
         }
 
-        // ===== FALLBACK: LIKE com subconsulta dfv pré-filtrada =====
-        if (!vouchers || vouchers.length === 0) {
-          const slowJoin = `
-            LEFT JOIN (
-              SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MAX(data_emissao) as data_emissao,
-                MIN(numero_processo) as numero_processo,
-                MAX(razao_social) as razao_social,
-                MAX(nome_beneficiario) as nome_beneficiario,
-                MAX(valor_nf) as valor_nf
-              FROM dados_dachser.t_dados_financeiro_voucher
-              WHERE nd LIKE ? OR numero_processo LIKE ?
-              GROUP BY nd
-            ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
-          `;
-          const slowWhere = `
-            AND (
-              v.numero_spo LIKE ?
-              OR v.fornecedor LIKE ?
-              OR v.cnpj_fornecedor LIKE ?
-              OR dfv.nd IS NOT NULL
-            )
-          `;
-          vouchers = await client.query(
-            `${baseSelect} ${slowJoin} ${baseWhere} ${slowWhere} ORDER BY v.updated_at DESC LIMIT 200`,
-            [like, like, like, like, like]
-          );
-          console.log(`[search_vouchers_including_concluded] like-path matches=${vouchers?.length || 0}`);
-        }
+        // Sem fallback LIKE: a busca aceita apenas ND/SPO completo (igualdade indexada).
 
         result = { success: true, data: vouchers || [], count: vouchers?.length || 0 };
         break;
@@ -17662,9 +17635,9 @@ Deno.serve(async (req) => {
           SELECT DISTINCT voucher_master_id, numero_spo
           FROM dados_dachser.t_vouchers
           WHERE voucher_master_id IS NOT NULL
-            AND numero_spo LIKE ? COLLATE utf8mb4_unicode_ci
+            AND SUBSTRING_INDEX(TRIM(numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
           LIMIT 50
-        `, [`${spo_prefix}%`]);
+        `, [spo_prefix]);
         
         result = { success: true, data: searchResults || [] };
         break;

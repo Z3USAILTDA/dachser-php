@@ -78,6 +78,7 @@ interface VoucherTableProps {
   lastUpdateTime?: Date | null;
   enviadoPorOptions?: string[];
   criadoPorOptions?: string[];
+  isSearching?: boolean;
 }
 
 const getEtapaColor = (etapa: string) => {
@@ -220,7 +221,7 @@ const getSlaColor = (status: "ok" | "warning" | "critical") => {
   return colors[status];
 };
 
-export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, onDisassemble, onValidateComprovante, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false, canDisassembleMaster = false, canValidateComprovante = false, canApproveSupervisor = false, canRetornarPendente = false, lastUpdateTime, enviadoPorOptions = [], criadoPorOptions = [] }: VoucherTableProps) => {
+export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, onDisassemble, onValidateComprovante, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false, canDisassembleMaster = false, canValidateComprovante = false, canApproveSupervisor = false, canRetornarPendente = false, lastUpdateTime, enviadoPorOptions = [], criadoPorOptions = [], isSearching = false }: VoucherTableProps) => {
   const [validatingVoucherId, setValidatingVoucherId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>("vencimento");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -618,7 +619,14 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
               {paginatedVouchers.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={14} className="text-center text-muted-foreground py-8">
-                    Nenhum voucher/SPO encontrado
+                    {isSearching ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Carregando…
+                      </span>
+                    ) : (
+                      "Nenhum voucher/SPO encontrado"
+                    )}
                   </TableCell>
                 </TableRow>
               ) : (

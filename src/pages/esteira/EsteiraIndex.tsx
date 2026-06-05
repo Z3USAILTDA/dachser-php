@@ -1302,17 +1302,26 @@ const EsteiraIndex = () => {
   const [masterChildSPOsMap, setMasterChildSPOsMap] = useState<Map<string, string[]>>(new Map());
   const searchDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLoadingVouchersRef = useRef(false);
-  
+
+  // Loading state da busca: enquanto o debounce não disparou ou alguma das
+  // duas invocações de busca está pendente, a tabela mostra "Carregando…"
+  // em vez de "Nenhum voucher/SPO encontrado".
+  const [mastersSearchLoading, setMastersSearchLoading] = useState(false);
+  const [concludedSearchLoading, setConcludedSearchLoading] = useState(false);
+  const searchLoading = mastersSearchLoading || concludedSearchLoading;
+
   // Lazy search: only fetch matching master IDs when user types a search term
   useEffect(() => {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    
+
     const searchTerm = filters.search?.trim();
     if (!searchTerm || searchTerm.length < 2) {
       setMasterChildSPOsMap(new Map());
+      setMastersSearchLoading(false);
       return;
     }
-    
+
+    setMastersSearchLoading(true);
     searchDebounceRef.current = setTimeout(async () => {
       try {
         const { data } = await supabase.functions.invoke("mariadb-proxy", {
@@ -1329,9 +1338,11 @@ const EsteiraIndex = () => {
         }
       } catch {
         setMasterChildSPOsMap(new Map());
+      } finally {
+        setMastersSearchLoading(false);
       }
     }, 400);
-    
+
     return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
   }, [filters.search]);
 
@@ -1341,8 +1352,12 @@ const EsteiraIndex = () => {
   useEffect(() => {
     if (concludedSearchDebounceRef.current) clearTimeout(concludedSearchDebounceRef.current);
     const term = filters.search?.trim();
-    if (!term || term.length < 2) return;
+    if (!term || term.length < 2) {
+      setConcludedSearchLoading(false);
+      return;
+    }
 
+    setConcludedSearchLoading(true);
     concludedSearchDebounceRef.current = setTimeout(async () => {
       try {
         const { data } = await supabase.functions.invoke("mariadb-proxy", {
@@ -1360,6 +1375,8 @@ const EsteiraIndex = () => {
         });
       } catch (err) {
         console.warn("[search_vouchers_including_concluded] erro:", err);
+      } finally {
+        setConcludedSearchLoading(false);
       }
     }, 450);
 
@@ -1374,13 +1391,15 @@ const EsteiraIndex = () => {
     yesterday.setDate(yesterday.getDate() - 1);
 
     return vouchersList.filter((voucher) => {
-      // Filtro de busca por SPO, nome do master ou SPO de filho vinculado
+      // Filtro de busca por SPO/ND — exigir valor COMPLETO (sem LIKE).
       if (filters.search) {
         const searchLower = filters.search.toLowerCase().trim();
-        const spoMatch = voucher.numeroSPO.toLowerCase().startsWith(searchLower);
-        const masterNameMatch = voucher.nomeMaster?.toLowerCase().startsWith(searchLower);
+        const spoToken = (voucher.numeroSPO || "").toLowerCase().trim().split(" ")[0];
+        const masterName = (voucher.nomeMaster || "").toLowerCase().trim();
+        const spoMatch = spoToken === searchLower;
+        const masterNameMatch = masterName === searchLower;
         const childSPOMatch = voucher.isMaster && (masterChildSPOsMap.get(voucher.id) || []).some(
-          spo => spo.toLowerCase().startsWith(searchLower)
+          spo => (spo || "").toLowerCase().trim().split(" ")[0] === searchLower
         );
         if (!spoMatch && !masterNameMatch && !childSPOMatch) return false;
       }
@@ -2293,7 +2312,7 @@ const EsteiraIndex = () => {
           {/* Tab Content */}
           {activeTab === "processos" && <div className="mt-3">
               {loading ? <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" /> : <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)] overflow-hidden">
-                    <VoucherTable vouchers={filteredVouchers} onViewDetails={handleViewDetails} onEdit={handleEdit} onDelete={handleDelete} onGoBack={handleGoBack} onCancel={handleCancel} onDisassemble={handleDisassemble} onValidateComprovante={handleValidateComprovante} filters={filters} onFilterChange={(newFilters) => { setFilters(newFilters); setDrillDownFilter("all"); }} canEdit={canEditVoucher} canDelete={canDeleteVoucher} canGoBackStage={canGoBackStage} canCancelVoucher={canCancelVoucher} canDisassembleMaster={canDisassembleMaster} canValidateComprovante={isFinanceiro || isAdmin || isSystemAdmin} canApproveSupervisor={canApproveSupervisor} canRetornarPendente={isFinanceiro || isAdmin || isSystemAdmin} lastUpdateTime={lastUpdateTime} enviadoPorOptions={enviadoPorOptions} criadoPorOptions={criadoPorOptions} />
+                    <VoucherTable vouchers={filteredVouchers} onViewDetails={handleViewDetails} onEdit={handleEdit} onDelete={handleDelete} onGoBack={handleGoBack} onCancel={handleCancel} onDisassemble={handleDisassemble} onValidateComprovante={handleValidateComprovante} filters={filters} onFilterChange={(newFilters) => { setFilters(newFilters); setDrillDownFilter("all"); }} canEdit={canEditVoucher} canDelete={canDeleteVoucher} canGoBackStage={canGoBackStage} canCancelVoucher={canCancelVoucher} canDisassembleMaster={canDisassembleMaster} canValidateComprovante={isFinanceiro || isAdmin || isSystemAdmin} canApproveSupervisor={canApproveSupervisor} canRetornarPendente={isFinanceiro || isAdmin || isSystemAdmin} lastUpdateTime={lastUpdateTime} enviadoPorOptions={enviadoPorOptions} criadoPorOptions={criadoPorOptions} isSearching={searchLoading} />
                 </div>}
             </div>}
 
