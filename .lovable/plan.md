@@ -1,44 +1,63 @@
-# Plan: corrigir Localização Automática para usar dados do banco
+# Ajustes na Esteira de Vouchers
 
-## Problema
+Duas correções pontuais, sem refatorações estruturais.
 
-A "localização automática" do ajuste do usuário sempre cai em **"Erro na localização automática"** com confiança **baixa** (como na imagem).
+## 1) Busca de ND lenta — especialmente com ND completo
 
-Causa: o `chb-corrections` ainda tenta `fetch(file.url)` em `t_dachser_chb_files` para ler o conteúdo do arquivo. Como os documentos são PDFs binários, o `fileResponse.text()` não retorna texto legível, então `locateValueInFile` e o re-extraction (Gemini Pro) recebem lixo ou nada — falham e gravam "Erro na localização automática / baixa confiança".
+**Onde:** `supabase/functions/mariadb-proxy/index.ts`, action `search_vouchers_including_concluded` (linhas 17503-17569).
 
-Com a nova arquitetura, a análise CHB já persiste o conteúdo trabalhável em `ai_agente.t_dachser_chb_extracted_data` (colunas `raw_text` + `extracted_fields` por `item_id` + `filename`). Essa é a fonte que a IA deve consultar para localizar o valor corrigido.
+**Problema:** quando o usuário digita o ND completo (ex.: `12345/2025`), a busca continua demorando porque:
+- A query usa `LIKE '%termo%'` em 5 colunas → nenhum índice é usado, mesmo com termo exato;
+- O `LEFT JOIN` agrupa **toda** a `t_dados_financeiro_voucher` (`GROUP BY nd`) antes de filtrar pelo termo;
+- 3 subqueries correlacionadas em `t_voucher_logs` são executadas para cada linha.
 
-## Mudança proposta (cirúrgica, apenas no edge function)
+**O que mudar (cirúrgico):**
 
-Arquivo: `supabase/functions/chb-corrections/index.ts`
+1. **Detectar "termo completo"** no início da action:
+   ```ts
+   const looksLikeFullNd = /^[A-Z0-9._\-\/]+$/i.test(rawTerm) && rawTerm.length >= 4;
+   const exactNd = looksLikeFullNd ? rawTerm.split(' ')[0] : null;
+   ```
 
-1. **Nova helper `fetchDocContentFromDb(client, item_id, filename)`**
-   - Faz `SELECT raw_text, extracted_fields FROM ai_agente.t_dachser_chb_extracted_data WHERE item_id = ? AND filename = ? LIMIT 1`.
-   - Fallback de matching: se nada bater por filename exato, tenta `LIKE` por tokens do filename (mesma normalização já usada hoje no bloco de file_url).
-   - Fallback final: pega todos os registros do `item_id` e concatena `raw_text` (ou `extracted_fields` JSON.stringificado) ordenados por `updated_at DESC` — assim, mesmo se o `filename` enviado pelo frontend for um label divergente, o Gemini ainda recebe contexto útil.
-   - Retorna a string composta: `${raw_text || ''}\n\n=== Campos já extraídos ===\n${extracted_fields}`.
+2. **Caminho rápido (exato):** quando `exactNd` está presente, rodar primeiro uma query indexada usando igualdade em `SUBSTRING_INDEX(numero_spo,' ',1)` e `SUBSTRING_INDEX(nd,' ',1)` (subselect dfv já pré-filtrado pelo ND exato). Se retornar linhas, devolve direto. Senão, cai para o LIKE.
 
-2. **Action `save` (linhas ~589-690)**
-   - Substituir todo o bloco que faz `JOIN t_dachser_chb_files` + `fetch(row.file_url)` pela chamada de `fetchDocContentFromDb`.
-   - Manter `file_content` enviado pelo cliente como prioridade (se vier preenchido, usa direto).
-   - Sem conteúdo do DB → segue o caminho atual de "Localização manual não realizada".
+3. **Pré-filtrar a subconsulta `dfv`** mesmo no caminho LIKE: aplicar `WHERE nd LIKE ? OR numero_processo LIKE ?` **dentro** do subselect antes do `GROUP BY`, eliminando o agrupamento da tabela inteira.
 
-3. **Action `reprocess-pending` (linhas ~882-980)**
-   - Mesma substituição: trocar o `JOIN t_dachser_chb_files` + `fetch(file_url)` por `fetchDocContentFromDb`.
-   - Garante que correções antigas marcadas como `baixa` / "Erro" possam ser re-resolvidas pelo novo backend ao rodar reprocess.
+4. **Manter as subqueries de `t_voucher_logs`** (necessárias para exibição) — o ganho vem de chegarem em um conjunto já pequeno.
 
-4. **Sem mudanças** em `locateValueInFile` e `reextractFieldWithContext` — eles continuam recebendo `fileContent: string` e o prompt continua igual. Só muda a origem da string.
+**Não muda:** assinatura da action, payload de retorno, hook frontend, debounce de 450 ms.
 
-## Não-objetivos / o que NÃO muda
+## 2) Filtro de mês não respeitado em etapas ativas
 
-- Esquema do banco (nenhuma migration).
-- Frontend (`EditableCell`, `useChbCorrections`, `ConferenciaChb`) — payload de `save` continua o mesmo; `file_content` continua opcional.
-- `analyze-chb-documents` e o fluxo de gravação em `t_dachser_chb_extracted_data` (já existem, só passamos a consumir).
-- Outros consumidores do `t_dachser_chb_files`/`t_dachser_chb_docs` — não tocamos nessas queries fora de `chb-corrections`.
-- Lógica das regras de extração (`saveExtractionRule`) e do `applied_count`.
+**Onde:** `supabase/functions/mariadb-proxy/index.ts`, action `get_vouchers_combined` (linhas 17409-17416).
+
+**Problema:** o `ativosMonthClause` mantém **todas** as etapas ativas sempre visíveis, ignorando o mês selecionado. Isso polui a tela com processos antigos.
+
+**O que mudar (cirúrgico):**
+- Apenas **OPERACAO, RASCUNHO e FINANCEIRO** continuam visíveis independente do mês. Todas as demais etapas (incluindo `A_PROCESSAR`) passam a respeitar o filtro:
+  ```sql
+  AND (
+    v.etapa_atual IN ('RASCUNHO','OPERACAO','FINANCEIRO')
+    OR (dfv.data_emissao >= ? AND dfv.data_emissao < ?)
+    OR (dfv.data_emissao IS NULL
+        AND v.data_emissao_documento >= ? AND v.data_emissao_documento < ?)
+  )
+  ```
+- Etapas `FISCAL`, `SUPERVISOR`, `AJUSTE_OPERACAO`, `AJUSTE_FISCAL`, `PRE_LANCAMENTO`, `CANCELADO`, `ROBO` e `A_PROCESSAR` passam a respeitar o mês via `data_emissao`/`data_emissao_documento`.
+- **`get_vouchers_pendentes_rm`** já filtra por mês — os cards virtuais A_PROCESSAR vindos do RM continuam aparecendo apenas dentro do mês selecionado (comportamento já correto).
+
+**Não muda:**
+- Frontend, hooks, layout, ou qualquer outra etapa do fluxo.
+- Regra de retenção 24 h para `CONCLUIDO`/`CANCELADO`.
 
 ## Validação
 
-1. Editar um campo de um documento já analisado (ex.: `$35,662.74` da imagem) → tooltip deve mostrar "Página/Seção …" e confiança **alta** ou **média**, não mais "Erro na localização automática / baixa".
-2. Em casos onde `raw_text` está vazio, comportamento deve ser idêntico ao atual (fallback gracioso).
-3. Rodar `reprocess-pending` em correções antigas e confirmar atualização de `location_reference`/`location_confidence` em `t_dachser_chb_user_corrections`.
+1. **ND completo:** digitar `12345/2025` → resultado em < 1 s (contra os ~5-10 s atuais).
+2. **ND parcial:** digitar `1234` → continua funcionando (cai no caminho LIKE otimizado).
+3. **Filtro mês:**
+   - OPERACAO, RASCUNHO, FINANCEIRO → aparecem em qualquer mês selecionado.
+   - FISCAL, SUPERVISOR, ROBO, AJUSTE_*, A_PROCESSAR → só aparecem quando `data_emissao` cai no mês.
+
+## Deploy
+
+Redeploy de `mariadb-proxy` após as alterações.
