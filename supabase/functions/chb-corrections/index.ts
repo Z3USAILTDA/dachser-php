@@ -898,103 +898,72 @@ serve(async (req) => {
         
         for (const correction of (pendingCorrections || [])) {
           try {
-            // Fetch file content from storage
-            // Try exact match first, then all files for item
-            let docRows = await client.query(`
-              SELECT f.url as file_url, f.filename as real_filename
-              FROM ai_agente.t_dachser_chb_docs d
-              JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
-              WHERE d.item_id = ? AND f.filename = ? AND d.is_active = 1
-              LIMIT 1
-            `, [correction.item_id, correction.filename]);
-            
-            if (!docRows || docRows.length === 0) {
-              docRows = await client.query(`
-                SELECT f.url as file_url, f.filename as real_filename
-                FROM ai_agente.t_dachser_chb_docs d
-                JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
-                WHERE d.item_id = ? AND d.is_active = 1
-                ORDER BY d.created_at DESC
-              `, [correction.item_id]);
-            }
-            
-            if (docRows && docRows.length > 0 && docRows[0].file_url) {
-              console.log(`[chb-corrections] Fetching content for ${correction.filename}`);
-              
-              const fileResponse = await fetch(docRows[0].file_url);
-              if (fileResponse.ok) {
-                const fileContent = await fileResponse.text();
-                console.log(`[chb-corrections] File content length: ${fileContent.length}`);
-                
-                // Run re-extraction using Gemini Pro
-                const reextractionResult = await reextractFieldWithContext(
-                  correction.filename,
+            // Fetch DB-extracted content (raw_text + extracted_fields) for this item/filename
+            const fileContent = await fetchDocContentFromDb(client, correction.item_id, correction.filename);
+
+            if (fileContent) {
+              console.log(`[chb-corrections] DB content length for ${correction.filename}: ${fileContent.length}`);
+
+              // Run re-extraction using Gemini Pro
+              const reextractionResult = await reextractFieldWithContext(
+                correction.filename,
+                correction.field_name,
+                correction.corrected_value,
+                fileContent
+              );
+
+              if (reextractionResult.found) {
+                // Update correction with location
+                await client.execute(`
+                  UPDATE ai_agente.t_dachser_chb_user_corrections
+                  SET location_reference = ?,
+                      location_context = ?,
+                      location_confidence = ?,
+                      updated_at = NOW()
+                  WHERE id = ?
+                `, [
+                  reextractionResult.location,
+                  reextractionResult.nearbyText,
+                  reextractionResult.confidence,
+                  correction.id
+                ]);
+
+                // Save extraction rule for future use
+                const docType = detectDocumentType(correction.filename);
+                await saveExtractionRule(
+                  client,
                   correction.field_name,
-                  correction.corrected_value,
-                  fileContent
+                  docType,
+                  reextractionResult.pattern,
+                  reextractionResult.extractionHint,
+                  correction.corrected_value
                 );
-                
-                if (reextractionResult.found) {
-                  // Update correction with location
-                  await client.execute(`
-                    UPDATE ai_agente.t_dachser_chb_user_corrections
-                    SET location_reference = ?,
-                        location_context = ?,
-                        location_confidence = ?,
-                        updated_at = NOW()
-                    WHERE id = ?
-                  `, [
-                    reextractionResult.location,
-                    reextractionResult.nearbyText,
-                    reextractionResult.confidence,
-                    correction.id
-                  ]);
-                  
-                  // Save extraction rule for future use
-                  const docType = detectDocumentType(correction.filename);
-                  await saveExtractionRule(
-                    client,
-                    correction.field_name,
-                    docType,
-                    reextractionResult.pattern,
-                    reextractionResult.extractionHint,
-                    correction.corrected_value
-                  );
-                  
-                  results.push({
-                    id: correction.id,
-                    field: correction.field_name,
-                    file: correction.filename,
-                    status: 'processed',
-                    location: reextractionResult.location,
-                    confidence: reextractionResult.confidence
-                  });
-                  
-                  console.log(`[chb-corrections] Successfully processed correction ${correction.id}`);
-                } else {
-                  results.push({
-                    id: correction.id,
-                    field: correction.field_name,
-                    file: correction.filename,
-                    status: 'not_found'
-                  });
-                  console.log(`[chb-corrections] Value not found for correction ${correction.id}`);
-                }
+
+                results.push({
+                  id: correction.id,
+                  field: correction.field_name,
+                  file: correction.filename,
+                  status: 'processed',
+                  location: reextractionResult.location,
+                  confidence: reextractionResult.confidence
+                });
+
+                console.log(`[chb-corrections] Successfully processed correction ${correction.id}`);
               } else {
                 results.push({
                   id: correction.id,
                   field: correction.field_name,
                   file: correction.filename,
-                  status: 'fetch_failed',
-                  error: `HTTP ${fileResponse.status}`
+                  status: 'not_found'
                 });
+                console.log(`[chb-corrections] Value not found for correction ${correction.id}`);
               }
             } else {
               results.push({
                 id: correction.id,
                 field: correction.field_name,
                 file: correction.filename,
-                status: 'no_file_url'
+                status: 'no_db_content'
               });
             }
           } catch (err) {
@@ -1008,6 +977,7 @@ serve(async (req) => {
             console.error(`[chb-corrections] Error processing correction ${correction.id}:`, err);
           }
         }
+
         
         // Also check and list extraction rules
         let rulesCount = 0;
