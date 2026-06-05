@@ -495,6 +495,10 @@ const TrackingAereo = () => {
   const [cardFilter, setCardFilter] = useState<CardFilterType>("all");
   const [showMonitoredModal, setShowMonitoredModal] = useState(false);
   const [cadastroNovaOpen, setCadastroNovaOpen] = useState(false);
+  const [masterSwaps, setMasterSwaps] = useState<Record<string, any>>({});
+  const [discrepancies, setDiscrepancies] = useState<any[]>([]);
+  const [discrepancyModal, setDiscrepancyModal] = useState<{ open: boolean; disc: any | null; chosen: string }>({ open: false, disc: null, chosen: "" });
+
   
   // const [dbStats, setDbStats] = useState<DbStats | null>(null);
   // const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
