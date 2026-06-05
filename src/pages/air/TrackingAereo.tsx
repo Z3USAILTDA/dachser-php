@@ -493,6 +493,7 @@ const TrackingAereo = () => {
   const [sortLastCheck, setSortLastCheck] = useState<"asc" | "desc" | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [cardFilter, setCardFilter] = useState<CardFilterType>("all");
+  const [filterMasterSwap, setFilterMasterSwap] = useState(false);
   const [showMonitoredModal, setShowMonitoredModal] = useState(false);
   const [cadastroNovaOpen, setCadastroNovaOpen] = useState(false);
   const [masterSwaps, setMasterSwaps] = useState<Record<string, any>>({});
