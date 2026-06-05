@@ -66,7 +66,7 @@ async function applyDlvOnOldFato(client: Client, awbAntigo: string, hawb: string
     await client.execute(
       `UPDATE ${DB}.t_fato_aereo
          SET last_status_code = 'DLV'
-       WHERE TRIM(awb_number) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
+       WHERE TRIM(awb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
          AND TRIM(COALESCE(hawb,'')) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
          AND (last_status_code IS NULL OR last_status_code <> 'DLV')`,
       [awbAntigo, hawb]
