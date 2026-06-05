@@ -671,6 +671,66 @@ const TrackingAereo = () => {
     return () => { clearInterval(interval); };
   }, [isVisible, fetchData, isAdminUser]);
 
+  // ─── Master swap badges + discrepancias pendentes ───
+  useEffect(() => {
+    if (awbsData.length === 0) return;
+    const awbs = Array.from(new Set(awbsData.map(a => (a.awb || "").trim()).filter(Boolean)));
+    if (awbs.length === 0) return;
+    (async () => {
+      try {
+        const { data } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "air_master_swap_list", awbs },
+        });
+        if (data?.success && Array.isArray(data.data)) {
+          const map: Record<string, any> = {};
+          for (const row of data.data) {
+            const k = (row.awb_novo || "").trim().toUpperCase();
+            if (!k) continue;
+            if (!map[k] || new Date(row.data_atualizacao) > new Date(map[k].data_atualizacao)) {
+              map[k] = row;
+            }
+          }
+          setMasterSwaps(map);
+        }
+      } catch (e) { console.warn("[master_swap_list]", e); }
+    })();
+  }, [awbsData]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "air_master_discrepancy_list" },
+        });
+        if (data?.success && Array.isArray(data.data)) setDiscrepancies(data.data);
+      } catch (e) { console.warn("[discrepancy_list]", e); }
+    };
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, []);
+
+  const resolveDiscrepancy = useCallback(async () => {
+    const { disc, chosen } = discrepancyModal;
+    if (!disc || !chosen) return;
+    try {
+      const { data } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "air_master_discrepancy_resolve", id: disc.id, awb_escolhido: chosen, user: user?.email || "system" },
+      });
+      if (data?.success) {
+        toast({ title: "Troca de master resolvida", description: `Master correto: ${chosen}` });
+        setDiscrepancies(prev => prev.filter(d => d.id !== disc.id));
+        setDiscrepancyModal({ open: false, disc: null, chosen: "" });
+        fetchData();
+      } else {
+        toast({ title: "Erro", description: data?.error || "Falha ao resolver", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Erro", description: (e as Error).message, variant: "destructive" });
+    }
+  }, [discrepancyModal, user, toast, fetchData]);
+
+
   // ─── Alert for tracking failures ───
   useEffect(() => {
     if (!isAdminUser) return;
