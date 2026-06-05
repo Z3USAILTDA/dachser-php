@@ -1440,7 +1440,64 @@ const TrackingAereo = () => {
 
       {/* Cadastro NOVA Modal */}
       <CadastroNovaModal open={cadastroNovaOpen} onOpenChange={setCadastroNovaOpen} onSuccess={fetchData} />
+
+      {/* Discrepâncias de master pendentes */}
+      {discrepancies.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 bg-[#1a1a1a] border border-amber-500/40 rounded-lg p-4 shadow-xl max-w-md">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            <span className="text-amber-300 text-sm font-semibold">{discrepancies.length} discrepância{discrepancies.length > 1 ? 's' : ''} de master pendente{discrepancies.length > 1 ? 's' : ''}</span>
+          </div>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {discrepancies.map(d => {
+              let cands: string[] = [];
+              try { cands = typeof d.awbs_candidatos === 'string' ? JSON.parse(d.awbs_candidatos) : (d.awbs_candidatos || []); } catch {}
+              return (
+                <div key={d.id} className="text-xs text-[#ccc] border-t border-white/10 pt-2">
+                  <div>HAWB: <span className="text-white">{d.hawb}</span></div>
+                  <div className="text-[#aaa]">Candidatos: {cands.join(', ')}</div>
+                  <Button size="sm" variant="outline" className="mt-1 h-7 text-[0.7rem]" onClick={() => setDiscrepancyModal({ open: true, disc: d, chosen: "" })}>
+                    Resolver troca de master
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <Dialog open={discrepancyModal.open} onOpenChange={(o) => !o && setDiscrepancyModal({ open: false, disc: null, chosen: "" })}>
+        <DialogContent className="bg-[#0f0f0f] border-amber-500/40">
+          <DialogHeader>
+            <DialogTitle className="text-amber-300">Resolver troca de master</DialogTitle>
+            <DialogDescription className="text-[#bbb]">
+              {discrepancyModal.disc && (() => {
+                let cands: string[] = [];
+                try { cands = typeof discrepancyModal.disc.awbs_candidatos === 'string' ? JSON.parse(discrepancyModal.disc.awbs_candidatos) : (discrepancyModal.disc.awbs_candidatos || []); } catch {}
+                return `Os processos correspondentes ${cands.join(' e ')} possuem mesmo ID, data de inclusão e HAWB. Para troca de master correta, qual dos masters seria o correto?`;
+              })()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            {discrepancyModal.disc && (() => {
+              let cands: string[] = [];
+              try { cands = typeof discrepancyModal.disc.awbs_candidatos === 'string' ? JSON.parse(discrepancyModal.disc.awbs_candidatos) : (discrepancyModal.disc.awbs_candidatos || []); } catch {}
+              return cands.map((awb: string) => (
+                <label key={awb} className="flex items-center gap-2 p-2 rounded border border-white/10 hover:bg-white/5 cursor-pointer">
+                  <input type="radio" name="awb-chosen" value={awb} checked={discrepancyModal.chosen === awb} onChange={() => setDiscrepancyModal(prev => ({ ...prev, chosen: awb }))} />
+                  <span className="text-white font-mono">{awb}</span>
+                </label>
+              ));
+            })()}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" onClick={() => setDiscrepancyModal({ open: false, disc: null, chosen: "" })}>Cancelar</Button>
+            <Button onClick={resolveDiscrepancy} disabled={!discrepancyModal.chosen} className="bg-amber-500 hover:bg-amber-600 text-black">Confirmar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
+
   );
 };
 
