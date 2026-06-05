@@ -1374,13 +1374,15 @@ const EsteiraIndex = () => {
     yesterday.setDate(yesterday.getDate() - 1);
 
     return vouchersList.filter((voucher) => {
-      // Filtro de busca por SPO, nome do master ou SPO de filho vinculado
+      // Filtro de busca por SPO/ND — exigir valor COMPLETO (sem LIKE).
       if (filters.search) {
         const searchLower = filters.search.toLowerCase().trim();
-        const spoMatch = voucher.numeroSPO.toLowerCase().startsWith(searchLower);
-        const masterNameMatch = voucher.nomeMaster?.toLowerCase().startsWith(searchLower);
+        const spoToken = (voucher.numeroSPO || "").toLowerCase().trim().split(" ")[0];
+        const masterName = (voucher.nomeMaster || "").toLowerCase().trim();
+        const spoMatch = spoToken === searchLower;
+        const masterNameMatch = masterName === searchLower;
         const childSPOMatch = voucher.isMaster && (masterChildSPOsMap.get(voucher.id) || []).some(
-          spo => spo.toLowerCase().startsWith(searchLower)
+          spo => (spo || "").toLowerCase().trim().split(" ")[0] === searchLower
         );
         if (!spoMatch && !masterNameMatch && !childSPOMatch) return false;
       }
