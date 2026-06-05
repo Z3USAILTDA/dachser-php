@@ -591,8 +591,10 @@ export default function ConferenciaChb() {
 
       setAnalysisProgress('');
 
-      // Files were already persisted to Storage + MariaDB BEFORE the analysis call
-      // (see "Persist files" block above). Nothing to do here.
+      if (savedDocsCount > 0) {
+        toast.success(`${savedDocsCount} arquivo(s) salvo(s) com sucesso!`);
+      }
+
 
 
       const analysisData = data as ChbAnalysisResult & { cliente?: string; modal?: 'SEA' | 'AIR' };
