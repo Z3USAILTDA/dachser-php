@@ -17404,11 +17404,12 @@ Deno.serve(async (req) => {
         const hasMonthFilter = !!(dataEmissaoInicio && dataEmissaoFim);
         console.log(`[get_vouchers_combined] Fetching active + pending RM vouchers. monthFilter=${hasMonthFilter ? `${dataEmissaoInicio}..${dataEmissaoFim}` : 'none'}`);
 
-        // Etapas ativas SEMPRE aparecem, independente do mês.
-        // Filtro de mês só restringe vouchers fora dessas etapas (ex.: CONCLUIDO, ROBO).
+        // Apenas RASCUNHO, OPERACAO e FINANCEIRO aparecem independente do mês.
+        // Demais etapas (A_PROCESSAR, FISCAL, SUPERVISOR, ROBO, AJUSTE_*, PRE_LANCAMENTO,
+        // CANCELADO) respeitam o filtro via data_emissao / data_emissao_documento.
         const ativosMonthClause = hasMonthFilter
           ? `AND (
-              v.etapa_atual IN ('RASCUNHO','A_PROCESSAR','OPERACAO','FISCAL','SUPERVISOR','FINANCEIRO','AJUSTE_OPERACAO','AJUSTE_FISCAL','CANCELADO','PRE_LANCAMENTO')
+              v.etapa_atual IN ('RASCUNHO','OPERACAO','FINANCEIRO')
               OR (dfv.data_emissao >= ? AND dfv.data_emissao < ?)
               OR (dfv.data_emissao IS NULL
                   AND v.data_emissao_documento >= ? AND v.data_emissao_documento < ?)
@@ -17507,9 +17508,12 @@ Deno.serve(async (req) => {
           break;
         }
         const like = `%${rawTerm}%`;
-        console.log(`[search_vouchers_including_concluded] term="${rawTerm}"`);
+        // Detectar termo "completo" (ND/SPO sem espaços, caracteres válidos) para fast-path indexado
+        const looksLikeFullNd = /^[A-Z0-9._\-\/]{4,}$/i.test(rawTerm);
+        const exactNd = looksLikeFullNd ? rawTerm.split(' ')[0] : null;
+        console.log(`[search_vouchers_including_concluded] term="${rawTerm}" exact="${exactNd || ''}"`);
 
-        const vouchers = await client.query(`
+        const baseSelect = `
           SELECT v.*,
             COALESCE(v.data_emissao_documento, dfv.data_emissao) AS data_emissao_documento,
             dfv.id_rm as dfv_id_rm,
@@ -17540,33 +17544,75 @@ Deno.serve(async (req) => {
                AND l.user_name IS NOT NULL AND l.user_name <> ''
              ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
           FROM dados_dachser.t_vouchers v
-          LEFT JOIN (
-            SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MAX(data_emissao) as data_emissao,
-              MIN(numero_processo) as numero_processo,
-              MAX(razao_social) as razao_social,
-              MAX(nome_beneficiario) as nome_beneficiario,
-              MAX(valor_nf) as valor_nf
-            FROM dados_dachser.t_dados_financeiro_voucher
-            GROUP BY nd
-          ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
+        `;
+        const baseWhere = `
           WHERE v.sync_status = 'ATIVO'
             AND (v.voucher_master_id IS NULL OR v.voucher_master_id = '')
             AND v.etapa_atual NOT IN ('AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER')
+        `;
+
+        let vouchers: any[] = [];
+
+        // ===== FAST PATH: ND/SPO completo (igualdade indexável) =====
+        if (exactNd) {
+          const fastJoin = `
+            LEFT JOIN (
+              SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MAX(data_emissao) as data_emissao,
+                MIN(numero_processo) as numero_processo,
+                MAX(razao_social) as razao_social,
+                MAX(nome_beneficiario) as nome_beneficiario,
+                MAX(valor_nf) as valor_nf
+              FROM dados_dachser.t_dados_financeiro_voucher
+              WHERE SUBSTRING_INDEX(TRIM(nd), ' ', 1) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+              GROUP BY nd
+            ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
+          `;
+          const fastWhere = `
+            AND (
+              SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+              OR dfv.nd IS NOT NULL
+            )
+          `;
+          vouchers = await client.query(
+            `${baseSelect} ${fastJoin} ${baseWhere} ${fastWhere} ORDER BY v.updated_at DESC LIMIT 100`,
+            [exactNd, exactNd]
+          );
+          console.log(`[search_vouchers_including_concluded] fast-path matches=${vouchers?.length || 0}`);
+        }
+
+        // ===== FALLBACK: LIKE com subconsulta dfv pré-filtrada =====
+        if (!vouchers || vouchers.length === 0) {
+          const slowJoin = `
+            LEFT JOIN (
+              SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MAX(data_emissao) as data_emissao,
+                MIN(numero_processo) as numero_processo,
+                MAX(razao_social) as razao_social,
+                MAX(nome_beneficiario) as nome_beneficiario,
+                MAX(valor_nf) as valor_nf
+              FROM dados_dachser.t_dados_financeiro_voucher
+              WHERE nd LIKE ? OR numero_processo LIKE ?
+              GROUP BY nd
+            ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
+          `;
+          const slowWhere = `
             AND (
               v.numero_spo LIKE ?
               OR v.fornecedor LIKE ?
               OR v.cnpj_fornecedor LIKE ?
-              OR dfv.nd LIKE ?
-              OR dfv.numero_processo LIKE ?
+              OR dfv.nd IS NOT NULL
             )
-          ORDER BY v.updated_at DESC
-          LIMIT 200
-        `, [like, like, like, like, like]);
+          `;
+          vouchers = await client.query(
+            `${baseSelect} ${slowJoin} ${baseWhere} ${slowWhere} ORDER BY v.updated_at DESC LIMIT 200`,
+            [like, like, like, like, like]
+          );
+          console.log(`[search_vouchers_including_concluded] like-path matches=${vouchers?.length || 0}`);
+        }
 
-        console.log(`[search_vouchers_including_concluded] Found ${vouchers?.length || 0} matches`);
         result = { success: true, data: vouchers || [], count: vouchers?.length || 0 };
         break;
       }
+
 
       // ==================== GET VOUCHER FILHOS BATCH ====================
       case 'get_voucher_filhos_batch': {
