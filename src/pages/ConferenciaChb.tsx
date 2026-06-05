@@ -334,6 +334,96 @@ export default function ConferenciaChb() {
     pollingRef.current = true;
 
     try {
+      // =========================================================================
+      // STEP 0: Persist newly uploaded files to Storage + MariaDB BEFORE analysis.
+      // This prevents analyze-chb-documents from auto-registering duplicate rows
+      // (its "auto-register" branch creates rows without size/url, causing dupes).
+      // =========================================================================
+      let savedDocsCount = 0;
+      if (currentStepFiles.length > 0) {
+        setAnalysisProgress('Salvando arquivos...');
+        const savedDocs: ChbDocument[] = [];
+
+        for (const file of currentStepFiles) {
+          try {
+            const timestamp = Date.now();
+            const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+            const filePath = `${itemId}/${activeStep}/${timestamp}_${safeName}`;
+
+            const { error: uploadError } = await supabase.storage
+              .from('chb-documents')
+              .upload(filePath, file, { cacheControl: '3600', upsert: false });
+
+            if (uploadError) {
+              console.error('Error uploading file:', uploadError);
+              toast.error(`Erro ao enviar ${file.name}`);
+              continue;
+            }
+
+            const { data: urlData } = supabase.storage
+              .from('chb-documents')
+              .getPublicUrl(filePath);
+            const publicUrl = urlData?.publicUrl;
+
+            const { error: fileInsertError, data: fileData } = await supabase.functions.invoke('mariadb-proxy', {
+              body: {
+                action: 'create_chb_file',
+                itemId: itemId,
+                filename: file.name,
+                mime: file.type,
+                sizeBytes: file.size,
+                sha256: null,
+                relPath: filePath,
+                url: publicUrl || '',
+                etapa: activeStep.toString(),
+                docRole: detectDocumentType(file.name),
+                userId: null,
+              },
+            });
+
+            if (fileInsertError || !fileData?.success) {
+              console.error('Error saving file to MariaDB:', fileInsertError || fileData);
+              toast.error(`Erro ao salvar ${file.name}`);
+              continue;
+            }
+
+            savedDocs.push({
+              id: `doc-${activeStep}-${timestamp}`,
+              name: file.name,
+              type: detectDocumentType(file.name),
+              uploadedAt: new Date().toLocaleString('pt-BR'),
+              size: formatFileSize(file.size),
+              stepId: activeStep,
+              file: file,
+              url: publicUrl,
+            });
+
+            console.log(`[CHB] File saved successfully: ${file.name}`);
+          } catch (err) {
+            console.error('Error saving file:', err);
+            toast.error(`Erro ao salvar ${file.name}`);
+          }
+        }
+
+        savedDocsCount = savedDocs.length;
+
+        if (savedDocs.length > 0) {
+          setDocuments(prev => ({
+            ...prev,
+            [activeStep]: [...(prev[activeStep] || []), ...savedDocs],
+          }));
+        }
+
+        // Refresh from MariaDB so the UI mirrors the DB truth
+        await loadMariaDBFiles();
+
+        // Clear the upload buffer for this step now that files are persisted
+        setUploadedFiles(prev => ({
+          ...prev,
+          [activeStep]: [],
+        }));
+      }
+
       // Convert new uploaded files to base64
       const newFilesContent = await Promise.all(
         currentStepFiles.map(async (file) => ({
@@ -343,6 +433,7 @@ export default function ConferenciaChb() {
           stepId: activeStep,
         }))
       );
+
 
       // Convert existing documents (all steps) - fetch from URL if no local file
       setAnalysisProgress('Carregando documentos existentes...');
