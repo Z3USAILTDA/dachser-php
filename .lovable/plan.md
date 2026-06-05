@@ -1,26 +1,12 @@
-# Discrepâncias de troca de master no card Críticos + filtro
+# Botão "Resolver troca de master" inline na coluna Ações
 
-## Objetivo
-Garantir que processos com discrepância de troca de master (registros PENDENTE em `t_aereo_master_discrepancia`) sejam contabilizados e visíveis no card **Críticos** da tela `/air/tracking-aereo`, e adicionar um botão de filtro **"Troca de master"** na barra de filtros para isolar somente esses processos.
+Na tabela de `/air/tracking-aereo`, adicionar um terceiro botão na coluna **Ações** que aparece apenas para linhas com discrepância de troca de master pendente. Ao clicar, abre o modal `discrepancyModal` já existente, pré-carregado com a discrepância correspondente (match por `hawb` da linha + `awb` contido em `awbs_candidatos`).
 
 ## Mudanças
+- `src/pages/air/TrackingAereo.tsx`:
+  - Após o botão `ExternalLink` (linha ~1415), renderizar condicionalmente um botão âmbar com ícone `Replace` quando `hasMasterDiscrepancy(awb)` for verdadeiro.
+  - Localizar o registro em `discrepancies` cujo `hawb` (upper/trim) bate com o da linha e cujo `awbs_candidatos` contém o AWB da linha.
+  - `onClick` → `setDiscrepancyModal({ open: true, disc, chosen: "" })`.
+  - Tooltip: "Resolver troca de master".
 
-### 1. Backend (`mariadb-proxy/index.ts`)
-- Ajustar `air_master_discrepancy_list` (ou criar action auxiliar) para retornar o conjunto de pares `(awb, hawb)` PENDENTES — usado pelo frontend para marcar linhas.
-- Na action que alimenta o dashboard (contagem de Críticos), incluir como Crítico qualquer AWB+HAWB presente em `t_aereo_master_discrepancia` com `status='PENDENTE'`, mesmo que `last_status_code` não seja crítico por si só. Sem alterar a regra de Alertas.
-
-### 2. Frontend (`src/pages/air/TrackingAereo.tsx`)
-- Após carregar a lista de AWBs, cruzar com `air_master_discrepancy_list` e marcar essas linhas com flag `hasMasterDiscrepancy=true`.
-- **Card Críticos**: incluir essas linhas na contagem e na listagem do card (união com os críticos atuais, dedup por awb+hawb).
-- **Barra de filtros**: adicionar botão/chip **"Troca de master"** ao lado dos filtros existentes (mesmo estilo dos atuais — pill com ícone `GitMerge` ou `Replace`). Quando ativo, a tabela mostra apenas as linhas com `hasMasterDiscrepancy=true`. Toggle on/off; mutuamente compatível com a busca textual.
-- Badge de "Discrepância de master" já existente continua aparecendo inline.
-
-### 3. Regras
-- Não altera detecção/cron, schema, nem a lógica de resolução manual já implementada.
-- Não cria painel fixo (memória anterior: removido a pedido).
-- Sem mudanças em RLS, sem novas tabelas.
-
-## Detalhes técnicos
-- Junção no frontend para evitar nova query pesada; `air_master_discrepancy_list` já retorna o conjunto pendente.
-- Contagem do card Críticos = `count(distinct awb||hawb)` da união (críticos por status) ∪ (pendentes de discrepância).
-- Filtro persiste apenas em estado local (sem URL/localStorage), seguindo padrão dos outros filtros da página.
+Sem mudanças em backend, sem novas actions; reaproveita o fluxo `air_master_discrepancy_resolve` já existente.

@@ -1413,7 +1413,31 @@ const TrackingAereo = () => {
                                   </TooltipTrigger><TooltipContent><p className="text-xs">Abrir Rastreio Externo</p></TooltipContent></Tooltip></TooltipProvider>
                                 ) : null;
                               })()}
+                              {hasMasterDiscrepancy(awb) && (() => {
+                                const hKey = String(awb.hawb || "").trim().toUpperCase();
+                                const aKey = String(awb.awb || "").trim().toUpperCase();
+                                const disc = discrepancies.find((d: any) => {
+                                  if (String(d?.hawb || "").trim().toUpperCase() !== hKey) return false;
+                                  let cands: any = d?.awbs_candidatos;
+                                  if (typeof cands === "string") { try { cands = JSON.parse(cands); } catch { cands = []; } }
+                                  if (!Array.isArray(cands)) return false;
+                                  return cands.some((c: any) => String(c || "").trim().toUpperCase() === aKey);
+                                });
+                                if (!disc) return null;
+                                return (
+                                  <TooltipProvider><Tooltip><TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost" size="sm"
+                                      onClick={() => setDiscrepancyModal({ open: true, disc, chosen: "" })}
+                                      className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 h-8 w-8 p-0"
+                                    >
+                                      <Replace className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger><TooltipContent><p className="text-xs">Resolver troca de master</p></TooltipContent></Tooltip></TooltipProvider>
+                                );
+                              })()}
                             </div>
+
                           </td>
                         </tr>
                       );
