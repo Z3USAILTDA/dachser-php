@@ -2383,30 +2383,51 @@ async function processAnalysisInBackground(
       const persistResults = await persistRawOcrForFiles(itemId, stepId, files, {});
       console.log(`[BG][pre-analysis] Persisted raw OCR for ${persistResults.length} file(s)`);
 
-      const dbRowsResp = await callMariaDBProxy('get_chb_extractions', { itemId, etapa: String(stepId) });
-      const dbRows: Array<{ filename: string; raw_ocr_text: string | null }> = dbRowsResp?.data || [];
-      for (const row of dbRows) {
-        if (row.filename && row.raw_ocr_text) {
-          dbOcrByFilename[row.filename] = row.raw_ocr_text;
+      // Primary source: in-memory OCR computed during persistence
+      let memoryCount = 0;
+      for (const r of persistResults) {
+        if (r.rawOcrText && r.rawOcrText.trim().length >= 10) {
+          dbOcrByFilename[r.filename] = r.rawOcrText;
+          memoryCount++;
         }
       }
-      console.log(`[BG][pre-analysis] Read back ${Object.keys(dbOcrByFilename).length} raw_ocr_text rows from t_chb_file_extractions`);
+      console.log(`[BG][pre-analysis] Using in-memory OCR for ${memoryCount} file(s)`);
+
+      // Secondary source: re-read from DB (audit consistency). Best-effort; do not abort if empty.
+      try {
+        const dbRowsResp = await callMariaDBProxy('get_chb_extractions', { itemId, etapa: String(stepId) });
+        const dbRows: Array<{ filename: string; raw_ocr_text: string | null }> = dbRowsResp?.data || [];
+        let dbCount = 0;
+        for (const row of dbRows) {
+          if (row.filename && row.raw_ocr_text && row.raw_ocr_text.trim().length >= 10) {
+            dbOcrByFilename[row.filename] = row.raw_ocr_text;
+            dbCount++;
+          }
+        }
+        if (dbCount === 0) {
+          console.warn(`[BG][pre-analysis] DB readback returned 0 usable rows (itemId=${itemId}, etapa=${stepId}) — proceeding with in-memory OCR`);
+        } else {
+          console.log(`[BG][pre-analysis] Read back ${dbCount} raw_ocr_text rows from t_chb_file_extractions (DB wins where available)`);
+        }
+      } catch (readErr) {
+        console.warn('[BG][pre-analysis] DB readback failed — proceeding with in-memory OCR:', (readErr as Error).message);
+      }
     } catch (e) {
-      console.error('[BG][pre-analysis] Pre-extraction/read failed — aborting analysis:', (e as Error).message);
+      console.error('[BG][pre-analysis] Pre-extraction failed — aborting analysis:', (e as Error).message);
       await callMariaDBProxy('update_chb_run', {
         runId: requestId,
         status: 'error',
-        resultText: `Falha ao gravar/reler OCR persistido: ${(e as Error).message}`
+        resultText: `Falha ao extrair/gravar OCR: ${(e as Error).message}`
       });
       return;
     }
 
     if (Object.keys(dbOcrByFilename).length === 0) {
-      console.error('[BG][pre-analysis] Nenhum raw_ocr_text relido — abortando análise');
+      console.error('[BG][pre-analysis] Nenhum OCR utilizável (memória nem banco) — abortando análise');
       await callMariaDBProxy('update_chb_run', {
         runId: requestId,
         status: 'error',
-        resultText: 'Nenhum OCR persistido pôde ser relido de t_chb_file_extractions.'
+        resultText: 'Nenhum OCR pôde ser extraído dos arquivos enviados.'
       });
       return;
     }
