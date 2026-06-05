@@ -22478,7 +22478,130 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'air_master_swap_list': {
+        const awbs: string[] = Array.isArray(body?.awbs) ? body.awbs.filter((x: any) => x && typeof x === 'string') : [];
+        if (awbs.length === 0) { result = { success: true, data: [] }; break; }
+        const ph = awbs.map(() => '?').join(',');
+        try {
+          const rows = await client!.query(
+            `SELECT id, hawb, awb_antigo, awb_novo, fonte, id_olss,
+                    flight_number, departure_airport, destination_airport,
+                    data_atualizacao, flag_troca_master, resolvido_manual
+               FROM ${database}.t_aereo_master_swap
+              WHERE TRIM(awb_novo) COLLATE utf8mb4_unicode_ci IN (${ph})
+              ORDER BY data_atualizacao DESC`,
+            awbs.map((a) => a.trim())
+          );
+          result = { success: true, data: rows };
+        } catch (e) {
+          console.warn('[air_master_swap_list]', (e as Error).message);
+          result = { success: true, data: [] };
+        }
+        break;
+      }
+
+      case 'air_master_swap_history': {
+        const awb: string = (body?.awb || '').toString().trim();
+        if (!awb) { result = { success: true, data: [] }; break; }
+        try {
+          const rows = await client!.query(
+            `SELECT id, hawb, awb_antigo, awb_novo, fonte, id_olss,
+                    flight_number, departure_airport, destination_airport,
+                    data_atualizacao, flag_troca_master, resolvido_manual
+               FROM ${database}.t_aereo_master_swap
+              WHERE TRIM(awb_novo) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                 OR TRIM(awb_antigo) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+              ORDER BY data_atualizacao DESC`,
+            [awb, awb]
+          );
+          result = { success: true, data: rows };
+        } catch (e) {
+          console.warn('[air_master_swap_history]', (e as Error).message);
+          result = { success: true, data: [] };
+        }
+        break;
+      }
+
+      case 'air_master_discrepancy_list': {
+        try {
+          const rows = await client!.query(
+            `SELECT id, hawb, id_olss, data_inclusao_nova, awbs_candidatos,
+                    status, awb_escolhido, resolvido_em, resolvido_por, created_at
+               FROM ${database}.t_aereo_master_discrepancia
+              WHERE status = 'PENDENTE'
+              ORDER BY created_at DESC`
+          );
+          result = { success: true, data: rows };
+        } catch (e) {
+          console.warn('[air_master_discrepancy_list]', (e as Error).message);
+          result = { success: true, data: [] };
+        }
+        break;
+      }
+
+      case 'air_master_discrepancy_resolve': {
+        const id = Number(body?.id);
+        const awbEscolhido: string = (body?.awb_escolhido || '').toString().trim();
+        const user: string = (body?.user || 'system').toString();
+        if (!id || !awbEscolhido) {
+          result = { success: false, error: 'id e awb_escolhido obrigatórios' };
+          break;
+        }
+        const discRows: any[] = await client!.query(
+          `SELECT id, hawb, id_olss, data_inclusao_nova, awbs_candidatos
+             FROM ${database}.t_aereo_master_discrepancia
+            WHERE id = ? AND status = 'PENDENTE' LIMIT 1`,
+          [id]
+        );
+        if (!discRows || discRows.length === 0) {
+          result = { success: false, error: 'Discrepância não encontrada' };
+          break;
+        }
+        const disc = discRows[0];
+        let candidatos: string[] = [];
+        try {
+          candidatos = typeof disc.awbs_candidatos === 'string'
+            ? JSON.parse(disc.awbs_candidatos)
+            : (disc.awbs_candidatos || []);
+        } catch { candidatos = []; }
+        const descartados = candidatos.filter((a: string) => a !== awbEscolhido);
+
+        for (const awbAntigo of descartados) {
+          try {
+            await client!.execute(
+              `INSERT IGNORE INTO ${database}.t_aereo_master_swap
+                 (hawb, awb_antigo, awb_novo, fonte, id_olss, data_atualizacao, flag_troca_master, resolvido_manual)
+               VALUES (?, ?, ?, 'DADOS_AEREO', ?, NOW(), 1, 1)`,
+              [disc.hawb, awbAntigo, awbEscolhido, disc.id_olss]
+            );
+          } catch (e) {
+            console.warn('[disc_resolve insert swap]', (e as Error).message);
+          }
+          try {
+            await client!.execute(
+              `UPDATE ${database}.t_fato_aereo
+                  SET last_status_code = 'DLV'
+                WHERE TRIM(awb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
+                  AND TRIM(COALESCE(hawb,'')) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci`,
+              [awbAntigo, disc.hawb]
+            );
+          } catch (e) {
+            console.warn('[disc_resolve dlv]', (e as Error).message);
+          }
+        }
+
+        await client!.execute(
+          `UPDATE ${database}.t_aereo_master_discrepancia
+              SET status='RESOLVIDA', awb_escolhido=?, resolvido_em=NOW(), resolvido_por=?
+            WHERE id = ?`,
+          [awbEscolhido, user, id]
+        );
+        result = { success: true, descartados, awb_escolhido: awbEscolhido };
+        break;
+      }
+
       default:
+
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
