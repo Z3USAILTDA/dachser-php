@@ -1,63 +1,51 @@
-# Ajustes na Esteira de Vouchers
+# Corrigir erro "Nenhum OCR persistido pôde ser relido"
 
-Duas correções pontuais, sem refatorações estruturais.
+## Causa
 
-## 1) Busca de ND lenta — especialmente com ND completo
+Em `analyze-chb-documents/index.ts` o fluxo atual é estritamente dependente da releitura de `t_chb_file_extractions`:
 
-**Onde:** `supabase/functions/mariadb-proxy/index.ts`, action `search_vouchers_including_concluded` (linhas 17503-17569).
+1. `persistRawOcrForFiles(...)` extrai o OCR em memória e grava 1 linha por arquivo (logs confirmam: "Persisted raw OCR for 6 file(s)" e `insertId` retornado pelo proxy).
+2. Logo depois, `get_chb_extractions` faz um JOIN com subquery `MAX(id) GROUP BY file_id` para pegar a versão mais recente — e nesse momento retornou **0 linhas** ("Read back 0 raw_ocr_text rows").
+3. Como o código aborta sempre que a releitura retorna vazio, o usuário vê o erro "Nenhum OCR persistido pôde ser relido de t_chb_file_extractions" e a análise é cancelada.
 
-**Problema:** quando o usuário digita o ND completo (ex.: `12345/2025`), a busca continua demorando porque:
-- A query usa `LIKE '%termo%'` em 5 colunas → nenhum índice é usado, mesmo com termo exato;
-- O `LEFT JOIN` agrupa **toda** a `t_dados_financeiro_voucher` (`GROUP BY nd`) antes de filtrar pelo termo;
-- 3 subqueries correlacionadas em `t_voucher_logs` são executadas para cada linha.
+O OCR já foi extraído e está disponível em memória (`persistRawOcrForFiles` o computa antes de gravar). Descartar essa cópia e abortar é frágil — qualquer hiccup na releitura (latência de replicação, GROUP BY ignorando `file_id NULL`, etc.) interrompe análises válidas.
 
-**O que mudar (cirúrgico):**
+## Solução (cirúrgica, apenas em `analyze-chb-documents/index.ts`)
 
-1. **Detectar "termo completo"** no início da action:
-   ```ts
-   const looksLikeFullNd = /^[A-Z0-9._\-\/]+$/i.test(rawTerm) && rawTerm.length >= 4;
-   const exactNd = looksLikeFullNd ? rawTerm.split(' ')[0] : null;
-   ```
+Manter a persistência como hoje (auditoria), mas usar o OCR em memória como **fonte primária** e a releitura do banco como **confirmação opcional**.
 
-2. **Caminho rápido (exato):** quando `exactNd` está presente, rodar primeiro uma query indexada usando igualdade em `SUBSTRING_INDEX(numero_spo,' ',1)` e `SUBSTRING_INDEX(nd,' ',1)` (subselect dfv já pré-filtrado pelo ND exato). Se retornar linhas, devolve direto. Senão, cai para o LIKE.
+### 1. `persistRawOcrForFiles` (linha ~2052)
+Mudar o retorno para também devolver o texto OCR computado:
 
-3. **Pré-filtrar a subconsulta `dfv`** mesmo no caminho LIKE: aplicar `WHERE nd LIKE ? OR numero_processo LIKE ?` **dentro** do subselect antes do `GROUP BY`, eliminando o agrupamento da tabela inteira.
+```ts
+persisted.push({
+  filename: file.name,
+  extractionId: ins.extractionId ?? null,
+  status: hasRawOcr ? 'OK' : 'PARCIAL',
+  rawOcrText: hasRawOcr ? rawOcr : '',
+});
+```
 
-4. **Manter as subqueries de `t_voucher_logs`** (necessárias para exibição) — o ganho vem de chegarem em um conjunto já pequeno.
+Tipar o array de retorno com o novo campo `rawOcrText: string`.
 
-**Não muda:** assinatura da action, payload de retorno, hook frontend, debounce de 450 ms.
+### 2. Bloco "FLUXO ÚNICO" (linhas ~2371-2412)
+Substituir a lógica que aborta quando a releitura volta vazia:
 
-## 2) Filtro de mês não respeitado em etapas ativas
+- Primeiro, montar `dbOcrByFilename` a partir do retorno de `persistRawOcrForFiles` (em memória).
+- Em seguida, tentar `get_chb_extractions`. Se trouxer linhas com `raw_ocr_text`, sobrescrever as entradas correspondentes (banco vence quando disponível).
+- Abortar **somente** se, depois das duas fontes combinadas, ainda restarem **zero** arquivos com texto utilizável.
+- Logar de forma clara qual fonte foi usada por arquivo (`memory` vs `db`) e quando a releitura voltou vazia (apenas warning, não erro).
 
-**Onde:** `supabase/functions/mariadb-proxy/index.ts`, action `get_vouchers_combined` (linhas 17409-17416).
+### 3. Mensagem de erro final
+Trocar o texto de erro residual para algo mais útil quando realmente não houver OCR algum:
+`"Nenhum OCR pôde ser extraído dos arquivos enviados."`
 
-**Problema:** o `ativosMonthClause` mantém **todas** as etapas ativas sempre visíveis, ignorando o mês selecionado. Isso polui a tela com processos antigos.
-
-**O que mudar (cirúrgico):**
-- Apenas **OPERACAO, RASCUNHO e FINANCEIRO** continuam visíveis independente do mês. Todas as demais etapas (incluindo `A_PROCESSAR`) passam a respeitar o filtro:
-  ```sql
-  AND (
-    v.etapa_atual IN ('RASCUNHO','OPERACAO','FINANCEIRO')
-    OR (dfv.data_emissao >= ? AND dfv.data_emissao < ?)
-    OR (dfv.data_emissao IS NULL
-        AND v.data_emissao_documento >= ? AND v.data_emissao_documento < ?)
-  )
-  ```
-- Etapas `FISCAL`, `SUPERVISOR`, `AJUSTE_OPERACAO`, `AJUSTE_FISCAL`, `PRE_LANCAMENTO`, `CANCELADO`, `ROBO` e `A_PROCESSAR` passam a respeitar o mês via `data_emissao`/`data_emissao_documento`.
-- **`get_vouchers_pendentes_rm`** já filtra por mês — os cards virtuais A_PROCESSAR vindos do RM continuam aparecendo apenas dentro do mês selecionado (comportamento já correto).
-
-**Não muda:**
-- Frontend, hooks, layout, ou qualquer outra etapa do fluxo.
-- Regra de retenção 24 h para `CONCLUIDO`/`CANCELADO`.
+## O que NÃO muda
+- Continua gravando em `t_chb_file_extractions` (auditoria intacta).
+- `persistRawOcrForFiles` continua falhando alto se a gravação no banco falhar.
+- Nenhuma mudança em `mariadb-proxy`, no schema, no prompt, no resto do pipeline ou no frontend.
 
 ## Validação
-
-1. **ND completo:** digitar `12345/2025` → resultado em < 1 s (contra os ~5-10 s atuais).
-2. **ND parcial:** digitar `1234` → continua funcionando (cai no caminho LIKE otimizado).
-3. **Filtro mês:**
-   - OPERACAO, RASCUNHO, FINANCEIRO → aparecem em qualquer mês selecionado.
-   - FISCAL, SUPERVISOR, ROBO, AJUSTE_*, A_PROCESSAR → só aparecem quando `data_emissao` cai no mês.
-
-## Deploy
-
-Redeploy de `mariadb-proxy` após as alterações.
+- Reenviar os mesmos documentos do processo 135: a análise deve concluir mesmo se `get_chb_extractions` voltar 0 linhas.
+- Logs devem mostrar "Using in-memory OCR for N file(s)" e a análise progredir normalmente.
+- O toast de erro só aparece se nenhum arquivo conseguir produzir OCR.

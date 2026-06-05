@@ -2054,7 +2054,7 @@ async function persistRawOcrForFiles(
   stepId: number,
   files: FileForAnalysis[],
   extractedTexts: Record<string, string> = {}
-): Promise<Array<{ filename: string; extractionId: number | null; status: string }>> {
+): Promise<Array<{ filename: string; extractionId: number | null; status: string; rawOcrText: string }>> {
   console.log(`[BG][raw-ocr-save] v2-all-files :: Persisting raw OCR for ${files.length} file(s) (item ${itemId})...`);
 
   const filesResult = await callMariaDBProxy('get_chb_files', { itemId });
