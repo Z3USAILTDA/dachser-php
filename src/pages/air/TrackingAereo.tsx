@@ -880,10 +880,15 @@ const TrackingAereo = () => {
         switch (cardFilter) {
           case "transito": return ["DEP", "MAN", "RCF", "ARR", "ARR - DESTINO", "ARR - CONEXÃO"].includes(code);
           case "alerta": return code === "DIS" || (awb.has_dis_event && !awb.pieces_discrepancy);
-          case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy || isStaleAwb(awb);
+          case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy || isStaleAwb(awb) || hasMasterDiscrepancy(awb);
           default: return true;
         }
       });
+    }
+
+    // Filtro "Troca de master"
+    if (filterMasterSwap) {
+      awbs = awbs.filter(awb => hasMasterDiscrepancy(awb));
     }
 
     // Sorting
