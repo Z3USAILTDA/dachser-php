@@ -17497,6 +17497,77 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ==================== SEARCH VOUCHERS INCLUDING CONCLUIDO/CANCELADO ====================
+      // Mirrors air CCT pattern: when user explicitly searches, lift the 24h retention
+      // filter so concluded/cancelled vouchers also surface.
+      case 'search_vouchers_including_concluded': {
+        const rawTerm = String((body as any)?.search || '').trim();
+        if (!rawTerm || rawTerm.length < 2) {
+          result = { success: true, data: [], count: 0 };
+          break;
+        }
+        const like = `%${rawTerm}%`;
+        console.log(`[search_vouchers_including_concluded] term="${rawTerm}"`);
+
+        const vouchers = await client.query(`
+          SELECT v.*,
+            COALESCE(v.data_emissao_documento, dfv.data_emissao) AS data_emissao_documento,
+            dfv.id_rm as dfv_id_rm,
+            dfv.numero_processo as dfv_numero_processo,
+            dfv.razao_social as dfv_razao_social,
+            dfv.nome_beneficiario as dfv_nome_beneficiario,
+            dfv.valor_nf as dfv_valor_nf,
+            CASE
+              WHEN v.is_master = 1 THEN
+                COALESCE(
+                  (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
+                   WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+                   AND lc.acao = 'MASTER_CRIADO'
+                   ORDER BY lc.data_hora ASC LIMIT 1),
+                  v.criado_por_user_id
+                )
+              ELSE
+                COALESCE(dfv.created_by,
+                  (SELECT lc.user_name FROM dados_dachser.t_voucher_logs lc
+                   WHERE lc.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+                   AND lc.acao = 'VOUCHER_CRIADO'
+                   ORDER BY lc.data_hora ASC LIMIT 1),
+                  v.criado_por_user_id
+                )
+            END as dfv_created_by,
+            (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
+             WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+               AND l.user_name IS NOT NULL AND l.user_name <> ''
+             ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
+          FROM dados_dachser.t_vouchers v
+          LEFT JOIN (
+            SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MAX(data_emissao) as data_emissao,
+              MIN(numero_processo) as numero_processo,
+              MAX(razao_social) as razao_social,
+              MAX(nome_beneficiario) as nome_beneficiario,
+              MAX(valor_nf) as valor_nf
+            FROM dados_dachser.t_dados_financeiro_voucher
+            GROUP BY nd
+          ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
+          WHERE v.sync_status = 'ATIVO'
+            AND (v.voucher_master_id IS NULL OR v.voucher_master_id = '')
+            AND v.etapa_atual NOT IN ('AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER')
+            AND (
+              v.numero_spo LIKE ?
+              OR v.fornecedor LIKE ?
+              OR v.cnpj_fornecedor LIKE ?
+              OR dfv.nd LIKE ?
+              OR dfv.numero_processo LIKE ?
+            )
+          ORDER BY v.updated_at DESC
+          LIMIT 200
+        `, [like, like, like, like, like]);
+
+        console.log(`[search_vouchers_including_concluded] Found ${vouchers?.length || 0} matches`);
+        result = { success: true, data: vouchers || [], count: vouchers?.length || 0 };
+        break;
+      }
+
       // ==================== GET VOUCHER FILHOS BATCH ====================
       case 'get_voucher_filhos_batch': {
         // Batch fetch children for multiple master vouchers in a single query
