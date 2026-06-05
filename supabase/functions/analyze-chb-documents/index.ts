@@ -2074,7 +2074,7 @@ async function persistRawOcrForFiles(
     textByNormalized.set(normalizeChbFilename(filename), text);
   }
 
-  const persisted: Array<{ filename: string; extractionId: number | null; status: string }> = [];
+  const persisted: Array<{ filename: string; extractionId: number | null; status: string; rawOcrText: string }> = [];
   const duplicateNames = new Set(
     files
       .map(file => normalizeChbFilename(file.name))
