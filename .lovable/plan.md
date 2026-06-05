@@ -1,51 +1,48 @@
-# Corrigir erro "Nenhum OCR persistido pôde ser relido"
+# Esteira de Vouchers — busca exata por ND/SPO e estado de carregamento
 
-## Causa
+Dois ajustes pequenos e cirúrgicos no filtro de busca da tabela de vouchers (Esteira). Sem mexer em layout, colunas ou outros filtros.
 
-Em `analyze-chb-documents/index.ts` o fluxo atual é estritamente dependente da releitura de `t_chb_file_extractions`:
+## 1. Remover o `LIKE` da busca por ND/SPO — somente valor completo
 
-1. `persistRawOcrForFiles(...)` extrai o OCR em memória e grava 1 linha por arquivo (logs confirmam: "Persisted raw OCR for 6 file(s)" e `insertId` retornado pelo proxy).
-2. Logo depois, `get_chb_extractions` faz um JOIN com subquery `MAX(id) GROUP BY file_id` para pegar a versão mais recente — e nesse momento retornou **0 linhas** ("Read back 0 raw_ocr_text rows").
-3. Como o código aborta sempre que a releitura retorna vazio, o usuário vê o erro "Nenhum OCR persistido pôde ser relido de t_chb_file_extractions" e a análise é cancelada.
+Hoje a busca aceita início parcial (`startsWith` no front e `LIKE '%termo%'` / `LIKE 'termo%'` no backend). Vamos passar a aceitar apenas correspondência exata do ND/SPO digitado.
 
-O OCR já foi extraído e está disponível em memória (`persistRawOcrForFiles` o computa antes de gravar). Descartar essa cópia e abortar é frágil — qualquer hiccup na releitura (latência de replicação, GROUP BY ignorando `file_id NULL`, etc.) interrompe análises válidas.
+**Frontend — `src/pages/esteira/EsteiraIndex.tsx`** (função `filterVouchers`, linhas ~1378–1386):
+- Trocar `startsWith(searchLower)` por igualdade case-insensitive (`=== searchLower`) nos três checks: `spoMatch`, `masterNameMatch` e `childSPOMatch`.
+- Normalizar comparando apenas o primeiro token (antes do espaço) do `numeroSPO`, para casar com a regra já existente "SPO/ND prefix identity" (`SUBSTRING_INDEX(x, ' ', 1)`).
 
-## Solução (cirúrgica, apenas em `analyze-chb-documents/index.ts`)
+**Backend — `supabase/functions/mariadb-proxy/index.ts`:**
+- `search_masters_by_child_spo` (linha ~17661): substituir `numero_spo LIKE ?` por igualdade exata com `SUBSTRING_INDEX(TRIM(numero_spo), ' ', 1) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci`, passando o termo sem o `%`.
+- `search_vouchers_including_concluded` (linhas ~17504–17613): manter apenas o **fast-path** (igualdade indexada por `SUBSTRING_INDEX`). Remover o fallback `LIKE` (slow-path) inteiro, para que a busca não retorne mais matches parciais por fornecedor/CNPJ/processo. Resultado: ou bate exatamente o ND, ou não retorna nada.
 
-Manter a persistência como hoje (auditoria), mas usar o OCR em memória como **fonte primária** e a releitura do banco como **confirmação opcional**.
+Nenhuma mudança nos outros filtros da tabela (Processo, Fornecedor, etc.) — esses continuam com `includes`/`LIKE` como hoje.
 
-### 1. `persistRawOcrForFiles` (linha ~2052)
-Mudar o retorno para também devolver o texto OCR computado:
+## 2. Mostrar "Carregando…" enquanto a busca consulta o backend
 
-```ts
-persisted.push({
-  filename: file.name,
-  extractionId: ins.extractionId ?? null,
-  status: hasRawOcr ? 'OK' : 'PARCIAL',
-  rawOcrText: hasRawOcr ? rawOcr : '',
-});
-```
+Hoje, assim que o usuário digita, a tabela já mostra **"Nenhum voucher/SPO encontrado"** antes das chamadas `search_masters_by_child_spo` e `search_vouchers_including_concluded` voltarem, dando a falsa impressão de inexistência.
 
-Tipar o array de retorno com o novo campo `rawOcrText: string`.
+**Frontend — `src/pages/esteira/EsteiraIndex.tsx`:**
+- Adicionar estado `searchLoading` (boolean) acionado quando:
+  - há `filters.search` com ≥ 2 caracteres, **e**
+  - o debounce ainda não disparou **ou** alguma das duas invocações (`search_masters_by_child_spo`, `search_vouchers_including_concluded`) está em andamento.
+- Setar `true` no início de cada `setTimeout` de debounce e nas chamadas; setar `false` no `finally` de cada uma. Quando ambas terminam, `searchLoading = false`.
 
-### 2. Bloco "FLUXO ÚNICO" (linhas ~2371-2412)
-Substituir a lógica que aborta quando a releitura volta vazia:
+**Frontend — `src/components/esteira/VoucherTable.tsx`:**
+- Adicionar prop opcional `isSearching?: boolean`.
+- No bloco de empty-state (linhas ~618–623), trocar por:
+  - se `isSearching` → renderizar "Carregando…" (com o mesmo estilo de `text-muted-foreground py-8`, e ícone `Loader2` animado se já estiver importado).
+  - senão → manter "Nenhum voucher/SPO encontrado".
+- Em `EsteiraIndex.tsx`, passar `isSearching={searchLoading}` para `<VoucherTable />`.
 
-- Primeiro, montar `dbOcrByFilename` a partir do retorno de `persistRawOcrForFiles` (em memória).
-- Em seguida, tentar `get_chb_extractions`. Se trouxer linhas com `raw_ocr_text`, sobrescrever as entradas correspondentes (banco vence quando disponível).
-- Abortar **somente** se, depois das duas fontes combinadas, ainda restarem **zero** arquivos com texto utilizável.
-- Logar de forma clara qual fonte foi usada por arquivo (`memory` vs `db`) e quando a releitura voltou vazia (apenas warning, não erro).
+A mensagem "Nenhum voucher/SPO encontrado" só aparecerá quando ambas as buscas no backend tiverem efetivamente retornado zero linhas.
 
-### 3. Mensagem de erro final
-Trocar o texto de erro residual para algo mais útil quando realmente não houver OCR algum:
-`"Nenhum OCR pôde ser extraído dos arquivos enviados."`
+## Escopo e não-objetivos
 
-## O que NÃO muda
-- Continua gravando em `t_chb_file_extractions` (auditoria intacta).
-- `persistRawOcrForFiles` continua falhando alto se a gravação no banco falhar.
-- Nenhuma mudança em `mariadb-proxy`, no schema, no prompt, no resto do pipeline ou no frontend.
+- Não altera ordenação, paginação ou demais filtros.
+- Não altera RLS, schema, edge functions além do `mariadb-proxy` nas duas actions citadas.
+- Não toca em layouts, cores ou design tokens.
 
 ## Validação
-- Reenviar os mesmos documentos do processo 135: a análise deve concluir mesmo se `get_chb_extractions` voltar 0 linhas.
-- Logs devem mostrar "Using in-memory OCR for N file(s)" e a análise progredir normalmente.
-- O toast de erro só aparece se nenhum arquivo conseguir produzir OCR.
+
+1. Digitar um ND parcial (ex: `2026156`) → tabela mostra "Carregando…" durante o debounce/chamada e depois "Nenhum voucher/SPO encontrado" (pois não é o valor completo).
+2. Digitar o ND completo (`202615671`) → mostra "Carregando…" e em seguida o voucher correspondente (mesmo que CONCLUIDO/CANCELADO via fast-path).
+3. Digitar termo que não existe em nenhuma fonte (`t_vouchers` nem `t_dados_financeiro_voucher`) → "Carregando…" → "Nenhum voucher/SPO encontrado".
