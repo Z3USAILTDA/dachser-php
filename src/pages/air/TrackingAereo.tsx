@@ -783,6 +783,27 @@ const TrackingAereo = () => {
     return matchesSearch && matchesAirline && matchesAnalyst && matchesType;
   }, [searchTerm, filterAirline, filterAnalyst, filterProcessType]);
 
+  // ─── Discrepância de troca de master: Set "AWB|HAWB" pendentes ───
+  const discrepancyKeys = useMemo(() => {
+    const s = new Set<string>();
+    for (const d of discrepancies) {
+      const hawb = String(d?.hawb || "").trim().toUpperCase();
+      let cands: any = d?.awbs_candidatos;
+      if (typeof cands === "string") { try { cands = JSON.parse(cands); } catch { cands = []; } }
+      if (!Array.isArray(cands)) cands = [];
+      for (const a of cands) {
+        const awb = String(a || "").trim().toUpperCase();
+        if (awb) s.add(`${awb}|${hawb}`);
+      }
+    }
+    return s;
+  }, [discrepancies]);
+  const hasMasterDiscrepancy = useCallback((awb: any) => {
+    const a = String(awb?.awb || "").trim().toUpperCase();
+    const h = String(awb?.hawb || "").trim().toUpperCase();
+    return discrepancyKeys.has(`${a}|${h}`);
+  }, [discrepancyKeys]);
+
   // ─── Card counts (respeitam filtros de topo, mas não o cardFilter) ───
   const cardCounts = useMemo(() => {
     const inTransitCodes = new Set(["DEP", "MAN", "RCF", "ARR"]);
