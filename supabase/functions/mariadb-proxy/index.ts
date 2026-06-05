@@ -16721,7 +16721,7 @@ Deno.serve(async (req) => {
           `SELECT d.id, d.doc_role, d.created_at, f.filename, f.url as file_url, f.size_bytes as file_size, d.etapa
            FROM ai_agente.t_dachser_chb_docs d
            JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
-           WHERE d.item_id = ?
+           WHERE d.item_id = ? AND d.is_active = 1
            ORDER BY d.created_at ASC`,
           [item_id]
         );
