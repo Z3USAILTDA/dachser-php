@@ -1302,17 +1302,26 @@ const EsteiraIndex = () => {
   const [masterChildSPOsMap, setMasterChildSPOsMap] = useState<Map<string, string[]>>(new Map());
   const searchDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLoadingVouchersRef = useRef(false);
-  
+
+  // Loading state da busca: enquanto o debounce não disparou ou alguma das
+  // duas invocações de busca está pendente, a tabela mostra "Carregando…"
+  // em vez de "Nenhum voucher/SPO encontrado".
+  const [mastersSearchLoading, setMastersSearchLoading] = useState(false);
+  const [concludedSearchLoading, setConcludedSearchLoading] = useState(false);
+  const searchLoading = mastersSearchLoading || concludedSearchLoading;
+
   // Lazy search: only fetch matching master IDs when user types a search term
   useEffect(() => {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    
+
     const searchTerm = filters.search?.trim();
     if (!searchTerm || searchTerm.length < 2) {
       setMasterChildSPOsMap(new Map());
+      setMastersSearchLoading(false);
       return;
     }
-    
+
+    setMastersSearchLoading(true);
     searchDebounceRef.current = setTimeout(async () => {
       try {
         const { data } = await supabase.functions.invoke("mariadb-proxy", {
@@ -1329,9 +1338,11 @@ const EsteiraIndex = () => {
         }
       } catch {
         setMasterChildSPOsMap(new Map());
+      } finally {
+        setMastersSearchLoading(false);
       }
     }, 400);
-    
+
     return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
   }, [filters.search]);
 
@@ -1341,8 +1352,12 @@ const EsteiraIndex = () => {
   useEffect(() => {
     if (concludedSearchDebounceRef.current) clearTimeout(concludedSearchDebounceRef.current);
     const term = filters.search?.trim();
-    if (!term || term.length < 2) return;
+    if (!term || term.length < 2) {
+      setConcludedSearchLoading(false);
+      return;
+    }
 
+    setConcludedSearchLoading(true);
     concludedSearchDebounceRef.current = setTimeout(async () => {
       try {
         const { data } = await supabase.functions.invoke("mariadb-proxy", {
@@ -1360,6 +1375,8 @@ const EsteiraIndex = () => {
         });
       } catch (err) {
         console.warn("[search_vouchers_including_concluded] erro:", err);
+      } finally {
+        setConcludedSearchLoading(false);
       }
     }, 450);
 
