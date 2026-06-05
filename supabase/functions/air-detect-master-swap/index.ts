@@ -259,7 +259,7 @@ async function detectFromExtractedEmails(client: Client) {
             const insertCols = colNames.filter((c: string) => c.toLowerCase() !== 'id');
             const selectExprs = insertCols.map((c: string) => {
               const lc = c.toLowerCase();
-              if (lc === 'awb') return `? AS \`${c}\``;
+              if (lc === 'awb_number') return `? AS \`${c}\``;
               if (lc === 'master_insert') return `NULL AS \`${c}\``;
               if (lc === 'created_at') return `NOW() AS \`${c}\``;
               return `\`${c}\``;
