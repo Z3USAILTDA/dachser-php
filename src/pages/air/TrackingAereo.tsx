@@ -914,7 +914,7 @@ const TrackingAereo = () => {
     }
 
     return awbs;
-  }, [awbsData, searchTerm, applyTopFilters, isStaleAwb, cardFilter, sortAwb, sortClient, sortAnalyst, sortLastCheck]);
+  }, [awbsData, searchTerm, applyTopFilters, isStaleAwb, cardFilter, sortAwb, sortClient, sortAnalyst, sortLastCheck, filterMasterSwap, hasMasterDiscrepancy]);
 
   const totalPages = Math.ceil(filteredAwbs.length / itemsPerPage);
   const currentAwbs = filteredAwbs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
