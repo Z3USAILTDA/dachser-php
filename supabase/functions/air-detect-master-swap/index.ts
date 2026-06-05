@@ -66,7 +66,7 @@ async function applyDlvOnOldFato(client: Client, awbAntigo: string, hawb: string
     await client.execute(
       `UPDATE ${DB}.t_fato_aereo
          SET last_status_code = 'DLV'
-       WHERE TRIM(awb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
+       WHERE TRIM(awb_number) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
          AND TRIM(COALESCE(hawb,'')) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
          AND (last_status_code IS NULL OR last_status_code <> 'DLV')`,
       [awbAntigo, hawb]
@@ -85,17 +85,17 @@ async function detectFromDadosAereo(client: Client) {
     FROM ${DB}.t_dados_aereo
     WHERE id_olss IS NOT NULL AND TRIM(id_olss) <> ''
     GROUP BY id_olss
-    HAVING COUNT(DISTINCT TRIM(awb)) > 1
+    HAVING COUNT(DISTINCT TRIM(awb_number)) > 1
   `);
 
   for (const g of groups) {
     const idOlss = g.id_olss;
     const rows: any[] = await client.query(`
-      SELECT TRIM(awb) AS awb,
+      SELECT TRIM(awb_number) AS awb,
              TRIM(COALESCE(hawb_number,'')) AS hawb,
              DATE_FORMAT(data_inclusao_nova, '%Y-%m-%d %H:%i:%s') AS data_inclusao_nova
       FROM ${DB}.t_dados_aereo
-      WHERE id_olss = ? AND awb IS NOT NULL AND TRIM(awb) <> ''
+      WHERE id_olss = ? AND awb_number IS NOT NULL AND TRIM(awb_number) <> ''
     `, [idOlss]);
 
     // Agrupa por HAWB
@@ -210,9 +210,9 @@ async function detectFromExtractedEmails(client: Client) {
 
         // AWB antigo atualmente em t_fato_aereo para esse hawb
         const fatoRows: any[] = await client.query(
-          `SELECT TRIM(awb) AS awb FROM ${DB}.t_fato_aereo
+          `SELECT TRIM(awb_number) AS awb FROM ${DB}.t_fato_aereo
              WHERE TRIM(COALESCE(hawb,'')) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
-               AND TRIM(awb) COLLATE utf8mb4_unicode_ci <> TRIM(?) COLLATE utf8mb4_unicode_ci
+               AND TRIM(awb_number) COLLATE utf8mb4_unicode_ci <> TRIM(?) COLLATE utf8mb4_unicode_ci
                AND (last_status_code IS NULL OR last_status_code <> 'DLV')
              ORDER BY COALESCE(last_event_date, created_at) DESC
              LIMIT 1`,
@@ -243,7 +243,7 @@ async function detectFromExtractedEmails(client: Client) {
           const exists: any[] = await client.query(
             `SELECT 1 FROM ${DB}.t_dados_aereo
               WHERE TRIM(COALESCE(hawb_number,'')) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
-                AND TRIM(awb) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                AND TRIM(awb_number) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
               LIMIT 1`,
             [hawbRaw, mawb]
           );
@@ -270,7 +270,7 @@ async function detectFromExtractedEmails(client: Client) {
                  SELECT ${selectExprs}
                  FROM ${DB}.t_dados_aereo
                 WHERE TRIM(COALESCE(hawb_number,'')) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
-                  AND TRIM(awb) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                  AND TRIM(awb_number) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
                 ORDER BY created_at DESC
                 LIMIT 1`,
               [mawb, hawbRaw, awbAntigo]
