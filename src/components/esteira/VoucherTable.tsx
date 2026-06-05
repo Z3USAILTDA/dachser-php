@@ -221,7 +221,7 @@ const getSlaColor = (status: "ok" | "warning" | "critical") => {
   return colors[status];
 };
 
-export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, onDisassemble, onValidateComprovante, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false, canDisassembleMaster = false, canValidateComprovante = false, canApproveSupervisor = false, canRetornarPendente = false, lastUpdateTime, enviadoPorOptions = [], criadoPorOptions = [] }: VoucherTableProps) => {
+export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, onDisassemble, onValidateComprovante, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false, canDisassembleMaster = false, canValidateComprovante = false, canApproveSupervisor = false, canRetornarPendente = false, lastUpdateTime, enviadoPorOptions = [], criadoPorOptions = [], isSearching = false }: VoucherTableProps) => {
   const [validatingVoucherId, setValidatingVoucherId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>("vencimento");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
