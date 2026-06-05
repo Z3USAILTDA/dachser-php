@@ -78,6 +78,7 @@ interface VoucherTableProps {
   lastUpdateTime?: Date | null;
   enviadoPorOptions?: string[];
   criadoPorOptions?: string[];
+  isSearching?: boolean;
 }
 
 const getEtapaColor = (etapa: string) => {
