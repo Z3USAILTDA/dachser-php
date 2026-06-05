@@ -1130,7 +1130,8 @@ const TrackingAereo = () => {
                     {currentAwbs.map((awb, index) => {
                       const statusCode = getStatusCode(awb.last_event).toUpperCase();
                       const stale = isStaleAwb(awb);
-                      const isCritical = awb.is_critical || stale;
+                      const hasMasterSwap = hasMasterDiscrepancy(awb);
+                      const isCritical = awb.is_critical || stale || hasMasterSwap;
                       const isDelayed = statusCode === "DIS";
 
                       // Route highlighting logic
@@ -1349,6 +1350,11 @@ const TrackingAereo = () => {
                                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
                                   <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
                                   Crítico · Sem atualizações
+                                </span>
+                              ) : hasMasterSwap ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                                  Crítico · Troca de master
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
