@@ -495,6 +495,10 @@ const TrackingAereo = () => {
   const [cardFilter, setCardFilter] = useState<CardFilterType>("all");
   const [showMonitoredModal, setShowMonitoredModal] = useState(false);
   const [cadastroNovaOpen, setCadastroNovaOpen] = useState(false);
+  const [masterSwaps, setMasterSwaps] = useState<Record<string, any>>({});
+  const [discrepancies, setDiscrepancies] = useState<any[]>([]);
+  const [discrepancyModal, setDiscrepancyModal] = useState<{ open: boolean; disc: any | null; chosen: string }>({ open: false, disc: null, chosen: "" });
+
   
   // const [dbStats, setDbStats] = useState<DbStats | null>(null);
   // const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
@@ -666,6 +670,66 @@ const TrackingAereo = () => {
     const interval = setInterval(fetchData, 30000);
     return () => { clearInterval(interval); };
   }, [isVisible, fetchData, isAdminUser]);
+
+  // ─── Master swap badges + discrepancias pendentes ───
+  useEffect(() => {
+    if (awbsData.length === 0) return;
+    const awbs = Array.from(new Set(awbsData.map(a => (a.awb || "").trim()).filter(Boolean)));
+    if (awbs.length === 0) return;
+    (async () => {
+      try {
+        const { data } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "air_master_swap_list", awbs },
+        });
+        if (data?.success && Array.isArray(data.data)) {
+          const map: Record<string, any> = {};
+          for (const row of data.data) {
+            const k = (row.awb_novo || "").trim().toUpperCase();
+            if (!k) continue;
+            if (!map[k] || new Date(row.data_atualizacao) > new Date(map[k].data_atualizacao)) {
+              map[k] = row;
+            }
+          }
+          setMasterSwaps(map);
+        }
+      } catch (e) { console.warn("[master_swap_list]", e); }
+    })();
+  }, [awbsData]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "air_master_discrepancy_list" },
+        });
+        if (data?.success && Array.isArray(data.data)) setDiscrepancies(data.data);
+      } catch (e) { console.warn("[discrepancy_list]", e); }
+    };
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, []);
+
+  const resolveDiscrepancy = useCallback(async () => {
+    const { disc, chosen } = discrepancyModal;
+    if (!disc || !chosen) return;
+    try {
+      const { data } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "air_master_discrepancy_resolve", id: disc.id, awb_escolhido: chosen, user: user?.email || "system" },
+      });
+      if (data?.success) {
+        toast({ title: "Troca de master resolvida", description: `Master correto: ${chosen}` });
+        setDiscrepancies(prev => prev.filter(d => d.id !== disc.id));
+        setDiscrepancyModal({ open: false, disc: null, chosen: "" });
+        fetchData();
+      } else {
+        toast({ title: "Erro", description: data?.error || "Falha ao resolver", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Erro", description: (e as Error).message, variant: "destructive" });
+    }
+  }, [discrepancyModal, user, toast, fetchData]);
+
 
   // ─── Alert for tracking failures ───
   useEffect(() => {
@@ -1110,8 +1174,28 @@ const TrackingAereo = () => {
                         <tr key={`${awb.id}-${index}`} className={`border-b border-[rgba(255,255,255,.06)] transition-all duration-300 ${isCritical ? "bg-red-500/15 border-red-400/50 border-2 shadow-[0_0_15px_rgba(255,0,0,0.2)]" : "hover:bg-[rgba(255,255,255,.03)]"}`}>
                           {/* AWB */}
                           <td className="px-4 py-3 whitespace-nowrap">
-                            <span className="font-semibold text-[#f5f5f5] text-[0.82rem]">{awb.awb}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-[#f5f5f5] text-[0.82rem]">{awb.awb}</span>
+                              {(() => {
+                                const swap = masterSwaps[(awb.awb || "").trim().toUpperCase()];
+                                if (!swap) return null;
+                                const fonteLabel = swap.fonte === 'EXTRACTED_EMAILS' ? 'E-mail Dachser' : 'Dados aéreo';
+                                return (
+                                  <TooltipProvider><Tooltip><TooltipTrigger asChild>
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.6rem] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/40">
+                                      <ArrowLeftRight className="w-2.5 h-2.5" /> Troca de master
+                                    </span>
+                                  </TooltipTrigger><TooltipContent>
+                                    <p className="text-xs">Antigo: {swap.awb_antigo}</p>
+                                    <p className="text-xs">Novo: {swap.awb_novo}</p>
+                                    <p className="text-xs text-muted-foreground">Fonte: {fonteLabel}</p>
+                                    {swap.data_atualizacao && <p className="text-xs text-muted-foreground">{formatDateTimeBR(swap.data_atualizacao)}</p>}
+                                  </TooltipContent></Tooltip></TooltipProvider>
+                                );
+                              })()}
+                            </div>
                           </td>
+
                           {/* HAWB */}
                           <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem] whitespace-nowrap">{awb.hawb || "-"}</td>
                           {/* Cliente */}
@@ -1356,7 +1440,64 @@ const TrackingAereo = () => {
 
       {/* Cadastro NOVA Modal */}
       <CadastroNovaModal open={cadastroNovaOpen} onOpenChange={setCadastroNovaOpen} onSuccess={fetchData} />
+
+      {/* Discrepâncias de master pendentes */}
+      {discrepancies.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 bg-[#1a1a1a] border border-amber-500/40 rounded-lg p-4 shadow-xl max-w-md">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            <span className="text-amber-300 text-sm font-semibold">{discrepancies.length} discrepância{discrepancies.length > 1 ? 's' : ''} de master pendente{discrepancies.length > 1 ? 's' : ''}</span>
+          </div>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {discrepancies.map(d => {
+              let cands: string[] = [];
+              try { cands = typeof d.awbs_candidatos === 'string' ? JSON.parse(d.awbs_candidatos) : (d.awbs_candidatos || []); } catch {}
+              return (
+                <div key={d.id} className="text-xs text-[#ccc] border-t border-white/10 pt-2">
+                  <div>HAWB: <span className="text-white">{d.hawb}</span></div>
+                  <div className="text-[#aaa]">Candidatos: {cands.join(', ')}</div>
+                  <Button size="sm" variant="outline" className="mt-1 h-7 text-[0.7rem]" onClick={() => setDiscrepancyModal({ open: true, disc: d, chosen: "" })}>
+                    Resolver troca de master
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <Dialog open={discrepancyModal.open} onOpenChange={(o) => !o && setDiscrepancyModal({ open: false, disc: null, chosen: "" })}>
+        <DialogContent className="bg-[#0f0f0f] border-amber-500/40">
+          <DialogHeader>
+            <DialogTitle className="text-amber-300">Resolver troca de master</DialogTitle>
+            <DialogDescription className="text-[#bbb]">
+              {discrepancyModal.disc && (() => {
+                let cands: string[] = [];
+                try { cands = typeof discrepancyModal.disc.awbs_candidatos === 'string' ? JSON.parse(discrepancyModal.disc.awbs_candidatos) : (discrepancyModal.disc.awbs_candidatos || []); } catch {}
+                return `Os processos correspondentes ${cands.join(' e ')} possuem mesmo ID, data de inclusão e HAWB. Para troca de master correta, qual dos masters seria o correto?`;
+              })()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            {discrepancyModal.disc && (() => {
+              let cands: string[] = [];
+              try { cands = typeof discrepancyModal.disc.awbs_candidatos === 'string' ? JSON.parse(discrepancyModal.disc.awbs_candidatos) : (discrepancyModal.disc.awbs_candidatos || []); } catch {}
+              return cands.map((awb: string) => (
+                <label key={awb} className="flex items-center gap-2 p-2 rounded border border-white/10 hover:bg-white/5 cursor-pointer">
+                  <input type="radio" name="awb-chosen" value={awb} checked={discrepancyModal.chosen === awb} onChange={() => setDiscrepancyModal(prev => ({ ...prev, chosen: awb }))} />
+                  <span className="text-white font-mono">{awb}</span>
+                </label>
+              ));
+            })()}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" onClick={() => setDiscrepancyModal({ open: false, disc: null, chosen: "" })}>Cancelar</Button>
+            <Button onClick={resolveDiscrepancy} disabled={!discrepancyModal.chosen} className="bg-amber-500 hover:bg-amber-600 text-black">Confirmar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
+
   );
 };
 
