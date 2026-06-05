@@ -619,7 +619,14 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
               {paginatedVouchers.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={14} className="text-center text-muted-foreground py-8">
-                    Nenhum voucher/SPO encontrado
+                    {isSearching ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Carregando…
+                      </span>
+                    ) : (
+                      "Nenhum voucher/SPO encontrado"
+                    )}
                   </TableCell>
                 </TableRow>
               ) : (
