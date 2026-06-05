@@ -210,9 +210,9 @@ async function detectFromExtractedEmails(client: Client) {
 
         // AWB antigo atualmente em t_fato_aereo para esse hawb
         const fatoRows: any[] = await client.query(
-          `SELECT TRIM(awb_number) AS awb FROM ${DB}.t_fato_aereo
+          `SELECT TRIM(awb) AS awb FROM ${DB}.t_fato_aereo
              WHERE TRIM(COALESCE(hawb,'')) COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
-               AND TRIM(awb_number) COLLATE utf8mb4_unicode_ci <> TRIM(?) COLLATE utf8mb4_unicode_ci
+               AND TRIM(awb) COLLATE utf8mb4_unicode_ci <> TRIM(?) COLLATE utf8mb4_unicode_ci
                AND (last_status_code IS NULL OR last_status_code <> 'DLV')
              ORDER BY COALESCE(last_event_date, created_at) DESC
              LIMIT 1`,
