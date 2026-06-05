@@ -1,52 +1,44 @@
+# Plan: corrigir Localização Automática para usar dados do banco
+
 ## Problema
 
-Análise da etapa 2 do item 126 ficou em `processing` por mais de 10 min, estourando o timeout do cliente. Os logs da edge `analyze-chb-documents` não mostram nenhuma mensagem `[BG] ...` (Anthropic, Gemini, snapshots, Prompt length) — apenas os `[POLL]` do cliente. Isso indica que a task em background morreu silenciosamente sem atualizar o status no MariaDB, ou que a chamada ao LLM ficou pendurada até o runtime matar o processo.
+A "localização automática" do ajuste do usuário sempre cai em **"Erro na localização automática"** com confiança **baixa** (como na imagem).
 
-Causas prováveis (em ordem):
-1. **Chamada ao Anthropic/Gemini sem `AbortController`** (linha ~1391). Se o provedor demora, a request fica pendurada até o runtime da edge function matar o worker aos 300s — e o `catch` nunca roda, então `update_chb_run status=error` nunca é gravado.
-2. **Prompt inflado**: o bloco de snapshots aprovados + REGRA DE OURO + OCR completo dos arquivos da etapa 1 (já incluídos via `cachedContext`) pode estar empurrando o prompt para um tamanho onde o LLM trava ou retorna timeout.
-3. **`processAnalysisInBackground` invocado sem `EdgeRuntime.waitUntil`** em fallback (linha 2835-2836): se o `EdgeRuntime` não existir, a Promise vira fire-and-forget e pode ser cancelada quando a response inicial fecha.
+Causa: o `chb-corrections` ainda tenta `fetch(file.url)` em `t_dachser_chb_files` para ler o conteúdo do arquivo. Como os documentos são PDFs binários, o `fileResponse.text()` não retorna texto legível, então `locateValueInFile` e o re-extraction (Gemini Pro) recebem lixo ou nada — falham e gravam "Erro na localização automática / baixa confiança".
 
-## Mudanças
+Com a nova arquitetura, a análise CHB já persiste o conteúdo trabalhável em `ai_agente.t_dachser_chb_extracted_data` (colunas `raw_text` + `extracted_fields` por `item_id` + `filename`). Essa é a fonte que a IA deve consultar para localizar o valor corrigido.
 
-### 1. Timeout duro nas chamadas LLM (núcleo do fix)
-Em `callAnthropicAPI` e `callGeminiAPI`:
-- Envolver o `fetch` com `AbortController` + `setTimeout(240_000)` (4 min).
-- Se abortar, lançar erro claro `LLM_TIMEOUT` para o catch externo fazer fallback ou marcar `error` no MariaDB.
+## Mudança proposta (cirúrgica, apenas no edge function)
 
-### 2. Garantia de gravação de erro mesmo em crash silencioso
-Em `processAnalysisInBackground`:
-- Envolver todo o corpo num `try/catch` externo que SEMPRE chama `update_chb_run status=error` com a mensagem do erro, inclusive timeouts.
-- Adicionar `console.log` no início absoluto (antes de qualquer await) para confirmar que a task arrancou.
+Arquivo: `supabase/functions/chb-corrections/index.ts`
 
-### 3. Garantir que o background roda
-Trocar `EdgeRuntime.waitUntil(...)  ||  processAnalysisInBackground(...)` por:
-```ts
-const bg = processAnalysisInBackground(...);
-if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(bg);
-// fire-and-forget já está disparado via bg
-```
+1. **Nova helper `fetchDocContentFromDb(client, item_id, filename)`**
+   - Faz `SELECT raw_text, extracted_fields FROM ai_agente.t_dachser_chb_extracted_data WHERE item_id = ? AND filename = ? LIMIT 1`.
+   - Fallback de matching: se nada bater por filename exato, tenta `LIKE` por tokens do filename (mesma normalização já usada hoje no bloco de file_url).
+   - Fallback final: pega todos os registros do `item_id` e concatena `raw_text` (ou `extracted_fields` JSON.stringificado) ordenados por `updated_at DESC` — assim, mesmo se o `filename` enviado pelo frontend for um label divergente, o Gemini ainda recebe contexto útil.
+   - Retorna a string composta: `${raw_text || ''}\n\n=== Campos já extraídos ===\n${extracted_fields}`.
 
-### 4. Reduzir bloat do prompt de snapshots
-- Limitar `snapBlock` a no máximo ~20 linhas por etapa anterior (cortar `rows` longos com `…+N campos`).
-- Não duplicar snapshots quando o `cachedContext` (correções do usuário) já cobre os mesmos campos.
+2. **Action `save` (linhas ~589-690)**
+   - Substituir todo o bloco que faz `JOIN t_dachser_chb_files` + `fetch(row.file_url)` pela chamada de `fetchDocContentFromDb`.
+   - Manter `file_content` enviado pelo cliente como prioridade (se vier preenchido, usa direto).
+   - Sem conteúdo do DB → segue o caminho atual de "Localização manual não realizada".
 
-### 5. Logging mínimo de diagnóstico
-- Logar `[BG] startedAt`, `[BG] step0 ok`, `[BG] anthropic.start`, `[BG] anthropic.end ms=…` para que da próxima vez seja possível identificar exatamente onde travou via `edge_function_logs`.
+3. **Action `reprocess-pending` (linhas ~882-980)**
+   - Mesma substituição: trocar o `JOIN t_dachser_chb_files` + `fetch(file_url)` por `fetchDocContentFromDb`.
+   - Garante que correções antigas marcadas como `baixa` / "Erro" possam ser re-resolvidas pelo novo backend ao rodar reprocess.
 
-### 6. Mensagem amigável no front
-Em `ConferenciaChb.tsx` (linha 498), trocar a mensagem genérica de "Tempo limite excedido" por uma que oriente o usuário a tentar novamente (a análise será marcada como erro pelo backend graças ao item 2, então o retry funcionará sem ficar preso).
+4. **Sem mudanças** em `locateValueInFile` e `reextractFieldWithContext` — eles continuam recebendo `fileContent: string` e o prompt continua igual. Só muda a origem da string.
 
-## Arquivos afetados
-- `supabase/functions/analyze-chb-documents/index.ts` — itens 1, 2, 3, 4, 5
-- `src/pages/ConferenciaChb.tsx` — item 6
+## Não-objetivos / o que NÃO muda
 
-## Não faz parte deste plano
-- Mudar a tabela de snapshots.
-- Trocar provedor de LLM.
-- Mexer no `mariadb-proxy`.
+- Esquema do banco (nenhuma migration).
+- Frontend (`EditableCell`, `useChbCorrections`, `ConferenciaChb`) — payload de `save` continua o mesmo; `file_content` continua opcional.
+- `analyze-chb-documents` e o fluxo de gravação em `t_dachser_chb_extracted_data` (já existem, só passamos a consumir).
+- Outros consumidores do `t_dachser_chb_files`/`t_dachser_chb_docs` — não tocamos nessas queries fora de `chb-corrections`.
+- Lógica das regras de extração (`saveExtractionRule`) e do `applied_count`.
 
 ## Validação
-1. Rodar análise da etapa 2 do item 126 novamente.
-2. Conferir nos logs: `[BG] startedAt` → `[BG] anthropic.start` → `[BG] anthropic.end ms=...` → `[BG] Analysis completed`.
-3. Se ocorrer timeout, a UI deve mostrar erro em < 5 min com mensagem clara e o status no MariaDB deve estar `error` (não `processing`).
+
+1. Editar um campo de um documento já analisado (ex.: `$35,662.74` da imagem) → tooltip deve mostrar "Página/Seção …" e confiança **alta** ou **média**, não mais "Erro na localização automática / baixa".
+2. Em casos onde `raw_text` está vazio, comportamento deve ser idêntico ao atual (fallback gracioso).
+3. Rodar `reprocess-pending` em correções antigas e confirmar atualização de `location_reference`/`location_confidence` em `t_dachser_chb_user_corrections`.

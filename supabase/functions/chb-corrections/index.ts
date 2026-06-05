@@ -363,6 +363,83 @@ async function reextractAndUpdateCorrection(
   }
 }
 
+// Fetch document content from DB-extracted data (raw_text + extracted_fields).
+// This replaces fetching the binary file URL — the analysis pipeline already
+// persists the readable content of every analyzed doc in t_dachser_chb_extracted_data.
+async function fetchDocContentFromDb(
+  client: Client,
+  itemId: number | string,
+  filename: string
+): Promise<string | null> {
+  const buildContent = (rows: any[]): string | null => {
+    if (!rows || rows.length === 0) return null;
+    const parts: string[] = [];
+    for (const r of rows) {
+      const raw = (r.raw_text || '').toString().trim();
+      const fields = r.extracted_fields
+        ? (typeof r.extracted_fields === 'string'
+            ? r.extracted_fields
+            : JSON.stringify(r.extracted_fields))
+        : '';
+      const header = r.filename ? `=== Documento: ${r.filename} ===` : '';
+      const block = [header, raw, fields ? `--- Campos já extraídos ---\n${fields}` : '']
+        .filter(Boolean)
+        .join('\n');
+      if (block) parts.push(block);
+    }
+    const joined = parts.join('\n\n').trim();
+    return joined.length > 0 ? joined : null;
+  };
+
+  try {
+    // 1) Exact filename match
+    let rows = await client.query(
+      `SELECT filename, raw_text, extracted_fields
+         FROM ai_agente.t_dachser_chb_extracted_data
+        WHERE item_id = ? AND filename = ?
+        LIMIT 1`,
+      [itemId, filename]
+    );
+    let content = buildContent(rows);
+    if (content) return content;
+
+    // 2) Partial token match (frontend may send the column label, not the real filename)
+    const tokens = (filename || '')
+      .replace(/\.[^.]+$/, '')
+      .split(/[\s_\-\.]+/)
+      .filter((t) => t.length > 2)
+      .map((t) => t.toLowerCase());
+
+    if (tokens.length > 0) {
+      const likeConditions = tokens.map(() => `LOWER(filename) LIKE ?`).join(' AND ');
+      const likeParams = tokens.map((t) => `%${t}%`);
+      rows = await client.query(
+        `SELECT filename, raw_text, extracted_fields
+           FROM ai_agente.t_dachser_chb_extracted_data
+          WHERE item_id = ? AND (${likeConditions})
+          ORDER BY updated_at DESC
+          LIMIT 1`,
+        [itemId, ...likeParams]
+      );
+      content = buildContent(rows);
+      if (content) return content;
+    }
+
+    // 3) Fallback: aggregate ALL extracted docs for this item — gives Gemini full context
+    rows = await client.query(
+      `SELECT filename, raw_text, extracted_fields
+         FROM ai_agente.t_dachser_chb_extracted_data
+        WHERE item_id = ?
+        ORDER BY updated_at DESC`,
+      [itemId]
+    );
+    return buildContent(rows);
+  } catch (error) {
+    console.error('[chb-corrections] fetchDocContentFromDb error:', error);
+    return null;
+  }
+}
+
 // Detect document type from filename
 function detectDocumentType(filename: string): string {
   const lowerName = filename.toLowerCase();
@@ -586,107 +663,19 @@ serve(async (req) => {
           confidence: 'baixa'
         };
 
-        // Get file content - either from request or fetch from storage
+        // Get file content - either from request (priority) or DB-extracted data
         let effectiveFileContent = file_content;
-        
+
         if (!effectiveFileContent && item_id && filename) {
-          console.log(`[chb-corrections] file_content not provided, fetching from storage for item=${item_id}, filename="${filename}"`);
-          
-          try {
-            // Strategy 1: Exact filename match
-            let docRows = await client.query(`
-              SELECT f.url as file_url, f.filename as real_filename
-              FROM ai_agente.t_dachser_chb_docs d
-              JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
-              WHERE d.item_id = ? AND f.filename = ? AND d.is_active = 1
-              LIMIT 1
-            `, [item_id, filename]);
-            
-            // Strategy 2: Partial match — the frontend sends the HTML column header 
-            // (e.g. "Invoice Proforma") which may differ from the stored filename (e.g. "invoice_proforma_123.pdf")
-            if (!docRows || docRows.length === 0) {
-              console.log(`[chb-corrections] Exact match failed, trying partial match for "${filename}"`);
-              // Normalize: remove extension, special chars, create search tokens
-              const searchTokens = filename
-                .replace(/\.[^.]+$/, '') // remove extension
-                .split(/[\s_\-\.]+/)     // split by separators
-                .filter(t => t.length > 2) // keep meaningful tokens
-                .map(t => t.toLowerCase());
-              
-              if (searchTokens.length > 0) {
-                // Build LIKE conditions for each token
-                const likeConditions = searchTokens.map(() => `LOWER(f.filename) LIKE ?`).join(' AND ');
-                const likeParams = searchTokens.map(t => `%${t}%`);
-                
-                docRows = await client.query(`
-                  SELECT f.url as file_url, f.filename as real_filename
-                  FROM ai_agente.t_dachser_chb_docs d
-                  JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
-                  WHERE d.item_id = ? AND d.is_active = 1 AND (${likeConditions})
-                  LIMIT 1
-                `, [item_id, ...likeParams]);
-              }
-            }
-            
-            // Strategy 3: Fetch ALL active files for this item and try each one
-            if (!docRows || docRows.length === 0) {
-              console.log(`[chb-corrections] Partial match failed, fetching all files for item ${item_id}`);
-              docRows = await client.query(`
-                SELECT f.url as file_url, f.filename as real_filename
-                FROM ai_agente.t_dachser_chb_docs d
-                JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
-                WHERE d.item_id = ? AND d.is_active = 1
-                ORDER BY d.created_at DESC
-              `, [item_id]);
-              
-              if (docRows && docRows.length > 0) {
-                console.log(`[chb-corrections] Found ${docRows.length} files for item, will try each until content loads`);
-              }
-            }
-            
-            // Try to fetch content from matched files
-            if (docRows && docRows.length > 0) {
-              for (const row of docRows) {
-                if (!row.file_url) continue;
-                console.log(`[chb-corrections] Trying file: "${row.real_filename}" URL: ${row.file_url.substring(0, 80)}...`);
-                
-                try {
-                  const fileResponse = await fetch(row.file_url);
-                  if (fileResponse.ok) {
-                    const contentType = fileResponse.headers.get('content-type') || '';
-                    // Only use text-based content (skip binary PDFs — they need OCR)
-                    if (contentType.includes('text') || contentType.includes('json') || contentType.includes('xml') || contentType.includes('csv')) {
-                      effectiveFileContent = await fileResponse.text();
-                      console.log(`[chb-corrections] Fetched text content from "${row.real_filename}", length: ${effectiveFileContent.length}`);
-                      break;
-                    } else {
-                      // For PDFs and other binary files, fetch as text anyway — the URL might point to extracted text
-                      const textContent = await fileResponse.text();
-                      // Check if it looks like extracted text (has readable content)
-                      if (textContent.length > 100 && /[a-zA-Z]{3,}/.test(textContent.substring(0, 500))) {
-                        effectiveFileContent = textContent;
-                        console.log(`[chb-corrections] Fetched content from "${row.real_filename}" (${contentType}), length: ${effectiveFileContent.length}`);
-                        break;
-                      } else {
-                        console.log(`[chb-corrections] File "${row.real_filename}" appears to be binary (${contentType}), skipping`);
-                      }
-                    }
-                  } else {
-                    console.log(`[chb-corrections] Failed to fetch "${row.real_filename}": HTTP ${fileResponse.status}`);
-                  }
-                } catch (fetchErr) {
-                  console.error(`[chb-corrections] Error fetching "${row.real_filename}":`, fetchErr);
-                }
-              }
-            }
-            
-            if (!effectiveFileContent) {
-              console.log(`[chb-corrections] No readable file content found for item ${item_id}, filename "${filename}"`);
-            }
-          } catch (fetchError) {
-            console.error('[chb-corrections] Error fetching file content:', fetchError);
+          console.log(`[chb-corrections] file_content not provided, fetching DB-extracted content for item=${item_id}, filename="${filename}"`);
+          effectiveFileContent = await fetchDocContentFromDb(client, item_id, filename);
+          if (effectiveFileContent) {
+            console.log(`[chb-corrections] Loaded ${effectiveFileContent.length} chars from t_dachser_chb_extracted_data`);
+          } else {
+            console.log(`[chb-corrections] No DB-extracted content found for item ${item_id}, filename "${filename}"`);
           }
         }
+
 
         if (effectiveFileContent) {
           console.log(`[chb-corrections] Locating value "${corrected_value}" in ${filename}`);
@@ -909,103 +898,72 @@ serve(async (req) => {
         
         for (const correction of (pendingCorrections || [])) {
           try {
-            // Fetch file content from storage
-            // Try exact match first, then all files for item
-            let docRows = await client.query(`
-              SELECT f.url as file_url, f.filename as real_filename
-              FROM ai_agente.t_dachser_chb_docs d
-              JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
-              WHERE d.item_id = ? AND f.filename = ? AND d.is_active = 1
-              LIMIT 1
-            `, [correction.item_id, correction.filename]);
-            
-            if (!docRows || docRows.length === 0) {
-              docRows = await client.query(`
-                SELECT f.url as file_url, f.filename as real_filename
-                FROM ai_agente.t_dachser_chb_docs d
-                JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
-                WHERE d.item_id = ? AND d.is_active = 1
-                ORDER BY d.created_at DESC
-              `, [correction.item_id]);
-            }
-            
-            if (docRows && docRows.length > 0 && docRows[0].file_url) {
-              console.log(`[chb-corrections] Fetching content for ${correction.filename}`);
-              
-              const fileResponse = await fetch(docRows[0].file_url);
-              if (fileResponse.ok) {
-                const fileContent = await fileResponse.text();
-                console.log(`[chb-corrections] File content length: ${fileContent.length}`);
-                
-                // Run re-extraction using Gemini Pro
-                const reextractionResult = await reextractFieldWithContext(
-                  correction.filename,
+            // Fetch DB-extracted content (raw_text + extracted_fields) for this item/filename
+            const fileContent = await fetchDocContentFromDb(client, correction.item_id, correction.filename);
+
+            if (fileContent) {
+              console.log(`[chb-corrections] DB content length for ${correction.filename}: ${fileContent.length}`);
+
+              // Run re-extraction using Gemini Pro
+              const reextractionResult = await reextractFieldWithContext(
+                correction.filename,
+                correction.field_name,
+                correction.corrected_value,
+                fileContent
+              );
+
+              if (reextractionResult.found) {
+                // Update correction with location
+                await client.execute(`
+                  UPDATE ai_agente.t_dachser_chb_user_corrections
+                  SET location_reference = ?,
+                      location_context = ?,
+                      location_confidence = ?,
+                      updated_at = NOW()
+                  WHERE id = ?
+                `, [
+                  reextractionResult.location,
+                  reextractionResult.nearbyText,
+                  reextractionResult.confidence,
+                  correction.id
+                ]);
+
+                // Save extraction rule for future use
+                const docType = detectDocumentType(correction.filename);
+                await saveExtractionRule(
+                  client,
                   correction.field_name,
-                  correction.corrected_value,
-                  fileContent
+                  docType,
+                  reextractionResult.pattern,
+                  reextractionResult.extractionHint,
+                  correction.corrected_value
                 );
-                
-                if (reextractionResult.found) {
-                  // Update correction with location
-                  await client.execute(`
-                    UPDATE ai_agente.t_dachser_chb_user_corrections
-                    SET location_reference = ?,
-                        location_context = ?,
-                        location_confidence = ?,
-                        updated_at = NOW()
-                    WHERE id = ?
-                  `, [
-                    reextractionResult.location,
-                    reextractionResult.nearbyText,
-                    reextractionResult.confidence,
-                    correction.id
-                  ]);
-                  
-                  // Save extraction rule for future use
-                  const docType = detectDocumentType(correction.filename);
-                  await saveExtractionRule(
-                    client,
-                    correction.field_name,
-                    docType,
-                    reextractionResult.pattern,
-                    reextractionResult.extractionHint,
-                    correction.corrected_value
-                  );
-                  
-                  results.push({
-                    id: correction.id,
-                    field: correction.field_name,
-                    file: correction.filename,
-                    status: 'processed',
-                    location: reextractionResult.location,
-                    confidence: reextractionResult.confidence
-                  });
-                  
-                  console.log(`[chb-corrections] Successfully processed correction ${correction.id}`);
-                } else {
-                  results.push({
-                    id: correction.id,
-                    field: correction.field_name,
-                    file: correction.filename,
-                    status: 'not_found'
-                  });
-                  console.log(`[chb-corrections] Value not found for correction ${correction.id}`);
-                }
+
+                results.push({
+                  id: correction.id,
+                  field: correction.field_name,
+                  file: correction.filename,
+                  status: 'processed',
+                  location: reextractionResult.location,
+                  confidence: reextractionResult.confidence
+                });
+
+                console.log(`[chb-corrections] Successfully processed correction ${correction.id}`);
               } else {
                 results.push({
                   id: correction.id,
                   field: correction.field_name,
                   file: correction.filename,
-                  status: 'fetch_failed',
-                  error: `HTTP ${fileResponse.status}`
+                  status: 'not_found'
                 });
+                console.log(`[chb-corrections] Value not found for correction ${correction.id}`);
               }
             } else {
               results.push({
                 id: correction.id,
                 field: correction.field_name,
                 file: correction.filename,
-                status: 'no_file_url'
+                status: 'no_db_content'
               });
             }
           } catch (err) {
@@ -1019,6 +977,7 @@ serve(async (req) => {
             console.error(`[chb-corrections] Error processing correction ${correction.id}:`, err);
           }
         }
+
         
         // Also check and list extraction rules
         let rulesCount = 0;
