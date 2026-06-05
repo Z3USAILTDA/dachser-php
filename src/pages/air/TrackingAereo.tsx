@@ -1174,8 +1174,28 @@ const TrackingAereo = () => {
                         <tr key={`${awb.id}-${index}`} className={`border-b border-[rgba(255,255,255,.06)] transition-all duration-300 ${isCritical ? "bg-red-500/15 border-red-400/50 border-2 shadow-[0_0_15px_rgba(255,0,0,0.2)]" : "hover:bg-[rgba(255,255,255,.03)]"}`}>
                           {/* AWB */}
                           <td className="px-4 py-3 whitespace-nowrap">
-                            <span className="font-semibold text-[#f5f5f5] text-[0.82rem]">{awb.awb}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-[#f5f5f5] text-[0.82rem]">{awb.awb}</span>
+                              {(() => {
+                                const swap = masterSwaps[(awb.awb || "").trim().toUpperCase()];
+                                if (!swap) return null;
+                                const fonteLabel = swap.fonte === 'EXTRACTED_EMAILS' ? 'E-mail Dachser' : 'Dados aéreo';
+                                return (
+                                  <TooltipProvider><Tooltip><TooltipTrigger asChild>
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[0.6rem] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/40">
+                                      <ArrowLeftRight className="w-2.5 h-2.5" /> Troca de master
+                                    </span>
+                                  </TooltipTrigger><TooltipContent>
+                                    <p className="text-xs">Antigo: {swap.awb_antigo}</p>
+                                    <p className="text-xs">Novo: {swap.awb_novo}</p>
+                                    <p className="text-xs text-muted-foreground">Fonte: {fonteLabel}</p>
+                                    {swap.data_atualizacao && <p className="text-xs text-muted-foreground">{formatDateTimeBR(swap.data_atualizacao)}</p>}
+                                  </TooltipContent></Tooltip></TooltipProvider>
+                                );
+                              })()}
+                            </div>
                           </td>
+
                           {/* HAWB */}
                           <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem] whitespace-nowrap">{awb.hawb || "-"}</td>
                           {/* Cliente */}
