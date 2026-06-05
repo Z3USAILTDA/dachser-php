@@ -363,6 +363,83 @@ async function reextractAndUpdateCorrection(
   }
 }
 
+// Fetch document content from DB-extracted data (raw_text + extracted_fields).
+// This replaces fetching the binary file URL — the analysis pipeline already
+// persists the readable content of every analyzed doc in t_dachser_chb_extracted_data.
+async function fetchDocContentFromDb(
+  client: Client,
+  itemId: number | string,
+  filename: string
+): Promise<string | null> {
+  const buildContent = (rows: any[]): string | null => {
+    if (!rows || rows.length === 0) return null;
+    const parts: string[] = [];
+    for (const r of rows) {
+      const raw = (r.raw_text || '').toString().trim();
+      const fields = r.extracted_fields
+        ? (typeof r.extracted_fields === 'string'
+            ? r.extracted_fields
+            : JSON.stringify(r.extracted_fields))
+        : '';
+      const header = r.filename ? `=== Documento: ${r.filename} ===` : '';
+      const block = [header, raw, fields ? `--- Campos já extraídos ---\n${fields}` : '']
+        .filter(Boolean)
+        .join('\n');
+      if (block) parts.push(block);
+    }
+    const joined = parts.join('\n\n').trim();
+    return joined.length > 0 ? joined : null;
+  };
+
+  try {
+    // 1) Exact filename match
+    let rows = await client.query(
+      `SELECT filename, raw_text, extracted_fields
+         FROM ai_agente.t_dachser_chb_extracted_data
+        WHERE item_id = ? AND filename = ?
+        LIMIT 1`,
+      [itemId, filename]
+    );
+    let content = buildContent(rows);
+    if (content) return content;
+
+    // 2) Partial token match (frontend may send the column label, not the real filename)
+    const tokens = (filename || '')
+      .replace(/\.[^.]+$/, '')
+      .split(/[\s_\-\.]+/)
+      .filter((t) => t.length > 2)
+      .map((t) => t.toLowerCase());
+
+    if (tokens.length > 0) {
+      const likeConditions = tokens.map(() => `LOWER(filename) LIKE ?`).join(' AND ');
+      const likeParams = tokens.map((t) => `%${t}%`);
+      rows = await client.query(
+        `SELECT filename, raw_text, extracted_fields
+           FROM ai_agente.t_dachser_chb_extracted_data
+          WHERE item_id = ? AND (${likeConditions})
+          ORDER BY updated_at DESC
+          LIMIT 1`,
+        [itemId, ...likeParams]
+      );
+      content = buildContent(rows);
+      if (content) return content;
+    }
+
+    // 3) Fallback: aggregate ALL extracted docs for this item — gives Gemini full context
+    rows = await client.query(
+      `SELECT filename, raw_text, extracted_fields
+         FROM ai_agente.t_dachser_chb_extracted_data
+        WHERE item_id = ?
+        ORDER BY updated_at DESC`,
+      [itemId]
+    );
+    return buildContent(rows);
+  } catch (error) {
+    console.error('[chb-corrections] fetchDocContentFromDb error:', error);
+    return null;
+  }
+}
+
 // Detect document type from filename
 function detectDocumentType(filename: string): string {
   const lowerName = filename.toLowerCase();
