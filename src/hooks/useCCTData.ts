@@ -412,9 +412,8 @@ export function useProcessosCCT(options: { enabled?: boolean } = {}) {
 
       // O edge `get_cct_shipments_cached` já aplica a regra de retenção
       // (oculta entregues após 5 dias do evento via dados_dachser.t_cct_hidden_hawbs).
-      const allProcessos: ProcessoCCT[] = (data.data || []).map(mapRowToProcessoCCT);
-      const processos = filterByYearIfNotZ3us<ProcessoCCT>(allProcessos, (p) => p.shipment.created_at);
-      console.log(`CCT: Loaded ${processos.length} processos (total: ${allProcessos.length})`);
+      const processos: ProcessoCCT[] = (data.data || []).map(mapRowToProcessoCCT);
+      console.log(`CCT: Loaded ${processos.length} processos`);
       return processos;
     },
     enabled,
