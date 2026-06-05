@@ -23,6 +23,7 @@ import {
   ExternalLink,
   FilePlus,
   Package,
+  Replace,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -493,6 +494,7 @@ const TrackingAereo = () => {
   const [sortLastCheck, setSortLastCheck] = useState<"asc" | "desc" | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [cardFilter, setCardFilter] = useState<CardFilterType>("all");
+  const [filterMasterSwap, setFilterMasterSwap] = useState(false);
   const [showMonitoredModal, setShowMonitoredModal] = useState(false);
   const [cadastroNovaOpen, setCadastroNovaOpen] = useState(false);
   const [masterSwaps, setMasterSwaps] = useState<Record<string, any>>({});
@@ -782,6 +784,27 @@ const TrackingAereo = () => {
     return matchesSearch && matchesAirline && matchesAnalyst && matchesType;
   }, [searchTerm, filterAirline, filterAnalyst, filterProcessType]);
 
+  // ─── Discrepância de troca de master: Set "AWB|HAWB" pendentes ───
+  const discrepancyKeys = useMemo(() => {
+    const s = new Set<string>();
+    for (const d of discrepancies) {
+      const hawb = String(d?.hawb || "").trim().toUpperCase();
+      let cands: any = d?.awbs_candidatos;
+      if (typeof cands === "string") { try { cands = JSON.parse(cands); } catch { cands = []; } }
+      if (!Array.isArray(cands)) cands = [];
+      for (const a of cands) {
+        const awb = String(a || "").trim().toUpperCase();
+        if (awb) s.add(`${awb}|${hawb}`);
+      }
+    }
+    return s;
+  }, [discrepancies]);
+  const hasMasterDiscrepancy = useCallback((awb: any) => {
+    const a = String(awb?.awb || "").trim().toUpperCase();
+    const h = String(awb?.hawb || "").trim().toUpperCase();
+    return discrepancyKeys.has(`${a}|${h}`);
+  }, [discrepancyKeys]);
+
   // ─── Card counts (respeitam filtros de topo, mas não o cardFilter) ───
   const cardCounts = useMemo(() => {
     const inTransitCodes = new Set(["DEP", "MAN", "RCF", "ARR"]);
@@ -807,10 +830,10 @@ const TrackingAereo = () => {
       total++;
       if (inTransitCodes.has(code)) transit++;
       if (code === "DIS" || (awb.has_dis_event && !awb.pieces_discrepancy)) alert++;
-      if (criticalCodes.has(code) || awb.pieces_discrepancy || stale) critical++;
+      if (criticalCodes.has(code) || awb.pieces_discrepancy || stale || hasMasterDiscrepancy(awb)) critical++;
     });
     return { total, transit, alert, critical };
-  }, [awbsData, applyTopFilters, isStaleAwb]);
+  }, [awbsData, applyTopFilters, isStaleAwb, hasMasterDiscrepancy]);
 
   // ─── Filtered & sorted data ───
   const filteredAwbs = useMemo(() => {
@@ -858,10 +881,15 @@ const TrackingAereo = () => {
         switch (cardFilter) {
           case "transito": return ["DEP", "MAN", "RCF", "ARR", "ARR - DESTINO", "ARR - CONEXÃO"].includes(code);
           case "alerta": return code === "DIS" || (awb.has_dis_event && !awb.pieces_discrepancy);
-          case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy || isStaleAwb(awb);
+          case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy || isStaleAwb(awb) || hasMasterDiscrepancy(awb);
           default: return true;
         }
       });
+    }
+
+    // Filtro "Troca de master"
+    if (filterMasterSwap) {
+      awbs = awbs.filter(awb => hasMasterDiscrepancy(awb));
     }
 
     // Sorting
@@ -887,7 +915,7 @@ const TrackingAereo = () => {
     }
 
     return awbs;
-  }, [awbsData, searchTerm, applyTopFilters, isStaleAwb, cardFilter, sortAwb, sortClient, sortAnalyst, sortLastCheck]);
+  }, [awbsData, searchTerm, applyTopFilters, isStaleAwb, cardFilter, sortAwb, sortClient, sortAnalyst, sortLastCheck, filterMasterSwap, hasMasterDiscrepancy]);
 
   const totalPages = Math.ceil(filteredAwbs.length / itemsPerPage);
   const currentAwbs = filteredAwbs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -1031,7 +1059,27 @@ const TrackingAereo = () => {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Troca de master filter */}
+                <button
+                  onClick={() => { setFilterMasterSwap(v => !v); setCurrentPage(1); }}
+                  className={`h-8 px-3 rounded-full flex items-center gap-1.5 text-[0.75rem] font-medium transition border ${
+                    filterMasterSwap
+                      ? "bg-amber-500 text-black border-amber-400 shadow-[0_0_18px_rgba(255,200,0,.35)]"
+                      : "bg-[rgba(0,0,0,.5)] text-[#f5f5f5] border-[rgba(255,255,255,.22)] hover:border-amber-400/60"
+                  }`}
+                  title="Filtrar processos com discrepância de troca de master"
+                >
+                  <Replace className="w-3.5 h-3.5" />
+                  Troca de master
+                  {discrepancyKeys.size > 0 && (
+                    <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[0.65rem] ${filterMasterSwap ? "bg-black/20 text-black" : "bg-amber-500/20 text-amber-300"}`}>
+                      {discrepancies.length}
+                    </span>
+                  )}
+                </button>
               </div>
+
 
               <div className="flex items-center gap-2">
                 <button onClick={() => { trackEvent("air.monitored_airlines.open"); setShowMonitoredModal(true); }} className="h-8 px-4 rounded-full bg-emerald-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-emerald-500/80 transition border border-emerald-500/50">
