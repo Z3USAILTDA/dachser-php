@@ -1524,7 +1524,8 @@ const TrackingAereo = () => {
               {discrepancyModal.disc && (() => {
                 let cands: string[] = [];
                 try { cands = typeof discrepancyModal.disc.awbs_candidatos === 'string' ? JSON.parse(discrepancyModal.disc.awbs_candidatos) : (discrepancyModal.disc.awbs_candidatos || []); } catch {}
-                return `Os processos correspondentes ${cands.join(' e ')} possuem mesmo ID, data de inclusão e HAWB. Para troca de master correta, qual dos masters seria o correto?`;
+                const hawb = discrepancyModal.disc.hawb || '—';
+                return `Os processos correspondentes ${cands.join(' e ')} possuem mesmo ID, data de inclusão e HAWB (${hawb}). Para troca de master correta, qual dos masters seria o correto?`;
               })()}
             </DialogDescription>
           </DialogHeader>
