@@ -1059,7 +1059,27 @@ const TrackingAereo = () => {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Troca de master filter */}
+                <button
+                  onClick={() => { setFilterMasterSwap(v => !v); setCurrentPage(1); }}
+                  className={`h-8 px-3 rounded-full flex items-center gap-1.5 text-[0.75rem] font-medium transition border ${
+                    filterMasterSwap
+                      ? "bg-amber-500 text-black border-amber-400 shadow-[0_0_18px_rgba(255,200,0,.35)]"
+                      : "bg-[rgba(0,0,0,.5)] text-[#f5f5f5] border-[rgba(255,255,255,.22)] hover:border-amber-400/60"
+                  }`}
+                  title="Filtrar processos com discrepância de troca de master"
+                >
+                  <Replace className="w-3.5 h-3.5" />
+                  Troca de master
+                  {discrepancyKeys.size > 0 && (
+                    <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[0.65rem] ${filterMasterSwap ? "bg-black/20 text-black" : "bg-amber-500/20 text-amber-300"}`}>
+                      {discrepancies.length}
+                    </span>
+                  )}
+                </button>
               </div>
+
 
               <div className="flex items-center gap-2">
                 <button onClick={() => { trackEvent("air.monitored_airlines.open"); setShowMonitoredModal(true); }} className="h-8 px-4 rounded-full bg-emerald-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-emerald-500/80 transition border border-emerald-500/50">
