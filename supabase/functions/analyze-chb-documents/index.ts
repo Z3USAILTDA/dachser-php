@@ -2135,7 +2135,7 @@ async function persistRawOcrForFiles(
       errorMessage: hasRawOcr ? null : 'OCR vazio ou insuficiente no fluxo principal e na reextração',
     });
 
-    persisted.push({ filename: file.name, extractionId: ins.extractionId ?? null, status: hasRawOcr ? 'OK' : 'PARCIAL' });
+    persisted.push({ filename: file.name, extractionId: ins.extractionId ?? null, status: hasRawOcr ? 'OK' : 'PARCIAL', rawOcrText: hasRawOcr ? rawOcr : '' });
     console.log(`[BG][raw-ocr-save] ${file.name} → extractionId=${ins.extractionId} status=${hasRawOcr ? 'OK' : 'PARCIAL'} (${rawOcr.length} chars)`);
   }
 
