@@ -416,8 +416,7 @@ serve(async (req: Request): Promise<Response> => {
     });
 
     // ====== Stage condition — alinhado com a régua visual ======
-    // PRE/D1/D7/D15/D30: por dias de atraso (independente de tipo_documento)
-    // D45/D60: split por tipo_documento (FAT_NF antecipa em 15 dias)
+    // Janelas fixas por dias de atraso, independente de tipo_documento.
     const getStageCondition = (s: string): string => {
       switch (s) {
         case "PRE":
@@ -431,13 +430,14 @@ serve(async (req: Request): Promise<Response> => {
         case "D30":
           return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44";
         case "D45":
-          return "t.tipo_documento <> 'FAT_NF' AND DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59";
         case "D60":
-          return "((t.tipo_documento <> 'FAT_NF' AND DATEDIFF(CURDATE(), t.data_vencimento) >= 60) OR (t.tipo_documento = 'FAT_NF' AND DATEDIFF(CURDATE(), t.data_vencimento) >= 45))";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) >= 60";
         default:
           return "1=0";
       }
     };
+
 
     // ====== Query da view canônica ======
     // - Fonte única: dados_dachser.v_fin_regua_contas_receber
