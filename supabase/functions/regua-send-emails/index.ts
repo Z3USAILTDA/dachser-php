@@ -422,19 +422,20 @@ serve(async (req: Request): Promise<Response> => {
         case "PRE":
           return "t.data_vencimento >= CURDATE()";
         case "D1":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) = 1";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) = 2";
         case "D7":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7 AND 14";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 8 AND 14";
         case "D15":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 16 AND 29";
         case "D30":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 44";
         case "D45":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 46 AND 59";
         case "D60":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) >= 60";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) >= 61";
         default:
           return "1=0";
+
       }
     };
 
