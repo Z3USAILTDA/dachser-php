@@ -1,66 +1,71 @@
 ## Objetivo
 
-Reverter a lógica de matching da importação de SPO em lote: voltar a usar o **número do SPO (ND)** da planilha como identificador, em vez do **processo**. A planilha voltará a ter a coluna SPO/ND preenchida, então ela passa a ser a chave de busca contra `t_dados_financeiro_spo` (e fallback `t_dados_financeiro_voucher`).
+Eliminar a exceção que faz **`FAT_NF` (à vista)** cair em **D60 a partir de 45 dias**. Após a mudança, **D60 = `dias >= 60`** para todos os tipos de documento, e **D45 = `dias BETWEEN 45 AND 59`** também para todos (inclusive `FAT_NF`).
 
-## Mudanças
+## Por que existia a exceção
 
-### 1. Backend — `supabase/functions/mariadb-proxy/index.ts`
+Hoje o código tem dois ramos no `CASE` (`tipo_documento = 'FAT_NF'` vs demais). No ramo do FAT_NF, **D45 é pulado** e D60 começa em 45 dias — partindo da premissa de que faturas à vista deveriam ser tratadas como críticas mais cedo. Você quer remover esse comportamento e usar a régua única (PRE/D1/D7/D15/D30/D45/D60) por janelas fixas de dias, sem distinção por tipo.
 
-**`buildPreviewItems` (linha ~21442):**
-- Trocar a chave de busca: coletar `s.spo` em vez de `s.processo`.
-- Remover a expansão "1 processo → N linhas" (não faz mais sentido, pois o SPO já é único por linha).
-- Cada linha procura um único DFV pelo SPO; se não achar, segue com `mergeWithDfv(s, null)`.
+## Resultado final (régua única)
 
-**Novo helper `fetchDfvBySpo(spos)`** (substitui `fetchSpoByProcesso`):
-- Query principal em `t_dados_financeiro_spo`:
-  ```sql
-  SELECT id_rm, nd, nome_beneficiario, ..., numero_processo, detalhes
-    FROM dados_dachser.t_dados_financeiro_spo
-   WHERE UPPER(TRIM(nd)) COLLATE utf8mb4_unicode_ci IN (?, ?, ...)
-  ```
-- Fallback em `t_dados_financeiro_voucher` pelos `nd` não encontrados.
-- Retorna `Map<spoNormalizado, dfvRow>`.
+| Estágio | Janela (todos os tipos) |
+|---|---|
+| PRE | `dias <= 0` |
+| D1  | `dias = 1` |
+| D7  | `7–14` |
+| D15 | `15–29` |
+| D30 | `30–44` |
+| **D45** | **`45–59`** |
+| **D60** | **`>= 60`** (cap externo `<= 120`) |
 
-**`mergeWithDfv` (linha ~21368):**
-- Permanece igual: SPO da planilha já é prioritário; `processo` agora vem do DFV (`dfv.numero_processo`) quando a planilha não traz.
-- Validação `merged.processo` continua obrigatória; se planilha não tiver Processo e o DFV trouxer, OK; se nenhum dos dois, erro `processo obrigatório` (mesma regra atual).
+## Arquivos a alterar
 
-**`parseSheetRow`:** já lê `SPO`/`ND` corretamente (linha 21265). Sem mudança.
+Três endpoints/funções têm a mesma lógica duplicada e precisam ser ajustados juntos para não desalinhar tela × e-mails × aging:
 
-### 2. Frontend — `src/components/esteira/BatchImportVoucherDialog.tsx`
+### 1. `supabase/functions/mariadb-proxy/index.ts` — `get_regua_counts_cr` (linhas 17760–17801)
 
-- Atualizar a mensagem de toast vazio (linha 175): "Verifique se a planilha tem dados e se a coluna **'SPO' (ou 'ND')** está preenchida."
-- Nenhuma outra mudança estrutural — o cabeçalho esperado já lista SPO em primeiro, e a busca/dedupe já operam por `(id_rm + spo)`.
+Remover o ramo `WHEN t.tipo_documento = 'FAT_NF' THEN ...` e manter **apenas** o ramo padrão (que já tem D45 = 45–59 e D60 ≥ 60). Ajustar também o filtro externo do `WHERE`: trocar
+```sql
+OR (t.tipo_documento <> 'FAT_NF' AND DATEDIFF(...) >= 61)
+OR (t.tipo_documento = 'FAT_NF' AND DATEDIFF(...) >= 45)
+```
+por uma única cláusula
+```sql
+OR DATEDIFF(CURDATE(), t.data_vencimento) >= 45
+```
+(suficiente para cobrir D45 e D60 sem o split).
 
-### 3. Compatibilidade
+### 2. `supabase/functions/mariadb-proxy/index.ts` — `get_regua_stage_cr` (linhas 17819–17910)
 
-- Planilhas legadas que vinham só com `Processo` (sem SPO) passam a falhar com `SPO obrigatório` na validação — comportamento desejado pelo usuário.
-- `processo` continua sendo gravado em `processo_id` (preenchido pelo DFV via `mergeWithDfv` ou pela planilha).
-- A regra de identidade `SUBSTRING_INDEX(TRIM(x),' ',1)` para SPOs com sufixo (`DIM-BY`, `SAN`) é mantida via `spoPrefix`/`normSpo`, então o lookup tolera variações.
+No `CASE` interno (linhas 17869–17889), remover o ramo `WHEN t.tipo_documento='FAT_NF' THEN ...` e manter só o ramo padrão (D7/D15/D30/D45/D60 já corretos). O filtro externo `(? IN ('PRE',...,'D45') AND ... <= ?) OR ? = 'D60'` continua válido.
 
-### Diagrama do fluxo novo
+### 3. `supabase/functions/regua-send-emails/index.ts` (linhas ~420–436)
 
-```text
-Planilha (SPO + Processo + ...)
-        │
-        ▼
-parseSheetRow  →  { spo, processo, ... }
-        │
-        ▼
-fetchDfvBySpo([spo1, spo2, ...])      ← antes: fetchSpoByProcesso
-        │
-        ▼
-mergeWithDfv(sheet, dfv)              ← 1 linha = 1 DFV (sem expansão)
-        │
-        ▼
-fetchExistingVouchers / markAlreadyExisting   (já operam por id_rm+spo)
-        │
-        ▼
-INSERT em t_vouchers
+Trocar o builder de cláusula `D45`/`D60`:
+
+```ts
+case 'D45':
+  return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59";
+case 'D60':
+  return "DATEDIFF(CURDATE(), t.data_vencimento) >= 60";
 ```
 
-## Fora de escopo
+Remover também o comentário "FAT_NF antecipa em 15 dias" (linha 420) para refletir a nova regra.
 
-- Não alterar `t_voucher_batch_import_item.processo` (continua persistindo o processo da linha).
-- Não mexer em UI de edição linha-a-linha, dedupe, ou upload de documentos.
-- Não tocar nas regras de parser de filename, matching de comprovantes, ou cascade de anexos.
+## Impactos a confirmar
+
+- **Faturas FAT_NF com 45–59 dias** que hoje aparecem/recebem e-mail em **D60** passarão a aparecer em **D45** (mesmo template, contagem e e-mail diferentes do que recebem hoje).
+- **Faturas FAT_NF com ≥ 60 dias** continuam em D60 normalmente.
+- Os **templates de e-mail D45 e D60** (em `regua-send-emails`) já existem e serão usados para FAT_NF também — nada a criar.
+- Não há alteração de schema, view nem migration SQL: a mudança é 100% nos endpoints/edge functions.
+
+## Validação após implementar
+
+1. Abrir `/fin/regua` e conferir que os cards D45/D60 mudam de contagem (FAT_NF entre 45–59 saem do D60 e entram no D45).
+2. Rodar `get_regua_stage_cr` para `D45` e `D60` e confirmar que nenhuma fatura aparece nos dois.
+3. Disparar um envio de teste (`regua-send-emails`) em modo dry-run para D45 e D60 e conferir as faturas listadas.
+
+## Fora do escopo
+
+- Filtro de **disputas** (`t_fin_disputas`) — assunto separado, já discutido.
+- Tornar os limites (45, 60, 120) configuráveis em tabela — não vou mexer agora.
