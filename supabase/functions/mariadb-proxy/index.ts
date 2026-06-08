@@ -17767,8 +17767,9 @@ Deno.serve(async (req) => {
                 WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN  8 AND 14 THEN 'D7'
                 WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 16 AND 29 THEN 'D15'
                 WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 44 THEN 'D30'
-                WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 46 AND 59 THEN 'D45'
-                WHEN DATEDIFF(CURDATE(), t.data_vencimento) >= 61 THEN 'D60'
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 46 AND 59 AND t.tipo_documento <> 'FAT_NF' THEN 'D45'
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) >= 61 AND t.tipo_documento <> 'FAT_NF' THEN 'D60'
+
                 ELSE NULL
               END AS stage,
               t.valor_nf
