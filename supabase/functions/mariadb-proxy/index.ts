@@ -17858,12 +17858,13 @@ Deno.serve(async (req) => {
             AND (
               CASE ?
                 WHEN 'PRE' THEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0
-                WHEN 'D1'  THEN DATEDIFF(CURDATE(), t.data_vencimento) = 1
-                WHEN 'D7'  THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7 AND 14
-                WHEN 'D15' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29
-                WHEN 'D30' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44
-                WHEN 'D45' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59
-                WHEN 'D60' THEN DATEDIFF(CURDATE(), t.data_vencimento) >= 60
+                WHEN 'D1'  THEN DATEDIFF(CURDATE(), t.data_vencimento) = 2
+                WHEN 'D7'  THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN  8 AND 14
+                WHEN 'D15' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 16 AND 29
+                WHEN 'D30' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 44
+                WHEN 'D45' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 46 AND 59
+                WHEN 'D60' THEN DATEDIFF(CURDATE(), t.data_vencimento) >= 61
+
                 ELSE FALSE
               END
             )
