@@ -148,6 +148,26 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
         contMap[c.cnpjClean].push(c);
       }
       setContatos(contMap);
+
+      // Buscar histórico de envios de e-mail por CNPJ em paralelo
+      const cnpjList = (data.data || []).map((d: any) => d.cnpjClean).filter(Boolean);
+      if (cnpjList.length > 0) {
+        const results = await Promise.all(
+          cnpjList.map((cnpjClean: string) =>
+            supabase.functions
+              .invoke("mariadb-proxy", {
+                body: { action: "get_olimpo_email_logs_by_cnpj", cnpj: cnpjClean },
+              })
+              .then((r) => ({ cnpjClean, logs: (r.data?.logsByEmail || {}) as Record<string, EmailLog[]> }))
+              .catch(() => ({ cnpjClean, logs: {} as Record<string, EmailLog[]> }))
+          )
+        );
+        const logsMap: Record<string, Record<string, EmailLog[]>> = {};
+        for (const r of results) logsMap[r.cnpjClean] = r.logs;
+        setEmailLogs(logsMap);
+      } else {
+        setEmailLogs({});
+      }
     } catch (err: any) {
       console.error("Error fetching client detail:", err);
       toast({ title: "Erro", description: err.message, variant: "destructive" });
