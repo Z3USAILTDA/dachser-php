@@ -337,13 +337,49 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                     {(contatos[cnpj.cnpjClean]?.length ?? 0) === 0 ? (
                       <p className="text-xs text-muted-foreground/70 italic">Nenhum e-mail cadastrado</p>
                     ) : (
-                      <ul className="space-y-0.5">
-                        {contatos[cnpj.cnpjClean].map((c, i) => (
-                          <li key={i} className="text-xs text-foreground">
-                            {c.nome_contato && <span className="text-muted-foreground">{c.nome_contato} — </span>}
-                            <a href={`mailto:${c.email_contato}`} className="text-primary hover:underline">{c.email_contato}</a>
-                          </li>
-                        ))}
+                      <ul className="space-y-1.5">
+                        {contatos[cnpj.cnpjClean].map((c, i) => {
+                          const logs = emailLogs[cnpj.cnpjClean]?.[c.email_contato.toLowerCase().trim()] || [];
+                          return (
+                            <li key={i} className="text-xs text-foreground space-y-1">
+                              <div>
+                                {c.nome_contato && <span className="text-muted-foreground">{c.nome_contato} — </span>}
+                                <a href={`mailto:${c.email_contato}`} className="text-primary hover:underline">{c.email_contato}</a>
+                              </div>
+                              {logs.length === 0 ? (
+                                <p className="text-[10px] text-muted-foreground/60 italic pl-2">Sem envios registrados</p>
+                              ) : (
+                                <div className="flex flex-wrap gap-1 pl-2">
+                                  {logs.map((log) => {
+                                    const dt = new Date(log.sent_at);
+                                    const dtLabel = isNaN(dt.getTime())
+                                      ? "—"
+                                      : new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(dt);
+                                    const ok = log.success === 1;
+                                    const title = `${ok ? "Enviado" : "Falha"} · ${log.stage} · ${dtLabel}` +
+                                      (log.subject ? `\nAssunto: ${log.subject}` : "") +
+                                      (!ok && log.error_message ? `\nErro: ${log.error_message}` : "");
+                                    return (
+                                      <span
+                                        key={log.id}
+                                        title={title}
+                                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border ${
+                                          ok
+                                            ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                                            : "bg-rose-500/10 text-rose-300 border-rose-500/30"
+                                        }`}
+                                      >
+                                        <span className="font-semibold">{log.stage}</span>
+                                        <span className="opacity-70">· {dtLabel}</span>
+                                        <span>{ok ? "✓" : "✗"}</span>
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </div>
