@@ -17764,23 +17764,12 @@ Deno.serve(async (req) => {
               CASE
                 WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 'PRE'
                 WHEN DATEDIFF(CURDATE(), t.data_vencimento) = 1 THEN 'D1'
-                WHEN t.tipo_documento = 'FAT_NF' THEN
-                  CASE
-                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7  AND 14 THEN 'D7'
-                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29 THEN 'D15'
-                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44 THEN 'D30'
-                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) >= 45 THEN 'D60'
-                    ELSE NULL
-                  END
-                ELSE
-                  CASE
-                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7  AND 14 THEN 'D7'
-                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29 THEN 'D15'
-                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44 THEN 'D30'
-                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59 THEN 'D45'
-                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) >= 60 THEN 'D60'
-                    ELSE NULL
-                  END
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7  AND 14 THEN 'D7'
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29 THEN 'D15'
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44 THEN 'D30'
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59 THEN 'D45'
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) >= 60 THEN 'D60'
+                ELSE NULL
               END AS stage,
               t.valor_nf
             FROM dados_dachser.v_fin_regua_contas_receber t
@@ -17792,9 +17781,9 @@ Deno.serve(async (req) => {
               AND (
                 DATEDIFF(CURDATE(), t.data_vencimento) < 0
                 OR DATEDIFF(CURDATE(), t.data_vencimento) <= ?
-                OR (t.tipo_documento <> 'FAT_NF' AND DATEDIFF(CURDATE(), t.data_vencimento) >= 61)
-                OR (t.tipo_documento = 'FAT_NF' AND DATEDIFF(CURDATE(), t.data_vencimento) >= 45)
+                OR DATEDIFF(CURDATE(), t.data_vencimento) >= 45
               )
+
           ) x
           WHERE stage IS NOT NULL
           GROUP BY stage
