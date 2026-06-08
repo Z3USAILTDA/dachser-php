@@ -430,9 +430,10 @@ serve(async (req: Request): Promise<Response> => {
         case "D30":
           return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 31 AND 44";
         case "D45":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 46 AND 59";
+          return "t.tipo_documento <> 'FAT_NF' AND DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 46 AND 59";
         case "D60":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) >= 61";
+          return "t.tipo_documento <> 'FAT_NF' AND DATEDIFF(CURDATE(), t.data_vencimento) >= 61";
+
         default:
           return "1=0";
 
