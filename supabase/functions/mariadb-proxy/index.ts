@@ -21290,77 +21290,59 @@ Deno.serve(async (req) => {
           const m = n.match(/^(\d{2,4}-\d{4,})/);
           return m ? m[1] : n;
         };
-        // Lookup SPO em t_dados_financeiro_spo por numero_processo (e por cada processo
-        // listado na coluna `detalhes`, separada por ';'). Retorna índice byProcesso.
+        // Lookup DFV por número do SPO (nd). Retorna índice bySpo (chave = SPO normalizado).
         const normProcesso = (s: any): string => String(s ?? '').trim().replace(/\s+/g, '').toUpperCase();
-        const fetchSpoByProcesso = async (processos: string[]): Promise<{ byProcesso: Record<string, any[]> }> => {
-          const byProcesso: Record<string, any[]> = {};
-          const pushUnique = (key: string, row: any) => {
-            if (!key) return;
-            const list = (byProcesso[key] ||= []);
-            // Evita duplicar a mesma linha (mesmo id_rm+nd) quando indexada via processo e via detalhes
-            const sig = `${row?.id_rm ?? ''}|${normSpo(row?.nd)}`;
-            if (!list.some((r: any) => `${r?.id_rm ?? ''}|${normSpo(r?.nd)}` === sig)) list.push(row);
-          };
-          const normalized = Array.from(new Set(processos.map(normProcesso).filter(Boolean)));
-          if (normalized.length === 0) return { byProcesso };
+        const fetchDfvBySpo = async (spos: string[]): Promise<{ bySpo: Map<string, any> }> => {
+          const bySpo = new Map<string, any>();
+          const normalized = Array.from(new Set(spos.map(normSpo).filter(Boolean)));
+          if (normalized.length === 0) return { bySpo };
+          // Também indexamos por prefixo numérico (NNN-NNNNNN) para tolerar sufixos como " DIM-BY"/" SAN".
+          const prefixes = Array.from(new Set(normalized.map(spoPrefix).filter(Boolean)));
           const cols = `id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
                         modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
                         valor_nf, moeda, cnpj, razao_social, detalhes`;
+          const setKey = (row: any) => {
+            const nsp = normSpo(row?.nd);
+            if (nsp && !bySpo.has(nsp)) bySpo.set(nsp, row);
+            const pfx = spoPrefix(row?.nd);
+            if (pfx && pfx !== nsp && !bySpo.has(pfx)) bySpo.set(pfx, row);
+          };
           try {
-            const placeholders = normalized.map(() => '?').join(',');
-            const detalhesNormSql = `UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(detalhes, CHAR(13), ','), CHAR(10), ','), CHAR(9), ','), '|', ','), ';', ','), ' ', ''))`;
-            const findInSetClauses = normalized
-              .map(() => `FIND_IN_SET(?, ${detalhesNormSql}) > 0`)
-              .join(' OR ');
-            const params: any[] = [
-              ...normalized,
-              ...normalized,
-            ];
+            const ph = normalized.map(() => '?').join(',');
+            const phPfx = prefixes.map(() => '?').join(',');
             const rows = await client.query(
               `SELECT ${cols} FROM dados_dachser.t_dados_financeiro_spo
-                WHERE UPPER(REPLACE(TRIM(numero_processo), ' ', '')) COLLATE utf8mb4_unicode_ci IN (${placeholders})
-                   OR (${findInSetClauses})`,
-              params
+                WHERE UPPER(TRIM(nd)) COLLATE utf8mb4_unicode_ci IN (${ph})
+                   OR SUBSTRING_INDEX(TRIM(nd), ' ', 1) COLLATE utf8mb4_unicode_ci IN (${phPfx})`,
+              [...normalized, ...prefixes]
             );
-            for (const r of (rows || [])) {
-              pushUnique(normProcesso(r.numero_processo), r);
-              if (r.detalhes) {
-                String(r.detalhes)
-                  .split(/[;,\n\r\t|]/)
-                  .map((t) => normProcesso(t))
-                  .filter(Boolean)
-                  .forEach((tok) => pushUnique(tok, r));
-              }
-            }
-
+            for (const r of (rows || [])) setKey(r);
           } catch (e) {
-            console.log('fetchSpoByProcesso error:', e);
+            console.log('fetchDfvBySpo error:', e);
           }
-
-          // Fallback: processos não encontrados em SPO → buscar em t_dados_financeiro_voucher
-          const missing = normalized.filter((p) => !byProcesso[p] || byProcesso[p].length === 0);
+          // Fallback em t_dados_financeiro_voucher para SPOs não encontrados em SPO.
+          const missing = normalized.filter((s) => !bySpo.has(s) && !bySpo.has(spoPrefix(s)));
           if (missing.length > 0) {
             try {
+              const missingPfx = Array.from(new Set(missing.map(spoPrefix).filter(Boolean)));
               const ph = missing.map(() => '?').join(',');
+              const phPfx = missingPfx.map(() => '?').join(',');
               const dfvRows = await client.query(
                 `SELECT id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
                         modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
                         valor_nf, moeda, cnpj, razao_social
                    FROM dados_dachser.t_dados_financeiro_voucher
-                  WHERE UPPER(REPLACE(TRIM(numero_processo), ' ', '')) COLLATE utf8mb4_unicode_ci IN (${ph})`,
-                missing
+                  WHERE UPPER(TRIM(nd)) COLLATE utf8mb4_unicode_ci IN (${ph})
+                     OR SUBSTRING_INDEX(TRIM(nd), ' ', 1) COLLATE utf8mb4_unicode_ci IN (${phPfx})`,
+                [...missing, ...missingPfx]
               );
-              for (const r of (dfvRows || [])) {
-                pushUnique(normProcesso(r.numero_processo), { ...r, detalhes: null });
-              }
-              console.log(`[fetchSpoByProcesso] fallback voucher: ${missing.length} solicitados, ${(dfvRows || []).length} encontrados`);
+              for (const r of (dfvRows || [])) setKey({ ...r, detalhes: null });
+              console.log(`[fetchDfvBySpo] fallback voucher: ${missing.length} solicitados, ${(dfvRows || []).length} encontrados`);
             } catch (e) {
-              console.log('fetchSpoByProcesso voucher-fallback error:', e);
+              console.log('fetchDfvBySpo voucher-fallback error:', e);
             }
           }
-
-          return { byProcesso };
+          return { bySpo };
         };
 
 
@@ -21438,34 +21420,23 @@ Deno.serve(async (req) => {
           return merged;
         };
 
-
         const buildPreviewItems = async (rows: any[]) => {
           const sheetRows = rows.map((r, i) => parseSheetRow(r, i));
-          // Chave de busca agora é o PROCESSO da planilha (não o SPO).
-          const processos = sheetRows.map((s) => s.processo).filter(Boolean) as string[];
-          const { byProcesso } = await fetchSpoByProcesso(processos);
+          // Chave de busca: número do SPO (ND) da planilha.
+          const spos = sheetRows.map((s) => s.spo).filter(Boolean) as string[];
+          const { bySpo } = await fetchDfvBySpo(spos);
           const results: any[] = [];
-          let nextRowIndex = sheetRows.length; // índices novos para linhas expandidas
           for (const s of sheetRows) {
-            if (!s.processo) { results.push(mergeWithDfv(s, null)); continue; }
-            const np = normProcesso(s.processo);
-            const candidates: any[] = byProcesso[np] || [];
-            if (candidates.length === 0) { results.push(mergeWithDfv(s, null)); continue; }
-            if (candidates.length === 1) { results.push(mergeWithDfv(s, candidates[0])); continue; }
-
-            // 2+ candidatos: sempre expande em N linhas (uma por SPO).
-            // O valor é sempre o do banco (mergeWithDfv já prioriza dfv.valor_nf).
-            candidates.forEach((c, k) => {
-              const expanded = { ...s };
-              if (k > 0) expanded.row_index = nextRowIndex++;
-              const merged = mergeWithDfv(expanded, c);
-              merged.expanded_from_processo = true;
-              merged.source_row_index = s.row_index;
-              results.push(merged);
-            });
+            if (!s.spo) { results.push(mergeWithDfv(s, null)); continue; }
+            const nsp = normSpo(s.spo);
+            const pfx = spoPrefix(s.spo);
+            const dfv = bySpo.get(nsp) || bySpo.get(pfx) || null;
+            results.push(mergeWithDfv(s, dfv));
           }
           return results;
         };
+
+
 
 
         const prettyEtapa = (raw: any): string => {

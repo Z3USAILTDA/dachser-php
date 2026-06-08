@@ -172,7 +172,7 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
       if (it.length === 0) {
         toast({
           title: "Nenhuma linha encontrada na planilha",
-          description: "Verifique se a planilha tem dados e se a coluna 'Processo' (ou 'SPO') está preenchida.",
+          description: "Verifique se a planilha tem dados e se a coluna 'SPO' (ou 'ND') está preenchida.",
           variant: "destructive",
         });
       } else if (missing.length) {
