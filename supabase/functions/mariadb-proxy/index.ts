@@ -21346,11 +21346,97 @@ Deno.serve(async (req) => {
         };
 
 
-...
-            });
+        // Merge sheet row + DFV. Returns resolved fields with origin per field.
+        const mergeWithDfv = (sheet: any, dfv: any | null) => {
+          const origin: Record<string, 'DFV' | 'PLANILHA' | null> = {};
+          const pick = (sheetVal: any, dfvVal: any, key: string): any => {
+            const sheetEmpty = sheetVal === null || sheetVal === undefined || sheetVal === '';
+            const dfvEmpty = dfvVal === null || dfvVal === undefined || dfvVal === '';
+            if (!dfvEmpty && sheetEmpty) { origin[key] = 'DFV'; return dfvVal; }
+            if (!sheetEmpty) { origin[key] = 'PLANILHA'; return sheetVal; }
+            origin[key] = null;
+            return null;
+          };
+          const dfvForma = dfv?.forma_pag ? (FORMA_MAP[String(dfv.forma_pag).toUpperCase()] || null) : null;
+          const dfvOrigem = dfv?.modal ? (ORIGEM_PROCESSO_MAP[String(dfv.modal).toUpperCase()] || null) : null;
+          const dfvVenc = dfv?.data_vencimento ? parseDate(dfv.data_vencimento) : null;
+          const dfvEmis = dfv?.data_emissao ? parseDate(dfv.data_emissao) : null;
+          const dfvCnpj = dfv?.cnpj ? String(dfv.cnpj).replace(/\D/g, '') || null : null;
+          const dfvFornecedor = dfv?.nome_beneficiario || dfv?.razao_social || null;
+          const dfvValor = dfv?.valor_nf != null ? Number(dfv.valor_nf) : null;
+          const dfvMoeda = dfv?.moeda ? String(dfv.moeda).toUpperCase() : null;
+          const dfvProcesso = dfv?.numero_processo || null;
+          const dfvFilial = dfv?.nome_cobranca || null;
+          const dfvTipoDoc = dfv?.tipo_pag ? String(dfv.tipo_pag).toUpperCase() : null;
+
+          const dfvSpo = dfv?.nd ? String(dfv.nd).trim() : null;
+          const resolvedSpo = (sheet.spo && String(sheet.spo).trim()) || dfvSpo || null;
+          if (!sheet.spo && dfvSpo) origin['spo'] = 'DFV';
+          else if (sheet.spo) origin['spo'] = 'PLANILHA';
+          else origin['spo'] = null;
+
+          const merged = {
+            row_index: sheet.row_index,
+            spo: resolvedSpo,
+            id_rm: dfv?.id_rm ?? null,
+            processo: pick(sheet.processo, dfvProcesso, 'processo'),
+            origem_processo: (() => { origin['origem_processo'] = 'PLANILHA'; return sheet.origem_processo || 'CHB'; })(),
+            fornecedor: dfvFornecedor,
+            cnpj_fornecedor: pick(sheet.cnpj_fornecedor, dfvCnpj, 'cnpj_fornecedor'),
+            valor: (() => {
+              if (dfvValor != null) { origin['valor'] = 'DFV'; return dfvValor; }
+              origin['valor'] = sheet.valor != null ? 'PLANILHA' : null;
+              return sheet.valor;
+            })(),
+            moeda: pick(sheet.moeda, dfvMoeda, 'moeda') || 'BRL',
+            vencimento: (() => { origin['vencimento'] = sheet.vencimento ? 'PLANILHA' : null; return sheet.vencimento; })(),
+            data_emissao: pick(sheet.data_emissao, dfvEmis, 'data_emissao'),
+            tipo_documento: (() => { origin['tipo_documento'] = sheet.tipo_documento ? 'PLANILHA' : null; return sheet.tipo_documento; })(),
+            filial: pick(sheet.filial, dfvFilial, 'filial'),
+            forma_pagamento: (() => { origin['forma_pagamento'] = sheet.forma_pagamento ? 'PLANILHA' : null; return sheet.forma_pagamento; })(),
+            cobranca_em_nome_de: (() => { origin['cobranca_em_nome_de'] = sheet.cobranca_em_nome_de ? 'PLANILHA' : null; return sheet.cobranca_em_nome_de || 'DACHSER'; })(),
+            urgente: !!sheet.urgente,
+            comentarios: sheet.comentarios,
+            fatura: sheet.fatura,
+            raw_json: sheet.raw_json,
+            field_origin: origin,
+          } as any;
+          if (!sheet.moeda && !dfvMoeda) origin['moeda'] = null;
+          origin['fornecedor'] = dfvFornecedor ? 'DFV' : null;
+          merged.dfv_found = !!dfv;
+
+          const errors: string[] = [];
+          if (!merged.spo) errors.push('SPO obrigatório');
+          if (!merged.processo) errors.push('processo obrigatório');
+          if (!merged.origem_processo) errors.push('origem do processo obrigatória');
+          if (!merged.fornecedor) errors.push('fornecedor obrigatório');
+          if (!merged.valor || merged.valor <= 0) errors.push('valor inválido');
+          if (!merged.vencimento) errors.push('vencimento obrigatório');
+          if (!merged.tipo_documento) errors.push('tipo de documento obrigatório');
+          if (!merged.forma_pagamento) errors.push('forma de pagamento obrigatória');
+          if (!merged.cobranca_em_nome_de) errors.push('contabilização fiscal obrigatória');
+          merged.status = errors.length ? 'ERROR' : 'VALID';
+          merged.validation_message = errors.length ? errors.join('; ') : null;
+          return merged;
+        };
+
+        const buildPreviewItems = async (rows: any[]) => {
+          const sheetRows = rows.map((r, i) => parseSheetRow(r, i));
+          // Chave de busca: número do SPO (ND) da planilha.
+          const spos = sheetRows.map((s) => s.spo).filter(Boolean) as string[];
+          const { bySpo } = await fetchDfvBySpo(spos);
+          const results: any[] = [];
+          for (const s of sheetRows) {
+            if (!s.spo) { results.push(mergeWithDfv(s, null)); continue; }
+            const nsp = normSpo(s.spo);
+            const pfx = spoPrefix(s.spo);
+            const dfv = bySpo.get(nsp) || bySpo.get(pfx) || null;
+            results.push(mergeWithDfv(s, dfv));
           }
           return results;
         };
+
+
 
 
         const prettyEtapa = (raw: any): string => {
