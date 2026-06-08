@@ -105,6 +105,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
   const [cnpjData, setCnpjData] = useState<CnpjDetail[]>([]);
   const [observacoes, setObservacoes] = useState<Record<string, string>>({});
   const [contatos, setContatos] = useState<Record<string, Contato[]>>({});
+  const [emailLogs, setEmailLogs] = useState<Record<string, Record<string, EmailLog[]>>>({});
   const [savingCnpj, setSavingCnpj] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
