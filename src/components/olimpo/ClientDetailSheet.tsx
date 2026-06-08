@@ -47,6 +47,15 @@ interface Contato {
   email_contato: string;
 }
 
+interface EmailLog {
+  id: number;
+  stage: string;
+  subject: string | null;
+  sent_at: string;
+  success: 0 | 1;
+  error_message: string | null;
+}
+
 interface AgingRow {
   product: string;
   cnpjs?: string[];
