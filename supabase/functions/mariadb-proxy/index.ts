@@ -537,6 +537,7 @@ Deno.serve(async (req) => {
       // Olimpo Cobrança shadow _cr (Fase 4.1 — leitura da view nova)
       'get_aging_overview_cr','get_aging_by_client_cr','get_client_cnpj_detail_cr',
       'get_client_faturas_cr','get_aging_analitico_cr','report_cnpjs_sem_email_cr',
+      'get_olimpo_email_logs_by_cnpj',
       // Supervisor tokens (aprovação fluxo voucher)
       'setup_supervisor_tokens_table','create_supervisor_token',
       'validate_supervisor_token','mark_supervisor_token_used',
@@ -18223,6 +18224,44 @@ Deno.serve(async (req) => {
         break;
       }
 
+
+      case 'get_olimpo_email_logs_by_cnpj': {
+        const { cnpj: logCnpj } = body as { cnpj?: string };
+        if (!logCnpj) { result = { success: false, error: 'cnpj required' }; break; }
+        const cnpjClean = String(logCnpj).replace(/\D/g, '');
+        if (!cnpjClean) { result = { success: true, logsByEmail: {} }; break; }
+        try {
+          const rows = await client.query(
+            `SELECT id, stage, LOWER(TRIM(email_to)) AS email_to, subject, sent_at, success, error_message
+             FROM ai_agente.t_financeiro_email_log
+             WHERE REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','') COLLATE utf8mb4_unicode_ci
+                 = ? COLLATE utf8mb4_unicode_ci
+             ORDER BY sent_at DESC
+             LIMIT 200`,
+            [cnpjClean]
+          );
+          const grouped: Record<string, any[]> = {};
+          for (const r of (rows || [])) {
+            const key = String(r.email_to || '').toLowerCase().trim();
+            if (!key) continue;
+            if (!grouped[key]) grouped[key] = [];
+            if (grouped[key].length >= 10) continue;
+            grouped[key].push({
+              id: r.id,
+              stage: r.stage,
+              subject: r.subject,
+              sent_at: r.sent_at,
+              success: Number(r.success) === 1 ? 1 : 0,
+              error_message: r.error_message,
+            });
+          }
+          result = { success: true, logsByEmail: grouped };
+        } catch (e: any) {
+          console.warn('[get_olimpo_email_logs_by_cnpj] error:', e?.message);
+          result = { success: true, logsByEmail: {} };
+        }
+        break;
+      }
 
       case 'get_client_faturas_cr': {
         const { clientName: fatClientName, page: fatPage = 1, pageSize: fatPageSize = 20 } = body as { clientName: string; page?: number; pageSize?: number };

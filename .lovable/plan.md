@@ -1,71 +1,89 @@
+# Histórico de envios da régua por e-mail no Olimpo
+
 ## Objetivo
 
-Eliminar a exceção que faz **`FAT_NF` (à vista)** cair em **D60 a partir de 45 dias**. Após a mudança, **D60 = `dias >= 60`** para todos os tipos de documento, e **D45 = `dias BETWEEN 45 AND 59`** também para todos (inclusive `FAT_NF`).
+No `ClientDetailSheet` (Olimpo › Cobrança › abrir cliente), a seção **"E-mails cadastrados"** mostra hoje apenas a lista de e-mails. Vou expandi-la para mostrar, **por e-mail**, o histórico real de disparos da régua a partir de `ai_agente.t_financeiro_email_log`:
 
-## Por que existia a exceção
+- Estágio (`PRE`, `D1`, `D7`, …) — coluna `stage`
+- Data/hora do envio — `sent_at`
+- Status — `success = 1` ✓ Enviado, `success = 0` ✗ Falhou (com `error_message` em tooltip)
+- Assunto — `subject` (apenas em tooltip, para não poluir)
 
-Hoje o código tem dois ramos no `CASE` (`tipo_documento = 'FAT_NF'` vs demais). No ramo do FAT_NF, **D45 é pulado** e D60 começa em 45 dias — partindo da premissa de que faturas à vista deveriam ser tratadas como críticas mais cedo. Você quer remover esse comportamento e usar a régua única (PRE/D1/D7/D15/D30/D45/D60) por janelas fixas de dias, sem distinção por tipo.
+Filtragem por **CNPJ + e-mail**, ordenado por `sent_at DESC`, **últimos 10 envios** por e-mail (suficiente para ver tendência sem virar lista infinita; se precisar de mais é caso para tela própria).
 
-## Resultado final (régua única)
+## UI
 
-| Estágio | Janela (todos os tipos) |
-|---|---|
-| PRE | `dias <= 0` |
-| D1  | `dias = 1` |
-| D7  | `7–14` |
-| D15 | `15–29` |
-| D30 | `30–44` |
-| **D45** | **`45–59`** |
-| **D60** | **`>= 60`** (cap externo `<= 120`) |
+Em cada `<li>` da lista de e-mails, abaixo do nome/e-mail, renderizar uma linha de "pílulas" — uma por envio recente — no formato:
 
-## Arquivos a alterar
+```
+[PRE · 08/06 21:33 ✓]  [D1 · 09/06 21:34 ✓]  [D7 · 15/06 21:34 ✗]
+```
 
-Três endpoints/funções têm a mesma lógica duplicada e precisam ser ajustados juntos para não desalinhar tela × e-mails × aging:
+- Verde para `success=1`, vermelho para `success=0`.
+- Tooltip do badge com erro mostra `error_message` e `subject`.
+- Se não houver envios: texto cinza pequeno "Sem envios registrados".
+- Loading: skeleton de 3 pílulas enquanto carrega.
 
-### 1. `supabase/functions/mariadb-proxy/index.ts` — `get_regua_counts_cr` (linhas 17760–17801)
+Sem alteração no resto da sheet (faturas, observação, aging continuam iguais).
 
-Remover o ramo `WHEN t.tipo_documento = 'FAT_NF' THEN ...` e manter **apenas** o ramo padrão (que já tem D45 = 45–59 e D60 ≥ 60). Ajustar também o filtro externo do `WHERE`: trocar
+## Backend — novo endpoint no `mariadb-proxy`
+
+Adicionar `action: "get_olimpo_email_logs_by_cnpj"` em `supabase/functions/mariadb-proxy/index.ts`:
+
+- Input: `{ cnpj: string }` (CNPJ já limpo, só dígitos — frontend hoje envia `cnpjClean`).
+- Query (banco financeiro):
+
 ```sql
-OR (t.tipo_documento <> 'FAT_NF' AND DATEDIFF(...) >= 61)
-OR (t.tipo_documento = 'FAT_NF' AND DATEDIFF(...) >= 45)
-```
-por uma única cláusula
-```sql
-OR DATEDIFF(CURDATE(), t.data_vencimento) >= 45
-```
-(suficiente para cobrir D45 e D60 sem o split).
-
-### 2. `supabase/functions/mariadb-proxy/index.ts` — `get_regua_stage_cr` (linhas 17819–17910)
-
-No `CASE` interno (linhas 17869–17889), remover o ramo `WHEN t.tipo_documento='FAT_NF' THEN ...` e manter só o ramo padrão (D7/D15/D30/D45/D60 já corretos). O filtro externo `(? IN ('PRE',...,'D45') AND ... <= ?) OR ? = 'D60'` continua válido.
-
-### 3. `supabase/functions/regua-send-emails/index.ts` (linhas ~420–436)
-
-Trocar o builder de cláusula `D45`/`D60`:
-
-```ts
-case 'D45':
-  return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59";
-case 'D60':
-  return "DATEDIFF(CURDATE(), t.data_vencimento) >= 60";
+SELECT
+  id,
+  stage,
+  email_to,
+  subject,
+  sent_at,
+  success,
+  error_message
+FROM ai_agente.t_financeiro_email_log
+WHERE REPLACE(REPLACE(REPLACE(cnpj, '.', ''), '/', ''), '-', '')
+      COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+ORDER BY sent_at DESC
+LIMIT 200
 ```
 
-Remover também o comentário "FAT_NF antecipa em 15 dias" (linha 420) para refletir a nova regra.
+- No handler, agrupar por `email_to` (normalizado em lowercase/trim) e devolver:
+  ```json
+  {
+    "success": true,
+    "logsByEmail": {
+      "lgasparino@z3us.ai": [
+        { "stage": "PRE", "sent_at": "...", "success": 1, "subject": "...", "error_message": null },
+        ...
+      ]
+    }
+  }
+  ```
+  Limitar a 10 entradas por e-mail no servidor (`logsByEmail[email] = arr.slice(0, 10)`).
 
-## Impactos a confirmar
+`stage`, `success`, `error_message` e `subject` saem direto do `t_financeiro_email_log` (conforme print enviado).
 
-- **Faturas FAT_NF com 45–59 dias** que hoje aparecem/recebem e-mail em **D60** passarão a aparecer em **D45** (mesmo template, contagem e e-mail diferentes do que recebem hoje).
-- **Faturas FAT_NF com ≥ 60 dias** continuam em D60 normalmente.
-- Os **templates de e-mail D45 e D60** (em `regua-send-emails`) já existem e serão usados para FAT_NF também — nada a criar.
-- Não há alteração de schema, view nem migration SQL: a mudança é 100% nos endpoints/edge functions.
+## Frontend — `src/components/olimpo/ClientDetailSheet.tsx`
 
-## Validação após implementar
+1. Novo estado: `const [emailLogs, setEmailLogs] = useState<Record<string, Record<string, EmailLog[]>>>({})` — chave externa = `cnpjClean`, interna = `email_to`.
+2. Carregar logs **junto com os contatos** dentro do `useEffect` existente que já chama `get_client_cnpj_detail_cr` (linhas ~120–140). Para cada CNPJ retornado, disparar `get_olimpo_email_logs_by_cnpj` em paralelo (`Promise.all`) e popular `emailLogs`.
+3. Na renderização (linhas ~310–317), abaixo de cada `<a mailto>`, adicionar componente inline que lê `emailLogs[cnpj.cnpjClean]?.[c.email_contato.toLowerCase().trim()]` e renderiza as pílulas.
+4. Formatador de data: reusar `Intl.DateTimeFormat('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })`.
 
-1. Abrir `/fin/regua` e conferir que os cards D45/D60 mudam de contagem (FAT_NF entre 45–59 saem do D60 e entram no D45).
-2. Rodar `get_regua_stage_cr` para `D45` e `D60` e confirmar que nenhuma fatura aparece nos dois.
-3. Disparar um envio de teste (`regua-send-emails`) em modo dry-run para D45 e D60 e conferir as faturas listadas.
+Sem novo arquivo — manter o componente das pílulas inline no `ClientDetailSheet.tsx` (são ~25 linhas de JSX).
 
 ## Fora do escopo
 
-- Filtro de **disputas** (`t_fin_disputas`) — assunto separado, já discutido.
-- Tornar os limites (45, 60, 120) configuráveis em tabela — não vou mexer agora.
+- Página dedicada de histórico completo (paginado).
+- Reenvio manual a partir da sheet.
+- Mudanças em `OlimpoCobranca.tsx` (tabela principal).
+- Mudanças no contador "ativo/inativo" — o usuário pediu para *substituir* a informação por algo mais rico; o status binário (ativo) deixa de existir nessa seção.
+
+## Validação
+
+1. Abrir Olimpo › Cobrança › clicar num cliente que tem envios no print (ex.: GEMU 77.152.338/0001-93) e conferir as pílulas com `PRE 08/06 21:33 ✓` e `D1 08/06 21:34 ✓`.
+2. Verificar tooltip com `subject` no hover.
+3. Cliente sem envios mostra "Sem envios registrados".
+4. Forçar `success=0` numa linha de teste e conferir badge vermelho + tooltip com `error_message`.
