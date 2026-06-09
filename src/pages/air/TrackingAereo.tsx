@@ -1055,6 +1055,24 @@ const TrackingAereo = () => {
                   </Select>
                 </div>
 
+                {/* Service filter */}
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+                    <Package className="h-3 w-3 text-[#ffc800]" />
+                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Serviço</span>
+                  </div>
+                  <Select value={filterService} onValueChange={(v) => { setFilterService(v); setCurrentPage(1); }}>
+                    <SelectTrigger className="h-8 w-[180px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border border-border z-50">
+                      <SelectItem value="all">Todos</SelectItem>
+                      {uniqueServices.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+
                 {/* Impo/Expo filter */}
                 <div className="flex items-center gap-1.5">
                   <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-background/80 border border-border/50">
