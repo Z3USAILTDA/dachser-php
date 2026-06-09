@@ -1382,6 +1382,11 @@ async function computePayload(): Promise<string> {
     const FORCED_CONNECTIONS_AWBS: Record<string, string> = {
       '873-20395233': 'BOG',
     };
+    // Manual override: force the displayed last event for specific AWBs (applies to ALL HAWBs of the master).
+    // Used when carrier timeline shows DLV at destination but a partial set of HAWBs is still in transit.
+    const FORCED_LAST_EVENT_AWBS: Record<string, { code: string; loc: string; date: string }> = {
+      '172-90556270': { code: 'RCF', loc: 'LUX', date: '08 Jun 2026 08:00' },
+    };
     const stopWordsConn = new Set([
       'NIL','NIF','DIS','OFD','OFL','BUP','RDP','LAT','TKG','SCR','ECC',
       'TFD','TRM','RFC','DMG','RET','AWB','PRE','DEP','ARR','RCF','RCS',
