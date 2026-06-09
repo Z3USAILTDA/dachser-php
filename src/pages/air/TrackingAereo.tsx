@@ -754,6 +754,12 @@ const TrackingAereo = () => {
     return Array.from(s).sort();
   }, [awbsData]);
 
+  const uniqueServices = useMemo(() => {
+    const s = new Set<string>();
+    awbsData.forEach(a => { if (a.tipo_servico && a.tipo_servico.trim()) s.add(a.tipo_servico.trim()); });
+    return Array.from(s).sort();
+  }, [awbsData]);
+
   // ─── Sort handlers ───
   const handleAwbSort = () => { setSortAnalyst(null); setSortClient(null); setSortLastCheck(null); setSortAwb(prev => prev === null ? "asc" : prev === "asc" ? "desc" : null); };
   const handleClientSort = () => { setSortAnalyst(null); setSortAwb(null); setSortLastCheck(null); setSortClient(prev => prev === null ? "asc" : prev === "asc" ? "desc" : null); };
@@ -781,14 +787,15 @@ const TrackingAereo = () => {
       (awb.nome_analista && awb.nome_analista.toLowerCase().includes(sl));
     const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
     const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
+    const matchesService = filterService === "all" || (awb.tipo_servico || "").trim() === filterService;
     const BR_AIRPORTS = ['GRU','VCP','CGH','GIG','SDU','BSB','CNF','POA','CWB','REC','SSA','FOR','BEL','MAO','NAT','MCZ','FLN','VIX','CGB','GYN','SLZ','THE','AJU','JPA','PMW','PVH','RBR','BVB','MCP','CGR','LDB','MGF','IGU','NVT','JOI','XAP','UDI','RAO','SJP','PPB','BAU','CPQ','QPS','SOD','MAB','STM','SJK','PNZ'];
     const destCode = (awb.destino || '').toUpperCase().trim();
     const isImport = BR_AIRPORTS.includes(destCode);
     const matchesType = filterProcessType === "all" ||
       (filterProcessType === "import" && isImport) ||
       (filterProcessType === "export" && !isImport);
-    return matchesSearch && matchesAirline && matchesAnalyst && matchesType;
-  }, [searchTerm, filterAirline, filterAnalyst, filterProcessType]);
+    return matchesSearch && matchesAirline && matchesAnalyst && matchesService && matchesType;
+  }, [searchTerm, filterAirline, filterAnalyst, filterService, filterProcessType]);
 
   // ─── Discrepância de troca de master: Set "AWB|HAWB" pendentes ───
   const discrepancyKeys = useMemo(() => {
@@ -1048,6 +1055,24 @@ const TrackingAereo = () => {
                   </Select>
                 </div>
 
+                {/* Service filter */}
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+                    <Package className="h-3 w-3 text-[#ffc800]" />
+                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Serviço</span>
+                  </div>
+                  <Select value={filterService} onValueChange={(v) => { setFilterService(v); setCurrentPage(1); }}>
+                    <SelectTrigger className="h-8 w-[180px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border border-border z-50">
+                      <SelectItem value="all">Todos</SelectItem>
+                      {uniqueServices.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+
                 {/* Impo/Expo filter */}
                 <div className="flex items-center gap-1.5">
                   <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-background/80 border border-border/50">
@@ -1117,15 +1142,15 @@ const TrackingAereo = () => {
                         <span className="flex items-center gap-1">AWB {sortAwb === "asc" && <span className="text-[#ffc800]">↑</span>}{sortAwb === "desc" && <span className="text-[#ffc800]">↓</span>}</span>
                       </th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">HAWB</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Serviço</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition" onClick={handleClientSort}>
                         <span className="flex items-center gap-1">Cliente {sortClient === "asc" && <span className="text-[#ffc800]">↑</span>}{sortClient === "desc" && <span className="text-[#ffc800]">↓</span>}</span>
                       </th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Rota</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Rastreio</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Último Evento</th>
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Data/Hora</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">ETA/ETD</th>
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Situação</th>
-                      <th className="px-3 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">SLA</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition" onClick={handleAnalystSort}>
                         <span className="flex items-center gap-1">Analista {sortAnalyst === "asc" && <span className="text-[#ffc800]">↑</span>}{sortAnalyst === "desc" && <span className="text-[#ffc800]">↓</span>}</span>
                       </th>
@@ -1253,6 +1278,8 @@ const TrackingAereo = () => {
 
                           {/* HAWB */}
                           <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem] whitespace-nowrap">{awb.hawb || "-"}</td>
+                          {/* Serviço */}
+                          <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem] whitespace-nowrap">{awb.tipo_servico || "-"}</td>
                           {/* Cliente */}
                           <td className="px-4 py-3">
                             <div className="text-[#f5f5f5] text-[0.8rem] uppercase">{abbreviateName(awb.consignee_name)}</div>
@@ -1325,9 +1352,9 @@ const TrackingAereo = () => {
                               )}
                             </div>
                           </td>
-                          {/* Data/Hora */}
+                          {/* ETA/ETD */}
                           <td className="px-3 py-3 text-[#aaaaaa] text-sm whitespace-nowrap">
-                            {formatDateTimeBR(awb.last_event_date)}
+                            {formatDateTimeBR(awb.etd)}
                           </td>
                           {/* Situação */}
                           <td className="px-3 py-3 text-center">
@@ -1379,26 +1406,6 @@ const TrackingAereo = () => {
                                 No Prazo
                               </span>
                             )}
-                          </td>
-                          {/* SLA */}
-                          <td className="px-3 py-3 text-center">
-                            {(() => {
-                              const slaCor = awb.sla_cor;
-                              // Post-arrival/final statuses show green check
-                              if (slaCor === 'VERDE' && !awb.sla_tempo_formatado) return <span className="text-green-400 text-sm">✓</span>;
-                              if (!awb.sla_tempo_formatado) return <span className="text-muted-foreground text-xs">—</span>;
-                              const color = slaCor === 'VERMELHO' ? "text-red-400 bg-red-500/15 border-red-500/30" : slaCor === 'AMARELO' ? "text-amber-400 bg-amber-500/15 border-amber-500/30" : "text-green-400 bg-green-500/15 border-green-500/30";
-                              return (
-                                <TooltipProvider><Tooltip><TooltipTrigger asChild>
-                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.7rem] font-semibold border ${color}`}>
-                                    <Clock className="w-3 h-3" />{awb.sla_tempo_formatado}
-                                  </span>
-                                </TooltipTrigger><TooltipContent>
-                                  <p className="text-xs">SLA: {statusCode} — limite {awb.sla_limite_horas || '—'}h</p>
-                                  <p className="text-xs text-muted-foreground">{awb.sla_tooltip || '—'}</p>
-                                </TooltipContent></Tooltip></TooltipProvider>
-                              );
-                            })()}
                           </td>
                           {/* Analista */}
                           <td className="px-3 py-3 text-[#aaaaaa] text-sm uppercase">{awb.nome_analista || "-"}</td>
