@@ -971,6 +971,8 @@ async function computePayload(): Promise<string> {
           FROM dados_dachser.t_dados_aereo tda
           INNER JOIN dados_dachser.t_fato_aereo tdaf
             ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
+           AND JSON_VALID(tdaf.hawbs_json)
+           AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
           WHERE tdaf.timeline_json IS NOT NULL
             AND JSON_VALID(tdaf.timeline_json)
             ${awbInClauseRoute}
