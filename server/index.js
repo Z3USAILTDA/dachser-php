@@ -223,7 +223,7 @@ app.get('/tracking-aereo', async (req, res) => {
           WITH base_disc AS (
             SELECT tda.awb_number AS awb, tda.hawb_number AS hawb, tdaf.timeline_json
             FROM dados_dachser.t_dados_aereo tda
-            INNER JOIN dados_dachser.t_fato_aereo tdaf ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
+            INNER JOIN dados_dachser.t_fato_aereo tdaf ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci AND JSON_VALID(tdaf.hawbs_json) AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
             WHERE (tda.master_insert>='2026-03-20' OR tda.created_at>='2026-03-20') ${awbInClause} AND tdaf.timeline_json IS NOT NULL AND JSON_VALID(tdaf.timeline_json)
           ),
           eventos_disc AS (
