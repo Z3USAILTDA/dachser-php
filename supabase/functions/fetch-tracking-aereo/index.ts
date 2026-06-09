@@ -1500,6 +1500,15 @@ async function computePayload(): Promise<string> {
         // Without routeEntry, ambiguous — leave as ARR rather than guess CONEXÃO
       }
 
+      // Manual override: force last event (code + location + date) for whitelisted AWBs.
+      // Applies to ALL HAWBs of the master and takes priority over timeline election.
+      const forcedLast = FORCED_LAST_EVENT_AWBS[awbStr];
+      if (forcedLast) {
+        finalCode = forcedLast.code;
+        electedLoc = forcedLast.loc;
+        electedDate = forcedLast.date;
+      }
+
       // Date for the elected slot — prefer SQL slot date, then time-augmented row.date0/time0
       let dateStr: string | null = electedDate || null;
       if (!dateStr) {
