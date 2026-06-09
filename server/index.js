@@ -579,6 +579,7 @@ app.get('/tracking-aereo', async (req, res) => {
 
       data.push({
         awb_number:row.AWB||'', hawb_number:row.HAWB||'', consignee_nome:row.CLIENTE||clienteMap[row.HAWB]||'',
+        tipo_servico:row.TIPO_SERVICO||'', etd:row.ETD||null,
         clerk:row.ANALISTA||'', origin:finalOrigin, destination:finalDestination, conexao:finalConexao,
         route_status:routeEntry?.status||null, timeline_json:timeline,
         last_event:finalCode||'', last_event_description:eventMap[finalCode]?.descricao_en||'',
