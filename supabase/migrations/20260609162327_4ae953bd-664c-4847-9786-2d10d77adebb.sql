@@ -1,0 +1,1 @@
+DELETE FROM public.air_tracking_cache WHERE cache_key = 'payload';
