@@ -1476,8 +1476,8 @@ async function computePayload(): Promise<string> {
       }
 
       // Use elected slot's loc/date/desc as the "current" event surface
-      const electedLoc = top.loc || row.loc0 || "";
-      const electedDate = top.date || row.date0 || "";
+      let electedLoc = top.loc || row.loc0 || "";
+      let electedDate = top.date || row.date0 || "";
 
       // Enrich ARR with destination context.
       // CONEXÃO is only set when destination is authoritatively known (routeEntry) to avoid
