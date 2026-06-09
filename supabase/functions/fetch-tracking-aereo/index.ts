@@ -1676,6 +1676,8 @@ async function computePayload(): Promise<string> {
         awb_number: row.AWB || "",
         hawb_number: row.HAWB || "",
         consignee_nome: row.CLIENTE || clienteMap[row.HAWB] || "",
+        tipo_servico: row.TIPO_SERVICO || "",
+        etd: row.ETD || null,
         clerk: row.ANALISTA || "",
         origin: finalOrigin,
         destination: finalDestination,
