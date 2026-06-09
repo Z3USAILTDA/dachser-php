@@ -149,8 +149,6 @@ app.get('/tracking-aereo', async (req, res) => {
         from dados_dachser.t_dados_aereo tda
         left join dados_dachser.t_fato_aereo tdaf
             on tdaf.awb collate utf8mb4_unicode_ci = tda.awb_number collate utf8mb4_unicode_ci
-           and json_valid(tdaf.hawbs_json)
-           and json_contains(tdaf.hawbs_json, json_array(tda.hawb_number))
         where (tda.master_insert >= '2026-03-20' or tda.created_at >= '2026-03-20')
       ),
       event_time as (
