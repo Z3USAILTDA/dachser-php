@@ -1278,6 +1278,8 @@ const TrackingAereo = () => {
 
                           {/* HAWB */}
                           <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem] whitespace-nowrap">{awb.hawb || "-"}</td>
+                          {/* Serviço */}
+                          <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem] whitespace-nowrap">{awb.tipo_servico || "-"}</td>
                           {/* Cliente */}
                           <td className="px-4 py-3">
                             <div className="text-[#f5f5f5] text-[0.8rem] uppercase">{abbreviateName(awb.consignee_name)}</div>
