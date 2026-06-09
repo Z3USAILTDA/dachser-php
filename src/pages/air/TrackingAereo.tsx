@@ -1352,9 +1352,9 @@ const TrackingAereo = () => {
                               )}
                             </div>
                           </td>
-                          {/* Data/Hora */}
+                          {/* ETA/ETD */}
                           <td className="px-3 py-3 text-[#aaaaaa] text-sm whitespace-nowrap">
-                            {formatDateTimeBR(awb.last_event_date)}
+                            {formatDateTimeBR(awb.etd)}
                           </td>
                           {/* Situação */}
                           <td className="px-3 py-3 text-center">
@@ -1406,26 +1406,6 @@ const TrackingAereo = () => {
                                 No Prazo
                               </span>
                             )}
-                          </td>
-                          {/* SLA */}
-                          <td className="px-3 py-3 text-center">
-                            {(() => {
-                              const slaCor = awb.sla_cor;
-                              // Post-arrival/final statuses show green check
-                              if (slaCor === 'VERDE' && !awb.sla_tempo_formatado) return <span className="text-green-400 text-sm">✓</span>;
-                              if (!awb.sla_tempo_formatado) return <span className="text-muted-foreground text-xs">—</span>;
-                              const color = slaCor === 'VERMELHO' ? "text-red-400 bg-red-500/15 border-red-500/30" : slaCor === 'AMARELO' ? "text-amber-400 bg-amber-500/15 border-amber-500/30" : "text-green-400 bg-green-500/15 border-green-500/30";
-                              return (
-                                <TooltipProvider><Tooltip><TooltipTrigger asChild>
-                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.7rem] font-semibold border ${color}`}>
-                                    <Clock className="w-3 h-3" />{awb.sla_tempo_formatado}
-                                  </span>
-                                </TooltipTrigger><TooltipContent>
-                                  <p className="text-xs">SLA: {statusCode} — limite {awb.sla_limite_horas || '—'}h</p>
-                                  <p className="text-xs text-muted-foreground">{awb.sla_tooltip || '—'}</p>
-                                </TooltipContent></Tooltip></TooltipProvider>
-                              );
-                            })()}
                           </td>
                           {/* Analista */}
                           <td className="px-3 py-3 text-[#aaaaaa] text-sm uppercase">{awb.nome_analista || "-"}</td>
