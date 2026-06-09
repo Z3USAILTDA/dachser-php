@@ -754,6 +754,12 @@ const TrackingAereo = () => {
     return Array.from(s).sort();
   }, [awbsData]);
 
+  const uniqueServices = useMemo(() => {
+    const s = new Set<string>();
+    awbsData.forEach(a => { if (a.tipo_servico && a.tipo_servico.trim()) s.add(a.tipo_servico.trim()); });
+    return Array.from(s).sort();
+  }, [awbsData]);
+
   // ─── Sort handlers ───
   const handleAwbSort = () => { setSortAnalyst(null); setSortClient(null); setSortLastCheck(null); setSortAwb(prev => prev === null ? "asc" : prev === "asc" ? "desc" : null); };
   const handleClientSort = () => { setSortAnalyst(null); setSortAwb(null); setSortLastCheck(null); setSortClient(prev => prev === null ? "asc" : prev === "asc" ? "desc" : null); };
