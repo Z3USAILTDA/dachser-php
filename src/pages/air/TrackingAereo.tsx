@@ -542,6 +542,8 @@ const TrackingAereo = () => {
         hawb: item.hawb_number || "",
         airline_code: (item.awb_number || "").substring(0, 3),
         consignee_name: item.consignee_nome || "",
+        tipo_servico: item.tipo_servico || "",
+        etd: item.etd || null,
         last_event: lastEvent,
         status: statusCode,
         nome_analista: item.clerk || "",
