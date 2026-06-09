@@ -1142,15 +1142,15 @@ const TrackingAereo = () => {
                         <span className="flex items-center gap-1">AWB {sortAwb === "asc" && <span className="text-[#ffc800]">↑</span>}{sortAwb === "desc" && <span className="text-[#ffc800]">↓</span>}</span>
                       </th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">HAWB</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Serviço</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition" onClick={handleClientSort}>
                         <span className="flex items-center gap-1">Cliente {sortClient === "asc" && <span className="text-[#ffc800]">↑</span>}{sortClient === "desc" && <span className="text-[#ffc800]">↓</span>}</span>
                       </th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Rota</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Rastreio</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Último Evento</th>
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Data/Hora</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">ETA/ETD</th>
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Situação</th>
-                      <th className="px-3 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">SLA</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition" onClick={handleAnalystSort}>
                         <span className="flex items-center gap-1">Analista {sortAnalyst === "asc" && <span className="text-[#ffc800]">↑</span>}{sortAnalyst === "desc" && <span className="text-[#ffc800]">↓</span>}</span>
                       </th>
