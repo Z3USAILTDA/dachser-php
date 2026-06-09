@@ -588,7 +588,7 @@ const TrackingAereo = () => {
   }, []);
 
   // Fetch data — tries local server first, Supabase as fallback
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (force = false) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     setIsLoadingData(true);
@@ -606,7 +606,11 @@ const TrackingAereo = () => {
       try {
         const controller = new AbortController();
         const tid = setTimeout(() => controller.abort(), 2000);
-        const res = await fetch("/api/tracking-aereo", { signal: controller.signal });
+        const url = force ? "/api/tracking-aereo?force=1" : "/api/tracking-aereo";
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: force ? { "cache-control": "no-cache", "pragma": "no-cache" } : {},
+        });
         clearTimeout(tid);
         if (res.ok) {
           const body = await res.json();
@@ -619,7 +623,9 @@ const TrackingAereo = () => {
       // 2) Fallback: Supabase edge function (original simple call that was working)
       if (items === null) {
         try {
-          const { data, error } = await supabase.functions.invoke("fetch-tracking-aereo");
+          const { data, error } = await supabase.functions.invoke("fetch-tracking-aereo", {
+            headers: force ? { "cache-control": "no-cache", "pragma": "no-cache" } : undefined,
+          });
           if (!error && data?.success && Array.isArray(data?.data)) items = data.data;
         } catch {
           // Supabase also unavailable
