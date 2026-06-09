@@ -1382,6 +1382,11 @@ async function computePayload(): Promise<string> {
     const FORCED_CONNECTIONS_AWBS: Record<string, string> = {
       '873-20395233': 'BOG',
     };
+    // Manual override: force the displayed last event for specific AWBs (applies to ALL HAWBs of the master).
+    // Used when carrier timeline shows DLV at destination but a partial set of HAWBs is still in transit.
+    const FORCED_LAST_EVENT_AWBS: Record<string, { code: string; loc: string; date: string }> = {
+      '172-90556270': { code: 'RCF', loc: 'LUX', date: '08 Jun 2026 08:00' },
+    };
     const stopWordsConn = new Set([
       'NIL','NIF','DIS','OFD','OFL','BUP','RDP','LAT','TKG','SCR','ECC',
       'TFD','TRM','RFC','DMG','RET','AWB','PRE','DEP','ARR','RCF','RCS',
@@ -1471,8 +1476,8 @@ async function computePayload(): Promise<string> {
       }
 
       // Use elected slot's loc/date/desc as the "current" event surface
-      const electedLoc = top.loc || row.loc0 || "";
-      const electedDate = top.date || row.date0 || "";
+      let electedLoc = top.loc || row.loc0 || "";
+      let electedDate = top.date || row.date0 || "";
 
       // Enrich ARR with destination context.
       // CONEXÃO is only set when destination is authoritatively known (routeEntry) to avoid
@@ -1493,6 +1498,15 @@ async function computePayload(): Promise<string> {
           finalCode = "ARR - CONEXÃO";
         }
         // Without routeEntry, ambiguous — leave as ARR rather than guess CONEXÃO
+      }
+
+      // Manual override: force last event (code + location + date) for whitelisted AWBs.
+      // Applies to ALL HAWBs of the master and takes priority over timeline election.
+      const forcedLast = FORCED_LAST_EVENT_AWBS[awbStr];
+      if (forcedLast) {
+        finalCode = forcedLast.code;
+        electedLoc = forcedLast.loc;
+        electedDate = forcedLast.date;
       }
 
       // Date for the elected slot — prefer SQL slot date, then time-augmented row.date0/time0
