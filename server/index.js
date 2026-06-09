@@ -117,6 +117,7 @@ app.get('/tracking-aereo', async (req, res) => {
     const sql = `
       with base as (
         select tda.awb_number as AWB, tda.hawb_number as HAWB, tda.consignee_nome as CLIENTE,
+            tda.tipo_servico as TIPO_SERVICO, tda.etd as ETD,
             tdaf.origin as ORIGEM, tdaf.destination as DESTINO, tda.clerk as ANALISTA,
             tdaf.last_status_code,
             tdaf.timeline_json as TIMELINE,
@@ -578,6 +579,7 @@ app.get('/tracking-aereo', async (req, res) => {
 
       data.push({
         awb_number:row.AWB||'', hawb_number:row.HAWB||'', consignee_nome:row.CLIENTE||clienteMap[row.HAWB]||'',
+        tipo_servico:row.TIPO_SERVICO||'', etd:row.ETD||null,
         clerk:row.ANALISTA||'', origin:finalOrigin, destination:finalDestination, conexao:finalConexao,
         route_status:routeEntry?.status||null, timeline_json:timeline,
         last_event:finalCode||'', last_event_description:eventMap[finalCode]?.descricao_en||'',
