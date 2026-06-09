@@ -388,8 +388,6 @@ async function computePayload(): Promise<string> {
         from dados_dachser.t_dados_aereo tda
         left join dados_dachser.t_fato_aereo tdaf
             on tdaf.awb collate utf8mb4_unicode_ci = tda.awb_number collate utf8mb4_unicode_ci
-           and json_valid(tdaf.hawbs_json)
-           and json_contains(tdaf.hawbs_json, json_array(tda.hawb_number))
         where
             (tda.master_insert >= '2026-03-20' or tda.created_at >= '2026-03-20')
       ),
@@ -616,8 +614,6 @@ async function computePayload(): Promise<string> {
               FROM dados_dachser.t_dados_aereo tda
               INNER JOIN dados_dachser.t_fato_aereo tdaf
                 ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
-               AND JSON_VALID(tdaf.hawbs_json)
-               AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
               WHERE (tda.master_insert >= '2026-03-20' OR tda.created_at >= '2026-03-20')
                 ${awbInClause}
                 AND tdaf.timeline_json IS NOT NULL
@@ -813,8 +809,6 @@ async function computePayload(): Promise<string> {
             FROM dados_dachser.t_dados_aereo tda
             INNER JOIN dados_dachser.t_fato_aereo tdaf
               ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
-             AND JSON_VALID(tdaf.hawbs_json)
-             AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
             WHERE tda.awb_number LIKE '996-%'
               AND (tda.master_insert >= '2026-03-20' OR tda.created_at >= '2026-03-20')
               AND tdaf.timeline_json IS NOT NULL
@@ -973,8 +967,6 @@ async function computePayload(): Promise<string> {
           FROM dados_dachser.t_dados_aereo tda
           INNER JOIN dados_dachser.t_fato_aereo tdaf
             ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci
-           AND JSON_VALID(tdaf.hawbs_json)
-           AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
           WHERE tdaf.timeline_json IS NOT NULL
             AND JSON_VALID(tdaf.timeline_json)
             ${awbInClauseRoute}
