@@ -353,6 +353,8 @@ async function computePayload(): Promise<string> {
             tda.awb_number as AWB,
             tda.hawb_number as HAWB,
             tda.consignee_nome as CLIENTE,
+            tda.tipo_servico as TIPO_SERVICO,
+            tda.etd as ETD,
             tdaf.origin as ORIGEM,
             tdaf.destination as DESTINO,
             tda.clerk as ANALISTA,
