@@ -695,7 +695,7 @@ export default function OlimpoCobranca() {
           <KpiCard icon={DollarSign} label="Total Receivable" value={formatCompact(totalReceivable)} loading={loading} />
           <KpiCard icon={AlertTriangle} label="Total Overdue" value={formatCompact(totalOverdue)} loading={loading} accent />
           <KpiCard icon={TrendingUp} label="% Overdue" value={`${pctOverdue}%`} loading={loading} />
-          <KpiCard icon={Clock} label="Último Registro" value={data?.lastUpdate ? new Date(data.lastUpdate).toLocaleString("pt-BR") : "—"} loading={loading} />
+          <KpiCard icon={Clock} label="Último Registro" value={data?.lastUpdate ? (() => { const ymd = String(data.lastUpdate).slice(0, 10); const [y, m, d] = ymd.split("-"); return d && m && y ? `${d}/${m}/${y}` : "—"; })() : "—"} loading={loading} />
         </div>
 
 
