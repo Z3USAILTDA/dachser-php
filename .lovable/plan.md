@@ -1,31 +1,49 @@
-## Causa do erro
+## Problema
 
-`/regua` e `/olimpo` quebraram com:
+No card "Último Registro" em `/olimpo/cobranca` aparece `09/06/2026, 21:00:00` quando o `MAX(datavalidade)` da base é `10/06/2026`.
+
+Causa: o valor `data.lastUpdate` chega como `2026-06-10T00:00:00Z` (a coluna `datavalidade` é DATE; o driver/serializador adiciona `Z`). O código atual faz:
+
+```ts
+new Date(data.lastUpdate).toLocaleString("pt-BR")
 ```
-Unknown column 't.dataprevbaixa' in 'field list'
+
+Isso interpreta a string como UTC e converte para São Paulo (UTC-3), gerando `09/06/2026 21:00:00`.
+
+## Correção (cirúrgica, somente UI)
+
+Arquivo: `src/pages/olimpo/OlimpoCobranca.tsx`, linha 698.
+
+Trocar:
+
+```tsx
+value={data?.lastUpdate ? new Date(data.lastUpdate).toLocaleString("pt-BR") : "—"}
 ```
 
-A view `dados_dachser.v_fin_regua_contas_receber` renomeia a coluna para `data_prev_baixa` (com underscores). A coluna `dataprevbaixa` existe na **tabela base** `t_dados_financeiro_contas_receber`. No ajuste anterior, troquei o nome para `dataprevbaixa` mantendo a query lendo da view — por isso quebrou.
+por uma formatação date-only que extrai apenas `YYYY-MM-DD` antes de formatar (igual à abordagem já usada em `ReguaCobranca.tsx`):
 
-A action `get_financeiro_nfs_stats_cr` continua funcionando porque só usa `datavalidade` (nome igual em ambas).
+```tsx
+value={
+  data?.lastUpdate
+    ? (() => {
+        const ymd = String(data.lastUpdate).slice(0, 10); // "YYYY-MM-DD"
+        const [y, m, d] = ymd.split("-");
+        return d && m && y ? `${d}/${m}/${y}` : "—";
+      })()
+    : "—"
+}
+```
 
-## Correção (cirúrgica)
-
-Em `supabase/functions/mariadb-proxy/index.ts`, no bloco dos `_cr` (≈ linhas 17758–18402), trocar a origem das queries da view para a tabela base, para usar a coluna `dataprevbaixa` que a régua exige como verdade:
-
-- `FROM dados_dachser.v_fin_regua_contas_receber t` → `FROM dados_dachser.t_dados_financeiro_contas_receber t`
-- Manter as referências `t.dataprevbaixa` como já estão.
-- Manter os mesmos filtros `NOT EXISTS` / `WHERE` existentes.
-- Preservar o alias `AS data_vencimento` no SELECT para compatibilidade do frontend.
-- `get_financeiro_nfs_stats_cr` (que agrega `MAX(datavalidade)`): também trocar para a tabela base — ambas têm `datavalidade`, mas a verdade temporal pedida vem da base.
-
-Após editar: redeploy do `mariadb-proxy` e validação dos 4 endpoints `_cr` retornando `success:true`:
-- `get_aging_overview_cr`
-- `get_aging_by_client_cr`
-- `get_aging_analitico_cr`
-- `get_regua_cobranca_data_cr`
-- `get_financeiro_nfs_stats_cr`
+Resultado: exibirá `10/06/2026` (sem hora), refletindo exatamente a `datavalidade` mais recente retornada pelo backend.
 
 ## Fora de escopo
 
-Sem mudanças em UI, tipos, fluxo de voucher, esteira, RLS, banco ou autenticação.
+- Não alterar backend, `mariadb-proxy`, views, RLS, banco ou autenticação.
+- Não alterar outras telas (Régua já formata corretamente como data).
+- Sem mudanças em tipos, fluxo de voucher ou esteira.
+
+## Validação
+
+1. Abrir `/olimpo/cobranca`.
+2. Conferir card "Último Registro" → `10/06/2026` (sem hora).
+3. Conferir que os demais cards/tabelas continuam carregando normalmente (nenhuma outra linha foi tocada).
