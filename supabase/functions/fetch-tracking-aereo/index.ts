@@ -1513,9 +1513,25 @@ async function computePayload(): Promise<string> {
       const forcedLast = FORCED_LAST_EVENT_AWBS[awbStr];
       if (forcedLast) {
         finalCode = forcedLast.code;
-        electedLoc = forcedLast.loc;
-        electedDate = forcedLast.date;
+        let forcedLoc = forcedLast.loc;
+        let forcedDate = forcedLast.date;
+        // Resolve loc/date from the carrier timeline when not provided: scan for the
+        // most recent event whose resolved code matches forcedLast.code (timeline is
+        // ordered newest-first).
+        if ((!forcedLoc || !forcedDate) && timeline && timeline.length > 0) {
+          for (const evt of timeline) {
+            const evtCode = resolveCode(evt.description || "");
+            if (evtCode === forcedLast.code) {
+              if (!forcedLoc) forcedLoc = extractIATA(evt.location || "") || (evt.location || "").trim().toUpperCase();
+              if (!forcedDate) forcedDate = (evt.date || "").trim();
+              break;
+            }
+          }
+        }
+        electedLoc = forcedLoc || electedLoc;
+        electedDate = forcedDate || electedDate;
       }
+
 
       // Date for the elected slot — prefer SQL slot date, then time-augmented row.date0/time0
       let dateStr: string | null = electedDate || null;
