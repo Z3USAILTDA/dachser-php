@@ -413,6 +413,9 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                   <SortableHeader field="numeroSPO">Nº Voucher (SPO)</SortableHeader>
                 </TableHead>
                 <TableHead>Processo</TableHead>
+                <TableHead>Ref. Fornecedor</TableHead>
+                <TableHead>MAWB/MBL</TableHead>
+
                 
                 <TableHead>
                   <SortableHeader field="fornecedor">Fornecedor</SortableHeader>
