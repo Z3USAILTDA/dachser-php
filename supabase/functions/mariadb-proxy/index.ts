@@ -17751,7 +17751,7 @@ Deno.serve(async (req) => {
 
       // ====================================================================
       // RÉGUA SHADOW _cr — Fase 1 da migração para t_dados_financeiro_contas_receber
-      // Origem: VIEW dados_dachser.v_fin_regua_contas_receber
+      // Origem: VIEW dados_dachser.t_dados_financeiro_contas_receber
       // Regras:
       //  - Mesmo SHAPE de retorno dos endpoints atuais (sem FORA_DA_REGUA em counts_cr).
       //  - Soft delete via NOT EXISTS em sd.documento = doc_key (CR|idlan), sd.active = 0.
@@ -17779,7 +17779,7 @@ Deno.serve(async (req) => {
                 ELSE NULL
               END AS stage,
               t.valor_nf
-            FROM dados_dachser.v_fin_regua_contas_receber t
+            FROM dados_dachser.t_dados_financeiro_contas_receber t
             WHERE NOT EXISTS (
                 SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
                 WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
@@ -17852,7 +17852,7 @@ Deno.serve(async (req) => {
             t.master,
             t.house,
             t.status_lancamento
-          FROM dados_dachser.v_fin_regua_contas_receber t
+          FROM dados_dachser.t_dados_financeiro_contas_receber t
           WHERE NOT EXISTS (
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
@@ -17915,7 +17915,7 @@ Deno.serve(async (req) => {
             t.razao_social,
             t.cnpj,
             COUNT(*) AS qtd_faturas
-          FROM dados_dachser.v_fin_regua_contas_receber t
+          FROM dados_dachser.t_dados_financeiro_contas_receber t
           WHERE NOT EXISTS (
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
@@ -17935,11 +17935,11 @@ Deno.serve(async (req) => {
       }
 
       case 'get_financeiro_nfs_stats_cr': {
-        console.log('[get_financeiro_nfs_stats_cr] Fetching stats from v_fin_regua_contas_receber...');
+        console.log('[get_financeiro_nfs_stats_cr] Fetching stats from t_dados_financeiro_contas_receber...');
 
         const statsResult = await client.query(`
           SELECT COUNT(*) AS total_records, SUM(valor_nf) AS total_open_amount, MAX(datavalidade) AS last_update
-          FROM dados_dachser.v_fin_regua_contas_receber
+          FROM dados_dachser.t_dados_financeiro_contas_receber
         `);
 
         const lastUpdate = statsResult[0]?.last_update || null;
@@ -17957,7 +17957,7 @@ Deno.serve(async (req) => {
 
       // ====================================================================
       // OLIMPO COBRANÇA — Shadow _cr (Fase 4.1)
-      // Fonte: dados_dachser.v_fin_regua_contas_receber
+      // Fonte: dados_dachser.t_dados_financeiro_contas_receber
       // Regras:
       //  - Soft delete por doc_key em ai_agente.t_financeiro_soft_delete (active=0)
       //  - Exclusão de disputa ativa via ai_agente.t_fin_disputas.nf = doc_key
@@ -17967,7 +17967,7 @@ Deno.serve(async (req) => {
       // ====================================================================
 
       case 'get_aging_overview_cr': {
-        console.log('[get_aging_overview_cr] Fetching aging from v_fin_regua_contas_receber...');
+        console.log('[get_aging_overview_cr] Fetching aging from t_dados_financeiro_contas_receber...');
         const agingSql = `
           SELECT
             COALESCE(t.modal, 'Outros') AS product,
@@ -17991,7 +17991,7 @@ Deno.serve(async (req) => {
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 181 AND 240 THEN 1 ELSE 0 END) AS count_240,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 241 AND 365 THEN 1 ELSE 0 END) AS count_365,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) > 365 THEN 1 ELSE 0 END) AS count_366_plus
-          FROM dados_dachser.v_fin_regua_contas_receber t
+          FROM dados_dachser.t_dados_financeiro_contas_receber t
           WHERE NOT EXISTS (
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
@@ -18021,7 +18021,7 @@ Deno.serve(async (req) => {
           for (const f of countFields) { row[f] = Number(r[f]) || 0; totals[f] += row[f]; }
           return row;
         });
-        const lastUpdateResult = await client.query(`SELECT MAX(datavalidade) as last_update FROM dados_dachser.v_fin_regua_contas_receber`);
+        const lastUpdateResult = await client.query(`SELECT MAX(datavalidade) as last_update FROM dados_dachser.t_dados_financeiro_contas_receber`);
         const lastUpdate = lastUpdateResult?.[0]?.last_update || null;
         console.log(`[get_aging_overview_cr] ${rows.length} products`);
         result = { success: true, data: rows, totals, lastUpdate };
@@ -18054,7 +18054,7 @@ Deno.serve(async (req) => {
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 241 AND 365 THEN 1 ELSE 0 END) AS count_365,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) > 365 THEN 1 ELSE 0 END) AS count_366_plus,
             GROUP_CONCAT(DISTINCT REPLACE(REPLACE(REPLACE(t.cnpj, '.', ''), '/', ''), '-', '') SEPARATOR ',') AS cnpjs
-          FROM dados_dachser.v_fin_regua_contas_receber t
+          FROM dados_dachser.t_dados_financeiro_contas_receber t
           LEFT JOIN dados_dachser.t_fin_cliente_grupo g
             ON g.razao_social COLLATE utf8mb4_unicode_ci
              = UPPER(TRIM(COALESCE(t.razao_social,''))) COLLATE utf8mb4_unicode_ci
@@ -18090,7 +18090,7 @@ Deno.serve(async (req) => {
           for (const f of countFieldsC) { row[f] = Number(r[f]) || 0; clientTotals[f] += row[f]; }
           return row;
         });
-        const clientLastUpdateResult = await client.query(`SELECT MAX(datavalidade) as last_update FROM dados_dachser.v_fin_regua_contas_receber`);
+        const clientLastUpdateResult = await client.query(`SELECT MAX(datavalidade) as last_update FROM dados_dachser.t_dados_financeiro_contas_receber`);
         const clientLastUpdate = clientLastUpdateResult?.[0]?.last_update || null;
         console.log(`[get_aging_by_client_cr] ${clientRows.length} clients`);
         result = { success: true, data: clientRows, totals: clientTotals, lastUpdate: clientLastUpdate };
@@ -18115,7 +18115,7 @@ Deno.serve(async (req) => {
             COUNT(*) AS total_count,
             MAX(t.condicao_pag) AS condicao_pagamento,
             MAX(t.nome_vendedor) AS nome_vendedor
-          FROM dados_dachser.v_fin_regua_contas_receber t
+          FROM dados_dachser.t_dados_financeiro_contas_receber t
           LEFT JOIN dados_dachser.t_fin_cliente_grupo g
             ON g.razao_social COLLATE utf8mb4_unicode_ci
              = UPPER(TRIM(COALESCE(t.razao_social,''))) COLLATE utf8mb4_unicode_ci
@@ -18199,7 +18199,7 @@ Deno.serve(async (req) => {
             MAX(t.razao_social) AS razao_social,
             COUNT(*) AS qtd_faturas_abertas,
             SUM(t.valor_nf) AS valor_total_aberto
-          FROM dados_dachser.v_fin_regua_contas_receber t
+          FROM dados_dachser.t_dados_financeiro_contas_receber t
           WHERE NOT EXISTS (
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
@@ -18303,7 +18303,7 @@ Deno.serve(async (req) => {
                 AND d.deleted_at IS NULL
             ) THEN 1 ELSE 0 END AS disputa,
             COALESCE(NULLIF(t.numero_nf,''), t.documento) AS referencia_cliente
-          FROM dados_dachser.v_fin_regua_contas_receber t
+          FROM dados_dachser.t_dados_financeiro_contas_receber t
           LEFT JOIN dados_dachser.t_fin_cliente_grupo g
             ON g.razao_social COLLATE utf8mb4_unicode_ci
              = UPPER(TRIM(COALESCE(t.razao_social,''))) COLLATE utf8mb4_unicode_ci
@@ -18321,7 +18321,7 @@ Deno.serve(async (req) => {
 
         const countSql = `
           SELECT COUNT(*) as total
-          FROM dados_dachser.v_fin_regua_contas_receber t
+          FROM dados_dachser.t_dados_financeiro_contas_receber t
           LEFT JOIN dados_dachser.t_fin_cliente_grupo g
             ON g.razao_social COLLATE utf8mb4_unicode_ci
              = UPPER(TRIM(COALESCE(t.razao_social,''))) COLLATE utf8mb4_unicode_ci
@@ -18360,7 +18360,7 @@ Deno.serve(async (req) => {
               t.house,
               t.id_rm,
               DATEDIFF(CURDATE(), t.dataprevbaixa) AS dias_vencimento
-            FROM dados_dachser.v_fin_regua_contas_receber t
+            FROM dados_dachser.t_dados_financeiro_contas_receber t
             WHERE NOT EXISTS (
                 SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
                 WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
@@ -18475,7 +18475,7 @@ Deno.serve(async (req) => {
                   END
               END AS stage,
               t.valor_nf
-            FROM dados_dachser.v_fin_regua_contas_receber t
+            FROM dados_dachser.t_dados_financeiro_contas_receber t
             WHERE NOT EXISTS (
                 SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
                 WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
