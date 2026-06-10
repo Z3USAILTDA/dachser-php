@@ -1390,8 +1390,10 @@ async function computePayload(): Promise<string> {
     };
     // Manual override: force the displayed last event for specific AWBs (applies to ALL HAWBs of the master).
     // Used when carrier timeline shows DLV at destination but a partial set of HAWBs is still in transit.
-    const FORCED_LAST_EVENT_AWBS: Record<string, { code: string; loc: string; date: string }> = {
-      '172-90556270': { code: 'RCF', loc: 'LUX', date: '08 Jun 2026 08:00' },
+    // If loc/date are omitted, they are resolved by scanning the carrier timeline for the most recent
+    // event whose resolved code matches `code` (latest first).
+    const FORCED_LAST_EVENT_AWBS: Record<string, { code: string; loc?: string; date?: string }> = {
+      '172-90556270': { code: 'AWD' },
     };
     const stopWordsConn = new Set([
       'NIL','NIF','DIS','OFD','OFL','BUP','RDP','LAT','TKG','SCR','ECC',
@@ -1511,9 +1513,25 @@ async function computePayload(): Promise<string> {
       const forcedLast = FORCED_LAST_EVENT_AWBS[awbStr];
       if (forcedLast) {
         finalCode = forcedLast.code;
-        electedLoc = forcedLast.loc;
-        electedDate = forcedLast.date;
+        let forcedLoc = forcedLast.loc;
+        let forcedDate = forcedLast.date;
+        // Resolve loc/date from the carrier timeline when not provided: scan for the
+        // most recent event whose resolved code matches forcedLast.code (timeline is
+        // ordered newest-first).
+        if ((!forcedLoc || !forcedDate) && timeline && timeline.length > 0) {
+          for (const evt of timeline) {
+            const evtCode = resolveCode(evt.description || "");
+            if (evtCode === forcedLast.code) {
+              if (!forcedLoc) forcedLoc = extractIATA(evt.location || "") || (evt.location || "").trim().toUpperCase();
+              if (!forcedDate) forcedDate = (evt.date || "").trim();
+              break;
+            }
+          }
+        }
+        electedLoc = forcedLoc || electedLoc;
+        electedDate = forcedDate || electedDate;
       }
+
 
       // Date for the elected slot — prefer SQL slot date, then time-augmented row.date0/time0
       let dateStr: string | null = electedDate || null;
