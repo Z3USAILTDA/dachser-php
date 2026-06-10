@@ -17428,6 +17428,8 @@ Deno.serve(async (req) => {
             dfv.razao_social as dfv_razao_social,
             dfv.nome_beneficiario as dfv_nome_beneficiario,
             dfv.valor_nf as dfv_valor_nf,
+            dfv.ref_fornecedor as dfv_ref_fornecedor,
+            dfv.mawb_mbl as dfv_mawb_mbl,
             CASE 
               WHEN v.is_master = 1 THEN
                 COALESCE(
@@ -17456,10 +17458,13 @@ Deno.serve(async (req) => {
               MIN(numero_processo) as numero_processo,
               MAX(razao_social) as razao_social,
               MAX(nome_beneficiario) as nome_beneficiario,
-              MAX(valor_nf) as valor_nf
+              MAX(valor_nf) as valor_nf,
+              MAX(ref_fornecedor) as ref_fornecedor,
+              MAX(mawb_mbl) as mawb_mbl
             FROM dados_dachser.t_dados_financeiro_voucher
             GROUP BY nd
           ) dfv ON SUBSTRING_INDEX(TRIM(dfv.nd), ' ', 1) COLLATE utf8mb4_general_ci = SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
+
           WHERE sync_status = "ATIVO"
             AND (voucher_master_id IS NULL OR voucher_master_id = "")
             AND etapa_atual NOT IN ('AGUARDANDO_DOCUMENTOS_LOTE','CONSOLIDADO_NO_MASTER')
