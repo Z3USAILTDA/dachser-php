@@ -323,7 +323,10 @@ export interface Voucher {
   statusDocumentoFiscal?: StatusDocumentoFiscal;
   nomeMaster?: string; // Nome personalizado do voucher master
   criadoPorDfv?: string; // created_by from t_dados_financeiro_voucher
+  refFornecedor?: string | null; // ref_fornecedor de t_dados_financeiro_voucher / _spo
+  mawbMbl?: string | null; // MAWB/MBL de t_dados_financeiro_voucher / _spo
 }
+
 
 export interface RemessaItem {
   id: string;

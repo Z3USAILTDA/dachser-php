@@ -413,6 +413,9 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                   <SortableHeader field="numeroSPO">Nº Voucher (SPO)</SortableHeader>
                 </TableHead>
                 <TableHead>Processo</TableHead>
+                <TableHead>Ref. Fornecedor</TableHead>
+                <TableHead>MAWB/MBL</TableHead>
+
                 
                 <TableHead>
                   <SortableHeader field="fornecedor">Fornecedor</SortableHeader>
@@ -461,6 +464,9 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                   />
                 </TableHead>
                 <TableHead className="py-2"></TableHead>
+                <TableHead className="py-2"></TableHead>
+                <TableHead className="py-2"></TableHead>
+
                 <TableHead className="py-2">
                   <Select value={filters.faixaValor || "all"} onValueChange={(value) => handleFilterChange("faixaValor", value)}>
                     <SelectTrigger className="h-8 text-xs bg-card w-28">
@@ -618,7 +624,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
             <TableBody>
               {paginatedVouchers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={14} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={16} className="text-center text-muted-foreground py-8">
                     {isSearching ? (
                       <span className="inline-flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -704,6 +710,13 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       <TableCell className="font-mono text-xs">
                         {voucher.processoId || "-"}
                       </TableCell>
+                      <TableCell className="text-xs max-w-[140px] truncate" title={voucher.refFornecedor || undefined}>
+                        {voucher.refFornecedor || "-"}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs max-w-[140px] truncate" title={voucher.mawbMbl || undefined}>
+                        {voucher.mawbMbl || "-"}
+                      </TableCell>
+
                       <TableCell className="text-sm max-w-[150px] truncate">{voucher.fornecedor || "-"}</TableCell>
                       <TableCell className="text-sm font-medium">
                         {voucher.valor ? `${voucher.moeda} ${voucher.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : "-"}
