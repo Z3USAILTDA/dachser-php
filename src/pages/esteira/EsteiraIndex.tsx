@@ -816,6 +816,9 @@ const EsteiraIndex = () => {
     codigoBarras: v.codigo_barras || null,
     statusIntegracaoRm: v.status_integracao_rm || null,
     criadoPorDfv: v.dfv_created_by || null,
+    refFornecedor: v.ref_fornecedor || v.dfv_ref_fornecedor || null,
+    mawbMbl: v.mawb_mbl || v.dfv_mawb_mbl || null,
+
     createdAt: parseMariaDBDate(v.created_at) || new Date(),
     updatedAt: parseMariaDBDate(v.updated_at || v.created_at) || new Date(),
     anexos: [],
