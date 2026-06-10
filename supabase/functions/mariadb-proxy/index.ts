@@ -17751,7 +17751,7 @@ Deno.serve(async (req) => {
 
       // ====================================================================
       // RÉGUA SHADOW _cr — Fase 1 da migração para t_dados_financeiro_contas_receber
-      // Origem: VIEW dados_dachser.t_dados_financeiro_contas_receber
+      // Origem: VIEW dados_dachser.v_fin_regua_contas_receber
       // Regras:
       //  - Mesmo SHAPE de retorno dos endpoints atuais (sem FORA_DA_REGUA em counts_cr).
       //  - Soft delete via NOT EXISTS em sd.documento = doc_key (CR|idlan), sd.active = 0.
@@ -17768,27 +17768,27 @@ Deno.serve(async (req) => {
           FROM (
             SELECT
               CASE
-                WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) <= 0 THEN 'PRE'
-                WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) = 2 THEN 'D1'
-                WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN  8 AND 14 THEN 'D7'
-                WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 16 AND 29 THEN 'D15'
-                WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 31 AND 44 THEN 'D30'
-                WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 46 AND 59 AND t.tipo_documento <> 'FAT_NF' THEN 'D45'
-                WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) >= 61 AND t.tipo_documento <> 'FAT_NF' THEN 'D60'
+                WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) <= 0 THEN 'PRE'
+                WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) = 2 THEN 'D1'
+                WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN  8 AND 14 THEN 'D7'
+                WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 16 AND 29 THEN 'D15'
+                WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 31 AND 44 THEN 'D30'
+                WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 46 AND 59 AND t.tipo_documento <> 'FAT_NF' THEN 'D45'
+                WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) >= 61 AND t.tipo_documento <> 'FAT_NF' THEN 'D60'
 
                 ELSE NULL
               END AS stage,
               t.valor_nf
-            FROM dados_dachser.t_dados_financeiro_contas_receber t
+            FROM dados_dachser.v_fin_regua_contas_receber t
             WHERE NOT EXISTS (
                 SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
                 WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                   AND sd.active = 0
               )
               AND (
-                DATEDIFF(CURDATE(), t.dataprevbaixa) < 0
-                OR DATEDIFF(CURDATE(), t.dataprevbaixa) <= ?
-                OR DATEDIFF(CURDATE(), t.dataprevbaixa) >= 46
+                DATEDIFF(CURDATE(), t.data_prev_baixa) < 0
+                OR DATEDIFF(CURDATE(), t.data_prev_baixa) <= ?
+                OR DATEDIFF(CURDATE(), t.data_prev_baixa) >= 46
               )
 
 
@@ -17831,8 +17831,8 @@ Deno.serve(async (req) => {
             t.razao_social,
             t.documento,
             COALESCE(NULLIF(t.numero_nf,''), t.documento) AS nf_exibicao,
-            DATE_FORMAT(t.dataprevbaixa, '%d/%m/%Y') AS data_venc_br,
-            DATEDIFF(CURDATE(), t.dataprevbaixa) AS dias,
+            DATE_FORMAT(t.data_prev_baixa, '%d/%m/%Y') AS data_venc_br,
+            DATEDIFF(CURDATE(), t.data_prev_baixa) AS dias,
             CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo_pagto,
             t.valor_nf,
             t.cnpj,
@@ -17845,38 +17845,38 @@ Deno.serve(async (req) => {
             t.modal,
             t.tipo_documento,
             t.data_emissao,
-            t.dataprevbaixa AS data_vencimento,
+            t.data_prev_baixa AS data_vencimento,
             t.valor_liquido,
             t.valor_pendente_baixa,
             t.processo,
             t.master,
             t.house,
             t.status_lancamento
-          FROM dados_dachser.t_dados_financeiro_contas_receber t
+          FROM dados_dachser.v_fin_regua_contas_receber t
           WHERE NOT EXISTS (
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND sd.active = 0
             )
             AND (
-              (? IN ('PRE','D1','D7','D15','D30','D45') AND (? = 'PRE' OR DATEDIFF(CURDATE(), t.dataprevbaixa) <= ?))
+              (? IN ('PRE','D1','D7','D15','D30','D45') AND (? = 'PRE' OR DATEDIFF(CURDATE(), t.data_prev_baixa) <= ?))
               OR ? = 'D60'
             )
             AND (
               CASE ?
-                WHEN 'PRE' THEN DATEDIFF(CURDATE(), t.dataprevbaixa) <= 0
-                WHEN 'D1'  THEN DATEDIFF(CURDATE(), t.dataprevbaixa) = 2
-                WHEN 'D7'  THEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN  8 AND 14
-                WHEN 'D15' THEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 16 AND 29
-                WHEN 'D30' THEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 31 AND 44
-                WHEN 'D45' THEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 46 AND 59 AND t.tipo_documento <> 'FAT_NF'
-                WHEN 'D60' THEN DATEDIFF(CURDATE(), t.dataprevbaixa) >= 61 AND t.tipo_documento <> 'FAT_NF'
+                WHEN 'PRE' THEN DATEDIFF(CURDATE(), t.data_prev_baixa) <= 0
+                WHEN 'D1'  THEN DATEDIFF(CURDATE(), t.data_prev_baixa) = 2
+                WHEN 'D7'  THEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN  8 AND 14
+                WHEN 'D15' THEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 16 AND 29
+                WHEN 'D30' THEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 31 AND 44
+                WHEN 'D45' THEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 46 AND 59 AND t.tipo_documento <> 'FAT_NF'
+                WHEN 'D60' THEN DATEDIFF(CURDATE(), t.data_prev_baixa) >= 61 AND t.tipo_documento <> 'FAT_NF'
 
 
                 ELSE FALSE
               END
             )
-          ORDER BY t.dataprevbaixa ASC, t.razao_social ASC
+          ORDER BY t.data_prev_baixa ASC, t.razao_social ASC
         `;
 
         const rows = await client.query(sql, [
@@ -17915,7 +17915,7 @@ Deno.serve(async (req) => {
             t.razao_social,
             t.cnpj,
             COUNT(*) AS qtd_faturas
-          FROM dados_dachser.t_dados_financeiro_contas_receber t
+          FROM dados_dachser.v_fin_regua_contas_receber t
           WHERE NOT EXISTS (
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
@@ -17935,11 +17935,11 @@ Deno.serve(async (req) => {
       }
 
       case 'get_financeiro_nfs_stats_cr': {
-        console.log('[get_financeiro_nfs_stats_cr] Fetching stats from t_dados_financeiro_contas_receber...');
+        console.log('[get_financeiro_nfs_stats_cr] Fetching stats from v_fin_regua_contas_receber...');
 
         const statsResult = await client.query(`
           SELECT COUNT(*) AS total_records, SUM(valor_nf) AS total_open_amount, MAX(datavalidade) AS last_update
-          FROM dados_dachser.t_dados_financeiro_contas_receber
+          FROM dados_dachser.v_fin_regua_contas_receber
         `);
 
         const lastUpdate = statsResult[0]?.last_update || null;
@@ -17957,7 +17957,7 @@ Deno.serve(async (req) => {
 
       // ====================================================================
       // OLIMPO COBRANÇA — Shadow _cr (Fase 4.1)
-      // Fonte: dados_dachser.t_dados_financeiro_contas_receber
+      // Fonte: dados_dachser.v_fin_regua_contas_receber
       // Regras:
       //  - Soft delete por doc_key em ai_agente.t_financeiro_soft_delete (active=0)
       //  - Exclusão de disputa ativa via ai_agente.t_fin_disputas.nf = doc_key
@@ -17967,31 +17967,31 @@ Deno.serve(async (req) => {
       // ====================================================================
 
       case 'get_aging_overview_cr': {
-        console.log('[get_aging_overview_cr] Fetching aging from t_dados_financeiro_contas_receber...');
+        console.log('[get_aging_overview_cr] Fetching aging from v_fin_regua_contas_receber...');
         const agingSql = `
           SELECT
             COALESCE(t.modal, 'Outros') AS product,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS aging_30,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 31 AND 40 THEN t.valor_nf ELSE 0 END) AS aging_40,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 41 AND 60 THEN t.valor_nf ELSE 0 END) AS aging_60,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 61 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 91 AND 120 THEN t.valor_nf ELSE 0 END) AS aging_120,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 121 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS aging_240,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 241 AND 365 THEN t.valor_nf ELSE 0 END) AS aging_365,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) > 365 THEN t.valor_nf ELSE 0 END) AS aging_366_plus,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) <= 0 THEN 1 ELSE 0 END) AS count_not_due,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 1 AND 30 THEN 1 ELSE 0 END) AS count_30,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 31 AND 40 THEN 1 ELSE 0 END) AS count_40,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 41 AND 60 THEN 1 ELSE 0 END) AS count_60,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 61 AND 90 THEN 1 ELSE 0 END) AS count_90,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 91 AND 120 THEN 1 ELSE 0 END) AS count_120,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 121 AND 180 THEN 1 ELSE 0 END) AS count_180,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 181 AND 240 THEN 1 ELSE 0 END) AS count_240,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 241 AND 365 THEN 1 ELSE 0 END) AS count_365,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) > 365 THEN 1 ELSE 0 END) AS count_366_plus
-          FROM dados_dachser.t_dados_financeiro_contas_receber t
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS aging_30,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 31 AND 40 THEN t.valor_nf ELSE 0 END) AS aging_40,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 41 AND 60 THEN t.valor_nf ELSE 0 END) AS aging_60,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 61 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 91 AND 120 THEN t.valor_nf ELSE 0 END) AS aging_120,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 121 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS aging_240,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 241 AND 365 THEN t.valor_nf ELSE 0 END) AS aging_365,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) > 365 THEN t.valor_nf ELSE 0 END) AS aging_366_plus,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) <= 0 THEN 1 ELSE 0 END) AS count_not_due,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 1 AND 30 THEN 1 ELSE 0 END) AS count_30,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 31 AND 40 THEN 1 ELSE 0 END) AS count_40,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 41 AND 60 THEN 1 ELSE 0 END) AS count_60,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 61 AND 90 THEN 1 ELSE 0 END) AS count_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 91 AND 120 THEN 1 ELSE 0 END) AS count_120,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 121 AND 180 THEN 1 ELSE 0 END) AS count_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 181 AND 240 THEN 1 ELSE 0 END) AS count_240,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 241 AND 365 THEN 1 ELSE 0 END) AS count_365,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) > 365 THEN 1 ELSE 0 END) AS count_366_plus
+          FROM dados_dachser.v_fin_regua_contas_receber t
           WHERE NOT EXISTS (
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
@@ -18021,7 +18021,7 @@ Deno.serve(async (req) => {
           for (const f of countFields) { row[f] = Number(r[f]) || 0; totals[f] += row[f]; }
           return row;
         });
-        const lastUpdateResult = await client.query(`SELECT MAX(datavalidade) as last_update FROM dados_dachser.t_dados_financeiro_contas_receber`);
+        const lastUpdateResult = await client.query(`SELECT MAX(datavalidade) as last_update FROM dados_dachser.v_fin_regua_contas_receber`);
         const lastUpdate = lastUpdateResult?.[0]?.last_update || null;
         console.log(`[get_aging_overview_cr] ${rows.length} products`);
         result = { success: true, data: rows, totals, lastUpdate };
@@ -18033,28 +18033,28 @@ Deno.serve(async (req) => {
         const clientAgingSql = `
           SELECT
             COALESCE(g.grupo, TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))) AS product,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS aging_30,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 31 AND 40 THEN t.valor_nf ELSE 0 END) AS aging_40,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 41 AND 60 THEN t.valor_nf ELSE 0 END) AS aging_60,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 61 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 91 AND 120 THEN t.valor_nf ELSE 0 END) AS aging_120,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 121 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS aging_240,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 241 AND 365 THEN t.valor_nf ELSE 0 END) AS aging_365,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) > 365 THEN t.valor_nf ELSE 0 END) AS aging_366_plus,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) <= 0 THEN 1 ELSE 0 END) AS count_not_due,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 1 AND 30 THEN 1 ELSE 0 END) AS count_30,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 31 AND 40 THEN 1 ELSE 0 END) AS count_40,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 41 AND 60 THEN 1 ELSE 0 END) AS count_60,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 61 AND 90 THEN 1 ELSE 0 END) AS count_90,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 91 AND 120 THEN 1 ELSE 0 END) AS count_120,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 121 AND 180 THEN 1 ELSE 0 END) AS count_180,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 181 AND 240 THEN 1 ELSE 0 END) AS count_240,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 241 AND 365 THEN 1 ELSE 0 END) AS count_365,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) > 365 THEN 1 ELSE 0 END) AS count_366_plus,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS aging_30,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 31 AND 40 THEN t.valor_nf ELSE 0 END) AS aging_40,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 41 AND 60 THEN t.valor_nf ELSE 0 END) AS aging_60,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 61 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 91 AND 120 THEN t.valor_nf ELSE 0 END) AS aging_120,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 121 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS aging_240,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 241 AND 365 THEN t.valor_nf ELSE 0 END) AS aging_365,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) > 365 THEN t.valor_nf ELSE 0 END) AS aging_366_plus,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) <= 0 THEN 1 ELSE 0 END) AS count_not_due,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 1 AND 30 THEN 1 ELSE 0 END) AS count_30,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 31 AND 40 THEN 1 ELSE 0 END) AS count_40,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 41 AND 60 THEN 1 ELSE 0 END) AS count_60,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 61 AND 90 THEN 1 ELSE 0 END) AS count_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 91 AND 120 THEN 1 ELSE 0 END) AS count_120,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 121 AND 180 THEN 1 ELSE 0 END) AS count_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 181 AND 240 THEN 1 ELSE 0 END) AS count_240,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 241 AND 365 THEN 1 ELSE 0 END) AS count_365,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) > 365 THEN 1 ELSE 0 END) AS count_366_plus,
             GROUP_CONCAT(DISTINCT REPLACE(REPLACE(REPLACE(t.cnpj, '.', ''), '/', ''), '-', '') SEPARATOR ',') AS cnpjs
-          FROM dados_dachser.t_dados_financeiro_contas_receber t
+          FROM dados_dachser.v_fin_regua_contas_receber t
           LEFT JOIN dados_dachser.t_fin_cliente_grupo g
             ON g.razao_social COLLATE utf8mb4_unicode_ci
              = UPPER(TRIM(COALESCE(t.razao_social,''))) COLLATE utf8mb4_unicode_ci
@@ -18090,7 +18090,7 @@ Deno.serve(async (req) => {
           for (const f of countFieldsC) { row[f] = Number(r[f]) || 0; clientTotals[f] += row[f]; }
           return row;
         });
-        const clientLastUpdateResult = await client.query(`SELECT MAX(datavalidade) as last_update FROM dados_dachser.t_dados_financeiro_contas_receber`);
+        const clientLastUpdateResult = await client.query(`SELECT MAX(datavalidade) as last_update FROM dados_dachser.v_fin_regua_contas_receber`);
         const clientLastUpdate = clientLastUpdateResult?.[0]?.last_update || null;
         console.log(`[get_aging_by_client_cr] ${clientRows.length} clients`);
         result = { success: true, data: clientRows, totals: clientTotals, lastUpdate: clientLastUpdate };
@@ -18105,17 +18105,17 @@ Deno.serve(async (req) => {
           SELECT
             REPLACE(REPLACE(REPLACE(t.cnpj, '.', ''), '/', ''), '-', '') AS cnpj_clean,
             t.cnpj AS cnpj_original,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS aging_30,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 31 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 91 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS aging_240,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) BETWEEN 241 AND 360 THEN t.valor_nf ELSE 0 END) AS aging_360,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.dataprevbaixa) > 360 THEN t.valor_nf ELSE 0 END) AS aging_360_plus,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) <= 0 THEN t.valor_nf ELSE 0 END) AS not_due,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS aging_30,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 31 AND 90 THEN t.valor_nf ELSE 0 END) AS aging_90,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 91 AND 180 THEN t.valor_nf ELSE 0 END) AS aging_180,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS aging_240,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 241 AND 360 THEN t.valor_nf ELSE 0 END) AS aging_360,
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) > 360 THEN t.valor_nf ELSE 0 END) AS aging_360_plus,
             COUNT(*) AS total_count,
             MAX(t.condicao_pag) AS condicao_pagamento,
             MAX(t.nome_vendedor) AS nome_vendedor
-          FROM dados_dachser.t_dados_financeiro_contas_receber t
+          FROM dados_dachser.v_fin_regua_contas_receber t
           LEFT JOIN dados_dachser.t_fin_cliente_grupo g
             ON g.razao_social COLLATE utf8mb4_unicode_ci
              = UPPER(TRIM(COALESCE(t.razao_social,''))) COLLATE utf8mb4_unicode_ci
@@ -18199,7 +18199,7 @@ Deno.serve(async (req) => {
             MAX(t.razao_social) AS razao_social,
             COUNT(*) AS qtd_faturas_abertas,
             SUM(t.valor_nf) AS valor_total_aberto
-          FROM dados_dachser.t_dados_financeiro_contas_receber t
+          FROM dados_dachser.v_fin_regua_contas_receber t
           WHERE NOT EXISTS (
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
@@ -18283,7 +18283,7 @@ Deno.serve(async (req) => {
             t.cnpj,
             t.razao_social,
             DATE_FORMAT(t.data_emissao, '%d/%m/%Y') AS data_emissao,
-            DATE_FORMAT(t.dataprevbaixa, '%d/%m/%Y') AS data_vencimento,
+            DATE_FORMAT(t.data_prev_baixa, '%d/%m/%Y') AS data_vencimento,
             t.valor_nf,
             t.valor_liquido,
             t.modal,
@@ -18303,7 +18303,7 @@ Deno.serve(async (req) => {
                 AND d.deleted_at IS NULL
             ) THEN 1 ELSE 0 END AS disputa,
             COALESCE(NULLIF(t.numero_nf,''), t.documento) AS referencia_cliente
-          FROM dados_dachser.t_dados_financeiro_contas_receber t
+          FROM dados_dachser.v_fin_regua_contas_receber t
           LEFT JOIN dados_dachser.t_fin_cliente_grupo g
             ON g.razao_social COLLATE utf8mb4_unicode_ci
              = UPPER(TRIM(COALESCE(t.razao_social,''))) COLLATE utf8mb4_unicode_ci
@@ -18314,14 +18314,14 @@ Deno.serve(async (req) => {
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND sd.active = 0
             )
-          ORDER BY t.dataprevbaixa DESC
+          ORDER BY t.data_prev_baixa DESC
           LIMIT ? OFFSET ?
         `;
         const fatRows = await client.query(fatSql, [fatClientName, fatPageSize, offset]);
 
         const countSql = `
           SELECT COUNT(*) as total
-          FROM dados_dachser.t_dados_financeiro_contas_receber t
+          FROM dados_dachser.v_fin_regua_contas_receber t
           LEFT JOIN dados_dachser.t_fin_cliente_grupo g
             ON g.razao_social COLLATE utf8mb4_unicode_ci
              = UPPER(TRIM(COALESCE(t.razao_social,''))) COLLATE utf8mb4_unicode_ci
@@ -18350,7 +18350,7 @@ Deno.serve(async (req) => {
               t.modal,
               t.tipo_documento,
               t.data_emissao,
-              t.dataprevbaixa AS data_vencimento,
+              t.data_prev_baixa AS data_vencimento,
               NULL AS cod_cliente,
               t.razao_social,
               t.valor_nf,
@@ -18359,8 +18359,8 @@ Deno.serve(async (req) => {
               t.master,
               t.house,
               t.id_rm,
-              DATEDIFF(CURDATE(), t.dataprevbaixa) AS dias_vencimento
-            FROM dados_dachser.t_dados_financeiro_contas_receber t
+              DATEDIFF(CURDATE(), t.data_prev_baixa) AS dias_vencimento
+            FROM dados_dachser.v_fin_regua_contas_receber t
             WHERE NOT EXISTS (
                 SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
                 WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
@@ -18373,7 +18373,7 @@ Deno.serve(async (req) => {
                   AND d.resolved_at IS NULL
                   AND d.deleted_at IS NULL
               )
-            ORDER BY t.razao_social, t.dataprevbaixa
+            ORDER BY t.razao_social, t.data_prev_baixa
             LIMIT 10000
           `;
           const analiticoRows = await client.query(analiticoSql);
@@ -18475,7 +18475,7 @@ Deno.serve(async (req) => {
                   END
               END AS stage,
               t.valor_nf
-            FROM dados_dachser.t_dados_financeiro_contas_receber t
+            FROM dados_dachser.v_fin_regua_contas_receber t
             WHERE NOT EXISTS (
                 SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
                 WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
