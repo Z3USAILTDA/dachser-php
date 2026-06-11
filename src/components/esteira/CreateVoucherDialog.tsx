@@ -1550,7 +1550,15 @@ export const CreateVoucherDialog = ({
               </Button>
               <Button 
                 type="button" 
-                disabled={isSubmitting} 
+                disabled={
+                  isSubmitting ||
+                  (faturaFiles.length === 0 && form.watch("tipoDocumento") !== "ADF")
+                }
+                title={
+                  faturaFiles.length === 0 && form.watch("tipoDocumento") !== "ADF"
+                    ? "Anexe a Fatura/Demonstrativo (obrigatório, exceto para ADF)"
+                    : undefined
+                }
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={() => {
                    form.handleSubmit((values) => handleSubmitVoucher(values, false))();
