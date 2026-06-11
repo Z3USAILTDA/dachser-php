@@ -3441,8 +3441,8 @@ Deno.serve(async (req) => {
             FROM fd_ativas fd
             INNER JOIN dados_dachser.v_fin_regua_contas_receber v
               ON v.doc_key COLLATE utf8mb4_unicode_ci
-                 = fd.nf   COLLATE utf8mb4_unicode_ci
-            WHERE fd.nf LIKE 'CR|%'
+                 = CONCAT('CR|', fd.nf) COLLATE utf8mb4_unicode_ci
+            WHERE fd.documento = 'CR'
 
             UNION ALL
 
@@ -3468,11 +3468,10 @@ Deno.serve(async (req) => {
             FROM fd_ativas fd
             INNER JOIN dados_dachser.v_fin_regua_contas_receber v
               ON (
-                   SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.documento COLLATE utf8mb4_unicode_ci
-                OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.numero_nf COLLATE utf8mb4_unicode_ci
-                OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.nd        COLLATE utf8mb4_unicode_ci
+                   fd.documento COLLATE utf8mb4_unicode_ci = v.documento COLLATE utf8mb4_unicode_ci
+                AND fd.nf       COLLATE utf8mb4_unicode_ci = v.numero_nf COLLATE utf8mb4_unicode_ci
               )
-            WHERE fd.nf NOT LIKE 'CR|%'
+            WHERE COALESCE(fd.documento,'') <> 'CR'
           ),
           dedup AS (
             SELECT c.*,
