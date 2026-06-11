@@ -19373,22 +19373,25 @@ Deno.serve(async (req) => {
             [docKey]
           );
           
-          // 2. Remove from t_fin_disputas — match both composite and legacy simple key
-          await client.execute(
-            `DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`,
-            [docKey]
-          );
-          
-          // 3. Reset disputa flag in source table using composite key parts
+          // 2. Remove from t_fin_disputas — split doc_key
           const parts = docKey.split('|');
-          if (parts.length === 2) {
-            const [documento, numero_nf] = parts;
+          if (parts.length >= 2) {
+            const documento = parts[0];
+            const numero_nf = parts.slice(1).join('|');
+            await client.execute(
+              `DELETE FROM ai_agente.t_fin_disputas WHERE documento = ? AND nf = ?`,
+              [documento, numero_nf]
+            );
             await client.execute(
               `UPDATE dados_dachser.t_dados_financeiro_nfs SET disputa = 0 WHERE documento = ? AND numero_nf = ?`,
               [documento, numero_nf]
             );
           } else {
             // Fallback for legacy simple keys
+            await client.execute(
+              `DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`,
+              [docKey]
+            );
             await client.execute(
               `UPDATE dados_dachser.t_dados_financeiro_nfs SET disputa = 0 WHERE documento = ? OR numero_nf = ? OR nd = ?`,
               [docKey, docKey, docKey]
