@@ -1350,10 +1350,20 @@ async function computePayload(): Promise<string> {
         return u === "BKD" || u === "BKG" || u === "BOOKED";
       };
       const nonBkd = allSlots.filter(s => !isBkd(s.code));
-      const slots = nonBkd.length > 0 ? nonBkd : allSlots;
+      const afterBkd = nonBkd.length > 0 ? nonBkd : allSlots;
 
-      const slotsWithDate = slots.map((slot) => ({ ...slot, dateMs: parseSlotDateMs(slot.date) }));
+      // Filter out slots with future dates (carrier-published planned events like DEP
+      // with future ETD). Tolerate 6h ahead to absorb timezone drift. Only apply when
+      // at least one non-future slot exists; otherwise keep originals to avoid breaking
+      // brand-new shipments where everything is planned.
+      const nowMs = Date.now();
+      const futureCutoff = nowMs + 6 * 3600 * 1000;
+      const withDates = afterBkd.map((slot) => ({ ...slot, dateMs: parseSlotDateMs(slot.date) }));
+      const nonFuture = withDates.filter((s) => s.dateMs <= 0 || s.dateMs <= futureCutoff);
+      const slotsWithDate = nonFuture.length > 0 ? nonFuture : withDates;
+      const slots = slotsWithDate;
       const latestDateMs = Math.max(...slotsWithDate.map((slot) => slot.dateMs));
+
 
       if (latestDateMs <= 0) {
         return slots.reduce((best, slot) => (slot.idx < best.idx ? slot : best), slots[0]);
@@ -1379,10 +1389,11 @@ async function computePayload(): Promise<string> {
 
     // Hoisted constants/helpers — previously re-created per row (1.6k+ iterations).
     const FINAL_STATUSES = new Set(["DLV", "POD"]);
-    const SUPPRESSED_DISCREPANCY_AWBS = new Set<string>(['047-32916380', '047-33946636']);
+    const SUPPRESSED_DISCREPANCY_AWBS = new Set<string>(['047-32916380', '047-33946636', '724-88485423']);
     // Manual override: force ARR to be classified as DESTINO (bypass loc !== authDest check).
     // Use when routeMap destination is wrong or carrier reported the final ARR at a leg airport.
-    const FORCED_ARR_DESTINO_AWBS = new Set<string>(['016-83237055', '369-92002945']);
+    const FORCED_ARR_DESTINO_AWBS = new Set<string>(['016-83237055', '369-92002945', '016-65420832', '016-56147991']);
+
     // Manual override: force the connection list (comma-separated IATA codes) for specific AWBs.
     // Use when timeline/routeMap fails to surface the real transit airport(s).
     const FORCED_CONNECTIONS_AWBS: Record<string, string> = {
