@@ -4328,19 +4328,24 @@ Deno.serve(async (req) => {
             [doc_key]
           );
           
-          // Remove from t_fin_disputas
-          await client.execute(
-            `DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`,
-            [doc_key]
-          );
-          
-          // Reset disputa flag using composite key parts
+          // Remove from t_fin_disputas (split doc_key → documento + nf)
           const parts = doc_key.split('|');
-          if (parts.length === 2) {
-            const [documento, numero_nf] = parts;
+          if (parts.length >= 2) {
+            const documento = parts[0];
+            const numero_nf = parts.slice(1).join('|');
+            await client.execute(
+              `DELETE FROM ai_agente.t_fin_disputas WHERE documento = ? AND nf = ?`,
+              [documento, numero_nf]
+            );
             await client.execute(
               `UPDATE dados_dachser.t_dados_financeiro_nfs SET disputa = 0 WHERE documento = ? AND numero_nf = ?`,
               [documento, numero_nf]
+            );
+          } else {
+            // Legacy fallback
+            await client.execute(
+              `DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`,
+              [doc_key]
             );
           }
           
