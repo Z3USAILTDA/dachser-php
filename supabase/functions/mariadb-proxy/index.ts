@@ -3405,7 +3405,7 @@ Deno.serve(async (req) => {
 
         const sql = `
           WITH fd_ativas AS (
-            SELECT fd.id, fd.nf, fd.cliente, fd.responsavel, fd.departamento,
+            SELECT fd.id, fd.documento, fd.nf, fd.cliente, fd.responsavel, fd.departamento,
                    fd.observacoes, fd.escalation, fd.tipo, fd.created_at
             FROM ai_agente.t_fin_disputas fd
             WHERE fd.is_disputa = 1
@@ -3414,7 +3414,7 @@ Deno.serve(async (req) => {
               AND NOT EXISTS (
                 SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
                 WHERE sd.documento COLLATE utf8mb4_unicode_ci
-                      = fd.nf       COLLATE utf8mb4_unicode_ci
+                      = CONCAT(COALESCE(fd.documento,''),'|',COALESCE(fd.nf,'')) COLLATE utf8mb4_unicode_ci
                   AND sd.active = 0
               )
           ),
