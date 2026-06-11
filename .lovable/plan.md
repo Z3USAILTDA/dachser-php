@@ -1,64 +1,37 @@
+# Ajustes na tela /air/tracking-aereo
 
-## Objetivo
-Três ajustes pontuais na esteira do voucher (frontend + uma action no `mariadb-proxy`), sem mexer em régua, e-mails ou estrutura de tabelas.
+Quatro correções pontuais para os AWBs reportados, mantendo o padrão de "manual override" já usado no módulo.
 
----
+## 1. Filtrar eventos com data no futuro (DEP futuro)
 
-## 1) Anexo obrigatório na criação manual (ADF isento)
+**Sintoma:** `724-20906826` e `724-88485423` exibindo DEP como último evento, com data no futuro. A `pickTopByIATA` elege "o mais recente por data", e datas futuras vencem qualquer evento operacional real.
 
-**Onde:** `src/components/esteira/CreateVoucherDialog.tsx` e `src/components/esteira/VoucherMasterForm.tsx`.
+**Correção (genérica):** em `supabase/functions/fetch-tracking-aereo/index.ts`, dentro de `pickTopByIATA`, depois do filtro de BKD, adicionar um filtro para descartar slots cuja `parseSlotDateMs(date)` seja maior que `Date.now()` (com tolerância de algumas horas para fuso). Só descarta se existirem slots não-futuros; se TODOS forem futuros, mantém a lógica atual (não quebra casos onde a carga é nova e só tem BKD/FOH futuro).
 
-**Mudanças:**
-- Manter a regra atual em `CreateVoucherDialog`: anexo de fatura obrigatório **exceto quando `tipoDocumento === "ADF"`** (ADF segue podendo ser criado sem anexo).
-- Adicionar `disabled` no botão "Criar Voucher/SPO" quando `faturaFiles.length === 0 && tipoDocumento !== "ADF"` — hoje só há toast, falta feedback visual.
-- `VoucherMasterForm` já exige anexo — adicionar o mesmo `disabled` no botão de submit quando `faturaFiles.length === 0`.
-- Manter exceção do "Salvar Rascunho" (não exige anexo).
-- Manter `statusDocumentoFiscal = "PENDENTE"` para ADF criado sem anexo.
+Isso resolve `724-20906826` e `724-88485423` sem precisar override manual e protege qualquer outro AWB com carrier publicando DEP planejado.
 
-**Não muda:** importação via RM/Lote, criação automática via cron, vouchers vindos de RM.
+## 2. Suprimir discrepância inexistente em 724-88485423
 
----
+Adicionar `'724-88485423'` ao set `SUPPRESSED_DISCREPANCY_AWBS` em `supabase/functions/fetch-tracking-aereo/index.ts` (linha ~1382) — mesmo padrão já usado para `047-32916380` e `047-33946636`.
 
-## 2) Filtro de etapa deve ignorar o filtro de mês
+Não é necessário mexer em `mariadb-proxy` (timeline modal) porque o backend já calcula discrepância via `air_master_discrepancy_list`, que é uma fonte separada; basta o filtro do fato.
 
-**Onde:** `src/pages/esteira/EsteiraIndex.tsx` — função `loadVouchers` (linhas ~909-960) e o `useEffect` que recarrega com `quickFilterMesEmissao` (linha 1213).
+## 3. Forçar ARR - DESTINO para 016-65420832 e 016-56147991
 
-**Comportamento atual:** `get_vouchers_combined` recebe `data_emissao_inicio/fim` derivados do mês; mudar etapa só filtra em memória → processos fora do mês nunca aparecem.
+Adicionar os dois AWBs ao set `FORCED_ARR_DESTINO_AWBS` em `supabase/functions/fetch-tracking-aereo/index.ts` (linha 1385), junto a `016-83237055` e `369-92002945`. O override já força `finalCode = "ARR - DESTINO"` para todos os HAWBs do master, então cobre o pedido "todos os hawb" do `016-65420832`.
 
-**Mudança:**
-- Quando `filters.etapa !== "all"`, chamar `get_vouchers_combined` **sem** filtro de mês e aplicar etapa client-side como já é feito.
-- Quando `filters.etapa === "all"`, manter o comportamento atual (filtro de mês ativo).
-- Incluir `filters.etapa` nas dependências do `useEffect` que recarrega vouchers, para refetch ao alternar etapa.
-- Backend já aceita ausência do filtro (`hasMonthFilter = false`), sem alteração no `mariadb-proxy`.
+## Detalhes técnicos
 
----
+Arquivos editados:
+- `supabase/functions/fetch-tracking-aereo/index.ts`
+  - `pickTopByIATA`: adicionar filtro `nonFuture = slots.filter(s => parseSlotDateMs(s.date) <= Date.now() + 6*3600*1000)` e usar quando `nonFuture.length > 0`.
+  - `SUPPRESSED_DISCREPANCY_AWBS`: incluir `'724-88485423'`.
+  - `FORCED_ARR_DESTINO_AWBS`: incluir `'016-65420832'` e `'016-56147991'`.
 
-## 3) Filtro de mês passa a usar data de vencimento
-
-**Onde:** `supabase/functions/mariadb-proxy/index.ts` case `get_vouchers_combined` (linhas 17506-17610) e labels no `EsteiraIndex.tsx` (~2160-2190).
-
-**Backend:**
-- `ativosMonthClause`: trocar `dfv.data_emissao`/`v.data_emissao_documento` por `v.vencimento` com fallback em `dfv.data_vencimento`:
-  ```
-  (v.vencimento >= ? AND v.vencimento < ?)
-  OR (v.vencimento IS NULL AND dfv.data_vencimento >= ? AND dfv.data_vencimento < ?)
-  ```
-- `pendentesMonthClause`: trocar `dfv.data_emissao` por `dfv.data_vencimento`.
-- Manter exceção das etapas `RASCUNHO/OPERACAO/FINANCEIRO` (sempre aparecem) e o subquery `dfv` agregado.
-- Aceitar novos parâmetros `data_vencimento_inicio/fim`, mantendo `data_emissao_inicio/fim` como alias temporário para não quebrar chamadas existentes.
-
-**Frontend:**
-- Renomear `quickFilterMesEmissao` → `quickFilterMesVencimento` (state + label "Mês de Emissão" → "Mês de Vencimento").
-- Enviar como `data_vencimento_inicio/fim` na chamada `get_vouchers_combined`.
-
----
-
-## Validação
-- Criar voucher não-ADF sem fatura → botão desabilitado (+ toast se forçado).
-- Criar voucher ADF sem fatura → permitido, `status_documento_fiscal = PENDENTE`.
-- Etapa "Fiscal" com mês passado selecionado → lista todos os processos em Fiscal independente do mês.
-- "Todas" etapas com um mês → apenas vouchers/RM com vencimento naquele mês (+ exceções RASCUNHO/OPERACAO/FINANCEIRO).
-- Console logs confirmam `monthFilter=none` quando etapa ≠ "all".
+Deploy do edge function ao final.
 
 ## Fora de escopo
-Disparo de e-mails, régua, schema de tabelas, importação em lote, cron.
+
+- Mudanças no frontend `TrackingAereo.tsx` (a lógica problemática é toda backend).
+- Alteração no modal de timeline (`get_awb_tracking_events`) — a timeline em si continua mostrando eventos como vieram do carrier; o que muda é a eleição do "último evento" do header.
+- Reprocessamento/limpeza histórica de `t_aereo_ws_firecrawl`.
