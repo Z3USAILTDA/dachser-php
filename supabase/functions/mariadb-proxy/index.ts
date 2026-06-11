@@ -3642,9 +3642,13 @@ Deno.serve(async (req) => {
           const dep = departamento ?? null;
           const esc = escalation ?? null;
 
+          const parts = String(doc_key).split('|');
+          const docPart = parts.length > 1 ? parts[0] : 'CR';
+          const nfPart = parts.length > 1 ? parts.slice(1).join('|') : doc_key;
+
           const existing = await client.query(
-            `SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
-            [doc_key]
+            `SELECT id FROM ai_agente.t_fin_disputas WHERE documento = ? AND nf = ? LIMIT 1`,
+            [docPart, nfPart]
           );
 
           let affectedRows = 0;
@@ -3665,19 +3669,19 @@ Deno.serve(async (req) => {
                      resolved_at = NULL,
                      deleted_at = NULL,
                      updated_at = NOW()
-               WHERE nf = ?`,
-              [cliente, vencimento, valor, tipo, resp, obs, dep, esc, doc_key]
+               WHERE documento = ? AND nf = ?`,
+              [cliente, vencimento, valor, tipo, resp, obs, dep, esc, docPart, nfPart]
             );
             affectedRows = Number((upd as any)?.affectedRows ?? 0);
           } else {
             mode = 'insert';
             const ins = await client.execute(
               `INSERT INTO ai_agente.t_fin_disputas
-                 (nf, cliente, vencimento, valor, tipo, responsavel, observacoes,
+                 (documento, nf, cliente, vencimento, valor, tipo, responsavel, observacoes,
                   departamento, escalation, is_disputa, resolved_at, deleted_at,
                   created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NOW(), NOW())`,
-              [doc_key, cliente, vencimento, valor, tipo, resp, obs, dep, esc]
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NOW(), NOW())`,
+              [docPart, nfPart, cliente, vencimento, valor, tipo, resp, obs, dep, esc]
             );
             affectedRows = Number((ins as any)?.affectedRows ?? 0);
           }
