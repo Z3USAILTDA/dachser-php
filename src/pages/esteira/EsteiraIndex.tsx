@@ -2160,7 +2160,7 @@ const EsteiraIndex = () => {
                     </Select>
                   </div>
 
-                  {/* Mês de Emissão (filtragem aplicada no banco) */}
+                  {/* Mês de Vencimento (filtragem aplicada no banco — ignorada quando uma etapa específica está selecionada) */}
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-[#888888]" />
                     <Select
