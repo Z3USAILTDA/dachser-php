@@ -250,12 +250,19 @@ function FinanceiroDisputaContent() {
         setAddError("Documento não encontrado.");
         return;
       }
-      const docKey = lookupRows[0].doc_key;
+      const docKeys = (lookupRows as Array<{ doc_key?: string }>)
+        .map(r => r.doc_key)
+        .filter((k): k is string => !!k && k.trim().length > 0);
+
+      if (docKeys.length === 0) {
+        setAddError("Documento sem chave válida.");
+        return;
+      }
 
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
-          action: "save_disputa_cr",
-          doc_key: docKey,
+          action: "save_disputa_cr_bulk",
+          doc_keys: docKeys,
           responsavel: addResp.trim(),
           observacoes: addObservacoes.trim(),
         },
@@ -263,7 +270,21 @@ function FinanceiroDisputaContent() {
 
       if (error) throw error;
       if (data?.success) {
-        toast({ title: "Sucesso", description: "Disputa adicionada!" });
+        const inserted = Number(data?.inserted ?? 0);
+        const updated = Number(data?.updated ?? 0);
+        const failed = Array.isArray(data?.failed) ? data.failed.length : 0;
+        const affected = inserted + updated;
+        const descParts: string[] = [];
+        descParts.push(
+          affected <= 1
+            ? "Disputa adicionada!"
+            : `${affected} títulos da ND ${addNf.trim()} colocados em disputa.`
+        );
+        if (failed > 0) {
+          descParts.push(`${failed} falharam — veja o console.`);
+          console.warn("save_disputa_cr_bulk falhas:", data.failed);
+        }
+        toast({ title: "Sucesso", description: descParts.join(" ") });
         setAddModalOpen(false);
         setAddNf("");
         setAddResp("");
