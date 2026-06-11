@@ -737,7 +737,8 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                 variant: "destructive",
               });
             })}
-            disabled={isSubmitting || selectedVouchers.length < 2}
+            disabled={isSubmitting || selectedVouchers.length < 2 || faturaFiles.length === 0}
+            title={faturaFiles.length === 0 ? "Anexe ao menos uma Fatura/Demonstrativo" : undefined}
             className="bg-purple-600 hover:bg-purple-700 text-white gap-2"
           >
             {isSubmitting ? (

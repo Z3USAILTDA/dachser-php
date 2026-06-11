@@ -922,7 +922,10 @@ const EsteiraIndex = () => {
         // runIncrementalSync();
         
         // Load active vouchers + pending RM in a SINGLE call (saves 1 MariaDB connection)
-        // Month filter is applied at the database level (not in the frontend)
+        // Month filter is applied at the database level (não mais por emissão — agora por VENCIMENTO).
+        // Quando o usuário seleciona uma etapa específica (!= "all"), o filtro de mês é IGNORADO
+        // para que processos fora do mês corrente possam ser localizados.
+        const etapaSelecionada = filters.etapa && filters.etapa !== "all";
         const [yEm, mEm] = quickFilterMesEmissao.split('-').map(Number);
         const inicio = `${yEm}-${String(mEm).padStart(2, '0')}-01`;
         const fimExclusivo = mEm === 12
@@ -931,8 +934,10 @@ const EsteiraIndex = () => {
         const combinedResult = await supabase.functions.invoke("mariadb-proxy", {
           body: {
             action: "get_vouchers_combined",
-            data_emissao_inicio: inicio,
-            data_emissao_fim: fimExclusivo,
+            ...(etapaSelecionada ? {} : {
+              data_vencimento_inicio: inicio,
+              data_vencimento_fim: fimExclusivo,
+            }),
           }
         });
         
@@ -1210,7 +1215,7 @@ const EsteiraIndex = () => {
     if (user) {
       loadVouchers();
     }
-  }, [hasEsteiraAccess, quickFilterMesEmissao]);
+  }, [hasEsteiraAccess, quickFilterMesEmissao, filters.etapa]);
 
   // Fetch DB stats only when dashboard tab is active (deferred to reduce initial load)
   useEffect(() => {
@@ -2155,7 +2160,7 @@ const EsteiraIndex = () => {
                     </Select>
                   </div>
 
-                  {/* Mês de Emissão (filtragem aplicada no banco) */}
+                  {/* Mês de Vencimento (filtragem aplicada no banco — ignorada quando uma etapa específica está selecionada) */}
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-[#888888]" />
                     <Select
