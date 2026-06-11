@@ -1389,10 +1389,11 @@ async function computePayload(): Promise<string> {
 
     // Hoisted constants/helpers — previously re-created per row (1.6k+ iterations).
     const FINAL_STATUSES = new Set(["DLV", "POD"]);
-    const SUPPRESSED_DISCREPANCY_AWBS = new Set<string>(['047-32916380', '047-33946636']);
+    const SUPPRESSED_DISCREPANCY_AWBS = new Set<string>(['047-32916380', '047-33946636', '724-88485423']);
     // Manual override: force ARR to be classified as DESTINO (bypass loc !== authDest check).
     // Use when routeMap destination is wrong or carrier reported the final ARR at a leg airport.
-    const FORCED_ARR_DESTINO_AWBS = new Set<string>(['016-83237055', '369-92002945']);
+    const FORCED_ARR_DESTINO_AWBS = new Set<string>(['016-83237055', '369-92002945', '016-65420832', '016-56147991']);
+
     // Manual override: force the connection list (comma-separated IATA codes) for specific AWBs.
     // Use when timeline/routeMap fails to surface the real transit airport(s).
     const FORCED_CONNECTIONS_AWBS: Record<string, string> = {
