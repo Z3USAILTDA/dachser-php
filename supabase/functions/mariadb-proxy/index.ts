@@ -4077,24 +4077,25 @@ Deno.serve(async (req) => {
         }
         
         try {
-          // Check if record exists first
-          const checkRows = await client.query(
-            `SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
-            [doc_key]
-          );
-          
-          if (checkRows && checkRows.length > 0) {
-            // Record exists — UPDATE
-            await client.execute(
-              `UPDATE ai_agente.t_fin_disputas SET observacoes = ?, updated_at = NOW() WHERE nf = ?`,
-              [observacoes || '', doc_key]
+          // doc_key is "documento|numero_nf" for CP — update all rows for this documento (all NFs of the ND)
+          const parts = String(doc_key).split('|');
+          const docPart = parts[0];
+          const nfPart = parts.length > 1 ? parts.slice(1).join('|') : '';
+
+          if (docPart) {
+            // Propagate observation to all rows with this documento (covers all NFs of the same ND)
+            const upd = await client.execute(
+              `UPDATE ai_agente.t_fin_disputas SET observacoes = ?, updated_at = NOW() WHERE documento = ?`,
+              [observacoes || '', docPart]
             );
-          } else {
-            // Record does not exist — INSERT
-            await client.execute(
-              `INSERT INTO ai_agente.t_fin_disputas (nf, observacoes, created_at, updated_at) VALUES (?, ?, NOW(), NOW())`,
-              [doc_key, observacoes || '']
-            );
+            const affected = Number((upd as any)?.affectedRows ?? 0);
+            if (affected === 0 && nfPart) {
+              // No existing row — insert one
+              await client.execute(
+                `INSERT INTO ai_agente.t_fin_disputas (documento, nf, observacoes, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())`,
+                [docPart, nfPart, observacoes || '']
+              );
+            }
           }
           
           console.log(`Disputa observacoes updated for: ${doc_key}`);
