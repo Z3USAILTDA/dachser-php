@@ -505,7 +505,7 @@ Deno.serve(async (req) => {
       'get_pymt_term_rating','get_aging_analitico','get_regua_stage','get_regua_clientes_resumo',
       'get_disputas','update_disputa_observacoes','update_disputa_responsavel','lookup_documento',
       'get_disputas_cr','lookup_documento_cr',
-      'save_disputa_cr','resolve_disputa_cr','delete_disputa_cr',
+      'save_disputa_cr','save_disputa_cr_bulk','resolve_disputa_cr','delete_disputa_cr',
       'update_disputa_observacoes_cr','update_disputa_responsavel_cr',
       'save_disputa','delete_disputa','resolve_disputa','check_disputas_planilha',
       'import_disputas_planilha','bulk_delete_disputas','bulk_resolve_disputas',
