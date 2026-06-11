@@ -19565,11 +19565,14 @@ Deno.serve(async (req) => {
         try {
           await client.execute('START TRANSACTION');
           for (const key of keys) {
+            const parts = key.split('|');
+            const docPart = parts.length > 1 ? parts[0] : 'CR';
+            const nfPart = parts.length > 1 ? parts.slice(1).join('|') : key;
             const upd = await client.execute(
               `UPDATE ai_agente.t_fin_disputas
                SET resolved_at = NOW(), is_disputa = 0, updated_at = NOW()
-               WHERE nf = ?`,
-              [key]
+               WHERE documento = ? AND nf = ?`,
+              [docPart, nfPart]
             );
             const aff = (upd as any)?.affectedRows ?? 0;
             if (aff > 0) resolved++; else notFound++;
