@@ -19480,31 +19480,36 @@ Deno.serve(async (req) => {
         try {
           await client.execute('START TRANSACTION');
           for (const key of keys) {
-            // Resolve doc_key/nf -> fd.id, fd.nf
+            const parts = key.split('|');
+            const docPart = parts.length > 1 ? parts[0] : 'CR';
+            const nfPart = parts.length > 1 ? parts.slice(1).join('|') : key;
+            // Resolve doc_key -> fd.id, fd.documento, fd.nf
             const resolved = await client.query(
-              `SELECT DISTINCT fd.id AS fd_id, fd.nf AS fd_nf
+              `SELECT DISTINCT fd.id AS fd_id, fd.documento AS fd_documento, fd.nf AS fd_nf
                FROM ai_agente.t_fin_disputas fd
                LEFT JOIN dados_dachser.v_fin_regua_contas_receber v
                  ON (
-                      v.doc_key COLLATE utf8mb4_unicode_ci = fd.nf COLLATE utf8mb4_unicode_ci
+                      v.doc_key COLLATE utf8mb4_unicode_ci = CONCAT(COALESCE(fd.documento,''),'|',COALESCE(fd.nf,'')) COLLATE utf8mb4_unicode_ci
                    OR (
-                        fd.nf NOT LIKE 'CR|%' AND (
-                          SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.documento COLLATE utf8mb4_unicode_ci
-                       OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.numero_nf COLLATE utf8mb4_unicode_ci
-                       OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.nd        COLLATE utf8mb4_unicode_ci
+                        COALESCE(fd.documento,'') <> 'CR' AND (
+                          fd.documento COLLATE utf8mb4_unicode_ci = v.documento COLLATE utf8mb4_unicode_ci
+                       AND fd.nf       COLLATE utf8mb4_unicode_ci = v.numero_nf COLLATE utf8mb4_unicode_ci
                         )
                       )
                     )
                WHERE fd.is_disputa = 1 AND fd.deleted_at IS NULL
                  AND (
-                      fd.nf COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                      (fd.documento COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                       AND fd.nf    COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci)
                    OR v.doc_key COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
                  )`,
-              [key, key]
+              [docPart, nfPart, key]
             );
 
             const ids = (resolved as any[]).map((r: any) => r.fd_id).filter((x: any) => x != null);
-            const nfs = (resolved as any[]).map((r: any) => r.fd_nf).filter((x: any) => x != null);
+            const nfs = (resolved as any[]).map((r: any) =>
+              r.fd_documento ? `${r.fd_documento}|${r.fd_nf}` : r.fd_nf
+            ).filter((x: any) => x != null);
             resolvedIds += ids.length;
 
             if (ids.length > 0) {
