@@ -4029,11 +4029,14 @@ Deno.serve(async (req) => {
         }
 
         try {
+          const parts = key.split('|');
+          const docPart = parts.length > 1 ? parts[0] : 'CR';
+          const nfPart = parts.length > 1 ? parts.slice(1).join('|') : key;
           const upd = await client.execute(
             `UPDATE ai_agente.t_fin_disputas
                SET responsavel = ?, updated_at = NOW()
-             WHERE nf = ?`,
-            [responsavel ?? null, key]
+             WHERE documento = ? AND nf = ?`,
+            [responsavel ?? null, docPart, nfPart]
           );
           const affectedRows = Number((upd as any)?.affectedRows ?? 0);
           console.log(`[update_disputa_responsavel_cr] key=${key} affected=${affectedRows}`);
