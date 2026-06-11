@@ -19724,13 +19724,16 @@ Deno.serve(async (req) => {
             for (const doc of docRows as any[]) {
               const docKey = doc.doc_key;
               if (!docKey) continue;
+              const ps = String(docKey).split('|');
+              const docPart = ps.length > 1 ? ps[0] : 'CR';
+              const nfPart = ps.length > 1 ? ps.slice(1).join('|') : docKey;
               const tipo = doc.tipo_documento === 'FAT_NF' ? 'À vista' : 'A prazo';
               const vencimento = excelDateToSQL(item.prazo) || doc.data_vencimento || null;
 
               const existing = await client.query(
                 `SELECT id, deleted_at, resolved_at, is_disputa
-                 FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
-                [docKey]
+                 FROM ai_agente.t_fin_disputas WHERE documento = ? AND nf = ? LIMIT 1`,
+                [docPart, nfPart]
               );
 
               if (existing && existing.length > 0) {
@@ -19756,7 +19759,7 @@ Deno.serve(async (req) => {
                        resolved_at = NULL,
                        deleted_at = NULL,
                        updated_at = NOW()
-                   WHERE nf = ?`,
+                   WHERE documento = ? AND nf = ?`,
                   [
                     item.responsavel || '',
                     item.departamento || '',
@@ -19766,17 +19769,17 @@ Deno.serve(async (req) => {
                     doc.razao_social || '',
                     doc.valor_nf ?? null,
                     tipo,
-                    docKey,
+                    docPart, nfPart,
                   ]
                 );
                 if (isActive) updatedCount++; else count++;
               } else {
                 await client.execute(
                   `INSERT INTO ai_agente.t_fin_disputas
-                    (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())`,
+                    (documento, nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())`,
                   [
-                    docKey,
+                    docPart, nfPart,
                     doc.razao_social || 'N/A',
                     vencimento,
                     doc.valor_nf ?? 0,
