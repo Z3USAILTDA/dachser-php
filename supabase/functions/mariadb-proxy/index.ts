@@ -3347,7 +3347,7 @@ Deno.serve(async (req) => {
       case 'get_disputas': {
         const { tipo } = body as { tipo?: string };
         
-        let whereClause = '(t.disputa = 1 OR fd.nf IS NOT NULL) AND COALESCE(sd.active, 1) = 1';
+        let whereClause = '(t.disputa = 1 OR fd.id IS NOT NULL) AND COALESCE(sd.active, 1) = 1';
         const params: string[] = [];
         
         if (tipo) {
@@ -3357,7 +3357,8 @@ Deno.serve(async (req) => {
         
         const sql = `
           SELECT
-            COALESCE(NULLIF(t.numero_nf,''), NULLIF(t.documento,''), NULLIF(t.nd,'')) AS nf,
+            t.numero_nf AS nf,
+            t.documento,
             t.nd,
             t.razao_social AS cliente,
             SUBSTRING_INDEX(t.razao_social, ' - ', 1) AS razao_base,
@@ -3375,7 +3376,9 @@ Deno.serve(async (req) => {
           LEFT JOIN ai_agente.t_financeiro_soft_delete sd
             ON sd.documento COLLATE utf8mb4_general_ci = CONCAT(COALESCE(t.documento,''), '|', COALESCE(t.numero_nf,'')) COLLATE utf8mb4_general_ci
           LEFT JOIN ai_agente.t_fin_disputas fd
-            ON fd.nf COLLATE utf8mb4_general_ci = CONCAT(COALESCE(t.documento,''), '|', COALESCE(t.numero_nf,'')) COLLATE utf8mb4_general_ci
+            ON fd.documento COLLATE utf8mb4_general_ci = t.documento COLLATE utf8mb4_general_ci
+           AND fd.nf        COLLATE utf8mb4_general_ci = t.numero_nf COLLATE utf8mb4_general_ci
+           AND fd.deleted_at IS NULL
           WHERE ${whereClause}
           ORDER BY t.inicio_disputa DESC, t.razao_social ASC
         `;
@@ -3402,7 +3405,7 @@ Deno.serve(async (req) => {
 
         const sql = `
           WITH fd_ativas AS (
-            SELECT fd.id, fd.nf, fd.cliente, fd.responsavel, fd.departamento,
+            SELECT fd.id, fd.documento, fd.nf, fd.cliente, fd.responsavel, fd.departamento,
                    fd.observacoes, fd.escalation, fd.tipo, fd.created_at
             FROM ai_agente.t_fin_disputas fd
             WHERE fd.is_disputa = 1
@@ -3411,7 +3414,7 @@ Deno.serve(async (req) => {
               AND NOT EXISTS (
                 SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
                 WHERE sd.documento COLLATE utf8mb4_unicode_ci
-                      = fd.nf       COLLATE utf8mb4_unicode_ci
+                      = CONCAT(COALESCE(fd.documento,''),'|',COALESCE(fd.nf,'')) COLLATE utf8mb4_unicode_ci
                   AND sd.active = 0
               )
           ),
@@ -3438,8 +3441,8 @@ Deno.serve(async (req) => {
             FROM fd_ativas fd
             INNER JOIN dados_dachser.v_fin_regua_contas_receber v
               ON v.doc_key COLLATE utf8mb4_unicode_ci
-                 = fd.nf   COLLATE utf8mb4_unicode_ci
-            WHERE fd.nf LIKE 'CR|%'
+                 = CONCAT('CR|', fd.nf) COLLATE utf8mb4_unicode_ci
+            WHERE fd.documento = 'CR'
 
             UNION ALL
 
@@ -3465,11 +3468,10 @@ Deno.serve(async (req) => {
             FROM fd_ativas fd
             INNER JOIN dados_dachser.v_fin_regua_contas_receber v
               ON (
-                   SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.documento COLLATE utf8mb4_unicode_ci
-                OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.numero_nf COLLATE utf8mb4_unicode_ci
-                OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.nd        COLLATE utf8mb4_unicode_ci
+                   fd.documento COLLATE utf8mb4_unicode_ci = v.documento COLLATE utf8mb4_unicode_ci
+                AND fd.nf       COLLATE utf8mb4_unicode_ci = v.numero_nf COLLATE utf8mb4_unicode_ci
               )
-            WHERE fd.nf NOT LIKE 'CR|%'
+            WHERE COALESCE(fd.documento,'') <> 'CR'
           ),
           dedup AS (
             SELECT c.*,
@@ -3490,7 +3492,7 @@ Deno.serve(async (req) => {
                    CONVERT(fd.observacoes USING utf8mb4)  COLLATE utf8mb4_unicode_ci AS observacoes,
                    CONVERT(fd.escalation USING utf8mb4)   COLLATE utf8mb4_unicode_ci AS escalation,
                    fd.created_at AS fd_created_at,
-                   CONVERT(fd.nf USING utf8mb4)           COLLATE utf8mb4_unicode_ci AS doc_key,
+                   CONVERT(CASE WHEN fd.documento = 'CR' THEN CONCAT('CR|', fd.nf) ELSE CONCAT(COALESCE(fd.documento,''),'|',COALESCE(fd.nf,'')) END USING utf8mb4)           COLLATE utf8mb4_unicode_ci AS doc_key,
                    CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS idlan,
                    CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS id_rm,
                    CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS documento,
@@ -3640,9 +3642,13 @@ Deno.serve(async (req) => {
           const dep = departamento ?? null;
           const esc = escalation ?? null;
 
+          const parts = String(doc_key).split('|');
+          const docPart = parts.length > 1 ? parts[0] : 'CR';
+          const nfPart = parts.length > 1 ? parts.slice(1).join('|') : doc_key;
+
           const existing = await client.query(
-            `SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
-            [doc_key]
+            `SELECT id FROM ai_agente.t_fin_disputas WHERE documento = ? AND nf = ? LIMIT 1`,
+            [docPart, nfPart]
           );
 
           let affectedRows = 0;
@@ -3663,19 +3669,19 @@ Deno.serve(async (req) => {
                      resolved_at = NULL,
                      deleted_at = NULL,
                      updated_at = NOW()
-               WHERE nf = ?`,
-              [cliente, vencimento, valor, tipo, resp, obs, dep, esc, doc_key]
+               WHERE documento = ? AND nf = ?`,
+              [cliente, vencimento, valor, tipo, resp, obs, dep, esc, docPart, nfPart]
             );
             affectedRows = Number((upd as any)?.affectedRows ?? 0);
           } else {
             mode = 'insert';
             const ins = await client.execute(
               `INSERT INTO ai_agente.t_fin_disputas
-                 (nf, cliente, vencimento, valor, tipo, responsavel, observacoes,
+                 (documento, nf, cliente, vencimento, valor, tipo, responsavel, observacoes,
                   departamento, escalation, is_disputa, resolved_at, deleted_at,
                   created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NOW(), NOW())`,
-              [doc_key, cliente, vencimento, valor, tipo, resp, obs, dep, esc]
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NOW(), NOW())`,
+              [docPart, nfPart, cliente, vencimento, valor, tipo, resp, obs, dep, esc]
             );
             affectedRows = Number((ins as any)?.affectedRows ?? 0);
           }
@@ -3754,9 +3760,13 @@ Deno.serve(async (req) => {
             const valor = t.valor_nf ?? null;
             const tipo = t.tipo_documento === 'FAT_NF' ? 'À vista' : 'A prazo';
 
+            const parts = String(dk).split('|');
+            const docPart = parts.length > 1 ? parts[0] : 'CR';
+            const nfPart = parts.length > 1 ? parts.slice(1).join('|') : dk;
+
             const existing = await client.query(
-              `SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
-              [dk]
+              `SELECT id FROM ai_agente.t_fin_disputas WHERE documento = ? AND nf = ? LIMIT 1`,
+              [docPart, nfPart]
             );
 
             if (existing && existing.length > 0) {
@@ -3774,18 +3784,18 @@ Deno.serve(async (req) => {
                         resolved_at = NULL,
                         deleted_at = NULL,
                         updated_at = NOW()
-                  WHERE nf = ?`,
-                [cliente, vencimento, valor, tipo, resp, obs, dep, esc, dk]
+                  WHERE documento = ? AND nf = ?`,
+                [cliente, vencimento, valor, tipo, resp, obs, dep, esc, docPart, nfPart]
               );
               updated++;
             } else {
               await client.execute(
                 `INSERT INTO ai_agente.t_fin_disputas
-                   (nf, cliente, vencimento, valor, tipo, responsavel, observacoes,
+                   (documento, nf, cliente, vencimento, valor, tipo, responsavel, observacoes,
                     departamento, escalation, is_disputa, resolved_at, deleted_at,
                     created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NOW(), NOW())`,
-                [dk, cliente, vencimento, valor, tipo, resp, obs, dep, esc]
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NOW(), NOW())`,
+                [docPart, nfPart, cliente, vencimento, valor, tipo, resp, obs, dep, esc]
               );
               inserted++;
             }
@@ -3823,13 +3833,16 @@ Deno.serve(async (req) => {
         }
 
         try {
+          const parts = key.split('|');
+          const docPart = parts.length > 1 ? parts[0] : 'CR';
+          const nfPart = parts.length > 1 ? parts.slice(1).join('|') : key;
           const upd = await client.execute(
             `UPDATE ai_agente.t_fin_disputas
                SET resolved_at = NOW(),
                    is_disputa  = 0,
                    updated_at  = NOW()
-             WHERE nf = ?`,
-            [key]
+             WHERE documento = ? AND nf = ?`,
+            [docPart, nfPart]
           );
           const affectedRows = Number((upd as any)?.affectedRows ?? 0);
           console.log(`[resolve_disputa_cr] key=${key} affected=${affectedRows}`);
@@ -3868,31 +3881,36 @@ Deno.serve(async (req) => {
         }
 
         try {
-          // Resolve doc_key/nf -> fd.id, fd.nf usando a mesma lógica do get_disputas_cr
+          const parts = key.split('|');
+          const docPart = parts.length > 1 ? parts[0] : 'CR';
+          const nfPart = parts.length > 1 ? parts.slice(1).join('|') : key;
+          // Resolve doc_key -> fd.id, fd.documento, fd.nf
           const resolved = await client.query(
-            `SELECT DISTINCT fd.id AS fd_id, fd.nf AS fd_nf
+            `SELECT DISTINCT fd.id AS fd_id, fd.documento AS fd_documento, fd.nf AS fd_nf
              FROM ai_agente.t_fin_disputas fd
              LEFT JOIN dados_dachser.v_fin_regua_contas_receber v
                ON (
-                    v.doc_key COLLATE utf8mb4_unicode_ci = fd.nf COLLATE utf8mb4_unicode_ci
+                    v.doc_key COLLATE utf8mb4_unicode_ci = CONCAT(COALESCE(fd.documento,''),'|',COALESCE(fd.nf,'')) COLLATE utf8mb4_unicode_ci
                  OR (
-                      fd.nf NOT LIKE 'CR|%' AND (
-                        SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.documento COLLATE utf8mb4_unicode_ci
-                     OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.numero_nf COLLATE utf8mb4_unicode_ci
-                     OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.nd        COLLATE utf8mb4_unicode_ci
+                      COALESCE(fd.documento,'') <> 'CR' AND (
+                        fd.documento COLLATE utf8mb4_unicode_ci = v.documento COLLATE utf8mb4_unicode_ci
+                     AND fd.nf       COLLATE utf8mb4_unicode_ci = v.numero_nf COLLATE utf8mb4_unicode_ci
                       )
                     )
                   )
              WHERE fd.is_disputa = 1 AND fd.deleted_at IS NULL
                AND (
-                    fd.nf COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                    (fd.documento COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                     AND fd.nf    COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci)
                  OR v.doc_key COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
                )`,
-            [key, key]
+            [docPart, nfPart, key]
           );
 
           const ids = (resolved as any[]).map((r: any) => r.fd_id).filter((x: any) => x != null);
-          const nfs = (resolved as any[]).map((r: any) => r.fd_nf).filter((x: any) => x != null);
+          const nfs = (resolved as any[]).map((r: any) =>
+            r.fd_documento ? `${r.fd_documento}|${r.fd_nf}` : r.fd_nf
+          ).filter((x: any) => x != null);
 
           let affectedRows = 0;
           if (ids.length > 0) {
@@ -3965,11 +3983,14 @@ Deno.serve(async (req) => {
         }
 
         try {
+          const parts = key.split('|');
+          const docPart = parts.length > 1 ? parts[0] : 'CR';
+          const nfPart = parts.length > 1 ? parts.slice(1).join('|') : key;
           const upd = await client.execute(
             `UPDATE ai_agente.t_fin_disputas
                SET observacoes = ?, updated_at = NOW()
-             WHERE nf = ?`,
-            [observacoes ?? null, key]
+             WHERE documento = ? AND nf = ?`,
+            [observacoes ?? null, docPart, nfPart]
           );
           const affectedRows = Number((upd as any)?.affectedRows ?? 0);
           console.log(`[update_disputa_observacoes_cr] key=${key} affected=${affectedRows}`);
@@ -4008,11 +4029,14 @@ Deno.serve(async (req) => {
         }
 
         try {
+          const parts = key.split('|');
+          const docPart = parts.length > 1 ? parts[0] : 'CR';
+          const nfPart = parts.length > 1 ? parts.slice(1).join('|') : key;
           const upd = await client.execute(
             `UPDATE ai_agente.t_fin_disputas
                SET responsavel = ?, updated_at = NOW()
-             WHERE nf = ?`,
-            [responsavel ?? null, key]
+             WHERE documento = ? AND nf = ?`,
+            [responsavel ?? null, docPart, nfPart]
           );
           const affectedRows = Number((upd as any)?.affectedRows ?? 0);
           console.log(`[update_disputa_responsavel_cr] key=${key} affected=${affectedRows}`);
@@ -4053,24 +4077,25 @@ Deno.serve(async (req) => {
         }
         
         try {
-          // Check if record exists first
-          const checkRows = await client.query(
-            `SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
-            [doc_key]
-          );
-          
-          if (checkRows && checkRows.length > 0) {
-            // Record exists — UPDATE
-            await client.execute(
-              `UPDATE ai_agente.t_fin_disputas SET observacoes = ?, updated_at = NOW() WHERE nf = ?`,
-              [observacoes || '', doc_key]
+          // doc_key is "documento|numero_nf" for CP — update all rows for this documento (all NFs of the ND)
+          const parts = String(doc_key).split('|');
+          const docPart = parts[0];
+          const nfPart = parts.length > 1 ? parts.slice(1).join('|') : '';
+
+          if (docPart) {
+            // Propagate observation to all rows with this documento (covers all NFs of the same ND)
+            const upd = await client.execute(
+              `UPDATE ai_agente.t_fin_disputas SET observacoes = ?, updated_at = NOW() WHERE documento = ?`,
+              [observacoes || '', docPart]
             );
-          } else {
-            // Record does not exist — INSERT
-            await client.execute(
-              `INSERT INTO ai_agente.t_fin_disputas (nf, observacoes, created_at, updated_at) VALUES (?, ?, NOW(), NOW())`,
-              [doc_key, observacoes || '']
-            );
+            const affected = Number((upd as any)?.affectedRows ?? 0);
+            if (affected === 0 && nfPart) {
+              // No existing row — insert one
+              await client.execute(
+                `INSERT INTO ai_agente.t_fin_disputas (documento, nf, observacoes, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())`,
+                [docPart, nfPart, observacoes || '']
+              );
+            }
           }
           
           console.log(`Disputa observacoes updated for: ${doc_key}`);
@@ -4195,10 +4220,12 @@ Deno.serve(async (req) => {
         
         const searchTerm = nf.toString().trim();
         
-        // Check if document exists and get all required fields including id_rm
+        // Fetch ALL NFs matching this ND/documento/numero_nf — multiple rows per ND will produce multiple disputa rows
         const checkSql = `
           SELECT 
-            COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key,
+            documento,
+            numero_nf,
+            nd,
             id_rm,
             razao_social AS cliente,
             data_vencimento AS vencimento,
@@ -4206,7 +4233,6 @@ Deno.serve(async (req) => {
             CASE WHEN tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo
           FROM dados_dachser.t_dados_financeiro_nfs 
           WHERE documento = ? OR numero_nf = ? OR nd = ?
-          LIMIT 1
         `;
         const existingRows = await client.query(checkSql, [searchTerm, searchTerm, searchTerm]);
         
@@ -4217,65 +4243,63 @@ Deno.serve(async (req) => {
           );
         }
         
-        const docKey = existingRows[0].doc_key;
-        const idRm = existingRows[0].id_rm;
-        const cliente = existingRows[0].cliente || 'N/A';
-        const vencimento = existingRows[0].vencimento || new Date().toISOString().split('T')[0];
-        const valor = existingRows[0].valor || 0;
-        const tipo = existingRows[0].tipo || 'A prazo';
-        
-        // Update to mark as disputa in t_dados_financeiro_nfs
-        const updateSql = `
+        // Mark all matching NFs as disputa in source table
+        await client.execute(`
           UPDATE dados_dachser.t_dados_financeiro_nfs 
-          SET disputa = 1, 
-              inicio_disputa = NOW(), 
-              responsavel_disp = ?
+          SET disputa = 1, inicio_disputa = NOW(), responsavel_disp = ?
           WHERE documento = ? OR numero_nf = ? OR nd = ?
-        `;
-        await client.execute(updateSql, [responsavel || null, searchTerm, searchTerm, searchTerm]);
-        
-        // Also insert/update dispute info in t_dados_rm (using id_rm, not doc_key)
-        if (idRm) {
-          const rmUpsertSql = `
-            INSERT INTO dados_dachser.t_dados_rm (id_rm, nf_disputa, inicio_disputa, responsavel_disp)
-            VALUES (?, 1, NOW(), ?)
+        `, [responsavel || null, searchTerm, searchTerm, searchTerm]);
+
+        // Upsert one row per (documento, numero_nf) in t_fin_disputas
+        let insertedCount = 0;
+        for (const row of existingRows as any[]) {
+          const docPart = row.documento ?? '';
+          const nfPart = row.numero_nf ?? '';
+          const ndPart = row.nd ?? null;
+          const idRm = row.id_rm;
+          const cliente = row.cliente || 'N/A';
+          const vencimento = row.vencimento || new Date().toISOString().split('T')[0];
+          const valor = row.valor || 0;
+          const tipo = row.tipo || 'A prazo';
+
+          if (idRm) {
+            await client.execute(`
+              INSERT INTO dados_dachser.t_dados_rm (id_rm, nf_disputa, inicio_disputa, responsavel_disp)
+              VALUES (?, 1, NOW(), ?)
+              ON DUPLICATE KEY UPDATE 
+                nf_disputa = 1,
+                inicio_disputa = COALESCE(inicio_disputa, NOW()),
+                responsavel_disp = VALUES(responsavel_disp)
+            `, [idRm, responsavel || null]);
+          }
+
+          await client.execute(`
+            INSERT INTO ai_agente.t_fin_disputas
+              (documento, nf, nd, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
             ON DUPLICATE KEY UPDATE 
-              nf_disputa = 1,
-              inicio_disputa = COALESCE(inicio_disputa, NOW()),
-              responsavel_disp = VALUES(responsavel_disp)
-          `;
-          await client.execute(rmUpsertSql, [idRm, responsavel || null]);
+              nd = VALUES(nd),
+              cliente = VALUES(cliente),
+              vencimento = VALUES(vencimento),
+              valor = VALUES(valor),
+              tipo = VALUES(tipo),
+              responsavel = VALUES(responsavel),
+              departamento = VALUES(departamento),
+              observacoes = VALUES(observacoes),
+              escalation = VALUES(escalation),
+              is_disputa = 1,
+              resolved_at = NULL,
+              deleted_at = NULL,
+              updated_at = NOW()
+          `, [
+            docPart, nfPart, ndPart, cliente, vencimento, valor, tipo,
+            responsavel || null, departamento || null, observacoes || null, escalation || null,
+          ]);
+          insertedCount++;
         }
         
-        // Insert/update extra data in t_fin_disputas with all required fields
-        const upsertSql = `
-          INSERT INTO ai_agente.t_fin_disputas (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-          ON DUPLICATE KEY UPDATE 
-            cliente = VALUES(cliente),
-            vencimento = VALUES(vencimento),
-            valor = VALUES(valor),
-            tipo = VALUES(tipo),
-            responsavel = VALUES(responsavel),
-            departamento = VALUES(departamento),
-            observacoes = VALUES(observacoes),
-            escalation = VALUES(escalation),
-            updated_at = NOW()
-        `;
-        await client.execute(upsertSql, [
-          docKey, 
-          cliente,
-          vencimento,
-          valor,
-          tipo,
-          responsavel || null,
-          departamento || null, 
-          observacoes || null,
-          escalation || null
-        ]);
-        
-        console.log(`Disputa saved for: ${searchTerm} (doc_key: ${docKey})`);
-        result = { success: true };
+        console.log(`Disputa saved for: ${searchTerm} (${insertedCount} NF rows)`);
+        result = { success: true, rows: insertedCount };
         } catch (saveErr) {
           console.error(`[save_disputa] Error:`, saveErr);
           const saveErrMsg = saveErr instanceof Error ? saveErr.message : 'Erro desconhecido';
@@ -4304,19 +4328,24 @@ Deno.serve(async (req) => {
             [doc_key]
           );
           
-          // Remove from t_fin_disputas
-          await client.execute(
-            `DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`,
-            [doc_key]
-          );
-          
-          // Reset disputa flag using composite key parts
+          // Remove from t_fin_disputas (split doc_key → documento + nf)
           const parts = doc_key.split('|');
-          if (parts.length === 2) {
-            const [documento, numero_nf] = parts;
+          if (parts.length >= 2) {
+            const documento = parts[0];
+            const numero_nf = parts.slice(1).join('|');
+            await client.execute(
+              `DELETE FROM ai_agente.t_fin_disputas WHERE documento = ? AND nf = ?`,
+              [documento, numero_nf]
+            );
             await client.execute(
               `UPDATE dados_dachser.t_dados_financeiro_nfs SET disputa = 0 WHERE documento = ? AND numero_nf = ?`,
               [documento, numero_nf]
+            );
+          } else {
+            // Legacy fallback
+            await client.execute(
+              `DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`,
+              [doc_key]
             );
           }
           
@@ -4399,6 +4428,7 @@ Deno.serve(async (req) => {
           const docRows = await client.query(`
             SELECT 
               CONCAT(COALESCE(documento,''), '|', COALESCE(numero_nf,'')) AS doc_key,
+              documento, numero_nf,
               razao_social AS cliente,
               responsavel_disp AS responsavel
             FROM dados_dachser.t_dados_financeiro_nfs 
@@ -4415,19 +4445,20 @@ Deno.serve(async (req) => {
           for (const doc of docRows) {
             const disputaRows = await client.query(
               `SELECT fd.id FROM ai_agente.t_fin_disputas fd
-               WHERE fd.nf = ?
+               WHERE fd.documento = ? AND fd.nf = ?
                AND NOT EXISTS (
                  SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd 
-                 WHERE sd.documento = fd.nf AND sd.active = 0
+                 WHERE sd.documento = CONCAT(fd.documento,'|',fd.nf) AND sd.active = 0
                )
                LIMIT 1`,
-              [doc.doc_key]
+              [doc.documento ?? '', doc.numero_nf ?? '']
             );
             if (!disputaRows || disputaRows.length === 0) {
               allExist = false;
               break;
             }
           }
+          
           
           if (allExist) {
             existingItems.push({
@@ -4533,33 +4564,36 @@ Deno.serve(async (req) => {
           // Process each NF of this ND
           for (const docData of allNfs) {
             const docKey = docData.doc_key;
+            const docPart = docData.documento ?? '';
+            const nfPart = docData.numero_nf ?? '';
             const idRm = docData.id_rm;
             
             // Check if already exists in t_fin_disputas (excluding soft-deleted)
             const existingDisputa = await client.query(
               `SELECT fd.id FROM ai_agente.t_fin_disputas fd
-               WHERE fd.nf = ?
+               WHERE fd.documento = ? AND fd.nf = ?
                AND NOT EXISTS (
                  SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd 
-                 WHERE sd.documento = fd.nf AND sd.active = 0
+                 WHERE sd.documento = CONCAT(fd.documento,'|',fd.nf) AND sd.active = 0
                )
                LIMIT 1`,
-              [docKey]
+              [docPart, nfPart]
             );
             
             if (existingDisputa && existingDisputa.length > 0) {
               if (forceUpdate) {
                 await client.execute(`
                   UPDATE ai_agente.t_fin_disputas 
-                  SET responsavel = ?, departamento = ?, observacoes = COALESCE(?, observacoes), escalation = ?, vencimento = COALESCE(?, vencimento), updated_at = NOW()
-                  WHERE nf = ?
+                  SET nd = COALESCE(?, nd), responsavel = ?, departamento = ?, observacoes = COALESCE(?, observacoes), escalation = ?, vencimento = COALESCE(?, vencimento), updated_at = NOW()
+                  WHERE documento = ? AND nf = ?
                 `, [
+                  nd,
                   item.responsavel || docData.responsavel_disp || null,
                   item.departamento || null,
                   item.descricao || null,
                   item.escalation || null,
                   excelDateToSQL(item.prazo) || docData.vencimento || null,
-                  docKey
+                  docPart, nfPart
                 ]);
                 updatedCount++;
               } else {
@@ -4570,7 +4604,7 @@ Deno.serve(async (req) => {
             }
             
             // Clean up any soft-deleted residual records before inserting
-            await client.execute(`DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`, [docKey]);
+            await client.execute(`DELETE FROM ai_agente.t_fin_disputas WHERE documento = ? AND nf = ?`, [docPart, nfPart]);
             await client.execute(`DELETE FROM ai_agente.t_financeiro_soft_delete WHERE documento = ?`, [docKey]);
             // Also clean legacy simple-key soft-delete markers
             if (docData.documento) {
@@ -4601,10 +4635,10 @@ Deno.serve(async (req) => {
             
             // Insert new disputa
             await client.execute(`
-              INSERT INTO ai_agente.t_fin_disputas (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+              INSERT INTO ai_agente.t_fin_disputas (documento, nf, nd, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
             `, [
-              docKey, 
+              docPart, nfPart, nd,
               docData.cliente || 'N/A',
               excelDateToSQL(item.prazo) || docData.vencimento || null,
               docData.valor || 0,
@@ -4623,11 +4657,7 @@ Deno.serve(async (req) => {
             await client.execute(`
               UPDATE ai_agente.t_fin_disputas 
               SET observacoes = ?, updated_at = NOW()
-              WHERE nf IN (
-                SELECT DISTINCT CONCAT(COALESCE(documento,''), '|', COALESCE(numero_nf,''))
-                FROM dados_dachser.t_dados_financeiro_nfs 
-                WHERE nd = ? AND nd IS NOT NULL AND nd != ''
-              )
+              WHERE nd = ?
               AND (observacoes IS NULL OR observacoes = '')
             `, [item.descricao, nd]);
           }
@@ -18108,7 +18138,7 @@ Deno.serve(async (req) => {
             )
             AND NOT EXISTS (
               SELECT 1 FROM ai_agente.t_fin_disputas d
-              WHERE d.nf COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+              WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND d.is_disputa = 1
                 AND d.resolved_at IS NULL
                 AND d.deleted_at IS NULL
@@ -18174,7 +18204,7 @@ Deno.serve(async (req) => {
             )
             AND NOT EXISTS (
               SELECT 1 FROM ai_agente.t_fin_disputas d
-              WHERE d.nf COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+              WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND d.is_disputa = 1
                 AND d.resolved_at IS NULL
                 AND d.deleted_at IS NULL
@@ -18237,7 +18267,7 @@ Deno.serve(async (req) => {
             )
             AND NOT EXISTS (
               SELECT 1 FROM ai_agente.t_fin_disputas d
-              WHERE d.nf COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+              WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND d.is_disputa = 1
                 AND d.resolved_at IS NULL
                 AND d.deleted_at IS NULL
@@ -18406,7 +18436,7 @@ Deno.serve(async (req) => {
             t.idlan,
             CASE WHEN EXISTS (
               SELECT 1 FROM ai_agente.t_fin_disputas d
-              WHERE d.nf COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+              WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND d.is_disputa = 1
                 AND d.resolved_at IS NULL
                 AND d.deleted_at IS NULL
@@ -18477,7 +18507,7 @@ Deno.serve(async (req) => {
               )
               AND NOT EXISTS (
                 SELECT 1 FROM ai_agente.t_fin_disputas d
-                WHERE d.nf COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                   AND d.is_disputa = 1
                   AND d.resolved_at IS NULL
                   AND d.deleted_at IS NULL
@@ -19343,16 +19373,15 @@ Deno.serve(async (req) => {
             [docKey]
           );
           
-          // 2. Remove from t_fin_disputas — match both composite and legacy simple key
-          await client.execute(
-            `DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`,
-            [docKey]
-          );
-          
-          // 3. Reset disputa flag in source table using composite key parts
+          // 2. Remove from t_fin_disputas — split doc_key
           const parts = docKey.split('|');
-          if (parts.length === 2) {
-            const [documento, numero_nf] = parts;
+          if (parts.length >= 2) {
+            const documento = parts[0];
+            const numero_nf = parts.slice(1).join('|');
+            await client.execute(
+              `DELETE FROM ai_agente.t_fin_disputas WHERE documento = ? AND nf = ?`,
+              [documento, numero_nf]
+            );
             await client.execute(
               `UPDATE dados_dachser.t_dados_financeiro_nfs SET disputa = 0 WHERE documento = ? AND numero_nf = ?`,
               [documento, numero_nf]
@@ -19360,14 +19389,19 @@ Deno.serve(async (req) => {
           } else {
             // Fallback for legacy simple keys
             await client.execute(
+              `DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`,
+              [docKey]
+            );
+            await client.execute(
               `UPDATE dados_dachser.t_dados_financeiro_nfs SET disputa = 0 WHERE documento = ? OR numero_nf = ? OR nd = ?`,
               [docKey, docKey, docKey]
             );
           }
           
           // 4. Also clean up any legacy simple-key records in soft_delete
-          if (parts.length === 2) {
-            const [documento, numero_nf] = parts;
+          if (parts.length >= 2) {
+            const documento = parts[0];
+            const numero_nf = parts.slice(1).join('|');
             // Clean legacy soft-delete markers that used simple keys
             await client.execute(`DELETE FROM ai_agente.t_financeiro_soft_delete WHERE documento = ? AND documento NOT LIKE '%|%'`, [documento]);
             await client.execute(`DELETE FROM ai_agente.t_financeiro_soft_delete WHERE documento = ? AND documento NOT LIKE '%|%'`, [numero_nf]);
@@ -19446,31 +19480,36 @@ Deno.serve(async (req) => {
         try {
           await client.execute('START TRANSACTION');
           for (const key of keys) {
-            // Resolve doc_key/nf -> fd.id, fd.nf
+            const parts = key.split('|');
+            const docPart = parts.length > 1 ? parts[0] : 'CR';
+            const nfPart = parts.length > 1 ? parts.slice(1).join('|') : key;
+            // Resolve doc_key -> fd.id, fd.documento, fd.nf
             const resolved = await client.query(
-              `SELECT DISTINCT fd.id AS fd_id, fd.nf AS fd_nf
+              `SELECT DISTINCT fd.id AS fd_id, fd.documento AS fd_documento, fd.nf AS fd_nf
                FROM ai_agente.t_fin_disputas fd
                LEFT JOIN dados_dachser.v_fin_regua_contas_receber v
                  ON (
-                      v.doc_key COLLATE utf8mb4_unicode_ci = fd.nf COLLATE utf8mb4_unicode_ci
+                      v.doc_key COLLATE utf8mb4_unicode_ci = CONCAT(COALESCE(fd.documento,''),'|',COALESCE(fd.nf,'')) COLLATE utf8mb4_unicode_ci
                    OR (
-                        fd.nf NOT LIKE 'CR|%' AND (
-                          SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.documento COLLATE utf8mb4_unicode_ci
-                       OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.numero_nf COLLATE utf8mb4_unicode_ci
-                       OR SUBSTRING_INDEX(fd.nf,'|',1) COLLATE utf8mb4_unicode_ci = v.nd        COLLATE utf8mb4_unicode_ci
+                        COALESCE(fd.documento,'') <> 'CR' AND (
+                          fd.documento COLLATE utf8mb4_unicode_ci = v.documento COLLATE utf8mb4_unicode_ci
+                       AND fd.nf       COLLATE utf8mb4_unicode_ci = v.numero_nf COLLATE utf8mb4_unicode_ci
                         )
                       )
                     )
                WHERE fd.is_disputa = 1 AND fd.deleted_at IS NULL
                  AND (
-                      fd.nf COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                      (fd.documento COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
+                       AND fd.nf    COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci)
                    OR v.doc_key COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci
                  )`,
-              [key, key]
+              [docPart, nfPart, key]
             );
 
             const ids = (resolved as any[]).map((r: any) => r.fd_id).filter((x: any) => x != null);
-            const nfs = (resolved as any[]).map((r: any) => r.fd_nf).filter((x: any) => x != null);
+            const nfs = (resolved as any[]).map((r: any) =>
+              r.fd_documento ? `${r.fd_documento}|${r.fd_nf}` : r.fd_nf
+            ).filter((x: any) => x != null);
             resolvedIds += ids.length;
 
             if (ids.length > 0) {
@@ -19526,11 +19565,14 @@ Deno.serve(async (req) => {
         try {
           await client.execute('START TRANSACTION');
           for (const key of keys) {
+            const parts = key.split('|');
+            const docPart = parts.length > 1 ? parts[0] : 'CR';
+            const nfPart = parts.length > 1 ? parts.slice(1).join('|') : key;
             const upd = await client.execute(
               `UPDATE ai_agente.t_fin_disputas
                SET resolved_at = NOW(), is_disputa = 0, updated_at = NOW()
-               WHERE nf = ?`,
-              [key]
+               WHERE documento = ? AND nf = ?`,
+              [docPart, nfPart]
             );
             const aff = (upd as any)?.affectedRows ?? 0;
             if (aff > 0) resolved++; else notFound++;
@@ -19580,18 +19622,27 @@ Deno.serve(async (req) => {
               notFoundItems.push(nd);
               continue;
             }
-            const placeholders = docKeys.map(() => '?').join(',');
+            // Split each docKey ("CR|chave") into (documento, nf) pairs
+            const pairs = docKeys.map((k: string) => {
+              const ps = String(k).split('|');
+              return ps.length > 1
+                ? { d: ps[0], n: ps.slice(1).join('|') }
+                : { d: 'CR', n: k };
+            });
+            const orClauses = pairs.map(() => '(documento = ? AND nf = ?)').join(' OR ');
+            const params: string[] = [];
+            for (const p of pairs) { params.push(p.d, p.n); }
             const active = await client.query(
-              `SELECT nf, responsavel
+              `SELECT documento, nf, responsavel
                FROM ai_agente.t_fin_disputas
-               WHERE nf IN (${placeholders})
+               WHERE (${orClauses})
                  AND is_disputa = 1
                  AND resolved_at IS NULL
                  AND deleted_at IS NULL`,
-              docKeys
+              params
             );
-            const activeNfs = new Set((active as any[]).map(r => r.nf));
-            const allActive = docKeys.every(k => activeNfs.has(k));
+            const activeKeys = new Set((active as any[]).map(r => `${r.documento}|${r.nf}`));
+            const allActive = pairs.every(p => activeKeys.has(`${p.d}|${p.n}`));
             if (allActive) {
               const cliente = (rows as any[])[0]?.cliente || '';
               const responsavel = (active as any[]).find(r => r.responsavel)?.responsavel || '';
@@ -19673,13 +19724,16 @@ Deno.serve(async (req) => {
             for (const doc of docRows as any[]) {
               const docKey = doc.doc_key;
               if (!docKey) continue;
+              const ps = String(docKey).split('|');
+              const docPart = ps.length > 1 ? ps[0] : 'CR';
+              const nfPart = ps.length > 1 ? ps.slice(1).join('|') : docKey;
               const tipo = doc.tipo_documento === 'FAT_NF' ? 'À vista' : 'A prazo';
               const vencimento = excelDateToSQL(item.prazo) || doc.data_vencimento || null;
 
               const existing = await client.query(
                 `SELECT id, deleted_at, resolved_at, is_disputa
-                 FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
-                [docKey]
+                 FROM ai_agente.t_fin_disputas WHERE documento = ? AND nf = ? LIMIT 1`,
+                [docPart, nfPart]
               );
 
               if (existing && existing.length > 0) {
@@ -19705,7 +19759,7 @@ Deno.serve(async (req) => {
                        resolved_at = NULL,
                        deleted_at = NULL,
                        updated_at = NOW()
-                   WHERE nf = ?`,
+                   WHERE documento = ? AND nf = ?`,
                   [
                     item.responsavel || '',
                     item.departamento || '',
@@ -19715,17 +19769,17 @@ Deno.serve(async (req) => {
                     doc.razao_social || '',
                     doc.valor_nf ?? null,
                     tipo,
-                    docKey,
+                    docPart, nfPart,
                   ]
                 );
                 if (isActive) updatedCount++; else count++;
               } else {
                 await client.execute(
                   `INSERT INTO ai_agente.t_fin_disputas
-                    (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())`,
+                    (documento, nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())`,
                   [
-                    docKey,
+                    docPart, nfPart,
                     doc.razao_social || 'N/A',
                     vencimento,
                     doc.valor_nf ?? 0,
