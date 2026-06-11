@@ -1,62 +1,64 @@
 
-## Diagnóstico (causa real do problema)
+## Objetivo
+Três ajustes pontuais na esteira do voucher (frontend + uma action no `mariadb-proxy`), sem mexer em régua, e-mails ou estrutura de tabelas.
 
-A tela `/fin/disputa`, ao adicionar uma disputa via modal:
+---
 
-1. Chama `lookup_documento_cr` (mariadb-proxy:3548) passando o ND/NF/documento digitado.
-2. A query roda contra `dados_dachser.v_fin_regua_contas_receber` e pode retornar **N linhas** quando uma mesma ND está vinculada a múltiplas NFs / parcelas (cada linha = um `doc_key` distinto, formado por `documento|numero_nf`).
-3. `FinanceiroDisputa.tsx:253` pega **apenas `lookupRows[0].doc_key`** e chama `save_disputa_cr` só para essa primeira linha.
+## 1) Anexo obrigatório na criação manual (ADF isento)
 
-Resultado: só uma das NFs daquela ND vira disputa em `ai_agente.t_fin_disputas`. As demais NFs continuam "limpas" no contas a receber e entram normalmente no disparo de cobrança — exatamente o sintoma relatado.
+**Onde:** `src/components/esteira/CreateVoucherDialog.tsx` e `src/components/esteira/VoucherMasterForm.tsx`.
 
-O `save_disputa_cr` em si está correto (lê título da view, grava cliente/vencimento/valor/tipo, faz insert ou update por `nf = doc_key`). O bug é a tela mandar gravar só 1 dos N.
+**Mudanças:**
+- Manter a regra atual em `CreateVoucherDialog`: anexo de fatura obrigatório **exceto quando `tipoDocumento === "ADF"`** (ADF segue podendo ser criado sem anexo).
+- Adicionar `disabled` no botão "Criar Voucher/SPO" quando `faturaFiles.length === 0 && tipoDocumento !== "ADF"` — hoje só há toast, falta feedback visual.
+- `VoucherMasterForm` já exige anexo — adicionar o mesmo `disabled` no botão de submit quando `faturaFiles.length === 0`.
+- Manter exceção do "Salvar Rascunho" (não exige anexo).
+- Manter `statusDocumentoFiscal = "PENDENTE"` para ADF criado sem anexo.
 
-A importação por planilha (`import_disputas_planilha_cr`) já trata corretamente todos os doc_keys de uma ND — confirma que a regra de negócio esperada é "uma ND = todas as suas NFs em disputa".
+**Não muda:** importação via RM/Lote, criação automática via cron, vouchers vindos de RM.
 
-## Mudança
+---
 
-Corrigir a gravação da disputa para cobrir **todas** as linhas retornadas pelo lookup, mantendo idempotência.
+## 2) Filtro de etapa deve ignorar o filtro de mês
 
-### Backend (`supabase/functions/mariadb-proxy/index.ts`)
+**Onde:** `src/pages/esteira/EsteiraIndex.tsx` — função `loadVouchers` (linhas ~909-960) e o `useEffect` que recarrega com `quickFilterMesEmissao` (linha 1213).
 
-Adicionar nova ação `save_disputa_cr_bulk` que recebe um array de `doc_keys` (mais `responsavel`, `observacoes`, `departamento`, `escalation`) e, em transação por item, executa o mesmo insert/update já presente em `save_disputa_cr` para cada `doc_key`. Retorna `{ success, inserted, updated, failed: [{doc_key, message}] }`.
+**Comportamento atual:** `get_vouchers_combined` recebe `data_emissao_inicio/fim` derivados do mês; mudar etapa só filtra em memória → processos fora do mês nunca aparecem.
 
-Não alterar `save_disputa_cr` atual (continua servindo para chamadas single — `bulk_resolve`, edições por linha, etc.).
+**Mudança:**
+- Quando `filters.etapa !== "all"`, chamar `get_vouchers_combined` **sem** filtro de mês e aplicar etapa client-side como já é feito.
+- Quando `filters.etapa === "all"`, manter o comportamento atual (filtro de mês ativo).
+- Incluir `filters.etapa` nas dependências do `useEffect` que recarrega vouchers, para refetch ao alternar etapa.
+- Backend já aceita ausência do filtro (`hasMonthFilter = false`), sem alteração no `mariadb-proxy`.
 
-### Frontend (`src/pages/FinanceiroDisputa.tsx`, função `handleAddDispute` ~ linhas 233–281)
+---
 
-Substituir:
+## 3) Filtro de mês passa a usar data de vencimento
 
-```ts
-const docKey = lookupRows[0].doc_key;
-await invoke("save_disputa_cr", { doc_key: docKey, ... });
-```
+**Onde:** `supabase/functions/mariadb-proxy/index.ts` case `get_vouchers_combined` (linhas 17506-17610) e labels no `EsteiraIndex.tsx` (~2160-2190).
 
-por:
+**Backend:**
+- `ativosMonthClause`: trocar `dfv.data_emissao`/`v.data_emissao_documento` por `v.vencimento` com fallback em `dfv.data_vencimento`:
+  ```
+  (v.vencimento >= ? AND v.vencimento < ?)
+  OR (v.vencimento IS NULL AND dfv.data_vencimento >= ? AND dfv.data_vencimento < ?)
+  ```
+- `pendentesMonthClause`: trocar `dfv.data_emissao` por `dfv.data_vencimento`.
+- Manter exceção das etapas `RASCUNHO/OPERACAO/FINANCEIRO` (sempre aparecem) e o subquery `dfv` agregado.
+- Aceitar novos parâmetros `data_vencimento_inicio/fim`, mantendo `data_emissao_inicio/fim` como alias temporário para não quebrar chamadas existentes.
 
-```ts
-const docKeys = lookupRows.map(r => r.doc_key).filter(Boolean);
-await invoke("save_disputa_cr_bulk", { doc_keys: docKeys, responsavel, observacoes });
-```
+**Frontend:**
+- Renomear `quickFilterMesEmissao` → `quickFilterMesVencimento` (state + label "Mês de Emissão" → "Mês de Vencimento").
+- Enviar como `data_vencimento_inicio/fim` na chamada `get_vouchers_combined`.
 
-Ajustar o toast para mostrar quantos títulos entraram em disputa:
-- 1 título → "Disputa adicionada"
-- N>1 → "N títulos da ND `<ND>` colocados em disputa"
-
-Em caso de `failed.length > 0`, exibir aviso com a contagem e logar os erros no console; não bloquear o fluxo.
-
-## Fora de escopo
-
-- Disparo de e-mail / régua / `regua-send-emails` — intocados.
-- View vs tabela base — sem mudança.
-- Schema de `t_fin_disputas` — sem mudança.
-- Demais ações (`resolve`, `delete`, `bulk_*`, importação por planilha, edição de observação/responsável) — sem mudança.
+---
 
 ## Validação
+- Criar voucher não-ADF sem fatura → botão desabilitado (+ toast se forçado).
+- Criar voucher ADF sem fatura → permitido, `status_documento_fiscal = PENDENTE`.
+- Etapa "Fiscal" com mês passado selecionado → lista todos os processos em Fiscal independente do mês.
+- "Todas" etapas com um mês → apenas vouchers/RM com vencimento naquele mês (+ exceções RASCUNHO/OPERACAO/FINANCEIRO).
+- Console logs confirmam `monthFilter=none` quando etapa ≠ "all".
 
-1. Pegar uma ND real que hoje tem ≥2 NFs no contas a receber.
-2. Adicionar disputa pela tela usando essa ND.
-3. Confirmar no log do edge function: `[save_disputa_cr_bulk] nd_count=N inserted=X updated=Y failed=0`.
-4. Recarregar `/fin/disputa` e confirmar que **todas** as NFs daquela ND aparecem listadas como em disputa.
-5. Repetir a operação (clicar adicionar de novo na mesma ND) e confirmar idempotência: `inserted=0 updated=N`.
-6. Resolver/excluir uma das linhas e confirmar que as demais permanecem.
+## Fora de escopo
+Disparo de e-mails, régua, schema de tabelas, importação em lote, cron.
