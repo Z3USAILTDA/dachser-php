@@ -19622,18 +19622,27 @@ Deno.serve(async (req) => {
               notFoundItems.push(nd);
               continue;
             }
-            const placeholders = docKeys.map(() => '?').join(',');
+            // Split each docKey ("CR|chave") into (documento, nf) pairs
+            const pairs = docKeys.map((k: string) => {
+              const ps = String(k).split('|');
+              return ps.length > 1
+                ? { d: ps[0], n: ps.slice(1).join('|') }
+                : { d: 'CR', n: k };
+            });
+            const orClauses = pairs.map(() => '(documento = ? AND nf = ?)').join(' OR ');
+            const params: string[] = [];
+            for (const p of pairs) { params.push(p.d, p.n); }
             const active = await client.query(
-              `SELECT nf, responsavel
+              `SELECT documento, nf, responsavel
                FROM ai_agente.t_fin_disputas
-               WHERE nf IN (${placeholders})
+               WHERE (${orClauses})
                  AND is_disputa = 1
                  AND resolved_at IS NULL
                  AND deleted_at IS NULL`,
-              docKeys
+              params
             );
-            const activeNfs = new Set((active as any[]).map(r => r.nf));
-            const allActive = docKeys.every(k => activeNfs.has(k));
+            const activeKeys = new Set((active as any[]).map(r => `${r.documento}|${r.nf}`));
+            const allActive = pairs.every(p => activeKeys.has(`${p.d}|${p.n}`));
             if (allActive) {
               const cliente = (rows as any[])[0]?.cliente || '';
               const responsavel = (active as any[]).find(r => r.responsavel)?.responsavel || '';
