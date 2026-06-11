@@ -4220,10 +4220,12 @@ Deno.serve(async (req) => {
         
         const searchTerm = nf.toString().trim();
         
-        // Check if document exists and get all required fields including id_rm
+        // Fetch ALL NFs matching this ND/documento/numero_nf — multiple rows per ND will produce multiple disputa rows
         const checkSql = `
           SELECT 
-            COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key,
+            documento,
+            numero_nf,
+            nd,
             id_rm,
             razao_social AS cliente,
             data_vencimento AS vencimento,
@@ -4231,7 +4233,6 @@ Deno.serve(async (req) => {
             CASE WHEN tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo
           FROM dados_dachser.t_dados_financeiro_nfs 
           WHERE documento = ? OR numero_nf = ? OR nd = ?
-          LIMIT 1
         `;
         const existingRows = await client.query(checkSql, [searchTerm, searchTerm, searchTerm]);
         
@@ -4242,65 +4243,63 @@ Deno.serve(async (req) => {
           );
         }
         
-        const docKey = existingRows[0].doc_key;
-        const idRm = existingRows[0].id_rm;
-        const cliente = existingRows[0].cliente || 'N/A';
-        const vencimento = existingRows[0].vencimento || new Date().toISOString().split('T')[0];
-        const valor = existingRows[0].valor || 0;
-        const tipo = existingRows[0].tipo || 'A prazo';
-        
-        // Update to mark as disputa in t_dados_financeiro_nfs
-        const updateSql = `
+        // Mark all matching NFs as disputa in source table
+        await client.execute(`
           UPDATE dados_dachser.t_dados_financeiro_nfs 
-          SET disputa = 1, 
-              inicio_disputa = NOW(), 
-              responsavel_disp = ?
+          SET disputa = 1, inicio_disputa = NOW(), responsavel_disp = ?
           WHERE documento = ? OR numero_nf = ? OR nd = ?
-        `;
-        await client.execute(updateSql, [responsavel || null, searchTerm, searchTerm, searchTerm]);
-        
-        // Also insert/update dispute info in t_dados_rm (using id_rm, not doc_key)
-        if (idRm) {
-          const rmUpsertSql = `
-            INSERT INTO dados_dachser.t_dados_rm (id_rm, nf_disputa, inicio_disputa, responsavel_disp)
-            VALUES (?, 1, NOW(), ?)
+        `, [responsavel || null, searchTerm, searchTerm, searchTerm]);
+
+        // Upsert one row per (documento, numero_nf) in t_fin_disputas
+        let insertedCount = 0;
+        for (const row of existingRows as any[]) {
+          const docPart = row.documento ?? '';
+          const nfPart = row.numero_nf ?? '';
+          const ndPart = row.nd ?? null;
+          const idRm = row.id_rm;
+          const cliente = row.cliente || 'N/A';
+          const vencimento = row.vencimento || new Date().toISOString().split('T')[0];
+          const valor = row.valor || 0;
+          const tipo = row.tipo || 'A prazo';
+
+          if (idRm) {
+            await client.execute(`
+              INSERT INTO dados_dachser.t_dados_rm (id_rm, nf_disputa, inicio_disputa, responsavel_disp)
+              VALUES (?, 1, NOW(), ?)
+              ON DUPLICATE KEY UPDATE 
+                nf_disputa = 1,
+                inicio_disputa = COALESCE(inicio_disputa, NOW()),
+                responsavel_disp = VALUES(responsavel_disp)
+            `, [idRm, responsavel || null]);
+          }
+
+          await client.execute(`
+            INSERT INTO ai_agente.t_fin_disputas
+              (documento, nf, nd, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
             ON DUPLICATE KEY UPDATE 
-              nf_disputa = 1,
-              inicio_disputa = COALESCE(inicio_disputa, NOW()),
-              responsavel_disp = VALUES(responsavel_disp)
-          `;
-          await client.execute(rmUpsertSql, [idRm, responsavel || null]);
+              nd = VALUES(nd),
+              cliente = VALUES(cliente),
+              vencimento = VALUES(vencimento),
+              valor = VALUES(valor),
+              tipo = VALUES(tipo),
+              responsavel = VALUES(responsavel),
+              departamento = VALUES(departamento),
+              observacoes = VALUES(observacoes),
+              escalation = VALUES(escalation),
+              is_disputa = 1,
+              resolved_at = NULL,
+              deleted_at = NULL,
+              updated_at = NOW()
+          `, [
+            docPart, nfPart, ndPart, cliente, vencimento, valor, tipo,
+            responsavel || null, departamento || null, observacoes || null, escalation || null,
+          ]);
+          insertedCount++;
         }
         
-        // Insert/update extra data in t_fin_disputas with all required fields
-        const upsertSql = `
-          INSERT INTO ai_agente.t_fin_disputas (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-          ON DUPLICATE KEY UPDATE 
-            cliente = VALUES(cliente),
-            vencimento = VALUES(vencimento),
-            valor = VALUES(valor),
-            tipo = VALUES(tipo),
-            responsavel = VALUES(responsavel),
-            departamento = VALUES(departamento),
-            observacoes = VALUES(observacoes),
-            escalation = VALUES(escalation),
-            updated_at = NOW()
-        `;
-        await client.execute(upsertSql, [
-          docKey, 
-          cliente,
-          vencimento,
-          valor,
-          tipo,
-          responsavel || null,
-          departamento || null, 
-          observacoes || null,
-          escalation || null
-        ]);
-        
-        console.log(`Disputa saved for: ${searchTerm} (doc_key: ${docKey})`);
-        result = { success: true };
+        console.log(`Disputa saved for: ${searchTerm} (${insertedCount} NF rows)`);
+        result = { success: true, rows: insertedCount };
         } catch (saveErr) {
           console.error(`[save_disputa] Error:`, saveErr);
           const saveErrMsg = saveErr instanceof Error ? saveErr.message : 'Erro desconhecido';
