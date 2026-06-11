@@ -3347,7 +3347,7 @@ Deno.serve(async (req) => {
       case 'get_disputas': {
         const { tipo } = body as { tipo?: string };
         
-        let whereClause = '(t.disputa = 1 OR fd.nf IS NOT NULL) AND COALESCE(sd.active, 1) = 1';
+        let whereClause = '(t.disputa = 1 OR fd.id IS NOT NULL) AND COALESCE(sd.active, 1) = 1';
         const params: string[] = [];
         
         if (tipo) {
@@ -3357,7 +3357,8 @@ Deno.serve(async (req) => {
         
         const sql = `
           SELECT
-            COALESCE(NULLIF(t.numero_nf,''), NULLIF(t.documento,''), NULLIF(t.nd,'')) AS nf,
+            t.numero_nf AS nf,
+            t.documento,
             t.nd,
             t.razao_social AS cliente,
             SUBSTRING_INDEX(t.razao_social, ' - ', 1) AS razao_base,
@@ -3375,7 +3376,9 @@ Deno.serve(async (req) => {
           LEFT JOIN ai_agente.t_financeiro_soft_delete sd
             ON sd.documento COLLATE utf8mb4_general_ci = CONCAT(COALESCE(t.documento,''), '|', COALESCE(t.numero_nf,'')) COLLATE utf8mb4_general_ci
           LEFT JOIN ai_agente.t_fin_disputas fd
-            ON fd.nf COLLATE utf8mb4_general_ci = CONCAT(COALESCE(t.documento,''), '|', COALESCE(t.numero_nf,'')) COLLATE utf8mb4_general_ci
+            ON fd.documento COLLATE utf8mb4_general_ci = t.documento COLLATE utf8mb4_general_ci
+           AND fd.nf        COLLATE utf8mb4_general_ci = t.numero_nf COLLATE utf8mb4_general_ci
+           AND fd.deleted_at IS NULL
           WHERE ${whereClause}
           ORDER BY t.inicio_disputa DESC, t.razao_social ASC
         `;
