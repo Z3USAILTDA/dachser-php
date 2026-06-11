@@ -4562,33 +4562,36 @@ Deno.serve(async (req) => {
           // Process each NF of this ND
           for (const docData of allNfs) {
             const docKey = docData.doc_key;
+            const docPart = docData.documento ?? '';
+            const nfPart = docData.numero_nf ?? '';
             const idRm = docData.id_rm;
             
             // Check if already exists in t_fin_disputas (excluding soft-deleted)
             const existingDisputa = await client.query(
               `SELECT fd.id FROM ai_agente.t_fin_disputas fd
-               WHERE fd.nf = ?
+               WHERE fd.documento = ? AND fd.nf = ?
                AND NOT EXISTS (
                  SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd 
-                 WHERE sd.documento = fd.nf AND sd.active = 0
+                 WHERE sd.documento = CONCAT(fd.documento,'|',fd.nf) AND sd.active = 0
                )
                LIMIT 1`,
-              [docKey]
+              [docPart, nfPart]
             );
             
             if (existingDisputa && existingDisputa.length > 0) {
               if (forceUpdate) {
                 await client.execute(`
                   UPDATE ai_agente.t_fin_disputas 
-                  SET responsavel = ?, departamento = ?, observacoes = COALESCE(?, observacoes), escalation = ?, vencimento = COALESCE(?, vencimento), updated_at = NOW()
-                  WHERE nf = ?
+                  SET nd = COALESCE(?, nd), responsavel = ?, departamento = ?, observacoes = COALESCE(?, observacoes), escalation = ?, vencimento = COALESCE(?, vencimento), updated_at = NOW()
+                  WHERE documento = ? AND nf = ?
                 `, [
+                  nd,
                   item.responsavel || docData.responsavel_disp || null,
                   item.departamento || null,
                   item.descricao || null,
                   item.escalation || null,
                   excelDateToSQL(item.prazo) || docData.vencimento || null,
-                  docKey
+                  docPart, nfPart
                 ]);
                 updatedCount++;
               } else {
@@ -4599,7 +4602,7 @@ Deno.serve(async (req) => {
             }
             
             // Clean up any soft-deleted residual records before inserting
-            await client.execute(`DELETE FROM ai_agente.t_fin_disputas WHERE nf = ?`, [docKey]);
+            await client.execute(`DELETE FROM ai_agente.t_fin_disputas WHERE documento = ? AND nf = ?`, [docPart, nfPart]);
             await client.execute(`DELETE FROM ai_agente.t_financeiro_soft_delete WHERE documento = ?`, [docKey]);
             // Also clean legacy simple-key soft-delete markers
             if (docData.documento) {
@@ -4630,10 +4633,10 @@ Deno.serve(async (req) => {
             
             // Insert new disputa
             await client.execute(`
-              INSERT INTO ai_agente.t_fin_disputas (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+              INSERT INTO ai_agente.t_fin_disputas (documento, nf, nd, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
             `, [
-              docKey, 
+              docPart, nfPart, nd,
               docData.cliente || 'N/A',
               excelDateToSQL(item.prazo) || docData.vencimento || null,
               docData.valor || 0,
@@ -4652,11 +4655,7 @@ Deno.serve(async (req) => {
             await client.execute(`
               UPDATE ai_agente.t_fin_disputas 
               SET observacoes = ?, updated_at = NOW()
-              WHERE nf IN (
-                SELECT DISTINCT CONCAT(COALESCE(documento,''), '|', COALESCE(numero_nf,''))
-                FROM dados_dachser.t_dados_financeiro_nfs 
-                WHERE nd = ? AND nd IS NOT NULL AND nd != ''
-              )
+              WHERE nd = ?
               AND (observacoes IS NULL OR observacoes = '')
             `, [item.descricao, nd]);
           }
