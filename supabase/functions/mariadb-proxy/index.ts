@@ -17506,24 +17506,26 @@ Deno.serve(async (req) => {
       case 'get_vouchers_combined': {
         // Single call that returns both active vouchers and pending RM vouchers
         // Saves 1 MariaDB connection vs calling get_vouchers_ativos + get_vouchers_pendentes_rm separately
-        const dataEmissaoInicio = body?.data_emissao_inicio || null;
-        const dataEmissaoFim = body?.data_emissao_fim || null;
-        const hasMonthFilter = !!(dataEmissaoInicio && dataEmissaoFim);
-        console.log(`[get_vouchers_combined] Fetching active + pending RM vouchers. monthFilter=${hasMonthFilter ? `${dataEmissaoInicio}..${dataEmissaoFim}` : 'none'}`);
+        // Filtro de mês passou a usar DATA DE VENCIMENTO (v.vencimento com fallback em dfv.data_vencimento).
+        // Aceita data_vencimento_inicio/fim; mantém data_emissao_inicio/fim como alias por compatibilidade.
+        const dataVencInicio = body?.data_vencimento_inicio || body?.data_emissao_inicio || null;
+        const dataVencFim = body?.data_vencimento_fim || body?.data_emissao_fim || null;
+        const hasMonthFilter = !!(dataVencInicio && dataVencFim);
+        console.log(`[get_vouchers_combined] Fetching active + pending RM vouchers. monthFilter(vencimento)=${hasMonthFilter ? `${dataVencInicio}..${dataVencFim}` : 'none'}`);
 
         // Apenas RASCUNHO, OPERACAO e FINANCEIRO aparecem independente do mês.
         // Demais etapas (A_PROCESSAR, FISCAL, SUPERVISOR, ROBO, AJUSTE_*, PRE_LANCAMENTO,
-        // CANCELADO) respeitam o filtro via data_emissao / data_emissao_documento.
+        // CANCELADO) respeitam o filtro via vencimento.
         const ativosMonthClause = hasMonthFilter
           ? `AND (
               v.etapa_atual IN ('RASCUNHO','OPERACAO','FINANCEIRO')
-              OR (dfv.data_emissao >= ? AND dfv.data_emissao < ?)
-              OR (dfv.data_emissao IS NULL
-                  AND v.data_emissao_documento >= ? AND v.data_emissao_documento < ?)
+              OR (v.vencimento >= ? AND v.vencimento < ?)
+              OR (v.vencimento IS NULL
+                  AND dfv.data_vencimento >= ? AND dfv.data_vencimento < ?)
             )`
           : '';
         const ativosParams = hasMonthFilter
-          ? [dataEmissaoInicio, dataEmissaoFim, dataEmissaoInicio, dataEmissaoFim]
+          ? [dataVencInicio, dataVencFim, dataVencInicio, dataVencFim]
           : [];
 
         const combinedAtivos = await client.query(`
@@ -17561,6 +17563,7 @@ Deno.serve(async (req) => {
            FROM dados_dachser.t_vouchers v
            LEFT JOIN (
              SELECT nd, MIN(id_rm) as id_rm, MAX(created_by) as created_by, MAX(data_emissao) as data_emissao,
+              MAX(data_vencimento) as data_vencimento,
               MIN(numero_processo) as numero_processo,
               MAX(razao_social) as razao_social,
               MAX(nome_beneficiario) as nome_beneficiario,
@@ -17579,8 +17582,8 @@ Deno.serve(async (req) => {
           ORDER BY v.created_at DESC
         `, ativosParams);
         
-        const pendentesMonthClause = hasMonthFilter ? `AND dfv.data_emissao >= ? AND dfv.data_emissao < ?` : '';
-        const pendentesParams = hasMonthFilter ? [dataEmissaoInicio, dataEmissaoFim] : [];
+        const pendentesMonthClause = hasMonthFilter ? `AND dfv.data_vencimento >= ? AND dfv.data_vencimento < ?` : '';
+        const pendentesParams = hasMonthFilter ? [dataVencInicio, dataVencFim] : [];
 
         const combinedPendentes = await client.query(`
           SELECT 
