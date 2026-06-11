@@ -18138,7 +18138,7 @@ Deno.serve(async (req) => {
             )
             AND NOT EXISTS (
               SELECT 1 FROM ai_agente.t_fin_disputas d
-              WHERE d.nf COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+              WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND d.is_disputa = 1
                 AND d.resolved_at IS NULL
                 AND d.deleted_at IS NULL
@@ -18204,7 +18204,7 @@ Deno.serve(async (req) => {
             )
             AND NOT EXISTS (
               SELECT 1 FROM ai_agente.t_fin_disputas d
-              WHERE d.nf COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+              WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND d.is_disputa = 1
                 AND d.resolved_at IS NULL
                 AND d.deleted_at IS NULL
@@ -18267,7 +18267,7 @@ Deno.serve(async (req) => {
             )
             AND NOT EXISTS (
               SELECT 1 FROM ai_agente.t_fin_disputas d
-              WHERE d.nf COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+              WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND d.is_disputa = 1
                 AND d.resolved_at IS NULL
                 AND d.deleted_at IS NULL
@@ -18436,7 +18436,7 @@ Deno.serve(async (req) => {
             t.idlan,
             CASE WHEN EXISTS (
               SELECT 1 FROM ai_agente.t_fin_disputas d
-              WHERE d.nf COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+              WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND d.is_disputa = 1
                 AND d.resolved_at IS NULL
                 AND d.deleted_at IS NULL
@@ -18507,7 +18507,7 @@ Deno.serve(async (req) => {
               )
               AND NOT EXISTS (
                 SELECT 1 FROM ai_agente.t_fin_disputas d
-                WHERE d.nf COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                   AND d.is_disputa = 1
                   AND d.resolved_at IS NULL
                   AND d.deleted_at IS NULL
