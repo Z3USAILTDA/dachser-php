@@ -3704,6 +3704,112 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'save_disputa_cr_bulk': {
+        const { doc_keys, responsavel, observacoes, departamento, escalation } = body as {
+          doc_keys?: string[];
+          responsavel?: string | null;
+          observacoes?: string | null;
+          departamento?: string | null;
+          escalation?: string | null;
+        };
+
+        const keys = Array.isArray(doc_keys)
+          ? Array.from(new Set(doc_keys.map(k => (k ?? '').toString().trim()).filter(Boolean)))
+          : [];
+
+        if (keys.length === 0) {
+          console.log('[save_disputa_cr_bulk] error: doc_keys obrigatório');
+          return new Response(
+            JSON.stringify({ success: false, action: 'save_disputa_cr_bulk', message: 'doc_keys é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const resp = responsavel ?? null;
+        const obs = observacoes ?? null;
+        const dep = departamento ?? null;
+        const esc = escalation ?? null;
+
+        let inserted = 0;
+        let updated = 0;
+        const failed: Array<{ doc_key: string; message: string }> = [];
+
+        for (const dk of keys) {
+          try {
+            const titulo = await client.query(
+              `SELECT doc_key, razao_social, data_vencimento, valor_nf, tipo_documento
+               FROM dados_dachser.v_fin_regua_contas_receber
+               WHERE doc_key = ? LIMIT 1`,
+              [dk]
+            );
+
+            if (!titulo || titulo.length === 0) {
+              failed.push({ doc_key: dk, message: 'Título não encontrado em v_fin_regua_contas_receber' });
+              continue;
+            }
+
+            const t = titulo[0];
+            const cliente = t.razao_social ?? null;
+            const vencimento = t.data_vencimento ?? null;
+            const valor = t.valor_nf ?? null;
+            const tipo = t.tipo_documento === 'FAT_NF' ? 'À vista' : 'A prazo';
+
+            const existing = await client.query(
+              `SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
+              [dk]
+            );
+
+            if (existing && existing.length > 0) {
+              await client.execute(
+                `UPDATE ai_agente.t_fin_disputas
+                    SET cliente = ?,
+                        vencimento = ?,
+                        valor = ?,
+                        tipo = ?,
+                        responsavel  = COALESCE(?, responsavel),
+                        observacoes  = COALESCE(?, observacoes),
+                        departamento = COALESCE(?, departamento),
+                        escalation   = COALESCE(?, escalation),
+                        is_disputa = 1,
+                        resolved_at = NULL,
+                        deleted_at = NULL,
+                        updated_at = NOW()
+                  WHERE nf = ?`,
+                [cliente, vencimento, valor, tipo, resp, obs, dep, esc, dk]
+              );
+              updated++;
+            } else {
+              await client.execute(
+                `INSERT INTO ai_agente.t_fin_disputas
+                   (nf, cliente, vencimento, valor, tipo, responsavel, observacoes,
+                    departamento, escalation, is_disputa, resolved_at, deleted_at,
+                    created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NOW(), NOW())`,
+                [dk, cliente, vencimento, valor, tipo, resp, obs, dep, esc]
+              );
+              inserted++;
+            }
+          } catch (e: any) {
+            const msg = e?.message ?? String(e);
+            console.log(`[save_disputa_cr_bulk] key=${dk} error: ${msg}`);
+            failed.push({ doc_key: dk, message: msg });
+          }
+        }
+
+        console.log(`[save_disputa_cr_bulk] total=${keys.length} inserted=${inserted} updated=${updated} failed=${failed.length}`);
+        result = {
+          success: true,
+          action: 'save_disputa_cr_bulk',
+          total: keys.length,
+          inserted,
+          updated,
+          failed,
+        };
+        break;
+      }
+
+
+
       case 'resolve_disputa_cr': {
         const { nf, doc_key } = body as { nf?: string; doc_key?: string };
         const key = (nf ?? doc_key ?? '').toString().trim();
