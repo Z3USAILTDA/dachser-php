@@ -4428,6 +4428,7 @@ Deno.serve(async (req) => {
           const docRows = await client.query(`
             SELECT 
               CONCAT(COALESCE(documento,''), '|', COALESCE(numero_nf,'')) AS doc_key,
+              documento, numero_nf,
               razao_social AS cliente,
               responsavel_disp AS responsavel
             FROM dados_dachser.t_dados_financeiro_nfs 
@@ -4444,19 +4445,20 @@ Deno.serve(async (req) => {
           for (const doc of docRows) {
             const disputaRows = await client.query(
               `SELECT fd.id FROM ai_agente.t_fin_disputas fd
-               WHERE fd.nf = ?
+               WHERE fd.documento = ? AND fd.nf = ?
                AND NOT EXISTS (
                  SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd 
-                 WHERE sd.documento = fd.nf AND sd.active = 0
+                 WHERE sd.documento = CONCAT(fd.documento,'|',fd.nf) AND sd.active = 0
                )
                LIMIT 1`,
-              [doc.doc_key]
+              [doc.documento ?? '', doc.numero_nf ?? '']
             );
             if (!disputaRows || disputaRows.length === 0) {
               allExist = false;
               break;
             }
           }
+          
           
           if (allExist) {
             existingItems.push({
