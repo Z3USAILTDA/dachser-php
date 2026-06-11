@@ -3492,7 +3492,7 @@ Deno.serve(async (req) => {
                    CONVERT(fd.observacoes USING utf8mb4)  COLLATE utf8mb4_unicode_ci AS observacoes,
                    CONVERT(fd.escalation USING utf8mb4)   COLLATE utf8mb4_unicode_ci AS escalation,
                    fd.created_at AS fd_created_at,
-                   CONVERT(fd.nf USING utf8mb4)           COLLATE utf8mb4_unicode_ci AS doc_key,
+                   CONVERT(CASE WHEN fd.documento = 'CR' THEN CONCAT('CR|', fd.nf) ELSE CONCAT(COALESCE(fd.documento,''),'|',COALESCE(fd.nf,'')) END USING utf8mb4)           COLLATE utf8mb4_unicode_ci AS doc_key,
                    CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS idlan,
                    CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS id_rm,
                    CAST(NULL AS CHAR) COLLATE utf8mb4_unicode_ci AS documento,
