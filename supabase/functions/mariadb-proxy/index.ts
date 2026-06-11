@@ -19399,8 +19399,9 @@ Deno.serve(async (req) => {
           }
           
           // 4. Also clean up any legacy simple-key records in soft_delete
-          if (parts.length === 2) {
-            const [documento, numero_nf] = parts;
+          if (parts.length >= 2) {
+            const documento = parts[0];
+            const numero_nf = parts.slice(1).join('|');
             // Clean legacy soft-delete markers that used simple keys
             await client.execute(`DELETE FROM ai_agente.t_financeiro_soft_delete WHERE documento = ? AND documento NOT LIKE '%|%'`, [documento]);
             await client.execute(`DELETE FROM ai_agente.t_financeiro_soft_delete WHERE documento = ? AND documento NOT LIKE '%|%'`, [numero_nf]);
