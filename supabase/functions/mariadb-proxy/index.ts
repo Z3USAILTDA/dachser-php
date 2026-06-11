@@ -3760,9 +3760,13 @@ Deno.serve(async (req) => {
             const valor = t.valor_nf ?? null;
             const tipo = t.tipo_documento === 'FAT_NF' ? 'À vista' : 'A prazo';
 
+            const parts = String(dk).split('|');
+            const docPart = parts.length > 1 ? parts[0] : 'CR';
+            const nfPart = parts.length > 1 ? parts.slice(1).join('|') : dk;
+
             const existing = await client.query(
-              `SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1`,
-              [dk]
+              `SELECT id FROM ai_agente.t_fin_disputas WHERE documento = ? AND nf = ? LIMIT 1`,
+              [docPart, nfPart]
             );
 
             if (existing && existing.length > 0) {
@@ -3780,18 +3784,18 @@ Deno.serve(async (req) => {
                         resolved_at = NULL,
                         deleted_at = NULL,
                         updated_at = NOW()
-                  WHERE nf = ?`,
-                [cliente, vencimento, valor, tipo, resp, obs, dep, esc, dk]
+                  WHERE documento = ? AND nf = ?`,
+                [cliente, vencimento, valor, tipo, resp, obs, dep, esc, docPart, nfPart]
               );
               updated++;
             } else {
               await client.execute(
                 `INSERT INTO ai_agente.t_fin_disputas
-                   (nf, cliente, vencimento, valor, tipo, responsavel, observacoes,
+                   (documento, nf, cliente, vencimento, valor, tipo, responsavel, observacoes,
                     departamento, escalation, is_disputa, resolved_at, deleted_at,
                     created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NOW(), NOW())`,
-                [dk, cliente, vencimento, valor, tipo, resp, obs, dep, esc]
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NOW(), NOW())`,
+                [docPart, nfPart, cliente, vencimento, valor, tipo, resp, obs, dep, esc]
               );
               inserted++;
             }
