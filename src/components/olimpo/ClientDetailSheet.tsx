@@ -32,6 +32,8 @@ interface CnpjDetail {
   totalCount: number;
   condicao_pagamento: string | null;
   nome_vendedor: string | null;
+  disputa_total?: number;
+  disputa_count?: number;
 }
 
 interface Observacao {
@@ -56,6 +58,16 @@ interface EmailLog {
   error_message: string | null;
 }
 
+interface DisputaRow {
+  nd: string | null;
+  numero_nf: string | null;
+  documento: string | null;
+  valor_nf: number;
+  modal: string | null;
+  data_emissao: string | null;
+  data_vencimento: string | null;
+}
+
 interface AgingRow {
   product: string;
   cnpjs?: string[];
@@ -70,11 +82,13 @@ interface FaturaRow {
   data_vencimento: string;
   data_emissao: string;
   valor_nf: number;
+  modal: string | null;
   disputa: number;
   condicao_pagamento: string;
   nome_vendedor: string;
   numero_processo: string;
 }
+
 
 interface ClientDetailSheetProps {
   client: AgingRow | null;
