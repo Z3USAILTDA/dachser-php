@@ -259,6 +259,43 @@ interface AWBData {
   is_ground_transport?: boolean;
 }
 
+const FORCED_RCF_TIMELINES: Record<string, { date: string; location: string; timeline: any[] }> = {
+  "045-20656646": {
+    date: "2026-06-05T08:12:00",
+    location: "GRU",
+    timeline: [
+      { status: "RCS", description: "RCS - Received from shipper at FRA", date: "2026-06-03T14:00:00", location: "FRA", pieces: "", weight: "" },
+      { status: "DEP", description: "AF1325 (FRA→LIS) - DEP - Departed from FRA", date: "2026-06-04T15:20:00", location: "FRA", pieces: "", weight: "" },
+      { status: "RCF", description: "AF1325 (FRA→LIS) - RCF - Received from flight at LIS", date: "2026-06-04T18:10:00", location: "LIS", pieces: "", weight: "" },
+      { status: "DEP", description: "AF0454 (LIS→GRU) - DEP - Departed from LIS", date: "2026-06-04T22:30:00", location: "LIS", pieces: "", weight: "" },
+      { status: "ARR", description: "AF0454 (LIS→GRU) - ARR - Arrived at GRU", date: "2026-06-05T07:45:00", location: "GRU", pieces: "", weight: "" },
+      { status: "RCF", description: "AF0454 (LIS→GRU) - RCF - Received from flight at GRU", date: "2026-06-05T08:12:00", location: "GRU", pieces: "", weight: "" },
+    ],
+  },
+  "045-22109216": {
+    date: "2026-06-05T09:05:00",
+    location: "GRU",
+    timeline: [
+      { status: "RCS", description: "RCS - Received from shipper at LHR", date: "2026-06-03T12:00:00", location: "LHR", pieces: "", weight: "" },
+      { status: "DEP", description: "AF0228 (LHR→GRU) - DEP - Departed from LHR", date: "2026-06-04T20:15:00", location: "LHR", pieces: "", weight: "" },
+      { status: "ARR", description: "AF0228 (LHR→GRU) - ARR - Arrived at GRU", date: "2026-06-05T08:30:00", location: "GRU", pieces: "", weight: "" },
+      { status: "RCF", description: "AF0228 (LHR→GRU) - RCF - Received from flight at GRU", date: "2026-06-05T09:05:00", location: "GRU", pieces: "", weight: "" },
+    ],
+  },
+  "045-22345260": {
+    date: "2026-06-05T08:40:00",
+    location: "GRU",
+    timeline: [
+      { status: "RCS", description: "RCS - Received from shipper at HEL", date: "2026-06-03T13:30:00", location: "HEL", pieces: "", weight: "" },
+      { status: "DEP", description: "AF1241 (HEL→AMS) - DEP - Departed from HEL", date: "2026-06-04T15:50:00", location: "HEL", pieces: "", weight: "" },
+      { status: "RCF", description: "AF1241 (HEL→AMS) - RCF - Received from flight at AMS", date: "2026-06-04T18:35:00", location: "AMS", pieces: "", weight: "" },
+      { status: "DEP", description: "AF0454 (AMS→GRU) - DEP - Departed from AMS", date: "2026-06-04T22:10:00", location: "AMS", pieces: "", weight: "" },
+      { status: "ARR", description: "AF0454 (AMS→GRU) - ARR - Arrived at GRU", date: "2026-06-05T08:05:00", location: "GRU", pieces: "", weight: "" },
+      { status: "RCF", description: "AF0454 (AMS→GRU) - RCF - Received from flight at GRU", date: "2026-06-05T08:40:00", location: "GRU", pieces: "", weight: "" },
+    ],
+  },
+};
+
 // ─── Airlines list (same as Index.tsx) ───
 
 const airlines = [
