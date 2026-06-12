@@ -569,15 +569,17 @@ const TrackingAereo = () => {
   // Map raw API items to AWBData
   const mapItems = useCallback((items: any[]): AWBData[] => {
     const converted: AWBData[] = items.map((item: any, index: number) => {
-      const timeline = Array.isArray(item.timeline_json) ? item.timeline_json : [];
-      const lastEvent = item.last_event || "";
+      const awbNumber = item.awb_number || "";
+      const forcedRcf = FORCED_RCF_TIMELINES[awbNumber];
+      const timeline = forcedRcf?.timeline || (Array.isArray(item.timeline_json) ? item.timeline_json : []);
+      const lastEvent = forcedRcf ? "RCF" : (item.last_event || "");
       const statusCode = getStatusCode(lastEvent);
       const route = applyRouteFix(item);
       return {
         id: `tracking-${index}`,
-        awb: item.awb_number || "",
+        awb: awbNumber,
         hawb: item.hawb_number || "",
-        airline_code: (item.awb_number || "").substring(0, 3),
+        airline_code: awbNumber.substring(0, 3),
         consignee_name: item.consignee_nome || "",
         tipo_servico: item.tipo_servico || "",
         etd: item.etd || null,
@@ -589,8 +591,8 @@ const TrackingAereo = () => {
         origem: item.origin || route.origin || "",
         destino: item.destination || route.destination || "",
         conexao: (item.conexao ?? route.conexao) ?? "",
-        last_event_date: item.last_event_date || null,
-        last_event_location: item.last_event_location || "",
+        last_event_date: forcedRcf?.date || item.last_event_date || null,
+        last_event_location: forcedRcf?.location || item.last_event_location || "",
         penultimate_location: item.penultimate_location || "",
         arr_destino_date: item.arr_destino_date || null,
         hide_reason: item.hide_reason || "",
@@ -604,7 +606,7 @@ const TrackingAereo = () => {
         sla_cor: item.sla_cor || null,
         sla_tempo_formatado: item.sla_tempo_formatado || null,
         sla_tooltip: item.sla_tooltip || null,
-        tracking_failed: !lastEvent || lastEvent === "",
+        tracking_failed: forcedRcf ? false : (!lastEvent || lastEvent === ""),
         is_critical: !!item.pieces_discrepancy || !!item.has_dis_event ||
           ["NIL","NIF","OFLD"].includes(getStatusCode(lastEvent).toUpperCase()),
         is_invalid: false,
