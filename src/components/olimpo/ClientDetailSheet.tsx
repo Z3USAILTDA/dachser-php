@@ -19,6 +19,9 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 
 interface CnpjDetail {
@@ -144,6 +147,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
   const [modalFilter, setModalFilter] = useState("");
   const [modalFilterDebounced, setModalFilterDebounced] = useState("");
   const faturasPageSize = 20;
+  const [vencSort, setVencSort] = useState<"overdue-first" | "asc" | "desc">("overdue-first");
 
   // Disputas por CNPJ (lazy)
   const [disputasOpen, setDisputasOpen] = useState<Record<string, boolean>>({});
@@ -211,7 +215,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
     setFaturasLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_client_faturas_cr", clientName: client.product, page, pageSize: faturasPageSize, modalFilter: modalQ ?? modalFilterDebounced },
+        body: { action: "get_client_faturas_cr", clientName: client.product, page, pageSize: faturasPageSize, modalFilter: modalQ ?? modalFilterDebounced, vencSort },
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Erro");
@@ -224,7 +228,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
     } finally {
       setFaturasLoading(false);
     }
-  }, [client?.product, modalFilterDebounced]);
+  }, [client?.product, modalFilterDebounced, vencSort]);
 
   const fetchDisputasForCnpj = useCallback(async (cnpjClean: string) => {
     if (disputasByCnpj[cnpjClean] || disputasLoading[cnpjClean]) return;
@@ -260,13 +264,13 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
     }
   }, [faturasOpen]);
 
-  // Refetch ao mudar filtro modal (com debounce já aplicado)
+  // Refetch ao mudar filtro modal (com debounce já aplicado) ou sort
   useEffect(() => {
     if (faturasOpen && client?.product) {
       fetchFaturas(1, modalFilterDebounced);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modalFilterDebounced]);
+  }, [modalFilterDebounced, vencSort]);
 
 
   const handleSaveObs = async (cnpj: string) => {
@@ -557,7 +561,33 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                           <TableRow>
                             <TableHead>ND</TableHead>
                             <TableHead>Modal</TableHead>
-                            <TableHead>Vencimento</TableHead>
+                            <TableHead>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setVencSort((s) =>
+                                    s === "overdue-first" ? "asc" : s === "asc" ? "desc" : "overdue-first"
+                                  )
+                                }
+                                className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                                title={
+                                  vencSort === "overdue-first"
+                                    ? "Vencidos primeiro (clique para asc)"
+                                    : vencSort === "asc"
+                                      ? "Crescente (clique para desc)"
+                                      : "Decrescente (clique para vencidos primeiro)"
+                                }
+                              >
+                                Vencimento
+                                {vencSort === "overdue-first" ? (
+                                  <ArrowUpDown className="h-3 w-3" />
+                                ) : vencSort === "asc" ? (
+                                  <ArrowUp className="h-3 w-3" />
+                                ) : (
+                                  <ArrowDown className="h-3 w-3" />
+                                )}
+                              </button>
+                            </TableHead>
                             <TableHead className="text-right">Valor</TableHead>
                             <TableHead className="text-center">Disputa</TableHead>
                             <TableHead>Cond. Pagamento</TableHead>
