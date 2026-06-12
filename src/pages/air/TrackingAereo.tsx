@@ -24,6 +24,7 @@ import {
   FilePlus,
   Package,
   Replace,
+  BellRing,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -37,6 +38,7 @@ import { TablePagination } from "@/components/layout/TablePagination";
 
 import { CadastroNovaModal } from "@/components/air/CadastroNovaModal";
 import { AwbTimelineModalScraper } from "@/components/air/AwbTimelineModalScraper";
+import { EmailClienteRegrasDialog } from "@/components/air/EmailClienteRegrasDialog";
 import { formatDateTimeBR, parseDBDate } from "@/utils/timezone";
 
 // ─── Status code helpers (reused from Index.tsx) ───
@@ -526,6 +528,7 @@ const TrackingAereo = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [user, setUser] = useState<User | null>(null);
+  const [regrasOpen, setRegrasOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [awbsData, setAwbsData] = useState<AWBData[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -1034,6 +1037,9 @@ const TrackingAereo = () => {
           <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[220px] truncate">
             @{user?.email?.split("@")[0] || "admin"}
           </div>
+          <button onClick={() => setRegrasOpen(true)} className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors" title="Regras de Notificação por Cliente">
+            <BellRing className="h-4 w-4" />
+          </button>
           <button onClick={() => navigate("/air/tracking/manual")} className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors" title="Manual do usuário">
             <HelpCircle className="h-4 w-4" />
           </button>
@@ -1616,6 +1622,7 @@ const TrackingAereo = () => {
           </div>
         </DialogContent>
       </Dialog>
+      <EmailClienteRegrasDialog open={regrasOpen} onOpenChange={setRegrasOpen} />
     </div>
 
   );
