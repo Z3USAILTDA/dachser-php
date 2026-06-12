@@ -215,7 +215,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
     setFaturasLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_client_faturas_cr", clientName: client.product, page, pageSize: faturasPageSize, modalFilter: modalQ ?? modalFilterDebounced },
+        body: { action: "get_client_faturas_cr", clientName: client.product, page, pageSize: faturasPageSize, modalFilter: modalQ ?? modalFilterDebounced, vencSort },
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Erro");
@@ -228,7 +228,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
     } finally {
       setFaturasLoading(false);
     }
-  }, [client?.product, modalFilterDebounced]);
+  }, [client?.product, modalFilterDebounced, vencSort]);
 
   const fetchDisputasForCnpj = useCallback(async (cnpjClean: string) => {
     if (disputasByCnpj[cnpjClean] || disputasLoading[cnpjClean]) return;
