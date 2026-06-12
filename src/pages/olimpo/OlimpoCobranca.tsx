@@ -836,32 +836,35 @@ export default function OlimpoCobranca() {
                                 <span className="ml-2 text-[10px] text-muted-foreground">({row.cnpjs.length} CNPJs)</span>
                               )}
                             </td>
-                            {agingKeys.map((k) => (
-                              <td key={k} className="py-2.5 px-3 text-right tabular-nums"
-                                style={{ color: (row[k] as number) > 0 ? AGING_COLORS[k] : "var(--muted-foreground)" }}>
-                                {formatBRL(row[k] as number)}
-                              </td>
-                            ))}
-                            <td className="py-2.5 px-3 text-right tabular-nums text-red-400 font-medium">{formatBRL(rowOverdue)}</td>
+                            {agingKeys.map((k) => {
+                              const dispVal = ((row as any)[DISP_KEY_MAP[k]] || 0) as number;
+                              return (
+                                <td key={k} className="py-2.5 px-3 text-right tabular-nums"
+                                  style={{ color: (row[k] as number) > 0 ? AGING_COLORS[k] : "var(--muted-foreground)" }}>
+                                  <span className="inline-flex items-center justify-end gap-1">
+                                    {formatBRL(row[k] as number)}
+                                    {dispVal > 0 && (
+                                      <span title={`Inclui ${formatBRL(dispVal)} em disputa`}
+                                        className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+                                    )}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                            <td className="py-2.5 px-3 text-right tabular-nums text-red-400 font-medium">
+                              <span className="inline-flex items-center justify-end gap-1">
+                                {formatBRL(rowOverdue)}
+                                {((row as any).disp_total || 0) > 0 && (
+                                  <span title={`Inclui ${formatBRL((row as any).disp_total)} em disputa`}
+                                    className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+                                )}
+                              </span>
+                            </td>
                             <td className="py-2.5 px-3 text-right tabular-nums text-foreground font-medium">{formatBRL(rowTotal)}</td>
                           </tr>
                         );
                       })}
-                      {/* Bad Debts summary row */}
-                      {totals && totals.aging_366_plus > 0 && (
-                        <tr className="border-t border-red-500/30 bg-red-500/10">
-                          <td className="py-2.5 px-4 font-bold text-red-400">Bad Debts ({">"} 365)</td>
-                          {agingKeys.map((k) => (
-                            <td key={k} className="py-2.5 px-3 text-right tabular-nums font-bold" style={{ color: k === "aging_366_plus" ? "#991b1b" : "transparent" }}>
-                              {k === "aging_366_plus" ? formatBRL(totals.aging_366_plus) : ""}
-                            </td>
-                          ))}
-                          <td className="py-2.5 px-3" />
-                          <td className="py-2.5 px-3 text-right tabular-nums font-bold text-red-400">
-                            {totalReceivable > 0 ? `${((totals.aging_366_plus / totalReceivable) * 100).toFixed(1)}% do total` : ""}
-                          </td>
-                        </tr>
-                      )}
+
                       {/* Grand Total */}
                       {totals && (
                         <tr className="border-t-2 border-primary/40 bg-card sticky bottom-0 z-10 shadow-[0_-2px_6px_rgba(0,0,0,0.3)]">
