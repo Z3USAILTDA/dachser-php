@@ -746,12 +746,23 @@ export const VoucherDetailsView = ({ voucher, onUpdate, onPatch, onAnexosChanged
             <p className="text-muted-foreground text-center py-4">Nenhum anexo</p>
           ) : (
             <div className="space-y-2">
-              {voucher.anexos.map((anexo) => (
+              {(() => {
+                const tipoCount = voucher.anexos.reduce<Record<string, number>>((acc, a) => {
+                  const k = a.tipo || "OUTRO";
+                  acc[k] = (acc[k] || 0) + 1;
+                  return acc;
+                }, {});
+                return voucher.anexos.map((anexo) => {
+                  const isDup = (tipoCount[anexo.tipo || "OUTRO"] || 0) > 1;
+                  return (
                 <div
                   key={anexo.id}
                   draggable="true"
                   onDragStart={(e) => handleDragStart(e, anexo.fileUrl, anexo.fileName)}
-                  className="flex items-center justify-between p-3 border border-[rgba(255,255,255,0.08)] rounded-lg hover:bg-secondary/30 transition-colors cursor-move"
+                  className={cn(
+                    "flex items-center justify-between p-3 border rounded-lg hover:bg-secondary/30 transition-colors cursor-move",
+                    isDup ? "border-destructive/50" : "border-[rgba(255,255,255,0.08)]"
+                  )}
                 >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     {isImageFile(anexo.fileName) ? (
@@ -764,17 +775,33 @@ export const VoucherDetailsView = ({ voucher, onUpdate, onPatch, onAnexosChanged
                         />
                       </div>
                     ) : (
-                      <FileText className="h-5 w-5 text-primary shrink-0" />
+                      <FileText className={cn("h-5 w-5 shrink-0", isDup ? "text-destructive" : "text-primary")} />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate text-foreground">{anexo.fileName}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className={cn("font-medium text-sm truncate", isDup ? "text-destructive" : "text-foreground")}>
+                          {anexo.fileName}
+                        </p>
+                        {isDup && (
+                          <AlertCircle
+                            className="h-3.5 w-3.5 text-destructive shrink-0"
+                            aria-label="Existe mais de um anexo deste tipo"
+                          >
+                            <title>Existe mais de um anexo deste tipo — revise e exclua o antigo se necessário</title>
+                          </AlertCircle>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         {anexo.tipo?.replace(/_/g, " ")}
                         {anexo.fileSize && ` • ${(anexo.fileSize / 1024 / 1024).toFixed(2)} MB`}
                         <span className="ml-2 text-primary">• Arraste para baixar</span>
+                        {isDup && (
+                          <span className="ml-2 text-destructive">• Tipo duplicado</span>
+                        )}
                       </p>
                     </div>
                   </div>
+
                   <div className="flex items-center gap-2">
                     <FilePreview
                       fileName={anexo.fileName}
@@ -801,8 +828,11 @@ export const VoucherDetailsView = ({ voucher, onUpdate, onPatch, onAnexosChanged
                     )}
                   </div>
                 </div>
-              ))}
+                  );
+                });
+              })()}
             </div>
+
           )}
         </CardContent>
       </Card>
