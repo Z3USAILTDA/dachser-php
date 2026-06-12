@@ -3614,7 +3614,7 @@ Deno.serve(async (req) => {
 
         try {
           const titulo = await client.query(
-            `SELECT doc_key, razao_social, data_vencimento, valor_nf, tipo_documento
+            `SELECT doc_key, documento, numero_nf, nd, razao_social, data_vencimento, valor_nf, tipo_documento
              FROM dados_dachser.v_fin_regua_contas_receber
              WHERE doc_key = ? LIMIT 1`,
             [doc_key]
@@ -3643,9 +3643,15 @@ Deno.serve(async (req) => {
           const dep = departamento ?? null;
           const esc = escalation ?? null;
 
+          // De-para correto: t_fin_disputas.documento = t_dados_financeiro_contas_receber.numerodocumento (v.documento)
+          //                  t_fin_disputas.nf        = t_dados_financeiro_contas_receber.nota_fiscal     (v.numero_nf)
+          //                  t_fin_disputas.nd        = t_dados_financeiro_contas_receber.segundonumero   (v.nd)
+          // Fallback p/ legado órfão: se v.documento vier vazio, manter 'CR' para preservar lookup de linhas antigas.
           const parts = String(doc_key).split('|');
-          const docPart = parts.length > 1 ? parts[0] : 'CR';
-          const nfPart = parts.length > 1 ? parts.slice(1).join('|') : doc_key;
+          const nfFromKey = parts.length > 1 ? parts.slice(1).join('|') : doc_key;
+          const docPart = (t.documento ?? '').toString().trim() || 'CR';
+          const nfPart = (t.numero_nf ?? '').toString().trim() || nfFromKey;
+          const ndPart = t.nd ?? null;
 
           const existing = await client.query(
             `SELECT id FROM ai_agente.t_fin_disputas WHERE documento = ? AND nf = ? LIMIT 1`,
@@ -3658,7 +3664,8 @@ Deno.serve(async (req) => {
             mode = 'update';
             const upd = await client.execute(
               `UPDATE ai_agente.t_fin_disputas
-                 SET cliente = ?,
+                 SET nd = ?,
+                     cliente = ?,
                      vencimento = ?,
                      valor = ?,
                      tipo = ?,
@@ -3671,21 +3678,22 @@ Deno.serve(async (req) => {
                      deleted_at = NULL,
                      updated_at = NOW()
                WHERE documento = ? AND nf = ?`,
-              [cliente, vencimento, valor, tipo, resp, obs, dep, esc, docPart, nfPart]
+              [ndPart, cliente, vencimento, valor, tipo, resp, obs, dep, esc, docPart, nfPart]
             );
             affectedRows = Number((upd as any)?.affectedRows ?? 0);
           } else {
             mode = 'insert';
             const ins = await client.execute(
               `INSERT INTO ai_agente.t_fin_disputas
-                 (documento, nf, cliente, vencimento, valor, tipo, responsavel, observacoes,
+                 (documento, nf, nd, cliente, vencimento, valor, tipo, responsavel, observacoes,
                   departamento, escalation, is_disputa, resolved_at, deleted_at,
                   created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NOW(), NOW())`,
-              [docPart, nfPart, cliente, vencimento, valor, tipo, resp, obs, dep, esc]
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NOW(), NOW())`,
+              [docPart, nfPart, ndPart, cliente, vencimento, valor, tipo, resp, obs, dep, esc]
             );
             affectedRows = Number((ins as any)?.affectedRows ?? 0);
           }
+
 
           console.log(`[save_disputa_cr] key=${doc_key} mode=${mode} affected=${affectedRows}`);
           result = {
@@ -3744,7 +3752,7 @@ Deno.serve(async (req) => {
         for (const dk of keys) {
           try {
             const titulo = await client.query(
-              `SELECT doc_key, razao_social, data_vencimento, valor_nf, tipo_documento
+              `SELECT doc_key, documento, numero_nf, nd, razao_social, data_vencimento, valor_nf, tipo_documento
                FROM dados_dachser.v_fin_regua_contas_receber
                WHERE doc_key = ? LIMIT 1`,
               [dk]
@@ -3761,9 +3769,12 @@ Deno.serve(async (req) => {
             const valor = t.valor_nf ?? null;
             const tipo = t.tipo_documento === 'FAT_NF' ? 'À vista' : 'A prazo';
 
+            // De-para correto: documento=numerodocumento, nf=nota_fiscal, nd=segundonumero
             const parts = String(dk).split('|');
-            const docPart = parts.length > 1 ? parts[0] : 'CR';
-            const nfPart = parts.length > 1 ? parts.slice(1).join('|') : dk;
+            const nfFromKey = parts.length > 1 ? parts.slice(1).join('|') : dk;
+            const docPart = (t.documento ?? '').toString().trim() || 'CR';
+            const nfPart = (t.numero_nf ?? '').toString().trim() || nfFromKey;
+            const ndPart = t.nd ?? null;
 
             const existing = await client.query(
               `SELECT id FROM ai_agente.t_fin_disputas WHERE documento = ? AND nf = ? LIMIT 1`,
@@ -3773,7 +3784,8 @@ Deno.serve(async (req) => {
             if (existing && existing.length > 0) {
               await client.execute(
                 `UPDATE ai_agente.t_fin_disputas
-                    SET cliente = ?,
+                    SET nd = ?,
+                        cliente = ?,
                         vencimento = ?,
                         valor = ?,
                         tipo = ?,
@@ -3786,20 +3798,21 @@ Deno.serve(async (req) => {
                         deleted_at = NULL,
                         updated_at = NOW()
                   WHERE documento = ? AND nf = ?`,
-                [cliente, vencimento, valor, tipo, resp, obs, dep, esc, docPart, nfPart]
+                [ndPart, cliente, vencimento, valor, tipo, resp, obs, dep, esc, docPart, nfPart]
               );
               updated++;
             } else {
               await client.execute(
                 `INSERT INTO ai_agente.t_fin_disputas
-                   (documento, nf, cliente, vencimento, valor, tipo, responsavel, observacoes,
+                   (documento, nf, nd, cliente, vencimento, valor, tipo, responsavel, observacoes,
                     departamento, escalation, is_disputa, resolved_at, deleted_at,
                     created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NOW(), NOW())`,
-                [docPart, nfPart, cliente, vencimento, valor, tipo, resp, obs, dep, esc]
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NOW(), NOW())`,
+                [docPart, nfPart, ndPart, cliente, vencimento, valor, tipo, resp, obs, dep, esc]
               );
               inserted++;
             }
+
           } catch (e: any) {
             const msg = e?.message ?? String(e);
             console.log(`[save_disputa_cr_bulk] key=${dk} error: ${msg}`);
