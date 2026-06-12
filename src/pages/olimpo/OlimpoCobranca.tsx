@@ -179,6 +179,19 @@ const PRODUCT_MAP: Record<string, string> = {
 
 const agingKeys = ["not_due", "aging_30", "aging_40", "aging_60", "aging_90", "aging_120", "aging_180", "aging_240", "aging_365", "aging_366_plus"] as const;
 const overdueKeys = agingKeys.filter(k => k !== "not_due");
+const DISP_KEY_MAP: Record<string, string> = {
+  not_due: "disp_not_due",
+  aging_30: "disp_30",
+  aging_40: "disp_40",
+  aging_60: "disp_60",
+  aging_90: "disp_90",
+  aging_120: "disp_120",
+  aging_180: "disp_180",
+  aging_240: "disp_240",
+  aging_365: "disp_365",
+  aging_366_plus: "disp_366_plus",
+};
+
 
 function formatBRL(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
