@@ -561,7 +561,33 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                           <TableRow>
                             <TableHead>ND</TableHead>
                             <TableHead>Modal</TableHead>
-                            <TableHead>Vencimento</TableHead>
+                            <TableHead>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setVencSort((s) =>
+                                    s === "overdue-first" ? "asc" : s === "asc" ? "desc" : "overdue-first"
+                                  )
+                                }
+                                className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                                title={
+                                  vencSort === "overdue-first"
+                                    ? "Vencidos primeiro (clique para asc)"
+                                    : vencSort === "asc"
+                                      ? "Crescente (clique para desc)"
+                                      : "Decrescente (clique para vencidos primeiro)"
+                                }
+                              >
+                                Vencimento
+                                {vencSort === "overdue-first" ? (
+                                  <ArrowUpDown className="h-3 w-3" />
+                                ) : vencSort === "asc" ? (
+                                  <ArrowUp className="h-3 w-3" />
+                                ) : (
+                                  <ArrowDown className="h-3 w-3" />
+                                )}
+                              </button>
+                            </TableHead>
                             <TableHead className="text-right">Valor</TableHead>
                             <TableHead className="text-center">Disputa</TableHead>
                             <TableHead>Cond. Pagamento</TableHead>
