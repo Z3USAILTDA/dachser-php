@@ -18534,7 +18534,11 @@ Deno.serve(async (req) => {
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND sd.active = 0
             )${modalClause}
-          ORDER BY t.data_prev_baixa DESC
+          ORDER BY ${vencSort === 'asc'
+            ? 't.data_prev_baixa ASC'
+            : vencSort === 'desc'
+              ? 't.data_prev_baixa DESC'
+              : "CASE WHEN t.data_prev_baixa < CURDATE() THEN 0 ELSE 1 END, t.data_prev_baixa ASC"}
           LIMIT ? OFFSET ?
         `;
         const fatParams = modalQ ? [fatClientName, modalQ, fatPageSize, offset] : [fatClientName, fatPageSize, offset];
