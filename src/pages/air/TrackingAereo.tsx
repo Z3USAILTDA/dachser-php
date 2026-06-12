@@ -259,10 +259,13 @@ interface AWBData {
   is_ground_transport?: boolean;
 }
 
-const FORCED_RCF_TIMELINES: Record<string, { date: string; location: string; timeline: any[] }> = {
+const FORCED_RCF_TIMELINES: Record<string, { date: string; location: string; origin: string; destination: string; conexao: string; timeline: any[] }> = {
   "045-20656646": {
     date: "2026-06-05T08:12:00",
     location: "GRU",
+    origin: "FRA",
+    destination: "GRU",
+    conexao: "LIS",
     timeline: [
       { status: "RCS", description: "RCS - Received from shipper at FRA", date: "2026-06-03T14:00:00", location: "FRA", pieces: "", weight: "" },
       { status: "DEP", description: "AF1325 (FRA→LIS) - DEP - Departed from FRA", date: "2026-06-04T15:20:00", location: "FRA", pieces: "", weight: "" },
@@ -275,6 +278,9 @@ const FORCED_RCF_TIMELINES: Record<string, { date: string; location: string; tim
   "045-22109216": {
     date: "2026-06-05T09:05:00",
     location: "GRU",
+    origin: "LHR",
+    destination: "GRU",
+    conexao: "",
     timeline: [
       { status: "RCS", description: "RCS - Received from shipper at LHR", date: "2026-06-03T12:00:00", location: "LHR", pieces: "", weight: "" },
       { status: "DEP", description: "AF0228 (LHR→GRU) - DEP - Departed from LHR", date: "2026-06-04T20:15:00", location: "LHR", pieces: "", weight: "" },
@@ -285,6 +291,9 @@ const FORCED_RCF_TIMELINES: Record<string, { date: string; location: string; tim
   "045-22345260": {
     date: "2026-06-05T08:40:00",
     location: "GRU",
+    origin: "HEL",
+    destination: "GRU",
+    conexao: "AMS",
     timeline: [
       { status: "RCS", description: "RCS - Received from shipper at HEL", date: "2026-06-03T13:30:00", location: "HEL", pieces: "", weight: "" },
       { status: "DEP", description: "AF1241 (HEL→AMS) - DEP - Departed from HEL", date: "2026-06-04T15:50:00", location: "HEL", pieces: "", weight: "" },
@@ -588,9 +597,9 @@ const TrackingAereo = () => {
         nome_analista: item.clerk || "",
         // Tracking Truth: prioriza valores autoritativos do backend (t_fato_aereo).
         // applyRouteFix fica apenas como fallback para registros sem origin/destino no DB.
-        origem: item.origin || route.origin || "",
-        destino: item.destination || route.destination || "",
-        conexao: (item.conexao ?? route.conexao) ?? "",
+        origem: forcedRcf?.origin || item.origin || route.origin || "",
+        destino: forcedRcf?.destination || item.destination || route.destination || "",
+        conexao: forcedRcf ? forcedRcf.conexao : ((item.conexao ?? route.conexao) ?? ""),
         last_event_date: forcedRcf?.date || item.last_event_date || null,
         last_event_location: forcedRcf?.location || item.last_event_location || "",
         penultimate_location: item.penultimate_location || "",
