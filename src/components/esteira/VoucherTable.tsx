@@ -465,8 +465,22 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                     className="h-8 text-xs w-24"
                   />
                 </TableHead>
-                <TableHead className="py-2"></TableHead>
-                <TableHead className="py-2"></TableHead>
+                <TableHead className="py-2">
+                  <Input
+                    placeholder="Ref..."
+                    value={filters.refFornecedor || ""}
+                    onChange={(e) => handleFilterChange("refFornecedor", e.target.value)}
+                    className="h-8 text-xs w-24"
+                  />
+                </TableHead>
+                <TableHead className="py-2">
+                  <Input
+                    placeholder="MAWB/MBL..."
+                    value={filters.mawbMbl || ""}
+                    onChange={(e) => handleFilterChange("mawbMbl", e.target.value)}
+                    className="h-8 text-xs w-28"
+                  />
+                </TableHead>
                 <TableHead className="py-2"></TableHead>
 
                 <TableHead className="py-2">
