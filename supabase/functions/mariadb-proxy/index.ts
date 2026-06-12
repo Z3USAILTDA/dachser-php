@@ -19776,7 +19776,7 @@ Deno.serve(async (req) => {
         try {
           for (const nd of ndList) {
             const rows = await client.query(
-              `SELECT doc_key, razao_social AS cliente
+              `SELECT doc_key, razao_social AS cliente, documento, numero_nf, nd
                FROM dados_dachser.v_fin_regua_contas_receber
                WHERE nd = ? OR documento = ? OR numero_nf = ?`,
               [nd, nd, nd]
@@ -19785,18 +19785,22 @@ Deno.serve(async (req) => {
               notFoundItems.push(nd);
               continue;
             }
-            const docKeys = (rows as any[]).map(r => r.doc_key).filter(Boolean);
-            if (docKeys.length === 0) {
+            // De-para correto:
+            //   t_fin_disputas.documento = v.documento (numerodocumento)
+            //   t_fin_disputas.nf        = v.numero_nf (nota_fiscal)
+            //   t_fin_disputas.nd        = v.nd        (segundonumero)
+            const pairs = (rows as any[]).map((r) => {
+              const docPart = (r.documento ?? '').toString().trim();
+              const nfPart = (r.numero_nf ?? '').toString().trim();
+              const ps = String(r.doc_key ?? '').split('|');
+              const fbDoc = ps.length > 1 ? ps[0] : 'CR';
+              const fbNf = ps.length > 1 ? ps.slice(1).join('|') : (r.doc_key ?? '');
+              return { d: docPart || fbDoc, n: nfPart || fbNf };
+            }).filter((p: any) => p.n);
+            if (pairs.length === 0) {
               notFoundItems.push(nd);
               continue;
             }
-            // Split each docKey ("CR|chave") into (documento, nf) pairs
-            const pairs = docKeys.map((k: string) => {
-              const ps = String(k).split('|');
-              return ps.length > 1
-                ? { d: ps[0], n: ps.slice(1).join('|') }
-                : { d: 'CR', n: k };
-            });
             const orClauses = pairs.map(() => '(documento = ? AND nf = ?)').join(' OR ');
             const params: string[] = [];
             for (const p of pairs) { params.push(p.d, p.n); }
@@ -19879,7 +19883,7 @@ Deno.serve(async (req) => {
           await client.execute('START TRANSACTION');
           for (const [nd, item] of ndMap) {
             const docRows = await client.query(
-              `SELECT doc_key, razao_social, data_vencimento, valor_nf, tipo_documento
+              `SELECT doc_key, razao_social, data_vencimento, valor_nf, tipo_documento, documento, numero_nf, nd
                FROM dados_dachser.v_fin_regua_contas_receber
                WHERE nd = ? OR documento = ? OR numero_nf = ?`,
               [nd, nd, nd]
@@ -19892,9 +19896,16 @@ Deno.serve(async (req) => {
             for (const doc of docRows as any[]) {
               const docKey = doc.doc_key;
               if (!docKey) continue;
+              // De-para correto:
+              //   t_fin_disputas.documento = v.documento (numerodocumento)
+              //   t_fin_disputas.nf        = v.numero_nf (nota_fiscal)
+              //   t_fin_disputas.nd        = v.nd        (segundonumero)
               const ps = String(docKey).split('|');
-              const docPart = ps.length > 1 ? ps[0] : 'CR';
-              const nfPart = ps.length > 1 ? ps.slice(1).join('|') : docKey;
+              const fbDoc = ps.length > 1 ? ps[0] : 'CR';
+              const fbNf = ps.length > 1 ? ps.slice(1).join('|') : docKey;
+              const docPart = ((doc.documento ?? '').toString().trim()) || fbDoc;
+              const nfPart = ((doc.numero_nf ?? '').toString().trim()) || fbNf;
+              const ndPart = (doc.nd ?? null);
               const tipo = doc.tipo_documento === 'FAT_NF' ? 'À vista' : 'A prazo';
               const vencimento = excelDateToSQL(item.prazo) || doc.data_vencimento || null;
 
@@ -19915,7 +19926,8 @@ Deno.serve(async (req) => {
                 // Update or reopen
                 await client.execute(
                   `UPDATE ai_agente.t_fin_disputas
-                   SET responsavel = COALESCE(NULLIF(?, ''), responsavel),
+                   SET nd = COALESCE(?, nd),
+                       responsavel = COALESCE(NULLIF(?, ''), responsavel),
                        departamento = COALESCE(NULLIF(?, ''), departamento),
                        observacoes = COALESCE(NULLIF(?, ''), observacoes),
                        escalation = COALESCE(NULLIF(?, ''), escalation),
@@ -19929,6 +19941,7 @@ Deno.serve(async (req) => {
                        updated_at = NOW()
                    WHERE documento = ? AND nf = ?`,
                   [
+                    ndPart,
                     item.responsavel || '',
                     item.departamento || '',
                     item.descricao || '',
@@ -19944,10 +19957,10 @@ Deno.serve(async (req) => {
               } else {
                 await client.execute(
                   `INSERT INTO ai_agente.t_fin_disputas
-                    (documento, nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())`,
+                    (documento, nf, nd, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())`,
                   [
-                    docPart, nfPart,
+                    docPart, nfPart, ndPart,
                     doc.razao_social || 'N/A',
                     vencimento,
                     doc.valor_nf ?? 0,
