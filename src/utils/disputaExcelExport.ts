@@ -145,7 +145,7 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
   // Column headers
   const headers = [
     "Cliente",
-    "Documento/NF",
+    "ND",
     "Emissão",
     "Vencimento",
     "Tempo em Disputa",
@@ -158,7 +158,7 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
   // Prepare data rows
   const dataRows: (string | number)[][] = rows.map((r) => [
     r.cliente || r.razao_base || "-",
-    r.nf || r.nd || "-",
+    r.nd || "-",
     formatDate(r.emissao),
     formatDate(r.vencimento),
     formatElapsed(r.created_at),
@@ -167,6 +167,7 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     r.tipo || "-",
     r.observacoes || "-",
   ]);
+
 
   // Calculate max length for Observações column (index 8)
   const obsHeader = "Observações";
