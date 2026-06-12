@@ -18129,20 +18129,34 @@ Deno.serve(async (req) => {
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 121 AND 180 THEN 1 ELSE 0 END) AS count_180,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 181 AND 240 THEN 1 ELSE 0 END) AS count_240,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 241 AND 365 THEN 1 ELSE 0 END) AS count_365,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) > 365 THEN 1 ELSE 0 END) AS count_366_plus
-          FROM dados_dachser.v_fin_regua_contas_receber t
-          WHERE NOT EXISTS (
-              SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
-              WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
-                AND sd.active = 0
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM ai_agente.t_fin_disputas d
-              WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
-                AND d.is_disputa = 1
-                AND d.resolved_at IS NULL
-                AND d.deleted_at IS NULL
-            )
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) > 365 THEN 1 ELSE 0 END) AS count_366_plus,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) <= 0 THEN t.valor_nf ELSE 0 END) AS disp_not_due,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS disp_30,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 31 AND 40 THEN t.valor_nf ELSE 0 END) AS disp_40,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 41 AND 60 THEN t.valor_nf ELSE 0 END) AS disp_60,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 61 AND 90 THEN t.valor_nf ELSE 0 END) AS disp_90,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 91 AND 120 THEN t.valor_nf ELSE 0 END) AS disp_120,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 121 AND 180 THEN t.valor_nf ELSE 0 END) AS disp_180,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS disp_240,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 241 AND 365 THEN t.valor_nf ELSE 0 END) AS disp_365,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) > 365 THEN t.valor_nf ELSE 0 END) AS disp_366_plus,
+            SUM(CASE WHEN t.is_disputa = 1 THEN t.valor_nf ELSE 0 END) AS disp_total
+          FROM (
+            SELECT t.*,
+              CASE WHEN EXISTS (
+                SELECT 1 FROM ai_agente.t_fin_disputas d
+                WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                  AND d.is_disputa = 1
+                  AND d.resolved_at IS NULL
+                  AND d.deleted_at IS NULL
+              ) THEN 1 ELSE 0 END AS is_disputa
+            FROM dados_dachser.v_fin_regua_contas_receber t
+            WHERE NOT EXISTS (
+                SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+                WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                  AND sd.active = 0
+              )
+          ) t
           GROUP BY COALESCE(t.modal, 'Outros')
           ORDER BY SUM(t.valor_nf) DESC
         `;
@@ -18151,13 +18165,16 @@ Deno.serve(async (req) => {
           product: 'Grand Total',
           not_due: 0, aging_30: 0, aging_40: 0, aging_60: 0, aging_90: 0, aging_120: 0, aging_180: 0, aging_240: 0, aging_365: 0, aging_366_plus: 0,
           count_not_due: 0, count_30: 0, count_40: 0, count_60: 0, count_90: 0, count_120: 0, count_180: 0, count_240: 0, count_365: 0, count_366_plus: 0,
+          disp_not_due: 0, disp_30: 0, disp_40: 0, disp_60: 0, disp_90: 0, disp_120: 0, disp_180: 0, disp_240: 0, disp_365: 0, disp_366_plus: 0, disp_total: 0,
         };
         const agingFields = ['not_due', 'aging_30', 'aging_40', 'aging_60', 'aging_90', 'aging_120', 'aging_180', 'aging_240', 'aging_365', 'aging_366_plus'];
         const countFields = ['count_not_due', 'count_30', 'count_40', 'count_60', 'count_90', 'count_120', 'count_180', 'count_240', 'count_365', 'count_366_plus'];
+        const dispFields = ['disp_not_due', 'disp_30', 'disp_40', 'disp_60', 'disp_90', 'disp_120', 'disp_180', 'disp_240', 'disp_365', 'disp_366_plus', 'disp_total'];
         const rows = agingRows.map((r: any) => {
           const row: any = { product: r.product || 'Outros' };
           for (const f of agingFields) { row[f] = Number(r[f]) || 0; totals[f] += row[f]; }
           for (const f of countFields) { row[f] = Number(r[f]) || 0; totals[f] += row[f]; }
+          for (const f of dispFields) { row[f] = Number(r[f]) || 0; totals[f] += row[f]; }
           return row;
         });
         const lastUpdateResult = await client.query(`SELECT MAX(datavalidade) as last_update FROM dados_dachser.v_fin_regua_contas_receber`);
@@ -18166,6 +18183,7 @@ Deno.serve(async (req) => {
         result = { success: true, data: rows, totals, lastUpdate };
         break;
       }
+
 
       case 'get_aging_by_client_cr': {
         console.log('[get_aging_by_client_cr] Fetching aging by client from view...');
