@@ -1,37 +1,33 @@
-# Ajustes na tela /air/tracking-aereo
+## Objetivo
+No upload de anexos da Esteira (rascunho/A Processar), parar de excluir o anexo anterior do mesmo tipo. Em vez disso, manter ambos e sinalizar visualmente os anexos que possuem outro do mesmo tipo, destacando o título/nome em vermelho.
 
-Quatro correções pontuais para os AWBs reportados, mantendo o padrão de "manual override" já usado no módulo.
+## Mudanças
 
-## 1. Filtrar eventos com data no futuro (DEP futuro)
+### 1. `src/components/esteira/VoucherRascunhoActions.tsx` — `handleFileUpload`
+- Remover o bloco que procura `existingAnexo`, apaga do storage (`voucher-anexos`) e chama `delete_voucher_anexo`.
+- Sempre inserir o novo anexo via `save_voucher_anexo`, sem tocar nos existentes.
+- Ajustar o log para sempre usar `ANEXO_ADICIONADO` (remover ramo `ANEXO_SUBSTITUIDO`).
+- Ajustar o toast para sempre "Anexo adicionado".
+- Manter intacta a extração automática de linha digitável quando for boleto.
 
-**Sintoma:** `724-20906826` e `724-88485423` exibindo DEP como último evento, com data no futuro. A `pickTopByIATA` elege "o mais recente por data", e datas futuras vencem qualquer evento operacional real.
+### 2. Indicador visual de duplicidade
+Na lista de anexos exibida ao usuário (componente que renderiza `voucher.anexos` — provavelmente um `AnexosList`/seção dentro da página de detalhes do voucher, a ser localizado no momento da implementação), aplicar:
+- Calcular, por anexo, se existem 2+ anexos com o mesmo `tipo` no voucher.
+- Quando `count > 1`, renderizar o **nome do arquivo (título)** com classe `text-destructive` (vermelho do design system) e um ícone `AlertCircle` ao lado, com `title`/tooltip: "Existe mais de um anexo deste tipo — revise e exclua o antigo se necessário".
+- Não alterar nenhuma lógica de envio/validação — o checklist de "Anexos Obrigatórios" continua usando `some()` e portanto segue marcando como ✓ normalmente.
 
-**Correção (genérica):** em `supabase/functions/fetch-tracking-aereo/index.ts`, dentro de `pickTopByIATA`, depois do filtro de BKD, adicionar um filtro para descartar slots cuja `parseSlotDateMs(date)` seja maior que `Date.now()` (com tolerância de algumas horas para fuso). Só descarta se existirem slots não-futuros; se TODOS forem futuros, mantém a lógica atual (não quebra casos onde a carga é nova e só tem BKD/FOH futuro).
+### 3. Sem mudanças de backend
+- Não altera `mariadb-proxy` (`save_voucher_anexo` / `delete_voucher_anexo` continuam como estão).
+- Não altera schema de `t_voucher_anexos`.
+- Exclusão manual continua disponível pela ação de excluir anexo já existente na UI.
 
-Isso resolve `724-20906826` e `724-88485423` sem precisar override manual e protege qualquer outro AWB com carrier publicando DEP planejado.
+## Não incluso (fora de escopo)
+- Bloquear envio quando houver duplicidade — apenas sinalizar.
+- Mudar comportamento em outras etapas (Operação/Fiscal/Financeiro/Supervisor) — escopo é a tela onde hoje há substituição automática (`VoucherRascunhoActions`).
+- Migração de dados antigos.
 
-## 2. Suprimir discrepância inexistente em 724-88485423
-
-Adicionar `'724-88485423'` ao set `SUPPRESSED_DISCREPANCY_AWBS` em `supabase/functions/fetch-tracking-aereo/index.ts` (linha ~1382) — mesmo padrão já usado para `047-32916380` e `047-33946636`.
-
-Não é necessário mexer em `mariadb-proxy` (timeline modal) porque o backend já calcula discrepância via `air_master_discrepancy_list`, que é uma fonte separada; basta o filtro do fato.
-
-## 3. Forçar ARR - DESTINO para 016-65420832 e 016-56147991
-
-Adicionar os dois AWBs ao set `FORCED_ARR_DESTINO_AWBS` em `supabase/functions/fetch-tracking-aereo/index.ts` (linha 1385), junto a `016-83237055` e `369-92002945`. O override já força `finalCode = "ARR - DESTINO"` para todos os HAWBs do master, então cobre o pedido "todos os hawb" do `016-65420832`.
-
-## Detalhes técnicos
-
-Arquivos editados:
-- `supabase/functions/fetch-tracking-aereo/index.ts`
-  - `pickTopByIATA`: adicionar filtro `nonFuture = slots.filter(s => parseSlotDateMs(s.date) <= Date.now() + 6*3600*1000)` e usar quando `nonFuture.length > 0`.
-  - `SUPPRESSED_DISCREPANCY_AWBS`: incluir `'724-88485423'`.
-  - `FORCED_ARR_DESTINO_AWBS`: incluir `'016-65420832'` e `'016-56147991'`.
-
-Deploy do edge function ao final.
-
-## Fora de escopo
-
-- Mudanças no frontend `TrackingAereo.tsx` (a lógica problemática é toda backend).
-- Alteração no modal de timeline (`get_awb_tracking_events`) — a timeline em si continua mostrando eventos como vieram do carrier; o que muda é a eleição do "último evento" do header.
-- Reprocessamento/limpeza histórica de `t_aereo_ws_firecrawl`.
+## Validação
+1. Subir um segundo `BOLETO_INSTRUCOES` em um voucher que já tem um — confirmar que ambos aparecem na lista, com nome em vermelho + ícone de alerta, e que o antigo **não** foi removido do storage nem do banco.
+2. Subir um anexo de tipo novo — comportamento normal, sem destaque vermelho.
+3. Excluir manualmente um dos duplicados — o destaque vermelho some do que sobrou.
+4. Conferir log: aparece `ANEXO_ADICIONADO` (nunca `ANEXO_SUBSTITUIDO`).
