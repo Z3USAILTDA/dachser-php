@@ -4,7 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { TablePagination } from "@/components/layout/TablePagination";
@@ -32,6 +34,8 @@ interface CnpjDetail {
   totalCount: number;
   condicao_pagamento: string | null;
   nome_vendedor: string | null;
+  disputa_total?: number;
+  disputa_count?: number;
 }
 
 interface Observacao {
@@ -56,6 +60,16 @@ interface EmailLog {
   error_message: string | null;
 }
 
+interface DisputaRow {
+  nd: string | null;
+  numero_nf: string | null;
+  documento: string | null;
+  valor_nf: number;
+  modal: string | null;
+  data_emissao: string | null;
+  data_vencimento: string | null;
+}
+
 interface AgingRow {
   product: string;
   cnpjs?: string[];
@@ -70,11 +84,13 @@ interface FaturaRow {
   data_vencimento: string;
   data_emissao: string;
   valor_nf: number;
+  modal: string | null;
   disputa: number;
   condicao_pagamento: string;
   nome_vendedor: string;
   numero_processo: string;
 }
+
 
 interface ClientDetailSheetProps {
   client: AgingRow | null;
@@ -125,7 +141,21 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
   const [faturasTotal, setFaturasTotal] = useState(0);
   const [faturasPage, setFaturasPage] = useState(1);
   const [faturasLoading, setFaturasLoading] = useState(false);
+  const [modalFilter, setModalFilter] = useState("");
+  const [modalFilterDebounced, setModalFilterDebounced] = useState("");
   const faturasPageSize = 20;
+
+  // Disputas por CNPJ (lazy)
+  const [disputasOpen, setDisputasOpen] = useState<Record<string, boolean>>({});
+  const [disputasByCnpj, setDisputasByCnpj] = useState<Record<string, DisputaRow[]>>({});
+  const [disputasLoading, setDisputasLoading] = useState<Record<string, boolean>>({});
+
+  // Debounce do filtro modal
+  useEffect(() => {
+    const t = setTimeout(() => setModalFilterDebounced(modalFilter.trim()), 300);
+    return () => clearTimeout(t);
+  }, [modalFilter]);
+
 
   const fetchDetail = useCallback(async () => {
     if (!client?.product) return;
@@ -176,12 +206,12 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
     }
   }, [client?.product]);
 
-  const fetchFaturas = useCallback(async (page: number) => {
+  const fetchFaturas = useCallback(async (page: number, modalQ?: string) => {
     if (!client?.product) return;
     setFaturasLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_client_faturas_cr", clientName: client.product, page, pageSize: faturasPageSize },
+        body: { action: "get_client_faturas_cr", clientName: client.product, page, pageSize: faturasPageSize, modalFilter: modalQ ?? modalFilterDebounced },
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Erro");
@@ -194,7 +224,26 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
     } finally {
       setFaturasLoading(false);
     }
-  }, [client?.product]);
+  }, [client?.product, modalFilterDebounced]);
+
+  const fetchDisputasForCnpj = useCallback(async (cnpjClean: string) => {
+    if (disputasByCnpj[cnpjClean] || disputasLoading[cnpjClean]) return;
+    setDisputasLoading((prev) => ({ ...prev, [cnpjClean]: true }));
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "get_client_cnpj_disputas_cr", cnpj: cnpjClean },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Erro");
+      setDisputasByCnpj((prev) => ({ ...prev, [cnpjClean]: data.rows || [] }));
+    } catch (err: any) {
+      console.error("Error fetching disputas:", err);
+      toast({ title: "Erro ao buscar disputas", description: err.message, variant: "destructive" });
+    } finally {
+      setDisputasLoading((prev) => ({ ...prev, [cnpjClean]: false }));
+    }
+  }, [disputasByCnpj, disputasLoading]);
+
 
   useEffect(() => {
     if (open && client) {
@@ -210,6 +259,15 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
       fetchFaturas(1);
     }
   }, [faturasOpen]);
+
+  // Refetch ao mudar filtro modal (com debounce já aplicado)
+  useEffect(() => {
+    if (faturasOpen && client?.product) {
+      fetchFaturas(1, modalFilterDebounced);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalFilterDebounced]);
+
 
   const handleSaveObs = async (cnpj: string) => {
     setSavingCnpj(cnpj);
@@ -316,6 +374,54 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                       </span>
                     )}
                   </div>
+
+                  {/* Em disputa */}
+                  {(cnpj.disputa_total || 0) > 0 && (
+                    <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2 space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-amber-300 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          Em disputa: <strong>{formatBRLFull(cnpj.disputa_total || 0)}</strong>
+                          <span className="opacity-70">({cnpj.disputa_count || 0} fatura{(cnpj.disputa_count || 0) === 1 ? "" : "s"})</span>
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 text-[11px] text-amber-300 hover:text-amber-200 hover:bg-amber-500/10"
+                          onClick={() => {
+                            const next = !disputasOpen[cnpj.cnpjClean];
+                            setDisputasOpen((prev) => ({ ...prev, [cnpj.cnpjClean]: next }));
+                            if (next) fetchDisputasForCnpj(cnpj.cnpjClean);
+                          }}
+                        >
+                          {disputasOpen[cnpj.cnpjClean] ? "Ocultar" : "Ver"}
+                        </Button>
+                      </div>
+                      {disputasOpen[cnpj.cnpjClean] && (
+                        <div className="pt-1">
+                          {disputasLoading[cnpj.cnpjClean] ? (
+                            <div className="flex items-center justify-center py-2">
+                              <Loader2 className="h-4 w-4 animate-spin text-amber-300" />
+                            </div>
+                          ) : (disputasByCnpj[cnpj.cnpjClean]?.length || 0) === 0 ? (
+                            <p className="text-[11px] text-muted-foreground italic">Nenhuma disputa ativa encontrada.</p>
+                          ) : (
+                            <ul className="space-y-1">
+                              {(disputasByCnpj[cnpj.cnpjClean] || []).map((d, i) => (
+                                <li key={i} className="text-[11px] flex flex-wrap gap-x-3 gap-y-0.5 text-foreground/90 border-t border-amber-500/10 pt-1 first:border-t-0 first:pt-0">
+                                  <span><strong className="text-amber-300">ND:</strong> {d.nd || "—"}</span>
+                                  <span><strong>NF:</strong> {d.numero_nf || "—"}</span>
+                                  <span><strong>Venc.:</strong> {d.data_vencimento || "—"}</span>
+                                  <span className="ml-auto font-mono">{formatBRLFull(d.valor_nf)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
 
                   {/* Cond. Pagamento & Vendedor */}
                   {(cnpj.condicao_pagamento || cnpj.nome_vendedor) && (
@@ -424,6 +530,19 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
 
             {faturasOpen && (
               <div className="mt-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Filtrar por Modal..."
+                    value={modalFilter}
+                    onChange={(e) => setModalFilter(e.target.value)}
+                    className="h-8 text-xs bg-background border-border max-w-[240px]"
+                  />
+                  {modalFilter && (
+                    <Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={() => setModalFilter("")}>
+                      Limpar
+                    </Button>
+                  )}
+                </div>
                 {faturasLoading ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -437,6 +556,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                         <TableHeader>
                           <TableRow>
                             <TableHead>ND</TableHead>
+                            <TableHead>Modal</TableHead>
                             <TableHead>Vencimento</TableHead>
                             <TableHead className="text-right">Valor</TableHead>
                             <TableHead className="text-center">Disputa</TableHead>
@@ -448,6 +568,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                           {faturas.map((f, idx) => (
                             <TableRow key={idx}>
                               <TableCell className="font-mono font-medium">{f.nd || "—"}</TableCell>
+                              <TableCell>{f.modal || "—"}</TableCell>
                               <TableCell>{f.data_vencimento || "—"}</TableCell>
                               <TableCell className="text-right font-mono">
                                 {f.valor_nf != null ? formatBRLFull(Number(f.valor_nf)) : "—"}
@@ -472,6 +593,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                       totalPages={faturaTotalPages}
                       onPageChange={(p) => fetchFaturas(p)}
                     />
+
                   </>
                 )}
               </div>

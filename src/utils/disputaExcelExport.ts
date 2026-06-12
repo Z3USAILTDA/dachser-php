@@ -145,7 +145,7 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
   // Column headers
   const headers = [
     "Cliente",
-    "Documento/NF",
+    "ND",
     "Emissão",
     "Vencimento",
     "Tempo em Disputa",
@@ -158,7 +158,7 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
   // Prepare data rows
   const dataRows: (string | number)[][] = rows.map((r) => [
     r.cliente || r.razao_base || "-",
-    r.nf || r.nd || "-",
+    r.nd || "-",
     formatDate(r.emissao),
     formatDate(r.vencimento),
     formatElapsed(r.created_at),
@@ -167,6 +167,7 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     r.tipo || "-",
     r.observacoes || "-",
   ]);
+
 
   // Calculate max length for Observações column (index 8)
   const obsHeader = "Observações";
@@ -235,16 +236,18 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
       if (colIdx === 6) {
         // Valor column - right aligned with currency format
         style = isAlt ? moneyStyleAlt : moneyStyle;
+        ws[cellRef] = { v: Number(cell) || 0, t: 'n', s: style };
       } else if (colIdx === 2 || colIdx === 3 || colIdx === 4) {
         // Date columns - centered
         style = isAlt ? centerStyleAlt : centerStyle;
+        ws[cellRef] = { v: cell, s: style };
       } else {
         style = isAlt ? dataStyleAlt : dataStyle;
+        ws[cellRef] = { v: cell, s: style };
       }
-      
-      ws[cellRef] = { v: cell, s: style };
     });
   });
+
 
   // Add summary rows
   const summaryRow1Idx = dataRows.length + 5;
@@ -259,7 +262,7 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
   // Set column widths
   ws["!cols"] = [
     { wch: 30 }, // Cliente
-    { wch: 18 }, // Documento/NF
+    { wch: 18 }, // ND
     { wch: 12 }, // Emissão
     { wch: 12 }, // Vencimento
     { wch: 25 }, // Tempo em Disputa

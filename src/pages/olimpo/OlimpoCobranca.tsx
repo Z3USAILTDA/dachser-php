@@ -55,8 +55,20 @@ interface AgingRow {
   count_240: number;
   count_365: number;
   count_366_plus: number;
+  disp_not_due?: number;
+  disp_30?: number;
+  disp_40?: number;
+  disp_60?: number;
+  disp_90?: number;
+  disp_120?: number;
+  disp_180?: number;
+  disp_240?: number;
+  disp_365?: number;
+  disp_366_plus?: number;
+  disp_total?: number;
   cnpjs?: string[];
 }
+
 
 interface AgingData {
   data: AgingRow[];
@@ -167,6 +179,19 @@ const PRODUCT_MAP: Record<string, string> = {
 
 const agingKeys = ["not_due", "aging_30", "aging_40", "aging_60", "aging_90", "aging_120", "aging_180", "aging_240", "aging_365", "aging_366_plus"] as const;
 const overdueKeys = agingKeys.filter(k => k !== "not_due");
+const DISP_KEY_MAP: Record<string, string> = {
+  not_due: "disp_not_due",
+  aging_30: "disp_30",
+  aging_40: "disp_40",
+  aging_60: "disp_60",
+  aging_90: "disp_90",
+  aging_120: "disp_120",
+  aging_180: "disp_180",
+  aging_240: "disp_240",
+  aging_365: "disp_365",
+  aging_366_plus: "disp_366_plus",
+};
+
 
 function formatBRL(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -203,6 +228,11 @@ function mergeProductRows(rows: AgingRow[]): AgingRow[] {
       for (const ck of countKeys) {
         (grouped[mapped] as any)[ck] += (row as any)[ck];
       }
+      const dispKeys = ["disp_not_due","disp_30","disp_40","disp_60","disp_90","disp_120","disp_180","disp_240","disp_365","disp_366_plus","disp_total"] as const;
+      for (const dk of dispKeys) {
+        (grouped[mapped] as any)[dk] = ((grouped[mapped] as any)[dk] || 0) + ((row as any)[dk] || 0);
+      }
+
     }
   }
   return Object.values(grouped).sort((a, b) => {
@@ -543,6 +573,7 @@ export default function OlimpoCobranca() {
             "Provisão ≤90 (1%)", "Provisão 91-180 (25%)", "Provisão 181-240 (50%)",
             "Provisão 241-365 (75%)", "Provisão >365 (100%)",
             "Qtd. Dias de Vencimento",
+            "Email",
           ];
 
           const anData: any[][] = [
@@ -553,7 +584,10 @@ export default function OlimpoCobranca() {
 
           let totalProv1 = 0, totalProv25 = 0, totalProv50 = 0, totalProv75 = 0, totalProv100 = 0;
 
-          for (const r of analiticoResp.data) {
+          // Ordenar por vencidos primeiro (maior atraso primeiro)
+          const sortedAnalitico = [...analiticoResp.data].sort((a: any, b: any) => (Number(b.dias_vencimento) || 0) - (Number(a.dias_vencimento) || 0));
+
+          for (const r of sortedAnalitico) {
             const dias = r.dias_vencimento;
             const valor = r.valor_nf;
             const { pct } = getProvisionPct(dias);
@@ -569,6 +603,10 @@ export default function OlimpoCobranca() {
             totalProv1 += p1; totalProv25 += p25; totalProv50 += p50;
             totalProv75 += p75; totalProv100 += p100;
 
+            let emailLabel = "Não enviado";
+            if (r.email_status === "enviado") emailLabel = "Enviado";
+            else if (r.email_status === "falha") emailLabel = `Falha: ${(r.email_error || "").toString().slice(0, 120)}`;
+
             anData.push([
               "1",
               r.documento || "", r.numero_nf || "", r.modal || "", r.tipo_documento || "",
@@ -580,6 +618,7 @@ export default function OlimpoCobranca() {
               r.processo || "", r.master || "", r.house || "", r.id_rm || "",
               p1 || "", p25 || "", p50 || "", p75 || "", p100 || "",
               dias > 0 ? dias : 0,
+              emailLabel,
             ]);
           }
 
@@ -588,7 +627,7 @@ export default function OlimpoCobranca() {
             "", "", "", "", "", "", "", "", "",
             "TOTAL", "", "",
             "", "", "", "",
-            totalProv1, totalProv25, totalProv50, totalProv75, totalProv100, "",
+            totalProv1, totalProv25, totalProv50, totalProv75, totalProv100, "", "",
           ]);
 
           const ws2 = XLSX.utils.aoa_to_sheet(anData);
@@ -603,26 +642,27 @@ export default function OlimpoCobranca() {
             border: STYLE.border,
           };
 
-          for (let c = 0; c <= 21; c++) {
+          const LAST_COL = 22;
+          for (let c = 0; c <= LAST_COL; c++) {
             const addr = XLSX.utils.encode_cell({ r: 2, c });
             if (ws2[addr]) ws2[addr].s = headerStyleFn(c <= 9 ? "center" : "center");
           }
 
           for (let r = 3; r < anData.length - 2; r++) {
             const isZebra = r % 2 === 0;
-            for (let c = 0; c <= 21; c++) {
+            for (let c = 0; c <= LAST_COL; c++) {
               const addr = XLSX.utils.encode_cell({ r, c });
               if (!ws2[addr]) continue;
               const isMoneyCol = c === 10 || c === 11 || (c >= 16 && c <= 20);
               ws2[addr].s = cellStyleFn(
                 isZebra ? STYLE.zebra : STYLE.white,
-                { align: isMoneyCol ? "right" : c <= 9 ? "left" : "right", numFmt: isMoneyCol && typeof anData[r]?.[c] === "number" ? '#,##0.00' : undefined }
+                { align: isMoneyCol ? "right" : c <= 9 || c === 22 ? "left" : "right", numFmt: isMoneyCol && typeof anData[r]?.[c] === "number" ? '#,##0.00' : undefined }
               );
             }
           }
 
           const tRow = anData.length - 1;
-          for (let c = 0; c <= 21; c++) {
+          for (let c = 0; c <= LAST_COL; c++) {
             const addr = XLSX.utils.encode_cell({ r: tRow, c });
             if (!ws2[addr]) continue;
             const isMoneyCol = c >= 16 && c <= 20;
@@ -640,9 +680,11 @@ export default function OlimpoCobranca() {
             { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 10 },
             { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
             { wch: 12 },
+            { wch: 40 },
           ];
 
           ws2["!rows"] = [{ hpt: 28 }, {}, { hpt: 22 }];
+
 
           XLSX.utils.book_append_sheet(wb, ws2, "Analítico de Clientes");
         }
@@ -806,32 +848,35 @@ export default function OlimpoCobranca() {
                                 <span className="ml-2 text-[10px] text-muted-foreground">({row.cnpjs.length} CNPJs)</span>
                               )}
                             </td>
-                            {agingKeys.map((k) => (
-                              <td key={k} className="py-2.5 px-3 text-right tabular-nums"
-                                style={{ color: (row[k] as number) > 0 ? AGING_COLORS[k] : "var(--muted-foreground)" }}>
-                                {formatBRL(row[k] as number)}
-                              </td>
-                            ))}
-                            <td className="py-2.5 px-3 text-right tabular-nums text-red-400 font-medium">{formatBRL(rowOverdue)}</td>
+                            {agingKeys.map((k) => {
+                              const dispVal = ((row as any)[DISP_KEY_MAP[k]] || 0) as number;
+                              return (
+                                <td key={k} className="py-2.5 px-3 text-right tabular-nums"
+                                  style={{ color: (row[k] as number) > 0 ? AGING_COLORS[k] : "var(--muted-foreground)" }}>
+                                  <span className="inline-flex items-center justify-end gap-1">
+                                    {formatBRL(row[k] as number)}
+                                    {dispVal > 0 && (
+                                      <span title={`Inclui ${formatBRL(dispVal)} em disputa`}
+                                        className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+                                    )}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                            <td className="py-2.5 px-3 text-right tabular-nums text-red-400 font-medium">
+                              <span className="inline-flex items-center justify-end gap-1">
+                                {formatBRL(rowOverdue)}
+                                {((row as any).disp_total || 0) > 0 && (
+                                  <span title={`Inclui ${formatBRL((row as any).disp_total)} em disputa`}
+                                    className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+                                )}
+                              </span>
+                            </td>
                             <td className="py-2.5 px-3 text-right tabular-nums text-foreground font-medium">{formatBRL(rowTotal)}</td>
                           </tr>
                         );
                       })}
-                      {/* Bad Debts summary row */}
-                      {totals && totals.aging_366_plus > 0 && (
-                        <tr className="border-t border-red-500/30 bg-red-500/10">
-                          <td className="py-2.5 px-4 font-bold text-red-400">Bad Debts ({">"} 365)</td>
-                          {agingKeys.map((k) => (
-                            <td key={k} className="py-2.5 px-3 text-right tabular-nums font-bold" style={{ color: k === "aging_366_plus" ? "#991b1b" : "transparent" }}>
-                              {k === "aging_366_plus" ? formatBRL(totals.aging_366_plus) : ""}
-                            </td>
-                          ))}
-                          <td className="py-2.5 px-3" />
-                          <td className="py-2.5 px-3 text-right tabular-nums font-bold text-red-400">
-                            {totalReceivable > 0 ? `${((totals.aging_366_plus / totalReceivable) * 100).toFixed(1)}% do total` : ""}
-                          </td>
-                        </tr>
-                      )}
+
                       {/* Grand Total */}
                       {totals && (
                         <tr className="border-t-2 border-primary/40 bg-card sticky bottom-0 z-10 shadow-[0_-2px_6px_rgba(0,0,0,0.3)]">

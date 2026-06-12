@@ -537,7 +537,8 @@ Deno.serve(async (req) => {
       // Olimpo Cobrança shadow _cr (Fase 4.1 — leitura da view nova)
       'get_aging_overview_cr','get_aging_by_client_cr','get_client_cnpj_detail_cr',
       'get_client_faturas_cr','get_aging_analitico_cr','report_cnpjs_sem_email_cr',
-      'get_olimpo_email_logs_by_cnpj',
+      'get_olimpo_email_logs_by_cnpj','get_client_cnpj_disputas_cr',
+
       // Supervisor tokens (aprovação fluxo voucher)
       'setup_supervisor_tokens_table','create_supervisor_token',
       'validate_supervisor_token','mark_supervisor_token_used',
@@ -18129,20 +18130,34 @@ Deno.serve(async (req) => {
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 121 AND 180 THEN 1 ELSE 0 END) AS count_180,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 181 AND 240 THEN 1 ELSE 0 END) AS count_240,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 241 AND 365 THEN 1 ELSE 0 END) AS count_365,
-            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) > 365 THEN 1 ELSE 0 END) AS count_366_plus
-          FROM dados_dachser.v_fin_regua_contas_receber t
-          WHERE NOT EXISTS (
-              SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
-              WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
-                AND sd.active = 0
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM ai_agente.t_fin_disputas d
-              WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
-                AND d.is_disputa = 1
-                AND d.resolved_at IS NULL
-                AND d.deleted_at IS NULL
-            )
+            SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) > 365 THEN 1 ELSE 0 END) AS count_366_plus,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) <= 0 THEN t.valor_nf ELSE 0 END) AS disp_not_due,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS disp_30,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 31 AND 40 THEN t.valor_nf ELSE 0 END) AS disp_40,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 41 AND 60 THEN t.valor_nf ELSE 0 END) AS disp_60,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 61 AND 90 THEN t.valor_nf ELSE 0 END) AS disp_90,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 91 AND 120 THEN t.valor_nf ELSE 0 END) AS disp_120,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 121 AND 180 THEN t.valor_nf ELSE 0 END) AS disp_180,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS disp_240,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 241 AND 365 THEN t.valor_nf ELSE 0 END) AS disp_365,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) > 365 THEN t.valor_nf ELSE 0 END) AS disp_366_plus,
+            SUM(CASE WHEN t.is_disputa = 1 THEN t.valor_nf ELSE 0 END) AS disp_total
+          FROM (
+            SELECT t.*,
+              CASE WHEN EXISTS (
+                SELECT 1 FROM ai_agente.t_fin_disputas d
+                WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                  AND d.is_disputa = 1
+                  AND d.resolved_at IS NULL
+                  AND d.deleted_at IS NULL
+              ) THEN 1 ELSE 0 END AS is_disputa
+            FROM dados_dachser.v_fin_regua_contas_receber t
+            WHERE NOT EXISTS (
+                SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+                WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                  AND sd.active = 0
+              )
+          ) t
           GROUP BY COALESCE(t.modal, 'Outros')
           ORDER BY SUM(t.valor_nf) DESC
         `;
@@ -18151,13 +18166,16 @@ Deno.serve(async (req) => {
           product: 'Grand Total',
           not_due: 0, aging_30: 0, aging_40: 0, aging_60: 0, aging_90: 0, aging_120: 0, aging_180: 0, aging_240: 0, aging_365: 0, aging_366_plus: 0,
           count_not_due: 0, count_30: 0, count_40: 0, count_60: 0, count_90: 0, count_120: 0, count_180: 0, count_240: 0, count_365: 0, count_366_plus: 0,
+          disp_not_due: 0, disp_30: 0, disp_40: 0, disp_60: 0, disp_90: 0, disp_120: 0, disp_180: 0, disp_240: 0, disp_365: 0, disp_366_plus: 0, disp_total: 0,
         };
         const agingFields = ['not_due', 'aging_30', 'aging_40', 'aging_60', 'aging_90', 'aging_120', 'aging_180', 'aging_240', 'aging_365', 'aging_366_plus'];
         const countFields = ['count_not_due', 'count_30', 'count_40', 'count_60', 'count_90', 'count_120', 'count_180', 'count_240', 'count_365', 'count_366_plus'];
+        const dispFields = ['disp_not_due', 'disp_30', 'disp_40', 'disp_60', 'disp_90', 'disp_120', 'disp_180', 'disp_240', 'disp_365', 'disp_366_plus', 'disp_total'];
         const rows = agingRows.map((r: any) => {
           const row: any = { product: r.product || 'Outros' };
           for (const f of agingFields) { row[f] = Number(r[f]) || 0; totals[f] += row[f]; }
           for (const f of countFields) { row[f] = Number(r[f]) || 0; totals[f] += row[f]; }
+          for (const f of dispFields) { row[f] = Number(r[f]) || 0; totals[f] += row[f]; }
           return row;
         });
         const lastUpdateResult = await client.query(`SELECT MAX(datavalidade) as last_update FROM dados_dachser.v_fin_regua_contas_receber`);
@@ -18166,6 +18184,7 @@ Deno.serve(async (req) => {
         result = { success: true, data: rows, totals, lastUpdate };
         break;
       }
+
 
       case 'get_aging_by_client_cr': {
         console.log('[get_aging_by_client_cr] Fetching aging by client from view...');
@@ -18192,23 +18211,37 @@ Deno.serve(async (req) => {
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 181 AND 240 THEN 1 ELSE 0 END) AS count_240,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 241 AND 365 THEN 1 ELSE 0 END) AS count_365,
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) > 365 THEN 1 ELSE 0 END) AS count_366_plus,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) <= 0 THEN t.valor_nf ELSE 0 END) AS disp_not_due,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 1 AND 30 THEN t.valor_nf ELSE 0 END) AS disp_30,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 31 AND 40 THEN t.valor_nf ELSE 0 END) AS disp_40,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 41 AND 60 THEN t.valor_nf ELSE 0 END) AS disp_60,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 61 AND 90 THEN t.valor_nf ELSE 0 END) AS disp_90,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 91 AND 120 THEN t.valor_nf ELSE 0 END) AS disp_120,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 121 AND 180 THEN t.valor_nf ELSE 0 END) AS disp_180,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 181 AND 240 THEN t.valor_nf ELSE 0 END) AS disp_240,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) BETWEEN 241 AND 365 THEN t.valor_nf ELSE 0 END) AS disp_365,
+            SUM(CASE WHEN t.is_disputa = 1 AND DATEDIFF(CURDATE(), t.data_prev_baixa) > 365 THEN t.valor_nf ELSE 0 END) AS disp_366_plus,
+            SUM(CASE WHEN t.is_disputa = 1 THEN t.valor_nf ELSE 0 END) AS disp_total,
             GROUP_CONCAT(DISTINCT REPLACE(REPLACE(REPLACE(t.cnpj, '.', ''), '/', ''), '-', '') SEPARATOR ',') AS cnpjs
-          FROM dados_dachser.v_fin_regua_contas_receber t
+          FROM (
+            SELECT t.*,
+              CASE WHEN EXISTS (
+                SELECT 1 FROM ai_agente.t_fin_disputas d
+                WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                  AND d.is_disputa = 1
+                  AND d.resolved_at IS NULL
+                  AND d.deleted_at IS NULL
+              ) THEN 1 ELSE 0 END AS is_disputa
+            FROM dados_dachser.v_fin_regua_contas_receber t
+            WHERE NOT EXISTS (
+                SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+                WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                  AND sd.active = 0
+              )
+          ) t
           LEFT JOIN dados_dachser.t_fin_cliente_grupo g
             ON g.razao_social COLLATE utf8mb4_unicode_ci
              = UPPER(TRIM(COALESCE(t.razao_social,''))) COLLATE utf8mb4_unicode_ci
-          WHERE NOT EXISTS (
-              SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
-              WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
-                AND sd.active = 0
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM ai_agente.t_fin_disputas d
-              WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
-                AND d.is_disputa = 1
-                AND d.resolved_at IS NULL
-                AND d.deleted_at IS NULL
-            )
           GROUP BY COALESCE(g.grupo, TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1)))
           ORDER BY SUM(t.valor_nf) DESC
         `;
@@ -18217,9 +18250,11 @@ Deno.serve(async (req) => {
           product: 'Grand Total',
           not_due: 0, aging_30: 0, aging_40: 0, aging_60: 0, aging_90: 0, aging_120: 0, aging_180: 0, aging_240: 0, aging_365: 0, aging_366_plus: 0,
           count_not_due: 0, count_30: 0, count_40: 0, count_60: 0, count_90: 0, count_120: 0, count_180: 0, count_240: 0, count_365: 0, count_366_plus: 0,
+          disp_not_due: 0, disp_30: 0, disp_40: 0, disp_60: 0, disp_90: 0, disp_120: 0, disp_180: 0, disp_240: 0, disp_365: 0, disp_366_plus: 0, disp_total: 0,
         };
         const agingFieldsC = ['not_due', 'aging_30', 'aging_40', 'aging_60', 'aging_90', 'aging_120', 'aging_180', 'aging_240', 'aging_365', 'aging_366_plus'];
         const countFieldsC = ['count_not_due', 'count_30', 'count_40', 'count_60', 'count_90', 'count_120', 'count_180', 'count_240', 'count_365', 'count_366_plus'];
+        const dispFieldsC = ['disp_not_due', 'disp_30', 'disp_40', 'disp_60', 'disp_90', 'disp_120', 'disp_180', 'disp_240', 'disp_365', 'disp_366_plus', 'disp_total'];
         const clientRows = clientAgingRows.map((r: any) => {
           const row: any = {
             product: r.product || 'Sem Cliente',
@@ -18227,6 +18262,7 @@ Deno.serve(async (req) => {
           };
           for (const f of agingFieldsC) { row[f] = Number(r[f]) || 0; clientTotals[f] += row[f]; }
           for (const f of countFieldsC) { row[f] = Number(r[f]) || 0; clientTotals[f] += row[f]; }
+          for (const f of dispFieldsC) { row[f] = Number(r[f]) || 0; clientTotals[f] += row[f]; }
           return row;
         });
         const clientLastUpdateResult = await client.query(`SELECT MAX(datavalidade) as last_update FROM dados_dachser.v_fin_regua_contas_receber`);
@@ -18235,6 +18271,7 @@ Deno.serve(async (req) => {
         result = { success: true, data: clientRows, totals: clientTotals, lastUpdate: clientLastUpdate };
         break;
       }
+
 
       case 'get_client_cnpj_detail_cr': {
         const { clientName } = body as { clientName: string };
@@ -18253,25 +18290,30 @@ Deno.serve(async (req) => {
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) > 360 THEN t.valor_nf ELSE 0 END) AS aging_360_plus,
             COUNT(*) AS total_count,
             MAX(t.condicao_pag) AS condicao_pagamento,
-            MAX(t.nome_vendedor) AS nome_vendedor
-          FROM dados_dachser.v_fin_regua_contas_receber t
+            MAX(t.nome_vendedor) AS nome_vendedor,
+            SUM(CASE WHEN t.is_disputa = 1 THEN t.valor_nf ELSE 0 END) AS disputa_total,
+            SUM(CASE WHEN t.is_disputa = 1 THEN 1 ELSE 0 END) AS disputa_count
+          FROM (
+            SELECT t.*,
+              CASE WHEN EXISTS (
+                SELECT 1 FROM ai_agente.t_fin_disputas d
+                WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                  AND d.is_disputa = 1
+                  AND d.resolved_at IS NULL
+                  AND d.deleted_at IS NULL
+              ) THEN 1 ELSE 0 END AS is_disputa
+            FROM dados_dachser.v_fin_regua_contas_receber t
+            WHERE NOT EXISTS (
+                SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+                WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                  AND sd.active = 0
+              )
+          ) t
           LEFT JOIN dados_dachser.t_fin_cliente_grupo g
             ON g.razao_social COLLATE utf8mb4_unicode_ci
              = UPPER(TRIM(COALESCE(t.razao_social,''))) COLLATE utf8mb4_unicode_ci
           WHERE COALESCE(g.grupo, TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))) COLLATE utf8mb4_unicode_ci
               = ? COLLATE utf8mb4_unicode_ci
-            AND NOT EXISTS (
-              SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
-              WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
-                AND sd.active = 0
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM ai_agente.t_fin_disputas d
-              WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
-                AND d.is_disputa = 1
-                AND d.resolved_at IS NULL
-                AND d.deleted_at IS NULL
-            )
           GROUP BY cnpj_clean, cnpj_original
           ORDER BY total_count DESC
         `;
@@ -18289,7 +18331,10 @@ Deno.serve(async (req) => {
           totalCount: Number(r.total_count) || 0,
           condicao_pagamento: r.condicao_pagamento || null,
           nome_vendedor: r.nome_vendedor || null,
+          disputa_total: Number(r.disputa_total) || 0,
+          disputa_count: Number(r.disputa_count) || 0,
         }));
+
         const cnpjList = mapped.map((m: any) => m.cnpjClean).filter(Boolean);
         let observacoes: any[] = [];
         let contatos: any[] = [];
@@ -18408,10 +18453,15 @@ Deno.serve(async (req) => {
       }
 
       case 'get_client_faturas_cr': {
-        const { clientName: fatClientName, page: fatPage = 1, pageSize: fatPageSize = 20 } = body as { clientName: string; page?: number; pageSize?: number };
+        const { clientName: fatClientName, page: fatPage = 1, pageSize: fatPageSize = 20, modalFilter } = body as { clientName: string; page?: number; pageSize?: number; modalFilter?: string };
         if (!fatClientName) { result = { success: false, error: 'clientName required' }; break; }
-        console.log(`[get_client_faturas_cr] client=${fatClientName} page=${fatPage} size=${fatPageSize}`);
+        const modalQ = (modalFilter || '').trim();
+        console.log(`[get_client_faturas_cr] client=${fatClientName} page=${fatPage} size=${fatPageSize} modal=${modalQ}`);
         const offset = (fatPage - 1) * fatPageSize;
+
+        const modalClause = modalQ
+          ? ` AND COALESCE(t.modal,'') COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', ? COLLATE utf8mb4_unicode_ci, '%')`
+          : '';
 
         const fatSql = `
           SELECT
@@ -18452,11 +18502,12 @@ Deno.serve(async (req) => {
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND sd.active = 0
-            )
+            )${modalClause}
           ORDER BY t.data_prev_baixa DESC
           LIMIT ? OFFSET ?
         `;
-        const fatRows = await client.query(fatSql, [fatClientName, fatPageSize, offset]);
+        const fatParams = modalQ ? [fatClientName, modalQ, fatPageSize, offset] : [fatClientName, fatPageSize, offset];
+        const fatRows = await client.query(fatSql, fatParams);
 
         const countSql = `
           SELECT COUNT(*) as total
@@ -18470,14 +18521,60 @@ Deno.serve(async (req) => {
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND sd.active = 0
-            )
+            )${modalClause}
         `;
-        const countResult = await client.query(countSql, [fatClientName]);
+        const countParams = modalQ ? [fatClientName, modalQ] : [fatClientName];
+        const countResult = await client.query(countSql, countParams);
         const total = Number(countResult[0]?.total || 0);
 
         result = { success: true, rows: fatRows, total, page: fatPage, pageSize: fatPageSize };
         break;
       }
+
+      case 'get_client_cnpj_disputas_cr': {
+        const { cnpj: dispCnpj } = body as { cnpj?: string };
+        const cnpjClean = String(dispCnpj || '').replace(/\D/g, '');
+        if (!cnpjClean) { result = { success: false, error: 'cnpj required' }; break; }
+        console.log(`[get_client_cnpj_disputas_cr] cnpj=${cnpjClean}`);
+        const sql = `
+          SELECT
+            t.nd,
+            t.numero_nf,
+            t.documento,
+            t.valor_nf,
+            t.modal,
+            DATE_FORMAT(t.data_emissao, '%d/%m/%Y') AS data_emissao,
+            DATE_FORMAT(t.data_prev_baixa, '%d/%m/%Y') AS data_vencimento
+          FROM dados_dachser.v_fin_regua_contas_receber t
+          WHERE REPLACE(REPLACE(REPLACE(t.cnpj,'.',''),'/',''),'-','') = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+              WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND sd.active = 0
+            )
+            AND EXISTS (
+              SELECT 1 FROM ai_agente.t_fin_disputas d
+              WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND d.is_disputa = 1
+                AND d.resolved_at IS NULL
+                AND d.deleted_at IS NULL
+            )
+          ORDER BY t.data_prev_baixa DESC
+          LIMIT 500
+        `;
+        const rows = await client.query(sql, [cnpjClean]);
+        result = { success: true, rows: (rows || []).map((r: any) => ({
+          nd: r.nd,
+          numero_nf: r.numero_nf,
+          documento: r.documento,
+          valor_nf: Number(r.valor_nf) || 0,
+          modal: r.modal,
+          data_emissao: r.data_emissao,
+          data_vencimento: r.data_vencimento,
+        })) };
+        break;
+      }
+
 
       case 'get_aging_analitico_cr': {
         console.log('[get_aging_analitico_cr] Fetching analítico from view...');
@@ -18492,14 +18589,28 @@ Deno.serve(async (req) => {
               t.data_prev_baixa AS data_vencimento,
               NULL AS cod_cliente,
               t.razao_social,
+              REPLACE(REPLACE(REPLACE(COALESCE(t.cnpj,''),'.',''),'/',''),'-','') AS cnpj_clean,
               t.valor_nf,
               t.valor_liquido,
               t.processo,
               t.master,
               t.house,
               t.id_rm,
-              DATEDIFF(CURDATE(), t.data_prev_baixa) AS dias_vencimento
+              DATEDIFF(CURDATE(), t.data_prev_baixa) AS dias_vencimento,
+              le.last_success AS email_success,
+              le.last_error   AS email_error,
+              le.last_sent_at AS email_sent_at
             FROM dados_dachser.v_fin_regua_contas_receber t
+            LEFT JOIN (
+              SELECT REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','') AS cnpj_clean,
+                     SUBSTRING_INDEX(GROUP_CONCAT(success ORDER BY sent_at DESC), ',', 1) AS last_success,
+                     SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(error_message,'') ORDER BY sent_at DESC SEPARATOR '||'), '||', 1) AS last_error,
+                     MAX(sent_at) AS last_sent_at
+              FROM ai_agente.t_financeiro_email_log
+              GROUP BY REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','')
+            ) le
+              ON le.cnpj_clean COLLATE utf8mb4_unicode_ci
+               = REPLACE(REPLACE(REPLACE(COALESCE(t.cnpj,''),'.',''),'/',''),'-','') COLLATE utf8mb4_unicode_ci
             WHERE NOT EXISTS (
                 SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
                 WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
@@ -18512,29 +18623,38 @@ Deno.serve(async (req) => {
                   AND d.resolved_at IS NULL
                   AND d.deleted_at IS NULL
               )
-            ORDER BY t.razao_social, t.data_prev_baixa
+            ORDER BY DATEDIFF(CURDATE(), t.data_prev_baixa) DESC, t.razao_social, t.data_prev_baixa
             LIMIT 10000
           `;
           const analiticoRows = await client.query(analiticoSql);
-          const data = analiticoRows.map((r: any) => ({
-            documento: r.documento,
-            numero_nf: r.numero_nf,
-            modal: r.modal,
-            tipo_documento: r.tipo_documento,
-            data_emissao: r.data_emissao,
-            data_vencimento: r.data_vencimento,
-            cod_cliente: r.cod_cliente,
-            razao_social: r.razao_social,
-            valor_nf: Number(r.valor_nf) || 0,
-            valor_liquido: Number(r.valor_liquido) || Number(r.valor_nf) || 0,
-            processo: r.processo,
-            master: r.master,
-            house: r.house,
-            id_rm: r.id_rm,
-            dias_vencimento: Number(r.dias_vencimento) || 0,
-          }));
+          const data = analiticoRows.map((r: any) => {
+            let email_status: 'enviado' | 'falha' | 'nao_enviado' = 'nao_enviado';
+            if (r.email_sent_at) {
+              email_status = Number(r.email_success) === 1 ? 'enviado' : 'falha';
+            }
+            return {
+              documento: r.documento,
+              numero_nf: r.numero_nf,
+              modal: r.modal,
+              tipo_documento: r.tipo_documento,
+              data_emissao: r.data_emissao,
+              data_vencimento: r.data_vencimento,
+              cod_cliente: r.cod_cliente,
+              razao_social: r.razao_social,
+              valor_nf: Number(r.valor_nf) || 0,
+              valor_liquido: Number(r.valor_liquido) || Number(r.valor_nf) || 0,
+              processo: r.processo,
+              master: r.master,
+              house: r.house,
+              id_rm: r.id_rm,
+              dias_vencimento: Number(r.dias_vencimento) || 0,
+              email_status,
+              email_error: email_status === 'falha' ? (r.email_error || '') : '',
+            };
+          });
           console.log(`[get_aging_analitico_cr] ${data.length} records`);
           result = { success: true, data, dataCorte: new Date().toISOString().slice(0, 10) };
+
         } catch (e: any) {
           console.error('[get_aging_analitico_cr] Error:', e);
           result = { success: false, error: e.message };
