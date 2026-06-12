@@ -528,6 +528,7 @@ const TrackingAereo = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [user, setUser] = useState<User | null>(null);
+  const [regrasOpen, setRegrasOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [awbsData, setAwbsData] = useState<AWBData[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
