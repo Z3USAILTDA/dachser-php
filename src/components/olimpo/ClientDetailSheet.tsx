@@ -204,12 +204,12 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
     }
   }, [client?.product]);
 
-  const fetchFaturas = useCallback(async (page: number) => {
+  const fetchFaturas = useCallback(async (page: number, modalQ?: string) => {
     if (!client?.product) return;
     setFaturasLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_client_faturas_cr", clientName: client.product, page, pageSize: faturasPageSize },
+        body: { action: "get_client_faturas_cr", clientName: client.product, page, pageSize: faturasPageSize, modalFilter: modalQ ?? modalFilterDebounced },
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Erro");
@@ -222,7 +222,26 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
     } finally {
       setFaturasLoading(false);
     }
-  }, [client?.product]);
+  }, [client?.product, modalFilterDebounced]);
+
+  const fetchDisputasForCnpj = useCallback(async (cnpjClean: string) => {
+    if (disputasByCnpj[cnpjClean] || disputasLoading[cnpjClean]) return;
+    setDisputasLoading((prev) => ({ ...prev, [cnpjClean]: true }));
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "get_client_cnpj_disputas_cr", cnpj: cnpjClean },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Erro");
+      setDisputasByCnpj((prev) => ({ ...prev, [cnpjClean]: data.rows || [] }));
+    } catch (err: any) {
+      console.error("Error fetching disputas:", err);
+      toast({ title: "Erro ao buscar disputas", description: err.message, variant: "destructive" });
+    } finally {
+      setDisputasLoading((prev) => ({ ...prev, [cnpjClean]: false }));
+    }
+  }, [disputasByCnpj, disputasLoading]);
+
 
   useEffect(() => {
     if (open && client) {
