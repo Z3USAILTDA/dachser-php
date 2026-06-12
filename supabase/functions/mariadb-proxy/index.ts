@@ -18484,7 +18484,7 @@ Deno.serve(async (req) => {
       }
 
       case 'get_client_faturas_cr': {
-        const { clientName: fatClientName, page: fatPage = 1, pageSize: fatPageSize = 20, modalFilter } = body as { clientName: string; page?: number; pageSize?: number; modalFilter?: string };
+        const { clientName: fatClientName, page: fatPage = 1, pageSize: fatPageSize = 20, modalFilter, vencSort } = body as { clientName: string; page?: number; pageSize?: number; modalFilter?: string; vencSort?: string };
         if (!fatClientName) { result = { success: false, error: 'clientName required' }; break; }
         const modalQ = (modalFilter || '').trim();
         console.log(`[get_client_faturas_cr] client=${fatClientName} page=${fatPage} size=${fatPageSize} modal=${modalQ}`);
