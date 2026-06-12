@@ -537,7 +537,8 @@ Deno.serve(async (req) => {
       // Olimpo Cobrança shadow _cr (Fase 4.1 — leitura da view nova)
       'get_aging_overview_cr','get_aging_by_client_cr','get_client_cnpj_detail_cr',
       'get_client_faturas_cr','get_aging_analitico_cr','report_cnpjs_sem_email_cr',
-      'get_olimpo_email_logs_by_cnpj',
+      'get_olimpo_email_logs_by_cnpj','get_client_cnpj_disputas_cr',
+
       // Supervisor tokens (aprovação fluxo voucher)
       'setup_supervisor_tokens_table','create_supervisor_token',
       'validate_supervisor_token','mark_supervisor_token_used',
