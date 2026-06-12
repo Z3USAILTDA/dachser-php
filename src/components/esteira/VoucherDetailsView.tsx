@@ -828,8 +828,11 @@ export const VoucherDetailsView = ({ voucher, onUpdate, onPatch, onAnexosChanged
                     )}
                   </div>
                 </div>
-              ))}
+                  );
+                });
+              })()}
             </div>
+
           )}
         </CardContent>
       </Card>
