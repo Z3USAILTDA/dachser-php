@@ -236,16 +236,18 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
       if (colIdx === 6) {
         // Valor column - right aligned with currency format
         style = isAlt ? moneyStyleAlt : moneyStyle;
+        ws[cellRef] = { v: Number(cell) || 0, t: 'n', s: style };
       } else if (colIdx === 2 || colIdx === 3 || colIdx === 4) {
         // Date columns - centered
         style = isAlt ? centerStyleAlt : centerStyle;
+        ws[cellRef] = { v: cell, s: style };
       } else {
         style = isAlt ? dataStyleAlt : dataStyle;
+        ws[cellRef] = { v: cell, s: style };
       }
-      
-      ws[cellRef] = { v: cell, s: style };
     });
   });
+
 
   // Add summary rows
   const summaryRow1Idx = dataRows.length + 5;
