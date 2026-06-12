@@ -18588,14 +18588,28 @@ Deno.serve(async (req) => {
               t.data_prev_baixa AS data_vencimento,
               NULL AS cod_cliente,
               t.razao_social,
+              REPLACE(REPLACE(REPLACE(COALESCE(t.cnpj,''),'.',''),'/',''),'-','') AS cnpj_clean,
               t.valor_nf,
               t.valor_liquido,
               t.processo,
               t.master,
               t.house,
               t.id_rm,
-              DATEDIFF(CURDATE(), t.data_prev_baixa) AS dias_vencimento
+              DATEDIFF(CURDATE(), t.data_prev_baixa) AS dias_vencimento,
+              le.last_success AS email_success,
+              le.last_error   AS email_error,
+              le.last_sent_at AS email_sent_at
             FROM dados_dachser.v_fin_regua_contas_receber t
+            LEFT JOIN (
+              SELECT REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','') AS cnpj_clean,
+                     SUBSTRING_INDEX(GROUP_CONCAT(success ORDER BY sent_at DESC), ',', 1) AS last_success,
+                     SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(error_message,'') ORDER BY sent_at DESC SEPARATOR '||'), '||', 1) AS last_error,
+                     MAX(sent_at) AS last_sent_at
+              FROM ai_agente.t_financeiro_email_log
+              GROUP BY REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','')
+            ) le
+              ON le.cnpj_clean COLLATE utf8mb4_unicode_ci
+               = REPLACE(REPLACE(REPLACE(COALESCE(t.cnpj,''),'.',''),'/',''),'-','') COLLATE utf8mb4_unicode_ci
             WHERE NOT EXISTS (
                 SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
                 WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
@@ -18608,29 +18622,38 @@ Deno.serve(async (req) => {
                   AND d.resolved_at IS NULL
                   AND d.deleted_at IS NULL
               )
-            ORDER BY t.razao_social, t.data_prev_baixa
+            ORDER BY DATEDIFF(CURDATE(), t.data_prev_baixa) DESC, t.razao_social, t.data_prev_baixa
             LIMIT 10000
           `;
           const analiticoRows = await client.query(analiticoSql);
-          const data = analiticoRows.map((r: any) => ({
-            documento: r.documento,
-            numero_nf: r.numero_nf,
-            modal: r.modal,
-            tipo_documento: r.tipo_documento,
-            data_emissao: r.data_emissao,
-            data_vencimento: r.data_vencimento,
-            cod_cliente: r.cod_cliente,
-            razao_social: r.razao_social,
-            valor_nf: Number(r.valor_nf) || 0,
-            valor_liquido: Number(r.valor_liquido) || Number(r.valor_nf) || 0,
-            processo: r.processo,
-            master: r.master,
-            house: r.house,
-            id_rm: r.id_rm,
-            dias_vencimento: Number(r.dias_vencimento) || 0,
-          }));
+          const data = analiticoRows.map((r: any) => {
+            let email_status: 'enviado' | 'falha' | 'nao_enviado' = 'nao_enviado';
+            if (r.email_sent_at) {
+              email_status = Number(r.email_success) === 1 ? 'enviado' : 'falha';
+            }
+            return {
+              documento: r.documento,
+              numero_nf: r.numero_nf,
+              modal: r.modal,
+              tipo_documento: r.tipo_documento,
+              data_emissao: r.data_emissao,
+              data_vencimento: r.data_vencimento,
+              cod_cliente: r.cod_cliente,
+              razao_social: r.razao_social,
+              valor_nf: Number(r.valor_nf) || 0,
+              valor_liquido: Number(r.valor_liquido) || Number(r.valor_nf) || 0,
+              processo: r.processo,
+              master: r.master,
+              house: r.house,
+              id_rm: r.id_rm,
+              dias_vencimento: Number(r.dias_vencimento) || 0,
+              email_status,
+              email_error: email_status === 'falha' ? (r.email_error || '') : '',
+            };
+          });
           console.log(`[get_aging_analitico_cr] ${data.length} records`);
           result = { success: true, data, dataCorte: new Date().toISOString().slice(0, 10) };
+
         } catch (e: any) {
           console.error('[get_aging_analitico_cr] Error:', e);
           result = { success: false, error: e.message };
