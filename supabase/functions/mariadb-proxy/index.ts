@@ -19883,7 +19883,7 @@ Deno.serve(async (req) => {
           await client.execute('START TRANSACTION');
           for (const [nd, item] of ndMap) {
             const docRows = await client.query(
-              `SELECT doc_key, razao_social, data_vencimento, valor_nf, tipo_documento
+              `SELECT doc_key, razao_social, data_vencimento, valor_nf, tipo_documento, documento, numero_nf, nd
                FROM dados_dachser.v_fin_regua_contas_receber
                WHERE nd = ? OR documento = ? OR numero_nf = ?`,
               [nd, nd, nd]
@@ -19896,9 +19896,16 @@ Deno.serve(async (req) => {
             for (const doc of docRows as any[]) {
               const docKey = doc.doc_key;
               if (!docKey) continue;
+              // De-para correto:
+              //   t_fin_disputas.documento = v.documento (numerodocumento)
+              //   t_fin_disputas.nf        = v.numero_nf (nota_fiscal)
+              //   t_fin_disputas.nd        = v.nd        (segundonumero)
               const ps = String(docKey).split('|');
-              const docPart = ps.length > 1 ? ps[0] : 'CR';
-              const nfPart = ps.length > 1 ? ps.slice(1).join('|') : docKey;
+              const fbDoc = ps.length > 1 ? ps[0] : 'CR';
+              const fbNf = ps.length > 1 ? ps.slice(1).join('|') : docKey;
+              const docPart = ((doc.documento ?? '').toString().trim()) || fbDoc;
+              const nfPart = ((doc.numero_nf ?? '').toString().trim()) || fbNf;
+              const ndPart = (doc.nd ?? null);
               const tipo = doc.tipo_documento === 'FAT_NF' ? 'À vista' : 'A prazo';
               const vencimento = excelDateToSQL(item.prazo) || doc.data_vencimento || null;
 
@@ -19919,7 +19926,8 @@ Deno.serve(async (req) => {
                 // Update or reopen
                 await client.execute(
                   `UPDATE ai_agente.t_fin_disputas
-                   SET responsavel = COALESCE(NULLIF(?, ''), responsavel),
+                   SET nd = COALESCE(?, nd),
+                       responsavel = COALESCE(NULLIF(?, ''), responsavel),
                        departamento = COALESCE(NULLIF(?, ''), departamento),
                        observacoes = COALESCE(NULLIF(?, ''), observacoes),
                        escalation = COALESCE(NULLIF(?, ''), escalation),
@@ -19933,6 +19941,7 @@ Deno.serve(async (req) => {
                        updated_at = NOW()
                    WHERE documento = ? AND nf = ?`,
                   [
+                    ndPart,
                     item.responsavel || '',
                     item.departamento || '',
                     item.descricao || '',
@@ -19948,10 +19957,10 @@ Deno.serve(async (req) => {
               } else {
                 await client.execute(
                   `INSERT INTO ai_agente.t_fin_disputas
-                    (documento, nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())`,
+                    (documento, nf, nd, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())`,
                   [
-                    docPart, nfPart,
+                    docPart, nfPart, ndPart,
                     doc.razao_social || 'N/A',
                     vencimento,
                     doc.valor_nf ?? 0,
