@@ -580,6 +580,8 @@ const EsteiraIndex = () => {
     origemCriacao: "all",
     // Novos filtros inline
     processo: "",
+    refFornecedor: "",
+    mawbMbl: "",
     fornecedor: "",
     faixaValor: "all",
     slaStatus: "all",
