@@ -139,7 +139,21 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
   const [faturasTotal, setFaturasTotal] = useState(0);
   const [faturasPage, setFaturasPage] = useState(1);
   const [faturasLoading, setFaturasLoading] = useState(false);
+  const [modalFilter, setModalFilter] = useState("");
+  const [modalFilterDebounced, setModalFilterDebounced] = useState("");
   const faturasPageSize = 20;
+
+  // Disputas por CNPJ (lazy)
+  const [disputasOpen, setDisputasOpen] = useState<Record<string, boolean>>({});
+  const [disputasByCnpj, setDisputasByCnpj] = useState<Record<string, DisputaRow[]>>({});
+  const [disputasLoading, setDisputasLoading] = useState<Record<string, boolean>>({});
+
+  // Debounce do filtro modal
+  useEffect(() => {
+    const t = setTimeout(() => setModalFilterDebounced(modalFilter.trim()), 300);
+    return () => clearTimeout(t);
+  }, [modalFilter]);
+
 
   const fetchDetail = useCallback(async () => {
     if (!client?.product) return;
