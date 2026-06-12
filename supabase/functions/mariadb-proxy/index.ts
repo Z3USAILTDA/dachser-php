@@ -18289,25 +18289,30 @@ Deno.serve(async (req) => {
             SUM(CASE WHEN DATEDIFF(CURDATE(), t.data_prev_baixa) > 360 THEN t.valor_nf ELSE 0 END) AS aging_360_plus,
             COUNT(*) AS total_count,
             MAX(t.condicao_pag) AS condicao_pagamento,
-            MAX(t.nome_vendedor) AS nome_vendedor
-          FROM dados_dachser.v_fin_regua_contas_receber t
+            MAX(t.nome_vendedor) AS nome_vendedor,
+            SUM(CASE WHEN t.is_disputa = 1 THEN t.valor_nf ELSE 0 END) AS disputa_total,
+            SUM(CASE WHEN t.is_disputa = 1 THEN 1 ELSE 0 END) AS disputa_count
+          FROM (
+            SELECT t.*,
+              CASE WHEN EXISTS (
+                SELECT 1 FROM ai_agente.t_fin_disputas d
+                WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                  AND d.is_disputa = 1
+                  AND d.resolved_at IS NULL
+                  AND d.deleted_at IS NULL
+              ) THEN 1 ELSE 0 END AS is_disputa
+            FROM dados_dachser.v_fin_regua_contas_receber t
+            WHERE NOT EXISTS (
+                SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+                WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                  AND sd.active = 0
+              )
+          ) t
           LEFT JOIN dados_dachser.t_fin_cliente_grupo g
             ON g.razao_social COLLATE utf8mb4_unicode_ci
              = UPPER(TRIM(COALESCE(t.razao_social,''))) COLLATE utf8mb4_unicode_ci
           WHERE COALESCE(g.grupo, TRIM(SUBSTRING_INDEX(COALESCE(t.razao_social, 'Sem Cliente'), '-', 1))) COLLATE utf8mb4_unicode_ci
               = ? COLLATE utf8mb4_unicode_ci
-            AND NOT EXISTS (
-              SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
-              WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
-                AND sd.active = 0
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM ai_agente.t_fin_disputas d
-              WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
-                AND d.is_disputa = 1
-                AND d.resolved_at IS NULL
-                AND d.deleted_at IS NULL
-            )
           GROUP BY cnpj_clean, cnpj_original
           ORDER BY total_count DESC
         `;
@@ -18325,7 +18330,10 @@ Deno.serve(async (req) => {
           totalCount: Number(r.total_count) || 0,
           condicao_pagamento: r.condicao_pagamento || null,
           nome_vendedor: r.nome_vendedor || null,
+          disputa_total: Number(r.disputa_total) || 0,
+          disputa_count: Number(r.disputa_count) || 0,
         }));
+
         const cnpjList = mapped.map((m: any) => m.cnpjClean).filter(Boolean);
         let observacoes: any[] = [];
         let contatos: any[] = [];
