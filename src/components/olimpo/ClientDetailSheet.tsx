@@ -264,13 +264,13 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
     }
   }, [faturasOpen]);
 
-  // Refetch ao mudar filtro modal (com debounce já aplicado)
+  // Refetch ao mudar filtro modal (com debounce já aplicado) ou sort
   useEffect(() => {
     if (faturasOpen && client?.product) {
       fetchFaturas(1, modalFilterDebounced);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modalFilterDebounced]);
+  }, [modalFilterDebounced, vencSort]);
 
 
   const handleSaveObs = async (cnpj: string) => {
