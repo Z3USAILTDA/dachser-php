@@ -2290,6 +2290,8 @@ const EsteiraIndex = () => {
                   vencimentoFim: "",
                   origemCriacao: "all",
                   processo: "",
+                  refFornecedor: "",
+                  mawbMbl: "",
                   fornecedor: "",
                   faixaValor: "all",
                   slaStatus: "all",
