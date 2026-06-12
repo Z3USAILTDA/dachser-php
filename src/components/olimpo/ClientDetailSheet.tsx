@@ -147,6 +147,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
   const [modalFilter, setModalFilter] = useState("");
   const [modalFilterDebounced, setModalFilterDebounced] = useState("");
   const faturasPageSize = 20;
+  const [vencSort, setVencSort] = useState<"overdue-first" | "asc" | "desc">("overdue-first");
 
   // Disputas por CNPJ (lazy)
   const [disputasOpen, setDisputasOpen] = useState<Record<string, boolean>>({});
