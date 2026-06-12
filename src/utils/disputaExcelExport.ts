@@ -262,7 +262,7 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
   // Set column widths
   ws["!cols"] = [
     { wch: 30 }, // Cliente
-    { wch: 18 }, // Documento/NF
+    { wch: 18 }, // ND
     { wch: 12 }, // Emissão
     { wch: 12 }, // Vencimento
     { wch: 25 }, // Tempo em Disputa
