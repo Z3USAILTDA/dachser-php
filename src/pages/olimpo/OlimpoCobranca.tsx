@@ -573,6 +573,7 @@ export default function OlimpoCobranca() {
             "Provisão ≤90 (1%)", "Provisão 91-180 (25%)", "Provisão 181-240 (50%)",
             "Provisão 241-365 (75%)", "Provisão >365 (100%)",
             "Qtd. Dias de Vencimento",
+            "Email",
           ];
 
           const anData: any[][] = [
@@ -583,7 +584,10 @@ export default function OlimpoCobranca() {
 
           let totalProv1 = 0, totalProv25 = 0, totalProv50 = 0, totalProv75 = 0, totalProv100 = 0;
 
-          for (const r of analiticoResp.data) {
+          // Ordenar por vencidos primeiro (maior atraso primeiro)
+          const sortedAnalitico = [...analiticoResp.data].sort((a: any, b: any) => (Number(b.dias_vencimento) || 0) - (Number(a.dias_vencimento) || 0));
+
+          for (const r of sortedAnalitico) {
             const dias = r.dias_vencimento;
             const valor = r.valor_nf;
             const { pct } = getProvisionPct(dias);
@@ -599,6 +603,10 @@ export default function OlimpoCobranca() {
             totalProv1 += p1; totalProv25 += p25; totalProv50 += p50;
             totalProv75 += p75; totalProv100 += p100;
 
+            let emailLabel = "Não enviado";
+            if (r.email_status === "enviado") emailLabel = "Enviado";
+            else if (r.email_status === "falha") emailLabel = `Falha: ${(r.email_error || "").toString().slice(0, 120)}`;
+
             anData.push([
               "1",
               r.documento || "", r.numero_nf || "", r.modal || "", r.tipo_documento || "",
@@ -610,6 +618,7 @@ export default function OlimpoCobranca() {
               r.processo || "", r.master || "", r.house || "", r.id_rm || "",
               p1 || "", p25 || "", p50 || "", p75 || "", p100 || "",
               dias > 0 ? dias : 0,
+              emailLabel,
             ]);
           }
 
@@ -618,7 +627,7 @@ export default function OlimpoCobranca() {
             "", "", "", "", "", "", "", "", "",
             "TOTAL", "", "",
             "", "", "", "",
-            totalProv1, totalProv25, totalProv50, totalProv75, totalProv100, "",
+            totalProv1, totalProv25, totalProv50, totalProv75, totalProv100, "", "",
           ]);
 
           const ws2 = XLSX.utils.aoa_to_sheet(anData);
@@ -633,26 +642,27 @@ export default function OlimpoCobranca() {
             border: STYLE.border,
           };
 
-          for (let c = 0; c <= 21; c++) {
+          const LAST_COL = 22;
+          for (let c = 0; c <= LAST_COL; c++) {
             const addr = XLSX.utils.encode_cell({ r: 2, c });
             if (ws2[addr]) ws2[addr].s = headerStyleFn(c <= 9 ? "center" : "center");
           }
 
           for (let r = 3; r < anData.length - 2; r++) {
             const isZebra = r % 2 === 0;
-            for (let c = 0; c <= 21; c++) {
+            for (let c = 0; c <= LAST_COL; c++) {
               const addr = XLSX.utils.encode_cell({ r, c });
               if (!ws2[addr]) continue;
               const isMoneyCol = c === 10 || c === 11 || (c >= 16 && c <= 20);
               ws2[addr].s = cellStyleFn(
                 isZebra ? STYLE.zebra : STYLE.white,
-                { align: isMoneyCol ? "right" : c <= 9 ? "left" : "right", numFmt: isMoneyCol && typeof anData[r]?.[c] === "number" ? '#,##0.00' : undefined }
+                { align: isMoneyCol ? "right" : c <= 9 || c === 22 ? "left" : "right", numFmt: isMoneyCol && typeof anData[r]?.[c] === "number" ? '#,##0.00' : undefined }
               );
             }
           }
 
           const tRow = anData.length - 1;
-          for (let c = 0; c <= 21; c++) {
+          for (let c = 0; c <= LAST_COL; c++) {
             const addr = XLSX.utils.encode_cell({ r: tRow, c });
             if (!ws2[addr]) continue;
             const isMoneyCol = c >= 16 && c <= 20;
@@ -670,9 +680,11 @@ export default function OlimpoCobranca() {
             { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 10 },
             { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
             { wch: 12 },
+            { wch: 40 },
           ];
 
           ws2["!rows"] = [{ hpt: 28 }, {}, { hpt: 22 }];
+
 
           XLSX.utils.book_append_sheet(wb, ws2, "Analítico de Clientes");
         }
