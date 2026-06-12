@@ -18452,10 +18452,15 @@ Deno.serve(async (req) => {
       }
 
       case 'get_client_faturas_cr': {
-        const { clientName: fatClientName, page: fatPage = 1, pageSize: fatPageSize = 20 } = body as { clientName: string; page?: number; pageSize?: number };
+        const { clientName: fatClientName, page: fatPage = 1, pageSize: fatPageSize = 20, modalFilter } = body as { clientName: string; page?: number; pageSize?: number; modalFilter?: string };
         if (!fatClientName) { result = { success: false, error: 'clientName required' }; break; }
-        console.log(`[get_client_faturas_cr] client=${fatClientName} page=${fatPage} size=${fatPageSize}`);
+        const modalQ = (modalFilter || '').trim();
+        console.log(`[get_client_faturas_cr] client=${fatClientName} page=${fatPage} size=${fatPageSize} modal=${modalQ}`);
         const offset = (fatPage - 1) * fatPageSize;
+
+        const modalClause = modalQ
+          ? ` AND COALESCE(t.modal,'') COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', ? COLLATE utf8mb4_unicode_ci, '%')`
+          : '';
 
         const fatSql = `
           SELECT
@@ -18496,11 +18501,12 @@ Deno.serve(async (req) => {
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND sd.active = 0
-            )
+            )${modalClause}
           ORDER BY t.data_prev_baixa DESC
           LIMIT ? OFFSET ?
         `;
-        const fatRows = await client.query(fatSql, [fatClientName, fatPageSize, offset]);
+        const fatParams = modalQ ? [fatClientName, modalQ, fatPageSize, offset] : [fatClientName, fatPageSize, offset];
+        const fatRows = await client.query(fatSql, fatParams);
 
         const countSql = `
           SELECT COUNT(*) as total
@@ -18514,14 +18520,60 @@ Deno.serve(async (req) => {
               SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
               WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
                 AND sd.active = 0
-            )
+            )${modalClause}
         `;
-        const countResult = await client.query(countSql, [fatClientName]);
+        const countParams = modalQ ? [fatClientName, modalQ] : [fatClientName];
+        const countResult = await client.query(countSql, countParams);
         const total = Number(countResult[0]?.total || 0);
 
         result = { success: true, rows: fatRows, total, page: fatPage, pageSize: fatPageSize };
         break;
       }
+
+      case 'get_client_cnpj_disputas_cr': {
+        const { cnpj: dispCnpj } = body as { cnpj?: string };
+        const cnpjClean = String(dispCnpj || '').replace(/\D/g, '');
+        if (!cnpjClean) { result = { success: false, error: 'cnpj required' }; break; }
+        console.log(`[get_client_cnpj_disputas_cr] cnpj=${cnpjClean}`);
+        const sql = `
+          SELECT
+            t.nd,
+            t.numero_nf,
+            t.documento,
+            t.valor_nf,
+            t.modal,
+            DATE_FORMAT(t.data_emissao, '%d/%m/%Y') AS data_emissao,
+            DATE_FORMAT(t.data_prev_baixa, '%d/%m/%Y') AS data_vencimento
+          FROM dados_dachser.v_fin_regua_contas_receber t
+          WHERE REPLACE(REPLACE(REPLACE(t.cnpj,'.',''),'/',''),'-','') = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM ai_agente.t_financeiro_soft_delete sd
+              WHERE sd.documento COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND sd.active = 0
+            )
+            AND EXISTS (
+              SELECT 1 FROM ai_agente.t_fin_disputas d
+              WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+                AND d.is_disputa = 1
+                AND d.resolved_at IS NULL
+                AND d.deleted_at IS NULL
+            )
+          ORDER BY t.data_prev_baixa DESC
+          LIMIT 500
+        `;
+        const rows = await client.query(sql, [cnpjClean]);
+        result = { success: true, rows: (rows || []).map((r: any) => ({
+          nd: r.nd,
+          numero_nf: r.numero_nf,
+          documento: r.documento,
+          valor_nf: Number(r.valor_nf) || 0,
+          modal: r.modal,
+          data_emissao: r.data_emissao,
+          data_vencimento: r.data_vencimento,
+        })) };
+        break;
+      }
+
 
       case 'get_aging_analitico_cr': {
         console.log('[get_aging_analitico_cr] Fetching analítico from view...');
