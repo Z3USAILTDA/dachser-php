@@ -84,26 +84,9 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
   const boletoRequired = voucher.formaPagamento === "BOLETO";
   const canEnviar = hasFatura && (!boletoRequired || hasBoleto);
 
-  // Função para adicionar novo anexo
+  // Função para adicionar novo anexo (sem substituição automática)
   const handleFileUpload = async (fileUrl: string, fileName: string, fileSize: number) => {
     try {
-      // Verificar se já existe anexo do mesmo tipo e deletar (substituição)
-      const existingAnexo = voucher.anexos.find(a => a.tipo === selectedTipo);
-      if (existingAnexo) {
-        const match = existingAnexo.fileUrl.match(/voucher-anexos\/(.+)$/);
-        if (match) {
-          const filePath = match[1];
-          await supabase.storage.from("voucher-anexos").remove([filePath]);
-        }
-        
-        await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "delete_voucher_anexo",
-            anexo_id: existingAnexo.id,
-          },
-        });
-      }
-
       const { error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "save_voucher_anexo",
@@ -124,12 +107,11 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
           voucher_id: voucher.id,
           user_id: userData.id?.toString(),
           user_name: userData.username,
-          acao: existingAnexo ? "ANEXO_SUBSTITUIDO" : "ANEXO_ADICIONADO",
-          detalhe: existingAnexo 
-            ? `Anexo "${existingAnexo.fileName}" substituído por "${fileName}" (${selectedTipo})`
-            : `Anexo "${fileName}" (${selectedTipo}) adicionado`,
+          acao: "ANEXO_ADICIONADO",
+          detalhe: `Anexo "${fileName}" (${selectedTipo}) adicionado`,
         },
       });
+
 
       // Extrair linha digitável automaticamente se for boleto e forma de pagamento for BOLETO
       const isBoletoAnexo = selectedTipo === "BOLETO_INSTRUCOES" || selectedTipo === "BOLETO";
