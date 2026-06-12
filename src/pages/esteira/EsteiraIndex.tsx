@@ -1420,6 +1420,18 @@ const EsteiraIndex = () => {
         if (!voucher.processoId?.toLowerCase().includes(searchLower)) return false;
       }
 
+      // Filtro de Ref. Fornecedor
+      if (filters.refFornecedor) {
+        const searchLower = filters.refFornecedor.toLowerCase();
+        if (!voucher.refFornecedor?.toLowerCase().includes(searchLower)) return false;
+      }
+
+      // Filtro de MAWB/MBL
+      if (filters.mawbMbl) {
+        const searchLower = filters.mawbMbl.toLowerCase();
+        if (!voucher.mawbMbl?.toLowerCase().includes(searchLower)) return false;
+      }
+
       // Filtro de fornecedor
       if (filters.fornecedor) {
         const searchLower = filters.fornecedor.toLowerCase();
