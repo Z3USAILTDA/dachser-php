@@ -38,6 +38,8 @@ export interface FilterValues {
   origemCriacao: string;
   // Novos filtros inline
   processo: string;
+  refFornecedor: string;
+  mawbMbl: string;
   fornecedor: string;
   faixaValor: string;
   slaStatus: string;
