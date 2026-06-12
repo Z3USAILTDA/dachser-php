@@ -147,11 +147,10 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
       }
 
       toast({
-        title: existingAnexo ? "Anexo substituído" : "Anexo adicionado",
-        description: existingAnexo 
-          ? `"${existingAnexo.fileName}" foi substituído por "${fileName}".`
-          : `"${fileName}" foi anexado com sucesso.`,
+        title: "Anexo adicionado",
+        description: `"${fileName}" foi anexado com sucesso.`,
       });
+
 
       onUpdate();
     } catch (error: any) {
