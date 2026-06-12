@@ -228,6 +228,11 @@ function mergeProductRows(rows: AgingRow[]): AgingRow[] {
       for (const ck of countKeys) {
         (grouped[mapped] as any)[ck] += (row as any)[ck];
       }
+      const dispKeys = ["disp_not_due","disp_30","disp_40","disp_60","disp_90","disp_120","disp_180","disp_240","disp_365","disp_366_plus","disp_total"] as const;
+      for (const dk of dispKeys) {
+        (grouped[mapped] as any)[dk] = ((grouped[mapped] as any)[dk] || 0) + ((row as any)[dk] || 0);
+      }
+
     }
   }
   return Object.values(grouped).sort((a, b) => {
