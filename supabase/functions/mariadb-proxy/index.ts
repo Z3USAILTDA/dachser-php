@@ -9773,6 +9773,37 @@ Deno.serve(async (req) => {
               mkForcedEvent('020-22473334', 18, 'RCS', 'RCS - HEL (Helsinki) - 2 pcs 11 kg', '2026-03-04T07:00:00', 'HEL', 2, '11 kg'),
             ],
           },
+          '045-20656646': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('045-20656646', 1, 'RCF', 'AF0454 (LIS→GRU) - RCF - Received from flight at GRU', '2026-06-05T08:12:00', 'GRU', null, null),
+              mkForcedEvent('045-20656646', 2, 'ARR', 'AF0454 (LIS→GRU) - ARR - Arrived at GRU', '2026-06-05T07:45:00', 'GRU', null, null),
+              mkForcedEvent('045-20656646', 3, 'DEP', 'AF0454 (LIS→GRU) - DEP - Departed from LIS', '2026-06-04T22:30:00', 'LIS', null, null),
+              mkForcedEvent('045-20656646', 4, 'RCF', 'AF1325 (FRA→LIS) - RCF - Received from flight at LIS', '2026-06-04T18:10:00', 'LIS', null, null),
+              mkForcedEvent('045-20656646', 5, 'DEP', 'AF1325 (FRA→LIS) - DEP - Departed from FRA', '2026-06-04T15:20:00', 'FRA', null, null),
+              mkForcedEvent('045-20656646', 6, 'RCS', 'RCS - Received from shipper at FRA', '2026-06-03T14:00:00', 'FRA', null, null),
+            ],
+          },
+          '045-22109216': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('045-22109216', 1, 'RCF', 'AF0228 (LHR→GRU) - RCF - Received from flight at GRU', '2026-06-05T09:05:00', 'GRU', null, null),
+              mkForcedEvent('045-22109216', 2, 'ARR', 'AF0228 (LHR→GRU) - ARR - Arrived at GRU', '2026-06-05T08:30:00', 'GRU', null, null),
+              mkForcedEvent('045-22109216', 3, 'DEP', 'AF0228 (LHR→GRU) - DEP - Departed from LHR', '2026-06-04T20:15:00', 'LHR', null, null),
+              mkForcedEvent('045-22109216', 4, 'RCS', 'RCS - Received from shipper at LHR', '2026-06-03T12:00:00', 'LHR', null, null),
+            ],
+          },
+          '045-22345260': {
+            tracking_failed: false,
+            events: [
+              mkForcedEvent('045-22345260', 1, 'RCF', 'AF0454 (AMS→GRU) - RCF - Received from flight at GRU', '2026-06-05T08:40:00', 'GRU', null, null),
+              mkForcedEvent('045-22345260', 2, 'ARR', 'AF0454 (AMS→GRU) - ARR - Arrived at GRU', '2026-06-05T08:05:00', 'GRU', null, null),
+              mkForcedEvent('045-22345260', 3, 'DEP', 'AF0454 (AMS→GRU) - DEP - Departed from AMS', '2026-06-04T22:10:00', 'AMS', null, null),
+              mkForcedEvent('045-22345260', 4, 'RCF', 'AF1241 (HEL→AMS) - RCF - Received from flight at AMS', '2026-06-04T18:35:00', 'AMS', null, null),
+              mkForcedEvent('045-22345260', 5, 'DEP', 'AF1241 (HEL→AMS) - DEP - Departed from HEL', '2026-06-04T15:50:00', 'HEL', null, null),
+              mkForcedEvent('045-22345260', 6, 'RCS', 'RCS - Received from shipper at HEL', '2026-06-03T13:30:00', 'HEL', null, null),
+            ],
+          },
           // 996-14370731 removed — timeline comes from DB naturally, discrepancy forced via FORCED_DISCREPANCIES
           '020-02593301': {
             tracking_failed: false,
