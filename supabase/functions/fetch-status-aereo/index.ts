@@ -2605,6 +2605,55 @@ serve(async (req) => {
           { status: 'FWB', description: 'FWB - Customer FWB processed (2 pieces)', date: '2026-03-16T12:49:00', pieces: '2', weight: '' },
         ]
       },
+      '045-20656646': {
+        status: 'RCF',
+        status_info: 'AF0454 (LIS→GRU) - RCF - Received from flight at GRU',
+        last_event_date: '2026-06-05T08:12:00',
+        tracking_failed: false,
+        force_origem: 'FRA',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'RCS', description: 'RCS - Received from shipper at FRA', date: '2026-06-03T14:00:00', pieces: '', weight: '' },
+          { status: 'DEP', description: 'AF1325 (FRA→LIS) - DEP - Departed from FRA', date: '2026-06-04T15:20:00', pieces: '', weight: '' },
+          { status: 'RCF', description: 'AF1325 (FRA→LIS) - RCF - Received from flight at LIS', date: '2026-06-04T18:10:00', pieces: '', weight: '' },
+          { status: 'DEP', description: 'AF0454 (LIS→GRU) - DEP - Departed from LIS', date: '2026-06-04T22:30:00', pieces: '', weight: '' },
+          { status: 'ARR', description: 'AF0454 (LIS→GRU) - ARR - Arrived at GRU', date: '2026-06-05T07:45:00', pieces: '', weight: '' },
+          { status: 'RCF', description: 'AF0454 (LIS→GRU) - RCF - Received from flight at GRU', date: '2026-06-05T08:12:00', pieces: '', weight: '' },
+        ]
+      },
+      '045-22109216': {
+        status: 'RCF',
+        status_info: 'AF0228 (LHR→GRU) - RCF - Received from flight at GRU',
+        last_event_date: '2026-06-05T09:05:00',
+        tracking_failed: false,
+        force_origem: 'LHR',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'RCS', description: 'RCS - Received from shipper at LHR', date: '2026-06-03T12:00:00', pieces: '', weight: '' },
+          { status: 'DEP', description: 'AF0228 (LHR→GRU) - DEP - Departed from LHR', date: '2026-06-04T20:15:00', pieces: '', weight: '' },
+          { status: 'ARR', description: 'AF0228 (LHR→GRU) - ARR - Arrived at GRU', date: '2026-06-05T08:30:00', pieces: '', weight: '' },
+          { status: 'RCF', description: 'AF0228 (LHR→GRU) - RCF - Received from flight at GRU', date: '2026-06-05T09:05:00', pieces: '', weight: '' },
+        ]
+      },
+      '045-22345260': {
+        status: 'RCF',
+        status_info: 'AF0454 (AMS→GRU) - RCF - Received from flight at GRU',
+        last_event_date: '2026-06-05T08:40:00',
+        tracking_failed: false,
+        force_origem: 'HEL',
+        force_destino: 'GRU',
+        disable_discrepancy: true,
+        force_timeline: [
+          { status: 'RCS', description: 'RCS - Received from shipper at HEL', date: '2026-06-03T13:30:00', pieces: '', weight: '' },
+          { status: 'DEP', description: 'AF1241 (HEL→AMS) - DEP - Departed from HEL', date: '2026-06-04T15:50:00', pieces: '', weight: '' },
+          { status: 'RCF', description: 'AF1241 (HEL→AMS) - RCF - Received from flight at AMS', date: '2026-06-04T18:35:00', pieces: '', weight: '' },
+          { status: 'DEP', description: 'AF0454 (AMS→GRU) - DEP - Departed from AMS', date: '2026-06-04T22:10:00', pieces: '', weight: '' },
+          { status: 'ARR', description: 'AF0454 (AMS→GRU) - ARR - Arrived at GRU', date: '2026-06-05T08:05:00', pieces: '', weight: '' },
+          { status: 'RCF', description: 'AF0454 (AMS→GRU) - RCF - Received from flight at GRU', date: '2026-06-05T08:40:00', pieces: '', weight: '' },
+        ]
+      },
     };
 
     // v2: override loop with conditional application (auto > manual = skip)
