@@ -19,6 +19,9 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 
 interface CnpjDetail {
