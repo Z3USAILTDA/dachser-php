@@ -55,8 +55,20 @@ interface AgingRow {
   count_240: number;
   count_365: number;
   count_366_plus: number;
+  disp_not_due?: number;
+  disp_30?: number;
+  disp_40?: number;
+  disp_60?: number;
+  disp_90?: number;
+  disp_120?: number;
+  disp_180?: number;
+  disp_240?: number;
+  disp_365?: number;
+  disp_366_plus?: number;
+  disp_total?: number;
   cnpjs?: string[];
 }
+
 
 interface AgingData {
   data: AgingRow[];
