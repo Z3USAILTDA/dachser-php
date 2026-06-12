@@ -530,6 +530,19 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
 
             {faturasOpen && (
               <div className="mt-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Filtrar por Modal..."
+                    value={modalFilter}
+                    onChange={(e) => setModalFilter(e.target.value)}
+                    className="h-8 text-xs bg-background border-border max-w-[240px]"
+                  />
+                  {modalFilter && (
+                    <Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={() => setModalFilter("")}>
+                      Limpar
+                    </Button>
+                  )}
+                </div>
                 {faturasLoading ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -543,6 +556,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                         <TableHeader>
                           <TableRow>
                             <TableHead>ND</TableHead>
+                            <TableHead>Modal</TableHead>
                             <TableHead>Vencimento</TableHead>
                             <TableHead className="text-right">Valor</TableHead>
                             <TableHead className="text-center">Disputa</TableHead>
@@ -554,6 +568,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                           {faturas.map((f, idx) => (
                             <TableRow key={idx}>
                               <TableCell className="font-mono font-medium">{f.nd || "—"}</TableCell>
+                              <TableCell>{f.modal || "—"}</TableCell>
                               <TableCell>{f.data_vencimento || "—"}</TableCell>
                               <TableCell className="text-right font-mono">
                                 {f.valor_nf != null ? formatBRLFull(Number(f.valor_nf)) : "—"}
@@ -578,6 +593,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                       totalPages={faturaTotalPages}
                       onPageChange={(p) => fetchFaturas(p)}
                     />
+
                   </>
                 )}
               </div>
