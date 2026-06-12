@@ -1,33 +1,39 @@
-## Problema
+A gravação ainda saiu errada porque o ajuste anterior foi aplicado nos fluxos `save_disputa_cr` e `save_disputa_cr_bulk`, mas a importação da planilha usa outro fluxo: `import_disputas_planilha_cr`.
 
-Na tela `/fin/disputa`, ao salvar uma disputa (ações `save_disputa_cr` e `save_disputa_cr_bulk` em `supabase/functions/mariadb-proxy/index.ts`), o backend grava em `ai_agente.t_fin_disputas` usando o split do `doc_key` ("CR|<nf>"), resultando em:
+Nesse fluxo da planilha, o código ainda faz o split de `doc_key`:
 
-- `documento = "CR"` (literal, errado)
-- `nf = <numero_nf da view>`
-- `nd = NULL` (nunca preenchido)
+```text
+doc_key = "CR|<chave>"
+documento = "CR"
+nf = "<chave>"
+nd = não grava
+```
 
-O correto, conforme o de-para com `dados_dachser.t_dados_financeiro_contas_receber` (exposto via `v_fin_regua_contas_receber`):
+Por isso a gravação continua saindo com `documento = CR` e sem `nd`.
 
-| t_fin_disputas | t_dados_financeiro_contas_receber | coluna da view |
-| -------------- | --------------------------------- | -------------- |
-| `nf`           | `nota_fiscal`                     | `numero_nf`    |
-| `documento`    | `numerodocumento`                 | `documento`    |
-| `nd`           | `segundonumero`                   | `nd`           |
+Plano de correção:
 
-## Mudança
+1. Ajustar `check_disputas_planilha_cr`
+   - Buscar também `documento`, `numero_nf` e `nd` na `v_fin_regua_contas_receber`.
+   - Parar de montar a chave ativa a partir do `doc_key.split('|')`.
+   - Conferir disputa existente por:
+     - `t_fin_disputas.documento = v_fin_regua_contas_receber.documento`
+     - `t_fin_disputas.nf = v_fin_regua_contas_receber.numero_nf`
 
-Em `supabase/functions/mariadb-proxy/index.ts`, ajustar **apenas** `save_disputa_cr` (linhas ~3596-3711) e `save_disputa_cr_bulk` (linhas ~3714-3820):
+2. Ajustar `import_disputas_planilha_cr`
+   - Buscar também `documento`, `numero_nf` e `nd` na view.
+   - Gravar usando o de-para correto:
+     - `documento = v.documento`
+     - `nf = v.numero_nf`
+     - `nd = v.nd`
+   - Incluir `nd` no `INSERT`.
+   - Incluir `nd = ?` no `UPDATE`, para corrigir/reabrir registros pela importação.
 
-1. No `SELECT` da view `v_fin_regua_contas_receber`, incluir `documento`, `numero_nf`, `nd` (além de `razao_social`, `data_vencimento`, `valor_nf`, `tipo_documento`).
-2. Substituir o split de `doc_key` por:
-   - `docPart = v.documento` (numerodocumento)
-   - `nfPart  = v.numero_nf` (nota_fiscal)
-   - `ndPart  = v.nd`        (segundonumero)
-3. UPDATE/INSERT em `t_fin_disputas` passa a gravar `documento=docPart`, `nf=nfPart`, `nd=ndPart` (incluir `nd` na lista de colunas do INSERT e no SET do UPDATE).
-4. Fallback: se a view devolver `documento` vazio (legado órfão), manter `docPart='CR'` para não quebrar lookup de registros antigos. Lookup de existente continua por `(documento, nf)`.
+3. Manter fallback seguro
+   - Se a view não trouxer `documento`, manter `CR` como fallback.
+   - Se a view não trouxer `numero_nf`, manter a parte útil do `doc_key` como fallback.
+   - Isso evita quebrar casos antigos ou dados incompletos.
 
-Nenhuma outra ação é alterada (delete/resolve/observacoes/responsavel/import/demurrage permanecem como estão; `save_disputa` legado em `t_dados_financeiro_nfs` já grava corretamente).
-
-## Observação
-
-Registros antigos já gravados com `documento='CR'` e `nd=NULL` **não** serão retroativamente corrigidos por este ajuste — só novas gravações/atualizações via `/fin/disputa` passam a usar o mapeamento correto. Se quiser também um backfill (`UPDATE` em `t_fin_disputas` setando `documento` e `nd` a partir da view para linhas existentes), me diga e incluo.
+4. Não mexer em outras telas/fluxos
+   - Alteração restrita à busca/check e importação da planilha de disputas CR.
+   - Não fazer backfill automático dos registros antigos já gravados errado, a menos que você peça.
