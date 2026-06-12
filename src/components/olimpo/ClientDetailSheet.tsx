@@ -373,6 +373,54 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
                     )}
                   </div>
 
+                  {/* Em disputa */}
+                  {(cnpj.disputa_total || 0) > 0 && (
+                    <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2 space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-amber-300 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          Em disputa: <strong>{formatBRLFull(cnpj.disputa_total || 0)}</strong>
+                          <span className="opacity-70">({cnpj.disputa_count || 0} fatura{(cnpj.disputa_count || 0) === 1 ? "" : "s"})</span>
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 text-[11px] text-amber-300 hover:text-amber-200 hover:bg-amber-500/10"
+                          onClick={() => {
+                            const next = !disputasOpen[cnpj.cnpjClean];
+                            setDisputasOpen((prev) => ({ ...prev, [cnpj.cnpjClean]: next }));
+                            if (next) fetchDisputasForCnpj(cnpj.cnpjClean);
+                          }}
+                        >
+                          {disputasOpen[cnpj.cnpjClean] ? "Ocultar" : "Ver"}
+                        </Button>
+                      </div>
+                      {disputasOpen[cnpj.cnpjClean] && (
+                        <div className="pt-1">
+                          {disputasLoading[cnpj.cnpjClean] ? (
+                            <div className="flex items-center justify-center py-2">
+                              <Loader2 className="h-4 w-4 animate-spin text-amber-300" />
+                            </div>
+                          ) : (disputasByCnpj[cnpj.cnpjClean]?.length || 0) === 0 ? (
+                            <p className="text-[11px] text-muted-foreground italic">Nenhuma disputa ativa encontrada.</p>
+                          ) : (
+                            <ul className="space-y-1">
+                              {(disputasByCnpj[cnpj.cnpjClean] || []).map((d, i) => (
+                                <li key={i} className="text-[11px] flex flex-wrap gap-x-3 gap-y-0.5 text-foreground/90 border-t border-amber-500/10 pt-1 first:border-t-0 first:pt-0">
+                                  <span><strong className="text-amber-300">ND:</strong> {d.nd || "—"}</span>
+                                  <span><strong>NF:</strong> {d.numero_nf || "—"}</span>
+                                  <span><strong>Venc.:</strong> {d.data_vencimento || "—"}</span>
+                                  <span className="ml-auto font-mono">{formatBRLFull(d.valor_nf)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+
                   {/* Cond. Pagamento & Vendedor */}
                   {(cnpj.condicao_pagamento || cnpj.nome_vendedor) && (
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
