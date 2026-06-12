@@ -1622,6 +1622,7 @@ const TrackingAereo = () => {
           </div>
         </DialogContent>
       </Dialog>
+      <EmailClienteRegrasDialog open={regrasOpen} onOpenChange={setRegrasOpen} />
     </div>
 
   );
