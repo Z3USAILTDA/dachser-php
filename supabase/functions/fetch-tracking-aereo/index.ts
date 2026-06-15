@@ -1716,9 +1716,10 @@ async function computePayload(): Promise<string> {
 
       // Override origin/destination/conexao with authoritative route map.
       // Use workingOrigin which already corrects the origin=destination data error.
-      const finalOrigin = workingOrigin || row.ORIGEM || "";
-      const finalDestination = workingDest || row.DESTINO || "";
-      const rawConexao = routeEntry ? (routeEntry.conexoes || null) : conexao;
+      const forcedRoute = FORCED_ROUTE_AWBS[awbStr] || {};
+      const finalOrigin = forcedRoute.origin || workingOrigin || row.ORIGEM || "";
+      const finalDestination = forcedRoute.destination || workingDest || row.DESTINO || "";
+      const rawConexao = FORCED_CONNECTIONS_AWBS[awbStr] || (routeEntry ? (routeEntry.conexoes || null) : conexao);
       const finalConexao = rawConexao
         ? rawConexao.split(',').map((c: string) => c.trim()).filter((c: string) => c.length === 3 && !stopWordsConn.has(c.toUpperCase())).join(',') || null
         : null;
