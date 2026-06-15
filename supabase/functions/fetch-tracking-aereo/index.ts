@@ -1400,6 +1400,10 @@ async function computePayload(): Promise<string> {
       '873-20395233': 'BOG',
       '020-07394811': 'FRA,MUC',
     };
+    // Manual override: force origin/destination IATA for specific AWBs (bypasses routeMap and DB DESTINO/ORIGEM).
+    const FORCED_ROUTE_AWBS: Record<string, { origin?: string; destination?: string }> = {
+      '020-07394811': { origin: 'CWB', destination: 'SKG' },
+    };
     // Manual override: force the displayed last event for specific AWBs (applies to ALL HAWBs of the master).
     // Used when carrier timeline shows DLV at destination but a partial set of HAWBs is still in transit.
     // If loc/date are omitted, they are resolved by scanning the carrier timeline for the most recent
