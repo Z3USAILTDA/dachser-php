@@ -113,14 +113,13 @@ export const FilePreview = ({ fileName, fileUrl, fileType, onDownload, allFiles,
   const goToPrevFile = () => setCurrentFileIndex((prev) => Math.max(prev - 1, 0));
   const goToNextFile = () => setCurrentFileIndex((prev) => Math.min(prev + 1, (allFiles?.length || 1) - 1));
 
-  const handleActiveDownload = () => {
-    const link = document.createElement("a");
-    link.href = activeFile.fileUrl;
-    link.download = activeFile.fileName;
-    link.target = "_blank";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleActiveDownload = async () => {
+    try {
+      await downloadViaBlob(activeFile.fileUrl, activeFile.fileName);
+    } catch (e) {
+      console.error("[FilePreview] download falhou", e);
+      window.open(activeFile.fileUrl, "_blank", "noopener,noreferrer");
+    }
   };
 
   const formatXML = (xml: string) => {
