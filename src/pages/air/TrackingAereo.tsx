@@ -1193,9 +1193,9 @@ const TrackingAereo = () => {
                 >
                   <Replace className="w-3.5 h-3.5" />
                   Troca de master
-                  {discrepancyKeys.size > 0 && (
+                  {masterSwapVisibleCount > 0 && (
                     <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[0.65rem] ${filterMasterSwap ? "bg-black/20 text-black" : "bg-amber-500/20 text-amber-300"}`}>
-                      {discrepancies.length}
+                      {masterSwapVisibleCount}
                     </span>
                   )}
                 </button>
