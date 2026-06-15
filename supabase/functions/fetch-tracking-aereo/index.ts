@@ -1398,6 +1398,11 @@ async function computePayload(): Promise<string> {
     // Use when timeline/routeMap fails to surface the real transit airport(s).
     const FORCED_CONNECTIONS_AWBS: Record<string, string> = {
       '873-20395233': 'BOG',
+      '020-07394811': 'FRA,MUC',
+    };
+    // Manual override: force origin/destination IATA for specific AWBs (bypasses routeMap and DB DESTINO/ORIGEM).
+    const FORCED_ROUTE_AWBS: Record<string, { origin?: string; destination?: string }> = {
+      '020-07394811': { origin: 'CWB', destination: 'SKG' },
     };
     // Manual override: force the displayed last event for specific AWBs (applies to ALL HAWBs of the master).
     // Used when carrier timeline shows DLV at destination but a partial set of HAWBs is still in transit.
@@ -1512,7 +1517,8 @@ async function computePayload(): Promise<string> {
         finalCode = "ARR - DESTINO";
       } else if (finalCode === "ARR") {
         const loc = extractIATA(electedLoc);
-        const authDest = routeEntry?.destination || null;
+        const forcedDest = FORCED_ROUTE_AWBS[awbStr]?.destination || null;
+        const authDest = forcedDest || routeEntry?.destination || null;
         const dest = authDest || extractIATA(row.DESTINO || "");
         if (dest && loc && loc === dest) {
           finalCode = "ARR - DESTINO";
@@ -1710,9 +1716,10 @@ async function computePayload(): Promise<string> {
 
       // Override origin/destination/conexao with authoritative route map.
       // Use workingOrigin which already corrects the origin=destination data error.
-      const finalOrigin = workingOrigin || row.ORIGEM || "";
-      const finalDestination = workingDest || row.DESTINO || "";
-      const rawConexao = routeEntry ? (routeEntry.conexoes || null) : conexao;
+      const forcedRoute = FORCED_ROUTE_AWBS[awbStr] || {};
+      const finalOrigin = forcedRoute.origin || workingOrigin || row.ORIGEM || "";
+      const finalDestination = forcedRoute.destination || workingDest || row.DESTINO || "";
+      const rawConexao = FORCED_CONNECTIONS_AWBS[awbStr] || (routeEntry ? (routeEntry.conexoes || null) : conexao);
       const finalConexao = rawConexao
         ? rawConexao.split(',').map((c: string) => c.trim()).filter((c: string) => c.length === 3 && !stopWordsConn.has(c.toUpperCase())).join(',') || null
         : null;
