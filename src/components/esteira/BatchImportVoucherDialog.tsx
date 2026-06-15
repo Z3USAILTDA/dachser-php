@@ -338,7 +338,12 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
         const m = raw.trim();
         if (!m) continue;
         // Consolida todas as mensagens de SPO duplicado em uma única entrada
-        const key = m.startsWith("SPO duplicado") ? "SPO duplicado nesta planilha (mesmo SPO+RM)" : m;
+        const key = m.startsWith("SPO ambígua")
+          ? "SPO ambígua (mesmo Processo+Valor+Vencimento)"
+          : m.startsWith("Nenhuma SPO encontrada")
+            ? "Nenhuma SPO encontrada em t_dados_financeiro_spo"
+            : m;
+
         if (seen.has(key)) continue;
         seen.add(key);
         map.set(key, (map.get(key) || 0) + 1);
