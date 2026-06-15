@@ -1440,17 +1440,17 @@ const TrackingAereo = () => {
                                   <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
                                   Crítico · Sem atualizações
                                 </span>
-                              ) : hasMasterSwap ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                                  Crítico · Troca de master
-                                </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
                                   <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
                                   Crítico
                                 </span>
                               )
+                            ) : hasMasterSwap ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                Troca de master
+                              </span>
                             ) : isDelayed ? (
                               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
                                 <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
