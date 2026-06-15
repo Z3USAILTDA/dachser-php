@@ -166,14 +166,15 @@ export function BatchImportPreviewTable({
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className="inline-flex items-center rounded-md border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400">
-                              Duplicado
+                              Ambígua
                             </span>
                           </TooltipTrigger>
                           <TooltipContent>
-                            Mesma combinação SPO + RM da linha #{(it.duplicate_of_row ?? 0) + 1}
+                            Mesma combinação Processo+Valor+Vencimento da linha #{(it.duplicate_of_row ?? 0) + 1} — exclua linhas extras até restar 1 por grupo.
                           </TooltipContent>
                         </Tooltip>
                       )}
+
                       {it.already_exists && (
                         <Tooltip>
                           <TooltipTrigger asChild>
