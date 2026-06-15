@@ -21633,7 +21633,9 @@ Deno.serve(async (req) => {
           const urgente = urgenteRaw ? ['SIM','S','TRUE','1','YES','Y'].includes(String(urgenteRaw).trim().toUpperCase()) : false;
           return {
             row_index: idx,
-            spo: get('SPO', 'Voucher', 'ND', 'Numero Voucher', 'Número Voucher') ? String(get('SPO', 'Voucher', 'ND', 'Numero Voucher', 'Número Voucher')) : null,
+            // SPO sempre vem da resolução em t_dados_financeiro_spo via lookup
+            // por (processo + valor + vencimento). Não lemos mais da planilha.
+            spo: null,
             processo: get('Processo', 'Numero Processo', 'Nº Processo', 'N° Processo') ? String(get('Processo', 'Numero Processo', 'Nº Processo', 'N° Processo')) : null,
             origem_processo: 'CHB',
             fornecedor: get('Fornecedor') ? String(get('Fornecedor')) : null,
@@ -21652,6 +21654,7 @@ Deno.serve(async (req) => {
             raw_json: raw,
           };
         };
+
 
         // Lookup DFV by SPO list (tolerant: trim + collapse whitespace)
         const normSpo = (s: any): string => String(s ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
