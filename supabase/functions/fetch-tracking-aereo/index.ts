@@ -1517,7 +1517,8 @@ async function computePayload(): Promise<string> {
         finalCode = "ARR - DESTINO";
       } else if (finalCode === "ARR") {
         const loc = extractIATA(electedLoc);
-        const authDest = routeEntry?.destination || null;
+        const forcedDest = FORCED_ROUTE_AWBS[awbStr]?.destination || null;
+        const authDest = forcedDest || routeEntry?.destination || null;
         const dest = authDest || extractIATA(row.DESTINO || "");
         if (dest && loc && loc === dest) {
           finalCode = "ARR - DESTINO";
