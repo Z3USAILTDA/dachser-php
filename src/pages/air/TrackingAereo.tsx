@@ -986,6 +986,40 @@ const TrackingAereo = () => {
   const totalPages = Math.ceil(filteredAwbs.length / itemsPerPage);
   const currentAwbs = filteredAwbs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
+  // Contador do filtro "Troca de master" — respeita as mesmas regras de ocultação da listagem
+  const masterSwapVisibleCount = useMemo(() => {
+    return awbsData.filter(awb => {
+      if (!hasMasterDiscrepancy(awb)) return false;
+      const code = getStatusCode(awb.last_event).toUpperCase();
+      if ((code === "DLV" || code === "POD") && !searchTerm) return false;
+      if (awb.hide_reason) {
+        const term = searchTerm.trim().toLowerCase();
+        const awbNum = (awb.awb || "").trim().toLowerCase();
+        const hawbNum = (awb.hawb || "").trim().toLowerCase();
+        const termNoDash = term.replace(/-/g, "");
+        const awbNoDash = awbNum.replace(/-/g, "");
+        const hawbNoDash = hawbNum.replace(/-/g, "");
+        const isFullMatch =
+          term.length > 0 &&
+          (term === awbNum ||
+            term === hawbNum ||
+            (awbNoDash.length > 0 && termNoDash === awbNoDash) ||
+            (hawbNoDash.length > 0 && termNoDash === hawbNoDash));
+        if (!isFullMatch) return false;
+      }
+      if (!searchTerm && awb.arr_destino_date) {
+        const arrDate = parseDBDate(awb.arr_destino_date);
+        if (arrDate) {
+          const diffDays = (Date.now() - arrDate.getTime()) / (1000 * 60 * 60 * 24);
+          if (diffDays > 5) return false;
+        }
+      }
+      if (awb.is_invalid && !searchTerm) return false;
+      if (awb.tracking_failed && !searchTerm) return false;
+      return applyTopFilters(awb);
+    }).length;
+  }, [awbsData, searchTerm, applyTopFilters, hasMasterDiscrepancy]);
+
   const abbreviateName = (name: string): string => {
     if (!name || name === "-") return "-";
     return name.length > 20 ? name.substring(0, 20) + "..." : name;
