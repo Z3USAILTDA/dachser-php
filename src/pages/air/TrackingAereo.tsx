@@ -1218,7 +1218,7 @@ const TrackingAereo = () => {
                       const statusCode = getStatusCode(awb.last_event).toUpperCase();
                       const stale = isStaleAwb(awb);
                       const hasMasterSwap = hasMasterDiscrepancy(awb);
-                      const isCritical = (awb.is_critical || stale) && !(hasMasterSwap && !stale && !awb.pieces_discrepancy && !awb.tracking_failed && !["NIL","NIF","OFLD"].includes(statusCode));
+                      const isCritical = awb.is_critical || stale;
                       const isDelayed = statusCode === "DIS";
 
                       // Route highlighting logic
