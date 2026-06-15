@@ -1408,6 +1408,7 @@ async function computePayload(): Promise<string> {
       '045-20656646': { code: 'RCF', loc: 'GRU', date: '2026-06-05T08:12:00' },
       '045-22109216': { code: 'RCF', loc: 'GRU', date: '2026-06-05T09:05:00' },
       '045-22345260': { code: 'RCF', loc: 'GRU', date: '2026-06-05T08:40:00' },
+      '724-20906826': { code: 'BKD' },
     };
     const stopWordsConn = new Set([
       'NIL','NIF','DIS','OFD','OFL','BUP','RDP','LAT','TKG','SCR','ECC',
