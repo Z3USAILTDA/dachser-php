@@ -107,14 +107,13 @@ export function ComprovantesTab() {
     );
   });
 
-  const handleDownload = (url: string, name: string) => {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = name;
-    link.target = "_blank";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownload = async (url: string, name: string) => {
+    try {
+      await downloadViaBlob(url, name);
+    } catch (e) {
+      console.error("[ComprovantesTab] download falhou", e);
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
   };
 
   return (
