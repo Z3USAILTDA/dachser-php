@@ -18,10 +18,11 @@ import { BatchImportRowEditor } from "./BatchImportRowEditor";
 import { FornecedoresSemFiscalDialog } from "./FornecedoresSemFiscalDialog";
 
 const EXPECTED_HEADERS = [
-  "SPO", "Processo", "Origem Processo", "Fornecedor", "CNPJ", "Valor", "Moeda",
+  "Processo", "Origem Processo", "Fornecedor", "CNPJ", "Valor", "Moeda",
   "Vencimento", "Data Emissão", "Tipo Documento", "Filial", "Forma Pagto",
   "Fiscal", "Urgente", "Comentários",
 ];
+
 
 const ORIGENS = ["AIR", "SEA", "CHB", "ROD"];
 const TIPOS_DOC = ["VOUCHER", "SPO", "ICMS", "ARMAZENAGEM", "ADF", "OUTROS"];
