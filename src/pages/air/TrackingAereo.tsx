@@ -896,10 +896,10 @@ const TrackingAereo = () => {
       total++;
       if (inTransitCodes.has(code)) transit++;
       if (code === "DIS" || (awb.has_dis_event && !awb.pieces_discrepancy)) alert++;
-      if (criticalCodes.has(code) || awb.pieces_discrepancy || stale || hasMasterDiscrepancy(awb)) critical++;
+      if (criticalCodes.has(code) || awb.pieces_discrepancy || stale) critical++;
     });
     return { total, transit, alert, critical };
-  }, [awbsData, applyTopFilters, isStaleAwb, hasMasterDiscrepancy]);
+  }, [awbsData, applyTopFilters, isStaleAwb]);
 
   // ─── Filtered & sorted data ───
   const filteredAwbs = useMemo(() => {
@@ -947,7 +947,7 @@ const TrackingAereo = () => {
         switch (cardFilter) {
           case "transito": return ["DEP", "MAN", "RCF", "ARR", "ARR - DESTINO", "ARR - CONEXÃO"].includes(code);
           case "alerta": return code === "DIS" || (awb.has_dis_event && !awb.pieces_discrepancy);
-          case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy || isStaleAwb(awb) || hasMasterDiscrepancy(awb);
+          case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy || isStaleAwb(awb);
           default: return true;
         }
       });
@@ -985,6 +985,40 @@ const TrackingAereo = () => {
 
   const totalPages = Math.ceil(filteredAwbs.length / itemsPerPage);
   const currentAwbs = filteredAwbs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // Contador do filtro "Troca de master" — respeita as mesmas regras de ocultação da listagem
+  const masterSwapVisibleCount = useMemo(() => {
+    return awbsData.filter(awb => {
+      if (!hasMasterDiscrepancy(awb)) return false;
+      const code = getStatusCode(awb.last_event).toUpperCase();
+      if ((code === "DLV" || code === "POD") && !searchTerm) return false;
+      if (awb.hide_reason) {
+        const term = searchTerm.trim().toLowerCase();
+        const awbNum = (awb.awb || "").trim().toLowerCase();
+        const hawbNum = (awb.hawb || "").trim().toLowerCase();
+        const termNoDash = term.replace(/-/g, "");
+        const awbNoDash = awbNum.replace(/-/g, "");
+        const hawbNoDash = hawbNum.replace(/-/g, "");
+        const isFullMatch =
+          term.length > 0 &&
+          (term === awbNum ||
+            term === hawbNum ||
+            (awbNoDash.length > 0 && termNoDash === awbNoDash) ||
+            (hawbNoDash.length > 0 && termNoDash === hawbNoDash));
+        if (!isFullMatch) return false;
+      }
+      if (!searchTerm && awb.arr_destino_date) {
+        const arrDate = parseDBDate(awb.arr_destino_date);
+        if (arrDate) {
+          const diffDays = (Date.now() - arrDate.getTime()) / (1000 * 60 * 60 * 24);
+          if (diffDays > 5) return false;
+        }
+      }
+      if (awb.is_invalid && !searchTerm) return false;
+      if (awb.tracking_failed && !searchTerm) return false;
+      return applyTopFilters(awb);
+    }).length;
+  }, [awbsData, searchTerm, applyTopFilters, hasMasterDiscrepancy]);
 
   const abbreviateName = (name: string): string => {
     if (!name || name === "-") return "-";
@@ -1159,9 +1193,9 @@ const TrackingAereo = () => {
                 >
                   <Replace className="w-3.5 h-3.5" />
                   Troca de master
-                  {discrepancyKeys.size > 0 && (
+                  {masterSwapVisibleCount > 0 && (
                     <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[0.65rem] ${filterMasterSwap ? "bg-black/20 text-black" : "bg-amber-500/20 text-amber-300"}`}>
-                      {discrepancies.length}
+                      {masterSwapVisibleCount}
                     </span>
                   )}
                 </button>
@@ -1218,7 +1252,7 @@ const TrackingAereo = () => {
                       const statusCode = getStatusCode(awb.last_event).toUpperCase();
                       const stale = isStaleAwb(awb);
                       const hasMasterSwap = hasMasterDiscrepancy(awb);
-                      const isCritical = awb.is_critical || stale || hasMasterSwap;
+                      const isCritical = awb.is_critical || stale;
                       const isDelayed = statusCode === "DIS";
 
                       // Route highlighting logic
@@ -1440,17 +1474,17 @@ const TrackingAereo = () => {
                                   <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
                                   Crítico · Sem atualizações
                                 </span>
-                              ) : hasMasterSwap ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                                  Crítico · Troca de master
-                                </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50">
                                   <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
                                   Crítico
                                 </span>
                               )
+                            ) : hasMasterSwap ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                Troca de master
+                              </span>
                             ) : isDelayed ? (
                               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
                                 <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
