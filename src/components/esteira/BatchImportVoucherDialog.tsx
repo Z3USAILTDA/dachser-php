@@ -80,49 +80,59 @@ export function BatchImportVoucherDialog({ open, onOpenChange, userId, onCreated
 
   const validate = (next: any) => {
     const errors: string[] = [];
-    if (!next.spo) errors.push("SPO obrigatório");
+    if (!next.processo) errors.push("processo obrigatório");
     if (!next.origem_processo) errors.push("origem do processo obrigatória");
     if (!next.fornecedor) errors.push("fornecedor obrigatório");
+    if (!next.valor || Number(next.valor) <= 0) errors.push("valor inválido");
     if (!next.vencimento) errors.push("vencimento obrigatório");
     if (!next.tipo_documento) errors.push("tipo de documento obrigatório");
     if (!next.forma_pagamento) errors.push("forma de pagamento obrigatória");
     if (!next.cobranca_em_nome_de) errors.push("contabilização fiscal obrigatória");
     if (next.forma_pagamento === "PIX" && !next.chave_pix) errors.push("chave PIX obrigatória");
+    // Preserve lookup-derived errors (Nenhuma SPO encontrada / SPO ambígua)
+    const prev = String(next.validation_message || "").split(";").map((s: string) => s.trim()).filter(Boolean);
+    for (const m of prev) {
+      if (m.startsWith("Nenhuma SPO encontrada") || m.startsWith("SPO ambígua")) {
+        if (!errors.includes(m)) errors.push(m);
+      }
+    }
     next.status = errors.length ? "ERROR" : "VALID";
     next.validation_message = errors.length ? errors.join("; ") : null;
     return next;
   };
 
-  // Marks rows that share the same (id_rm + spo) pair — would violate uq_voucher_rm_spo.
+  // Marks rows that share the same ambiguous_group_key (processo|valor|vencimento)
+  // emitido pelo backend quando há múltiplas SPOs candidatas. Quando o usuário exclui
+  // até sobrar 1 linha do grupo, a flag é limpa e a mensagem de ambiguidade removida.
   const markDuplicates = (list: any[]) => {
-    const groups = new Map<string, number[]>();
-    list.forEach((it, idx) => {
-      const rm = it?.id_rm == null ? "" : String(it.id_rm).trim();
-      const spo = (it?.spo == null ? "" : String(it.spo)).trim().toUpperCase();
-      if (!rm || !spo) return;
-      const key = `${rm}|${spo}`;
-      const arr = groups.get(key) || [];
-      arr.push(idx);
-      groups.set(key, arr);
-    });
-    const dupIdx = new Map<number, number>(); // arrayIdx -> firstRowIndex
-    for (const indices of groups.values()) {
-      if (indices.length < 2) continue;
-      const firstRowIdx = list[indices[0]].row_index;
-      for (let k = 1; k < indices.length; k++) dupIdx.set(indices[k], firstRowIdx);
+    const counts = new Map<string, number>();
+    for (const it of list) {
+      const k = it?.ambiguous_group_key;
+      if (k) counts.set(k, (counts.get(k) || 0) + 1);
     }
-    return list.map((it, idx) => {
-      if (dupIdx.has(idx)) {
-        const firstRowIdx = dupIdx.get(idx)!;
-        const dupMsg = `SPO duplicado nesta planilha (linha #${firstRowIdx + 1} já usa o mesmo SPO+RM)`;
-        const existing = String(it.validation_message || "").split(";").map(s => s.trim()).filter(Boolean);
-        if (!existing.includes(dupMsg)) existing.push(dupMsg);
-        return { ...it, is_duplicate: true, duplicate_of_row: firstRowIdx, status: "ERROR", validation_message: existing.join("; ") };
+    return list.map((it) => {
+      const k = it?.ambiguous_group_key;
+      if (!k) return { ...it, is_duplicate: false, duplicate_of_row: null };
+      const n = counts.get(k) || 0;
+      // strip any old ambiguity message before deciding
+      const errs = String(it.validation_message || "")
+        .split(";").map((s: string) => s.trim()).filter(Boolean)
+        .filter((m: string) => !m.startsWith("SPO ambígua"));
+      if (n > 1) {
+        const msg = `SPO ambígua: ${n} candidatas para o mesmo processo+valor+vencimento. Exclua ${n - 1} linha(s) para prosseguir.`;
+        errs.push(msg);
+        return { ...it, is_duplicate: true, duplicate_of_row: it.source_row_index ?? null, status: "ERROR", validation_message: errs.join("; ") };
       }
-      // not duplicate: clear flags but DO NOT clobber other validation errors
-      return { ...it, is_duplicate: false, duplicate_of_row: null };
+      return {
+        ...it,
+        is_duplicate: false,
+        duplicate_of_row: null,
+        status: errs.length ? "ERROR" : "VALID",
+        validation_message: errs.length ? errs.join("; ") : null,
+      };
     });
   };
+
 
   const revalidate = (list: any[]) => markDuplicates(list.map(validate));
 
