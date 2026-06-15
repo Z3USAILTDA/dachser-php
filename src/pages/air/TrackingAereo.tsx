@@ -896,10 +896,10 @@ const TrackingAereo = () => {
       total++;
       if (inTransitCodes.has(code)) transit++;
       if (code === "DIS" || (awb.has_dis_event && !awb.pieces_discrepancy)) alert++;
-      if (criticalCodes.has(code) || awb.pieces_discrepancy || stale || hasMasterDiscrepancy(awb)) critical++;
+      if (criticalCodes.has(code) || awb.pieces_discrepancy || stale) critical++;
     });
     return { total, transit, alert, critical };
-  }, [awbsData, applyTopFilters, isStaleAwb, hasMasterDiscrepancy]);
+  }, [awbsData, applyTopFilters, isStaleAwb]);
 
   // ─── Filtered & sorted data ───
   const filteredAwbs = useMemo(() => {
