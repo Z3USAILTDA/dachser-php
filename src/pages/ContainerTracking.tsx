@@ -2453,8 +2453,8 @@ const ContainerTracking = () => {
                 {/* Last Tracking Processing */}
                 {(() => {
                   const maxLastCheck = mblList.reduce((max, m) => {
-                    if (!m.last_check) return max;
-                    const parsed = parseMariaDBLocalDate(m.last_check);
+                    if (!m.last_check_real) return max;
+                    const parsed = parseMariaDBLocalDate(m.last_check_real);
                     const d = parsed ? parsed.getTime() : 0;
                     return d > max ? d : max;
                   }, 0);
