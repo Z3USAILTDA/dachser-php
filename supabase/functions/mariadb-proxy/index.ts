@@ -21633,7 +21633,9 @@ Deno.serve(async (req) => {
           const urgente = urgenteRaw ? ['SIM','S','TRUE','1','YES','Y'].includes(String(urgenteRaw).trim().toUpperCase()) : false;
           return {
             row_index: idx,
-            spo: get('SPO', 'Voucher', 'ND', 'Numero Voucher', 'Número Voucher') ? String(get('SPO', 'Voucher', 'ND', 'Numero Voucher', 'Número Voucher')) : null,
+            // SPO sempre vem da resolução em t_dados_financeiro_spo via lookup
+            // por (processo + valor + vencimento). Não lemos mais da planilha.
+            spo: null,
             processo: get('Processo', 'Numero Processo', 'Nº Processo', 'N° Processo') ? String(get('Processo', 'Numero Processo', 'Nº Processo', 'N° Processo')) : null,
             origem_processo: 'CHB',
             fornecedor: get('Fornecedor') ? String(get('Fornecedor')) : null,
@@ -21653,67 +21655,74 @@ Deno.serve(async (req) => {
           };
         };
 
-        // Lookup DFV by SPO list (tolerant: trim + collapse whitespace)
+
+        // Lookup DFV por (numero_processo + valor_nf + data_vencimento) em t_dados_financeiro_spo.
+        // SPO e Fornecedor sempre são resolvidos pelo banco — não vêm da planilha.
         const normSpo = (s: any): string => String(s ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
-        // Identidade do SPO: prefixo numérico "NNN-NNNNNN" ignorando sufixos como " DIM-BY", " SAN" etc.
         const spoPrefix = (s: any): string => {
           const n = normSpo(s);
           const m = n.match(/^(\d{2,4}-\d{4,})/);
           return m ? m[1] : n;
         };
-        // Lookup DFV por número do SPO (nd). Retorna índice bySpo (chave = SPO normalizado).
-        const normProcesso = (s: any): string => String(s ?? '').trim().replace(/\s+/g, '').toUpperCase();
-        const fetchDfvBySpo = async (spos: string[]): Promise<{ bySpo: Map<string, any> }> => {
-          const bySpo = new Map<string, any>();
-          const normalized = Array.from(new Set(spos.map(normSpo).filter(Boolean)));
-          if (normalized.length === 0) return { bySpo };
-          // Também indexamos por prefixo numérico (NNN-NNNNNN) para tolerar sufixos como " DIM-BY"/" SAN".
-          const prefixes = Array.from(new Set(normalized.map(spoPrefix).filter(Boolean)));
-          const cols = `id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
-                        modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
-                        valor_nf, moeda, cnpj, razao_social, detalhes`;
-          const setKey = (row: any) => {
-            const nsp = normSpo(row?.nd);
-            if (nsp && !bySpo.has(nsp)) bySpo.set(nsp, row);
-            const pfx = spoPrefix(row?.nd);
-            if (pfx && pfx !== nsp && !bySpo.has(pfx)) bySpo.set(pfx, row);
-          };
+        const normProcesso = (s: any): string =>
+          String(s ?? '').toUpperCase().replace(/\s+/g, '').replace(/\u00A0/g, '');
+        const round2 = (n: any): number | null => {
+          const v = typeof n === 'number' ? n : Number(n);
+          if (!isFinite(v)) return null;
+          return Math.round(v * 100) / 100;
+        };
+        const buildAmbigKey = (proc: any, valor: any, venc: any): string | null => {
+          const p = normProcesso(proc);
+          const v = round2(valor);
+          const d = venc ? String(venc).slice(0, 10) : null;
+          if (!p || v == null || !d) return null;
+          return `${p}|${v.toFixed(2)}|${d}`;
+        };
+
+        const fetchDfvByProcVenc = async (
+          triples: Array<{ processo: string; valor: number; vencimento: string }>
+        ): Promise<Map<string, any[]>> => {
+          const byKey = new Map<string, any[]>();
+          const uniq = new Map<string, { p: string; v: number; d: string }>();
+          for (const t of triples) {
+            const p = normProcesso(t.processo);
+            const v = round2(t.valor);
+            const d = t.vencimento ? String(t.vencimento).slice(0, 10) : null;
+            if (!p || v == null || !d) continue;
+            const k = `${p}|${v.toFixed(2)}|${d}`;
+            if (!uniq.has(k)) uniq.set(k, { p, v, d });
+          }
+          if (uniq.size === 0) return byKey;
           try {
-            const ph = normalized.map(() => '?').join(',');
-            const phPfx = prefixes.map(() => '?').join(',');
-            const rows = await client.query(
-              `SELECT ${cols} FROM dados_dachser.t_dados_financeiro_spo
-                WHERE UPPER(TRIM(nd)) COLLATE utf8mb4_unicode_ci IN (${ph})
-                   OR SUBSTRING_INDEX(TRIM(nd), ' ', 1) COLLATE utf8mb4_unicode_ci IN (${phPfx})`,
-              [...normalized, ...prefixes]
-            );
-            for (const r of (rows || [])) setKey(r);
-          } catch (e) {
-            console.log('fetchDfvBySpo error:', e);
-          }
-          // Fallback em t_dados_financeiro_voucher para SPOs não encontrados em SPO.
-          const missing = normalized.filter((s) => !bySpo.has(s) && !bySpo.has(spoPrefix(s)));
-          if (missing.length > 0) {
-            try {
-              const missingPfx = Array.from(new Set(missing.map(spoPrefix).filter(Boolean)));
-              const ph = missing.map(() => '?').join(',');
-              const phPfx = missingPfx.map(() => '?').join(',');
-              const dfvRows = await client.query(
-                `SELECT id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
-                        modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
-                        valor_nf, moeda, cnpj, razao_social
-                   FROM dados_dachser.t_dados_financeiro_voucher
-                  WHERE UPPER(TRIM(nd)) COLLATE utf8mb4_unicode_ci IN (${ph})
-                     OR SUBSTRING_INDEX(TRIM(nd), ' ', 1) COLLATE utf8mb4_unicode_ci IN (${phPfx})`,
-                [...missing, ...missingPfx]
+            const clauses: string[] = [];
+            const params: any[] = [];
+            for (const t of uniq.values()) {
+              clauses.push(
+                `(UPPER(REPLACE(REPLACE(TRIM(numero_processo),' ',''),CHAR(160),'')) COLLATE utf8mb4_unicode_ci = ?
+                  AND ROUND(valor_nf, 2) = ?
+                  AND DATE(data_vencimento) = ?)`
               );
-              for (const r of (dfvRows || [])) setKey({ ...r, detalhes: null });
-              console.log(`[fetchDfvBySpo] fallback voucher: ${missing.length} solicitados, ${(dfvRows || []).length} encontrados`);
-            } catch (e) {
-              console.log('fetchDfvBySpo voucher-fallback error:', e);
+              params.push(t.p, t.v, t.d);
             }
+            const cols = `id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
+                          modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
+                          valor_nf, moeda, cnpj, razao_social, detalhes`;
+            const rows = await client.query(
+              `SELECT ${cols} FROM dados_dachser.t_dados_financeiro_spo WHERE ${clauses.join(' OR ')}`,
+              params
+            );
+            for (const r of (rows || [])) {
+              const vencIso = r.data_vencimento ? parseDate(r.data_vencimento) : null;
+              const k = buildAmbigKey(r.numero_processo, r.valor_nf, vencIso);
+              if (!k) continue;
+              const arr = byKey.get(k) || [];
+              arr.push(r);
+              byKey.set(k, arr);
+            }
+          } catch (e) {
+            console.log('fetchDfvByProcVenc error:', e);
           }
-          return { bySpo };
+          return byKey;
         };
 
 
@@ -21728,8 +21737,6 @@ Deno.serve(async (req) => {
             origin[key] = null;
             return null;
           };
-          const dfvForma = dfv?.forma_pag ? (FORMA_MAP[String(dfv.forma_pag).toUpperCase()] || null) : null;
-          const dfvOrigem = dfv?.modal ? (ORIGEM_PROCESSO_MAP[String(dfv.modal).toUpperCase()] || null) : null;
           const dfvVenc = dfv?.data_vencimento ? parseDate(dfv.data_vencimento) : null;
           const dfvEmis = dfv?.data_emissao ? parseDate(dfv.data_emissao) : null;
           const dfvCnpj = dfv?.cnpj ? String(dfv.cnpj).replace(/\D/g, '') || null : null;
@@ -21738,17 +21745,13 @@ Deno.serve(async (req) => {
           const dfvMoeda = dfv?.moeda ? String(dfv.moeda).toUpperCase() : null;
           const dfvProcesso = dfv?.numero_processo || null;
           const dfvFilial = dfv?.nome_cobranca || null;
-          const dfvTipoDoc = dfv?.tipo_pag ? String(dfv.tipo_pag).toUpperCase() : null;
 
           const dfvSpo = dfv?.nd ? String(dfv.nd).trim() : null;
-          const resolvedSpo = (sheet.spo && String(sheet.spo).trim()) || dfvSpo || null;
-          if (!sheet.spo && dfvSpo) origin['spo'] = 'DFV';
-          else if (sheet.spo) origin['spo'] = 'PLANILHA';
-          else origin['spo'] = null;
+          origin['spo'] = dfvSpo ? 'DFV' : null;
 
           const merged = {
             row_index: sheet.row_index,
-            spo: resolvedSpo,
+            spo: dfvSpo,
             id_rm: dfv?.id_rm ?? null,
             processo: pick(sheet.processo, dfvProcesso, 'processo'),
             origem_processo: (() => { origin['origem_processo'] = 'PLANILHA'; return sheet.origem_processo || 'CHB'; })(),
@@ -21777,12 +21780,12 @@ Deno.serve(async (req) => {
           merged.dfv_found = !!dfv;
 
           const errors: string[] = [];
-          if (!merged.spo) errors.push('SPO obrigatório');
           if (!merged.processo) errors.push('processo obrigatório');
-          if (!merged.origem_processo) errors.push('origem do processo obrigatória');
-          if (!merged.fornecedor) errors.push('fornecedor obrigatório');
           if (!merged.valor || merged.valor <= 0) errors.push('valor inválido');
           if (!merged.vencimento) errors.push('vencimento obrigatório');
+          if (!dfv) errors.push('Nenhuma SPO encontrada em t_dados_financeiro_spo para este processo+valor+vencimento');
+          if (!merged.origem_processo) errors.push('origem do processo obrigatória');
+          if (!merged.fornecedor) errors.push('fornecedor obrigatório');
           if (!merged.tipo_documento) errors.push('tipo de documento obrigatório');
           if (!merged.forma_pagamento) errors.push('forma de pagamento obrigatória');
           if (!merged.cobranca_em_nome_de) errors.push('contabilização fiscal obrigatória');
@@ -21793,19 +21796,47 @@ Deno.serve(async (req) => {
 
         const buildPreviewItems = async (rows: any[]) => {
           const sheetRows = rows.map((r, i) => parseSheetRow(r, i));
-          // Chave de busca: número do SPO (ND) da planilha.
-          const spos = sheetRows.map((s) => s.spo).filter(Boolean) as string[];
-          const { bySpo } = await fetchDfvBySpo(spos);
+          const triples = sheetRows
+            .filter((s) => s.processo && s.valor != null && s.vencimento)
+            .map((s) => ({ processo: s.processo as string, valor: s.valor as number, vencimento: s.vencimento as string }));
+          const byKey = await fetchDfvByProcVenc(triples);
           const results: any[] = [];
+          let outIdx = 0;
           for (const s of sheetRows) {
-            if (!s.spo) { results.push(mergeWithDfv(s, null)); continue; }
-            const nsp = normSpo(s.spo);
-            const pfx = spoPrefix(s.spo);
-            const dfv = bySpo.get(nsp) || bySpo.get(pfx) || null;
-            results.push(mergeWithDfv(s, dfv));
+            const k = buildAmbigKey(s.processo, s.valor, s.vencimento);
+            const matches = k ? (byKey.get(k) || []) : [];
+            if (matches.length === 0) {
+              const merged = mergeWithDfv(s, null);
+              merged.row_index = outIdx++;
+              results.push(merged);
+            } else if (matches.length === 1) {
+              const merged = mergeWithDfv(s, matches[0]);
+              merged.row_index = outIdx++;
+              results.push(merged);
+            } else {
+              for (let i = 0; i < matches.length; i++) {
+                const merged = mergeWithDfv(s, matches[i]);
+                merged.row_index = outIdx++;
+                merged.expanded_from_processo = true;
+                merged.source_row_index = s.row_index;
+                merged.is_ambiguous = true;
+                merged.ambiguous_group_key = k;
+                merged.ambiguous_total = matches.length;
+                merged.is_duplicate = true;
+                merged.duplicate_of_row = s.row_index;
+                const ambigMsg = `SPO ambígua: ${matches.length} candidatas para o mesmo processo+valor+vencimento. Exclua ${matches.length - 1} linha(s) para prosseguir.`;
+                const existing = String(merged.validation_message || '').split(';').map((x: string) => x.trim()).filter(Boolean);
+                if (!existing.includes(ambigMsg)) existing.push(ambigMsg);
+                merged.status = 'ERROR';
+                merged.validation_message = existing.join('; ');
+                results.push(merged);
+              }
+            }
           }
           return results;
         };
+
+
 
 
 
