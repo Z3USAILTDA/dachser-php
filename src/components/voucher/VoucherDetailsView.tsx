@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Download, File, Trash2, AlertTriangle } from "lucide-react";
 import { formatDateOnlyBR, formatDateTimeBR } from "@/utils/timezone";
+import { downloadViaBlob } from "@/utils/blobDownload";
 
 interface VoucherDetailsViewProps {
   voucher: Voucher;
