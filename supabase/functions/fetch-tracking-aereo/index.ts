@@ -1398,6 +1398,7 @@ async function computePayload(): Promise<string> {
     // Use when timeline/routeMap fails to surface the real transit airport(s).
     const FORCED_CONNECTIONS_AWBS: Record<string, string> = {
       '873-20395233': 'BOG',
+      '020-07394811': 'FRA,MUC',
     };
     // Manual override: force the displayed last event for specific AWBs (applies to ALL HAWBs of the master).
     // Used when carrier timeline shows DLV at destination but a partial set of HAWBs is still in transit.
