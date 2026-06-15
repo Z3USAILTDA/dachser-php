@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { downloadViaBlob } from "@/utils/blobDownload";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -107,14 +108,13 @@ export function ComprovantesTab() {
     );
   });
 
-  const handleDownload = (url: string, name: string) => {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = name;
-    link.target = "_blank";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownload = async (url: string, name: string) => {
+    try {
+      await downloadViaBlob(url, name);
+    } catch (e) {
+      console.error("[ComprovantesTab] download falhou", e);
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
   };
 
   return (

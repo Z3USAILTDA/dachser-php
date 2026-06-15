@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Download, File, Trash2, AlertTriangle } from "lucide-react";
 import { formatDateOnlyBR, formatDateTimeBR } from "@/utils/timezone";
+import { downloadViaBlob } from "@/utils/blobDownload";
 
 interface VoucherDetailsViewProps {
   voucher: Voucher;
@@ -151,10 +152,19 @@ export const VoucherDetailsView = ({ voucher, canEditAttachments = false }: Vouc
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" asChild>
-                      <a href={anexo.fileUrl} target="_blank" rel="noopener noreferrer">
-                        <Download className="h-4 w-4" />
-                      </a>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={async () => {
+                        try {
+                          await downloadViaBlob(anexo.fileUrl, anexo.fileName);
+                        } catch (e) {
+                          console.error("[VoucherDetailsView] download falhou", e);
+                          window.open(anexo.fileUrl, "_blank", "noopener,noreferrer");
+                        }
+                      }}
+                    >
+                      <Download className="h-4 w-4" />
                     </Button>
                     {canEditAttachments && (
                       <Button variant="ghost" size="icon">
