@@ -1,55 +1,76 @@
-## Mudança no filtro de visibilidade de Demurrage
+## Problema
 
-Em vez de exigir match exato MBL↔bl_number entre `t_dachser_demurrage_containers` e `t_dados_maritimo`, vamos restringir a visibilidade apenas pelo **prefixo do MBL do container de demurrage**, considerando os 13 armadores válidos:
+A ND **164714** (NF `000552473`, documento `000552473/01`, cliente SUMITOMO) está marcada como disputa em `ai_agente.t_fin_disputas` (`is_disputa=1`, `resolved_at=NULL`, `deleted_at=NULL`), mas não aparece como "Em disputa" em nenhuma tela do Olimpo/Régua de Cobrança.
 
+## Causa raiz
+
+A view `dados_dachser.v_fin_regua_contas_receber` expõe `doc_key` no formato **`CR|<idlan>`** (ex.: `CR|4453543`). Já `t_fin_disputas` (após o de-para correto aplicado em `save_disputa_cr`) grava as três chaves canônicas vindas de `t_dados_financeiro_contas_receber`:
+
+- `documento` = `numerodocumento` (ex.: `000552473/01`)
+- `nf` = `numero_nf` (ex.: `000552473`)
+- `nd` = `segundonumero` (ex.: `164714`)
+
+Mas o detector de disputa nas queries de aging/CNPJ/cliente faz o join assim:
+
+```sql
+EXISTS (
+  SELECT 1 FROM ai_agente.t_fin_disputas d
+  WHERE CONCAT(COALESCE(d.documento,''),'|',COALESCE(d.nf,'')) = t.doc_key
+    AND d.is_disputa = 1 AND d.resolved_at IS NULL AND d.deleted_at IS NULL
+)
 ```
-HLCU, MEDU, ONEY, COSU, ZIMU, MAEU, SUDU,
-CMAU, EISU, YMLU, HDMU, PCIU, WHLU
+
+`CONCAT('000552473/01','|','000552473')` ≠ `'CR|4453543'`. **Nenhuma** disputa nova bate — só registros legados com `documento='CR'` e `nf=<idlan>` casam.
+
+## Correção
+
+Trocar a cláusula `WHERE` do `EXISTS` nos 6 pontos abaixo de `supabase/functions/mariadb-proxy/index.ts` (linhas **18293, 18374, 18444, 18633, 18705, 18769**) pelo match das três colunas canônicas, com fallback para o formato legado `'CR'`:
+
+```sql
+WHERE (
+  -- formato canônico atual (de-para com t_dados_financeiro_contas_receber)
+  (
+    COALESCE(d.documento,'') <> 'CR'
+    AND d.documento     COLLATE utf8mb4_unicode_ci = t.documento     COLLATE utf8mb4_unicode_ci
+    AND COALESCE(d.nf,'') COLLATE utf8mb4_unicode_ci = COALESCE(t.numero_nf,'') COLLATE utf8mb4_unicode_ci
+    AND COALESCE(d.nd,'') COLLATE utf8mb4_unicode_ci = COALESCE(t.nd,'')        COLLATE utf8mb4_unicode_ci
+  )
+  OR
+  -- legado órfão: documento='CR', nf=idlan -> casa com doc_key 'CR|<idlan>'
+  (
+    d.documento = 'CR'
+    AND CONCAT('CR|', COALESCE(d.nf,'')) COLLATE utf8mb4_unicode_ci = t.doc_key COLLATE utf8mb4_unicode_ci
+  )
+)
+AND d.is_disputa = 1
+AND d.resolved_at IS NULL
+AND d.deleted_at IS NULL
 ```
 
-### Comportamento
+Mapeamento usado (conforme solicitado):
 
-- Remover o `EXISTS` em `t_dados_maritimo` adicionado anteriormente em todas as queries de demurrage.
-- Adicionar em todas as queries de demurrage um filtro:
-  ```sql
-  UPPER(TRIM(dc.mbl)) LIKE 'HLCU%' OR
-  UPPER(TRIM(dc.mbl)) LIKE 'MEDU%' OR
-  ... (13 prefixos)
-  ```
-  (implementado como `LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU',...)` para performance/leitura).
+| t_fin_disputas | t_dados_financeiro_contas_receber / view | Exemplo       |
+|----------------|------------------------------------------|---------------|
+| `documento`    | `numerodocumento` (`v.documento`)        | `000552473/01`|
+| `nf`           | `numero_nf` (`v.numero_nf`)              | `000552473`   |
+| `nd`           | `segundonumero` (`v.nd`)                 | `164714`      |
 
-### Arquivos afetados
+## Pontos a alterar (mesmo padrão nos 6)
 
-`supabase/functions/mariadb-proxy/index.ts` — nas mesmas 9 actions já tocadas:
-1. `demurrage_get_containers`
-2. `demurrage_get_stats`
-3. `demurrage_get_unique_clients`
-4. `demurrage_get_unique_armadores`
-5. `demurrage_get_pre_invoices` (sobre `shipment_mbl`)
-6. `demurrage_get_alerts` (via join no container)
-7. `demurrage_get_disputes` (via join no container)
-8. `demurrage_get_dispute_stats` (via join no container)
-9. `demurrage_get_containers_by_mbl` (guard por prefixo)
+- 18293 — `get_aging_by_product_cr`
+- 18374 — `get_aging_by_client_cr`
+- 18444 — `get_client_cnpj_detail_cr`
+- 18633 / 18705 / 18769 — demais agregações CR (totais, aging por CNPJ e variantes)
 
-### Constante única
+## Validação após o deploy
 
-Definir no topo do arquivo:
-```ts
-const DEMURRAGE_MBL_PREFIXES = ['HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU'];
-const DEMURRAGE_PREFIX_FILTER = `LEFT(UPPER(TRIM(dc.mbl)),4) IN (${DEMURRAGE_MBL_PREFIXES.map(p=>`'${p}'`).join(',')})`;
-```
-e reaproveitar nas 9 queries (com alias ajustado por contexto, ex.: `pi.shipment_mbl` em pre-invoices).
+1. `get_client_cnpj_detail_cr` para SUMITOMO → `disputa_count ≥ 1` e `disputa_total ≥ 41.645,10`.
+2. `/olimpo/cobranca`: SUMITOMO mostra "Em disputa" e a ND **164714** aparece ao expandir as disputas do CNPJ.
+3. Totais `disp_*` em `get_aging_by_client_cr` refletem disputas que estavam ocultas.
 
-### Sem mudanças
+## Fora do escopo
 
-- Sem alteração de schema.
-- Sem alteração no frontend.
-- Sem mexer em cálculos/SLA.
-- Memória `mem://sea/demurrage-visibility-filter-dados-maritimo` será atualizada para refletir o novo critério (prefixo de armador, não `EXISTS` em `t_dados_maritimo`).
-
-### Validação
-
-- `curl` no `mariadb-proxy` para `demurrage_get_stats` e `demurrage_get_containers` e checar:
-  - total > 6
-  - todos os MBLs retornados começam com um dos 13 prefixos
-  - prefixos fora da lista (ex.: `SZP%`, `0001%`) não aparecem
+- Não alterar `save_disputa_cr` (de-para já correto).
+- Não alterar `get_disputas` / `get_disputas_cr` (já leem direto de `t_fin_disputas`).
+- Não alterar a view `v_fin_regua_contas_receber`.
+- Nenhuma mudança em UI ou outros módulos.
