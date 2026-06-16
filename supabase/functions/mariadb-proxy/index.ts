@@ -16299,6 +16299,9 @@ Deno.serve(async (req) => {
           alertParams.push(alertStatus);
         }
 
+        // Visibility filter: alert's container must exist and its MBL must exist in t_dados_maritimo
+        alertConditions.push(`EXISTS (SELECT 1 FROM dados_dachser.t_dachser_demurrage_containers dc JOIN dados_dachser.t_dados_maritimo dm ON TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci WHERE dc.id = dados_dachser.t_dachser_demurrage_alerts.container_id)`);
+
         const alertWhere = alertConditions.length > 0 ? `WHERE ${alertConditions.join(' AND ')}` : '';
 
         const alerts = await client.query(`
