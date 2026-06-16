@@ -15941,6 +15941,7 @@ Deno.serve(async (req) => {
 
         // Visibility filter: shipment_mbl prefix must match one of the 13 supported carriers
         piWhereConditions.push(`LEFT(UPPER(TRIM(dados_dachser.t_dachser_demurrage_pre_invoices.shipment_mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU')`);
+        piWhereConditions.push(`EXISTS (SELECT 1 FROM dados_dachser.t_sea_tracking_current tc WHERE UPPER(TRIM(tc.mbl_id)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dados_dachser.t_dachser_demurrage_pre_invoices.shipment_mbl)) COLLATE utf8mb4_unicode_ci)`);
 
         const piWhere = piWhereConditions.length > 0 ? `WHERE ${piWhereConditions.join(' AND ')}` : '';
 
