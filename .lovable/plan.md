@@ -1,29 +1,38 @@
-## Objetivo
+## Contexto
 
-No diálogo de criação de voucher (`CreateVoucherDialog`), desabilitar permanentemente os campos abaixo nos dois modos (Manual e Integração/RM). Os valores passam a ser preenchidos somente pela integração pós-criação (sync do RM já existente).
+Na importação em lote (`BatchDocumentBinderDialog`), quando um documento é vinculado a um voucher (ou master group), o sistema apenas registra o anexo via `bind_batch_document_to_voucher` / `bind_batch_document_to_master_group`. Diferente do fluxo unitário (`VoucherRascunhoActions`, `VoucherMasterForm`, etc.), nenhuma extração de linha digitável é disparada.
 
-Campos a desabilitar:
-- Fornecedor
-- CNPJ Fornecedor
-- Valor
-- Data de Emissão
+Regra existente: anexo `DAI` dispensa fatura/boleto (`temDai` no `mariadb-proxy`).
 
-## Mudanças
+## Mudança
 
-Arquivo: `src/components/esteira/CreateVoucherDialog.tsx`
+Tratar `DAI` como portador de linha digitável no fluxo de lote, **apenas quando o SPO não tiver BOLETO vinculado** — quando há BOLETO, ele é a única fonte de linha digitável (mantém o comportamento atual do fluxo unitário).
 
-1. **Fornecedor** (linha ~1082): trocar `disabled={isRmMode}` por `disabled={true}` e ajustar placeholder para algo como "Preenchido pela integração".
-2. **CNPJ Fornecedor** (linha ~1108): trocar `disabled={isRmMode && !cnpjNotFound}` por `disabled={true}`; manter o badge "Não encontrado" quando aplicável (apenas informativo).
-3. **Valor** (linha ~1161): adicionar `disabled` ao `<Input>`; manter validação Zod.
-4. **Data de Emissão** (linha ~1223): passar `disabled` ao `DateInputField` (verificar suporte; se não existir, adicionar a prop e propagar ao input/calendário).
+### Frontend — `src/components/esteira/BatchDocumentBinderDialog.tsx` (função `doBind`, ~linha 208)
 
-Comportamento mantido:
-- Sync RM continua populando os campos via `form.setValue(...)` (linhas 248-269) antes do submit, então o payload de criação segue idêntico ao atual.
-- Validações Zod (`valor` obrigatório, CNPJ válido) permanecem; como o sync preenche antes do submit, não há regressão no modo RM.
-- Modo manual: como agora todos os 4 campos ficam vazios no submit, a integração pós-criação (job/sync existente do RM por SPO) preenche `fornecedor`, `cnpj_fornecedor`, `valor` e `data_emissao_documento` no registro recém-criado.
+Após cada bind bem-sucedido, para cada `voucher_id` afetado:
+
+1. Determinar a fonte de linha digitável:
+   - Se `tipoAnexo === "BOLETO"` → usar o `file_url` do doc recém-vinculado.
+   - Se `tipoAnexo === "DAI"` → consultar os anexos existentes do voucher (após `refresh()`, via `checklist`/`docs` do lote já carregados, ou via `mariadb-proxy` `get_voucher_anexos`); se já houver qualquer anexo com `tipo === "BOLETO"` vinculado a esse voucher, **pular** a extração.
+   - Outros tipos → não extrai.
+2. Chamar `supabase.functions.invoke("extract-boleto-barcode", { body: { fileUrl } })`.
+3. Em sucesso (`linhaDigitavel` presente), gravar via `mariadb-proxy` `save_linha_digitavel` (`linha_digitavel` + `codigo_barras`) para cada `voucher_id` do bind (1 no single, N no master).
+4. Toast informativo; erros apenas em `console.warn` — não bloquear o fluxo do lote.
+
+### Decisão de "tem boleto"
+
+Usar a lista `docs` do próprio lote (já carregada em `refresh()`) filtrando por `voucher_id` (single) ou `master_voucher_ids` (master) e `tipo_anexo === "BOLETO"`. Isso evita roundtrip extra e cobre o caso em que BOLETO e DAI são vinculados no mesmo lote.
+
+Ordem importa: se o usuário vincular DAI antes do BOLETO, a extração do DAI ocorre, e depois o BOLETO (quando vinculado) sobrescreve via fluxo normal. Comportamento aceitável dado o requisito ("apenas se nenhum boleto for vinculado junto").
+
+### Não alterar
+
+- `extract-boleto-barcode`, schema, handlers `bind_*` no `mariadb-proxy`.
+- Regra `temDai` de obrigatoriedade.
+- Componentes fora do `BatchDocumentBinderDialog`.
 
 ## Fora de escopo
 
-- `EditVoucherDialog`: não foi solicitado alterar edição.
-- Lógica de sync/integração RM: já existente, sem alterações.
-- Backend / `mariadb-proxy`: sem alterações.
+- Edição/criação unitária de voucher.
+- Mudança no parser de DAI ou suporte a novos formatos de linha digitável.
