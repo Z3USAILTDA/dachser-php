@@ -236,8 +236,12 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
         : [...Array.from(selectedVouchers), ...extraIds];
       const isMasterBind = voucherIds.length >= 2;
 
+      // Acumular pares (voucher_id, file_url) para extrair linha digitável após bind
+      const extractionTargets: Array<{ voucherIds: string[]; fileUrl: string; tipo: string }> = [];
+
       if (allOk) {
         for (const docId of selectedDocs) {
+          const docMeta = docs.find((d: any) => String(d.id) === String(docId));
           if (isMasterBind) {
             const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
               body: {
@@ -251,6 +255,8 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
             if (error || !data?.success) {
               allOk = false;
               toast({ title: "Falha ao vincular master", description: data?.error || error?.message, variant: "destructive" });
+            } else if (docMeta?.file_url && (tipoAnexo === "BOLETO" || tipoAnexo === "DAI")) {
+              extractionTargets.push({ voucherIds, fileUrl: docMeta.file_url, tipo: tipoAnexo });
             }
           } else {
             const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
@@ -265,10 +271,65 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
             if (error || !data?.success) {
               allOk = false;
               toast({ title: "Falha ao vincular", description: data?.error || error?.message, variant: "destructive" });
+            } else if (docMeta?.file_url && (tipoAnexo === "BOLETO" || tipoAnexo === "DAI")) {
+              extractionTargets.push({ voucherIds: [voucherIds[0]], fileUrl: docMeta.file_url, tipo: tipoAnexo });
             }
           }
         }
       }
+
+      // Extração de linha digitável (BOLETO sempre; DAI somente se nenhum BOLETO já vinculado ao voucher)
+      if (extractionTargets.length > 0) {
+        const voucherHasBoleto = (vid: string): boolean => {
+          return docs.some((d: any) => {
+            if (String(d.tipo_anexo || "").toUpperCase() !== "BOLETO") return false;
+            if (String(d.voucher_id || "") === String(vid)) return true;
+            try {
+              const mv = typeof d.master_voucher_ids === "string"
+                ? JSON.parse(d.master_voucher_ids)
+                : d.master_voucher_ids;
+              if (Array.isArray(mv) && mv.map(String).includes(String(vid))) return true;
+            } catch (_) {}
+            return false;
+          });
+        };
+
+        for (const target of extractionTargets) {
+          // Para DAI: filtrar vouchers que já têm BOLETO vinculado
+          const eligibleVids = target.tipo === "DAI"
+            ? target.voucherIds.filter((vid) => !voucherHasBoleto(vid))
+            : target.voucherIds;
+          if (eligibleVids.length === 0) continue;
+
+          try {
+            const { data: ext, error: extErr } = await supabase.functions.invoke("extract-boleto-barcode", {
+              body: { fileUrl: target.fileUrl },
+            });
+            if (extErr || !ext?.success || !ext?.linhaDigitavel) {
+              console.warn("Lote: extração de linha digitável falhou", extErr || ext?.error);
+              continue;
+            }
+            for (const vid of eligibleVids) {
+              await supabase.functions.invoke("mariadb-proxy", {
+                body: {
+                  action: "save_linha_digitavel",
+                  voucher_id: vid,
+                  linha_digitavel: ext.linhaDigitavel,
+                  codigo_barras: ext.codigoBarras || null,
+                },
+              });
+            }
+            toast({
+              title: "Linha digitável extraída",
+              description: `Extraída do ${target.tipo} e gravada em ${eligibleVids.length} voucher(s).`,
+            });
+          } catch (e) {
+            console.warn("Lote: erro na extração de linha digitável", e);
+          }
+        }
+      }
+
+
       // Travar master após primeira vinculação bem-sucedida
       if (allOk && isMasterBind && !lockedMaster) {
         setLockedMaster({
