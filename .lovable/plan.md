@@ -1,27 +1,32 @@
 ## Objetivo
-Na importação em lote, quando o lookup em `t_dados_financeiro_spo` retorna mais de uma linha que compartilha o **mesmo SPO (nd) + processo + valor + vencimento**, considerar apenas a ocorrência com `data_insert` mais recente, evitando que duplicidades reais da tabela de origem inflem a contagem de candidatas ambíguas na pré-visualização.
 
-## Mudança (apenas backend)
-Arquivo: `supabase/functions/mariadb-proxy/index.ts` — função `fetchDfvByProcVenc` (~linha 21830) e `buildPreviewItems` (~21945). Sem alterações em frontend.
+Quando um conjunto de pré-lançados já tem um DAI vinculado (com linha digitável extraída) e, em seguida, recebe um BOLETO durante a formação do voucher master no lote, o sistema deve **sempre prevalecer a linha digitável do BOLETO**, sobrescrevendo a que veio do DAI.
 
-### 1. Incluir `data_insert` no SELECT
-Adicionar `data_insert` à lista de colunas retornadas pelo SELECT em `t_dados_financeiro_spo` (linha 21855), para permitir ordenar as candidatas.
+## Diagnóstico
 
-### 2. Deduplicar por SPO dentro de cada chave processo|valor|vencimento
-Logo após popular `byKey` (linha 21868), para cada chave aplicar:
-- Agrupar as linhas por `TRIM(nd)` (SPO).
-- Para cada grupo de mesmo SPO, manter somente a linha com o maior `data_insert` (timestamps nulos perdem para qualquer não-nulo; empate vence a primeira encontrada).
-- O array final por chave passa a ter no máximo uma linha por SPO distinto.
+Em `src/components/esteira/BatchDocumentBinderDialog.tsx` (linhas ~240-330):
 
-### 3. Comportamento resultante em `buildPreviewItems`
-Nenhuma alteração de lógica — apenas se beneficia do array já deduplicado:
-- 1 SPO distinto restante → linha resolvida normalmente (não ambígua, mesmo que originalmente houvesse 2+ inserts para o mesmo SPO).
-- 2+ SPOs distintos → comportamento atual de ambiguidade preservado (`is_ambiguous`, `ambiguous_total`, mensagem "SPO ambígua: N candidatas…").
+1. Cada vinculação acumula `extractionTargets` (BOLETO ou DAI).
+2. O filtro `voucherHasBoleto(vid)` consulta apenas o `docs` já carregado — não considera BOLETOs que estão sendo vinculados na **mesma** ação.
+3. O loop `for (const target of extractionTargets)` processa na ordem em que os documentos foram selecionados. Se um DAI for processado **depois** de um BOLETO no mesmo batch, ele pode sobrescrever a linha digitável do BOLETO (porque `save_linha_digitavel` sempre faz UPDATE direto em `t_vouchers.linha_digitavel`).
+4. Se o BOLETO chega numa ação posterior à do DAI, hoje funciona (overwrite acontece). O bug está apenas no caso de DAI + BOLETO na mesma ação, ou em ações intercaladas onde `docs` não foi atualizado a tempo.
+
+## Mudança (cirúrgica, somente frontend)
+
+Arquivo único: `src/components/esteira/BatchDocumentBinderDialog.tsx`.
+
+1. **Considerar os BOLETOs em vinculação atual** em `voucherHasBoleto`: além de `docs`, marcar como "tem boleto" qualquer `vid` que apareça em algum `extractionTargets[i]` com `tipo === "BOLETO"`.
+2. **Ordenar `extractionTargets`** antes do loop: processar todos os **DAI primeiro** e os **BOLETO por último**. Assim, se ambos coexistem para o mesmo voucher, o BOLETO sempre faz o último `save_linha_digitavel` e prevalece — mesmo em race de cache do `docs`.
+3. Manter o filtro existente que pula DAI quando já existe BOLETO no voucher (agora reforçado pelo item 1).
+
+Nenhuma alteração no backend (`mariadb-proxy`, `extract-boleto-barcode`) ou em outros componentes.
 
 ## Fora de escopo
-- Frontend (`BatchImportVoucherDialog`, `BatchImportPreviewTable`): nenhuma alteração; `markDuplicates` continua reagindo a `ambiguous_group_key` e `ambiguous_total` enviados pelo backend.
-- Outras rotas de lookup (unitário, RM, vouchers existentes).
-- Regra `dedupe-by-spo-fornecedor-valor` (cron de duplicados em `t_vouchers`) — independente; permanece como está.
+
+- Comportamento do fluxo normal da esteira (não-lote).
+- Demais ações do `BatchDocumentBinderDialog` (preview, master/SPO numbering, anexos).
+- Backend `save_linha_digitavel` (já sobrescreve corretamente).
 
 ## Memória
-Atualizar `mem://vouchers/batch-import-lookup-by-processo-valor-vencimento` adicionando: "Quando múltiplas linhas em `t_dados_financeiro_spo` compartilham o mesmo `nd` para a mesma chave processo+valor+vencimento, o backend mantém apenas a de `data_insert` mais recente antes de decidir ambiguidade."
+
+Atualizar `mem://vouchers/document-validation-rules-v2` (ou adicionar nota curta) com a regra: **"No lote, BOLETO sempre prevalece sobre DAI para `linha_digitavel`; DAI só é fonte se nenhum BOLETO estiver vinculado nem sendo vinculado no mesmo conjunto."**
