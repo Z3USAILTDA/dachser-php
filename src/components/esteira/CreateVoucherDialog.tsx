@@ -1078,11 +1078,11 @@ export const CreateVoucherDialog = ({
                         <FormLabel className="flex items-center gap-1.5 text-sm">
                           Fornecedor {isRmMode && <SyncIcon />}
                         </FormLabel>
-                        <FormControl>
+                         <FormControl>
                           <Input 
-                            placeholder={isRmMode ? "Preenchido pelo RM" : "Nome do fornecedor"}
+                            placeholder="Preenchido pela integração"
                             className="bg-background/50 border-border"
-                            disabled={isRmMode}
+                            disabled={true}
                             {...field} 
                           />
                         </FormControl>
