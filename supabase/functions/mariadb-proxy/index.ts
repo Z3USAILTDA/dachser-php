@@ -15062,6 +15062,8 @@ Deno.serve(async (req) => {
           'dc.active = 1',
           // Visibility filter: MBL prefix must match one of the 13 supported carriers
           `LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU')`,
+          // Visibility filter: container must exist in t_sea_tracking_current (by container or mbl_id)
+          `EXISTS (SELECT 1 FROM dados_dachser.t_sea_tracking_current tc WHERE UPPER(TRIM(tc.container)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.numero)) COLLATE utf8mb4_unicode_ci OR UPPER(TRIM(tc.mbl_id)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.mbl)) COLLATE utf8mb4_unicode_ci)`,
         ];
         let params: (string | number)[] = [];
 
@@ -15161,9 +15163,9 @@ Deno.serve(async (req) => {
           break;
         }
 
-        // Step 1: Search by normalized MBL in demurrage table
+        // Step 1: Search by normalized MBL in demurrage table — must also exist in t_sea_tracking_current
         let mblContainers = await queryWithRetry(() => client.query(
-          `SELECT dc.* FROM dados_dachser.t_dachser_demurrage_containers dc WHERE TRIM(UPPER(dc.mbl)) = TRIM(UPPER(?))`,
+          `SELECT dc.* FROM dados_dachser.t_dachser_demurrage_containers dc WHERE TRIM(UPPER(dc.mbl)) = TRIM(UPPER(?)) AND EXISTS (SELECT 1 FROM dados_dachser.t_sea_tracking_current tc WHERE UPPER(TRIM(tc.container)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.numero)) COLLATE utf8mb4_unicode_ci OR UPPER(TRIM(tc.mbl_id)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.mbl)) COLLATE utf8mb4_unicode_ci)`,
           [mbl]
         ), { label: 'demurrage_get_containers_by_mbl', attempts: 3 });
 
@@ -15499,6 +15501,7 @@ Deno.serve(async (req) => {
           FROM dados_dachser.t_dachser_demurrage_containers dc
           WHERE active = 1
             AND LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU')
+            AND EXISTS (SELECT 1 FROM dados_dachser.t_sea_tracking_current tc WHERE UPPER(TRIM(tc.container)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.numero)) COLLATE utf8mb4_unicode_ci OR UPPER(TRIM(tc.mbl_id)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.mbl)) COLLATE utf8mb4_unicode_ci)
         `);
 
         const row = stats?.[0] || {};
@@ -15762,6 +15765,7 @@ Deno.serve(async (req) => {
           FROM dados_dachser.t_dachser_demurrage_containers dc
           WHERE active = 1 AND cliente IS NOT NULL AND cliente != ''
             AND LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU')
+            AND EXISTS (SELECT 1 FROM dados_dachser.t_sea_tracking_current tc WHERE UPPER(TRIM(tc.container)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.numero)) COLLATE utf8mb4_unicode_ci OR UPPER(TRIM(tc.mbl_id)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.mbl)) COLLATE utf8mb4_unicode_ci)
           GROUP BY cliente
           ORDER BY cliente ASC
         `);
@@ -15778,6 +15782,7 @@ Deno.serve(async (req) => {
           FROM dados_dachser.t_dachser_demurrage_containers dc
           WHERE active = 1 AND armador IS NOT NULL AND armador != ''
             AND LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU')
+            AND EXISTS (SELECT 1 FROM dados_dachser.t_sea_tracking_current tc WHERE UPPER(TRIM(tc.container)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.numero)) COLLATE utf8mb4_unicode_ci OR UPPER(TRIM(tc.mbl_id)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.mbl)) COLLATE utf8mb4_unicode_ci)
           GROUP BY armador
           ORDER BY armador ASC
         `);
@@ -15936,6 +15941,7 @@ Deno.serve(async (req) => {
 
         // Visibility filter: shipment_mbl prefix must match one of the 13 supported carriers
         piWhereConditions.push(`LEFT(UPPER(TRIM(dados_dachser.t_dachser_demurrage_pre_invoices.shipment_mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU')`);
+        piWhereConditions.push(`EXISTS (SELECT 1 FROM dados_dachser.t_sea_tracking_current tc WHERE UPPER(TRIM(tc.mbl_id)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dados_dachser.t_dachser_demurrage_pre_invoices.shipment_mbl)) COLLATE utf8mb4_unicode_ci)`);
 
         const piWhere = piWhereConditions.length > 0 ? `WHERE ${piWhereConditions.join(' AND ')}` : '';
 
@@ -16309,7 +16315,7 @@ Deno.serve(async (req) => {
         }
 
         // Visibility filter: alert's container MBL prefix must match supported carriers
-        alertConditions.push(`EXISTS (SELECT 1 FROM dados_dachser.t_dachser_demurrage_containers dc WHERE dc.id = dados_dachser.t_dachser_demurrage_alerts.container_id AND LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU'))`);
+        alertConditions.push(`EXISTS (SELECT 1 FROM dados_dachser.t_dachser_demurrage_containers dc WHERE dc.id = dados_dachser.t_dachser_demurrage_alerts.container_id AND LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU') AND EXISTS (SELECT 1 FROM dados_dachser.t_sea_tracking_current tc WHERE UPPER(TRIM(tc.container)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.numero)) COLLATE utf8mb4_unicode_ci OR UPPER(TRIM(tc.mbl_id)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.mbl)) COLLATE utf8mb4_unicode_ci))`);
 
         const alertWhere = alertConditions.length > 0 ? `WHERE ${alertConditions.join(' AND ')}` : '';
 
@@ -16462,7 +16468,7 @@ Deno.serve(async (req) => {
         }
 
         // Visibility filter: dispute's container MBL prefix must match supported carriers
-        dispConditions.push(`EXISTS (SELECT 1 FROM dados_dachser.t_dachser_demurrage_containers dc WHERE dc.id = dados_dachser.t_dachser_demurrage_disputes.container_id AND LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU'))`);
+        dispConditions.push(`EXISTS (SELECT 1 FROM dados_dachser.t_dachser_demurrage_containers dc WHERE dc.id = dados_dachser.t_dachser_demurrage_disputes.container_id AND LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU') AND EXISTS (SELECT 1 FROM dados_dachser.t_sea_tracking_current tc WHERE UPPER(TRIM(tc.container)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.numero)) COLLATE utf8mb4_unicode_ci OR UPPER(TRIM(tc.mbl_id)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.mbl)) COLLATE utf8mb4_unicode_ci))`);
 
         const dispWhere = dispConditions.length > 0 ? `WHERE ${dispConditions.join(' AND ')}` : '';
 
@@ -16613,6 +16619,7 @@ Deno.serve(async (req) => {
             SELECT 1 FROM dados_dachser.t_dachser_demurrage_containers dc
             WHERE dc.id = d.container_id
               AND LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU')
+              AND EXISTS (SELECT 1 FROM dados_dachser.t_sea_tracking_current tc WHERE UPPER(TRIM(tc.container)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.numero)) COLLATE utf8mb4_unicode_ci OR UPPER(TRIM(tc.mbl_id)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.mbl)) COLLATE utf8mb4_unicode_ci)
           )
         `);
 
