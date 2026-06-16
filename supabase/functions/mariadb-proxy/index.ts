@@ -15163,9 +15163,9 @@ Deno.serve(async (req) => {
           break;
         }
 
-        // Step 1: Search by normalized MBL in demurrage table
+        // Step 1: Search by normalized MBL in demurrage table — must also exist in t_sea_tracking_current
         let mblContainers = await queryWithRetry(() => client.query(
-          `SELECT dc.* FROM dados_dachser.t_dachser_demurrage_containers dc WHERE TRIM(UPPER(dc.mbl)) = TRIM(UPPER(?))`,
+          `SELECT dc.* FROM dados_dachser.t_dachser_demurrage_containers dc WHERE TRIM(UPPER(dc.mbl)) = TRIM(UPPER(?)) AND EXISTS (SELECT 1 FROM dados_dachser.t_sea_tracking_current tc WHERE UPPER(TRIM(tc.container)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.numero)) COLLATE utf8mb4_unicode_ci OR UPPER(TRIM(tc.mbl_id)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.mbl)) COLLATE utf8mb4_unicode_ci)`,
           [mbl]
         ), { label: 'demurrage_get_containers_by_mbl', attempts: 3 });
 
