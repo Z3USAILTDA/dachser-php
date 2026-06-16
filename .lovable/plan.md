@@ -1,37 +1,37 @@
-## Objetivo
+# Por que o 2º teste falhou
 
-Quando um voucher do lote tem **DAI vinculado**, o sistema deve tratar essa vinculação como satisfazendo **tanto fatura quanto boleto** — sem mostrar badges "Falta Fatura"/"Falta Boleto" nem bloquear "Finalizar lote".
+O log do navegador mostra:
 
-## Diagnóstico
+> `Lote: extração de linha digitável falhou — Linha digitável com tamanho inválido (113 dígitos)`
 
-Em `supabase/functions/mariadb-proxy/index.ts`, dois blocos calculam pendências do lote a partir dos anexos:
+Ou seja, a Edge Function `extract-boleto-barcode` **respondeu**, mas o conteúdo extraído tinha **113 dígitos** — fora dos tamanhos válidos (47 boleto bancário / 48 arrecadação).
 
-1. `get_batch_import_status` (linhas ~22548-22567) — produz o `checklist` consumido por `BatchVoucherChecklist.tsx` (badges Fatura/Boleto e status `PENDENTE_FATURA_E_BOLETO`, etc.).
-2. `finalize_batch_import` (linhas ~22608-22624) — bloqueia finalização quando `motivos` contém `PENDENTE_FATURA`/`PENDENTE_BOLETO`.
+## Causa
 
-Hoje, o `temDai` só é considerado no caso especial de `PRE_LANCAMENTO`. No fluxo normal, DAI não substitui fatura nem boleto.
+DAIs frequentemente contêm **mais de uma linha digitável** no mesmo PDF (DAI principal + parcelas / GRU complementar / 2ª via). No 1º teste o PDF tinha só 1 linha digitável; no 2º o PDF tinha múltiplas.
 
-## Mudança (cirúrgica, somente backend)
+O prompt em `EXTRACTION_PROMPT` (linhas 173-192 de `supabase/functions/extract-boleto-barcode/index.ts`) **não diz** ao Claude o que fazer quando há mais de uma. Resultado: o modelo concatenou os dígitos de 2-3 códigos na mesma linha `LIMPA:`, e o parser `parseExtractionResponse` (regex `/LIMPA:\s*(\d+)/`) capturou todos de uma vez → 113 dígitos → reprovado na validação de tamanho.
 
-Em ambos os blocos, antes de derivar `status`/`motivos`:
+Não é problema do anexo no voucher nem do `save_linha_digitavel`. O DAI foi vinculado normalmente; só a extração textual variou entre os PDFs.
 
-```ts
-if (temDai) { temFatura = true; temBoleto = true; }
-```
+## Plano de correção (cirúrgico, somente em `extract-boleto-barcode/index.ts`)
 
-Isso garante:
-- O checklist mostra Fatura ✓ e Boleto ✓ quando há DAI.
-- O `status` resulta em `COMPLETO`.
-- `finalize_batch_import` não acrescenta `PENDENTE_FATURA`/`PENDENTE_BOLETO` ao motivo do voucher com DAI.
+1. **Reforçar o prompt** (`EXTRACTION_PROMPT` e `buildRetryPrompt`):
+   - Adicionar instrução explícita: *"Se houver MAIS DE UMA linha digitável no documento (ex.: DAI com parcelas, GRU complementar, 2ª via), retorne SOMENTE a do valor principal/total. Nunca concatene dígitos de códigos diferentes."*
 
-Nenhuma mudança no frontend. Lógica de extração de linha digitável e prioridade BOLETO>DAI permanecem intactas.
+2. **Defender o parser** `parseExtractionResponse` contra resposta concatenada:
+   - Se a string capturada tiver `> 48` dígitos, tentar fatiar nos tamanhos válidos: primeiros 48 começando com `8` (arrecadação) ou primeiros 47 (bancário), validar com `validateLinhaDigitavel` / `validateLinhaDigitavelArrecadacao` e usar a primeira fatia que passar.
+   - Se nenhuma fatia validar, retornar string vazia (mantém o comportamento atual de "não encontrado", em vez de mandar 113 dígitos para validação).
+
+3. **Logar no servidor** o tamanho bruto retornado pelo Claude antes da validação, para diagnosticar futuros casos.
 
 ## Fora de escopo
 
-- Fluxo normal da esteira (fora de lote).
-- Regras de PRE_LANCAMENTO (já tratadas).
-- Estrutura de anexos, validações de tipo, e o front `BatchVoucherChecklist`.
+- Frontend `BatchDocumentBinderDialog.tsx` (a lógica DAI×BOLETO já está correta).
+- `mariadb-proxy` / `save_linha_digitavel`.
+- Fluxo unitário e PRE_LANCAMENTO.
+- Mudança de modelo Anthropic.
 
 ## Memória
 
-Atualizar `mem://vouchers/document-validation-rules-v2` ou adicionar `mem://vouchers/dai-substitui-fatura-e-boleto-no-lote` com a regra: **"No lote, anexo DAI substitui tanto FATURA quanto BOLETO; voucher fica COMPLETO e pode finalizar mesmo sem fatura/boleto físicos."**
+Atualizar `mem://vouchers/boleto-extraction-arrecadacao-support` adicionando: *DAIs com múltiplas parcelas devem retornar apenas a linha digitável principal; parser deve fatiar e validar quando recebe `>48` dígitos.*
