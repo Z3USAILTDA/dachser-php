@@ -15060,8 +15060,8 @@ Deno.serve(async (req) => {
 
         let whereConditions = [
           'dc.active = 1',
-          // Visibility filter: container must exist in t_dados_maritimo (post data cleanup)
-          `EXISTS (SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci)`,
+          // Visibility filter: MBL prefix must match one of the 13 supported carriers
+          `LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU')`,
         ];
         let params: (string | number)[] = [];
 
