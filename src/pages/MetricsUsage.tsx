@@ -585,6 +585,18 @@ const MetricsUsage = () => {
             </div>
 
             <button
+              onClick={() => {
+                const todayStr = getLocalDateString(new Date());
+                setDateFrom(todayStr);
+                setDateTo(todayStr);
+                setCurrentPage(1);
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-full border border-primary/40 bg-primary/10 text-primary text-sm font-semibold uppercase tracking-[0.12em] hover:bg-primary/20 transition-all w-full justify-center"
+            >
+              Hoje
+            </button>
+
+            <button
               onClick={clearFilters}
               className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/20 bg-white/5 text-foreground text-sm font-semibold uppercase tracking-[0.12em] hover:bg-white/10 transition-all w-full justify-center"
             >
