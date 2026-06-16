@@ -1342,6 +1342,25 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'delete_metric_user_logs': {
+        const { targetUsername } = body as { targetUsername?: string };
+        if (!targetUsername) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'targetUsername é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const delRes = await client.execute(
+          `DELETE FROM ai_agente.t_dachser_usage_logs WHERE LOWER(username) = LOWER(?)`,
+          [targetUsername]
+        );
+        console.log(`[delete_metric_user_logs] removidos ${delRes?.affectedRows ?? 0} logs de ${targetUsername}`);
+        result = { success: true, deleted: delRes?.affectedRows ?? 0 };
+        break;
+      }
+
+
+
       // ==================== RULE MATRIX ====================
       case 'get_rule_matrices': {
         const { customer, isActive } = body;
