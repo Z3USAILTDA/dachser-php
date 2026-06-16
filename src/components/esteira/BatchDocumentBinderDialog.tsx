@@ -278,9 +278,17 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
         }
       }
 
-      // Extração de linha digitável (BOLETO sempre; DAI somente se nenhum BOLETO já vinculado ao voucher)
+      // Extração de linha digitável (BOLETO sempre prevalece; DAI só se nenhum BOLETO existir
+      // — incluindo BOLETOs que estão sendo vinculados nesta mesma ação)
       if (extractionTargets.length > 0) {
+        // VIDs que receberão BOLETO nesta mesma ação
+        const vidsRecebendoBoletoAgora = new Set<string>();
+        for (const t of extractionTargets) {
+          if (t.tipo === "BOLETO") t.voucherIds.forEach((v) => vidsRecebendoBoletoAgora.add(String(v)));
+        }
+
         const voucherHasBoleto = (vid: string): boolean => {
+          if (vidsRecebendoBoletoAgora.has(String(vid))) return true;
           return docs.some((d: any) => {
             if (String(d.tipo_anexo || "").toUpperCase() !== "BOLETO") return false;
             if (String(d.voucher_id || "") === String(vid)) return true;
@@ -294,12 +302,19 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
           });
         };
 
-        for (const target of extractionTargets) {
-          // Para DAI: filtrar vouchers que já têm BOLETO vinculado
+        // Processar DAI primeiro e BOLETO por último, para garantir que BOLETO sobrescreva
+        const ordered = [...extractionTargets].sort((a, b) => {
+          const rank = (t: string) => (t === "BOLETO" ? 1 : 0);
+          return rank(a.tipo) - rank(b.tipo);
+        });
+
+        for (const target of ordered) {
+          // Para DAI: filtrar vouchers que já têm BOLETO vinculado (ou recebendo agora)
           const eligibleVids = target.tipo === "DAI"
             ? target.voucherIds.filter((vid) => !voucherHasBoleto(vid))
             : target.voucherIds;
           if (eligibleVids.length === 0) continue;
+
 
           try {
             const { data: ext, error: extErr } = await supabase.functions.invoke("extract-boleto-barcode", {
