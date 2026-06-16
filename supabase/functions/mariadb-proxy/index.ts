@@ -21854,7 +21854,7 @@ Deno.serve(async (req) => {
             }
             const cols = `id_rm, nd, nome_beneficiario, nome_cobranca, numero_processo,
                           modal, tipo_pag, forma_pag, data_emissao, data_vencimento,
-                          valor_nf, moeda, cnpj, razao_social, detalhes`;
+                          valor_nf, moeda, cnpj, razao_social, detalhes, data_insert`;
             const rows = await client.query(
               `SELECT ${cols} FROM dados_dachser.t_dados_financeiro_spo WHERE ${clauses.join(' OR ')}`,
               params
@@ -21867,11 +21867,28 @@ Deno.serve(async (req) => {
               arr.push(r);
               byKey.set(k, arr);
             }
+            // Dedup por SPO (nd) dentro de cada chave: mantém apenas a linha
+            // com data_insert mais recente quando o mesmo SPO aparece >1 vez.
+            for (const [k, arr] of byKey.entries()) {
+              const bySpo = new Map<string, any>();
+              const noSpo: any[] = [];
+              for (const r of arr) {
+                const spoKey = r?.nd ? String(r.nd).trim() : '';
+                if (!spoKey) { noSpo.push(r); continue; }
+                const cur = bySpo.get(spoKey);
+                if (!cur) { bySpo.set(spoKey, r); continue; }
+                const curTs = cur.data_insert ? new Date(cur.data_insert).getTime() : -Infinity;
+                const newTs = r.data_insert ? new Date(r.data_insert).getTime() : -Infinity;
+                if (newTs > curTs) bySpo.set(spoKey, r);
+              }
+              byKey.set(k, [...bySpo.values(), ...noSpo]);
+            }
           } catch (e) {
             console.log('fetchDfvByProcVenc error:', e);
           }
           return byKey;
         };
+
 
 
         // Merge sheet row + DFV. Returns resolved fields with origin per field.
