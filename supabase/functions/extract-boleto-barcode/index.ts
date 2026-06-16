@@ -227,15 +227,43 @@ Se não encontrar, responda: NAO_ENCONTRADO`;
 function parseExtractionResponse(text: string): string {
   // Try to extract "LIMPA:" line first
   const limpaMatch = text.match(/LIMPA:\s*(\d+)/);
-  if (limpaMatch) return limpaMatch[1];
-  
-  // Try "FORMATADA:" line and clean it
-  const formatadaMatch = text.match(/FORMATADA:\s*([0-9.\s]+)/);
-  if (formatadaMatch) return formatadaMatch[1].replace(/\D/g, '');
-  
-  // Fallback: just extract all digits
-  return text.replace(/\D/g, '');
+  let raw = limpaMatch ? limpaMatch[1] : '';
+
+  if (!raw) {
+    // Try "FORMATADA:" line and clean it
+    const formatadaMatch = text.match(/FORMATADA:\s*([0-9.\-\s]+)/);
+    if (formatadaMatch) raw = formatadaMatch[1].replace(/\D/g, '');
+  }
+
+  if (!raw) {
+    // Fallback: just extract all digits
+    raw = text.replace(/\D/g, '');
+  }
+
+  // Defesa contra resposta concatenada (múltiplas linhas digitáveis emendadas pelo modelo)
+  if (raw.length > 48) {
+    // Tenta arrecadação (48 dígitos começando com 8) em qualquer posição
+    for (let i = 0; i + 48 <= raw.length; i++) {
+      if (raw[i] === '8') {
+        const slice = raw.slice(i, i + 48);
+        if (validateLinhaDigitavelArrecadacao(slice).valid) return slice;
+      }
+    }
+    // Tenta bancário (47 dígitos não começando com 8) em qualquer posição
+    for (let i = 0; i + 47 <= raw.length; i++) {
+      if (raw[i] !== '8') {
+        const slice = raw.slice(i, i + 47);
+        if (validateLinhaDigitavel(slice).valid) return slice;
+      }
+    }
+    // Sem fatia válida → preserva os primeiros 48/47 conforme primeiro dígito,
+    // para que o fluxo de retry/erro reporte tamanho coerente em vez de string gigante.
+    return raw[0] === '8' ? raw.slice(0, 48) : raw.slice(0, 47);
+  }
+
+  return raw;
 }
+
 
 async function callClaude(anthropicApiKey: string, mediaType: string, base64Data: string, promptText: string): Promise<string> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
