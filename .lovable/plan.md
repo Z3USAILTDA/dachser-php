@@ -1,26 +1,37 @@
-# Excluir `admin` e `herbert.zacatei` da tela de Métricas
-
 ## Objetivo
-Na tela `/metrics`, ocultar completamente os acessos dos usuários `admin` e `herbert.zacatei` em **todas as visualizações** (estatísticas, gráficos diário/endpoint, módulos, sessões, conexões ativas, lista de logs e dropdown de filtro de usuários), para **qualquer requisitante** — não apenas os usuários DACHSER especiais.
 
-## Mudanças
-Arquivo único: `supabase/functions/mariadb-proxy/index.ts`
+Exibir na tela de Demurrage apenas processos cujo MBL ainda exista em `dados_dachser.t_dados_maritimo.bl_number` (tabela passou por limpa de dados). Containers órfãos em `t_dachser_demurrage_containers` deixam de aparecer em todas as listagens do módulo.
 
-Nos 5 cases abaixo, a lista `HIDDEN_LOG_USERS*` passa de `["admin", "teste.test3"]` para `["admin", "herbert.zacatei", "teste.test3"]` e o filtro `username NOT IN (...)` é aplicado **sempre** (remover o gate `if (isDachserUser...)`):
+## Filtro padrão (SQL)
 
-1. `get_metrics` (linhas ~1114-1125) — estatísticas, dailyData, endpointData e tabela de logs.
-2. `get_metrics_by_module` (linhas ~1234-1257) — cards por módulo.
-3. `get_metrics_sessions` (linhas ~953-966) — lista de sessões.
-4. `get_active_connections` (linhas ~1046-1061) — conexões ativas.
-5. `get_metric_users` (linhas ~1336-1346) — dropdown de filtro de usuário.
+```sql
+AND EXISTS (
+  SELECT 1 FROM dados_dachser.t_dados_maritimo dm
+  WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci
+      = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci
+)
+```
 
-Mantém `teste.test3` na lista (comportamento atual de teste).
+## Mudanças (apenas `supabase/functions/mariadb-proxy/index.ts`)
 
-## Detalhes técnicos
-- Não alterar o frontend (`src/pages/MetricsUsage.tsx`) — o filtro é aplicado server-side e cobre automaticamente os contadores, gráficos e a tabela.
-- `t_dachser_usage_logs` continua recebendo logs normalmente; apenas a leitura é filtrada.
-- Sem migração de banco.
+1. **`demurrage_get_containers`** (Monitor) — incluir o `EXISTS` em `whereConditions`.
+2. **`demurrage_get_containers_by_mbl`** — só retorna container se o MBL existir em `t_dados_maritimo.bl_number`; fallbacks por tracking/pre-invoice ficam condicionados à mesma checagem.
+3. **`demurrage_get_stats`** — agregados (totais, USD, risk_status) consideram apenas containers com MBL presente em `t_dados_maritimo`.
+4. **Demais actions `demurrage_*`** que listam containers/pre-invoices/disputas/analytics — aplicar o mesmo `EXISTS` (via join em `t_dachser_demurrage_containers` ou direto pelo MBL da pre-invoice).
 
-## Fora de escopo
-- Não mexer em logs de uso de outras telas (admin/UserManagement etc.) — o usuário pediu apenas a tela de Métricas.
-- Não tornar a lista configurável via UI; é hard-coded como já é hoje.
+## Não muda
+
+- Schema MariaDB (sem migrações, sem deletes).
+- Frontend/React.
+- `demurrage-recalc`, cron, free-time: cálculo continua igual; só a visibilidade na tela é afetada.
+
+## Memória
+
+Salvar `mem://sea/demurrage-visibility-filter-dados-maritimo`:
+"Toda listagem de demurrage filtra por EXISTS em `t_dados_maritimo.bl_number = t_dachser_demurrage_containers.mbl` (TRIM/UPPER + COLLATE utf8mb4_unicode_ci). Containers sem MBL correspondente ficam ocultos após a limpa."
+
+## Validação
+
+- `curl` em `demurrage_get_containers` antes/depois para confirmar redução.
+- Conferir um MBL removido da `t_dados_maritimo` — não deve mais aparecer.
+- Conferir MBLs presentes — continuam aparecendo normalmente.
