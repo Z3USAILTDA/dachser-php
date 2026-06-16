@@ -951,7 +951,7 @@ Deno.serve(async (req) => {
         const offset = (page - 1) * limit;
 
         const DACHSER_ADMIN_USERS_S = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
-        const HIDDEN_LOG_USERS_S = ["admin", "herbert.zacatei", "teste.test3"];
+        const HIDDEN_LOG_USERS_S = ["admin", "herbert.zacatei", "laricell", "teste.test3"];
         const isDachserUserS = sRequester && DACHSER_ADMIN_USERS_S.includes(sRequester);
 
         const conds: string[] = [
@@ -1042,7 +1042,7 @@ Deno.serve(async (req) => {
         const ACTIVITY_WINDOW_MIN = 20;
 
         const DACHSER_ADMIN_USERS_AC = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
-        const HIDDEN_LOG_USERS_AC = ["admin", "herbert.zacatei", "teste.test3"];
+        const HIDDEN_LOG_USERS_AC = ["admin", "herbert.zacatei", "laricell", "teste.test3"];
         const isDachserUserAC = acRequester && DACHSER_ADMIN_USERS_AC.includes(acRequester);
 
         const acConds: string[] = [
@@ -1108,7 +1108,7 @@ Deno.serve(async (req) => {
 
         // Constantes para controle de visibilidade de logs
         const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
-        const HIDDEN_LOG_USERS = ["admin", "herbert.zacatei", "teste.test3"];
+        const HIDDEN_LOG_USERS = ["admin", "herbert.zacatei", "laricell", "teste.test3"];
 
         let whereConditions = ["event_time BETWEEN ? AND ?", "username != 'unknown'", "username IS NOT NULL", "username != ''"];
         let params: (string | number)[] = [`${dateFrom} 00:00:00`, `${dateTo} 23:59:59`];
@@ -1225,7 +1225,7 @@ Deno.serve(async (req) => {
         const dTo = mDateTo || new Date().toISOString().split('T')[0];
 
         const DACHSER_ADMIN_USERS_M = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
-        const HIDDEN_LOG_USERS_M = ["admin", "herbert.zacatei", "teste.test3"];
+        const HIDDEN_LOG_USERS_M = ["admin", "herbert.zacatei", "laricell", "teste.test3"];
         const isDachserUserM = mRequester && DACHSER_ADMIN_USERS_M.includes(mRequester);
 
         const moduleEndpointPatterns: Record<string, string[]> = {
@@ -1325,7 +1325,7 @@ Deno.serve(async (req) => {
       case 'get_metric_users': {
         const { requesterUsername: metricRequester } = body;
         const DACHSER_ADMIN_USERS_MU = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
-        const HIDDEN_LOG_USERS_MU = ["admin", "herbert.zacatei", "teste.test3"];
+        const HIDDEN_LOG_USERS_MU = ["admin", "herbert.zacatei", "laricell", "teste.test3"];
         const isDachserUserMU = metricRequester && DACHSER_ADMIN_USERS_MU.includes(metricRequester);
 
         let usersQuery = `SELECT DISTINCT username FROM ai_agente.t_dachser_usage_logs WHERE username != 'unknown'`;
