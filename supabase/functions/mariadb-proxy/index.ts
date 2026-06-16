@@ -15152,13 +15152,11 @@ Deno.serve(async (req) => {
         console.log(`[demurrage_get_containers_by_mbl] Fetching containers for MBL: ${mbl}, invoice: ${invoice_number || 'none'}`);
         const batchSizeMbl = 100;
 
-        // Visibility gate: MBL must exist in t_dados_maritimo (post data cleanup)
-        const dmExists = await queryWithRetry(() => client.query(
-          `SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(?)) COLLATE utf8mb4_unicode_ci LIMIT 1`,
-          [mbl]
-        ), { label: 'demurrage_by_mbl_dados_maritimo_check', attempts: 2 });
-        if (!dmExists || dmExists.length === 0) {
-          console.log(`[demurrage_get_containers_by_mbl] MBL ${mbl} not found in t_dados_maritimo — skipping`);
+        // Visibility gate: MBL prefix must match one of the 13 supported carriers
+        const mblPrefix = String(mbl || '').trim().toUpperCase().slice(0, 4);
+        const allowedPrefixes = ['HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU'];
+        if (!allowedPrefixes.includes(mblPrefix)) {
+          console.log(`[demurrage_get_containers_by_mbl] MBL ${mbl} prefix not in allowed carriers — skipping`);
           result = { success: true, data: [] };
           break;
         }
