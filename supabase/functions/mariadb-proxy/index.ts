@@ -15058,7 +15058,11 @@ Deno.serve(async (req) => {
         const batchSize = 100;
         console.log('Fetching demurrage containers with filters:', { search, risk_status, cronos_status, cronos_status_list, cliente, armador });
 
-        let whereConditions = ['dc.active = 1'];
+        let whereConditions = [
+          'dc.active = 1',
+          // Visibility filter: container must exist in t_dados_maritimo (post data cleanup)
+          `EXISTS (SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci)`,
+        ];
         let params: (string | number)[] = [];
 
         if (search) {
@@ -15147,6 +15151,17 @@ Deno.serve(async (req) => {
         }
         console.log(`[demurrage_get_containers_by_mbl] Fetching containers for MBL: ${mbl}, invoice: ${invoice_number || 'none'}`);
         const batchSizeMbl = 100;
+
+        // Visibility gate: MBL must exist in t_dados_maritimo (post data cleanup)
+        const dmExists = await queryWithRetry(() => client.query(
+          `SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(?)) COLLATE utf8mb4_unicode_ci LIMIT 1`,
+          [mbl]
+        ), { label: 'demurrage_by_mbl_dados_maritimo_check', attempts: 2 });
+        if (!dmExists || dmExists.length === 0) {
+          console.log(`[demurrage_get_containers_by_mbl] MBL ${mbl} not found in t_dados_maritimo — skipping`);
+          result = { success: true, data: [] };
+          break;
+        }
 
         // Step 1: Search by normalized MBL in demurrage table
         let mblContainers = await queryWithRetry(() => client.query(
@@ -15483,8 +15498,9 @@ Deno.serve(async (req) => {
             SUM(CASE WHEN risk_status IN ('at_risk', 'critical', 'exceeded') THEN 1 ELSE 0 END) as at_risk,
             SUM(CASE WHEN cronos_status IN ('GATE_OUT', 'RETURNED') THEN 1 ELSE 0 END) as delivered,
             COALESCE(SUM(expected_cost_usd), 0) as total_demurrage_usd
-          FROM dados_dachser.t_dachser_demurrage_containers
+          FROM dados_dachser.t_dachser_demurrage_containers dc
           WHERE active = 1
+            AND EXISTS (SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci)
         `);
 
         const row = stats?.[0] || {};
@@ -15745,8 +15761,9 @@ Deno.serve(async (req) => {
           SELECT DISTINCT cliente, 
                  COUNT(*) as total_containers,
                  SUM(expected_cost_usd) as total_demurrage
-          FROM dados_dachser.t_dachser_demurrage_containers
+          FROM dados_dachser.t_dachser_demurrage_containers dc
           WHERE active = 1 AND cliente IS NOT NULL AND cliente != ''
+            AND EXISTS (SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci)
           GROUP BY cliente
           ORDER BY cliente ASC
         `);
@@ -15760,8 +15777,9 @@ Deno.serve(async (req) => {
 
         const armadores = await client.query(`
           SELECT DISTINCT armador, COUNT(*) as total_containers
-          FROM dados_dachser.t_dachser_demurrage_containers
+          FROM dados_dachser.t_dachser_demurrage_containers dc
           WHERE active = 1 AND armador IS NOT NULL AND armador != ''
+            AND EXISTS (SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci)
           GROUP BY armador
           ORDER BY armador ASC
         `);
@@ -15917,6 +15935,9 @@ Deno.serve(async (req) => {
           piWhereConditions.push('client_name LIKE ?');
           piParams.push(`%${piClient}%`);
         }
+
+        // Visibility filter: pre-invoice's shipment_mbl must exist in t_dados_maritimo
+        piWhereConditions.push(`EXISTS (SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dados_dachser.t_dachser_demurrage_pre_invoices.shipment_mbl)) COLLATE utf8mb4_unicode_ci)`);
 
         const piWhere = piWhereConditions.length > 0 ? `WHERE ${piWhereConditions.join(' AND ')}` : '';
 
@@ -16289,6 +16310,9 @@ Deno.serve(async (req) => {
           alertParams.push(alertStatus);
         }
 
+        // Visibility filter: alert's container must exist and its MBL must exist in t_dados_maritimo
+        alertConditions.push(`EXISTS (SELECT 1 FROM dados_dachser.t_dachser_demurrage_containers dc JOIN dados_dachser.t_dados_maritimo dm ON TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci WHERE dc.id = dados_dachser.t_dachser_demurrage_alerts.container_id)`);
+
         const alertWhere = alertConditions.length > 0 ? `WHERE ${alertConditions.join(' AND ')}` : '';
 
         const alerts = await client.query(`
@@ -16439,6 +16463,9 @@ Deno.serve(async (req) => {
           dispParams.push(`%${dispClient}%`);
         }
 
+        // Visibility filter: dispute's container must exist and its MBL must exist in t_dados_maritimo
+        dispConditions.push(`EXISTS (SELECT 1 FROM dados_dachser.t_dachser_demurrage_containers dc JOIN dados_dachser.t_dados_maritimo dm ON TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci WHERE dc.id = dados_dachser.t_dachser_demurrage_disputes.container_id)`);
+
         const dispWhere = dispConditions.length > 0 ? `WHERE ${dispConditions.join(' AND ')}` : '';
 
         const disputes = await client.query(`
@@ -16583,7 +16610,13 @@ Deno.serve(async (req) => {
             SUM(CASE WHEN status = 'lost' THEN 1 ELSE 0 END) as lost,
             COALESCE(SUM(disputed_amount_usd), 0) as total_disputed_usd,
             COALESCE(SUM(recovered_amount_usd), 0) as total_recovered_usd
-          FROM dados_dachser.t_dachser_demurrage_disputes
+          FROM dados_dachser.t_dachser_demurrage_disputes d
+          WHERE EXISTS (
+            SELECT 1 FROM dados_dachser.t_dachser_demurrage_containers dc
+            JOIN dados_dachser.t_dados_maritimo dm
+              ON TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci
+            WHERE dc.id = d.container_id
+          )
         `);
 
         const stats = dispStats?.[0] || {};
