@@ -15498,7 +15498,7 @@ Deno.serve(async (req) => {
             COALESCE(SUM(expected_cost_usd), 0) as total_demurrage_usd
           FROM dados_dachser.t_dachser_demurrage_containers dc
           WHERE active = 1
-            AND EXISTS (SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci)
+            AND LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU')
         `);
 
         const row = stats?.[0] || {};
