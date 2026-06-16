@@ -951,7 +951,7 @@ Deno.serve(async (req) => {
         const offset = (page - 1) * limit;
 
         const DACHSER_ADMIN_USERS_S = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
-        const HIDDEN_LOG_USERS_S = ["admin", "teste.test3"];
+        const HIDDEN_LOG_USERS_S = ["admin", "herbert.zacatei", "teste.test3"];
         const isDachserUserS = sRequester && DACHSER_ADMIN_USERS_S.includes(sRequester);
 
         const conds: string[] = [
@@ -960,10 +960,8 @@ Deno.serve(async (req) => {
           "session_id IS NOT NULL",
         ];
         const params: (string | number)[] = [`${dFrom} 00:00:00`, `${dTo} 23:59:59`];
-        if (isDachserUserS) {
-          conds.push(`username NOT IN (${HIDDEN_LOG_USERS_S.map(() => '?').join(', ')})`);
-          params.push(...HIDDEN_LOG_USERS_S);
-        }
+        conds.push(`username NOT IN (${HIDDEN_LOG_USERS_S.map(() => '?').join(', ')})`);
+        params.push(...HIDDEN_LOG_USERS_S);
         if (sUsername) {
           conds.push("username LIKE ?");
           params.push(`%${sUsername}%`);
@@ -1044,7 +1042,7 @@ Deno.serve(async (req) => {
         const ACTIVITY_WINDOW_MIN = 20;
 
         const DACHSER_ADMIN_USERS_AC = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
-        const HIDDEN_LOG_USERS_AC = ["admin", "teste.test3"];
+        const HIDDEN_LOG_USERS_AC = ["admin", "herbert.zacatei", "teste.test3"];
         const isDachserUserAC = acRequester && DACHSER_ADMIN_USERS_AC.includes(acRequester);
 
         const acConds: string[] = [
@@ -1055,10 +1053,8 @@ Deno.serve(async (req) => {
           "session_id IS NOT NULL",
         ];
         const acParams: (string | number)[] = [ACTIVITY_WINDOW_MIN];
-        if (isDachserUserAC) {
-          acConds.push(`username NOT IN (${HIDDEN_LOG_USERS_AC.map(() => '?').join(', ')})`);
-          acParams.push(...HIDDEN_LOG_USERS_AC);
-        }
+        acConds.push(`username NOT IN (${HIDDEN_LOG_USERS_AC.map(() => '?').join(', ')})`);
+        acParams.push(...HIDDEN_LOG_USERS_AC);
 
         const acRows = await client.query(
           `SELECT
@@ -1112,17 +1108,14 @@ Deno.serve(async (req) => {
 
         // Constantes para controle de visibilidade de logs
         const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
-        const HIDDEN_LOG_USERS = ["admin", "teste.test3"];
+        const HIDDEN_LOG_USERS = ["admin", "herbert.zacatei", "teste.test3"];
 
         let whereConditions = ["event_time BETWEEN ? AND ?", "username != 'unknown'", "username IS NOT NULL", "username != ''"];
         let params: (string | number)[] = [`${dateFrom} 00:00:00`, `${dateTo} 23:59:59`];
 
-        // Filtrar logs de usuários de teste para usuários DACHSER
-        const isDachserUser = requesterUsername && DACHSER_ADMIN_USERS.includes(requesterUsername);
-        if (isDachserUser) {
-          whereConditions.push(`username NOT IN (${HIDDEN_LOG_USERS.map(() => '?').join(', ')})`);
-          params.push(...HIDDEN_LOG_USERS);
-        }
+        // Sempre ocultar usuários admin/herbert.zacatei/teste das métricas
+        whereConditions.push(`username NOT IN (${HIDDEN_LOG_USERS.map(() => '?').join(', ')})`);
+        params.push(...HIDDEN_LOG_USERS);
 
         if (usernameFilter) {
           whereConditions.push("username LIKE ?");
@@ -1232,7 +1225,7 @@ Deno.serve(async (req) => {
         const dTo = mDateTo || new Date().toISOString().split('T')[0];
 
         const DACHSER_ADMIN_USERS_M = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
-        const HIDDEN_LOG_USERS_M = ["admin", "teste.test3"];
+        const HIDDEN_LOG_USERS_M = ["admin", "herbert.zacatei", "teste.test3"];
         const isDachserUserM = mRequester && DACHSER_ADMIN_USERS_M.includes(mRequester);
 
         const moduleEndpointPatterns: Record<string, string[]> = {
@@ -1251,10 +1244,8 @@ Deno.serve(async (req) => {
 
         const baseConds: string[] = ["event_time BETWEEN ? AND ?", "username != 'unknown'"];
         const baseParams: (string | number)[] = [`${dFrom} 00:00:00`, `${dTo} 23:59:59`];
-        if (isDachserUserM) {
-          baseConds.push(`username NOT IN (${HIDDEN_LOG_USERS_M.map(() => '?').join(', ')})`);
-          baseParams.push(...HIDDEN_LOG_USERS_M);
-        }
+        baseConds.push(`username NOT IN (${HIDDEN_LOG_USERS_M.map(() => '?').join(', ')})`);
+        baseParams.push(...HIDDEN_LOG_USERS_M);
         if (mUsername) {
           baseConds.push("username LIKE ?");
           baseParams.push(`%${mUsername}%`);
@@ -1334,16 +1325,14 @@ Deno.serve(async (req) => {
       case 'get_metric_users': {
         const { requesterUsername: metricRequester } = body;
         const DACHSER_ADMIN_USERS_MU = ["ana.tozzo", "danilo.pedroso", "teste.test3", "metricas"];
-        const HIDDEN_LOG_USERS_MU = ["admin", "teste.test3"];
+        const HIDDEN_LOG_USERS_MU = ["admin", "herbert.zacatei", "teste.test3"];
         const isDachserUserMU = metricRequester && DACHSER_ADMIN_USERS_MU.includes(metricRequester);
 
         let usersQuery = `SELECT DISTINCT username FROM ai_agente.t_dachser_usage_logs WHERE username != 'unknown'`;
         let usersParams: string[] = [];
 
-        if (isDachserUserMU) {
-          usersQuery += ` AND username NOT IN (${HIDDEN_LOG_USERS_MU.map(() => '?').join(', ')})`;
-          usersParams = [...HIDDEN_LOG_USERS_MU];
-        }
+        usersQuery += ` AND username NOT IN (${HIDDEN_LOG_USERS_MU.map(() => '?').join(', ')})`;
+        usersParams = [...HIDDEN_LOG_USERS_MU];
 
         usersQuery += ` ORDER BY username ASC`;
 
