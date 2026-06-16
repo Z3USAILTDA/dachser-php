@@ -32,3 +32,6 @@ type: feature
 - `supabase/functions/mariadb-proxy/index.ts` — `parseSheetRow`, `fetchDfvByProcVenc` (substitui `fetchDfvBySpo`), `mergeWithDfv`, `buildPreviewItems`.
 - `src/components/esteira/BatchImportVoucherDialog.tsx` — `EXPECTED_HEADERS`, `validate`, `markDuplicates`, `confirm`, `errorReasons`.
 - `src/components/esteira/BatchImportPreviewTable.tsx` — badge "Ambígua".
+
+## Dedup por SPO+data_insert
+Quando múltiplas linhas em `t_dados_financeiro_spo` compartilham o mesmo `nd` para a mesma chave processo+valor+vencimento, o backend (`fetchDfvByProcVenc`) mantém apenas a de `data_insert` mais recente antes de decidir ambiguidade. Assim, duplicidades reais na tabela de origem não inflam a contagem de candidatas ambíguas.
