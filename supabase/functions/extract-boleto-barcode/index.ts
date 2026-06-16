@@ -184,6 +184,8 @@ Existem DOIS formatos possíveis — identifique pelo primeiro dígito:
 
 NÃO COMPRIMA nem CORTE dígitos para encaixar em outro formato. Se vir 48 dígitos começando com 8, é arrecadação.
 
+IMPORTANTE — múltiplas linhas digitáveis: se o documento contiver MAIS DE UMA linha digitável (ex.: DAI com parcelas, GRU complementar, 2ª via, demonstrativos), retorne SOMENTE UMA — a do valor PRINCIPAL/TOTAL (geralmente a primeira ou a de maior valor). NUNCA concatene dígitos de códigos diferentes na mesma resposta. O campo LIMPA deve ter EXATAMENTE 47 ou 48 dígitos, nada além disso.
+
 RESPONDA exatamente neste formato:
 TIPO: BANCARIO ou ARRECADACAO
 FORMATADA: <linha formatada conforme o tipo>
