@@ -15925,6 +15925,9 @@ Deno.serve(async (req) => {
           piParams.push(`%${piClient}%`);
         }
 
+        // Visibility filter: pre-invoice's shipment_mbl must exist in t_dados_maritimo
+        piWhereConditions.push(`EXISTS (SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dados_dachser.t_dachser_demurrage_pre_invoices.shipment_mbl)) COLLATE utf8mb4_unicode_ci)`);
+
         const piWhere = piWhereConditions.length > 0 ? `WHERE ${piWhereConditions.join(' AND ')}` : '';
 
         const preInvoices = await client.query(`
