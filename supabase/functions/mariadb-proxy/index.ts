@@ -15152,6 +15152,17 @@ Deno.serve(async (req) => {
         console.log(`[demurrage_get_containers_by_mbl] Fetching containers for MBL: ${mbl}, invoice: ${invoice_number || 'none'}`);
         const batchSizeMbl = 100;
 
+        // Visibility gate: MBL must exist in t_dados_maritimo (post data cleanup)
+        const dmExists = await queryWithRetry(() => client.query(
+          `SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(?)) COLLATE utf8mb4_unicode_ci LIMIT 1`,
+          [mbl]
+        ), { label: 'demurrage_by_mbl_dados_maritimo_check', attempts: 2 });
+        if (!dmExists || dmExists.length === 0) {
+          console.log(`[demurrage_get_containers_by_mbl] MBL ${mbl} not found in t_dados_maritimo — skipping`);
+          result = { success: true, data: [] };
+          break;
+        }
+
         // Step 1: Search by normalized MBL in demurrage table
         let mblContainers = await queryWithRetry(() => client.query(
           `SELECT dc.* FROM dados_dachser.t_dachser_demurrage_containers dc WHERE TRIM(UPPER(dc.mbl)) = TRIM(UPPER(?))`,
