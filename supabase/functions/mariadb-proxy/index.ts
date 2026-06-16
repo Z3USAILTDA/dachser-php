@@ -15058,7 +15058,11 @@ Deno.serve(async (req) => {
         const batchSize = 100;
         console.log('Fetching demurrage containers with filters:', { search, risk_status, cronos_status, cronos_status_list, cliente, armador });
 
-        let whereConditions = ['dc.active = 1'];
+        let whereConditions = [
+          'dc.active = 1',
+          // Visibility filter: container must exist in t_dados_maritimo (post data cleanup)
+          `EXISTS (SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci)`,
+        ];
         let params: (string | number)[] = [];
 
         if (search) {
