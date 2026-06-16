@@ -22609,9 +22609,11 @@ Deno.serve(async (req) => {
             for (const a of allAnexos) (byV[a.voucher_id] ||= []).push(a.tipo);
             for (const it of items) {
               const tipos = [...(byV[it.voucher_id] || []), ...(masterTiposByVoucher[it.voucher_id] || [])];
-              const temFatura = tipos.some(t => t === 'FATURA' || t === 'FATURA_DEMONSTRATIVO');
-              const temBoleto = tipos.some(t => t === 'BOLETO' || t === 'BOLETO_INSTRUCOES');
+              let temFatura = tipos.some(t => t === 'FATURA' || t === 'FATURA_DEMONSTRATIVO');
+              let temBoleto = tipos.some(t => t === 'BOLETO' || t === 'BOLETO_INSTRUCOES');
               const temDai = tipos.some(t => t === 'DAI');
+              // DAI substitui FATURA e BOLETO no fluxo de lote
+              if (temDai) { temFatura = true; temBoleto = true; }
               const requerBoleto = it.forma_pagamento === 'BOLETO';
               const isPreLanc = String(it.etapa_destino || '').toUpperCase() === 'PRE_LANCAMENTO';
               const motivos: string[] = [];
