@@ -16461,8 +16461,8 @@ Deno.serve(async (req) => {
           dispParams.push(`%${dispClient}%`);
         }
 
-        // Visibility filter: dispute's container must exist and its MBL must exist in t_dados_maritimo
-        dispConditions.push(`EXISTS (SELECT 1 FROM dados_dachser.t_dachser_demurrage_containers dc JOIN dados_dachser.t_dados_maritimo dm ON TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci WHERE dc.id = dados_dachser.t_dachser_demurrage_disputes.container_id)`);
+        // Visibility filter: dispute's container MBL prefix must match supported carriers
+        dispConditions.push(`EXISTS (SELECT 1 FROM dados_dachser.t_dachser_demurrage_containers dc WHERE dc.id = dados_dachser.t_dachser_demurrage_disputes.container_id AND LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU'))`);
 
         const dispWhere = dispConditions.length > 0 ? `WHERE ${dispConditions.join(' AND ')}` : '';
 
