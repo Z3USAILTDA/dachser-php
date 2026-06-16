@@ -1,16 +1,12 @@
 ---
 name: Boleto Extraction Arrecadação Support
-description: extract-boleto-barcode supports both bancário (47 dig) and arrecadação/convênio (48 dig, starts with 8) FEBRABAN layouts
+description: extract-boleto-barcode suporta bancário (47) e arrecadação (48, começa com 8); trata DAIs com múltiplas linhas digitáveis
 type: feature
 ---
-A edge function `extract-boleto-barcode` aceita os dois layouts FEBRABAN:
+`extract-boleto-barcode` (Edge Function) suporta:
+- Boleto bancário: 47 dígitos, mod-10/mod-11.
+- Arrecadação/convênio (DAI, DARF, tributos): 48 dígitos começando com 8, mod-10 ou mod-11 conforme 3º dígito.
 
-- **Bancário**: 47 dígitos, 5 grupos. Validação: mod-10 nos 3 campos + mod-11 no DV geral (`validateLinhaDigitavel`).
-- **Arrecadação/Convênio** (DAI, DARF, tributos, taxas, concessionárias): **48 dígitos**, começa com `8`, em 4 grupos de 12 (11 dígitos + 1 DV). Algoritmo do DV depende do 3º dígito do código:
-  - `6` ou `7` → mod-10 (`calcModulo10`)
-  - `8` ou `9` → mod-11 com pesos cíclicos 2..9 (`calcModulo11Arrecadacao`); resto 0/1/10/11 → DV 0
-  - Função: `validateLinhaDigitavelArrecadacao`
-
-**Detecção do tipo**: pelo primeiro dígito do código limpo. Se vier 47 dígitos começando com `8`, considerar arrecadação truncada e re-pedir ao LLM com prompt focado em arrecadação (defesa contra "compressão" — o LLM corta um dígito para encaixar no formato bancário).
-
-`formatLinhaDigitavel` formata ambos os tamanhos. Resposta da função inclui `tipo: 'BANCARIO' | 'ARRECADACAO'`.
+**Múltiplas linhas digitáveis no mesmo PDF** (DAI com parcelas, GRU complementar, 2ª via):
+- Prompt instrui o modelo a retornar SOMENTE a linha do valor principal/total e nunca concatenar dígitos de códigos diferentes.
+- `parseExtractionResponse` defende contra resposta concatenada: se receber `>48` dígitos, fatia janelas de 48 (arrecadação, começando com 8) e 47 (bancário) testando validação matemática; usa a primeira que passar. Sem fatia válida, trunca aos primeiros 48/47 para que o erro reportado tenha tamanho coerente em vez de string gigante.
