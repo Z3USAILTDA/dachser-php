@@ -1078,11 +1078,11 @@ export const CreateVoucherDialog = ({
                         <FormLabel className="flex items-center gap-1.5 text-sm">
                           Fornecedor {isRmMode && <SyncIcon />}
                         </FormLabel>
-                        <FormControl>
+                         <FormControl>
                           <Input 
-                            placeholder={isRmMode ? "Preenchido pelo RM" : "Nome do fornecedor"}
+                            placeholder="Preenchido pela integração"
                             className="bg-background/50 border-border"
-                            disabled={isRmMode}
+                            disabled={true}
                             {...field} 
                           />
                         </FormControl>
@@ -1106,9 +1106,9 @@ export const CreateVoucherDialog = ({
                         </FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="00.000.000/0000-00"
+                            placeholder="Preenchido pela integração"
                             className="bg-background/50 border-border"
-                            disabled={isRmMode && !cnpjNotFound}
+                            disabled={true}
                             maxLength={18}
                             value={field.value || ""}
                             onChange={(e) => {
@@ -1159,8 +1159,9 @@ export const CreateVoucherDialog = ({
                         </FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="0.00"
+                            placeholder="Preenchido pela integração"
                             className="bg-background/50 border-border"
+                            disabled={true}
                             {...field} 
                           />
                         </FormControl>
@@ -1224,6 +1225,7 @@ export const CreateVoucherDialog = ({
                     control={form.control}
                     name="dataEmissaoDocumento"
                     label="Data de Emissão"
+                    disabled={true}
                   />
                 </div>
               </div>
