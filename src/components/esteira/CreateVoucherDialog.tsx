@@ -1159,8 +1159,9 @@ export const CreateVoucherDialog = ({
                         </FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="0.00"
+                            placeholder="Preenchido pela integração"
                             className="bg-background/50 border-border"
+                            disabled={true}
                             {...field} 
                           />
                         </FormControl>
