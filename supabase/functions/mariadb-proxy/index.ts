@@ -17577,6 +17577,61 @@ Deno.serve(async (req) => {
         const hasMonthFilter = !!(dataVencInicio && dataVencFim);
         console.log(`[get_vouchers_combined] Fetching active + pending RM vouchers. monthFilter(vencimento)=${hasMonthFilter ? `${dataVencInicio}..${dataVencFim}` : 'none'}`);
 
+        // Garante colunas ref_fornecedor / mawb_mbl em t_vouchers e mantém backfill
+        // a partir de t_dados_financeiro_voucher e t_dados_financeiro_spo, em qualquer etapa.
+        // ALTERs são idempotentes (IF NOT EXISTS); UPDATEs cobrem apenas linhas ainda NULL.
+        try {
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS ref_fornecedor VARCHAR(255) DEFAULT NULL`);
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS mawb_mbl VARCHAR(255) DEFAULT NULL`);
+        } catch (e) {
+          console.log('[get_vouchers_combined] ALTER ref_fornecedor/mawb_mbl skipped:', (e as Error)?.message);
+        }
+        try {
+          // Backfill a partir de DFV (t_dados_financeiro_voucher)
+          await client.execute(`
+            UPDATE dados_dachser.t_vouchers v
+            JOIN (
+              SELECT SUBSTRING_INDEX(TRIM(nd), ' ', 1) AS nd_key,
+                     MAX(ref_fornecedor) AS ref_fornecedor,
+                     MAX(mawb_mbl) AS mawb_mbl
+              FROM dados_dachser.t_dados_financeiro_voucher
+              WHERE (ref_fornecedor IS NOT NULL AND ref_fornecedor <> '')
+                 OR (mawb_mbl IS NOT NULL AND mawb_mbl <> '')
+              GROUP BY nd_key
+            ) dfv
+              ON SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
+               = dfv.nd_key COLLATE utf8mb4_general_ci
+            SET v.ref_fornecedor = COALESCE(NULLIF(v.ref_fornecedor,''), dfv.ref_fornecedor),
+                v.mawb_mbl       = COALESCE(NULLIF(v.mawb_mbl,''),       dfv.mawb_mbl)
+            WHERE (v.ref_fornecedor IS NULL OR v.ref_fornecedor = '' OR v.mawb_mbl IS NULL OR v.mawb_mbl = '')
+          `);
+        } catch (e) {
+          console.log('[get_vouchers_combined] backfill from DFV skipped:', (e as Error)?.message);
+        }
+        try {
+          // Backfill a partir de DFS (t_dados_financeiro_spo) para vouchers que não tinham match em DFV
+          await client.execute(`
+            UPDATE dados_dachser.t_vouchers v
+            JOIN (
+              SELECT SUBSTRING_INDEX(TRIM(nd), ' ', 1) AS nd_key,
+                     MAX(ref_fornecedor) AS ref_fornecedor,
+                     MAX(mawb_mbl) AS mawb_mbl
+              FROM dados_dachser.t_dados_financeiro_spo
+              WHERE (ref_fornecedor IS NOT NULL AND ref_fornecedor <> '')
+                 OR (mawb_mbl IS NOT NULL AND mawb_mbl <> '')
+              GROUP BY nd_key
+            ) dfs
+              ON SUBSTRING_INDEX(TRIM(v.numero_spo), ' ', 1) COLLATE utf8mb4_general_ci
+               = dfs.nd_key COLLATE utf8mb4_general_ci
+            SET v.ref_fornecedor = COALESCE(NULLIF(v.ref_fornecedor,''), dfs.ref_fornecedor),
+                v.mawb_mbl       = COALESCE(NULLIF(v.mawb_mbl,''),       dfs.mawb_mbl)
+            WHERE (v.ref_fornecedor IS NULL OR v.ref_fornecedor = '' OR v.mawb_mbl IS NULL OR v.mawb_mbl = '')
+          `);
+        } catch (e) {
+          console.log('[get_vouchers_combined] backfill from DFS skipped (coluna pode não existir em t_dados_financeiro_spo):', (e as Error)?.message);
+        }
+
+
         // Apenas RASCUNHO, OPERACAO e FINANCEIRO aparecem independente do mês.
         // Demais etapas (A_PROCESSAR, FISCAL, SUPERVISOR, ROBO, AJUSTE_*, PRE_LANCAMENTO,
         // CANCELADO) respeitam o filtro via vencimento.
