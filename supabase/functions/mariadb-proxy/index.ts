@@ -15062,6 +15062,8 @@ Deno.serve(async (req) => {
           'dc.active = 1',
           // Visibility filter: MBL prefix must match one of the 13 supported carriers
           `LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU')`,
+          // Visibility filter: container must exist in t_sea_tracking_current (by container or mbl_id)
+          `EXISTS (SELECT 1 FROM dados_dachser.t_sea_tracking_current tc WHERE UPPER(TRIM(tc.container)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.numero)) COLLATE utf8mb4_unicode_ci OR UPPER(TRIM(tc.mbl_id)) COLLATE utf8mb4_unicode_ci = UPPER(TRIM(dc.mbl)) COLLATE utf8mb4_unicode_ci)`,
         ];
         let params: (string | number)[] = [];
 
