@@ -16599,7 +16599,13 @@ Deno.serve(async (req) => {
             SUM(CASE WHEN status = 'lost' THEN 1 ELSE 0 END) as lost,
             COALESCE(SUM(disputed_amount_usd), 0) as total_disputed_usd,
             COALESCE(SUM(recovered_amount_usd), 0) as total_recovered_usd
-          FROM dados_dachser.t_dachser_demurrage_disputes
+          FROM dados_dachser.t_dachser_demurrage_disputes d
+          WHERE EXISTS (
+            SELECT 1 FROM dados_dachser.t_dachser_demurrage_containers dc
+            JOIN dados_dachser.t_dados_maritimo dm
+              ON TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci
+            WHERE dc.id = d.container_id
+          )
         `);
 
         const stats = dispStats?.[0] || {};
