@@ -1,38 +1,27 @@
-## Contexto
+## Objetivo
+Na importação em lote, quando o lookup em `t_dados_financeiro_spo` retorna mais de uma linha que compartilha o **mesmo SPO (nd) + processo + valor + vencimento**, considerar apenas a ocorrência com `data_insert` mais recente, evitando que duplicidades reais da tabela de origem inflem a contagem de candidatas ambíguas na pré-visualização.
 
-Na importação em lote (`BatchDocumentBinderDialog`), quando um documento é vinculado a um voucher (ou master group), o sistema apenas registra o anexo via `bind_batch_document_to_voucher` / `bind_batch_document_to_master_group`. Diferente do fluxo unitário (`VoucherRascunhoActions`, `VoucherMasterForm`, etc.), nenhuma extração de linha digitável é disparada.
+## Mudança (apenas backend)
+Arquivo: `supabase/functions/mariadb-proxy/index.ts` — função `fetchDfvByProcVenc` (~linha 21830) e `buildPreviewItems` (~21945). Sem alterações em frontend.
 
-Regra existente: anexo `DAI` dispensa fatura/boleto (`temDai` no `mariadb-proxy`).
+### 1. Incluir `data_insert` no SELECT
+Adicionar `data_insert` à lista de colunas retornadas pelo SELECT em `t_dados_financeiro_spo` (linha 21855), para permitir ordenar as candidatas.
 
-## Mudança
+### 2. Deduplicar por SPO dentro de cada chave processo|valor|vencimento
+Logo após popular `byKey` (linha 21868), para cada chave aplicar:
+- Agrupar as linhas por `TRIM(nd)` (SPO).
+- Para cada grupo de mesmo SPO, manter somente a linha com o maior `data_insert` (timestamps nulos perdem para qualquer não-nulo; empate vence a primeira encontrada).
+- O array final por chave passa a ter no máximo uma linha por SPO distinto.
 
-Tratar `DAI` como portador de linha digitável no fluxo de lote, **apenas quando o SPO não tiver BOLETO vinculado** — quando há BOLETO, ele é a única fonte de linha digitável (mantém o comportamento atual do fluxo unitário).
-
-### Frontend — `src/components/esteira/BatchDocumentBinderDialog.tsx` (função `doBind`, ~linha 208)
-
-Após cada bind bem-sucedido, para cada `voucher_id` afetado:
-
-1. Determinar a fonte de linha digitável:
-   - Se `tipoAnexo === "BOLETO"` → usar o `file_url` do doc recém-vinculado.
-   - Se `tipoAnexo === "DAI"` → consultar os anexos existentes do voucher (após `refresh()`, via `checklist`/`docs` do lote já carregados, ou via `mariadb-proxy` `get_voucher_anexos`); se já houver qualquer anexo com `tipo === "BOLETO"` vinculado a esse voucher, **pular** a extração.
-   - Outros tipos → não extrai.
-2. Chamar `supabase.functions.invoke("extract-boleto-barcode", { body: { fileUrl } })`.
-3. Em sucesso (`linhaDigitavel` presente), gravar via `mariadb-proxy` `save_linha_digitavel` (`linha_digitavel` + `codigo_barras`) para cada `voucher_id` do bind (1 no single, N no master).
-4. Toast informativo; erros apenas em `console.warn` — não bloquear o fluxo do lote.
-
-### Decisão de "tem boleto"
-
-Usar a lista `docs` do próprio lote (já carregada em `refresh()`) filtrando por `voucher_id` (single) ou `master_voucher_ids` (master) e `tipo_anexo === "BOLETO"`. Isso evita roundtrip extra e cobre o caso em que BOLETO e DAI são vinculados no mesmo lote.
-
-Ordem importa: se o usuário vincular DAI antes do BOLETO, a extração do DAI ocorre, e depois o BOLETO (quando vinculado) sobrescreve via fluxo normal. Comportamento aceitável dado o requisito ("apenas se nenhum boleto for vinculado junto").
-
-### Não alterar
-
-- `extract-boleto-barcode`, schema, handlers `bind_*` no `mariadb-proxy`.
-- Regra `temDai` de obrigatoriedade.
-- Componentes fora do `BatchDocumentBinderDialog`.
+### 3. Comportamento resultante em `buildPreviewItems`
+Nenhuma alteração de lógica — apenas se beneficia do array já deduplicado:
+- 1 SPO distinto restante → linha resolvida normalmente (não ambígua, mesmo que originalmente houvesse 2+ inserts para o mesmo SPO).
+- 2+ SPOs distintos → comportamento atual de ambiguidade preservado (`is_ambiguous`, `ambiguous_total`, mensagem "SPO ambígua: N candidatas…").
 
 ## Fora de escopo
+- Frontend (`BatchImportVoucherDialog`, `BatchImportPreviewTable`): nenhuma alteração; `markDuplicates` continua reagindo a `ambiguous_group_key` e `ambiguous_total` enviados pelo backend.
+- Outras rotas de lookup (unitário, RM, vouchers existentes).
+- Regra `dedupe-by-spo-fornecedor-valor` (cron de duplicados em `t_vouchers`) — independente; permanece como está.
 
-- Edição/criação unitária de voucher.
-- Mudança no parser de DAI ou suporte a novos formatos de linha digitável.
+## Memória
+Atualizar `mem://vouchers/batch-import-lookup-by-processo-valor-vencimento` adicionando: "Quando múltiplas linhas em `t_dados_financeiro_spo` compartilham o mesmo `nd` para a mesma chave processo+valor+vencimento, o backend mantém apenas a de `data_insert` mais recente antes de decidir ambiguidade."
