@@ -15777,7 +15777,7 @@ Deno.serve(async (req) => {
           SELECT DISTINCT armador, COUNT(*) as total_containers
           FROM dados_dachser.t_dachser_demurrage_containers dc
           WHERE active = 1 AND armador IS NOT NULL AND armador != ''
-            AND EXISTS (SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci)
+            AND LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU')
           GROUP BY armador
           ORDER BY armador ASC
         `);
