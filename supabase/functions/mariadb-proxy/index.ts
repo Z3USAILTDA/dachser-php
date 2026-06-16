@@ -22550,9 +22550,11 @@ Deno.serve(async (req) => {
             const tiposReais = ax.map((a: any) => a.tipo);
             const tiposGrupo = masterAnexosByVoucher[i.voucher_id] || [];
             const tiposAll = [...tiposReais, ...tiposGrupo];
-            const temFatura = tiposAll.some(t => t === 'FATURA' || t === 'FATURA_DEMONSTRATIVO');
-            const temBoleto = tiposAll.some(t => t === 'BOLETO' || t === 'BOLETO_INSTRUCOES');
+            let temFatura = tiposAll.some(t => t === 'FATURA' || t === 'FATURA_DEMONSTRATIVO');
+            let temBoleto = tiposAll.some(t => t === 'BOLETO' || t === 'BOLETO_INSTRUCOES');
             const temDai = tiposAll.some(t => t === 'DAI');
+            // DAI substitui FATURA e BOLETO no fluxo de lote
+            if (temDai) { temFatura = true; temBoleto = true; }
             const requerBoleto = i.forma_pagamento === 'BOLETO';
             const isPreLanc = String(i.etapa_destino || '').toUpperCase() === 'PRE_LANCAMENTO';
             let status = 'COMPLETO';
@@ -22607,9 +22609,11 @@ Deno.serve(async (req) => {
             for (const a of allAnexos) (byV[a.voucher_id] ||= []).push(a.tipo);
             for (const it of items) {
               const tipos = [...(byV[it.voucher_id] || []), ...(masterTiposByVoucher[it.voucher_id] || [])];
-              const temFatura = tipos.some(t => t === 'FATURA' || t === 'FATURA_DEMONSTRATIVO');
-              const temBoleto = tipos.some(t => t === 'BOLETO' || t === 'BOLETO_INSTRUCOES');
+              let temFatura = tipos.some(t => t === 'FATURA' || t === 'FATURA_DEMONSTRATIVO');
+              let temBoleto = tipos.some(t => t === 'BOLETO' || t === 'BOLETO_INSTRUCOES');
               const temDai = tipos.some(t => t === 'DAI');
+              // DAI substitui FATURA e BOLETO no fluxo de lote
+              if (temDai) { temFatura = true; temBoleto = true; }
               const requerBoleto = it.forma_pagamento === 'BOLETO';
               const isPreLanc = String(it.etapa_destino || '').toUpperCase() === 'PRE_LANCAMENTO';
               const motivos: string[] = [];
