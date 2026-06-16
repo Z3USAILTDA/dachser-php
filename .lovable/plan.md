@@ -1,37 +1,55 @@
-## Objetivo
+## Mudança no filtro de visibilidade de Demurrage
 
-Exibir na tela de Demurrage apenas processos cujo MBL ainda exista em `dados_dachser.t_dados_maritimo.bl_number` (tabela passou por limpa de dados). Containers órfãos em `t_dachser_demurrage_containers` deixam de aparecer em todas as listagens do módulo.
+Em vez de exigir match exato MBL↔bl_number entre `t_dachser_demurrage_containers` e `t_dados_maritimo`, vamos restringir a visibilidade apenas pelo **prefixo do MBL do container de demurrage**, considerando os 13 armadores válidos:
 
-## Filtro padrão (SQL)
-
-```sql
-AND EXISTS (
-  SELECT 1 FROM dados_dachser.t_dados_maritimo dm
-  WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci
-      = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci
-)
+```
+HLCU, MEDU, ONEY, COSU, ZIMU, MAEU, SUDU,
+CMAU, EISU, YMLU, HDMU, PCIU, WHLU
 ```
 
-## Mudanças (apenas `supabase/functions/mariadb-proxy/index.ts`)
+### Comportamento
 
-1. **`demurrage_get_containers`** (Monitor) — incluir o `EXISTS` em `whereConditions`.
-2. **`demurrage_get_containers_by_mbl`** — só retorna container se o MBL existir em `t_dados_maritimo.bl_number`; fallbacks por tracking/pre-invoice ficam condicionados à mesma checagem.
-3. **`demurrage_get_stats`** — agregados (totais, USD, risk_status) consideram apenas containers com MBL presente em `t_dados_maritimo`.
-4. **Demais actions `demurrage_*`** que listam containers/pre-invoices/disputas/analytics — aplicar o mesmo `EXISTS` (via join em `t_dachser_demurrage_containers` ou direto pelo MBL da pre-invoice).
+- Remover o `EXISTS` em `t_dados_maritimo` adicionado anteriormente em todas as queries de demurrage.
+- Adicionar em todas as queries de demurrage um filtro:
+  ```sql
+  UPPER(TRIM(dc.mbl)) LIKE 'HLCU%' OR
+  UPPER(TRIM(dc.mbl)) LIKE 'MEDU%' OR
+  ... (13 prefixos)
+  ```
+  (implementado como `LEFT(UPPER(TRIM(dc.mbl)),4) IN ('HLCU','MEDU',...)` para performance/leitura).
 
-## Não muda
+### Arquivos afetados
 
-- Schema MariaDB (sem migrações, sem deletes).
-- Frontend/React.
-- `demurrage-recalc`, cron, free-time: cálculo continua igual; só a visibilidade na tela é afetada.
+`supabase/functions/mariadb-proxy/index.ts` — nas mesmas 9 actions já tocadas:
+1. `demurrage_get_containers`
+2. `demurrage_get_stats`
+3. `demurrage_get_unique_clients`
+4. `demurrage_get_unique_armadores`
+5. `demurrage_get_pre_invoices` (sobre `shipment_mbl`)
+6. `demurrage_get_alerts` (via join no container)
+7. `demurrage_get_disputes` (via join no container)
+8. `demurrage_get_dispute_stats` (via join no container)
+9. `demurrage_get_containers_by_mbl` (guard por prefixo)
 
-## Memória
+### Constante única
 
-Salvar `mem://sea/demurrage-visibility-filter-dados-maritimo`:
-"Toda listagem de demurrage filtra por EXISTS em `t_dados_maritimo.bl_number = t_dachser_demurrage_containers.mbl` (TRIM/UPPER + COLLATE utf8mb4_unicode_ci). Containers sem MBL correspondente ficam ocultos após a limpa."
+Definir no topo do arquivo:
+```ts
+const DEMURRAGE_MBL_PREFIXES = ['HLCU','MEDU','ONEY','COSU','ZIMU','MAEU','SUDU','CMAU','EISU','YMLU','HDMU','PCIU','WHLU'];
+const DEMURRAGE_PREFIX_FILTER = `LEFT(UPPER(TRIM(dc.mbl)),4) IN (${DEMURRAGE_MBL_PREFIXES.map(p=>`'${p}'`).join(',')})`;
+```
+e reaproveitar nas 9 queries (com alias ajustado por contexto, ex.: `pi.shipment_mbl` em pre-invoices).
 
-## Validação
+### Sem mudanças
 
-- `curl` em `demurrage_get_containers` antes/depois para confirmar redução.
-- Conferir um MBL removido da `t_dados_maritimo` — não deve mais aparecer.
-- Conferir MBLs presentes — continuam aparecendo normalmente.
+- Sem alteração de schema.
+- Sem alteração no frontend.
+- Sem mexer em cálculos/SLA.
+- Memória `mem://sea/demurrage-visibility-filter-dados-maritimo` será atualizada para refletir o novo critério (prefixo de armador, não `EXISTS` em `t_dados_maritimo`).
+
+### Validação
+
+- `curl` no `mariadb-proxy` para `demurrage_get_stats` e `demurrage_get_containers` e checar:
+  - total > 6
+  - todos os MBLs retornados começam com um dos 13 prefixos
+  - prefixos fora da lista (ex.: `SZP%`, `0001%`) não aparecem
