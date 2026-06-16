@@ -1225,6 +1225,7 @@ export const CreateVoucherDialog = ({
                     control={form.control}
                     name="dataEmissaoDocumento"
                     label="Data de Emissão"
+                    disabled={true}
                   />
                 </div>
               </div>
