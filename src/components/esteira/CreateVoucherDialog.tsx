@@ -1106,9 +1106,9 @@ export const CreateVoucherDialog = ({
                         </FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="00.000.000/0000-00"
+                            placeholder="Preenchido pela integração"
                             className="bg-background/50 border-border"
-                            disabled={isRmMode && !cnpjNotFound}
+                            disabled={true}
                             maxLength={18}
                             value={field.value || ""}
                             onChange={(e) => {
