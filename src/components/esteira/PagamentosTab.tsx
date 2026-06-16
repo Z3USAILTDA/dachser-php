@@ -69,6 +69,8 @@ import { format as fnsFormat } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 import { MoedaBadge } from "./MoedaBadge";
 import { StatusComprovanteBadge } from "./StatusComprovanteBadge";
+import { downloadViaBlob } from "@/utils/blobDownload";
+
 
 interface PagamentoItem {
   id: string;
@@ -1604,15 +1606,14 @@ export const PagamentosTab = () => {
                                   fileName={anexo.file_name || "arquivo"}
                                   fileUrl={anexo.file_url}
                                   fileType={anexo.tipo || "OUTROS"}
-                                  onDownload={() => {
-                                    const link = document.createElement("a");
-                                    link.href = anexo.file_url;
-                                    link.download = anexo.file_name || "arquivo";
-                                    link.target = "_blank";
-                                    document.body.appendChild(link);
-                                    link.click();
-                                    document.body.removeChild(link);
+                                  onDownload={async () => {
+                                    try {
+                                      await downloadViaBlob(anexo.file_url, anexo.file_name || "arquivo");
+                                    } catch (e) {
+                                      console.error("Falha no download:", e);
+                                    }
                                   }}
+
                                   allFiles={anexosDialog.filter((a: any) => a.file_url).map((a: any) => ({ fileName: a.file_name || "arquivo", fileUrl: a.file_url, fileType: a.tipo || "OUTROS" }))}
                                   initialIndex={anexosDialog.filter((a: any) => a.file_url).findIndex((a: any) => a.id === anexo.id)}
                                 />
