@@ -15750,8 +15750,9 @@ Deno.serve(async (req) => {
           SELECT DISTINCT cliente, 
                  COUNT(*) as total_containers,
                  SUM(expected_cost_usd) as total_demurrage
-          FROM dados_dachser.t_dachser_demurrage_containers
+          FROM dados_dachser.t_dachser_demurrage_containers dc
           WHERE active = 1 AND cliente IS NOT NULL AND cliente != ''
+            AND EXISTS (SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci)
           GROUP BY cliente
           ORDER BY cliente ASC
         `);
@@ -15765,8 +15766,9 @@ Deno.serve(async (req) => {
 
         const armadores = await client.query(`
           SELECT DISTINCT armador, COUNT(*) as total_containers
-          FROM dados_dachser.t_dachser_demurrage_containers
+          FROM dados_dachser.t_dachser_demurrage_containers dc
           WHERE active = 1 AND armador IS NOT NULL AND armador != ''
+            AND EXISTS (SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci)
           GROUP BY armador
           ORDER BY armador ASC
         `);
