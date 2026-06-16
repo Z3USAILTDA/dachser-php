@@ -1,32 +1,37 @@
 ## Objetivo
 
-Quando um conjunto de pré-lançados já tem um DAI vinculado (com linha digitável extraída) e, em seguida, recebe um BOLETO durante a formação do voucher master no lote, o sistema deve **sempre prevalecer a linha digitável do BOLETO**, sobrescrevendo a que veio do DAI.
+Quando um voucher do lote tem **DAI vinculado**, o sistema deve tratar essa vinculação como satisfazendo **tanto fatura quanto boleto** — sem mostrar badges "Falta Fatura"/"Falta Boleto" nem bloquear "Finalizar lote".
 
 ## Diagnóstico
 
-Em `src/components/esteira/BatchDocumentBinderDialog.tsx` (linhas ~240-330):
+Em `supabase/functions/mariadb-proxy/index.ts`, dois blocos calculam pendências do lote a partir dos anexos:
 
-1. Cada vinculação acumula `extractionTargets` (BOLETO ou DAI).
-2. O filtro `voucherHasBoleto(vid)` consulta apenas o `docs` já carregado — não considera BOLETOs que estão sendo vinculados na **mesma** ação.
-3. O loop `for (const target of extractionTargets)` processa na ordem em que os documentos foram selecionados. Se um DAI for processado **depois** de um BOLETO no mesmo batch, ele pode sobrescrever a linha digitável do BOLETO (porque `save_linha_digitavel` sempre faz UPDATE direto em `t_vouchers.linha_digitavel`).
-4. Se o BOLETO chega numa ação posterior à do DAI, hoje funciona (overwrite acontece). O bug está apenas no caso de DAI + BOLETO na mesma ação, ou em ações intercaladas onde `docs` não foi atualizado a tempo.
+1. `get_batch_import_status` (linhas ~22548-22567) — produz o `checklist` consumido por `BatchVoucherChecklist.tsx` (badges Fatura/Boleto e status `PENDENTE_FATURA_E_BOLETO`, etc.).
+2. `finalize_batch_import` (linhas ~22608-22624) — bloqueia finalização quando `motivos` contém `PENDENTE_FATURA`/`PENDENTE_BOLETO`.
 
-## Mudança (cirúrgica, somente frontend)
+Hoje, o `temDai` só é considerado no caso especial de `PRE_LANCAMENTO`. No fluxo normal, DAI não substitui fatura nem boleto.
 
-Arquivo único: `src/components/esteira/BatchDocumentBinderDialog.tsx`.
+## Mudança (cirúrgica, somente backend)
 
-1. **Considerar os BOLETOs em vinculação atual** em `voucherHasBoleto`: além de `docs`, marcar como "tem boleto" qualquer `vid` que apareça em algum `extractionTargets[i]` com `tipo === "BOLETO"`.
-2. **Ordenar `extractionTargets`** antes do loop: processar todos os **DAI primeiro** e os **BOLETO por último**. Assim, se ambos coexistem para o mesmo voucher, o BOLETO sempre faz o último `save_linha_digitavel` e prevalece — mesmo em race de cache do `docs`.
-3. Manter o filtro existente que pula DAI quando já existe BOLETO no voucher (agora reforçado pelo item 1).
+Em ambos os blocos, antes de derivar `status`/`motivos`:
 
-Nenhuma alteração no backend (`mariadb-proxy`, `extract-boleto-barcode`) ou em outros componentes.
+```ts
+if (temDai) { temFatura = true; temBoleto = true; }
+```
+
+Isso garante:
+- O checklist mostra Fatura ✓ e Boleto ✓ quando há DAI.
+- O `status` resulta em `COMPLETO`.
+- `finalize_batch_import` não acrescenta `PENDENTE_FATURA`/`PENDENTE_BOLETO` ao motivo do voucher com DAI.
+
+Nenhuma mudança no frontend. Lógica de extração de linha digitável e prioridade BOLETO>DAI permanecem intactas.
 
 ## Fora de escopo
 
-- Comportamento do fluxo normal da esteira (não-lote).
-- Demais ações do `BatchDocumentBinderDialog` (preview, master/SPO numbering, anexos).
-- Backend `save_linha_digitavel` (já sobrescreve corretamente).
+- Fluxo normal da esteira (fora de lote).
+- Regras de PRE_LANCAMENTO (já tratadas).
+- Estrutura de anexos, validações de tipo, e o front `BatchVoucherChecklist`.
 
 ## Memória
 
-Atualizar `mem://vouchers/document-validation-rules-v2` (ou adicionar nota curta) com a regra: **"No lote, BOLETO sempre prevalece sobre DAI para `linha_digitavel`; DAI só é fonte se nenhum BOLETO estiver vinculado nem sendo vinculado no mesmo conjunto."**
+Atualizar `mem://vouchers/document-validation-rules-v2` ou adicionar `mem://vouchers/dai-substitui-fatura-e-boleto-no-lote` com a regra: **"No lote, anexo DAI substitui tanto FATURA quanto BOLETO; voucher fica COMPLETO e pode finalizar mesmo sem fatura/boleto físicos."**
