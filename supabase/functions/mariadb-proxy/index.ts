@@ -15487,8 +15487,9 @@ Deno.serve(async (req) => {
             SUM(CASE WHEN risk_status IN ('at_risk', 'critical', 'exceeded') THEN 1 ELSE 0 END) as at_risk,
             SUM(CASE WHEN cronos_status IN ('GATE_OUT', 'RETURNED') THEN 1 ELSE 0 END) as delivered,
             COALESCE(SUM(expected_cost_usd), 0) as total_demurrage_usd
-          FROM dados_dachser.t_dachser_demurrage_containers
+          FROM dados_dachser.t_dachser_demurrage_containers dc
           WHERE active = 1
+            AND EXISTS (SELECT 1 FROM dados_dachser.t_dados_maritimo dm WHERE TRIM(UPPER(dm.bl_number)) COLLATE utf8mb4_unicode_ci = TRIM(UPPER(dc.mbl)) COLLATE utf8mb4_unicode_ci)
         `);
 
         const row = stats?.[0] || {};
