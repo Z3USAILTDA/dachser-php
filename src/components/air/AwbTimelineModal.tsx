@@ -101,9 +101,21 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
         peso: row.peso ?? null,
       }));
 
-      const deduped = rawEvents.filter((event: TimelineEvent, index: number) => {
+      // Discard events whose date falls beyond tomorrow (end of day) — too far in the future.
+      // Hours-ahead or next-day events are allowed.
+      const maxFuture = new Date();
+      maxFuture.setHours(23, 59, 59, 999);
+      maxFuture.setDate(maxFuture.getDate() + 1);
+      const filteredFuture = rawEvents.filter((event: TimelineEvent) => {
+        if (!event.data_hora_evento) return true;
+        const d = new Date(event.data_hora_evento);
+        if (isNaN(d.getTime())) return true;
+        return d.getTime() <= maxFuture.getTime();
+      });
+
+      const deduped = filteredFuture.filter((event: TimelineEvent, index: number) => {
         if (index === 0) return true;
-        return event.codigo_evento?.toUpperCase() !== rawEvents[index - 1].codigo_evento?.toUpperCase();
+        return event.codigo_evento?.toUpperCase() !== filteredFuture[index - 1].codigo_evento?.toUpperCase();
       });
 
       // Backend (mariadb-proxy) already sorts events DESC by date with IATA tiebreaker.
