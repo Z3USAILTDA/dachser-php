@@ -101,17 +101,17 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
         peso: row.peso ?? null,
       }));
 
-      // Discard events whose date falls beyond tomorrow (end of day) — too far in the future.
-      // Hours-ahead or next-day events are allowed.
+      // Discard events whose date falls after the end of today — too far in the future.
+      // Only same-day future events (hours ahead) are allowed.
       const maxFuture = new Date();
       maxFuture.setHours(23, 59, 59, 999);
-      maxFuture.setDate(maxFuture.getDate() + 1);
       const filteredFuture = rawEvents.filter((event: TimelineEvent) => {
         if (!event.data_hora_evento) return true;
         const d = new Date(event.data_hora_evento);
         if (isNaN(d.getTime())) return true;
         return d.getTime() <= maxFuture.getTime();
       });
+
 
       const deduped = filteredFuture.filter((event: TimelineEvent, index: number) => {
         if (index === 0) return true;
