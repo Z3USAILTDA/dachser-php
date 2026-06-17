@@ -1238,9 +1238,13 @@ const TrackingAereo = () => {
                   <FilePlus className="w-3.5 h-3.5" />
                   Novo Processo
                 </button>
-                <button onClick={() => { trackEvent("air.refresh"); fetchData(true); }} className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)]">
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  Atualizar
+                <button
+                  onClick={() => { trackEvent("air.refresh"); fetchData(true); }}
+                  disabled={isLoadingData}
+                  className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)] disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingData ? "animate-spin" : ""}`} />
+                  {isLoadingData ? "Atualizando..." : "Atualizar"}
                 </button>
               </div>
             </div>
