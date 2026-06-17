@@ -1459,9 +1459,19 @@ async function computePayload(): Promise<string> {
     const FLIGHT_FIELDS = ['Flight', 'flight', 'voo', 'Voo', 'flight_number', 'flightNumber', 'numero_voo'];
     const TEXT_FIELDS = ['status', 'Status', 'Description', 'description', 'details', 'title', 'event_description', 'evento', 'descricao', 'remarks'];
 
-
+    // ─── Master-level discrepancy propagation ───
+    // If ANY HAWB of a given master AWB has pieces_discrepancy, all sibling HAWBs
+    // of that master inherit pieces_discrepancy=true (card + row highlight).
+    const mastersWithDisc = new Set<string>();
+    for (const [k, v] of Object.entries(discrepancyMap)) {
+      if (v?.pieces_discrepancy) {
+        const awb = k.split("|")[0];
+        if (awb) mastersWithDisc.add(awb);
+      }
+    }
 
     for (const row of rows || []) {
+
       let timeline: any[] = [];
       try {
         if (row.TIMELINE) {
@@ -1585,10 +1595,17 @@ async function computePayload(): Promise<string> {
       // Discrepancy lookup
       let disc = discrepancyMap[routeKey] || { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
 
+      // Master-level propagation: inherit pieces_discrepancy from sibling HAWBs of the same master AWB
+      const _awbForMaster = String(row.AWB || "").trim();
+      if (_awbForMaster && mastersWithDisc.has(_awbForMaster) && !disc.pieces_discrepancy) {
+        disc = { ...disc, pieces_discrepancy: true };
+      }
+
       // Suppress false-positive discrepancies for whitelisted AWBs
       if (SUPPRESSED_DISCREPANCY_AWBS.has(String(row.AWB || '').trim())) {
         disc = { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
       }
+
 
 
       // Determine working origin/destination — fix origin=destination data error.
