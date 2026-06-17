@@ -1595,10 +1595,17 @@ async function computePayload(): Promise<string> {
       // Discrepancy lookup
       let disc = discrepancyMap[routeKey] || { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
 
+      // Master-level propagation: inherit pieces_discrepancy from sibling HAWBs of the same master AWB
+      const _awbForMaster = String(row.AWB || "").trim();
+      if (_awbForMaster && mastersWithDisc.has(_awbForMaster) && !disc.pieces_discrepancy) {
+        disc = { ...disc, pieces_discrepancy: true };
+      }
+
       // Suppress false-positive discrepancies for whitelisted AWBs
       if (SUPPRESSED_DISCREPANCY_AWBS.has(String(row.AWB || '').trim())) {
         disc = { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
       }
+
 
 
       // Determine working origin/destination — fix origin=destination data error.
