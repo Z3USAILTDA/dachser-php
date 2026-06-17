@@ -1368,7 +1368,7 @@ const TrackingAereo = () => {
                       const dotColorMuted = isAlertStatus ? "bg-red-400/70" : "bg-white/70";
 
                       return (
-                        <tr key={`${awb.id}-${index}`} className={`border-b border-[rgba(255,255,255,.06)] transition-all duration-300 ${isCritical ? "bg-red-500/15 border-red-400/50 border-2 shadow-[0_0_15px_rgba(255,0,0,0.2)]" : "hover:bg-[rgba(255,255,255,.03)]"}`}>
+                        <tr key={`${awb.id}-${index}`} className={`border-b border-[rgba(255,255,255,.06)] transition-all duration-300 ${(isCritical || hasMasterSwap) ? "bg-red-500/15 border-red-400/50 border-2 shadow-[0_0_15px_rgba(255,0,0,0.2)]" : "hover:bg-[rgba(255,255,255,.03)]"}`}>
                           {/* AWB */}
                           <td className="px-4 py-3 whitespace-nowrap">
                             <div className="flex items-center gap-2">
