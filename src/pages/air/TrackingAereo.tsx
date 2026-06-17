@@ -629,8 +629,9 @@ const TrackingAereo = () => {
         origem: forcedRcf?.origin || item.origin || route.origin || "",
         destino: forcedRcf?.destination || item.destination || route.destination || "",
         conexao: forcedRcf ? forcedRcf.conexao : ((item.conexao ?? route.conexao) ?? ""),
-        last_event_date: forcedRcf?.date || item.last_event_date || null,
-        last_event_location: forcedRcf?.location || item.last_event_location || "",
+        last_event_date: lastEventDate,
+        last_event_location: lastEventLocation,
+
         penultimate_location: item.penultimate_location || "",
         arr_destino_date: item.arr_destino_date || null,
         hide_reason: item.hide_reason || "",
