@@ -580,11 +580,11 @@ const TrackingAereo = () => {
 
   // Map raw API items to AWBData
   const mapItems = useCallback((items: any[]): AWBData[] => {
-    // Discard timeline events farther than tomorrow EOD (too far in the future).
+    // Discard timeline events after end of today (too far in the future).
     const maxFuture = new Date();
     maxFuture.setHours(23, 59, 59, 999);
-    maxFuture.setDate(maxFuture.getDate() + 1);
     const maxFutureMs = maxFuture.getTime();
+
 
     const converted: AWBData[] = items.map((item: any, index: number) => {
       const awbNumber = item.awb_number || "";
