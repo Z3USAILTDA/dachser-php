@@ -1459,9 +1459,19 @@ async function computePayload(): Promise<string> {
     const FLIGHT_FIELDS = ['Flight', 'flight', 'voo', 'Voo', 'flight_number', 'flightNumber', 'numero_voo'];
     const TEXT_FIELDS = ['status', 'Status', 'Description', 'description', 'details', 'title', 'event_description', 'evento', 'descricao', 'remarks'];
 
-
+    // ─── Master-level discrepancy propagation ───
+    // If ANY HAWB of a given master AWB has pieces_discrepancy, all sibling HAWBs
+    // of that master inherit pieces_discrepancy=true (card + row highlight).
+    const mastersWithDisc = new Set<string>();
+    for (const [k, v] of Object.entries(discrepancyMap)) {
+      if (v?.pieces_discrepancy) {
+        const awb = k.split("|")[0];
+        if (awb) mastersWithDisc.add(awb);
+      }
+    }
 
     for (const row of rows || []) {
+
       let timeline: any[] = [];
       try {
         if (row.TIMELINE) {
