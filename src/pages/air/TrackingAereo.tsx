@@ -669,7 +669,7 @@ const TrackingAereo = () => {
 
   // Fetch data — tries local server first, Supabase as fallback
   const fetchData = useCallback(async (force = false) => {
-    if (isFetchingRef.current) return;
+    if (isFetchingRef.current && !force) return;
     isFetchingRef.current = true;
     setIsLoadingData(true);
 
