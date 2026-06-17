@@ -1,37 +1,69 @@
-# Por que o 2º teste falhou
+## Causa raiz
 
-O log do navegador mostra:
+Quando 2 pré-lançados recebem 1 boleto único formando um master:
 
-> `Lote: extração de linha digitável falhou — Linha digitável com tamanho inválido (113 dígitos)`
+1. No frontend (`BatchDocumentBinderDialog.doBind`), após `bind_batch_document_to_master_group`, `extract-boleto-barcode` é chamado e `save_linha_digitavel` grava nos **child voucher ids** (ids dos pré-lançados). O master ainda não existe.
+2. Em `finalize_batch_import` (mariadb-proxy), o master é criado como **novo voucher** sem `linha_digitavel`/`codigo_barras`. Os anexos do boleto-grupo são corretamente vinculados ao master, mas a linha digitável não é extraída/gravada nele.
 
-Ou seja, a Edge Function `extract-boleto-barcode` **respondeu**, mas o conteúdo extraído tinha **113 dígitos** — fora dos tamanhos válidos (47 boleto bancário / 48 arrecadação).
+Resultado: master sem linha digitável.
 
-## Causa
+## Correção (alinhada à regra de negócio)
 
-DAIs frequentemente contêm **mais de uma linha digitável** no mesmo PDF (DAI principal + parcelas / GRU complementar / 2ª via). No 1º teste o PDF tinha só 1 linha digitável; no 2º o PDF tinha múltiplas.
+A linha digitável do master deve vir **do BOLETO/DAI vinculado ao próprio grupo master** (`grp.docs` em `finalize_batch_import`), nunca dos boletos individuais dos filhos. Isso é necessário porque um pré-lançado pode ter sido criado com um boleto antigo que será substituído pelo boleto único do master.
 
-O prompt em `EXTRACTION_PROMPT` (linhas 173-192 de `supabase/functions/extract-boleto-barcode/index.ts`) **não diz** ao Claude o que fazer quando há mais de uma. Resultado: o modelo concatenou os dígitos de 2-3 códigos na mesma linha `LIMPA:`, e o parser `parseExtractionResponse` (regex `/LIMPA:\s*(\d+)/`) capturou todos de uma vez → 113 dígitos → reprovado na validação de tamanho.
+Editar **`supabase/functions/mariadb-proxy/index.ts`** dentro de `finalize_batch_import`, logo após o bloco que cria os anexos do master a partir de `grp.docs` (~linha 22739) e antes do espelhamento dos anexos dos filhos:
 
-Não é problema do anexo no voucher nem do `save_linha_digitavel`. O DAI foi vinculado normalmente; só a extração textual variou entre os PDFs.
+```ts
+// Extrair linha digitável a partir do BOLETO/DAI vinculado ao MASTER
+// (prioridade BOLETO > DAI; ignora anexos individuais dos filhos).
+try {
+  const boletoDoc = grp.docs.find((d: any) =>
+    ['BOLETO', 'BOLETO_INSTRUCOES'].includes(String(d.tipo_anexo || '').toUpperCase())
+  );
+  const daiDoc = grp.docs.find((d: any) =>
+    String(d.tipo_anexo || '').toUpperCase() === 'DAI'
+  );
+  const sourceDoc = boletoDoc || daiDoc;
+  if (sourceDoc?.file_url) {
+    const extRes = await fetch(`${SUPABASE_URL}/functions/v1/extract-boleto-barcode`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({ fileUrl: sourceDoc.file_url }),
+    });
+    const ext = await extRes.json().catch(() => null);
+    if (ext?.success && ext?.linhaDigitavel) {
+      await client.execute(
+        `UPDATE dados_dachser.t_vouchers
+            SET linha_digitavel = ?, codigo_barras = ?, updated_at = NOW()
+          WHERE id = ?`,
+        [ext.linhaDigitavel, ext.codigoBarras || null, masterId]
+      );
+    } else {
+      console.warn('[finalize_batch_import] extract-boleto-barcode falhou p/ master', masterId, ext?.error);
+    }
+  }
+} catch (e) {
+  console.error('[finalize_batch_import] linha_digitavel master falhou:', (e as any)?.message || e);
+}
+```
 
-## Plano de correção (cirúrgico, somente em `extract-boleto-barcode/index.ts`)
+Observações:
+- Usa `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` já disponíveis no módulo (confirmar referências existentes no arquivo; reaproveitar o mesmo padrão já utilizado em outras invocações de edge functions dentro do mariadb-proxy).
+- Não altera `linha_digitavel` dos filhos (eles vão para `CONSOLIDADO_NO_MASTER` e ficam ocultos).
+- Para grupos só com `FATURA` (sem BOLETO/DAI), nada é gravado — master pode não exigir linha digitável (forma_pagamento ≠ BOLETO).
 
-1. **Reforçar o prompt** (`EXTRACTION_PROMPT` e `buildRetryPrompt`):
-   - Adicionar instrução explícita: *"Se houver MAIS DE UMA linha digitável no documento (ex.: DAI com parcelas, GRU complementar, 2ª via), retorne SOMENTE a do valor principal/total. Nunca concatene dígitos de códigos diferentes."*
-
-2. **Defender o parser** `parseExtractionResponse` contra resposta concatenada:
-   - Se a string capturada tiver `> 48` dígitos, tentar fatiar nos tamanhos válidos: primeiros 48 começando com `8` (arrecadação) ou primeiros 47 (bancário), validar com `validateLinhaDigitavel` / `validateLinhaDigitavelArrecadacao` e usar a primeira fatia que passar.
-   - Se nenhuma fatia validar, retornar string vazia (mantém o comportamento atual de "não encontrado", em vez de mandar 113 dígitos para validação).
-
-3. **Logar no servidor** o tamanho bruto retornado pelo Claude antes da validação, para diagnosticar futuros casos.
-
-## Fora de escopo
-
-- Frontend `BatchDocumentBinderDialog.tsx` (a lógica DAI×BOLETO já está correta).
-- `mariadb-proxy` / `save_linha_digitavel`.
-- Fluxo unitário e PRE_LANCAMENTO.
-- Mudança de modelo Anthropic.
+Deploy do `mariadb-proxy` após editar.
 
 ## Memória
 
-Atualizar `mem://vouchers/boleto-extraction-arrecadacao-support` adicionando: *DAIs com múltiplas parcelas devem retornar apenas a linha digitável principal; parser deve fatiar e validar quando recebe `>48` dígitos.*
+Atualizar `mem://vouchers/batch-boleto-dai-priority.md` adicionando regra:
+**A linha digitável do voucher master vem exclusivamente do BOLETO/DAI vinculado ao próprio grupo master (`t_voucher_batch_documents` com `is_master_group=1`), extraída em `finalize_batch_import` no momento da criação do master. Nunca herdar do `linha_digitavel` dos filhos individuais.**
+
+## Fora de escopo
+
+- Frontend `BatchDocumentBinderDialog` (continua gravando nos filhos no fluxo individual; sem alteração).
+- `extract-boleto-barcode` (sem mudanças).
+- Fluxo unitário e PRE_LANCAMENTO sem master.
