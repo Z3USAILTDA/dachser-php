@@ -1,69 +1,63 @@
-## Causa raiz
+## Entregável
 
-Quando 2 pré-lançados recebem 1 boleto único formando um master:
+Criar **`docs/ARCHITECTURE.md`** preenchendo o template "Prompt Coringa" com a arquitetura real do Dachser, extraída do código. Documento serve como template reutilizável para futuros projetos similares.
 
-1. No frontend (`BatchDocumentBinderDialog.doBind`), após `bind_batch_document_to_master_group`, `extract-boleto-barcode` é chamado e `save_linha_digitavel` grava nos **child voucher ids** (ids dos pré-lançados). O master ainda não existe.
-2. Em `finalize_batch_import` (mariadb-proxy), o master é criado como **novo voucher** sem `linha_digitavel`/`codigo_barras`. Os anexos do boleto-grupo são corretamente vinculados ao master, mas a linha digitável não é extraída/gravada nele.
+## Estrutura do documento
 
-Resultado: master sem linha digitável.
+Cada seção do template será preenchida com dados reais coletados do repositório:
 
-## Correção (alinhada à regra de negócio)
+1. **Informações Básicas** — Nome, propósito (plataforma logística Z3US/DACHSER multi-modal: marítimo, aéreo, CCT, CHB, demurrage, esteira financeira, vouchers, draft, local charges), status (em uso).
 
-A linha digitável do master deve vir **do BOLETO/DAI vinculado ao próprio grupo master** (`grp.docs` em `finalize_batch_import`), nunca dos boletos individuais dos filhos. Isso é necessário porque um pré-lançado pode ter sido criado com um boleto antigo que será substituído pelo boleto único do master.
+2. **Tech Stack** — extraído do `package.json`:
+   - Frontend: React 18.3, TypeScript 5.8, Vite 5.4, Tailwind 3.4, shadcn/ui (Radix), React Router 6.30, TanStack Query 5.83, React Hook Form + Zod, Recharts, Leaflet/Mapbox, react-pdf, jspdf, xlsx, sonner, sweetalert2.
+   - Backend: Supabase Edge Functions (Deno) — **105 funções** catalogadas por módulo + servidor Node/Express opcional (`server/index.js`).
+   - Database: MariaDB externo (pools AIR/SEA/FIN/CHARGES/OPS) acessado via `mariadb-proxy` edge function + Supabase Postgres para auth/profiles/roles/storage.
+   - Deploy: Lovable Cloud / `dachser.lovable.app` e domínio `dachser.z3us.app`.
+   - Secrets: ~50 secrets (MARIADB_*, LOVABLE_API_KEY, ANTHROPIC, OPENAI, GEMINI, HAPAG, FIRECRAWL, MAPBOX, SMTP, etc).
 
-Editar **`supabase/functions/mariadb-proxy/index.ts`** dentro de `finalize_batch_import`, logo após o bloco que cria os anexos do master a partir de `grp.docs` (~linha 22739) e antes do espelhamento dos anexos dos filhos:
+3. **Estrutura do projeto** — árvore real de `src/` (pages por módulo, components/{esteira,sea,air,cct,chb,demurrage,...}, hooks, utils, lib, types) e `supabase/functions/`.
 
-```ts
-// Extrair linha digitável a partir do BOLETO/DAI vinculado ao MASTER
-// (prioridade BOLETO > DAI; ignora anexos individuais dos filhos).
-try {
-  const boletoDoc = grp.docs.find((d: any) =>
-    ['BOLETO', 'BOLETO_INSTRUCOES'].includes(String(d.tipo_anexo || '').toUpperCase())
-  );
-  const daiDoc = grp.docs.find((d: any) =>
-    String(d.tipo_anexo || '').toUpperCase() === 'DAI'
-  );
-  const sourceDoc = boletoDoc || daiDoc;
-  if (sourceDoc?.file_url) {
-    const extRes = await fetch(`${SUPABASE_URL}/functions/v1/extract-boleto-barcode`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      },
-      body: JSON.stringify({ fileUrl: sourceDoc.file_url }),
-    });
-    const ext = await extRes.json().catch(() => null);
-    if (ext?.success && ext?.linhaDigitavel) {
-      await client.execute(
-        `UPDATE dados_dachser.t_vouchers
-            SET linha_digitavel = ?, codigo_barras = ?, updated_at = NOW()
-          WHERE id = ?`,
-        [ext.linhaDigitavel, ext.codigoBarras || null, masterId]
-      );
-    } else {
-      console.warn('[finalize_batch_import] extract-boleto-barcode falhou p/ master', masterId, ext?.error);
-    }
-  }
-} catch (e) {
-  console.error('[finalize_batch_import] linha_digitavel master falhou:', (e as any)?.message || e);
-}
-```
+4. **Módulos/Páginas principais** — 13 módulos catalogados com rota, hooks-chave, edge functions associadas:
+   - Esteira Financeira (vouchers), CCT, Marítimo (tracking/draft/demurrage/local charges/análise), Aéreo (AWB tracking, AWB list), CHB (análise documental), Régua de Cobrança, Disputas, Olimpo (faturamento), Admin (users, cron, monitors), Auth, Dashboard, System Logs.
 
-Observações:
-- Usa `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` já disponíveis no módulo (confirmar referências existentes no arquivo; reaproveitar o mesmo padrão já utilizado em outras invocações de edge functions dentro do mariadb-proxy).
-- Não altera `linha_digitavel` dos filhos (eles vão para `CONSOLIDADO_NO_MASTER` e ficam ocultos).
-- Para grupos só com `FATURA` (sem BOLETO/DAI), nada é gravado — master pode não exigir linha digitável (forma_pagamento ≠ BOLETO).
+5. **Fluxo de dados & estado**:
+   - Auth: MariaDB próprio (NÃO Supabase Auth) — regra registrada em memory.
+   - Carregamento: TanStack Query + hooks (`useVoucherSync`, `useCCTData`, `useDemurrageData`, etc) → `supabase.functions.invoke('mariadb-proxy', {action})`.
+   - CRUD: dialogs/modais shadcn + react-hook-form + zod → edge function → MariaDB → toast (sonner/sweetalert).
+   - Fluxo IA: `LOVABLE_API_KEY` gateway para Claude/Gemini/OpenAI (extract-boleto-barcode, analyze-chb-documents, compare-documents-llm, etc).
 
-Deploy do `mariadb-proxy` após editar.
+6. **Design & Visual** — extraído de `src/index.css` e `tailwind.config.ts`:
+   - Tema Z3US/DACHSER dark (bg `#050608`, gold `#F5B843`), tema light premium restrito ao módulo Maritime.
+   - Tipografia Montserrat (`@fontsource/montserrat`).
+   - Tokens HSL semânticos (sem cores hardcoded).
+   - Componentes shadcn customizados.
 
-## Memória
+7. **Funcionalidades-chave** — top 10: tracking marítimo multi-carrier (Hapag/MSC/ONE/ZIM), tracking aéreo, CCT compliance, extração de documentos por IA (boleto/DAI/HBL/NCM), workflow de vouchers com aprovação por supervisor, demurrage com pré-faturamento, draft exportação multi-carrier, régua de cobrança, disputas financeiras, monitoramento de SLAs operacionais.
 
-Atualizar `mem://vouchers/batch-boleto-dai-priority.md` adicionando regra:
-**A linha digitável do voucher master vem exclusivamente do BOLETO/DAI vinculado ao próprio grupo master (`t_voucher_batch_documents` com `is_master_group=1`), extraída em `finalize_batch_import` no momento da criação do master. Nunca herdar do `linha_digitavel` dos filhos individuais.**
+8. **Responsive & Performance** — Tailwind breakpoints padrão, lazy routes via React.lazy onde aplicável, paginação server-side em tabelas grandes (vouchers, AWBs), polling controlado via `usePolling`/`usePageVisibility`.
+
+9. **Integrações & APIs** — Hapag-Lloyd, JsonCargo, Leadcomex, Firecrawl, Mapbox/Leaflet, FlightRadar, LH Cargo, Azul, Anthropic/OpenAI/Gemini (via Lovable AI Gateway), SMTP (Resend + nodemailer), MariaDB pools externos.
+
+10. **Código importante** — snippets de:
+    - `src/App.tsx` (roteamento + providers)
+    - `src/integrations/supabase/client.ts` (cliente)
+    - Padrão de hook (`useVoucherInlineSave`)
+    - Tipo principal (`Voucher` em `src/types/voucher.ts`)
+    - `tailwind.config.ts` resumido
+    - Edge function pattern (CORS + invoke MariaDB)
+
+11. **Observações** — limitações conhecidas (sem Supabase Auth → RLS permissivo; staleness MariaDB; complexidade do `mariadb-proxy` de 23k linhas), pontos de melhoria (split do proxy, testes), desafios técnicos (concorrência de cron jobs, dedupe de vouchers, regras CCT/SLA).
+
+12. **Resumo rápido** — 4 perguntas finais respondidas em 2-3 linhas cada.
+
+## Operações
+
+- **Criar:** `docs/ARCHITECTURE.md` (~600-900 linhas).
+- **Ler para citações precisas:** `src/App.tsx`, `src/index.css`, `tailwind.config.ts`, `src/integrations/supabase/client.ts`, `src/types/voucher.ts`, `vite.config.ts`, lista completa de `supabase/functions/`.
+- Sem alteração de código de aplicação. Apenas documentação.
 
 ## Fora de escopo
 
-- Frontend `BatchDocumentBinderDialog` (continua gravando nos filhos no fluxo individual; sem alteração).
-- `extract-boleto-barcode` (sem mudanças).
-- Fluxo unitário e PRE_LANCAMENTO sem master.
+- Screenshots (Parte 9) — apenas indicar onde colocar; geração de imagens opcional via skill product-shot se o usuário pedir depois.
+- Refatoração de código.
+- Tradução para inglês (manter em PT-BR conforme template do usuário).
