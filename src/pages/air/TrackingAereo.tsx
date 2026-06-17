@@ -580,13 +580,39 @@ const TrackingAereo = () => {
 
   // Map raw API items to AWBData
   const mapItems = useCallback((items: any[]): AWBData[] => {
+    // Discard timeline events farther than tomorrow EOD (too far in the future).
+    const maxFuture = new Date();
+    maxFuture.setHours(23, 59, 59, 999);
+    maxFuture.setDate(maxFuture.getDate() + 1);
+    const maxFutureMs = maxFuture.getTime();
+
     const converted: AWBData[] = items.map((item: any, index: number) => {
       const awbNumber = item.awb_number || "";
       const forcedRcf = FORCED_RCF_TIMELINES[awbNumber];
-      const timeline = forcedRcf?.timeline || (Array.isArray(item.timeline_json) ? item.timeline_json : []);
-      const lastEvent = forcedRcf ? "RCF" : (item.last_event || "");
+      const rawTimeline = forcedRcf?.timeline || (Array.isArray(item.timeline_json) ? item.timeline_json : []);
+      const timeline = forcedRcf
+        ? rawTimeline
+        : rawTimeline.filter((evt: any) => {
+            const d = evt?.date ? new Date(evt.date) : null;
+            if (!d || isNaN(d.getTime())) return true;
+            return d.getTime() <= maxFutureMs;
+          });
+
+      // If backend's last_event_date is too far in the future, recover the most
+      // recent valid event from the (already filtered) timeline.
+      let lastEvent = forcedRcf ? "RCF" : (item.last_event || "");
+      let lastEventDate = forcedRcf?.date || item.last_event_date || null;
+      let lastEventLocation = forcedRcf?.location || item.last_event_location || "";
+      const beDate = lastEventDate ? new Date(lastEventDate) : null;
+      if (!forcedRcf && beDate && !isNaN(beDate.getTime()) && beDate.getTime() > maxFutureMs && timeline.length > 0) {
+        const newest = timeline[0]; // timeline is DESC by date
+        lastEvent = (newest.status_code || newest.code || lastEvent || "").toString();
+        lastEventDate = newest.date || lastEventDate;
+        lastEventLocation = newest.location || lastEventLocation;
+      }
       const statusCode = getStatusCode(lastEvent);
-      const route = applyRouteFix(item);
+      const route = applyRouteFix({ ...item, timeline_json: timeline });
+
       return {
         id: `tracking-${index}`,
         awb: awbNumber,
@@ -603,8 +629,9 @@ const TrackingAereo = () => {
         origem: forcedRcf?.origin || item.origin || route.origin || "",
         destino: forcedRcf?.destination || item.destination || route.destination || "",
         conexao: forcedRcf ? forcedRcf.conexao : ((item.conexao ?? route.conexao) ?? ""),
-        last_event_date: forcedRcf?.date || item.last_event_date || null,
-        last_event_location: forcedRcf?.location || item.last_event_location || "",
+        last_event_date: lastEventDate,
+        last_event_location: lastEventLocation,
+
         penultimate_location: item.penultimate_location || "",
         arr_destino_date: item.arr_destino_date || null,
         hide_reason: item.hide_reason || "",
