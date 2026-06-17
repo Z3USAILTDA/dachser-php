@@ -22738,6 +22738,47 @@ Deno.serve(async (req) => {
                 `, [masterId, anexoId, d.id]);
               }
 
+              // Extrair linha digitável a partir do BOLETO/DAI vinculado ao MASTER
+              // (prioridade BOLETO > DAI; ignora anexos individuais dos filhos).
+              try {
+                const boletoDoc = grp.docs.find((d: any) =>
+                  ['BOLETO', 'BOLETO_INSTRUCOES'].includes(String(d.tipo_anexo || '').toUpperCase())
+                );
+                const daiDoc = grp.docs.find((d: any) =>
+                  String(d.tipo_anexo || '').toUpperCase() === 'DAI'
+                );
+                const sourceDoc = boletoDoc || daiDoc;
+                if (sourceDoc?.file_url) {
+                  const supaUrl = Deno.env.get('SUPABASE_URL');
+                  const supaKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY');
+                  const extRes = await fetch(`${supaUrl}/functions/v1/extract-boleto-barcode`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${supaKey}`,
+                      'apikey': supaKey || '',
+                    },
+                    body: JSON.stringify({ fileUrl: sourceDoc.file_url }),
+                  });
+                  const ext = await extRes.json().catch(() => null);
+                  if (ext?.success && ext?.linhaDigitavel) {
+                    await client.execute(
+                      `UPDATE dados_dachser.t_vouchers
+                          SET linha_digitavel = ?, codigo_barras = ?, updated_at = NOW()
+                        WHERE id = ?`,
+                      [ext.linhaDigitavel, ext.codigoBarras || null, masterId]
+                    );
+                    console.log(`[finalize_batch_import] linha_digitavel gravada no master ${masterId} (fonte=${sourceDoc.tipo_anexo})`);
+                  } else {
+                    console.warn(`[finalize_batch_import] extract-boleto-barcode falhou p/ master ${masterId}:`, ext?.error || 'sem linhaDigitavel');
+                  }
+                }
+              } catch (e) {
+                console.error('[finalize_batch_import] linha_digitavel master falhou:', (e as any)?.message || e);
+              }
+
+
+
               // Espelhar no master os anexos pré-existentes dos filhos (ex.: pré-lançados)
               try {
                 const childAnexos: any[] = await client.query(
