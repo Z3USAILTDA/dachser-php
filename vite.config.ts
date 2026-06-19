@@ -12,12 +12,13 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
     proxy: {
-      "/api/tracking-aereo": {
+      // Encaminha as chamadas internas da tela air/tracking-aereo para o backend Express.
+      // Em produção, o reverse proxy do domínio deve encaminhar /api/air -> backend (porta 3001).
+      "/api/air": {
         target: "http://localhost:3001",
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/tracking-aereo/, "/tracking-aereo"),
-        timeout: 20000,
-        proxyTimeout: 20000,
+        timeout: 30000,
+        proxyTimeout: 30000,
       },
     },
   },

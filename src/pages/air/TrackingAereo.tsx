@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { useUsageLog, trackEvent } from "@/hooks/useUsageLog";
+import { useAirPageView, trackEvent } from "@/services/airTelemetry";
+import {
+  getAirTrackingAereo,
+  getMasterSwaps,
+  getMasterDiscrepancies,
+  resolveMasterDiscrepancy,
+  reportTrackingFailures,
+} from "@/services/airTrackingAereoService";
 // import { DatabaseStatsPanel, DbStats } from "@/components/DatabaseStatsPanel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -31,7 +37,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import type { User, Session } from "@supabase/supabase-js";
 import DashboardCards, { CardFilterType } from "@/components/DashboardCards";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
@@ -523,11 +528,17 @@ function applyRouteFix(item: any): { origin: string; destination: string; conexa
 
 // ─── Component ───
 
+// Usuário logado lido do localStorage (definido no Login). Sem dependência de Supabase Auth.
+interface SessionUser {
+  email?: string;
+  username?: string;
+}
+
 const TrackingAereo = () => {
-  useUsageLog({ endpoint: "/air/tracking-aereo" });
+  useAirPageView("/air/tracking-aereo");
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [regrasOpen, setRegrasOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [awbsData, setAwbsData] = useState<AWBData[]>([]);
@@ -565,17 +576,15 @@ const TrackingAereo = () => {
   const isFetchingRef = useRef(false);
   const awbsDataRef  = useRef<AWBData[]>([]);
 
-  // Auth
+  // Usuário logado (localStorage) — sem Supabase Auth.
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-      setUser(session?.user ?? null);
-      setIsLoading(false);
-    });
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setIsLoading(false);
-    });
-    return () => subscription.unsubscribe();
+    try {
+      const stored = localStorage.getItem("user");
+      if (stored) setUser(JSON.parse(stored));
+    } catch {
+      /* ignora payload inválido */
+    }
+    setIsLoading(false);
   }, []);
 
   // Map raw API items to AWBData
@@ -667,7 +676,7 @@ const TrackingAereo = () => {
     }, []);
   }, []);
 
-  // Fetch data — tries local server first, Supabase as fallback
+  // Busca os dados na API interna (/api/air/tracking-aereo) — banco próprio, sem Supabase.
   const fetchData = useCallback(async (force = false) => {
     if (isFetchingRef.current && !force) return;
     isFetchingRef.current = true;
@@ -680,51 +689,24 @@ const TrackingAereo = () => {
     }, 90000);
 
     try {
-      let items: any[] | null = null;
-
-      // 1) Try local server (2 s abort — fast fail so Supabase fallback starts quickly)
-      try {
-        const controller = new AbortController();
-        const tid = setTimeout(() => controller.abort(), 2000);
-        const url = force ? "/api/tracking-aereo?force=1" : "/api/tracking-aereo";
-        const res = await fetch(url, {
-          signal: controller.signal,
-          headers: force ? { "cache-control": "no-cache", "pragma": "no-cache" } : {},
-        });
-        clearTimeout(tid);
-        if (res.ok) {
-          const body = await res.json();
-          if (body?.success && Array.isArray(body?.data)) items = body.data;
-        }
-      } catch {
-        // local server not running — fall through to Supabase
-      }
-
-      // 2) Fallback: Supabase edge function (original simple call that was working)
-      if (items === null) {
-        try {
-          const { data, error } = await supabase.functions.invoke("fetch-tracking-aereo", {
-            headers: force ? { "cache-control": "no-cache", "pragma": "no-cache" } : undefined,
-          });
-          if (!error && data?.success && Array.isArray(data?.data)) items = data.data;
-        } catch {
-          // Supabase also unavailable
-        }
-      }
-
-      if (items !== null) {
-        const mapped = mapItems(items);
+      const body = await getAirTrackingAereo({ force });
+      if (body?.success && Array.isArray(body?.data)) {
+        const mapped = mapItems(body.data);
         awbsDataRef.current = mapped;
         setAwbsData(mapped);
-      } else if (awbsDataRef.current.length === 0) {
+      } else {
+        throw new Error(body?.error || "Resposta inválida da API de tracking aéreo.");
+      }
+    } catch (err) {
+      console.error("[tracking-aereo] fetchData:", err);
+      // Só alerta o usuário se ainda não há dados em tela (evita toasts no polling).
+      if (awbsDataRef.current.length === 0) {
         toast({
           title: "Erro ao carregar dados",
-          description: "Servidor local e Supabase indisponíveis. Verifique a conexão.",
+          description: "Não foi possível conectar à API de tracking aéreo. Verifique se o backend está ativo e tente novamente.",
           variant: "destructive",
         });
       }
-    } catch (err) {
-      console.error("fetchData error:", err);
     } finally {
       clearTimeout(safetyTimer);
       setIsLoadingData(false);
@@ -732,19 +714,7 @@ const TrackingAereo = () => {
     }
   }, [mapItems, toast]);
 
-  // Discrepancy detection is now done server-side via SQL in fetch-tracking-aereo
-
-  // Fetch DB stats (commented out)
-  // const fetchDbStats = useCallback(async () => {
-  //   setIsLoadingDbStats(true);
-  //   try {
-  //     const { data, error } = await supabase.functions.invoke("fetch-master-dados-stats");
-  //     if (error) return;
-  //     if (data?.success && data?.stats) setDbStats(data.stats);
-  //   } catch (_) {} finally {
-  //     setIsLoadingDbStats(false);
-  //   }
-  // }, []);
+  // A detecção de discrepância é feita no backend via SQL em /api/air/tracking-aereo.
 
   // Acesso liberado a todos os usuários para carregamento dos processos desta tela
   const isAdminUser = true;
@@ -766,9 +736,7 @@ const TrackingAereo = () => {
     if (awbs.length === 0) return;
     (async () => {
       try {
-        const { data } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "air_master_swap_list", awbs },
-        });
+        const data = await getMasterSwaps(awbs);
         if (data?.success && Array.isArray(data.data)) {
           const map: Record<string, any> = {};
           for (const row of data.data) {
@@ -787,9 +755,7 @@ const TrackingAereo = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const { data } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "air_master_discrepancy_list" },
-        });
+        const data = await getMasterDiscrepancies();
         if (data?.success && Array.isArray(data.data)) setDiscrepancies(data.data);
       } catch (e) { console.warn("[discrepancy_list]", e); }
     };
@@ -802,8 +768,10 @@ const TrackingAereo = () => {
     const { disc, chosen } = discrepancyModal;
     if (!disc || !chosen) return;
     try {
-      const { data } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "air_master_discrepancy_resolve", id: disc.id, awb_escolhido: chosen, user: user?.email || "system" },
+      const data = await resolveMasterDiscrepancy({
+        id: disc.id,
+        awb_escolhido: chosen,
+        user: user?.email || user?.username || "system",
       });
       if (data?.success) {
         toast({ title: "Troca de master resolvida", description: `Master correto: ${chosen}` });
@@ -824,7 +792,7 @@ const TrackingAereo = () => {
     if (!isAdminUser) return;
     const failedAwbs = awbsData.filter(a => a.tracking_failed);
     if (failedAwbs.length === 0) return;
-    supabase.functions.invoke("air-tracking-failed-alert").catch(console.error);
+    void reportTrackingFailures(failedAwbs.map(a => a.awb));
   }, [awbsData, isAdminUser]);
 
   // ─── Unique analysts ───
@@ -856,6 +824,34 @@ const TrackingAereo = () => {
     if (!d) return false;
     return (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24) > 30;
   }, []);
+
+  // ─── Definição única de "crítico" (usada no card e no filtro da tabela) ───
+  // Falha de rastreio (tracking_failed) NÃO é crítico: fica oculta e fora do card "Críticos".
+  const isCriticalAwb = useCallback((awb: AWBData): boolean => {
+    if (awb.tracking_failed) return false;
+    const code = getStatusCode(awb.last_event).toUpperCase();
+    if (["NIL", "NIF", "OFLD"].includes(code)) return true;
+    if (awb.pieces_discrepancy) return true;
+    if (isStaleAwb(awb)) return true;
+    return false;
+  }, [isStaleAwb]);
+
+  // ─── Revela um processo oculto só quando a busca é o número COMPLETO do master (AWB) ou HAWB ───
+  const matchesFullNumber = useCallback((awb: AWBData): boolean => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return false;
+    const awbNum = (awb.awb || "").trim().toLowerCase();
+    const hawbNum = (awb.hawb || "").trim().toLowerCase();
+    const termNoDash = term.replace(/-/g, "");
+    const awbNoDash = awbNum.replace(/-/g, "");
+    const hawbNoDash = hawbNum.replace(/-/g, "");
+    return (
+      term === awbNum ||
+      term === hawbNum ||
+      (awbNoDash.length > 0 && termNoDash === awbNoDash) ||
+      (hawbNoDash.length > 0 && termNoDash === hawbNoDash)
+    );
+  }, [searchTerm]);
 
   // ─── Top filters (search, airline, analyst, processType) — usado em cards e tabela ───
   const applyTopFilters = useCallback((awb: AWBData): boolean => {
@@ -901,32 +897,39 @@ const TrackingAereo = () => {
   // ─── Card counts (respeitam filtros de topo, mas não o cardFilter) ───
   const cardCounts = useMemo(() => {
     const inTransitCodes = new Set(["DEP", "MAN", "RCF", "ARR"]);
-    const criticalCodes = new Set(["NIL", "NIF", "OFLD"]);
 
     let total = 0, transit = 0, alert = 0, critical = 0;
     awbsData.forEach(awb => {
       if (!applyTopFilters(awb)) return;
       if (awb.is_invalid) return;
-      if (awb.tracking_failed) return;
-      const code = getStatusCode(awb.last_event).toUpperCase();
-      if (code === "DLV" || code === "POD") return;
       // Skip hidden processes (persisted or fallback)
       if (awb.hide_reason) return;
-      if (awb.arr_destino_date) {
+      // tracking_failed fica totalmente oculto: fora de monitorados/trânsito/alerta/críticos.
+      if (awb.tracking_failed) return;
+
+      const code = getStatusCode(awb.last_event).toUpperCase();
+      const crit = isCriticalAwb(awb);
+
+      // Críticos (NIL/NIF/OFLD, discrepância de peças, "Sem atualizações") SEMPRE contam —
+      // inclusive os que já chegaram ao destino há mais de 5 dias mas seguem parados.
+      if (crit) critical++;
+
+      // Entregues e processos que chegaram há >5 dias saem dos demais cards (mas não os críticos).
+      if (code === "DLV" || code === "POD") return;
+      if (!crit && awb.arr_destino_date) {
         const arrDate = parseDBDate(awb.arr_destino_date);
         if (arrDate) {
           const diffDays = (Date.now() - arrDate.getTime()) / (1000 * 60 * 60 * 24);
           if (diffDays > 5) return;
         }
       }
-      const stale = isStaleAwb(awb);
+
       total++;
       if (inTransitCodes.has(code)) transit++;
       if (code === "DIS" || (awb.has_dis_event && !awb.pieces_discrepancy)) alert++;
-      if (criticalCodes.has(code) || awb.pieces_discrepancy || stale) critical++;
     });
     return { total, transit, alert, critical };
-  }, [awbsData, applyTopFilters, isStaleAwb]);
+  }, [awbsData, applyTopFilters, isCriticalAwb]);
 
   // ─── Filtered & sorted data ───
   const filteredAwbs = useMemo(() => {
@@ -935,24 +938,11 @@ const TrackingAereo = () => {
       const isDLV = code === "DLV" || code === "POD";
       // Hide DLV unless actively searching
       if (isDLV && !searchTerm) return false;
-      // Hide processes with persisted hide_reason — só revela em busca pelo número COMPLETO (AWB ou HAWB)
-      if (awb.hide_reason) {
-        const term = searchTerm.trim().toLowerCase();
-        const awbNum = (awb.awb || "").trim().toLowerCase();
-        const hawbNum = (awb.hawb || "").trim().toLowerCase();
-        const termNoDash = term.replace(/-/g, "");
-        const awbNoDash = awbNum.replace(/-/g, "");
-        const hawbNoDash = hawbNum.replace(/-/g, "");
-        const isFullMatch =
-          term.length > 0 &&
-          (term === awbNum ||
-            term === hawbNum ||
-            (awbNoDash.length > 0 && termNoDash === awbNoDash) ||
-            (hawbNoDash.length > 0 && termNoDash === hawbNoDash));
-        if (!isFullMatch) return false;
-      }
+      // Hide processes with persisted hide_reason — só revela na busca pelo número COMPLETO (AWB/HAWB)
+      if (awb.hide_reason && !matchesFullNumber(awb)) return false;
       // Hide processes where ARR at destination happened > 5 days ago (fallback)
-      if (!searchTerm && awb.arr_destino_date) {
+      // — exceto críticos (ex.: "Sem atualizações"), que permanecem visíveis.
+      if (!searchTerm && awb.arr_destino_date && !isCriticalAwb(awb)) {
         const arrDate = parseDBDate(awb.arr_destino_date);
         if (arrDate) {
           const diffDays = (Date.now() - arrDate.getTime()) / (1000 * 60 * 60 * 24);
@@ -961,8 +951,8 @@ const TrackingAereo = () => {
       }
       // Hide invalid unless actively searching
       if (awb.is_invalid && !searchTerm) return false;
-      // Hide tracking failed unless actively searching by AWB
-      if (awb.tracking_failed && !searchTerm) return false;
+      // Falha do Rastreio: oculto por padrão; só aparece na busca pelo número COMPLETO do master (AWB/HAWB)
+      if (awb.tracking_failed && !matchesFullNumber(awb)) return false;
 
       return applyTopFilters(awb);
     });
@@ -974,7 +964,7 @@ const TrackingAereo = () => {
         switch (cardFilter) {
           case "transito": return ["DEP", "MAN", "RCF", "ARR", "ARR - DESTINO", "ARR - CONEXÃO"].includes(code);
           case "alerta": return code === "DIS" || (awb.has_dis_event && !awb.pieces_discrepancy);
-          case "criticos": return awb.tracking_failed || ["NIL", "NIF", "OFLD"].includes(code) || awb.pieces_discrepancy || isStaleAwb(awb);
+          case "criticos": return isCriticalAwb(awb);
           default: return true;
         }
       });
@@ -1008,7 +998,7 @@ const TrackingAereo = () => {
     }
 
     return awbs;
-  }, [awbsData, searchTerm, applyTopFilters, isStaleAwb, cardFilter, sortAwb, sortClient, sortAnalyst, sortLastCheck, filterMasterSwap, hasMasterDiscrepancy]);
+  }, [awbsData, searchTerm, applyTopFilters, isCriticalAwb, matchesFullNumber, cardFilter, sortAwb, sortClient, sortAnalyst, sortLastCheck, filterMasterSwap, hasMasterDiscrepancy]);
 
   const totalPages = Math.ceil(filteredAwbs.length / itemsPerPage);
   const currentAwbs = filteredAwbs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -1019,21 +1009,7 @@ const TrackingAereo = () => {
       if (!hasMasterDiscrepancy(awb)) return false;
       const code = getStatusCode(awb.last_event).toUpperCase();
       if ((code === "DLV" || code === "POD") && !searchTerm) return false;
-      if (awb.hide_reason) {
-        const term = searchTerm.trim().toLowerCase();
-        const awbNum = (awb.awb || "").trim().toLowerCase();
-        const hawbNum = (awb.hawb || "").trim().toLowerCase();
-        const termNoDash = term.replace(/-/g, "");
-        const awbNoDash = awbNum.replace(/-/g, "");
-        const hawbNoDash = hawbNum.replace(/-/g, "");
-        const isFullMatch =
-          term.length > 0 &&
-          (term === awbNum ||
-            term === hawbNum ||
-            (awbNoDash.length > 0 && termNoDash === awbNoDash) ||
-            (hawbNoDash.length > 0 && termNoDash === hawbNoDash));
-        if (!isFullMatch) return false;
-      }
+      if (awb.hide_reason && !matchesFullNumber(awb)) return false;
       if (!searchTerm && awb.arr_destino_date) {
         const arrDate = parseDBDate(awb.arr_destino_date);
         if (arrDate) {
@@ -1042,10 +1018,10 @@ const TrackingAereo = () => {
         }
       }
       if (awb.is_invalid && !searchTerm) return false;
-      if (awb.tracking_failed && !searchTerm) return false;
+      if (awb.tracking_failed && !matchesFullNumber(awb)) return false;
       return applyTopFilters(awb);
     }).length;
-  }, [awbsData, searchTerm, applyTopFilters, hasMasterDiscrepancy]);
+  }, [awbsData, searchTerm, applyTopFilters, matchesFullNumber, hasMasterDiscrepancy]);
 
   const abbreviateName = (name: string): string => {
     if (!name || name === "-") return "-";

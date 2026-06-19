@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Clock, Plane, MapPin, AlertCircle, AlertTriangle, X, Package } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { parseDBDate } from "@/utils/timezone";
 
 interface AwbTimelineModalScraperProps {
   open: boolean;
@@ -43,13 +44,26 @@ const getEventColor = (desc: string) => {
   return "bg-[#ffc800]/20 text-[#ffc800] border-[#ffc800]/30";
 };
 
-const formatDateTime = (dateStr: string | null) => {
-  if (!dateStr) return "-";
-  try {
-    return format(new Date(dateStr), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-  } catch {
-    return dateStr;
-  }
+// O timeline_json (t_fato_aereo) grava data e hora em campos SEPARADOS (`date` e `time`).
+// Usar apenas `date` zerava o horário (00:00). Aqui combinamos os dois campos.
+const buildDateTime = (event: TimelineEntry): string => {
+  const date = (event.date || event.timestamp || "").trim();
+  const time = (event.time || "").trim();
+  if (!date) return "";
+  // Se a data já vier com hora embutida, não duplica o campo `time`.
+  const dateHasTime = /\d{1,2}:\d{2}/.test(date);
+  if (dateHasTime || !time) return date;
+  return `${date} ${time}`;
+};
+
+const formatEventDateTime = (event: TimelineEntry): string => {
+  const combined = buildDateTime(event);
+  if (!combined) return "-";
+  // parseDBDate entende os formatos do timeline_json ("DD Mon YYYY HH:MM", ISO, etc.)
+  // e aplica o fuso do banco (São Paulo), igual ao restante do sistema.
+  const parsed = parseDBDate(combined);
+  if (!parsed || isNaN(parsed.getTime())) return combined;
+  return format(parsed, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
 };
 
 // Extract a short code from description for display
@@ -89,15 +103,14 @@ export const AwbTimelineModalScraper: React.FC<AwbTimelineModalScraperProps> = (
       _index: i,
     }));
 
-    // Sort by date DESC (most recent first)
+    // Sort by date+time DESC (most recent first)
     entries.sort((a, b) => {
-      const dateA = a.date || a.timestamp || "";
-      const dateB = b.date || b.timestamp || "";
-      if (dateA && dateB) {
-        const diff = new Date(dateB).getTime() - new Date(dateA).getTime();
-        if (diff !== 0) return diff;
-      }
-      // Same date: use original order (lower index = more recent in scraper)
+      const dA = parseDBDate(buildDateTime(a));
+      const dB = parseDBDate(buildDateTime(b));
+      const tA = dA ? dA.getTime() : 0;
+      const tB = dB ? dB.getTime() : 0;
+      if (tA && tB && tA !== tB) return tB - tA;
+      // Same timestamp: use original order (lower index = more recent in scraper)
       return a._index - b._index;
     });
 
@@ -150,7 +163,6 @@ export const AwbTimelineModalScraper: React.FC<AwbTimelineModalScraperProps> = (
                 {sortedTimeline.map((event, index) => {
                   const desc = event.description || "";
                   const code = extractCode(desc);
-                  const eventDate = event.date || event.timestamp || "";
                   const location = event.location || "";
 
                   return (
@@ -171,7 +183,7 @@ export const AwbTimelineModalScraper: React.FC<AwbTimelineModalScraperProps> = (
                             )}
                           </div>
                           <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            {formatDateTime(eventDate)}
+                            {formatEventDateTime(event)}
                           </span>
                         </div>
                         {desc && (

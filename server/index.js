@@ -9,6 +9,17 @@ import nodemailer from 'nodemailer';
 const app = express();
 const PORT = process.env.SERVER_PORT || 3001;
 
+// Schema/banco usado pelas queries (aceita aliases DB_NAME e MARIADB_*).
+const AIR_DB =
+  process.env.MARIADB_AIR_DATABASE ||
+  process.env.MARIADB_OPS_DATABASE ||
+  process.env.DB_NAME ||
+  'dados_dachser';
+
+// Janela de dados da tela: traz da t_fato_aereo apenas processos cujo ETD (t_dados_aereo.etd)
+// seja desta data em diante. Configurável por env; default = 01/06/2026.
+const ETD_CUTOFF = process.env.AIR_ETD_CUTOFF || '2026-06-01';
+
 app.use(cors());
 app.use(express.json());
 
@@ -22,11 +33,11 @@ let pool = null;
 function getPool() {
   if (!pool) {
     pool = mysql.createPool({
-      host:     process.env.MARIADB_AIR_HOST     || process.env.MARIADB_OPS_HOST,
-      port:     parseInt(process.env.MARIADB_AIR_PORT || process.env.MARIADB_OPS_PORT || '3306'),
-      database: process.env.MARIADB_AIR_DATABASE || process.env.MARIADB_OPS_DATABASE,
-      user:     process.env.MARIADB_AIR_USER     || process.env.MARIADB_OPS_USER     || undefined,
-      password: process.env.MARIADB_AIR_PASSWORD || process.env.MARIADB_OPS_PASSWORD || undefined,
+      host:     process.env.MARIADB_AIR_HOST     || process.env.MARIADB_OPS_HOST     || process.env.DB_HOST,
+      port:     parseInt(process.env.MARIADB_AIR_PORT || process.env.MARIADB_OPS_PORT || process.env.DB_PORT || '3306'),
+      database: process.env.MARIADB_AIR_DATABASE || process.env.MARIADB_OPS_DATABASE || process.env.DB_NAME,
+      user:     process.env.MARIADB_AIR_USER     || process.env.MARIADB_OPS_USER     || process.env.DB_USER || undefined,
+      password: process.env.MARIADB_AIR_PASSWORD || process.env.MARIADB_OPS_PASSWORD || process.env.DB_PASSWORD || undefined,
       waitForConnections: true,
       connectionLimit: 5,
       connectTimeout: 8000,
@@ -83,9 +94,8 @@ function extractIATA(loc) {
   return t.replace(/[^A-Za-z]/g, "").substring(0, 3).toUpperCase();
 }
 
-// ─── Main route ───
-app.get('/tracking-aereo', async (req, res) => {
-  try {
+// ─── Core: produz os dados do tracking aéreo (reutilizado por várias rotas) ───
+async function computeTrackingData() {
     const normalizeDesc = s => (s || '').toUpperCase().trim().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
 
     // Step 1: event codes lookup
@@ -149,7 +159,7 @@ app.get('/tracking-aereo', async (req, res) => {
         from dados_dachser.t_dados_aereo tda
         left join dados_dachser.t_fato_aereo tdaf
             on tdaf.awb collate utf8mb4_unicode_ci = tda.awb_number collate utf8mb4_unicode_ci
-        where (tda.master_insert >= '2026-03-20' or tda.created_at >= '2026-03-20')
+        where tda.etd >= ?
       ),
       event_time as (
         select b.*,
@@ -188,7 +198,7 @@ app.get('/tracking-aereo', async (req, res) => {
       from sla_calc s
     `;
 
-    const rows = await queryWithRetry(sql);
+    const rows = await queryWithRetry(sql, [ETD_CUTOFF]);
     console.log(`Query returned ${rows?.length || 0} rows`);
 
     // Step 3b: missing CLIENTE
@@ -224,7 +234,7 @@ app.get('/tracking-aereo', async (req, res) => {
             SELECT tda.awb_number AS awb, tda.hawb_number AS hawb, tdaf.timeline_json
             FROM dados_dachser.t_dados_aereo tda
             INNER JOIN dados_dachser.t_fato_aereo tdaf ON tdaf.awb COLLATE utf8mb4_unicode_ci = tda.awb_number COLLATE utf8mb4_unicode_ci AND JSON_VALID(tdaf.hawbs_json) AND JSON_CONTAINS(tdaf.hawbs_json, JSON_ARRAY(tda.hawb_number))
-            WHERE (tda.master_insert>='2026-03-20' OR tda.created_at>='2026-03-20') ${awbInClause} AND tdaf.timeline_json IS NOT NULL AND JSON_VALID(tdaf.timeline_json)
+            WHERE tda.etd >= '${ETD_CUTOFF}' ${awbInClause} AND tdaf.timeline_json IS NOT NULL AND JSON_VALID(tdaf.timeline_json)
           ),
           eventos_disc AS (
             SELECT b.awb, b.hawb, jt.ordem, jt.description,
@@ -592,30 +602,209 @@ app.get('/tracking-aereo', async (req, res) => {
       });
     }
 
-    // Filter hidden AWBs via Supabase REST (optional)
-    let filteredData = data;
-    try {
-      const supaUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-      const supaKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      if (supaUrl && supaKey) {
-        const resp = await fetch(`${supaUrl}/rest/v1/air_hidden_awbs?select=awb`, { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } });
-        if (resp.ok) {
-          const hidden = await resp.json();
-          const hiddenSet = new Set((hidden||[]).map(h=>String(h.awb).trim()));
-          if (hiddenSet.size>0) filteredData = data.filter(d=>!hiddenSet.has(String(d.awb_number).trim()));
-        }
-      }
-    } catch {}
+    // Ocultação de AWBs é tratada via dados_dachser.t_air_process_visibility (hide_reason),
+    // já incluído em cada item e aplicado no front. Sem dependência de Supabase nesta tela.
+    return { success: true, data, failed_count: failed.length };
+}
 
-    res.json({ success: true, data: filteredData, failed_count: failed.length });
+// ─── Route handlers (/api/air/*) ───
+
+async function handleTrackingAereo(_req, res) {
+  try {
+    const result = await computeTrackingData();
+    console.log(`[tracking-aereo] ${result.data.length} registros (${result.failed_count} falhas de rastreio)`);
+    res.json(result);
   } catch (error) {
-    const msg = (error?.message || String(error) || 'Unknown error');
-    console.error('fetch-tracking-aereo error:', msg);
-    if (!res.headersSent) {
-      res.status(500).json({ success: false, error: msg });
-    }
+    const msg = error?.message || String(error) || 'Unknown error';
+    console.error('[tracking-aereo] error:', msg);
+    if (!res.headersSent) res.status(500).json({ success: false, error: 'Falha ao carregar tracking aéreo.' });
   }
-});
+}
+
+// Opções de filtro derivadas do banco (companhias, analistas, serviços).
+async function handleFilters(_req, res) {
+  try {
+    const { data } = await computeTrackingData();
+    const airlines = [...new Set(data.map(d => (d.awb_number || '').substring(0, 3)).filter(Boolean))].sort();
+    const analysts = [...new Set(data.map(d => (d.clerk || '').trim()).filter(Boolean))].sort();
+    const services = [...new Set(data.map(d => (d.tipo_servico || '').trim()).filter(Boolean))].sort();
+    res.json({ success: true, filters: { airlines, analysts, services } });
+  } catch (error) {
+    console.error('[tracking-aereo/filters] error:', error?.message || error);
+    if (!res.headersSent) res.status(500).json({ success: false, error: 'Falha ao carregar filtros.' });
+  }
+}
+
+// Métricas agregadas para os cards (visão geral, sem filtros de UI).
+async function handleSummary(_req, res) {
+  try {
+    const { data } = await computeTrackingData();
+    const inTransit = new Set(['DEP', 'MAN', 'RCF', 'ARR']);
+    const criticalCodes = new Set(['NIL', 'NIF', 'OFLD']);
+    let total = 0, transit = 0, alert = 0, critical = 0;
+    for (const a of data) {
+      const code = (a.last_status_code || a.last_event || '').toUpperCase().trim();
+      if (code === 'DLV' || code === 'POD') continue;
+      if (a.hide_reason) continue;
+      total++;
+      if (inTransit.has(code)) transit++;
+      if (code === 'DIS' || (a.has_dis_event && !a.pieces_discrepancy)) alert++;
+      if (criticalCodes.has(code) || a.pieces_discrepancy) critical++;
+    }
+    res.json({ success: true, summary: { total, transit, alert, critical } });
+  } catch (error) {
+    console.error('[tracking-aereo/summary] error:', error?.message || error);
+    if (!res.headersSent) res.status(500).json({ success: false, error: 'Falha ao carregar métricas.' });
+  }
+}
+
+// Best-effort: registra AWBs com falha de rastreio (e-mail de alerta fica pendente).
+async function handleFailedAlert(req, res) {
+  const awbs = Array.isArray(req.body?.awbs) ? req.body.awbs : [];
+  console.log(`[tracking-aereo] failed-alert: ${awbs.length} AWB(s) com falha de rastreio`);
+  res.json({ success: true, count: awbs.length, emailed: false });
+}
+
+// Badges de troca de master para os AWBs visíveis.
+async function handleMasterSwaps(req, res) {
+  try {
+    const awbs = Array.isArray(req.body?.awbs)
+      ? req.body.awbs.filter(x => x && typeof x === 'string')
+      : [];
+    if (awbs.length === 0) return res.json({ success: true, data: [] });
+    const ph = awbs.map(() => '?').join(',');
+    const rows = await queryWithRetry(
+      `SELECT id, hawb, awb_antigo, awb_novo, fonte, id_olss,
+              flight_number, departure_airport, destination_airport,
+              data_atualizacao, flag_troca_master, resolvido_manual
+         FROM ${AIR_DB}.t_aereo_master_swap
+        WHERE TRIM(awb_novo) COLLATE utf8mb4_unicode_ci IN (${ph})
+        ORDER BY data_atualizacao DESC`,
+      awbs.map(a => a.trim())
+    );
+    res.json({ success: true, data: rows || [] });
+  } catch (e) {
+    console.warn('[master-swaps]', e.message);
+    res.json({ success: true, data: [] });
+  }
+}
+
+// Discrepâncias pendentes de troca de master.
+async function handleDiscrepancyList(_req, res) {
+  try {
+    const rows = await queryWithRetry(
+      `SELECT id, hawb, id_olss, data_inclusao_nova, awbs_candidatos,
+              status, awb_escolhido, resolvido_em, resolvido_por, created_at
+         FROM ${AIR_DB}.t_aereo_master_discrepancia
+        WHERE status = 'PENDENTE'
+        ORDER BY created_at DESC`
+    );
+    res.json({ success: true, data: rows || [] });
+  } catch (e) {
+    console.warn('[master-discrepancies]', e.message);
+    res.json({ success: true, data: [] });
+  }
+}
+
+// Resolve uma discrepância escolhendo o master correto.
+async function handleDiscrepancyResolve(req, res) {
+  try {
+    const id = Number(req.body?.id);
+    const awbEscolhido = (req.body?.awb_escolhido || '').toString().trim();
+    const user = (req.body?.user || 'system').toString();
+    if (!id || !awbEscolhido) {
+      return res.status(400).json({ success: false, error: 'id e awb_escolhido são obrigatórios.' });
+    }
+    const discRows = await queryWithRetry(
+      `SELECT id, hawb, id_olss, data_inclusao_nova, awbs_candidatos
+         FROM ${AIR_DB}.t_aereo_master_discrepancia
+        WHERE id = ? AND status = 'PENDENTE' LIMIT 1`,
+      [id]
+    );
+    if (!discRows || discRows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Discrepância não encontrada.' });
+    }
+    const disc = discRows[0];
+    let candidatos = [];
+    try {
+      candidatos = typeof disc.awbs_candidatos === 'string'
+        ? JSON.parse(disc.awbs_candidatos)
+        : (disc.awbs_candidatos || []);
+    } catch { candidatos = []; }
+    const descartados = candidatos.filter(a => a !== awbEscolhido);
+
+    for (const awbAntigo of descartados) {
+      try {
+        await queryWithRetry(
+          `INSERT IGNORE INTO ${AIR_DB}.t_aereo_master_swap
+             (hawb, awb_antigo, awb_novo, fonte, id_olss, data_atualizacao, flag_troca_master, resolvido_manual)
+           VALUES (?, ?, ?, 'DADOS_AEREO', ?, NOW(), 1, 1)`,
+          [disc.hawb, awbAntigo, awbEscolhido, disc.id_olss]
+        );
+      } catch (e) { console.warn('[disc_resolve insert swap]', e.message); }
+      try {
+        await queryWithRetry(
+          `UPDATE ${AIR_DB}.t_fato_aereo
+              SET last_status_code = 'DLV'
+            WHERE TRIM(awb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
+              AND TRIM(COALESCE(hawb,'')) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci`,
+          [awbAntigo, disc.hawb]
+        );
+      } catch (e) { console.warn('[disc_resolve dlv]', e.message); }
+    }
+
+    await queryWithRetry(
+      `UPDATE ${AIR_DB}.t_aereo_master_discrepancia
+          SET status='RESOLVIDA', awb_escolhido=?, resolvido_em=NOW(), resolvido_por=?
+        WHERE id = ?`,
+      [awbEscolhido, user, id]
+    );
+    res.json({ success: true, descartados, awb_escolhido: awbEscolhido });
+  } catch (e) {
+    console.error('[master-discrepancies/resolve]', e.message);
+    if (!res.headersSent) res.status(500).json({ success: false, error: 'Falha ao resolver discrepância.' });
+  }
+}
+
+// Log de uso/telemetria da tela (best-effort).
+async function handleUsageLog(req, res) {
+  try {
+    const { username, endpoint, method, sessionId, eventType, durationMs } = req.body || {};
+    if (!username || !endpoint || username === 'unknown') return res.json({ success: true });
+
+    let storedMethod = method || 'GET';
+    let storedEndpoint = endpoint;
+    if (eventType === 'view_start') {
+      storedMethod = 'VI';
+    } else if (eventType === 'view_end') {
+      storedMethod = 'VO';
+      if (typeof durationMs === 'number' && durationMs >= 0) {
+        storedEndpoint = `${endpoint}#dur=${Math.round(durationMs)}`;
+      }
+    }
+    const safeMethod = String(storedMethod).slice(0, 4);
+    await queryWithRetry(
+      `INSERT INTO ai_agente.t_dachser_usage_logs (username, endpoint, method, session_id, event_time)
+       VALUES (?, ?, ?, ?, NOW())`,
+      [username, storedEndpoint, safeMethod, sessionId || null]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    console.warn('[usage-log]', e.message);
+    res.json({ success: true });
+  }
+}
+
+// ─── Registro de rotas ───
+app.get('/tracking-aereo', handleTrackingAereo);                          // legado (compat)
+app.get('/api/air/tracking-aereo', handleTrackingAereo);
+app.get('/api/air/tracking-aereo/filters', handleFilters);
+app.get('/api/air/tracking-aereo/summary', handleSummary);
+app.post('/api/air/tracking-aereo/failed-alert', handleFailedAlert);
+app.post('/api/air/master-swaps', handleMasterSwaps);
+app.get('/api/air/master-discrepancies', handleDiscrepancyList);
+app.post('/api/air/master-discrepancies/resolve', handleDiscrepancyResolve);
+app.post('/api/air/usage-log', handleUsageLog);
 
 // Express error handler — ensures JSON even for unhandled errors
 app.use((err, req, res, _next) => {
