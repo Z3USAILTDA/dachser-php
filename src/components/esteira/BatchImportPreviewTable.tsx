@@ -55,8 +55,11 @@ interface Props {
 
 const fmtCurrency = (v: number | null, moeda?: string | null) => {
   if (v == null) return "—";
+  const map: Record<string, string> = { "R$": "BRL", "US$": "USD", "U$": "USD", "€": "EUR", "£": "GBP" };
+  const raw = (moeda || "BRL").trim();
+  const code = map[raw] || raw.toUpperCase();
   try {
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: moeda || "BRL" }).format(v);
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: code }).format(v);
   } catch {
     return v.toFixed(2);
   }
