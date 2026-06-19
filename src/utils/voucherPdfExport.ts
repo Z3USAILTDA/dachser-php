@@ -8,10 +8,13 @@ const formatNumber = (value: number): string =>
   new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 
 const formatCurrency = (value: number, moeda: string = "BRL"): string => {
+  const map: Record<string, string> = { "R$": "BRL", "US$": "USD", "U$": "USD", "€": "EUR", "£": "GBP" };
+  const raw = (moeda || "BRL").trim();
+  const code = map[raw] || raw.toUpperCase();
   try {
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: moeda }).format(value);
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: code }).format(value);
   } catch {
-    return `${moeda} ${formatNumber(value)}`;
+    return `${raw} ${formatNumber(value)}`;
   }
 };
 

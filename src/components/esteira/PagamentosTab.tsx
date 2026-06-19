@@ -709,7 +709,14 @@ export const PagamentosTab = () => {
   };
 
   const formatCurrency = (value: number, moeda = "BRL") => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: moeda }).format(value);
+    const map: Record<string, string> = { "R$": "BRL", "US$": "USD", "U$": "USD", "€": "EUR", "£": "GBP" };
+    const raw = (moeda || "BRL").trim();
+    const code = map[raw] || raw.toUpperCase();
+    try {
+      return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: code }).format(value);
+    } catch {
+      return `${raw} ${Number(value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+    }
   };
 
   const formatDate = (dateStr: string) => {
