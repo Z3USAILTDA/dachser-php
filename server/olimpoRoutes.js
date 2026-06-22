@@ -30,7 +30,7 @@ async function query(sql, params = []) {
 function parsePageLimit(req) {
   const page = Math.max(1, parseInt(req.query.page || '1', 10) || 1);
   const rawLimit = parseInt(req.query.limit || req.query.pageSize || '50', 10) || 50;
-  const limit = Math.max(1, Math.min(rawLimit, 500));
+  const limit = Math.max(1, Math.min(rawLimit, 2000));
   return { page, limit, offset: (page - 1) * limit };
 }
 
@@ -81,13 +81,72 @@ const PORTS = {
   'PORT KLANG': [3.0000, 101.3833], 'JEBEL ALI': [25.0167, 55.0667],
   DUBAI: [25.2700, 55.3000], BUENOSAIRES: [-34.6000, -58.3667],
   'BUENOS AIRES': [-34.6000, -58.3667], MONTEVIDEO: [-34.9100, -56.2100],
+  // Brasil (adicionais)
+  MANAUS: [-3.1300, -60.0200], VITORIA: [-20.3200, -40.3300],
+  PECEM: [-3.5500, -38.8000], SUAPE: [-8.3900, -34.9500],
+  SALVADOR: [-12.9700, -38.5100], IMBITUBA: [-28.2300, -48.6500],
+  ITAGUAI: [-22.9200, -43.8200], BARCARENA: [-1.5100, -48.6200],
+  FORTALEZA: [-3.7200, -38.4800], VILA_DO_CONDE: [-1.5400, -48.7500],
+  // Ásia
+  CHATTOGRAM: [22.3000, 91.8000], CHITTAGONG: [22.3000, 91.8000],
+  'NHAVA SHEVA': [18.9500, 72.9500], MUNDRA: [22.8400, 69.7000],
+  COLOMBO: [6.9500, 79.8400], 'PORT QASIM': [24.7800, 67.3400],
+  KARACHI: [24.8400, 66.9800], TIANJINXINGANG: [38.9800, 117.7800],
+  XINGANG: [38.9800, 117.7800], KAOHSIUNG: [22.5500, 120.3000],
+  HAIPHONG: [20.8600, 106.6800], 'LAEM CHABANG': [13.0800, 100.8800],
+  'HO CHI MINH': [10.7600, 106.7900], 'CAT LAI': [10.7600, 106.7900],
+  JEDDAH: [21.4800, 39.1800],
+  // Europa (adicionais)
+  ALGECIRAS: [36.1300, -5.4400], SINES: [37.9500, -8.8300],
+  GDANSK: [54.4000, 18.6700], GOTHENBURG: [57.6900, 11.8400],
+  'LONDON GATEWAY': [51.5100, 0.4300], TANGER: [35.8800, -5.5100],
+  RAUMA: [61.1300, 21.5000], FREDERICIA: [55.5700, 9.7500],
+  'GIOIA TAURO': [38.4500, 15.9000], 'PIRAEUS': [37.9400, 23.6400],
+  ISKENDERUN: [36.6800, 36.2000], MERSIN: [36.8000, 34.6300],
+  // Américas (adicionais)
+  'LONG BEACH': [33.7500, -118.2000], 'LOS ANGELES': [33.7400, -118.2700],
+  SAVANNAH: [32.0800, -81.1000], CHARLESTON: [32.7800, -79.9200],
+  NORFOLK: [36.9200, -76.3300], CALLAO: [-12.0500, -77.1500],
+  VERACRUZ: [19.2000, -96.1300], MANZANILLO: [19.0500, -104.3200],
+  CARTAGENA: [10.4000, -75.5400], COTONOU: [6.3500, 2.4300],
+  GUAYAQUIL: [-2.2700, -79.9000], 'LA GUAIRA': [10.6000, -66.9300],
+  // África / Mediterrâneo / Oriente Médio
+  DURBAN: [-29.8700, 31.0300], ALGIERS: [36.7700, 3.0600],
+  ORAN: [35.7100, -0.6200], ALEXANDRIA: [31.1800, 29.8700],
+  'EL DEKHEILA': [31.1300, 29.8100], 'PORT SAID': [31.2600, 32.3000],
+  // Europa (adicionais)
+  LIVERPOOL: [53.4500, -3.0200], 'FOS SUR MER': [43.4200, 4.9400],
+  MARSEILLE: [43.3400, 5.3400], BILBAO: [43.3500, -3.0200],
+  // Ásia (adicionais)
+  NANSHA: [22.7500, 113.6200], DALIAN: [38.9500, 121.8800],
+  XIAMEN: [24.4500, 118.0800], 'PORT KELANG': [3.0000, 101.3833],
 };
+
+// Chaves de PORTS ordenadas do nome mais longo para o mais curto, para casar
+// "PORT QASIM" / "LE HAVRE" antes de "PORT" / "LE" ao varrer prefixos.
+const PORT_KEYS_BY_LEN = Object.keys(PORTS).sort((a, b) => b.length - a.length);
 
 function portCoords(raw) {
   if (!raw) return null;
-  const clean = String(raw).toUpperCase().trim();
-  const first = clean.split(/[,(]/)[0].trim();
-  return PORTS[clean] || PORTS[first] || PORTS[first.replace(/\s+/g, '')] || null;
+  // Normaliza: maiúsculas e colapsa espaços múltiplos (ex.: "SANTOS  BRAZIL").
+  const clean = String(raw).toUpperCase().replace(/\s+/g, ' ').trim();
+  if (!clean) return null;
+  if (PORTS[clean]) return PORTS[clean];
+
+  // Remove sufixo após vírgula/parêntese (ex.: "CHATTOGRAM, BD" -> "CHATTOGRAM").
+  const beforeComma = clean.split(/[,(]/)[0].trim();
+  if (PORTS[beforeComma]) return PORTS[beforeComma];
+  if (PORTS[beforeComma.replace(/\s+/g, '')]) return PORTS[beforeComma.replace(/\s+/g, '')];
+
+  // Casa uma chave conhecida que seja prefixo do nome (lida com "PORTO PAÍS",
+  // ex.: "SANTOS BRAZIL", "LE HAVRE FRANCE", "PORT QASIM PAKISTAN").
+  for (const key of PORT_KEYS_BY_LEN) {
+    if (beforeComma === key || beforeComma.startsWith(key + ' ')) return PORTS[key];
+  }
+
+  // Último recurso: primeiro token (ex.: "VITORIA BR" -> "VITORIA").
+  const firstToken = beforeComma.split(' ')[0];
+  return PORTS[firstToken] || null;
 }
 
 function fmtBRDateTime(value) {
@@ -228,108 +287,126 @@ async function getFaturamentoRows() {
 async function getMovementRows() {
   const out = [];
   const now = Date.now();
-  const airRows = await query(`
-    SELECT DISTINCT af.awb, UPPER(REPLACE(af.num_voo, ' ', '')) AS flight, dm.cliente, dm.tipo_processo AS tipo
-      FROM ${DB}.t_awb_voo af
-      INNER JOIN ${DB}.t_master_dados dm ON dm.mawb = af.awb
-     WHERE af.num_voo IS NOT NULL AND TRIM(af.num_voo) <> '' AND TRIM(af.num_voo) <> '0'
-       AND dm.cliente IS NOT NULL AND TRIM(dm.cliente) <> ''
-     LIMIT 500
-  `);
-  const hubs = { LH: 'FRA', LA: 'SCL', DL: 'ATL', AZ: 'FCO', AF: 'CDG', KL: 'AMS', BA: 'LHR', IB: 'MAD', TP: 'LIS', UA: 'IAH', AA: 'MIA', AC: 'YYZ', QR: 'DOH', EK: 'DXB', TK: 'IST', CX: 'HKG', SQ: 'SIN', JL: 'NRT', NH: 'NRT', AV: 'BOG', CM: 'PTY' };
-  airRows.filter((_, i) => i % 2 === 0).forEach((r, i) => {
-    const flight = String(r.flight || '').replace(/[^A-Z0-9]/g, '');
-    const carrier = (flight.match(/^([A-Z]{2,3}|[0-9][A-Z])/) || [])[1];
-    const hub = hubs[carrier];
-    if (!hub || !AIRPORTS[hub] || !AIRPORTS.GRU) return;
-    const isExport = String(r.tipo || '').toUpperCase().includes('EXPORT');
-    const oCode = isExport ? 'GRU' : hub;
-    const dCode = isExport ? hub : 'GRU';
-    const h = hashString(r.awb || flight);
-    const etaIso = new Date(now + (2 + (h % 20)) * 3600 * 1000).toISOString();
-    const prog = 0.15 + ((h % 70) / 100);
-    const o = AIRPORTS[oCode];
-    const d = AIRPORTS[dCode];
-    out.push({
-      id: `air:${i}`,
-      mode: 'air',
-      tipo_label: r.tipo || 'Air',
-      cliente: String(r.cliente || '').split(' - ')[0].trim(),
-      rota: `${oCode} → ${dCode}`,
-      eta_iso: etaIso,
-      eta_api: fmtBRDateTime(etaIso),
-      ata_iso: null,
-      delivered_until_ts: null,
-      status: 'Em trânsito',
-      orig: [o.lat, o.lon],
-      dest: [d.lat, d.lon],
-      prog,
-      pos: [o.lat + (d.lat - o.lat) * prog, o.lon + (d.lon - o.lon) * prog],
-      flight,
-      asset: r.awb || null,
-    });
-  });
+  const sourceErrors = [];
 
-  const seaRows = await query(`
-    SELECT ts.mbl_id, ts.container, ts.consignee, ts.tipo_processo, ts.origem AS porto_origem,
-           ts.destino AS porto_destino, ts.navio AS vessel_name, ts.eta, ts.container_status,
-           ts.last_event, ts.last_check, ts.shipping_line,
-           CASE WHEN COALESCE(MAX(sm.eta_ata), MAX(mdn.eta)) IS NOT NULL AND MAX(ts.eta) IS NOT NULL
-                  AND MAX(ts.eta) > COALESCE(MAX(sm.eta_ata), MAX(mdn.eta))
-                  AND DATEDIFF(MAX(ts.eta), COALESCE(MAX(sm.eta_ata), MAX(mdn.eta))) >= 3
-                THEN 1 ELSE 0 END AS is_eta_delayed,
-           MAX(ot.origem_lat) AS origem_lat, MAX(ot.origem_lon) AS origem_lon,
-           MAX(ot.destino_lat) AS destino_lat, MAX(ot.destino_lon) AS destino_lon,
-           MAX(ot.current_lat) AS current_lat, MAX(ot.current_lon) AS current_lon
-      FROM ${DB}.t_sea_tracking_current ts
-      LEFT JOIN ${DB}.t_olimpo_tracking ot ON ot.mode = 'sea' AND ot.asset COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
-      LEFT JOIN ${DB}.t_sea_master sm ON TRIM(sm.master) COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
-      LEFT JOIN ${DB}.t_master_dados mdn ON TRIM(mdn.mawb) COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
-        AND mdn.tipo_processo IN ('SI', 'SE') AND mdn.data_insert >= '2026-02-01'
-     WHERE ts.active = 1
-       AND NOT (UPPER(ts.container_status) IN ('DELIVERED', 'DLV', 'GOD', 'EMPTY_RETURNED') AND ts.last_check < DATE_SUB(NOW(), INTERVAL 24 HOUR))
-     GROUP BY ts.mbl_id
-     ORDER BY ts.eta ASC
-     LIMIT 500
-  `);
-  seaRows.forEach((s) => {
-    const oCode = String(s.porto_origem || '').toUpperCase();
-    const dCode = String(s.porto_destino || '').toUpperCase();
-    const orig = s.origem_lat && s.origem_lon ? [Number(s.origem_lat), Number(s.origem_lon)] : portCoords(oCode);
-    const dest = s.destino_lat && s.destino_lon ? [Number(s.destino_lat), Number(s.destino_lon)] : portCoords(dCode);
-    if (!orig || !dest) return;
-    const etaIso = s.eta ? new Date(s.eta).toISOString() : null;
-    const statusRaw = String(s.container_status || '').toUpperCase();
-    let status = 'Em trânsito';
-    let deliveredUntil = null;
-    if (['DELIVERED', 'DLV', 'GOD', 'EMPTY_RETURNED'].includes(statusRaw)) {
-      status = 'Entregue';
-      deliveredUntil = s.last_check ? new Date(s.last_check).getTime() + 24 * 3600 * 1000 : null;
-    } else if (Number(s.is_eta_delayed) === 1 || (etaIso && now > new Date(etaIso).getTime())) {
-      status = 'Atraso';
-    }
-    out.push({
-      id: `sea:${s.mbl_id}`,
-      mode: 'sea',
-      tipo_label: s.tipo_processo || 'SEA IMPORT',
-      cliente: s.consignee || '',
-      rota: `${oCode} → ${dCode}`,
-      eta_iso: etaIso,
-      eta_api: fmtBRDateTime(etaIso),
-      ata_iso: null,
-      delivered_until_ts: deliveredUntil,
-      status,
-      orig,
-      dest,
-      prog: 0.5,
-      pos: s.current_lat && s.current_lon ? [Number(s.current_lat), Number(s.current_lon)] : null,
-      flight: null,
-      asset: s.mbl_id,
+  try {
+    const airRows = await query(`
+      SELECT DISTINCT af.awb, UPPER(REPLACE(af.num_voo, ' ', '')) AS flight, dm.cliente, dm.tipo_processo AS tipo
+        FROM ${DB}.t_awb_voo af
+        INNER JOIN ${DB}.t_master_dados dm ON dm.mawb = af.awb
+       WHERE af.num_voo IS NOT NULL AND TRIM(af.num_voo) <> '' AND TRIM(af.num_voo) <> '0'
+         AND dm.cliente IS NOT NULL AND TRIM(dm.cliente) <> ''
+       LIMIT 500
+    `);
+    const hubs = { LH: 'FRA', LA: 'SCL', DL: 'ATL', AZ: 'FCO', AF: 'CDG', KL: 'AMS', BA: 'LHR', IB: 'MAD', TP: 'LIS', UA: 'IAH', AA: 'MIA', AC: 'YYZ', QR: 'DOH', EK: 'DXB', TK: 'IST', CX: 'HKG', SQ: 'SIN', JL: 'NRT', NH: 'NRT', AV: 'BOG', CM: 'PTY' };
+
+    airRows.forEach((r, i) => {
+      const flight = String(r.flight || '').replace(/[^A-Z0-9]/g, '');
+      const carrier = (flight.match(/^([A-Z]{2,3}|[0-9][A-Z])/) || [])[1];
+      const hub = hubs[carrier] || 'MIA';
+      const isExport = String(r.tipo || '').toUpperCase().includes('EXPORT');
+      const oCode = isExport ? 'GRU' : hub;
+      const dCode = isExport ? hub : 'GRU';
+      const h = hashString(r.awb || flight || String(i));
+      const etaIso = new Date(now + (2 + (h % 20)) * 3600 * 1000).toISOString();
+      const prog = 0.15 + ((h % 70) / 100);
+      const o = AIRPORTS[oCode] || AIRPORTS.GRU;
+      const d = AIRPORTS[dCode] || AIRPORTS.MIA;
+
+      out.push({
+        id: `air:${r.awb || flight || i}`,
+        mode: 'air',
+        tipo_label: r.tipo || 'Air',
+        cliente: String(r.cliente || '').split(' - ')[0].trim(),
+        rota: `${oCode} \u2192 ${dCode}`,
+        eta_iso: etaIso,
+        eta_api: fmtBRDateTime(etaIso),
+        ata_iso: null,
+        delivered_until_ts: null,
+        status: 'Em trânsito',
+        orig: o ? [o.lat, o.lon] : null,
+        dest: d ? [d.lat, d.lon] : null,
+        prog,
+        pos: o && d ? [o.lat + (d.lat - o.lat) * prog, o.lon + (d.lon - o.lon) * prog] : null,
+        flight,
+        asset: r.awb || null,
+      });
     });
-  });
+  } catch (error) {
+    sourceErrors.push('air');
+    console.error('[olimpo:movimentacao-global:air]', error.message);
+  }
+
+  try {
+    const seaRows = await query(`
+      SELECT ts.mbl_id, ts.container, ts.consignee, ts.tipo_processo, ts.origem AS porto_origem,
+             ts.destino AS porto_destino, ts.navio AS vessel_name, ts.eta, ts.container_status,
+             ts.last_event, ts.last_check, ts.shipping_line,
+             CASE WHEN COALESCE(MAX(sm.eta_ata), MAX(mdn.eta)) IS NOT NULL AND MAX(ts.eta) IS NOT NULL
+                    AND MAX(ts.eta) > COALESCE(MAX(sm.eta_ata), MAX(mdn.eta))
+                    AND DATEDIFF(MAX(ts.eta), COALESCE(MAX(sm.eta_ata), MAX(mdn.eta))) >= 3
+                  THEN 1 ELSE 0 END AS is_eta_delayed,
+             MAX(ot.origem_lat) AS origem_lat, MAX(ot.origem_lon) AS origem_lon,
+             MAX(ot.destino_lat) AS destino_lat, MAX(ot.destino_lon) AS destino_lon,
+             MAX(ot.current_lat) AS current_lat, MAX(ot.current_lon) AS current_lon
+        FROM ${DB}.t_sea_tracking_current ts
+        LEFT JOIN ${DB}.t_olimpo_tracking ot ON ot.mode = 'sea' AND ot.asset COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
+        LEFT JOIN ${DB}.t_sea_master sm ON TRIM(sm.master) COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
+        LEFT JOIN ${DB}.t_master_dados mdn ON TRIM(mdn.mawb) COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
+          AND mdn.tipo_processo IN ('SI', 'SE') AND mdn.data_insert >= '2026-02-01'
+       WHERE ts.active = 1
+         AND NOT (UPPER(ts.container_status) IN ('DELIVERED', 'DLV', 'GOD', 'EMPTY_RETURNED') AND ts.last_check < DATE_SUB(NOW(), INTERVAL 24 HOUR))
+       GROUP BY ts.mbl_id
+       ORDER BY ts.eta ASC
+       LIMIT 500
+    `);
+
+    seaRows.forEach((s) => {
+      const oCode = String(s.porto_origem || '').toUpperCase().trim() || 'ORIGEM';
+      const dCode = String(s.porto_destino || '').toUpperCase().trim() || 'DESTINO';
+      const orig = s.origem_lat && s.origem_lon ? [Number(s.origem_lat), Number(s.origem_lon)] : portCoords(oCode);
+      const dest = s.destino_lat && s.destino_lon ? [Number(s.destino_lat), Number(s.destino_lon)] : portCoords(dCode);
+      const etaIso = s.eta ? new Date(s.eta).toISOString() : null;
+      const statusRaw = String(s.container_status || '').toUpperCase();
+      let status = 'Em trânsito';
+      let deliveredUntil = null;
+      if (['DELIVERED', 'DLV', 'GOD', 'EMPTY_RETURNED'].includes(statusRaw)) {
+        status = 'Entregue';
+        deliveredUntil = s.last_check ? new Date(s.last_check).getTime() + 24 * 3600 * 1000 : null;
+      } else if (Number(s.is_eta_delayed) === 1 || (etaIso && now > new Date(etaIso).getTime())) {
+        status = 'Atraso';
+      }
+
+      out.push({
+        id: `sea:${s.mbl_id || s.container}`,
+        mode: 'sea',
+        tipo_label: s.tipo_processo || 'SEA IMPORT',
+        cliente: s.consignee || '',
+        rota: `${oCode} \u2192 ${dCode}`,
+        eta_iso: etaIso,
+        eta_api: fmtBRDateTime(etaIso),
+        ata_iso: null,
+        delivered_until_ts: deliveredUntil,
+        status,
+        orig,
+        dest,
+        prog: 0.5,
+        pos: s.current_lat && s.current_lon ? [Number(s.current_lat), Number(s.current_lon)] : null,
+        flight: null,
+        asset: s.mbl_id || s.container || null,
+      });
+    });
+  } catch (error) {
+    sourceErrors.push('sea');
+    console.error('[olimpo:movimentacao-global:sea]', error.message);
+  }
+
+  if (out.length === 0 && sourceErrors.length > 0) {
+    throw new Error('movement_sources_unavailable');
+  }
+
   return out;
 }
-
 export function registerOlimpoRoutes(app) {
   app.get('/api/olimpo/mapbox-token', (_req, res) => res.json({ success: true, token: process.env.MAPBOX_PUBLIC_TOKEN || '' }));
 

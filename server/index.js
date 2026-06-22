@@ -2924,6 +2924,8 @@ app.post('/api/air/master-swaps', handleMasterSwaps);
 app.get('/api/air/master-discrepancies', handleDiscrepancyList);
 app.post('/api/air/master-discrepancies/resolve', handleDiscrepancyResolve);
 app.post('/api/air/usage-log', handleUsageLog);
+// Rota genérica de log de uso (substitui a edge function mariadb-proxy/log_usage do Supabase).
+app.post('/api/usage-log', handleUsageLog);
 registerOlimpoRoutes(app);
 
 // ═══════════════════════════════════════════════════════════════════
@@ -5677,7 +5679,7 @@ app.use((err, req, res, _next) => {
   if (!res.headersSent) res.status(500).json({ success: false, error: msg });
 });
 
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`\n✅ Servidor rodando em http://localhost:${PORT}\n`);
 
   // Valida conexão de cada fase configurada no .env

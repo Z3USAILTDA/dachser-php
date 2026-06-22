@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { UserRole } from "@/types/voucher";
 
 export function useUserRole() {
@@ -9,9 +8,9 @@ export function useUserRole() {
   const [esteiraActive, setEsteiraActive] = useState<boolean>(false);
 
   useEffect(() => {
-    const ROLE_CACHE_KEY = "esteira_role_cache_v1";
-    const ROLE_CACHE_TTL_MS = 60_000;
-
+    // Fonte da verdade: o usuário autenticado já vem do backend (/api/auth/login)
+    // com esteira_role / esteira_active / is_admin, persistido no localStorage.
+    // Não há mais dependência do Supabase para resolver o papel do usuário.
     const applyRoleData = (
       esteiraRoleRaw: string | null,
       active: boolean,
@@ -33,134 +32,31 @@ export function useUserRole() {
       }
     };
 
-    const fetchRole = async () => {
-      try {
-        const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
-
-        if (storedUser) {
-          const parsed = JSON.parse(storedUser);
-          const userId = parsed.id;
-          const isAdminUser = parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
-
-          // 1) Tenta cache de sessão (evita chamada ao MariaDB a cada navegação)
-          try {
-            const cachedRaw = sessionStorage.getItem(ROLE_CACHE_KEY);
-            if (cachedRaw) {
-              const cached = JSON.parse(cachedRaw);
-              if (
-                cached &&
-                cached.userId === userId &&
-                typeof cached.timestamp === "number" &&
-                Date.now() - cached.timestamp < ROLE_CACHE_TTL_MS
-              ) {
-                applyRoleData(cached.esteiraRoleRaw ?? null, !!cached.active, isAdminUser);
-                setLoading(false);
-                return;
-              }
-            }
-          } catch {
-            // ignora cache corrompido
-          }
-
-          // 2) Busca esteira role do banco
-          try {
-            const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-              body: { action: "get_user_esteira_role", userId },
-            });
-
-            if (!error && data?.success) {
-              const esteiraRoleRaw = data.esteira_role as string | null;
-              const active = data.esteira_active === 1;
-
-              applyRoleData(esteiraRoleRaw, active, isAdminUser);
-
-              try {
-                sessionStorage.setItem(
-                  ROLE_CACHE_KEY,
-                  JSON.stringify({ userId, esteiraRoleRaw, active, timestamp: Date.now() }),
-                );
-              } catch {
-                // sessionStorage cheio / indisponível — segue sem cache
-              }
-            } else {
-              if (isAdminUser) {
-                setRole("ADMIN");
-                setRoles(["ADMIN"]);
-                setEsteiraActive(true);
-              } else {
-                setRole(null);
-                setRoles([]);
-                setEsteiraActive(false);
-              }
-            }
-          } catch (fetchErr) {
-            console.error("Error fetching esteira role:", fetchErr);
-            if (isAdminUser) {
-              setRole("ADMIN");
-              setRoles(["ADMIN"]);
-              setEsteiraActive(true);
-            } else {
-              setRole(null);
-              setRoles([]);
-              setEsteiraActive(false);
-            }
-          }
-          setLoading(false);
-          return;
-        }
-
-        // Check Supabase auth (fallback)
-        const { data: { user } } = await supabase.auth.getUser();
-
-        if (!user) {
-          setRole(null);
-          setRoles([]);
-          setEsteiraActive(false);
-          setLoading(false);
-          return;
-        }
-
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (roleData?.role) {
-          setRole(roleData.role as UserRole);
-          setRoles([roleData.role as UserRole]);
-          setEsteiraActive(true);
-        } else {
-          setRole(null);
-          setRoles([]);
-          setEsteiraActive(false);
-        }
-      } catch (error) {
-        console.error("Error fetching user role:", error);
-        const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
-        if (storedUser) {
-          const parsed = JSON.parse(storedUser);
-          const isAdminUser = parsed.is_admin === 1 || parsed.is_admin === true;
-          if (isAdminUser) {
-            setRole("ADMIN");
-            setRoles(["ADMIN"]);
-            setEsteiraActive(true);
-          } else {
-            setRole(null);
-            setRoles([]);
-            setEsteiraActive(false);
-          }
-        } else {
-          setRole(null);
-          setRoles([]);
-          setEsteiraActive(false);
-        }
-      } finally {
-        setLoading(false);
+    try {
+      const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+      if (!storedUser) {
+        setRole(null);
+        setRoles([]);
+        setEsteiraActive(false);
+        return;
       }
-    };
 
-    fetchRole();
+      const parsed = JSON.parse(storedUser);
+      const isAdminUser =
+        parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
+      const esteiraRoleRaw = (parsed.esteira_role ?? null) as string | null;
+      const active =
+        parsed.esteira_active === 1 || parsed.esteira_active === "1" || parsed.esteira_active === true;
+
+      applyRoleData(esteiraRoleRaw, active, isAdminUser);
+    } catch (error) {
+      console.error("Error reading user role from localStorage:", error);
+      setRole(null);
+      setRoles([]);
+      setEsteiraActive(false);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   // Check if user has a specific role
@@ -230,10 +126,10 @@ export function useUserRole() {
   // Verifica se pode gerenciar usuários (Admin apenas)
   const canManageUsers = isAdmin;
 
-  return { 
-    role, 
+  return {
+    role,
     roles,
-    loading, 
+    loading,
     isAdmin,
     isFiscal,
     isSupervisor,

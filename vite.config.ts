@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => ({
       // Encaminha todas as chamadas /api para o backend Express (porta 3001).
       // Em produção, o reverse proxy do domínio encaminha /api -> backend.
       "/api": {
-        target: "http://localhost:3001",
+        target: "http://127.0.0.1:3001",
         changeOrigin: true,
         timeout: 30000,
         proxyTimeout: 30000,
@@ -24,7 +24,7 @@ export default defineConfig(({ mode }) => ({
       // para o mesmo backend Express. Em produção, o reverse proxy também deve encaminhar
       // /api/olimpo -> backend (porta 3001).
       "/api/olimpo": {
-        target: "http://localhost:3001",
+        target: "http://127.0.0.1:3001",
         changeOrigin: true,
         timeout: 30000,
         proxyTimeout: 30000,

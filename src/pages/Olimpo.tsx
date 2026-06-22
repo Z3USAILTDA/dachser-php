@@ -214,6 +214,7 @@ function OlimpoContent() {
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [data, setData] = useState<DataItem[]>([]);
   const [selectedAssetDetails, setSelectedAssetDetails] = useState<SelectedAssetDetails | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -361,12 +362,16 @@ function OlimpoContent() {
   // Load data from API
   const loadData = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
-      const result = await getMovimentacaoGlobal({ page: 1, limit: 500 });
+      // limit alto para trazer aéreo + marítimo juntos (o backend retorna até ~1000 itens);
+      // sem isso os 500 voos preenchiam o limite e os navios não chegavam ao mapa.
+      const result = await getMovimentacaoGlobal({ page: 1, limit: 1000 });
       setData(Array.isArray(result?.data) ? result.data : []);
     } catch (error) {
       console.error("[Olimpo] Error loading data:", error);
       setData([]);
+      setLoadError("N\u00e3o foi poss\u00edvel carregar os dados do Olimpo no momento. Tente novamente.");
     } finally {
       setIsLoading(false);
     }
@@ -481,15 +486,21 @@ function OlimpoContent() {
 
       let routeIndex = 0;
 
+      // Valida coordenada [lat, lon]: finita e dentro do range geográfico.
+      const isValidCoord = (c: [number, number] | null | undefined): c is [number, number] =>
+        Array.isArray(c) && Number.isFinite(c[0]) && Number.isFinite(c[1]) &&
+        c[0] >= -90 && c[0] <= 90 && c[1] >= -180 && c[1] <= 180;
+
       for (const [key, items] of groups.entries()) {
         const item = items[0];
-        if (!item.orig || !item.dest) continue;
 
         const currentRouteIndex = routeIndex;
         routeIndex++;
 
-        // Build route line
-        const line = buildRouteLine(item, currentRouteIndex);
+        // Linha de rota apenas quando há origem e destino válidos.
+        const line = isValidCoord(item.orig) && isValidCoord(item.dest)
+          ? buildRouteLine(item, currentRouteIndex)
+          : [];
         
         // Only show route if this vehicle is selected (with proper null checks)
         const isSelected = selectedAssetDetails && (
@@ -535,13 +546,14 @@ function OlimpoContent() {
           activeSourcesRef.current.push(sourceId);
         }
 
-        // Calculate marker position
-        let pos = item.pos;
-        if (!pos && line.length > 1) {
-          pos = pointAtFraction(line, item.prog);
-        }
+        // Posição do marcador: posição atual real → meio da rota → origem → destino.
+        let pos: [number, number] | null = isValidCoord(item.pos) ? item.pos : null;
+        if (!pos && line.length > 1) pos = pointAtFraction(line, item.prog);
+        if (!isValidCoord(pos)) pos = isValidCoord(item.orig) ? item.orig : null;
+        if (!isValidCoord(pos)) pos = isValidCoord(item.dest) ? item.dest : null;
+        if (!isValidCoord(pos)) continue;
 
-        if (pos) {
+        try {
           // Create marker element
           const el = document.createElement("div");
           el.className = "cursor-pointer";
@@ -597,6 +609,8 @@ function OlimpoContent() {
           });
 
           markersRef.current.push(marker);
+        } catch (err) {
+          console.warn("[Olimpo] Falha ao criar marcador:", item.rota, err);
         }
       }
 
@@ -1198,6 +1212,21 @@ function OlimpoContent() {
                   <TableRow>
                     <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                       Carregando dados...
+                    </TableCell>
+                  </TableRow>
+                ) : loadError ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                      <div className="flex flex-col items-center gap-3">
+                        <span>{loadError}</span>
+                        <button
+                          type="button"
+                          onClick={loadData}
+                          className="rounded-full border border-primary/60 px-3 py-1 text-[10px] uppercase tracking-[0.14em] text-primary hover:bg-primary/10"
+                        >
+                          Tentar novamente
+                        </button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : paginatedData.length === 0 ? (

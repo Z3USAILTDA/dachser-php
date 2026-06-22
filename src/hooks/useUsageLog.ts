@@ -61,7 +61,7 @@ async function sendLog(payload: Record<string, unknown>) {
     const username = user?.username || user?.email?.split("@")[0];
     if (!username || username === "unknown") return;
 
-    await fetch("/api/air/usage-log", {
+    await fetch("/api/usage-log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, sessionId: getOrCreateSessionId(), ...payload }),
@@ -129,7 +129,7 @@ export async function logAction(endpoint: string, method: "POST" | "DELETE" | "P
     const username = user?.username || user?.email?.split("@")[0];
     if (!username || username === "unknown") return;
 
-    await fetch("/api/air/usage-log", {
+    await fetch("/api/usage-log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, endpoint, method, sessionId: getOrCreateSessionId() }),
