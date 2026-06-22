@@ -20,6 +20,15 @@ export default defineConfig(({ mode }) => ({
         timeout: 30000,
         proxyTimeout: 30000,
       },
+      // Encaminha as chamadas das telas Olimpo (Movimentação Global, Cobrança, Faturamento)
+      // para o mesmo backend Express. Em produção, o reverse proxy também deve encaminhar
+      // /api/olimpo -> backend (porta 3001).
+      "/api/olimpo": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+        timeout: 30000,
+        proxyTimeout: 30000,
+      },
     },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),

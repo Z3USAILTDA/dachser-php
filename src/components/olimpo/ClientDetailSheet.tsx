@@ -7,8 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { getClientDetail, getClientDisputas, getClientEmailLogs, getClientFaturas, saveCobrancaObservacao } from "@/services/olimpo/cobrancaService";
 import { TablePagination } from "@/components/layout/TablePagination";
 import {
   Building2,
@@ -165,10 +165,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
     if (!client?.product) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_client_cnpj_detail_cr", clientName: client.product },
-      });
-      if (error) throw error;
+      const data = await getClientDetail(client.product);
       if (!data?.success) throw new Error(data?.error || "Erro");
       setCnpjData(data.data || []);
       const obsMap: Record<string, string> = {};
@@ -188,11 +185,8 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
       if (cnpjList.length > 0) {
         const results = await Promise.all(
           cnpjList.map((cnpjClean: string) =>
-            supabase.functions
-              .invoke("mariadb-proxy", {
-                body: { action: "get_olimpo_email_logs_by_cnpj", cnpj: cnpjClean },
-              })
-              .then((r) => ({ cnpjClean, logs: (r.data?.logsByEmail || {}) as Record<string, EmailLog[]> }))
+            getClientEmailLogs(cnpjClean)
+              .then((r) => ({ cnpjClean, logs: (r?.logsByEmail || {}) as Record<string, EmailLog[]> }))
               .catch(() => ({ cnpjClean, logs: {} as Record<string, EmailLog[]> }))
           )
         );
@@ -214,10 +208,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
     if (!client?.product) return;
     setFaturasLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_client_faturas_cr", clientName: client.product, page, pageSize: faturasPageSize, modalFilter: modalQ ?? modalFilterDebounced, vencSort },
-      });
-      if (error) throw error;
+      const data = await getClientFaturas({ clientName: client.product, page, pageSize: faturasPageSize, modalFilter: modalQ ?? modalFilterDebounced, vencSort });
       if (!data?.success) throw new Error(data?.error || "Erro");
       setFaturas(data.rows || []);
       setFaturasTotal(data.total || 0);
@@ -234,10 +225,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
     if (disputasByCnpj[cnpjClean] || disputasLoading[cnpjClean]) return;
     setDisputasLoading((prev) => ({ ...prev, [cnpjClean]: true }));
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_client_cnpj_disputas_cr", cnpj: cnpjClean },
-      });
-      if (error) throw error;
+      const data = await getClientDisputas(cnpjClean);
       if (!data?.success) throw new Error(data?.error || "Erro");
       setDisputasByCnpj((prev) => ({ ...prev, [cnpjClean]: data.rows || [] }));
     } catch (err: any) {
@@ -276,10 +264,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
   const handleSaveObs = async (cnpj: string) => {
     setSavingCnpj(cnpj);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "save_cobranca_observacao", cnpj, observacao: observacoes[cnpj] || "" },
-      });
-      if (error) throw error;
+      const data = await saveCobrancaObservacao({ cnpj, observacao: observacoes[cnpj] || "" });
       if (!data?.success) throw new Error(data?.error || "Erro");
       toast({ title: "Observação salva" });
     } catch (err: any) {

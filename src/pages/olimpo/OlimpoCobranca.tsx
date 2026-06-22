@@ -15,9 +15,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { supabase } from "@/integrations/supabase/client";
 import { ClientDetailSheet } from "@/components/olimpo/ClientDetailSheet";
 import { useToast } from "@/hooks/use-toast";
+import { getAgingAnalitico, getAgingHistorical, getAgingHistoricalByClient, getBudgetForecast, getCobranca, getPaymentTermByClient, getPaymentTermRating } from "@/services/olimpo/cobrancaService";
 import {
   BarChart,
   Bar,
@@ -260,20 +260,17 @@ export default function OlimpoCobranca() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const agingAction = viewMode === "client" ? "get_aging_by_client_cr" : "get_aging_overview_cr";
-
       const [agingResult, bfResult, pymtResult, histResult, pymtClientResult, agingClientResult] = await Promise.allSettled([
-        supabase.functions.invoke("mariadb-proxy", { body: { action: agingAction } }),
-        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_budget_forecast_auto", viewMode } }),
-        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_pymt_term_rating" } }),
-        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_aging_historical" } }),
-        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_pymt_term_by_client" } }),
-        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_aging_historical_by_client" } }),
+        getCobranca({ viewMode }),
+        getBudgetForecast(viewMode),
+        getPaymentTermRating(),
+        getAgingHistorical(),
+        getPaymentTermByClient(),
+        getAgingHistoricalByClient(),
       ]);
 
       if (agingResult.status === "fulfilled") {
-        const { data: resp, error } = agingResult.value;
-        if (error) throw error;
+        const resp = agingResult.value;
         if (!resp?.success) throw new Error(resp?.error || "Erro desconhecido");
         setData(resp);
       } else {
@@ -283,8 +280,8 @@ export default function OlimpoCobranca() {
       const currentPeriod = new Date().toISOString().slice(0, 7);
       const fallback: BudgetForecast = { period: currentPeriod, budget: 0, forecast: 0, asOf: new Date().toISOString() };
       if (bfResult.status === "fulfilled") {
-        const { data: bfResp, error: bfError } = bfResult.value;
-        if (!bfError && bfResp?.success) {
+        const bfResp = bfResult.value;
+        if (bfResp?.success) {
           setBudgetForecast({
             period: bfResp.period || currentPeriod,
             budget: Number(bfResp.budget) || 0,
@@ -299,28 +296,28 @@ export default function OlimpoCobranca() {
       }
 
       if (pymtResult.status === "fulfilled") {
-        const { data: pymtResp } = pymtResult.value;
+        const pymtResp = pymtResult.value;
         if (pymtResp?.success) {
           setPymtTermData(pymtResp.data || []);
         }
       }
 
       if (histResult.status === "fulfilled") {
-        const { data: histResp } = histResult.value;
+        const histResp = histResult.value;
         if (histResp?.success) {
           setHistoricalData(histResp.data || []);
         }
       }
 
       if (pymtClientResult.status === "fulfilled") {
-        const { data: pymtClientResp } = pymtClientResult.value;
+        const pymtClientResp = pymtClientResult.value;
         if (pymtClientResp?.success) {
           setClientPymtHistorical(pymtClientResp.data || []);
         }
       }
 
       if (agingClientResult.status === "fulfilled") {
-        const { data: agingClientResp } = agingClientResult.value;
+        const agingClientResp = agingClientResult.value;
         if (agingClientResp?.success) {
           setClientAgingHistorical(agingClientResp.data || []);
         }
@@ -531,23 +528,23 @@ export default function OlimpoCobranca() {
     try {
       // Fetch both datasets in parallel (independent of current viewMode)
       const [productResp, clientResp] = await Promise.all([
-        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_aging_overview_cr" } }),
-        supabase.functions.invoke("mariadb-proxy", { body: { action: "get_aging_by_client_cr" } }),
+        getCobranca({ viewMode: "product" }),
+        getCobranca({ viewMode: "client" }),
       ]);
 
       const wb = XLSX.utils.book_new();
 
       // ===== ABA 1: AGING - PRODUCT =====
-      if (productResp.data?.success && productResp.data.data?.length > 0) {
-        const productRows = mergeProductRows(productResp.data.data);
+      if (productResp?.success && productResp.data?.length > 0) {
+        const productRows = mergeProductRows(productResp.data);
         const pc = computeTotals(productRows);
         const wsProduct = buildAgingSheet(productRows, "Product", pc.totals, pc.totalOverdue, pc.totalReceivable, STYLE, headerStyleFn, cellStyleFn);
         XLSX.utils.book_append_sheet(wb, wsProduct, "Aging - Product");
       }
 
       // ===== ABA 2: AGING - CLIENT =====
-      if (clientResp.data?.success && clientResp.data.data?.length > 0) {
-        const clientRows = [...clientResp.data.data].sort((a: AgingRow, b: AgingRow) => {
+      if (clientResp?.success && clientResp.data?.length > 0) {
+        const clientRows = [...clientResp.data].sort((a: AgingRow, b: AgingRow) => {
           const overdueA = overdueKeys.reduce((s, k) => s + ((a[k] as number) || 0), 0);
           const overdueB = overdueKeys.reduce((s, k) => s + ((b[k] as number) || 0), 0);
           return overdueB - overdueA;
@@ -559,9 +556,7 @@ export default function OlimpoCobranca() {
 
       // ===== ABA 3: ANALÍTICO =====
       try {
-        const { data: analiticoResp } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "get_aging_analitico_cr" },
-        });
+        const analiticoResp = await getAgingAnalitico();
 
         if (analiticoResp?.success && analiticoResp.data?.length > 0) {
           const dataCorte = analiticoResp.dataCorte || new Date().toISOString().slice(0, 10);

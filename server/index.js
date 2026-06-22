@@ -5,6 +5,7 @@ import express from 'express';
 import cors from 'cors';
 import mysql from 'mysql2/promise';
 import { Resend } from 'resend';
+import { registerOlimpoRoutes } from './olimpoRoutes.js';
 
 const app = express();
 const PORT = process.env.SERVER_PORT || 3001;
@@ -2923,6 +2924,7 @@ app.post('/api/air/master-swaps', handleMasterSwaps);
 app.get('/api/air/master-discrepancies', handleDiscrepancyList);
 app.post('/api/air/master-discrepancies/resolve', handleDiscrepancyResolve);
 app.post('/api/air/usage-log', handleUsageLog);
+registerOlimpoRoutes(app);
 
 // ═══════════════════════════════════════════════════════════════════
 // FIN-1 — ESTEIRA / VOUCHERS

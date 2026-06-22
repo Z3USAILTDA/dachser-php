@@ -5,8 +5,8 @@ import { PageLayout } from "@/components/layout/PageLayout";
 import { DollarSign, FileText, TrendingUp, TrendingDown, Users, RefreshCw, Building2, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { getFaturamento } from "@/services/olimpo/faturamentoService";
 import ChartDetailPanel, { type ChartColumn } from "@/components/charts/ChartDetailPanel";
 import DonutSingleChart from "@/components/charts/DonutSingleChart";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -148,8 +148,7 @@ export default function OlimpoFaturamento() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: res, error } = await supabase.functions.invoke("mariadb-proxy", { body: { action: "get_faturamento_dashboard" } });
-      if (error) throw error;
+      const res = await getFaturamento({ limit: 500 });
       setData(res?.data || []);
     } catch (e: any) {
       console.error(e);

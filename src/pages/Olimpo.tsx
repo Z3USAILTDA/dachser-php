@@ -10,6 +10,7 @@ import { TablePagination } from "@/components/layout/TablePagination";
 import dachserBg from "@/assets/dachser-background.jpg";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { getMapboxToken, getMovimentacaoGlobal, getMovimentacaoGlobalSummary } from "@/services/olimpo/movimentacaoGlobalService";
 
 // Olimpo mantém seu próprio layout devido ao mapa fullscreen
 // Mas usa os mesmos estilos de card e cores do PageLayout
@@ -336,8 +337,7 @@ function OlimpoContent() {
   // Load Mapbox token
   const loadMapboxToken = useCallback(async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-mapbox-token`);
-      const json = await res.json();
+      const json = await getMapboxToken();
       if (json?.token) {
         setMapboxToken(json.token);
       }
@@ -349,395 +349,27 @@ function OlimpoContent() {
   // Load container count from master table (fallback when API is paused)
   const loadMasterContainerCount = useCallback(async () => {
     try {
-      const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mariadb-proxy`;
-      const res = await fetch(baseUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'get_sea_container_count' }),
-      });
-      const json = await res.json();
-      if (json?.count !== undefined) {
-        setMasterContainerCount(json.count);
+      const json = await getMovimentacaoGlobalSummary();
+      if (json?.summary?.containers !== undefined) {
+        setMasterContainerCount(Number(json.summary.containers) || 0);
       }
     } catch (err) {
-      console.error('Error loading container count from master:', err);
+      console.error("Error loading container count from Olimpo:", err);
     }
   }, []);
 
   // Load data from API
   const loadData = useCallback(async () => {
     setIsLoading(true);
-    const newData: DataItem[] = [];
-
     try {
-      // Base URL for edge function
-      const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy`;
-      
-      // Seed AIR
-      const seedAirRes = await fetch(`${baseUrl}?action=seed_air`);
-      const seedAirJson = await seedAirRes.json();
-      const seedAirAll = Array.isArray(seedAirJson?.data) ? seedAirJson.data : [];
-      // Mostrar apenas metade dos aéreos no mapa (amostragem uniforme por índice par)
-      const seedAir = seedAirAll.filter((_: any, i: number) => i % 2 === 0);
-
-      if (seedAir.length > 0) {
-        const normFlight = (s: string) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-        const isValidFlight = (f: string) => /^(?:[A-Z]{2,3}|[0-9][A-Z])[0-9]{1,4}[A-Z]?$/i.test(f);
-
-        const flightsCsv = Array.from(
-          new Set(seedAir.map((x: any) => normFlight(x.flight)).filter((f: string) => f && f !== "0" && isValidFlight(f)))
-        ).join(",");
-
-        if (flightsCsv) {
-          // Get live positions - this endpoint returns: lat, lon, orig_iata, dest_iata, eta
-          const fullRes = await fetch(`${baseUrl}?action=fr24_full&flights=${encodeURIComponent(flightsCsv)}&batch=12&retries=3`);
-          const fullJson = await fullRes.json();
-          const fullArr = Array.isArray(fullJson?.data) ? fullJson.data : [];
-
-          // Build index from fr24_full response - this has all the data we need
-          const idxFull = new Map<string, any>();
-          for (const f of fullArr) {
-            const flightNum = f.flight || f.number || f?.identification?.number?.default || f.callsign || "";
-            const k = normFlight(flightNum);
-            if (!k) continue;
-            
-            idxFull.set(k, {
-              oCode: (f.orig_iata || f.origin_iata || f?.origin?.iata || "").toUpperCase(),
-              dCode: (f.dest_iata || f.destination_iata || f?.destination?.iata || "").toUpperCase(),
-              lat: typeof f.lat === "number" ? f.lat : null,
-              lon: typeof f.lon === "number" ? f.lon : null,
-              eta: f.eta || null, // ETA from fr24_full
-              timestamp: f.timestamp || null,
-            });
-          }
-
-          // Fallback route map (airline 2-letter prefix → hub IATA) for when FR24 is unavailable.
-          // Used to derive a plausible origin/destination based on tipo_processo (IMPORT/EXPORT).
-          const AIRLINE_HUB: Record<string, string> = {
-            LH: "FRA", LA: "SCL", DL: "ATL", AZ: "FCO", AF: "CDG", KL: "AMS",
-            BA: "LHR", IB: "MAD", TP: "LIS", UA: "IAH", AA: "MIA", AC: "YYZ",
-            QR: "DOH", EK: "DXB", TK: "IST", CX: "HKG", SQ: "SIN", JL: "NRT",
-            NH: "NRT", CA: "PEK", CI: "TPE", AV: "BOG", CM: "PTY", G3: "GRU",
-            JJ: "GRU", AD: "VCP", "4M": "EZE", AR: "EZE", LX: "ZRH", OS: "VIE",
-            SK: "CPH", AY: "HEL", EI: "DUB", SN: "BRU", SU: "SVO", EY: "AUH",
-          };
-          const carrierOf = (flt: string) => {
-            const m = flt.match(/^([A-Z]{2,3}|[0-9][A-Z])/);
-            return m ? m[1] : "";
-          };
-          const fallbackRoute = (flt: string, tipo: string): { o: string; d: string } | null => {
-            const c = carrierOf(flt);
-            const hub = AIRLINE_HUB[c];
-            if (!hub) return null;
-            const isExport = String(tipo || "").toUpperCase().includes("EXPORT");
-            return isExport ? { o: "GRU", d: hub } : { o: hub, d: "GRU" };
-          };
-
-          // Get airports for coordinates (live + fallback)
-          const liveCodes = [...idxFull.values()].flatMap((x) => [x.oCode, x.dCode]).filter(Boolean);
-          const fallbackCodes: string[] = [];
-          for (const s of seedAir) {
-            const fr = fallbackRoute(normFlight(s.flight), s.tipo || "");
-            if (fr) { fallbackCodes.push(fr.o, fr.d); }
-          }
-          const codesFull = Array.from(new Set([...liveCodes, ...fallbackCodes]));
-          let airports: Record<string, any> = {};
-          if (codesFull.length) {
-            const apRes = await fetch(`${baseUrl}?action=airports_public&codes=${encodeURIComponent(codesFull.join(","))}`);
-            const apJson = await apRes.json();
-            airports = apJson?.data || {};
-          }
-
-          const nowTs = Date.now();
-          
-          // Calculate progress based on timestamp and eta
-          const calcProg = (eta: string | null): number => {
-            if (!eta) return 0.5;
-            const etaTs = new Date(eta).getTime();
-            if (!isFinite(etaTs)) return 0.5;
-            // Assume flight started ~8h before ETA for international flights
-            const estimatedDuration = 8 * 60 * 60 * 1000; // 8 hours default
-            const startTs = etaTs - estimatedDuration;
-            if (nowTs <= startTs) return 0;
-            if (nowTs >= etaTs) return 1;
-            return (nowTs - startTs) / (etaTs - startTs);
-          };
-          
-          // Calculate status based on ETA
-          const calcStatus = (etaIso: string | null, hasPosition: boolean): "Em trânsito" | "Atraso" | "Entregue" => {
-            if (!etaIso) return "Em trânsito";
-            const etaTs = new Date(etaIso).getTime();
-            if (!isFinite(etaTs)) return "Em trânsito";
-            // If past ETA and still has position, it's delayed
-            if (nowTs > etaTs && hasPosition) return "Atraso";
-            // If past ETA and no position, likely delivered
-            if (nowTs > etaTs + 2 * 60 * 60 * 1000 && !hasPosition) return "Entregue";
-            return "Em trânsito";
-          };
-
-          // Simple hash for deterministic pseudo-randomness in fallback mode
-          const hashKey = (s: string): number => {
-            let h = 0;
-            for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-            return Math.abs(h);
-          };
-
-          for (let i = 0; i < seedAir.length; i++) {
-            const s = seedAir[i];
-            const k = normFlight(s.flight);
-            const f = idxFull.get(k) || {};
-
-            let oCode = (f.oCode || "").toUpperCase();
-            let dCode = (f.dCode || "").toUpperCase();
-            let etaIso: string | null = f.eta || null;
-            let lat = f.lat;
-            let lon = f.lon;
-            let isFallback = false;
-
-            // Fallback when live FR24 data is unavailable for this flight
-            if (!oCode || !dCode) {
-              const fr = fallbackRoute(k, s.tipo || "");
-              if (!fr) continue;
-              oCode = fr.o;
-              dCode = fr.d;
-              isFallback = true;
-              // Synthesize plausible ETA: 2-22h ahead based on AWB hash
-              const h = hashKey(s.awb || k);
-              const hoursAhead = 2 + (h % 20);
-              etaIso = new Date(nowTs + hoursAhead * 3600 * 1000).toISOString();
-            }
-
-            const o = airports[oCode] || null;
-            const d = airports[dCode] || null;
-
-            // Skip if no airport coordinates
-            if (!o || !d) continue;
-
-            // Interpolated pseudo-position for fallback (between origin and destination)
-            if (isFallback && Number.isFinite(+o.lat) && Number.isFinite(+d.lat)) {
-              const h = hashKey((s.awb || k) + "p");
-              const t = 0.15 + ((h % 70) / 100); // 0.15 .. 0.85
-              lat = Number(o.lat) + (Number(d.lat) - Number(o.lat)) * t;
-              lon = Number(o.lon) + (Number(d.lon) - Number(o.lon)) * t;
-            }
-
-            const etaApiHuman = fmtLocalBRDateTime(etaIso) || "—";
-
-            const hasPosition = Number.isFinite(lat) && Number.isFinite(lon);
-            const status = calcStatus(etaIso, hasPosition);
-            
-            // Skip delivered items older than 24h
-            if (status === "Entregue") {
-              const etaTs = etaIso ? new Date(etaIso).getTime() : 0;
-              if (nowTs > etaTs + 24 * 60 * 60 * 1000) continue;
-            }
-            
-            const pos: [number, number] | null = hasPosition ? [Number(lat), Number(lon)] : null;
-
-            const rawCliente = s.cliente || "";
-            const clienteCorto = String(rawCliente).split(" - ")[0].trim() || rawCliente;
-
-            newData.push({
-              id: `air:${i}`,
-              mode: "air",
-              tipo_label: s.tipo || "Air",
-              cliente: clienteCorto,
-              rota: `${oCode} → ${dCode}`,
-              eta_iso: etaIso,
-              eta_api: etaApiHuman,
-              ata_iso: status === "Entregue" ? etaIso : null,
-              delivered_until_ts: status === "Entregue" && etaIso ? new Date(etaIso).getTime() + 24 * 60 * 60 * 1000 : null,
-              status,
-              orig: o && Number.isFinite(+o.lat) && Number.isFinite(+o.lon) ? [Number(o.lat), Number(o.lon)] : null,
-              dest: d && Number.isFinite(+d.lat) && Number.isFinite(+d.lon) ? [Number(d.lat), Number(d.lon)] : null,
-              prog: isFallback ? Math.min(1, Math.max(0, (hashKey((s.awb || k) + "p") % 70) / 100 + 0.15)) : calcProg(etaIso),
-              pos,
-              flight: k,
-              asset: s.awb || null,
-            });
-          }
-        }
-
-      }
-
-      // SEA data - buscar da tela de monitoramento (t_tracking_sea)
-      // Primeiro, sincronizar dados e buscar coordenadas via JSONCARGO em background
-      fetch(`${baseUrl}?action=sync_olimpo_from_monitoring`).catch(() => {});
-      fetch(`${baseUrl}?action=refresh_sea_tracking_smart`).catch(() => {});
-      
-      const seaRes = await fetch(`${baseUrl}?action=olimpo_sea_from_monitoring`);
-      const seaJson = await seaRes.json();
-      const seaArr = Array.isArray(seaJson?.data) ? seaJson.data : [];
-
-      const nowTs = Date.now();
-
-      // Fallback: known port coordinates by name (used when backend lacks lat/lon)
-      const PORT_COORDS: Record<string, [number, number]> = {
-        "SANTOS": [-23.9618, -46.3322], "SSZ": [-23.9618, -46.3322],
-        "PARANAGUA": [-25.5161, -48.5089], "PNG": [-25.5161, -48.5089],
-        "ITAJAI": [-26.9078, -48.6619], "ITJ": [-26.9078, -48.6619],
-        "NAVEGANTES": [-26.8975, -48.6536], "NVT": [-26.8975, -48.6536],
-        "ITAPOA": [-26.1133, -48.6122], "IOA": [-26.1133, -48.6122],
-        "RIO GRANDE": [-32.0350, -52.0986], "RIG": [-32.0350, -52.0986],
-        "RIO DE JANEIRO": [-22.8917, -43.1947], "RIO": [-22.8917, -43.1947],
-        "SUAPE": [-8.3950, -34.9614], "SUA": [-8.3950, -34.9614],
-        "PECEM": [-3.5447, -38.8083], "PEC": [-3.5447, -38.8083],
-        "SALVADOR": [-12.9714, -38.5108], "SSA": [-12.9714, -38.5108],
-        "VITORIA": [-20.3194, -40.3361], "VIX": [-20.3194, -40.3361],
-        "MANAUS": [-3.1339, -60.0250], "MAO": [-3.1339, -60.0250],
-        "ITAGUAI": [-22.9333, -43.8167],
-        "ROTTERDAM": [51.9244, 4.4777], "RTM": [51.9244, 4.4777],
-        "ANTWERP": [51.2602, 4.4023], "ANTWERPEN": [51.2602, 4.4023], "ANR": [51.2602, 4.4023],
-        "HAMBURG": [53.5413, 9.9836], "HAM": [53.5413, 9.9836],
-        "BREMERHAVEN": [53.5396, 8.5810], "BRV": [53.5396, 8.5810],
-        "LE HAVRE": [49.4944, 0.1079], "LEH": [49.4944, 0.1079],
-        "VALENCIA": [39.4699, -0.3763], "VLC": [39.4699, -0.3763],
-        "BARCELONA": [41.3500, 2.1500], "BCN": [41.3500, 2.1500],
-        "ALGECIRAS": [36.1300, -5.4500],
-        "GENOA": [44.4056, 8.9463], "GENOVA": [44.4056, 8.9463], "GOA": [44.4056, 8.9463],
-        "LA SPEZIA": [44.0950, 9.8200],
-        "FELIXSTOWE": [51.9542, 1.3464], "FXT": [51.9542, 1.3464],
-        "LISBON": [38.7081, -9.1361], "LISBOA": [38.7081, -9.1361], "LIS": [38.7081, -9.1361],
-        "LEIXOES": [41.1844, -8.7044],
-        "GDANSK": [54.3520, 18.6466], "GDYNIA": [54.5333, 18.5500],
-        "NEW YORK": [40.6840, -74.0480], "NYC": [40.6840, -74.0480],
-        "MIAMI": [25.7780, -80.1700], "MIA": [25.7780, -80.1700],
-        "HOUSTON": [29.7300, -95.3000], "HOU": [29.7300, -95.3000],
-        "LOS ANGELES": [33.7400, -118.2700], "LAX": [33.7400, -118.2700],
-        "LONG BEACH": [33.7550, -118.2160],
-        "SAVANNAH": [32.1300, -81.1400], "SAV": [32.1300, -81.1400],
-        "NORFOLK": [36.8800, -76.3300],
-        "CHARLESTON": [32.7833, -79.9000],
-        "MONTREAL": [45.5500, -73.5400],
-        "SHANGHAI": [31.3300, 121.5000], "SHA": [31.3300, 121.5000],
-        "NINGBO": [29.8683, 121.5440],
-        "SHENZHEN": [22.5333, 113.9333], "YANTIAN": [22.5733, 114.2767],
-        "HONG KONG": [22.3050, 114.1700], "HKG": [22.3050, 114.1700],
-        "QINGDAO": [36.0833, 120.3167],
-        "TIANJIN": [38.9833, 117.7833], "TIANJINXINGANG": [38.9833, 117.7833], "XINGANG": [38.9833, 117.7833],
-        "DALIAN": [38.9333, 121.6333],
-        "BUSAN": [35.1000, 129.0400], "PUSAN": [35.1000, 129.0400],
-        "INCHEON": [37.4500, 126.6000],
-        "TOKYO": [35.6500, 139.7500], "YOKOHAMA": [35.4500, 139.6500],
-        "OSAKA": [34.6500, 135.4333], "KOBE": [34.6800, 135.2100],
-        "SINGAPORE": [1.2640, 103.8200], "SIN": [1.2640, 103.8200],
-        "PORT KLANG": [3.0000, 101.3833], "TANJUNG PELEPAS": [1.3633, 103.5500],
-        "LAEM CHABANG": [13.0833, 100.8833], "BANGKOK": [13.6900, 100.5600],
-        "HO CHI MINH": [10.7700, 106.7000], "HAIPHONG": [20.8500, 106.6833],
-        "JAKARTA": [-6.1000, 106.8800], "TANJUNG PRIOK": [-6.1000, 106.8800],
-        "MUMBAI": [18.9500, 72.8333], "NHAVA SHEVA": [18.9500, 72.9500],
-        "CHENNAI": [13.1000, 80.3000], "COLOMBO": [6.9500, 79.8500],
-        "JIAO XIN": [29.8683, 121.5440],
-        "JEBEL ALI": [25.0167, 55.0667], "DUBAI": [25.2700, 55.3000],
-        "DAMMAM": [26.5000, 50.2000], "DOHA": [25.2867, 51.5333],
-        "DURBAN": [-29.8667, 31.0500], "DUR": [-29.8667, 31.0500],
-        "CAPE TOWN": [-33.9100, 18.4400],
-        "LAGOS": [6.4400, 3.4000], "APAPA": [6.4400, 3.4000],
-        "BUENOS AIRES": [-34.6000, -58.3667],
-        "MONTEVIDEO": [-34.9100, -56.2100],
-        "VALPARAISO": [-33.0367, -71.6300], "SAN ANTONIO": [-33.5933, -71.6200],
-        "CALLAO": [-12.0500, -77.1500], "LIMA": [-12.0500, -77.1500],
-        "GUAYAQUIL": [-2.2667, -79.9000],
-        "CARTAGENA": [10.4000, -75.5333], "BARRANQUILLA": [11.0000, -74.8000],
-        "BALBOA": [8.9500, -79.5667], "MANZANILLO": [9.3500, -79.8167],
-        "SYDNEY": [-33.8600, 151.2000], "MELBOURNE": [-37.8333, 144.9333], "BRISBANE": [-27.3833, 153.1667],
-      };
-      const lookupPort = (raw: string): [number, number] | null => {
-        if (!raw) return null;
-        const cleaned = raw.toUpperCase().trim();
-        if (PORT_COORDS[cleaned]) return PORT_COORDS[cleaned];
-        const first = cleaned.split(/[,\(]/)[0].trim();
-        if (PORT_COORDS[first]) return PORT_COORDS[first];
-        const noSuffix = first.replace(/\s+(PORT|HARBOUR|HARBOR)$/i, "").trim();
-        if (PORT_COORDS[noSuffix]) return PORT_COORDS[noSuffix];
-        for (const k of Object.keys(PORT_COORDS)) {
-          if (k.length >= 4 && (first.includes(k) || k.includes(first))) return PORT_COORDS[k];
-        }
-        return null;
-      };
-
-      for (const s of seaArr) {
-        const oCode = (s.porto_origem || "").toUpperCase();
-        const dCode = (s.porto_destino || "").toUpperCase();
-        
-        if (!oCode || !dCode) continue;
-
-        // Coordenadas do banco com fallback por nome de porto
-        const origDb: [number, number] | null = 
-          s.origem_lat && s.origem_lon ? [Number(s.origem_lat), Number(s.origem_lon)] : null;
-        const destDb: [number, number] | null = 
-          s.destino_lat && s.destino_lon ? [Number(s.destino_lat), Number(s.destino_lon)] : null;
-        const orig = origDb || lookupPort(oCode);
-        const dest = destDb || lookupPort(dCode);
-
-        if (!orig && !dest) continue;
-
-        const etaIso = s.eta ? new Date(s.eta).toISOString() : null;
-        const mblId = s.mbl_id || `sea-${newData.length}`;
-        
-        // Determinar status baseado no container_status e is_eta_delayed
-        let status: "Em trânsito" | "Atraso" | "Entregue" = "Em trânsito";
-        let deliveredUntilTs: number | null = null;
-        
-        const containerStatus = (s.container_status || "").toUpperCase();
-        const isDelivered = ["DELIVERED", "DLV", "GOD", "EMPTY_RETURNED"].includes(containerStatus);
-        
-        if (isDelivered) {
-          status = "Entregue";
-          if (s.last_check) {
-            const lastCheckTs = new Date(s.last_check).getTime();
-            deliveredUntilTs = lastCheckTs + 24 * 60 * 60 * 1000;
-          }
-        } else if (s.is_eta_delayed === 1) {
-          status = "Atraso";
-        } else if (etaIso) {
-          const etaTs = new Date(etaIso).getTime();
-          if (nowTs > etaTs) {
-            status = "Atraso";
-          }
-        }
-
-        // Posição atual do navio (se disponível)
-        const pos: [number, number] | null = 
-          s.current_lat && s.current_lon 
-            ? [Number(s.current_lat), Number(s.current_lon)] 
-            : null;
-
-        // Calcular progresso baseado em ETD e ETA
-        const etdIso = s.etd ? new Date(s.etd).toISOString() : null;
-        const prog = (() => {
-          if (!(etdIso && etaIso)) return 0.5;
-          const t0 = new Date(etdIso).getTime();
-          const t1 = new Date(etaIso).getTime();
-          if (!isFinite(t0) || !isFinite(t1) || t1 <= t0) return 0.5;
-          return Math.max(0, Math.min(1, (nowTs - t0) / (t1 - t0)));
-        })();
-
-        newData.push({
-          id: `sea:${mblId}`,
-          mode: "sea",
-          tipo_label: s.tipo_processo || "SEA IMPORT",
-          cliente: s.consignee || s.cliente || "",
-          rota: `${oCode} → ${dCode}`,
-          eta_iso: etaIso,
-          eta_api: fmtLocalBRDateTime(etaIso) || "—",
-          ata_iso: null,
-          delivered_until_ts: deliveredUntilTs,
-          status,
-          orig,
-          dest,
-          prog,
-          pos,
-          flight: null,
-          asset: mblId,
-        });
-      }
+      const result = await getMovimentacaoGlobal({ page: 1, limit: 500 });
+      setData(Array.isArray(result?.data) ? result.data : []);
     } catch (error) {
       console.error("[Olimpo] Error loading data:", error);
+      setData([]);
+    } finally {
+      setIsLoading(false);
     }
-
-    setData(newData);
-    setIsLoading(false);
   }, []);
 
   // Initialize map
