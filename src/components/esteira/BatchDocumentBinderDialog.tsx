@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // kept: extract-boleto-barcode edge fn requires Supabase
 import { useToast } from "@/hooks/use-toast";
 import { Link2, Unlink, Loader2, FileText, Paperclip, CheckCircle2, Search, Layers, Lock, X, PackageSearch, Trash2 } from "lucide-react";
 import { TIPOS_ANEXO } from "@/utils/batchVoucherImport";
@@ -56,9 +56,8 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
     if (!batchId) return;
     setLoading(true);
     try {
-      const { data } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_batch_import_status", userId, batch_id: batchId },
-      });
+      const resp = await fetch(`/api/fin/batch-import/${encodeURIComponent(batchId)}/status`);
+      const data = await resp.json().catch(() => ({}));
       if (data?.success) {
         setDocs(data.documents || []);
         setChecklist(data.checklist || []);
@@ -67,7 +66,7 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
     } finally {
       setLoading(false);
     }
-  }, [batchId, userId]);
+  }, [batchId]);
 
 
   useEffect(() => {
@@ -214,17 +213,15 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
       let extraIds: string[] = [];
       if (!lockedMaster && selectedPreLanc.size > 0) {
         const preIds = Array.from(selectedPreLanc);
-        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "attach_pre_lancamento_to_batch",
-            userId,
-            batch_id: batchId,
-            voucher_ids: preIds,
-          },
+        const attachResp = await fetch(`/api/fin/batch-import/${encodeURIComponent(batchId!)}/attach-prelancamento`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, voucher_ids: preIds }),
         });
-        if (error || !data?.success) {
+        const data = await attachResp.json().catch(() => ({}));
+        if (!attachResp.ok || !data?.success) {
           allOk = false;
-          toast({ title: "Falha ao anexar pré-lançados", description: data?.error || error?.message, variant: "destructive" });
+          toast({ title: "Falha ao anexar pré-lançados", description: data?.error, variant: "destructive" });
         } else {
           extraIds = preIds;
         }
@@ -243,34 +240,28 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
         for (const docId of selectedDocs) {
           const docMeta = docs.find((d: any) => String(d.id) === String(docId));
           if (isMasterBind) {
-            const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-              body: {
-                action: "bind_batch_document_to_master_group",
-                userId,
-                batch_document_id: docId,
-                voucher_ids: voucherIds,
-                tipo_anexo: tipoAnexo,
-              },
+            const bindResp = await fetch(`/api/fin/batch-import/${encodeURIComponent(batchId!)}/bind-to-master`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId, batch_document_id: docId, voucher_ids: voucherIds, tipo_anexo: tipoAnexo }),
             });
-            if (error || !data?.success) {
+            const data = await bindResp.json().catch(() => ({}));
+            if (!bindResp.ok || !data?.success) {
               allOk = false;
-              toast({ title: "Falha ao vincular master", description: data?.error || error?.message, variant: "destructive" });
+              toast({ title: "Falha ao vincular master", description: data?.error, variant: "destructive" });
             } else if (docMeta?.file_url && (tipoAnexo === "BOLETO" || tipoAnexo === "DAI")) {
               extractionTargets.push({ voucherIds, fileUrl: docMeta.file_url, tipo: tipoAnexo });
             }
           } else {
-            const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-              body: {
-                action: "bind_batch_document_to_voucher",
-                userId,
-                batch_document_id: docId,
-                voucher_id: voucherIds[0],
-                tipo_anexo: tipoAnexo,
-              },
+            const bindResp = await fetch(`/api/fin/batch-import/${encodeURIComponent(batchId!)}/bind-to-voucher`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId, batch_document_id: docId, voucher_id: voucherIds[0], tipo_anexo: tipoAnexo }),
             });
-            if (error || !data?.success) {
+            const data = await bindResp.json().catch(() => ({}));
+            if (!bindResp.ok || !data?.success) {
               allOk = false;
-              toast({ title: "Falha ao vincular", description: data?.error || error?.message, variant: "destructive" });
+              toast({ title: "Falha ao vincular", description: data?.error, variant: "destructive" });
             } else if (docMeta?.file_url && (tipoAnexo === "BOLETO" || tipoAnexo === "DAI")) {
               extractionTargets.push({ voucherIds: [voucherIds[0]], fileUrl: docMeta.file_url, tipo: tipoAnexo });
             }
@@ -325,13 +316,10 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
               continue;
             }
             for (const vid of eligibleVids) {
-              await supabase.functions.invoke("mariadb-proxy", {
-                body: {
-                  action: "save_linha_digitavel",
-                  voucher_id: vid,
-                  linha_digitavel: ext.linhaDigitavel,
-                  codigo_barras: ext.codigoBarras || null,
-                },
+              await fetch(`/api/fin/vouchers/${encodeURIComponent(vid)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ linha_digitavel: ext.linhaDigitavel, codigo_barras: ext.codigoBarras || null }),
               });
             }
             toast({
@@ -380,9 +368,8 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
     if (!batchId) return;
     setPreSearchLoading(true);
     try {
-      const { data } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "search_pre_lancamento_by_fornecedores", userId, batch_id: batchId },
-      });
+      const resp = await fetch(`/api/fin/batch-import/${encodeURIComponent(batchId)}/pre-lancamento`);
+      const data = await resp.json().catch(() => ({}));
       if (data?.success) {
         const idsNoLote = new Set((checklist || []).map((c) => c.voucher_id));
         setPreLancVouchers((data.vouchers || []).filter((v: any) => !idsNoLote.has(v.id)));
@@ -412,8 +399,10 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
   const unbind = async (docId: string) => {
     setBusy(true);
     try {
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "unbind_batch_document", userId, batch_document_id: docId },
+      await fetch(`/api/fin/batch-import/${encodeURIComponent(batchId!)}/unbind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, batch_document_id: docId }),
       });
       await refresh();
     } finally {
@@ -425,11 +414,14 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
     if (!confirm(`Excluir definitivamente "${fileName}"? Esta ação não pode ser desfeita.`)) return;
     setBusy(true);
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "delete_batch_document", userId, batch_document_id: docId },
+      const resp = await fetch(`/api/fin/batch-import/doc/${encodeURIComponent(docId)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
       });
-      if (error || !data?.success) {
-        toast({ title: "Falha ao excluir", description: data?.error || error?.message, variant: "destructive" });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data?.success) {
+        toast({ title: "Falha ao excluir", description: data?.error, variant: "destructive" });
       } else {
         toast({ title: "Documento excluído" });
         setSelectedDocs((prev) => {
@@ -448,9 +440,12 @@ export function BatchDocumentBinderDialog({ open, onOpenChange, batchId, userId,
     if (!batchId) return;
     setBusy(true);
     try {
-      const { data } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "finalize_batch_import", userId, batch_id: batchId },
+      const resp = await fetch(`/api/fin/batch-import/${encodeURIComponent(batchId)}/finalize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
       });
+      const data = await resp.json().catch(() => ({}));
       if (data?.success) {
         toast({
           title: "Lote finalizado",

@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiPost, apiPatch, apiDelete } from "@/services/apiClient";
 
 interface ExtractedFile {
   name: string;
@@ -104,15 +104,11 @@ export const maritimoApi = {
    */
   async getItems(params: { analysisType?: string; status?: string; search?: string } = {}): Promise<MaritimoItem[]> {
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'get_maritimo_items',
-          analysisType: params.analysisType,
-          status: params.status,
-          search: params.search
-        }
-      });
-      if (error) throw error;
+      const qs = new URLSearchParams();
+      if (params.analysisType) qs.set('analysisType', params.analysisType);
+      if (params.status)       qs.set('status', params.status);
+      if (params.search)       qs.set('search', params.search);
+      const data = await apiGet(`/api/sea/maritimo/items?${qs.toString()}`);
       return data?.items || [];
     } catch (error) {
       console.error('Error fetching items:', error);
@@ -124,11 +120,7 @@ export const maritimoApi = {
    * Get a single maritime item by ID
    */
   async getItem(itemId: string): Promise<MaritimoItem> {
-    const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-      body: { action: 'get_maritimo_item', itemId }
-    });
-    
-    if (error) throw error;
+    const data = await apiGet(`/api/sea/maritimo/items/${encodeURIComponent(itemId)}`);
     if (!data?.item) throw new Error('Item not found');
     return data.item;
   },
@@ -137,11 +129,7 @@ export const maritimoApi = {
    * Get history for a specific item
    */
   async getHistory(itemId: string): Promise<HistoryResponse> {
-    const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-      body: { action: 'get_maritimo_history', itemId }
-    });
-    
-    if (error) throw error;
+    const data = await apiGet(`/api/sea/maritimo/items/${encodeURIComponent(itemId)}/history`);
     return {
       success: true,
       item: data?.item || {},
@@ -190,11 +178,7 @@ export const maritimoApi = {
    */
   async deleteItem(itemId: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'delete_maritimo_item', itemId }
-      });
-      
-      if (error) throw error;
+      await apiDelete(`/api/sea/maritimo/items/${encodeURIComponent(itemId)}`);
       return { success: true };
     } catch (error: any) {
       console.error('Error deleting item:', error);
@@ -206,16 +190,11 @@ export const maritimoApi = {
    * Complete or keep pending an analysis
    */
   async completeAnalysis(analysisId: string, itemId: string, shouldComplete: boolean): Promise<void> {
-    const { error } = await supabase.functions.invoke('mariadb-proxy', {
-      body: { 
-        action: 'complete_maritimo_analysis', 
-        analysisId, 
-        itemId, 
-        completed: shouldComplete 
-      }
+    await apiPost('/api/sea/maritimo/complete-analysis', {
+      analysisId,
+      itemId,
+      completed: shouldComplete,
     });
-    
-    if (error) throw error;
   },
 
   /**
@@ -431,10 +410,7 @@ export const maritimoApi = {
    */
   async reextractMetadata(options: { forceAll?: boolean; itemId?: string }): Promise<{ processed: number; updated?: number }> {
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'reextract_maritimo_metadata', ...options }
-      });
-      if (error) throw error;
+      const data = await apiPost('/api/sea/maritimo/reextract-metadata', options);
       return { processed: data?.processed || 0, updated: data?.updated || 0 };
     } catch (error) {
       console.error('Error reextracting metadata:', error);
@@ -446,15 +422,10 @@ export const maritimoApi = {
    * Get system logs (admin only)
    */
   async getSystemLogs(params: { functionName?: string; logType?: string; limit?: number } = {}): Promise<any> {
-    const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-      body: { 
-        action: 'raw_query',
-        query: `SELECT * FROM ai_agente.t_dachser_sea_runs ORDER BY created_at DESC LIMIT ${params.limit || 100}`
-      }
-    });
-    
-    if (error) throw error;
-    return { logs: data?.data || [] };
+    const qs = new URLSearchParams();
+    if (params.limit) qs.set('limit', String(params.limit));
+    const data = await apiGet(`/api/sea/maritimo/system-logs?${qs.toString()}`);
+    return { logs: data?.logs || [] };
   },
 
   /**
@@ -483,23 +454,18 @@ export const maritimoApi = {
     approvedByName?: string;
   }): Promise<{ success: boolean; action?: string; id?: number; error?: string }> {
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'save_approved_example',
-          runId: params.runId,
-          itemId: params.itemId,
-          analysisType: params.analysisType,
-          consignee: params.consignee,
-          scenarioType: params.scenarioType,
-          hblCount: params.hblCount,
-          inputSummary: params.inputSummary,
-          resultText: params.resultText,
-          approvedBy: params.approvedBy,
-          approvedByName: params.approvedByName
-        }
+      const data = await apiPost('/api/sea/maritimo/approved-examples', {
+        runId: params.runId,
+        itemId: params.itemId,
+        analysisType: params.analysisType,
+        consignee: params.consignee,
+        scenarioType: params.scenarioType,
+        hblCount: params.hblCount,
+        inputSummary: params.inputSummary,
+        resultText: params.resultText,
+        approvedBy: params.approvedBy,
+        approvedByName: params.approvedByName,
       });
-      
-      if (error) throw error;
       return { success: true, action: data?.action, id: data?.id };
     } catch (error: any) {
       console.error('Error saving approved example:', error);
@@ -516,16 +482,11 @@ export const maritimoApi = {
     limit?: number;
   }): Promise<{ success: boolean; examples: any[]; error?: string }> {
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'get_approved_examples',
-          analysisType: params.analysisType,
-          hblCount: params.hblCount || 1,
-          limit: params.limit || 3
-        }
-      });
-      
-      if (error) throw error;
+      const qs = new URLSearchParams();
+      qs.set('analysisType', params.analysisType);
+      qs.set('hblCount', String(params.hblCount || 1));
+      qs.set('limit', String(params.limit || 3));
+      const data = await apiGet(`/api/sea/maritimo/approved-examples?${qs.toString()}`);
       return { success: true, examples: data?.examples || [] };
     } catch (error: any) {
       console.error('Error getting approved examples:', error);
@@ -543,17 +504,12 @@ export const maritimoApi = {
     offset?: number;
   } = {}): Promise<{ success: boolean; examples: any[]; total: number; error?: string }> {
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'list_approved_examples',
-          analysisType: params.analysisType,
-          isActive: params.isActive,
-          limit: params.limit || 20,
-          offset: params.offset || 0
-        }
-      });
-      
-      if (error) throw error;
+      const qs = new URLSearchParams();
+      if (params.analysisType !== undefined) qs.set('analysisType', params.analysisType);
+      if (params.isActive !== undefined)     qs.set('isActive', String(params.isActive));
+      qs.set('limit',  String(params.limit  || 20));
+      qs.set('offset', String(params.offset || 0));
+      const data = await apiGet(`/api/sea/maritimo/approved-examples/list?${qs.toString()}`);
       return { success: true, examples: data?.examples || [], total: data?.total || 0 };
     } catch (error: any) {
       console.error('Error listing approved examples:', error);
@@ -566,15 +522,7 @@ export const maritimoApi = {
    */
   async toggleExampleActive(exampleId: number, isActive: boolean): Promise<{ success: boolean; error?: string }> {
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'toggle_example_active',
-          exampleId,
-          isActive
-        }
-      });
-      
-      if (error) throw error;
+      await apiPatch(`/api/sea/maritimo/approved-examples/${exampleId}/toggle`, { isActive });
       return { success: true };
     } catch (error: any) {
       console.error('Error toggling example:', error);
@@ -587,14 +535,7 @@ export const maritimoApi = {
    */
   async deleteApprovedExample(exampleId: number): Promise<{ success: boolean; error?: string }> {
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'delete_approved_example',
-          exampleId
-        }
-      });
-      
-      if (error) throw error;
+      await apiDelete(`/api/sea/maritimo/approved-examples/${exampleId}`);
       return { success: true };
     } catch (error: any) {
       console.error('Error deleting example:', error);
@@ -627,16 +568,12 @@ export const maritimoApi = {
     error?: string 
   }> {
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'export_sea_report',
-          analysisType: params.analysisType,
-          dateFrom: params.dateFrom,
-          dateTo: params.dateTo,
-          status: params.status
-        }
-      });
-      if (error) throw error;
+      const qs = new URLSearchParams();
+      if (params.analysisType) qs.set('analysisType', params.analysisType);
+      if (params.dateFrom)     qs.set('dateFrom', params.dateFrom);
+      if (params.dateTo)       qs.set('dateTo', params.dateTo);
+      if (params.status)       qs.set('status', params.status);
+      const data = await apiGet(`/api/sea/maritimo/export-report?${qs.toString()}`);
       return { success: true, items: data?.items || [] };
     } catch (error: any) {
       console.error('Error exporting SEA report:', error);

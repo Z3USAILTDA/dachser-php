@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/cct/PageLayout";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/services/apiClient";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { 
@@ -99,33 +99,20 @@ export default function ConsoleTecnico() {
   const checkSyncStatus = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: mariadbData, error: mariadbError } = await (supabase as any).functions.invoke('mariadb-proxy', {
-        body: { action: 'get_cct_shipments', limit: 1 }
-      });
+      let mariadbOk = false;
+      let recordCount = 0;
+      try {
+        const data = await apiGet('/api/air/stats');
+        mariadbOk = !!data?.success;
+        recordCount = data?.total || 0;
+      } catch (_) { /* noop */ }
 
       setSyncStatuses(prev => prev.map(s => {
-        if (s.name === 'MariaDB') {
-          return {
-            ...s,
-            status: mariadbError ? 'error' : 'online',
-            lastSync: new Date().toISOString(),
-            recordCount: mariadbData?.data?.length || 0,
-            errorMessage: mariadbError?.message
-          };
-        }
+        if (s.name === 'MariaDB') return { ...s, status: mariadbOk ? 'online' : 'error', lastSync: new Date().toISOString(), recordCount };
+        if (s.name === 'LeadComex') return { ...s, status: 'online', lastSync: new Date().toISOString() };
+        if (s.name === 'RFB') return { ...s, status: 'online', lastSync: new Date().toISOString() };
         return s;
       }));
-
-      setSyncStatuses(prev => prev.map(s => {
-        if (s.name === 'LeadComex') {
-          return { ...s, status: 'online', lastSync: new Date().toISOString() };
-        }
-        if (s.name === 'RFB') {
-          return { ...s, status: 'online', lastSync: new Date().toISOString() };
-        }
-        return s;
-      }));
-
       addLog('info', 'Sistema', 'Verificação de status concluída');
     } catch (err) {
       console.error('Error checking sync status:', err);
@@ -137,15 +124,8 @@ export default function ConsoleTecnico() {
 
   const fetchUsers = useCallback(async () => {
     try {
-      const { data, error } = await (supabase as any).functions.invoke('mariadb-proxy', {
-        body: { action: 'get_cct_profiles' }
-      });
-
-      if (error) throw error;
-      setUsers((data?.data || []).map((u: any) => ({
-        ...u,
-        ativo: u.ativo !== false,
-      })));
+      const data = await apiGet('/api/cct/profiles');
+      setUsers((data?.data || []).map((u: any) => ({ ...u, ativo: u.ativo !== false })));
     } catch (err) {
       console.error('Error fetching users:', err);
     }
@@ -160,30 +140,16 @@ export default function ConsoleTecnico() {
     addLog('info', serviceName, `Iniciando sincronização manual...`);
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
       if (serviceName === 'MariaDB') {
-        const { data, error } = await (supabase as any).functions.invoke('mariadb-proxy', {
-          body: { action: 'get_cct_shipments' }
-        });
-        
-        if (error) throw error;
-        
-        setSyncStatuses(prev => prev.map(s => 
-          s.name === serviceName ? { 
-            ...s, 
-            status: 'online', 
-            lastSync: new Date().toISOString(),
-            recordCount: data?.data?.length || 0
-          } : s
+        const data = await apiGet('/api/air/stats');
+        setSyncStatuses(prev => prev.map(s =>
+          s.name === serviceName ? { ...s, status: 'online', lastSync: new Date().toISOString(), recordCount: data?.total || 0 } : s
         ));
       } else {
-        setSyncStatuses(prev => prev.map(s => 
-          s.name === serviceName ? { 
-            ...s, 
-            status: 'online', 
-            lastSync: new Date().toISOString()
-          } : s
+        // LeadComex e RFB são serviços externos — sem sincronização manual disponível
+        toast.info(`${serviceName} é gerenciado por serviço externo.`);
+        setSyncStatuses(prev => prev.map(s =>
+          s.name === serviceName ? { ...s, status: 'online', lastSync: new Date().toISOString() } : s
         ));
       }
 

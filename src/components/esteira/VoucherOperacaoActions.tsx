@@ -3,12 +3,15 @@ import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
 import { parseRequesterFromAjuste, stripRequesterMarker } from "@/utils/voucherAjusteRouting";
 import { Voucher, TipoAnexo } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // mantido apenas para send-voucher-notification (FIN-5)
 import { useToast } from "@/hooks/use-toast";
 import { Send, AlertTriangle, RefreshCw, Loader2, Upload, MessageSquare, FileText, CheckCircle2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { FileUpload } from "./FileUpload";
-
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { AjusteRouteChoiceDialog } from "./AjusteRouteChoiceDialog";
 import { useAuth } from "@/hooks/useAuth";
 import {
   AlertDialog,
@@ -27,22 +30,30 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { AjusteRouteChoiceDialog } from "./AjusteRouteChoiceDialog";
-
 
 interface VoucherOperacaoActionsProps {
   voucher: Voucher;
   onUpdate: () => void;
 }
 
+const getUserData = () => {
+  const stored = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+  return stored ? JSON.parse(stored) : { id: 0, username: "sistema" };
+};
+
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+
 export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoActionsProps) => {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  
+
   const [showRouteChoice, setShowRouteChoice] = useState(false);
   const [routeChoice, setRouteChoice] = useState<"REQUESTER" | "NORMAL">("REQUESTER");
   const [selectedTipo, setSelectedTipo] = useState<TipoAnexo>("FATURA_DEMONSTRATIVO");
@@ -50,203 +61,76 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
   const { toast } = useToast();
   const { user } = useAuth();
 
-  // Verificar se voucher está com RM pendente
   const isRmPendente = voucher.fonteDados === "RM_PENDENTE";
   const isAjusteOperacao = voucher.etapaAtual === "AJUSTE_OPERACAO";
-  
-  // Verificar se é voucher master (não precisa de anexos)
+
   const isMaster = voucher.isMaster || voucher.origemCriacao === "MASTER" || voucher.numeroSPO?.startsWith("MASTER-");
 
-  // Verificar anexos obrigatórios (não se aplica a masters)
   const hasFatura = voucher.anexos.some(a => a.tipo === "FATURA_DEMONSTRATIVO" || a.tipo === "FATURA");
   const hasBoleto = voucher.anexos.some(a => a.tipo === "BOLETO_INSTRUCOES" || a.tipo === "BOLETO");
-  // Boleto só é obrigatório se forma de pagamento for BOLETO
   const boletoObrigatorio = voucher.formaPagamento === "BOLETO";
-  // Masters podem enviar sem anexos obrigatórios
   const canEnviar = isMaster ? !isRmPendente : (hasFatura && (!boletoObrigatorio || hasBoleto) && !isRmPendente);
 
-  // Get user data from localStorage (MariaDB auth)
-  const getUserData = () => {
-    const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
-    return storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
+  // Função passada ao FileUpload.uploadFn — substitui anexo existente do mesmo tipo e faz upload BLOB
+  const uploadFileFn = async (file: File): Promise<string> => {
+    const userData = getUserData();
+
+    // Deletar anexo existente do mesmo tipo (substituição)
+    const existingAnexo = voucher.anexos.find(a => a.tipo === selectedTipo);
+    if (existingAnexo) {
+      await fetch(`/api/fin/vouchers/anexos/${encodeURIComponent(existingAnexo.id)}`, { method: 'DELETE' });
+    }
+
+    const base64 = await fileToBase64(file);
+    const resp = await fetch('/api/fin/vouchers/anexos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        voucher_id: voucher.id,
+        tipo: selectedTipo,
+        file_name: file.name,
+        file_size: file.size,
+        mime_type: file.type,
+        file_base64: base64,
+        user_id: userData.id?.toString(),
+        user_name: userData.username,
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.success) throw new Error(data.error || `HTTP ${resp.status}`);
+    return data.file_url;
   };
 
-  // Função para adicionar novo anexo (MariaDB) - SUBSTITUI anexo existente do mesmo tipo
-  const handleFileUpload = async (fileUrl: string, fileName: string, fileSize: number) => {
+  const handleFileUpload = async (fileUrl: string, fileName: string, _fileSize: number) => {
     try {
-      // Verificar se já existe anexo do mesmo tipo e deletar (substituição)
       const existingAnexo = voucher.anexos.find(a => a.tipo === selectedTipo);
-      if (existingAnexo) {
-        // Deletar arquivo do storage
-        const match = existingAnexo.fileUrl.match(/voucher-anexos\/(.+)$/);
-        if (match) {
-          const filePath = match[1];
-          await supabase.storage.from("voucher-anexos").remove([filePath]);
-        }
-        
-        // Deletar registro do anexo no MariaDB
-        await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "delete_voucher_anexo",
-            anexo_id: existingAnexo.id,
-          },
-        });
-      }
-
-      const { error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "save_voucher_anexo",
-          voucher_id: voucher.id,
-          tipo: selectedTipo,
-          file_name: fileName,
-          file_url: fileUrl,
-          file_size: fileSize,
-        },
-      });
-
-      if (error) throw error;
-
-      // Log the action
-      const userData = getUserData();
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "save_voucher_log",
-          voucher_id: voucher.id,
-          user_id: userData.id?.toString(),
-          user_name: userData.username,
-          acao: existingAnexo ? "ANEXO_SUBSTITUIDO" : "ANEXO_ADICIONADO",
-          detalhe: existingAnexo 
-            ? `Anexo "${existingAnexo.fileName}" substituído por "${fileName}" (${selectedTipo})`
-            : `Anexo "${fileName}" (${selectedTipo}) adicionado`,
-        },
-      });
-
-      // Extrair linha digitável automaticamente se for boleto e forma de pagamento for BOLETO
-      const isBoletoAnexo = selectedTipo === "BOLETO_INSTRUCOES" || selectedTipo === "BOLETO";
-      if (isBoletoAnexo && voucher.formaPagamento === "BOLETO") {
-        try {
-          console.log("Extraindo linha digitável do boleto anexado...");
-          const { data: extractionResult, error: extractionError } = await supabase.functions.invoke("extract-boleto-barcode", {
-            body: { fileUrl }
-          });
-
-          if (!extractionError && extractionResult?.success && extractionResult?.linhaDigitavel) {
-            // Salvar linha digitável no voucher
-            await supabase.functions.invoke("mariadb-proxy", {
-              body: {
-                action: "save_linha_digitavel",
-                voucher_id: voucher.id,
-                linha_digitavel: extractionResult.linhaDigitavel,
-                codigo_barras: extractionResult.codigoBarras || null,
-              },
-            });
-            
-            toast({
-              title: "Linha digitável extraída",
-              description: "A linha digitável foi extraída automaticamente do boleto.",
-            });
-          } else {
-            console.warn("Não foi possível extrair linha digitável:", extractionError || extractionResult?.error);
-          }
-        } catch (extractError) {
-          console.error("Erro ao extrair linha digitável:", extractError);
-          // Não bloquear o fluxo se a extração falhar
-        }
-      }
-
+      // extract-boleto-barcode mantido no Supabase (FIN-5) — acessará URL de produção quando deployado
       toast({
         title: existingAnexo ? "Anexo substituído" : "Anexo adicionado",
-        description: existingAnexo 
+        description: existingAnexo
           ? `"${existingAnexo.fileName}" foi substituído por "${fileName}".`
           : `"${fileName}" foi anexado com sucesso.`,
       });
-
       onUpdate();
     } catch (error: any) {
-      toast({
-        title: "Erro ao adicionar anexo",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao adicionar anexo", description: error.message, variant: "destructive" });
     }
   };
 
-  // Tentar sincronizar dados do RM
+  // Sincronizar dados do RM (integração externa — mantém stub)
   const handleSyncRM = async () => {
     if (!voucher.numeroSPO) return;
-
     setSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("voucher-integrate-rm", {
-        body: {
-          action: "fetch",
-          numeroVoucherRM: voucher.numeroSPO,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data.success && data.data) {
-        // Atualizar voucher no MariaDB
-        await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "update_voucher_esteira",
-            voucher_id: voucher.id,
-            fornecedor: data.data.fornecedor || voucher.fornecedor,
-            cnpj_fornecedor: data.data.cnpjFornecedor || voucher.cnpjFornecedor,
-            valor: data.data.valor || voucher.valor,
-            vencimento: data.data.vencimento || voucher.vencimento,
-            tipo_documento: data.data.tipoDocumento || voucher.tipoDocumento,
-            data_emissao_documento: data.data.dataEmissao || voucher.dataEmissaoDocumento,
-            moeda: data.data.moeda || voucher.moeda,
-          },
-        });
-
-        // Log the action
-        const userData = getUserData();
-        await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "save_voucher_log",
-            voucher_id: voucher.id,
-            user_id: userData.id?.toString(),
-            user_name: userData.username,
-            acao: "DADOS_RM_SINCRONIZADOS",
-            detalhe: "Dados do RM carregados com sucesso",
-          },
-        });
-
-        toast({
-          title: "Dados sincronizados!",
-          description: "Dados do RM carregados com sucesso. Voucher pode prosseguir.",
-        });
-
-        onUpdate();
-      } else {
-        toast({
-          title: "RM ainda não disponível",
-          description: "Os dados ainda não estão disponíveis no RM. Tente novamente mais tarde.",
-          variant: "destructive",
-        });
-      }
-    } catch (error: any) {
-      toast({
-        title: "Erro ao sincronizar",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "RM ainda não disponível", description: "Integração RM em fase de migração. Tente novamente mais tarde.", variant: "destructive" });
     } finally {
       setSyncing(false);
     }
   };
 
-  // Pré-validações antes de abrir qualquer confirmação
   const validateBeforeSend = (): boolean => {
     if (isRmPendente) {
-      toast({
-        title: "Voucher/SPO com RM Pendente",
-        description: "Sincronize os dados do RM antes de enviar para a próxima etapa.",
-        variant: "destructive",
-      });
+      toast({ title: "Voucher/SPO com RM Pendente", description: "Sincronize os dados do RM antes de enviar.", variant: "destructive" });
       return false;
     }
     const camposFaltantes: string[] = [];
@@ -254,11 +138,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
     if (!voucher.formaPagamento) camposFaltantes.push("Forma de Pagamento");
     if (!voucher.vencimento) camposFaltantes.push("Vencimento");
     if (camposFaltantes.length > 0) {
-      toast({
-        title: "Campos obrigatórios não preenchidos",
-        description: `Preencha: ${camposFaltantes.join(", ")}`,
-        variant: "destructive",
-      });
+      toast({ title: "Campos obrigatórios não preenchidos", description: `Preencha: ${camposFaltantes.join(", ")}`, variant: "destructive" });
       return false;
     }
     if (!isMaster) {
@@ -279,7 +159,6 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
     return true;
   };
 
-  // Calcula a etapa do fluxo normal (ignorando o requester do ajuste)
   const computeNormalNextStage = (): "FISCAL" | "FINANCEIRO" | "SUPERVISOR" => {
     if (isMaster) return "FISCAL";
     if (voucher.urgenciaTipo === "URGENTE_REAL") return "SUPERVISOR";
@@ -287,32 +166,23 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
     return "FINANCEIRO";
   };
 
-  const requesterFromAjuste = isAjusteOperacao
-    ? parseRequesterFromAjuste(voucher.ajusteOperacao)
-    : null;
+  const requesterFromAjuste = isAjusteOperacao ? parseRequesterFromAjuste(voucher.ajusteOperacao) : null;
   const normalNextStageOp = computeNormalNextStage();
 
   const handleSendClick = () => {
     if (!validateBeforeSend()) return;
-    // Se há marcador de requester e ele difere do fluxo normal → abrir diálogo de escolha
     if (requesterFromAjuste && requesterFromAjuste !== normalNextStageOp) {
       setRouteChoice("REQUESTER");
       setShowRouteChoice(true);
       return;
     }
-    // Caso normal: confirmação simples
     setShowConfirm(true);
   };
 
   const handleEnviar = async (chosen: "REQUESTER" | "NORMAL" = "NORMAL") => {
     try {
       setLoading(true);
-
-      // Re-validação defensiva (caso estado tenha mudado)
-      if (!validateBeforeSend()) {
-        setLoading(false);
-        return;
-      }
+      if (!validateBeforeSend()) { setLoading(false); return; }
 
       let proximaEtapa: "FISCAL" | "FINANCEIRO" | "SUPERVISOR";
       if (chosen === "REQUESTER" && requesterFromAjuste) {
@@ -321,68 +191,43 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         proximaEtapa = normalNextStageOp;
       }
 
-      console.log("[VoucherOperacaoActions] Routing decision:", {
-        isMaster,
-        urgenciaTipo: voucher.urgenciaTipo,
-        cobrancaEmNomeDe: voucher.cobrancaEmNomeDe,
-        etapaAtual: voucher.etapaAtual,
-        requesterFromAjuste,
-        chosen,
-        proximaEtapa,
-      });
-
       const updateData: Record<string, any> = {
         etapa_atual: proximaEtapa,
         status_envio_cliente: voucher.cobrancaEmNomeDe === "CLIENTE" ? "AGUARDANDO_CLIENTE" : "NAO_APLICA",
       };
-
       if (isAjusteOperacao && respostaAjuste.trim()) {
         updateData.comentarios_operacao = respostaAjuste.trim();
       }
 
-      // Update voucher in MariaDB
-      const { error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "update_voucher_esteira",
-          voucher_id: voucher.id,
-          ...updateData,
-        },
-      });
-
-      if (error) throw error;
-
-      // Log the action
       const userData = getUserData();
-      const etapaLabel = proximaEtapa === "SUPERVISOR" ? "Supervisor" : 
-                         proximaEtapa === "FISCAL" ? "Fiscal" : "Financeiro";
-      const acaoLog = isMaster ? "MASTER_APROVADO_OPERACAO" : 
-                      isAjusteOperacao ? "REENVIO_APOS_AJUSTE" : "ENVIADO_OPERACAO";
+      const patchResp = await fetch(`/api/fin/vouchers/${encodeURIComponent(voucher.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...updateData, user_id: userData.id?.toString(), user_name: userData.username }),
+      });
+      const patchData = await patchResp.json();
+      if (!patchResp.ok || !patchData.success) throw new Error(patchData.error || 'Erro ao atualizar voucher');
+
+      const etapaLabel = proximaEtapa === "SUPERVISOR" ? "Supervisor" : proximaEtapa === "FISCAL" ? "Fiscal" : "Financeiro";
+      const acaoLog = isMaster ? "MASTER_APROVADO_OPERACAO" : isAjusteOperacao ? "REENVIO_APOS_AJUSTE" : "ENVIADO_OPERACAO";
       const choiceSuffix = (isAjusteOperacao && requesterFromAjuste)
         ? (chosen === "REQUESTER"
             ? ` (retornado para etapa solicitante ${requesterFromAjuste}, escolhido pelo usuário)`
             : ` (fluxo normal, escolhido pelo usuário, ignorando solicitante ${requesterFromAjuste})`)
         : "";
-      const detalheLog = (isMaster 
+      const detalheLog = (isMaster
         ? `Voucher master aprovado pela Operação e enviado para ${etapaLabel}`
         : `Voucher/SPO enviado para ${etapaLabel}`) + choiceSuffix;
-      
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "save_voucher_log",
-          voucher_id: voucher.id,
-          user_id: userData.id?.toString(),
-          user_name: userData.username,
-          acao: acaoLog,
-          detalhe: detalheLog,
-        },
+
+      await fetch(`/api/fin/vouchers/${encodeURIComponent(voucher.id)}/log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userData.id?.toString(), user_name: userData.username, acao: acaoLog, detalhe: detalheLog }),
       });
 
-      // Inserir na t_dados_rm ao entrar no FINANCEIRO
-      if (proximaEtapa === "FINANCEIRO") {
-        insertDadosRmOnFinanceiro(voucher);
-      }
+      if (proximaEtapa === "FINANCEIRO") insertDadosRmOnFinanceiro(voucher);
 
-      // Send email notification only for SUPERVISOR urgency flow
+      // Notificação de urgência — mantida no Supabase (FIN-5)
       if (proximaEtapa === "SUPERVISOR") {
         try {
           const urgencyBody = {
@@ -396,40 +241,25 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
             moeda: voucher.moeda,
             vencimento: voucher.vencimento,
           };
-          await supabase.functions.invoke("send-voucher-notification", {
-            body: { type: "URGENCIA_SOLICITADA", ...urgencyBody },
-          });
-          // Confirmação informativa ao solicitante (sem botões de ação)
+          await supabase.functions.invoke("send-voucher-notification", { body: { type: "URGENCIA_SOLICITADA", ...urgencyBody } });
           try {
-            await supabase.functions.invoke("send-voucher-notification", {
-              body: { type: "URGENCIA_SOLICITADA_CONFIRMACAO", ...urgencyBody },
-            });
-          } catch (confirmErr) {
-            console.log("Urgency confirmation email skipped:", confirmErr);
-          }
+            await supabase.functions.invoke("send-voucher-notification", { body: { type: "URGENCIA_SOLICITADA_CONFIRMACAO", ...urgencyBody } });
+          } catch (_) {}
         } catch (emailErr) {
           console.log("Email notification skipped:", emailErr);
         }
       }
 
-      toast({
-        title: isMaster ? "Voucher master aprovado!" : "Voucher/SPO enviado!",
-        description: detalheLog,
-      });
-
+      toast({ title: isMaster ? "Voucher master aprovado!" : "Voucher/SPO enviado!", description: detalheLog });
       onUpdate();
     } catch (error: any) {
       const msg = error.message || "";
-      const friendlyMsg = msg.includes("WORKER_LIMIT") 
+      const friendlyMsg = msg.includes("WORKER_LIMIT")
         ? "O servidor está sobrecarregado. Tente novamente em alguns segundos."
         : msg.includes("timeout") || msg.includes("Timeout")
         ? "A operação demorou demais. Tente novamente."
         : msg || "Erro desconhecido ao enviar o voucher.";
-      toast({
-        title: "Erro ao enviar voucher/SPO",
-        description: friendlyMsg,
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao enviar voucher/SPO", description: friendlyMsg, variant: "destructive" });
     } finally {
       setLoading(false);
       setShowConfirm(false);
@@ -439,7 +269,6 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
 
   return (
     <div className="space-y-4">
-      {/* Alerta de RM Pendente */}
       {isRmPendente && (
         <Alert variant="destructive" className="bg-warning/10 border-warning text-warning-foreground">
           <AlertTriangle className="h-4 w-4" />
@@ -449,25 +278,14 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
               Este voucher/SPO foi criado mas os dados do RM ainda não foram sincronizados.
               O voucher/SPO <strong>não pode avançar</strong> até que os dados sejam carregados.
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSyncRM}
-              disabled={syncing}
-              className="gap-2"
-            >
-              {syncing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
+            <Button variant="outline" size="sm" onClick={handleSyncRM} disabled={syncing} className="gap-2">
+              {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Tentar Sincronizar Agora
             </Button>
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Seção de Ajuste (quando retornado do Fiscal) */}
       {isAjusteOperacao && voucher.ajusteFiscal && (
         <Alert className="bg-destructive/10 border-destructive/30">
           <AlertTriangle className="h-4 w-4 text-destructive" />
@@ -501,7 +319,6 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         </Card>
       )}
 
-      {/* Checklist de Anexos Obrigatórios - Não exibido para Masters */}
       {!isMaster && (
         <Card className="border-[rgba(255,255,255,0.12)]" style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}>
           <CardHeader className="pb-3">
@@ -525,16 +342,13 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
               </div>
               <span className={hasBoleto ? 'text-foreground' : boletoObrigatorio ? 'text-muted-foreground' : 'text-muted-foreground/70'}>
                 Boleto / Instruções de Pagamento{' '}
-                <span className="text-xs text-muted-foreground">
-                  {boletoObrigatorio ? "(obrigatório)" : "(opcional)"}
-                </span>
+                <span className="text-xs text-muted-foreground">{boletoObrigatorio ? "(obrigatório)" : "(opcional)"}</span>
               </span>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Info para Voucher Master */}
       {isMaster && (
         <Alert className="bg-purple-500/10 border-purple-500/30">
           <AlertTriangle className="h-4 w-4 text-purple-500" />
@@ -545,7 +359,6 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         </Alert>
       )}
 
-      {/* Seção de Upload de Anexos - Sempre Visível */}
       <Card className="border-primary/30 bg-primary/5">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2 text-primary">
@@ -572,6 +385,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
           <FileUpload
             label="Selecionar arquivo"
             multiple
+            uploadFn={uploadFileFn}
             onFileUpload={handleFileUpload}
           />
         </CardContent>
@@ -581,15 +395,15 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         <div>
           <h3 className="text-lg font-semibold">Ações - Operacional</h3>
           <p className="text-sm text-muted-foreground">
-            {isRmPendente 
-              ? "Sincronize os dados do RM para liberar o envio" 
+            {isRmPendente
+              ? "Sincronize os dados do RM para liberar o envio"
               : isAjusteOperacao
-                ? "Corrija os anexos e reenvie o voucher/SPO"
-                : isMaster
-                  ? "Voucher master pronto para aprovação. Clique para enviar ao Fiscal."
-                  : canEnviar 
-                    ? "Anexos completos! Você pode enviar o voucher/SPO." 
-                    : "Adicione os anexos obrigatórios para enviar."}
+              ? "Corrija os anexos e reenvie o voucher/SPO"
+              : isMaster
+              ? "Voucher master pronto para aprovação. Clique para enviar ao Fiscal."
+              : canEnviar
+              ? "Anexos completos! Você pode enviar o voucher/SPO."
+              : "Adicione os anexos obrigatórios para enviar."}
           </p>
         </div>
       </div>
@@ -601,9 +415,8 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
           className={`gap-2 ${isMaster ? 'bg-purple-600 hover:bg-purple-700' : 'bg-primary hover:bg-primary/90'}`}
         >
           <Send className="h-4 w-4" />
-          {"Aprovar e Enviar para a Próxima Etapa"}
+          Aprovar e Enviar para a Próxima Etapa
         </Button>
-
       </div>
 
       <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
@@ -611,7 +424,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar envio</AlertDialogTitle>
             <AlertDialogDescription>
-              {isAjusteOperacao 
+              {isAjusteOperacao
                 ? "Confirma que os ajustes foram realizados e o voucher pode ser reenviado?"
                 : "Após o envio, os campos da operação serão bloqueados para edição."}
             </AlertDialogDescription>

@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Voucher } from "@/types/voucher";
 import { Loader2, AlertCircle } from "lucide-react";
@@ -126,10 +125,6 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
 
     setLoading(true);
     try {
-      // A esteira autentica via MariaDB + localStorage (não via supabase.auth)
-      const stored = localStorage.getItem("user") || localStorage.getItem("dachser_user");
-      const localUser = stored ? (() => { try { return JSON.parse(stored); } catch { return null; } })() : null;
-      
       // Determine urgencia_tipo based on tipoDocumento and urgente flag
       let urgenciaTipo = "NORMAL";
       if (formData.tipoDocumento === "ARMAZENAGEM" || formData.tipoDocumento === "ICMS") {
@@ -138,35 +133,29 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
         urgenciaTipo = "URGENTE_REAL";
       }
 
-      // Use mariadb-proxy to update voucher in MariaDB
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "update_voucher_esteira",
-          voucher_id: voucher.id,
-          updates: {
-            numero_spo: formData.numeroSPO,
-            fornecedor: formData.fornecedor || null,
-            cnpj_fornecedor: formData.cnpjFornecedor || null,
-            valor: formData.valor ? parseFloat(formData.valor.replace(",", ".")) : null,
-            moeda: formData.moeda,
-            vencimento: formData.vencimento,
-            data_emissao_documento: formData.dataEmissaoDocumento || null,
-            cobranca_em_nome_de: formData.cobrancaEmNomeDe,
-            forma_pagamento: formData.formaPagamento,
-            tipo_documento: formData.tipoDocumento || null,
-            filial: formData.filial || null,
-            urgencia_tipo: urgenciaTipo,
-            chave_pix: formData.formaPagamento === "PIX" ? (formData.chavePix || null) : null,
-            origem_processo: formData.origemProcesso || null,
-            comentarios_operacao: formData.comentariosOperacao || null,
-          },
-          user_id: localUser?.id ? String(localUser.id) : null,
-          user_name: localUser?.username || localUser?.name || localUser?.email || "Sistema",
-        },
+      const resp = await fetch(`/api/fin/vouchers/${voucher.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          numero_spo: formData.numeroSPO,
+          fornecedor: formData.fornecedor || null,
+          cnpj_fornecedor: formData.cnpjFornecedor || null,
+          valor: formData.valor ? parseFloat(formData.valor.replace(",", ".")) : null,
+          moeda: formData.moeda,
+          vencimento: formData.vencimento,
+          data_emissao_documento: formData.dataEmissaoDocumento || null,
+          cobranca_em_nome_de: formData.cobrancaEmNomeDe,
+          forma_pagamento: formData.formaPagamento,
+          tipo_documento: formData.tipoDocumento || null,
+          filial: formData.filial || null,
+          urgencia_tipo: urgenciaTipo,
+          chave_pix: formData.formaPagamento === "PIX" ? (formData.chavePix || null) : null,
+          origem_processo: formData.origemProcesso || null,
+          comentarios_operacao: formData.comentariosOperacao || null,
+        }),
       });
-
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || "Erro ao atualizar voucher");
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data?.success) throw new Error(data?.error || `HTTP ${resp.status}`);
 
       toast({
         title: "Voucher/SPO atualizado!",

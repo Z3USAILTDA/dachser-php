@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
 import { Bell, RefreshCw, AlertTriangle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
   DialogContent,
@@ -46,10 +45,9 @@ export const DatasAntigasBell = () => {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_datas_emissao_vencimento_antigas" },
-      });
-      if (error) throw error;
+      const resp = await fetch('/api/fin/vouchers/datas-antigas');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
       const list: Row[] = Array.isArray(data?.rows) ? data.rows : [];
       setRows(list);
     } catch (e) {

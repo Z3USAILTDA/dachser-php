@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // kept: extract-boleto-barcode edge fn requires Supabase
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { 
@@ -115,13 +115,10 @@ export const DadosPagamentoPanel = ({
         throw new Error(data?.error || "Falha na extração");
       }
 
-      // Save to database
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "save_linha_digitavel",
-          voucher_id: voucherId,
-          linha_digitavel: data.linhaDigitavel,
-        }
+      await fetch(`/api/fin/vouchers/${voucherId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linha_digitavel: data.linhaDigitavel }),
       });
 
       toast({ title: "Linha digitável extraída com sucesso!" });
@@ -140,14 +137,12 @@ export const DadosPagamentoPanel = ({
   const handleSaveLinhaDigitavel = async () => {
     setSavingLinhaDigitavel(true);
     try {
-      const { error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { 
-          action: "save_linha_digitavel", 
-          voucher_id: voucherId, 
-          linha_digitavel: linhaDigitavelInput.trim() 
-        }
+      const resp = await fetch(`/api/fin/vouchers/${voucherId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linha_digitavel: linhaDigitavelInput.trim() }),
       });
-      if (error) throw error;
+      if (!resp.ok) { const d = await resp.json().catch(() => ({})); throw new Error(d.error || `HTTP ${resp.status}`); }
       toast({ title: "Linha digitável salva com sucesso" });
       setEditingLinhaDigitavel(false);
       onUpdate?.();

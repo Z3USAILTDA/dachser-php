@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -67,15 +66,9 @@ export const BacklogTab = ({ onVoucherImported }: BacklogTabProps) => {
   const loadPendingVouchers = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "get_vouchers_pendentes_rm",
-          limit: 200,
-        },
-      });
-
-      if (error) throw error;
-
+      const resp = await fetch('/api/fin/vouchers/pendentes-rm?limit=200');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
       setPendingVouchers(data?.data || []);
     } catch (error: any) {
       toast({
@@ -95,16 +88,13 @@ export const BacklogTab = ({ onVoucherImported }: BacklogTabProps) => {
   const handleImportVoucher = async (nd: string) => {
     try {
       setImporting(nd);
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "import_voucher_from_rm",
-          nd,
-          user_id: user?.id,
-          user_name: user?.username || user?.email,
-        },
+      const resp = await fetch('/api/fin/vouchers/importar-rm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nd, user_id: user?.id, user_name: user?.username || user?.email }),
       });
-
-      if (error) throw error;
+      if (!resp.ok) { const d = await resp.json().catch(() => ({})); throw new Error(d.error || `HTTP ${resp.status}`); }
+      const data = await resp.json();
 
       if (data?.success) {
         toast({
@@ -140,20 +130,13 @@ export const BacklogTab = ({ onVoucherImported }: BacklogTabProps) => {
     for (const voucher of pendingVouchers) {
       try {
         setImporting(voucher.nd);
-        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "import_voucher_from_rm",
-            nd: voucher.nd,
-            user_id: user?.id,
-            user_name: user?.username || user?.email,
-          },
+        const r = await fetch('/api/fin/vouchers/importar-rm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nd: voucher.nd, user_id: user?.id, user_name: user?.username || user?.email }),
         });
-
-        if (!error && data?.success) {
-          imported++;
-        } else {
-          errors++;
-        }
+        const d = await r.json().catch(() => ({}));
+        if (r.ok && d?.success) { imported++; } else { errors++; }
       } catch {
         errors++;
       }

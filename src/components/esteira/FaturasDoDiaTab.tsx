@@ -16,7 +16,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -63,12 +62,9 @@ export const FaturasDoDiaTab = () => {
   const loadFaturas = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_faturas_do_dia" }
-      });
-
-      if (error) throw error;
-
+      const resp = await fetch('/api/fin/faturas/hoje');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
       setFaturas(data?.data || []);
     } catch (error: any) {
       console.error("Erro ao carregar faturas:", error);
@@ -89,15 +85,8 @@ export const FaturasDoDiaTab = () => {
 
     setLoadingDados(prev => ({ ...prev, [cnpj]: true }));
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { 
-          action: "get_dados_bancarios_fornecedor",
-          cnpj: cnpj.replace(/\D/g, "")
-        }
-      });
-
-      if (error) throw error;
-
+      const resp = await fetch(`/api/fin/fornecedor/dados-bancarios?cnpj=${encodeURIComponent(cnpj.replace(/\D/g, ""))}`);
+      const data = await resp.json().catch(() => ({}));
       if (data?.data) {
         setDadosBancariosCache(prev => ({ ...prev, [cnpj]: data.data }));
       }
@@ -173,9 +162,10 @@ export const FaturasDoDiaTab = () => {
       const dadosBancarios = dadosBancariosCache[fatura.cnpj_fornecedor];
       const regraFormaPag = getRegraFormaPag(fatura, dadosBancarios);
       
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { 
-          action: "insert_dados_rm",
+      const rmResp = await fetch('/api/fin/vouchers/dados-rm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           id_rm: fatura.id_rm || null,
           numero_spo: fatura.numero_spo,
           voucher_boleto: isBoleto(fatura.forma_pagamento) ? fatura.linha_digitavel : null,
@@ -183,25 +173,17 @@ export const FaturasDoDiaTab = () => {
           pix_tipo_chave: null,
           forma_pag: fatura.forma_pagamento,
           fornecedor: fatura.fornecedor,
-          regras_forma_pag: regraFormaPag,
-          tipo_exec: (fatura as any).tipo_execucao_pagamento || null
-        }
+          tipo_exec: (fatura as any).tipo_execucao_pagamento || null,
+        }),
       });
+      if (!rmResp.ok) { const d = await rmResp.json().catch(() => ({})); throw new Error(d.error || `HTTP ${rmResp.status}`); }
 
-      if (error) throw error;
+      toast({ title: "Enviado para Remessa", description: `Voucher ${fatura.numero_spo} inserido na t_dados_rm com sucesso` });
 
-      toast({
-        title: "Enviado para Remessa",
-        description: `Voucher ${fatura.numero_spo} inserido na t_dados_rm com sucesso`
-      });
-
-      // Atualizar status do voucher
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "update_voucher_esteira",
-          voucher_id: fatura.id,
-          status_baixa: "REALIZADA"
-        }
+      await fetch(`/api/fin/vouchers/${fatura.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status_baixa: "REALIZADA" }),
       });
 
       loadFaturas();

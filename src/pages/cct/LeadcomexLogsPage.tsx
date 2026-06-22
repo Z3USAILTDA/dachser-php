@@ -20,8 +20,6 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { AttemptTimeline } from '@/components/cct/AttemptTimeline';
 import { useLeadcomexLogs, useLeadcomexLogsStats, LeadcomexLog, LeadcomexLogFilters } from '@/hooks/useLeadcomexLogs';
-import { supabase } from '@/integrations/supabase/client';
-
 const LeadcomexLogsPage: React.FC = () => {
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState(false);
@@ -118,60 +116,13 @@ const LeadcomexLogsPage: React.FC = () => {
   };
 
   const runRefreshAllActive = async () => {
-    setIsRunningEnrich(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('leadcomex-sync', {
-        body: { 
-          action: 'refresh-all-active',
-          execution_source: 'manual'
-        }
-      });
-      
-      if (error) throw error;
-      
-      toast.success(`Atualização concluída: ${data.stats?.success || 0}/${data.stats?.processed || 0} HAWBs atualizados`);
-      refetch();
-    } catch (err) {
-      console.error('Erro ao executar refresh:', err);
-      toast.error('Erro ao executar atualização');
-    } finally {
-      setIsRunningEnrich(false);
-    }
+    // Sincronização gerenciada pelo serviço externo leadcomex-sync
+    toast.info('Sincronização LeadComex é gerenciada pelo serviço externo (cron automático).');
   };
 
   const runManualSearch = async () => {
-    if (!manualHawb.trim()) {
-      toast.error('Informe o HAWB para buscar');
-      return;
-    }
-    
-    setIsManualSearching(true);
-    setManualSearchResult(null);
-    
-    try {
-      const { data, error } = await supabase.functions.invoke('leadcomex-test-reverse', {
-        body: { 
-          hawb: manualHawb.trim(),
-          dep_date: manualDepDate || undefined
-        }
-      });
-      
-      if (error) throw error;
-      
-      setManualSearchResult(data);
-      
-      if (data.success) {
-        toast.success(`HAWB encontrado! Offset: -${data.offset_days} dias`);
-      } else {
-        toast.warning('HAWB não encontrado no LeadComex');
-      }
-    } catch (err) {
-      console.error('Erro na busca manual:', err);
-      toast.error('Erro ao buscar HAWB');
-      setManualSearchResult({ success: false, error: String(err) });
-    } finally {
-      setIsManualSearching(false);
-    }
+    // Consulta direta ao LeadComex é gerenciada pelo serviço externo
+    toast.info('Consulta manual ao LeadComex não disponível — gerenciada pelo serviço externo.');
   };
 
   if (isLoading) {

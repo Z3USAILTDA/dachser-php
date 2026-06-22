@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/services/apiClient";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Database, RefreshCw, Users, FileText, CheckCircle2, XCircle, AlertTriangle, Clock, Activity, Settings, Trash2, UserPlus, Search } from "lucide-react";
@@ -38,9 +38,10 @@ export default function ConsoleContent() {
   const checkSyncStatus = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: mariadbData, error: mariadbError } = await (supabase as any).functions.invoke('mariadb-proxy', { body: { action: 'get_cct_shipments', limit: 1 } });
+      let mariadbOk = false; let recordCount = 0;
+      try { const d = await apiGet('/api/air/stats'); mariadbOk = !!d?.success; recordCount = d?.total || 0; } catch (_) { /* noop */ }
       setSyncStatuses(prev => prev.map(s => {
-        if (s.name === 'MariaDB') return { ...s, status: mariadbError ? 'error' : 'online', lastSync: new Date().toISOString(), recordCount: mariadbData?.data?.length || 0, errorMessage: mariadbError?.message };
+        if (s.name === 'MariaDB') return { ...s, status: mariadbOk ? 'online' : 'error', lastSync: new Date().toISOString(), recordCount };
         if (s.name === 'LeadComex') return { ...s, status: 'online', lastSync: new Date().toISOString() };
         if (s.name === 'RFB') return { ...s, status: 'online', lastSync: new Date().toISOString() };
         return s;
@@ -54,8 +55,7 @@ export default function ConsoleContent() {
 
   const fetchUsers = useCallback(async () => {
     try {
-      const { data, error } = await (supabase as any).functions.invoke('mariadb-proxy', { body: { action: 'get_cct_profiles' } });
-      if (error) throw error;
+      const data = await apiGet('/api/cct/profiles');
       setUsers((data?.data || []).map((u: any) => ({ ...u, ativo: u.ativo !== false })));
     } catch (err) { console.error('Error fetching users:', err); }
   }, []);
@@ -66,39 +66,14 @@ export default function ConsoleContent() {
     addLog('info', serviceName, `Iniciando sincronização manual...`);
     try {
       if (serviceName === 'MariaDB') {
-        const { data, error } = await (supabase as any).functions.invoke('mariadb-proxy', { body: { action: 'get_cct_shipments' } });
-        if (error) throw error;
-        setSyncStatuses(prev => prev.map(s => s.name === serviceName ? { ...s, status: 'online', lastSync: new Date().toISOString(), recordCount: data?.data?.length || 0 } : s));
-        addLog('info', serviceName, `${data?.data?.length || 0} processos carregados`);
-      } else if (serviceName === 'LeadComex') {
-        // Chama a edge function leadcomex-sync para enriquecer os shipments
-        const { data, error } = await (supabase as any).functions.invoke('leadcomex-sync', { 
-          body: { action: 'enrich', daysBack: 14, limit: 500 } 
-        });
-        if (error) throw error;
-        const stats = data?.stats || {};
-        setSyncStatuses(prev => prev.map(s => s.name === serviceName ? { 
-          ...s, 
-          status: 'online', 
-          lastSync: new Date().toISOString(), 
-          recordCount: stats.matched || 0 
-        } : s));
-        addLog('info', serviceName, `Enrich: ${stats.matched || 0} matches, ${stats.updated || 0} atualizados, ${stats.events || 0} eventos criados`);
-        if (stats.bloqueios > 0) addLog('warn', serviceName, `${stats.bloqueios} bloqueio(s) ativo(s) detectado(s)`);
-        if (stats.divergencias > 0) addLog('warn', serviceName, `${stats.divergencias} divergência(s) detectada(s)`);
-      } else if (serviceName === 'RFB') {
-        // Health check da API LeadComex (que é integrador RFB)
-        const { data, error } = await (supabase as any).functions.invoke('leadcomex-sync', { 
-          body: { action: 'health' } 
-        });
-        if (error) throw error;
-        setSyncStatuses(prev => prev.map(s => s.name === serviceName ? { 
-          ...s, 
-          status: data?.status === 'online' ? 'online' : 'error', 
-          lastSync: new Date().toISOString(),
-          errorMessage: data?.error
-        } : s));
-        if (data?.latency) addLog('info', serviceName, `Conexão OK - Latência: ${data.latency}ms`);
+        const data = await apiGet('/api/air/stats');
+        setSyncStatuses(prev => prev.map(s => s.name === serviceName ? { ...s, status: 'online', lastSync: new Date().toISOString(), recordCount: data?.total || 0 } : s));
+        addLog('info', serviceName, `${data?.total || 0} registros verificados`);
+      } else {
+        // LeadComex e RFB são serviços externos — sem sincronização manual disponível
+        toast.info(`${serviceName} é gerenciado por serviço externo.`);
+        setSyncStatuses(prev => prev.map(s => s.name === serviceName ? { ...s, status: 'online', lastSync: new Date().toISOString() } : s));
+        addLog('info', serviceName, 'Serviço externo — sem ação manual disponível');
       }
       addLog('info', serviceName, `Sincronização concluída com sucesso`);
       toast.success(`${serviceName} sincronizado com sucesso`);

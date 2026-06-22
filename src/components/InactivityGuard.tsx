@@ -2,7 +2,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useInactivityTimeout } from "@/hooks/useInactivityTimeout";
-import { supabase } from "@/integrations/supabase/client";
 
 const PUBLIC_PATHS = new Set([
   "/login",
@@ -34,12 +33,7 @@ export const InactivityGuard = () => {
         description: "Sua sessão será encerrada em 1 minuto por inatividade.",
       });
     },
-    onTimeout: async () => {
-      try {
-        await supabase.auth.signOut();
-      } catch (_) {
-        // ignora — o relevante é limpar e redirecionar
-      }
+    onTimeout: () => {
       localStorage.removeItem("user");
       navigate("/login?reason=inactivity", { replace: true });
     },

@@ -1,6 +1,5 @@
 import { LogOut, Settings, Users, Menu, ArrowLeft, HelpCircle, User, DollarSign, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -40,46 +39,19 @@ export const AppHeader = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
 
-  // Fetch user profile name
   useEffect(() => {
-    const fetchUserName = async () => {
-      const userId = user && 'id' in user ? user.id : null;
-      if (!userId) return;
-      
-      const { data } = await supabase
-        .from("profiles")
-        .select("name")
-        .eq("user_id", String(userId))
-        .maybeSingle();
-      
-      if (data?.name) {
-        // Get first name only
-        const firstName = data.name.split(" ")[0];
-        setUserName(firstName);
-      }
-    };
-
-    fetchUserName();
-  }, [user?.id]);
-
-  const handleLogout = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      
-      toast({
-        title: "Logout realizado",
-        description: "Você foi desconectado com sucesso",
-      });
-      
-      navigate("/auth");
-    } catch (error: any) {
-      toast({
-        title: "Erro ao fazer logout",
-        description: error.message,
-        variant: "destructive",
-      });
+    if (user) {
+      const name = (user as any).name || (user as any).username || (user as any).email || null;
+      if (name) setUserName(String(name).split(" ")[0]);
     }
+  }, [user]);
+
+  const { signOut } = useAuth();
+
+  const handleLogout = () => {
+    signOut();
+    toast({ title: "Logout realizado", description: "Você foi desconectado com sucesso" });
+    navigate("/login");
   };
 
   const isActive = (path: string) => {

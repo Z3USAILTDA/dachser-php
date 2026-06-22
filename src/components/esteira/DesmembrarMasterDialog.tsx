@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Unlink, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 
 interface DesmembrarMasterDialogProps {
   open: boolean;
@@ -49,10 +48,9 @@ export const DesmembrarMasterDialog = ({
   const loadFilhos = async () => {
     try {
       setLoadingFilhos(true);
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_voucher_filhos", master_id: masterId },
-      });
-      if (error) throw error;
+      const resp = await fetch(`/api/fin/vouchers/${masterId}/filhos`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
       if (data?.data) {
         setVouchersFilhos(data.data.map((f: any) => ({
           id: f.id,

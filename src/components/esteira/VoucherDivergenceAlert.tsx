@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { sendVoucherReturnNotification } from "@/utils/voucherReturnNotification";
 
 const getUserData = () => {
@@ -46,16 +45,16 @@ export const VoucherDivergenceAlert = ({ voucher, divergence, onUpdated }: Props
         `[DIVERGÊNCIA DE ROTEAMENTO — ${divergence.rule}] ${motivo}`,
       );
 
-      const { error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "update_voucher_esteira",
-          voucher_id: voucher.id,
+      const patchResp = await fetch(`/api/fin/vouchers/${voucher.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           etapa_atual: "AJUSTE_OPERACAO",
           ajuste_operacao: ajusteTexto,
           responsavel_fiscal_user_id: userData.id?.toString(),
-        },
+        }),
       });
-      if (error) throw error;
+      if (!patchResp.ok) { const d = await patchResp.json().catch(() => ({})); throw new Error(d.error || `HTTP ${patchResp.status}`); }
 
       const detalhe = [
         `Regra violada: ${divergence.rule}`,
@@ -65,15 +64,15 @@ export const VoucherDivergenceAlert = ({ voucher, divergence, onUpdated }: Props
         `Motivo informado: ${motivo}`,
       ].join(" | ");
 
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "save_voucher_log",
-          voucher_id: voucher.id,
+      await fetch(`/api/fin/vouchers/${voucher.id}/log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           user_id: userData.id?.toString(),
           user_name: userData.username,
           acao: "DIVERGENCIA_DEVOLVIDA",
           detalhe,
-        },
+        }),
       });
 
       await sendVoucherReturnNotification({

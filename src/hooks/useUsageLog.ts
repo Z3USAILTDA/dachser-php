@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
 interface UseUsageLogOptions {
   endpoint: string;
@@ -62,13 +61,10 @@ async function sendLog(payload: Record<string, unknown>) {
     const username = user?.username || user?.email?.split("@")[0];
     if (!username || username === "unknown") return;
 
-    await supabase.functions.invoke("mariadb-proxy", {
-      body: {
-        action: "log_usage",
-        username,
-        sessionId: getOrCreateSessionId(),
-        ...payload,
-      },
+    await fetch("/api/air/usage-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, sessionId: getOrCreateSessionId(), ...payload }),
     });
   } catch (error) {
     console.warn("Failed to log usage:", error);
@@ -97,8 +93,7 @@ export function useUsageLog({ endpoint, method = "GET" }: UseUsageLogOptions) {
     const sendViewEnd = (reason: "unmount" | "pagehide") => {
       const leftAt = Date.now();
       const durationMs = leftAt - enteredAtRef.current;
-      // Use sendBeacon-like best-effort; supabase.functions.invoke may not flush on unload,
-      // so we also fire on unmount which covers SPA navigation.
+      // Best-effort: fires on unmount (SPA navigation) and pagehide (tab/window close).
       sendLog({
         endpoint,
         method,
@@ -134,14 +129,10 @@ export async function logAction(endpoint: string, method: "POST" | "DELETE" | "P
     const username = user?.username || user?.email?.split("@")[0];
     if (!username || username === "unknown") return;
 
-    await supabase.functions.invoke("mariadb-proxy", {
-      body: {
-        action: "log_usage",
-        username,
-        endpoint,
-        method,
-        sessionId: getOrCreateSessionId(),
-      },
+    await fetch("/api/air/usage-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, endpoint, method, sessionId: getOrCreateSessionId() }),
     });
   } catch (error) {
     console.warn("Failed to log action:", error);

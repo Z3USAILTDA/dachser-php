@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Download, FileSpreadsheet, CalendarIcon, FileText } from "lucide-react";
 import { format } from "date-fns";
@@ -43,24 +42,21 @@ export default function EsteiraReports() {
   const handleExport = async () => {
     try {
       setLoading(true);
-      
-      // Fetch from MariaDB via mariadb-proxy
-      const { data: response, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'export_vouchers_report',
-          etapa: filters.etapa,
-          statusBaixa: filters.statusBaixa,
-          cobrancaEmNomeDe: filters.cobrancaEmNomeDe,
-          statusIntegracaoRm: filters.statusIntegracaoRm,
-          tipoExecucaoPagamento: filters.tipoExecucaoPagamento,
-          dataInicio: filters.dataInicio ? format(filters.dataInicio, 'yyyy-MM-dd') : undefined,
-          dataFim: filters.dataFim ? format(filters.dataFim, 'yyyy-MM-dd') : undefined,
-        }
-      });
 
-      if (error) throw error;
+      const qs = new URLSearchParams();
+      if (filters.etapa) qs.set('etapa', filters.etapa);
+      if (filters.statusBaixa) qs.set('statusBaixa', filters.statusBaixa);
+      if (filters.cobrancaEmNomeDe) qs.set('cobrancaEmNomeDe', filters.cobrancaEmNomeDe);
+      if (filters.statusIntegracaoRm) qs.set('statusIntegracaoRm', filters.statusIntegracaoRm);
+      if (filters.tipoExecucaoPagamento) qs.set('tipoExecucaoPagamento', filters.tipoExecucaoPagamento);
+      if (filters.dataInicio) qs.set('dataInicio', format(filters.dataInicio, 'yyyy-MM-dd'));
+      if (filters.dataFim) qs.set('dataFim', format(filters.dataFim, 'yyyy-MM-dd'));
 
-      const data = response?.vouchers || [];
+      const resp = await fetch(`/api/fin/vouchers/report?${qs.toString()}`);
+      const response = await resp.json();
+      if (!resp.ok || !response.success) throw new Error(response.error || `HTTP ${resp.status}`);
+
+      const data = response.vouchers || [];
 
       if (!data || data.length === 0) {
       toast({

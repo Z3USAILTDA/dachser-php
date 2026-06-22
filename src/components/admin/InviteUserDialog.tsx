@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
+import { authRegister } from "@/services/authService";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, UserPlus } from "lucide-react";
 import { UserRole } from "@/types/voucher";
@@ -37,17 +37,11 @@ export const InviteUserDialog = ({ onUserInvited }: InviteUserDialogProps) => {
       // Generate temporary password
       const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
 
-      // Create user via Edge Function
-      const { data, error } = await supabase.functions.invoke("create-user", {
-        body: {
-          email,
-          password: tempPassword,
-          name,
-          role,
-        },
-      });
+      const result = await authRegister(name, email, tempPassword, role);
 
-      if (error) throw error;
+      if (!result.success) {
+        throw new Error(result.error || 'Erro ao criar usuário.');
+      }
 
       toast({
         title: "Usuário convidado!",

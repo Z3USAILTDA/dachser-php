@@ -19,7 +19,6 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { RetornarPendenteDialog } from "./RetornarPendenteDialog";
-import { supabase } from "@/integrations/supabase/client";
 import { insertDadosRmOnFinanceiro } from "@/utils/voucherRmSync";
 import { toast } from "sonner";
 import { MoedaBadge } from "./MoedaBadge";
@@ -253,9 +252,12 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
       isFetchingChildrenRef.current = true;
       try {
         const masterIds = uncachedMasters.map(m => m.id);
-        const { data } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "get_voucher_filhos_batch", master_ids: masterIds },
+        const resp = await fetch('/api/fin/vouchers/filhos-batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ master_ids: masterIds }),
         });
+        const data = resp.ok ? await resp.json() : {};
         const grouped = data?.data || {};
         for (const master of uncachedMasters) {
           const children = grouped[master.id] || [];
@@ -284,29 +286,22 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
       const userName = userData?.name || userData?.email || "Usuário";
       
       // Update status_comprovante to PENDENTE
-      const { error: updateError } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          operation: "update",
-          table: "vouchers_master",
-          data: { status_comprovante: "PENDENTE" },
-          where: { id: selectedVoucherForRetorno.id },
-        },
+      const updateResp = await fetch(`/api/fin/vouchers/${selectedVoucherForRetorno.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status_comprovante: 'PENDENTE' }),
       });
-
-      if (updateError) throw updateError;
+      if (!updateResp.ok) { const d = await updateResp.json().catch(() => ({})); throw new Error(d.error || `HTTP ${updateResp.status}`); }
 
       // Log the action
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          operation: "insert",
-          table: "voucher_logs",
-          data: {
-            voucher_id: selectedVoucherForRetorno.id,
-            acao: "COMPROVANTE_RETORNADO_PENDENTE",
-            usuario: userName,
-            detalhes: JSON.stringify({ justificativa, status_anterior: selectedVoucherForRetorno.statusComprovante || "VALIDADO" }),
-          },
-        },
+      await fetch(`/api/fin/vouchers/${selectedVoucherForRetorno.id}/log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          acao: 'COMPROVANTE_RETORNADO_PENDENTE',
+          user_name: userName,
+          detalhe: JSON.stringify({ justificativa, status_anterior: selectedVoucherForRetorno.statusComprovante || 'VALIDADO' }),
+        }),
       });
 
       // Email notifications removed — monthly report only
@@ -893,25 +888,25 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                                     const userData = userDataStr ? JSON.parse(userDataStr) : { id: 0, username: "sistema" };
                                     const proximaEtapa = voucher.cobrancaEmNomeDe === "DACHSER" ? "FISCAL" : "FINANCEIRO";
 
-                                    await supabase.functions.invoke("mariadb-proxy", {
-                                      body: {
-                                        action: "update_voucher_esteira",
-                                        voucher_id: voucher.id,
+                                    await fetch(`/api/fin/vouchers/${voucher.id}`, {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
                                         etapa_atual: proximaEtapa,
-                                        status_financeiro: "APROVADO",
+                                        status_financeiro: 'APROVADO',
                                         aprovado_por_user_id: userData.id?.toString(),
                                         responsavel_supervisor_user_id: userData.id?.toString(),
-                                      },
+                                      }),
                                     });
-                                    await supabase.functions.invoke("mariadb-proxy", {
-                                      body: {
-                                        action: "save_voucher_log",
-                                        voucher_id: voucher.id,
+                                    await fetch(`/api/fin/vouchers/${voucher.id}/log`, {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
                                         user_id: userData.id?.toString(),
                                         user_name: userData.username,
-                                        acao: "APROVADO_SUPERVISOR",
+                                        acao: 'APROVADO_SUPERVISOR',
                                         detalhe: `Voucher/SPO urgente aprovado pelo Supervisor (via tabela) — encaminhado para ${proximaEtapa}`,
-                                      },
+                                      }),
                                     });
                                     if (proximaEtapa === "FINANCEIRO") {
                                       insertDadosRmOnFinanceiro(voucher);
@@ -936,25 +931,25 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                                   try {
                                     const userDataStr = localStorage.getItem("user") || localStorage.getItem("dachser_user");
                                     const userData = userDataStr ? JSON.parse(userDataStr) : { id: 0, username: "sistema" };
-                                    await supabase.functions.invoke("mariadb-proxy", {
-                                      body: {
-                                        action: "update_voucher_esteira",
-                                        voucher_id: voucher.id,
-                                        etapa_atual: "AJUSTE_OPERACAO",
-                                        status_financeiro: "REJEITADO",
-                                        ajuste_operacao: buildAjusteWithRequester("SUPERVISOR", `REJEITADO PELO SUPERVISOR: ${motivo}`),
+                                    await fetch(`/api/fin/vouchers/${voucher.id}`, {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
+                                        etapa_atual: 'AJUSTE_OPERACAO',
+                                        status_financeiro: 'REJEITADO',
+                                        ajuste_operacao: buildAjusteWithRequester('SUPERVISOR', `REJEITADO PELO SUPERVISOR: ${motivo}`),
                                         responsavel_supervisor_user_id: userData.id?.toString(),
-                                      },
+                                      }),
                                     });
-                                    await supabase.functions.invoke("mariadb-proxy", {
-                                      body: {
-                                        action: "save_voucher_log",
-                                        voucher_id: voucher.id,
+                                    await fetch(`/api/fin/vouchers/${voucher.id}/log`, {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
                                         user_id: userData.id?.toString(),
                                         user_name: userData.username,
-                                        acao: "REJEITADO_SUPERVISOR",
+                                        acao: 'REJEITADO_SUPERVISOR',
                                         detalhe: `Voucher/SPO rejeitado (via tabela): ${motivo}`,
-                                      },
+                                      }),
                                     });
                                     await sendVoucherReturnNotification({
                                       voucher,
@@ -984,9 +979,8 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                               setDocPreviewLoading(true);
                               setDocPreviewAnexos([]);
                               try {
-                                const { data } = await supabase.functions.invoke("mariadb-proxy", {
-                                  body: { action: "get_voucher_anexos", voucher_id: voucher.id }
-                                });
+                                const resp = await fetch(`/api/fin/vouchers/${voucher.id}/anexos`);
+                                const data = resp.ok ? await resp.json() : {};
                                 setDocPreviewAnexos(data?.data || []);
                               } catch (e) {
                                 console.error("Erro ao carregar anexos:", e);

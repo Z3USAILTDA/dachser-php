@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { authLogin } from "@/services/authService";
 import logoZ3us from "@/assets/logo-z3us.png";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { Eye, EyeOff } from "lucide-react";
@@ -48,40 +48,31 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'login', username, password }
-      });
+      const data = await authLogin(username, password);
 
-      if (error) {
-        throw new Error(error.message || 'Erro ao conectar');
-      }
-
-      if (data.error) {
+      if (!data.success || !data.user) {
         toast({
           title: "Erro no login",
-          description: data.error,
+          description: data.error || "Usuário ou Senha incorretos.",
           variant: "destructive",
         });
         return;
       }
 
-      if (data.success && data.user) {
-        localStorage.setItem("user", JSON.stringify(data.user));
-        toast({
-          title: "Login realizado com sucesso!",
-          description: `Bem-vindo, ${data.user.username}!`,
-        });
-        
-        // Check if user must change password
-        if (data.user.must_change_password === 1) {
-          navigate("/change-password");
-        } else if (data.user.olimpo_only === 1) {
-          navigate("/olimpo");
-        } else if (data.user.metrics_only === 1) {
-          navigate("/admin/metrics");
-        } else {
-          navigate("/dashboard");
-        }
+      localStorage.setItem("user", JSON.stringify(data.user));
+      toast({
+        title: "Login realizado com sucesso!",
+        description: `Bem-vindo, ${data.user.username}!`,
+      });
+
+      if (data.user.must_change_password === 1) {
+        navigate("/change-password");
+      } else if (data.user.olimpo_only === 1) {
+        navigate("/olimpo");
+      } else if (data.user.metrics_only === 1) {
+        navigate("/admin/metrics");
+      } else {
+        navigate("/dashboard");
       }
     } catch (error) {
       console.error('Login error:', error);

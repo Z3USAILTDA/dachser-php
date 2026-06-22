@@ -13,7 +13,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AlertTriangle, XCircle } from "lucide-react";
 import { Voucher } from "@/types/voucher";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface CancelarVoucherDialogProps {
@@ -60,19 +59,19 @@ export const CancelarVoucherDialog = ({
     try {
       const user = getUserData();
 
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "cancelar_voucher",
-          voucher_id: voucher.id,
+      const resp = await fetch(`/api/fin/vouchers/${voucher.id}/cancelar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           motivo: motivo.trim(),
           voucher_credito: voucherCredito.trim(),
           user_id: user.id,
           user_name: user.name,
-        },
+        }),
       });
-
-      if (error || !data?.success) {
-        throw new Error(data?.error || error?.message || "Erro ao cancelar voucher/SPO");
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data?.success) {
+        throw new Error(data?.error || `HTTP ${resp.status}`);
       }
 
       toast.success("Voucher/SPO cancelado com sucesso", {

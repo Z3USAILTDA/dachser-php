@@ -13,7 +13,6 @@ import { DraftStats, CombinedMBLData } from "@/types/draft";
 import { TrackingStatusBadge } from "./TrackingStatusBadge";
 import { BookingInfoCard } from "./BookingInfoCard";
 import { DraftEventTimeline } from "./DraftEventTimeline";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { 
   Database, 
@@ -71,9 +70,11 @@ export const DraftSyncDashboard = ({
   const handleSyncMariaDB = async () => {
     setIsSyncingMariaDB(true);
     try {
-      const { data, error } = await supabase.functions.invoke('draft-fetch-mariadb');
-      if (error) throw error;
-      toast.success(`MariaDB sincronizado: ${data?.count || 0} registros`);
+      const response = await fetch('/api/sea/draft-exportacao');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      if (!data?.success) throw new Error(data?.error || 'Erro na sincronização');
+      toast.success(`MariaDB sincronizado: ${data?.mbls?.length || 0} registros`);
       await onSyncPending();
     } catch (err: any) {
       console.error('Erro ao sincronizar MariaDB:', err);
@@ -98,21 +99,9 @@ export const DraftSyncDashboard = ({
 
   const handleSelectMBL = async (item: CombinedMBLData) => {
     setSelectedMBL(item);
-    setDetailsLoading(true);
+    setDetailsLoading(false);
     setDetailsData(null);
-
-    try {
-      const { data, error } = await supabase.functions.invoke('draft-track-hapag-multi', {
-        body: { searchType: 'BL', searchValue: item.mbl_id }
-      });
-
-      if (error) throw error;
-      setDetailsData(data);
-    } catch (err) {
-      console.error('Erro ao carregar detalhes:', err);
-    } finally {
-      setDetailsLoading(false);
-    }
+    toast.info('Consulta de detalhes ao armador é gerenciada pelo serviço externo de tracking.');
   };
 
   const pieData = [

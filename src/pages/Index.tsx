@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { apiGet } from "@/services/apiClient";
+import { supabase } from "@/integrations/supabase/client"; // olimpo-proxy (Phase 6)
 import { filterByYearIfNotZ3us, isZ3usAdmin } from "@/utils/adminAccess";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,7 +44,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { User, Session } from "@supabase/supabase-js";
 import DashboardCards, { CardFilterType } from "@/components/DashboardCards";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
@@ -429,9 +430,8 @@ const STORAGE_KEY = "tracked-awbs";
 const Index = () => {
   useUsageLog({ endpoint: "/air/tracking" });
   const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { user, signOut } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
   const [awbNumber, setAwbNumber] = useState("");
   const [selectedAirline, setSelectedAirline] = useState("");
   const [consigneeName, setConsigneeName] = useState("");
@@ -511,31 +511,9 @@ const Index = () => {
     } catch (_) { /* ignore */ }
   }, []);
 
-  // Check authentication (optional - just get user info if available)
-  useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsLoading(false);
-    });
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    toast({
-      title: "Logout realizado",
-      description: "Até logo!",
-    });
+  const handleLogout = () => {
+    signOut();
+    toast({ title: "Logout realizado", description: "Até logo!" });
   };
 
   // Load AWBs from localStorage
@@ -552,19 +530,11 @@ const Index = () => {
     }
   }, []);
 
-  // Fetch AWBs from t_aereo_ws - Visível para todos os usuários
+  // Fetch AWBs from t_aereo_ws_firecrawl via backend
   const fetchStatusAereoData = React.useCallback(async () => {
-    // Buscar dados para todos os usuários autenticados
     setIsLoadingStatusAereo(true);
     try {
-      const { data, error } = await supabase.functions.invoke("fetch-status-aereo", {
-        body: { search: "" },
-      });
-
-      if (error) {
-        console.error("Error fetching status aereo:", error);
-        return;
-      }
+      const data = await apiGet("/api/air/status-aereo");
 
       if (data?.success && data?.data) {
         const convertedData: AWBData[] = data.data.map((item: any, index: number) => ({
@@ -684,20 +654,12 @@ const Index = () => {
     }
   }, []);
 
-  // Fetch database statistics from t_master_dados
+  // Fetch database statistics
   const fetchDbStats = useCallback(async () => {
     setIsLoadingDbStats(true);
     try {
-      const { data, error } = await supabase.functions.invoke("fetch-master-dados-stats");
-
-      if (error) {
-        console.error("Error fetching db stats:", error);
-        return;
-      }
-
-      if (data?.success && data?.stats) {
-        setDbStats(data.stats);
-      }
+      const data = await apiGet("/api/air/stats");
+      if (data?.success && data?.stats) setDbStats(data.stats);
     } catch (error) {
       console.error("Error in fetchDbStats:", error);
     } finally {
@@ -720,710 +682,21 @@ const Index = () => {
     };
   }, [isVisible, fetchStatusAereoData, fetchDbStats]);
 
-  // Function to re-track AWBs from t_status_aereo
-  // sendNoChangesEmail: only send "no changes" email when explicitly triggered by user (button click)
+  // Rastreio removido — serviço externo gerencia o rastreio (fetch-awbs-for-retrack, track-awb, add-awb-to-status)
   const retrackAWBsFromStatus = React.useCallback(
-    async (sendNoChangesEmail: boolean = false) => {
-      if (isPausedRef.current) {
-        console.log("Processing paused - not starting retrack");
-        return;
-      }
-
-      try {
-        console.log("Starting re-track process for AWBs in t_status_aereo");
-
-        const BATCH_SIZE = 10;
-        let offset = 0;
-        let totalRetracked = 0;
-        let hasMoreData = true;
-        const statusChanges: Array<{
-          awb: string;
-          oldStatus: string;
-          newStatus: string;
-          lastUpdate: string;
-          origin?: string;
-          destination?: string;
-          hawb?: string;
-        }> = [];
-
-        while (hasMoreData) {
-          if (isPausedRef.current) {
-            toast({
-              title: "Re-rastreio pausado",
-              description: `${totalRetracked} AWB(s) re-rastreados antes da pausa`,
-            });
-            return;
-          }
-
-          const { data, error } = await supabase.functions.invoke("fetch-awbs-for-retrack", {
-            body: { limit: BATCH_SIZE, offset },
-          });
-
-          if (error) {
-            console.error("Error fetching AWBs for retrack:", error);
-            break;
-          }
-
-          if (!data?.data || data.data.length === 0) {
-            hasMoreData = false;
-            break;
-          }
-
-          // Process each AWB in the batch
-          for (const item of data.data) {
-            if (isPausedRef.current) {
-              setRetrackingAwbs(new Set());
-              toast({
-                title: "Re-rastreio pausado",
-                description: `${totalRetracked} AWB(s) re-rastreados antes da pausa`,
-              });
-              return;
-            }
-
-            try {
-              const awbNumber = item.awb;
-              const airlineCode = awbNumber.substring(0, 3);
-              const oldStatus = item.último_status || item["último_status"] || "N/A";
-
-              // Debug: Log the full item to see all properties
-              console.log("Full item object:", JSON.stringify(item));
-              console.log("Item keys:", Object.keys(item));
-
-              // Get hawb from the item - explicitly access the hawb property
-              const rawItem = item as Record<string, any>;
-              const hawbValue = rawItem.hawb ?? rawItem["hawb"] ?? "";
-              const itemHawb = hawbValue && hawbValue !== "" && hawbValue !== "N/A" ? hawbValue : "N/A";
-              console.log(`Extracted HAWB for ${awbNumber}: "${itemHawb}" from raw value: "${rawItem.hawb}"`);
-              const itemUltimaAtualizacao =
-                item["última atualização"] ||
-                item.última_atualização ||
-                item["ultima atualizacao"] ||
-                new Date().toLocaleString("pt-BR");
-
-              // Get nome_analista from the item
-              const itemNomeAnalista = item.nome_analista || item["nome_analista"] || "N/A";
-
-              // Get email_analista from the item
-              const itemEmailAnalista = item.email_analista || item["email_analista"] || null;
-
-              // Get email_cliente from the item
-              const itemEmailCliente = item.email_cliente || item["email_cliente"] || null;
-
-              // Mark AWB as being retracked
-              setRetrackingAwbs((prev) => new Set(prev).add(awbNumber));
-
-              console.log(
-                `Re-tracking AWB: ${awbNumber}, HAWB: ${itemHawb}, Analista: ${itemNomeAnalista}, Email Analista: ${itemEmailAnalista}`,
-              );
-
-              const { data: trackData, error: trackError } = await supabase.functions.invoke("track-awb", {
-                body: { awb: awbNumber, airlineCode },
-              });
-
-              if (!trackError && trackData?.success && trackData.data) {
-                const latestEvent = trackData.data.events?.[0];
-                const lastEventText = latestEvent ? `${latestEvent.status} - ${latestEvent.description}` : "Rastreado";
-                const newStatus = getStatusCode(lastEventText);
-
-                // Update t_status_aereo with new status (preserve hawb and nome_analista)
-                // Extract DEP timestamp from carrier data when status is DEP
-                const statusCode = trackData.data.lastStatus?.code || trackData.data.status || "";
-                const depTimestamp = statusCode === "DEP" ? trackData.data.lastStatus?.timestamp : null;
-
-                await supabase.functions.invoke("add-awb-to-status", {
-                  body: {
-                    mawb: awbNumber,
-                    last_event: lastEventText,
-                    consignee_name: item.destinatário || "N/A",
-                    airline_code: airlineCode,
-                    hawb: "N/A", // Always N/A during reprocessing to preserve existing values
-                    nome_analista: "N/A", // Always N/A during reprocessing to preserve existing values
-                    origin: trackData.data.origin || "N/A",
-                    destination: trackData.data.destination || "N/A",
-                    dep_timestamp: depTimestamp, // Timestamp real do DEP da companhia aérea
-                    arr_location: trackData.data.lastStatus?.location || null, // IATA code where ARR occurred
-                  },
-                });
-
-                // Track status change - send individual email immediately
-                // Normalize both statuses to uppercase for comparison to avoid false positives (e.g., "ERRO" vs "Erro")
-                const normalizedOldStatus = (oldStatus || "").toUpperCase().trim();
-                const normalizedNewStatus = (newStatus || "").toUpperCase().trim();
-
-                // CRITICAL: Skip if normalized statuses are the same (case-only difference)
-                if (normalizedOldStatus === normalizedNewStatus) {
-                  console.log(
-                    `[EMAIL SKIP] Case-only difference for ${awbNumber}: "${oldStatus}" vs "${newStatus}" - both normalize to "${normalizedOldStatus}"`,
-                  );
-                } else {
-                  console.log(`Status change detected for ${awbNumber}: ${oldStatus} -> ${newStatus}`);
-                  console.log("Sending individual email for AWB:", awbNumber, "HAWB:", itemHawb);
-
-                  const statusChange = {
-                    awb: awbNumber,
-                    oldStatus,
-                    newStatus,
-                    lastUpdate: itemUltimaAtualizacao,
-                    origin: trackData.data.origin || "N/A",
-                    destination: trackData.data.destination || "N/A",
-                    hawb: itemHawb,
-                    analystEmail: itemEmailAnalista,
-                  };
-
-                  statusChanges.push(statusChange);
-
-                  // DETAILED LOGGING: Track email decision
-                  console.log(`[EMAIL DECISION] AWB: ${awbNumber}`);
-                  console.log(`[EMAIL DECISION] shouldSendEmailsRef.current: ${shouldSendEmailsRef.current}`);
-                  console.log(`[EMAIL DECISION] EMAIL_SENDING_ENABLED: ${EMAIL_SENDING_ENABLED}`);
-                  console.log(`[EMAIL DECISION] Old status: "${oldStatus}" -> Normalized: "${normalizedOldStatus}"`);
-                  console.log(`[EMAIL DECISION] New status: "${newStatus}" -> Normalized: "${normalizedNewStatus}"`);
-
-                  // Check if email enable timestamp is still valid (within timeout period)
-                  const emailEnableAge = Date.now() - emailEnableTimestampRef.current;
-                  const isEmailTimestampValid =
-                    emailEnableAge < EMAIL_ENABLE_TIMEOUT_MS && emailEnableTimestampRef.current > 0;
-                  console.log(
-                    `[EMAIL DECISION] Email enable age: ${Math.round(emailEnableAge / 1000)}s, Valid: ${isEmailTimestampValid}`,
-                  );
-
-                  // Send individual email for this AWB - ONLY if user explicitly clicked button AND emails are enabled AND timestamp is valid
-                  if (shouldSendEmailsRef.current && EMAIL_SENDING_ENABLED && isEmailTimestampValid) {
-                    // Check if email was already sent for this AWB+status combination to prevent duplicates
-                    const emailKey = `${awbNumber}-${normalizedNewStatus}`;
-                    if (emailsSentRef.current.has(emailKey)) {
-                      console.log(
-                        `[EMAIL SKIPPED DUPLICATE] Email already sent for ${emailKey} - preventing duplicate`,
-                      );
-                    } else {
-                      // Mark as sent BEFORE sending to prevent race conditions
-                      emailsSentRef.current.add(emailKey);
-
-                      // Use email_cliente directly from the item
-                      const customerEmail = itemEmailCliente || undefined;
-
-                      console.log(`[EMAIL SENDING] Customer email for ${awbNumber}: email=${customerEmail}`);
-
-                      try {
-                        const { data: emailData, error: emailError } = await supabase.functions.invoke(
-                          "send-status-change-email",
-                          {
-                            body: {
-                              statusChanges: [statusChange],
-                              customerEmail: customerEmail,
-                              analystEmail: itemEmailAnalista,
-                            },
-                          },
-                        );
-
-                        if (emailError) {
-                          console.error(`Error sending email for AWB ${awbNumber}:`, emailError);
-                          // Remove from sent set so it can be retried
-                          emailsSentRef.current.delete(emailKey);
-                        } else {
-                          console.log(`Email sent successfully for AWB ${awbNumber}:`, emailData);
-                          toast({
-                            title: "Email enviado",
-                            description: customerEmail
-                              ? `Notificação enviada para AWB ${awbNumber} (incluindo cliente: ${customerEmail})`
-                              : `Notificação enviada para AWB ${awbNumber}`,
-                          });
-                        }
-                      } catch (emailError) {
-                        console.error(`Exception sending email for AWB ${awbNumber}:`, emailError);
-                        // Remove from sent set so it can be retried
-                        emailsSentRef.current.delete(emailKey);
-                      }
-
-                      // Wait 1 minute before processing next AWB to avoid spam
-                      console.log("Waiting 1 minute before processing next AWB...");
-                      await new Promise((resolve) => setTimeout(resolve, 60000));
-                    }
-                  } else {
-                    console.log(
-                      `[EMAIL SKIPPED] AWB ${awbNumber} - shouldSendEmailsRef=${shouldSendEmailsRef.current}, EMAIL_SENDING_ENABLED=${EMAIL_SENDING_ENABLED}, timestampValid=${Date.now() - emailEnableTimestampRef.current < EMAIL_ENABLE_TIMEOUT_MS}`,
-                    );
-                  }
-                }
-
-                totalRetracked++;
-              }
-
-              // Remove AWB from retracking set
-              setRetrackingAwbs((prev) => {
-                const newSet = new Set(prev);
-                newSet.delete(awbNumber);
-                return newSet;
-              });
-            } catch (error) {
-              console.error(`Error re-tracking AWB ${item.awb}:`, error);
-              // Remove from retracking set on error too
-              setRetrackingAwbs((prev) => {
-                const newSet = new Set(prev);
-                newSet.delete(item.awb);
-                return newSet;
-              });
-            }
-          }
-
-          offset += BATCH_SIZE;
-
-          if (data.data.length < BATCH_SIZE) {
-            hasMoreData = false;
-          }
-        }
-
-        // Clear all retracking indicators
-        setRetrackingAwbs(new Set());
-
-        // Email "no changes" disabled - user requested removal
-        if (statusChanges.length > 0) {
-          toast({
-            title: "Processamento concluído",
-            description: `${statusChanges.length} email(s) enviado(s) com alterações de status`,
-          });
-        }
-
-        if (totalRetracked > 0) {
-          const now = new Date();
-          const formattedDate = now.toLocaleString("pt-BR", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-          });
-
-          toast({
-            title: "Re-rastreio completo!",
-            description: `Rastreio atualizado às ${formattedDate}`,
-          });
-        }
-
-        // Show completion popup after retracking finishes
-        setShowCompletionPopup(true);
-
-        // CRITICAL: Reset email flags after processing completes
-        // This prevents emails from being sent on automatic/background processing
-        console.log("[EMAIL CONTROL] Retracking complete - disabling email sending");
-        shouldSendEmailsRef.current = false;
-        emailEnableTimestampRef.current = 0;
-      } catch (error) {
-        console.error("Error in retrack process:", error);
-        // Reset email flags on error too
-        shouldSendEmailsRef.current = false;
-        emailEnableTimestampRef.current = 0;
-        toast({
-          title: "Erro no re-rastreio",
-          description: "Erro ao re-rastrear AWBs",
-          variant: "destructive",
-        });
-      }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    async (_sendNoChangesEmail: boolean = false) => {
+      // Rastreio removido — serviço externo gerencia o rastreio
     },
-    [toast],
+    [],
   );
 
   // Function to fetch AWBs in batches using persistent queue
   const fetchAWBsInBatches = React.useCallback(async () => {
-    // Check if paused before starting
-    if (isPausedRef.current) {
-      console.log("Processing paused - not starting batch fetch");
-      return;
-    }
+    // Rastreio removido — serviço externo gerencia o rastreio
+  }, []);
 
-    try {
-      // Step 1: Create queue table if not exists
-      console.log("Step 1: Creating/verifying queue table...");
-      await supabase.functions.invoke("manage-processing-queue", {
-        body: { action: "create_table" },
-      });
 
-      // Step 2: Populate queue with unprocessed AWBs
-      console.log("Step 2: Populating queue with unprocessed AWBs...");
-      const { data: populateData, error: populateError } = await supabase.functions.invoke("manage-processing-queue", {
-        body: { action: "populate" },
-      });
-
-      if (populateError) {
-        throw new Error(populateError.message || "Failed to populate queue");
-      }
-
-      const totalInQueue = populateData?.count || 0;
-      console.log(`Queue populated with ${totalInQueue} AWBs`);
-
-      if (totalInQueue === 0) {
-        toast({
-          title: "Nenhum AWB para processar",
-          description: "Todos os AWBs já foram processados",
-        });
-        return;
-      }
-
-      toast({
-        title: "Iniciando processamento",
-        description: `${totalInQueue} AWB(s) na fila de processamento`,
-      });
-
-      // Step 3: Process AWBs from queue in batches
-      const BATCH_SIZE = 10;
-      let batchNumber = 1;
-      let totalProcessed = 0;
-      let hasMoreData = true;
-
-      const stored = localStorage.getItem(STORAGE_KEY);
-      const existingAwbs = stored ? JSON.parse(stored) : [];
-
-      while (hasMoreData) {
-        // Check if paused
-        if (isPausedRef.current) {
-          toast({
-            title: "Processamento pausado",
-            description: `${totalProcessed} AWB(s) processados antes da pausa`,
-          });
-          return;
-        }
-
-        console.log(`Fetching batch ${batchNumber} from queue`);
-
-        // Fetch batch from queue
-        const { data: queueData, error: queueError } = await supabase.functions.invoke("manage-processing-queue", {
-          body: {
-            action: "fetch",
-            limit: BATCH_SIZE,
-            offset: 0, // Always fetch from start since we remove processed items
-          },
-        });
-
-        if (queueError) {
-          console.error("Error fetching from queue:", queueError);
-          break;
-        }
-
-        if (!queueData?.data || !Array.isArray(queueData.data) || queueData.data.length === 0) {
-          // Queue is empty, break and let retrackAWBsFromStatus handle retracking
-          console.log("Queue empty, will start re-tracking after batch processing completes...");
-          hasMoreData = false;
-          break;
-        }
-
-        const importedAwbs: AWBData[] = queueData.data
-          .filter((item: any) => {
-            const mawb = item.mawb?.trim() || "";
-            // Skip empty MAWBs
-            if (!mawb || mawb.length < 3) {
-              console.log(`Skipping invalid MAWB: "${mawb}"`);
-              return false;
-            }
-            return true;
-          })
-          .map((item: any, index: number) => {
-            const mawb = item.mawb.trim();
-            const airlineCode = mawb.slice(0, 3);
-
-            return {
-              id: `queue-${Date.now()}-${index}`,
-              awb: mawb,
-              hawb: item.hawb || "",
-              airline_code: airlineCode,
-              consignee_name: item.destinatario || "",
-              last_event: "Aguardando rastreio...",
-              status: "PENDING",
-              created_at: new Date().toISOString(),
-              nome_analista: item.nome_analista || "",
-              email_analista: "",
-              email_cliente: item.email_cliente || "",
-            };
-          });
-
-        // Process all AWBs from queue (queue already filtered against t_status_aereo)
-        const currentStorage = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-        const newAwbs = importedAwbs;
-
-        if (newAwbs.length > 0) {
-          // Save batch immediately
-          const mergedAwbs = [...currentStorage, ...newAwbs];
-          saveToStorage(mergedAwbs);
-
-          toast({
-            title: `Processando lote ${batchNumber}`,
-            description: `${newAwbs.length} AWB(s) da fila. Rastreando...`,
-          });
-
-          // Track each AWB in this batch sequentially
-          for (let i = 0; i < newAwbs.length; i++) {
-            // Check if paused before processing each AWB
-            if (isPausedRef.current) {
-              toast({
-                title: "Processamento pausado",
-                description: `${totalProcessed + i} AWB(s) processados antes da pausa`,
-              });
-              return;
-            }
-
-            const awb = newAwbs[i];
-
-            try {
-              setTrackingAwb(awb.id);
-
-              // Validate AWB before tracking
-              if (!awb.awb || awb.awb.trim().length < 3) {
-                console.error(`Invalid AWB format: "${awb.awb}"`);
-                throw new Error("AWB inválido");
-              }
-
-              const { data: trackData, error: trackError } = await supabase.functions.invoke("track-awb", {
-                body: { awb: awb.awb, airlineCode: awb.airline_code },
-              });
-
-              if (!trackError && trackData?.success && trackData.data) {
-                const latestEvent = trackData.data.events?.[0];
-                const lastEventText = latestEvent ? `${latestEvent.status} - ${latestEvent.description}` : "Rastreado";
-                const updatedAwb = {
-                  ...awb,
-                  last_event: lastEventText,
-                  status: trackData.data.status || "TRACKED",
-                  last_check: new Date().toISOString(),
-                  origem: trackData.data.origin || "N/A",
-                  destino: trackData.data.destination || "N/A",
-                };
-
-                // Update storage with tracked AWB
-                const currentList = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-                const updatedList = currentList.map((item: AWBData) => (item.id === awb.id ? updatedAwb : item));
-                saveToStorage(updatedList);
-
-                // Add to t_status_aereo
-                await supabase.functions.invoke("add-awb-to-status", {
-                  body: {
-                    mawb: awb.awb,
-                    last_event: lastEventText,
-                    consignee_name: awb.consignee_name,
-                    airline_code: awb.airline_code,
-                    hawb: awb.hawb || "N/A",
-                    nome_analista: awb.nome_analista || "N/A",
-                    origin: trackData.data.origin || "N/A",
-                    destination: trackData.data.destination || "N/A",
-                    email_cliente: awb.email_cliente || null,
-                    arr_location: trackData.data.lastStatus?.location || null, // IATA code where ARR occurred
-                  },
-                });
-
-                console.log(`AWB ${awb.awb} added to t_status_aereo`);
-
-                // Send individual email notification for new AWB
-                const newStatus = getStatusCode(lastEventText);
-                const statusChange = {
-                  awb: awb.awb,
-                  oldStatus: "NOVO",
-                  newStatus,
-                  lastUpdate: new Date().toLocaleString("pt-BR", {
-                    timeZone: "America/Sao_Paulo",
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  }),
-                  origin: trackData.data.origin || "N/A",
-                  destination: trackData.data.destination || "N/A",
-                  hawb: awb.hawb || "N/A",
-                };
-
-                // DETAILED LOGGING: Track email decision for new AWB
-                console.log(`[EMAIL DECISION NEW AWB] AWB: ${awb.awb}`);
-                console.log(`[EMAIL DECISION NEW AWB] shouldSendEmailsRef.current: ${shouldSendEmailsRef.current}`);
-                console.log(`[EMAIL DECISION NEW AWB] EMAIL_SENDING_ENABLED: ${EMAIL_SENDING_ENABLED}`);
-
-                // Check if email enable timestamp is still valid
-                const emailEnableAgeNew = Date.now() - emailEnableTimestampRef.current;
-                const isEmailTimestampValidNew =
-                  emailEnableAgeNew < EMAIL_ENABLE_TIMEOUT_MS && emailEnableTimestampRef.current > 0;
-                console.log(
-                  `[EMAIL DECISION NEW AWB] Email enable age: ${Math.round(emailEnableAgeNew / 1000)}s, Valid: ${isEmailTimestampValidNew}`,
-                );
-
-                // Send email for new AWB - ONLY if user explicitly clicked button AND emails are enabled AND timestamp valid
-                if (shouldSendEmailsRef.current && EMAIL_SENDING_ENABLED && isEmailTimestampValidNew) {
-                  // Check if email was already sent for this AWB+status combination to prevent duplicates
-                  const emailKey = `${awb.awb}-${newStatus.toUpperCase()}`;
-                  if (emailsSentRef.current.has(emailKey)) {
-                    console.log(
-                      `[EMAIL SKIPPED DUPLICATE NEW AWB] Email already sent for ${emailKey} - preventing duplicate`,
-                    );
-                  } else {
-                    // Mark as sent BEFORE sending to prevent race conditions
-                    emailsSentRef.current.add(emailKey);
-
-                    try {
-                      console.log(`[EMAIL SENDING NEW AWB] Sending email for ${awb.awb}...`);
-                      const { data: emailData, error: emailError } = await supabase.functions.invoke(
-                        "send-status-change-email",
-                        {
-                          body: {
-                            statusChanges: [statusChange],
-                            analystEmail: awb.email_analista || null,
-                          },
-                        },
-                      );
-
-                      if (emailError) {
-                        console.error(`Error sending email for AWB ${awb.awb}:`, emailError);
-                        // Remove from sent set so it can be retried
-                        emailsSentRef.current.delete(emailKey);
-                      } else {
-                        console.log(`Email sent successfully for AWB ${awb.awb}:`, emailData);
-                        toast({
-                          title: "Email enviado",
-                          description: `Notificação enviada para novo AWB ${awb.awb}`,
-                        });
-                      }
-                    } catch (emailError) {
-                      console.error(`Exception sending email for AWB ${awb.awb}:`, emailError);
-                      // Remove from sent set so it can be retried
-                      emailsSentRef.current.delete(emailKey);
-                    }
-
-                    // Wait 1 minute before processing next AWB to avoid spam
-                    console.log("Waiting 1 minute before processing next AWB...");
-                    await new Promise((resolve) => setTimeout(resolve, 60000));
-                  }
-                } else {
-                  console.log(
-                    `[EMAIL SKIPPED NEW AWB] AWB ${awb.awb} - shouldSendEmailsRef=${shouldSendEmailsRef.current}, EMAIL_SENDING_ENABLED=${EMAIL_SENDING_ENABLED}, timestampValid=${isEmailTimestampValidNew}`,
-                  );
-                }
-
-                // Step 4: Remove from queue after successful processing
-                console.log(`[REMOVE] Requesting removal of AWB ${awb.awb} from queue...`);
-                const { data: removeData, error: removeError } = await supabase.functions.invoke(
-                  "manage-processing-queue",
-                  {
-                    body: {
-                      action: "remove",
-                      mawb: awb.awb,
-                    },
-                  },
-                );
-
-                if (removeError) {
-                  console.error(`[REMOVE ERROR] Failed to remove AWB ${awb.awb}:`, removeError);
-                  console.error(`[REMOVE ERROR] Full error object:`, JSON.stringify(removeError, null, 2));
-                } else {
-                  console.log(`[REMOVE SUCCESS] AWB ${awb.awb} removal response:`, JSON.stringify(removeData, null, 2));
-
-                  // Validate removal - verify AWB is no longer in queue
-                  const { data: verifyData } = await supabase.functions.invoke("manage-processing-queue", {
-                    body: { action: "count" },
-                  });
-                  console.log(`[REMOVE VERIFY] Queue count after removal: ${verifyData?.count || 0}`);
-
-                  if (removeData?.deletedCount === 0) {
-                    console.error(`[REMOVE WARNING] AWB ${awb.awb} was NOT removed from queue (deletedCount=0)`);
-                  } else {
-                    console.log(
-                      `[REMOVE CONFIRMED] AWB ${awb.awb} successfully removed (deletedCount=${removeData?.deletedCount || "unknown"})`,
-                    );
-                  }
-                }
-              } else {
-                throw new Error(trackError?.message || "Falha no rastreio");
-              }
-            } catch (error) {
-              console.error(`Error tracking AWB ${awb.awb}:`, error);
-
-              // Keep the AWB with original data but mark as error
-              const currentList = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-              const updatedList = currentList.map((item: AWBData) =>
-                item.id === awb.id ? { ...item, last_event: "Erro no rastreio", status: "ERROR" } : item,
-              );
-              saveToStorage(updatedList);
-
-              // Remove from queue even on error to avoid reprocessing
-              console.log(`[REMOVE AFTER ERROR] AWB ${awb.awb} processing failed, requesting removal from queue...`);
-              const { data: removeErrorData, error: removeErrorError } = await supabase.functions.invoke(
-                "manage-processing-queue",
-                {
-                  body: {
-                    action: "remove",
-                    mawb: awb.awb,
-                  },
-                },
-              );
-
-              if (removeErrorError) {
-                console.error(`[REMOVE AFTER ERROR] Failed to remove AWB ${awb.awb}:`, removeErrorError);
-                console.error(`[REMOVE AFTER ERROR] Full error:`, JSON.stringify(removeErrorError, null, 2));
-              } else {
-                console.log(
-                  `[REMOVE AFTER ERROR SUCCESS] AWB ${awb.awb} removal response:`,
-                  JSON.stringify(removeErrorData, null, 2),
-                );
-
-                if (removeErrorData?.deletedCount === 0) {
-                  console.error(`[REMOVE AFTER ERROR WARNING] AWB ${awb.awb} was NOT removed (deletedCount=0)`);
-                } else {
-                  console.log(
-                    `[REMOVE AFTER ERROR CONFIRMED] AWB ${awb.awb} removed (deletedCount=${removeErrorData?.deletedCount || "unknown"})`,
-                  );
-                }
-              }
-            }
-
-            setTrackingAwb(null);
-          }
-
-          totalProcessed += newAwbs.length;
-
-          toast({
-            title: `Lote ${batchNumber} concluído`,
-            description: `${newAwbs.length} AWB(s) processados. Total: ${totalProcessed}`,
-          });
-        }
-
-        // Check queue count to see if there's more data
-        const { data: countData } = await supabase.functions.invoke("manage-processing-queue", {
-          body: { action: "count" },
-        });
-
-        const remainingInQueue = countData?.count || 0;
-        console.log(`Remaining in queue: ${remainingInQueue}`);
-
-        if (remainingInQueue === 0) {
-          hasMoreData = false;
-        }
-
-        batchNumber++;
-      }
-
-      // Clear the queue after processing
-      await supabase.functions.invoke("manage-processing-queue", {
-        body: { action: "clear" },
-      });
-
-      if (totalProcessed > 0) {
-        toast({
-          title: "Todos AWBs sincronizados!",
-          description: `${totalProcessed} AWB(s) processados e salvos no banco.`,
-        });
-      }
-
-      // Always start retracking after batch processing completes
-      // Pass false - don't send "no changes" email automatically, only when user explicitly clicks button
-      console.log("Batch processing complete, starting automatic retracking...");
-      await retrackAWBsFromStatus(false);
-    } catch (error) {
-      console.error("Error importing AWBs:", error);
-      // Reset email flags on error
-      shouldSendEmailsRef.current = false;
-      emailEnableTimestampRef.current = 0;
-      toast({
-        title: "Erro ao importar",
-        description: "Erro ao processar AWBs da fila.",
-        variant: "destructive",
-      });
-    }
-  }, [toast, saveToStorage, retrackAWBsFromStatus]);
 
   // Handle refresh button - checks queue and decides to process or retrack
   const handleRefresh = React.useCallback(async () => {
@@ -1611,95 +884,12 @@ const Index = () => {
 
     toast({
       title: "AWB cadastrado",
-      description: "Rastreando automaticamente...",
+      description: "AWB adicionado à lista.",
     });
 
     setAwbNumber("");
     setSelectedAirline("");
     setConsigneeName("");
-
-    // Automatically track the AWB
-    setTrackingAwb(newAwb.id);
-
-    try {
-      const { data, error } = await supabase.functions.invoke("track-awb", {
-        body: { awb: newAwb.awb, airlineCode: newAwb.airline_code },
-      });
-
-      if (error) throw error;
-
-      if (data.success && data.data) {
-        const latestEvent = data.data.events?.[0];
-        const updatedAwb = {
-          ...newAwb,
-          last_event: latestEvent ? `${latestEvent.status} - ${latestEvent.description}` : newAwb.last_event,
-          status: data.data.status || newAwb.status,
-          last_check: new Date().toISOString(),
-          origem: data.data.origin || "N/A",
-          destino: data.data.destination || "N/A",
-        };
-
-        const listAfterTracking = awbsList.map((item) => (item.id === newAwb.id ? updatedAwb : item));
-
-        // If not found in list, add it (since it was just added)
-        if (!listAfterTracking.find((item) => item.id === newAwb.id)) {
-          listAfterTracking.unshift(updatedAwb);
-        }
-
-        saveToStorage(listAfterTracking);
-
-        // Automatically add to database
-        setAddingToDb(newAwb.id);
-
-        try {
-          // Extract DEP timestamp from carrier data when status is DEP
-          const statusCode = data.data.lastStatus?.code || data.data.status || "";
-          const depTimestamp = statusCode === "DEP" ? data.data.lastStatus?.timestamp : null;
-
-          const { data: dbData, error: dbError } = await supabase.functions.invoke("add-awb-to-status", {
-            body: {
-              mawb: updatedAwb.awb,
-              last_event: updatedAwb.last_event || "N/A",
-              consignee_name: updatedAwb.consignee_name || "N/A",
-              airline_code: updatedAwb.airline_code,
-              hawb: "N/A",
-              nome_analista: "N/A",
-              origin: data.data.origin || "N/A",
-              destination: data.data.destination || "N/A",
-              dep_timestamp: depTimestamp, // Timestamp real do DEP da companhia aérea
-              arr_location: data.data.lastStatus?.location || null, // IATA code where ARR occurred
-            },
-          });
-
-          if (dbError) throw dbError;
-
-          if (dbData.success) {
-            toast({
-              title: "Sucesso completo",
-              description: "AWB rastreado e salvo no banco de dados.",
-            });
-          }
-        } catch (dbError) {
-          console.error("Error adding AWB to database:", dbError);
-          toast({
-            title: "AWB rastreado",
-            description: "Mas houve erro ao salvar no banco de dados.",
-            variant: "destructive",
-          });
-        } finally {
-          setAddingToDb(null);
-        }
-      }
-    } catch (error) {
-      console.error("Error tracking AWB:", error);
-      toast({
-        title: "AWB cadastrado",
-        description: "Mas houve erro no rastreamento automático.",
-        variant: "destructive",
-      });
-    } finally {
-      setTrackingAwb(null);
-    }
   };
 
   const handleDeleteAWB = (id: string) => {
@@ -1741,80 +931,12 @@ const Index = () => {
     }
   };
 
-  const handleTrackAWB = async (awb: AWBData) => {
-    setTrackingAwb(awb.id);
-
-    try {
-      const { data, error } = await supabase.functions.invoke("track-awb", {
-        body: { awb: awb.awb, airlineCode: awb.airline_code },
-      });
-
-      if (error) throw error;
-
-      if (data.success && data.data) {
-        const latestEvent = data.data.events?.[0];
-        const updatedAwb = {
-          ...awb,
-          last_event: latestEvent ? `${latestEvent.status} - ${latestEvent.description}` : awb.last_event,
-          status: data.data.status || awb.status,
-          last_check: new Date().toISOString(),
-        };
-
-        const updatedList = awbsList.map((item) => (item.id === awb.id ? updatedAwb : item));
-        saveToStorage(updatedList);
-
-        toast({
-          title: "Rastreamento atualizado",
-          description: `Status: ${latestEvent?.status || "N/A"}`,
-        });
-      }
-    } catch (error) {
-      console.error("Error tracking AWB:", error);
-      toast({
-        title: "Erro no rastreamento",
-        description: "Não foi possível consultar o site da companhia.",
-        variant: "destructive",
-      });
-    } finally {
-      setTrackingAwb(null);
-    }
+  const handleTrackAWB = async (_awb: AWBData) => {
+    // Rastreio removido — serviço externo gerencia o rastreio
   };
 
-  const handleAddToDatabase = async (awb: AWBData) => {
-    setAddingToDb(awb.id);
-
-    try {
-      const { data, error } = await supabase.functions.invoke("add-awb-to-status", {
-        body: {
-          mawb: awb.awb,
-          last_event: awb.last_event || "N/A",
-          consignee_name: awb.consignee_name || "N/A",
-          airline_code: awb.airline_code,
-          hawb: awb.hawb || "N/A",
-          nome_analista: awb.nome_analista || "N/A",
-        },
-      });
-
-      if (error) throw error;
-
-      if (data.success) {
-        toast({
-          title: "Sucesso",
-          description: "AWB adicionado ao banco de dados.",
-        });
-      } else {
-        throw new Error(data.error || "Erro desconhecido");
-      }
-    } catch (error) {
-      console.error("Error adding AWB to database:", error);
-      toast({
-        title: "Erro ao adicionar",
-        description: "Não foi possível adicionar o AWB ao banco de dados.",
-        variant: "destructive",
-      });
-    } finally {
-      setAddingToDb(null);
-    }
+  const handleAddToDatabase = async (_awb: AWBData) => {
+    // Rastreio removido — serviço externo gerencia o rastreio
   };
 
   const formatAWB = (value: string) => {

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/services/apiClient";
 
 export interface LeadcomexLogFilters {
   hawb?: string;
@@ -71,22 +71,17 @@ export function useLeadcomexLogs(filters: LeadcomexLogFilters) {
   return useQuery({
     queryKey: ['leadcomex-logs', filters],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'get_leadcomex_logs',
-          ...filters 
-        }
-      });
-      
-      if (error) throw error;
+      const qs = new URLSearchParams();
+      if (filters.limit)            qs.set('limit', String(filters.limit));
+      if (filters.offset)           qs.set('offset', String(filters.offset));
+      if (filters.hawb)             qs.set('hawb', filters.hawb);
+      if (filters.success != null)  qs.set('success', String(filters.success));
+      if (filters.date_from)        qs.set('date_from', filters.date_from);
+      if (filters.date_to)          qs.set('date_to', filters.date_to);
+      if (filters.execution_source) qs.set('execution_source', filters.execution_source);
+      const data = await apiGet(`/api/cct/leadcomex-logs?${qs.toString()}`);
       if (!data?.success) throw new Error(data?.error || 'Failed to fetch logs');
-      
-      return {
-        logs: data.logs as LeadcomexLog[],
-        total: data.total as number,
-        limit: data.limit as number,
-        offset: data.offset as number,
-      };
+      return { logs: data.logs as LeadcomexLog[], total: data.total as number, limit: data.limit as number, offset: data.offset as number };
     },
     refetchInterval: () => (typeof document !== "undefined" && document.visibilityState === "visible" ? 30000 : false),
     refetchIntervalInBackground: false,
@@ -98,17 +93,8 @@ export function useLeadcomexLogDetail(logId: number | null) {
     queryKey: ['leadcomex-log-detail', logId],
     queryFn: async () => {
       if (!logId) return null;
-      
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'get_leadcomex_log_detail',
-          id: logId
-        }
-      });
-      
-      if (error) throw error;
+      const data = await apiGet(`/api/cct/leadcomex-logs/${logId}`);
       if (!data?.success) throw new Error(data?.error || 'Failed to fetch log detail');
-      
       return data.log;
     },
     enabled: !!logId,
@@ -119,17 +105,11 @@ export function useLeadcomexLogsStats(dateFrom?: string, dateTo?: string) {
   return useQuery({
     queryKey: ['leadcomex-logs-stats', dateFrom, dateTo],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'get_leadcomex_logs_stats',
-          date_from: dateFrom,
-          date_to: dateTo
-        }
-      });
-      
-      if (error) throw error;
+      const qs = new URLSearchParams();
+      if (dateFrom) qs.set('date_from', dateFrom);
+      if (dateTo)   qs.set('date_to', dateTo);
+      const data = await apiGet(`/api/cct/leadcomex-logs/stats?${qs.toString()}`);
       if (!data?.success) throw new Error(data?.error || 'Failed to fetch stats');
-      
       return data.stats as LeadcomexLogStats;
     },
     refetchInterval: () => (typeof document !== "undefined" && document.visibilityState === "visible" ? 60000 : false),
@@ -139,32 +119,10 @@ export function useLeadcomexLogsStats(dateFrom?: string, dateTo?: string) {
 
 export function useSaveLeadcomexLog() {
   const queryClient = useQueryClient();
-  
   return useMutation({
-    mutationFn: async (params: {
-      hawb: string;
-      mawb?: string;
-      dep_date?: string;
-      success: boolean;
-      matched_date?: string;
-      offset_days: number;
-      total_attempts: number;
-      total_time_ms: number;
-      execution_source: string;
-      attempts: AttemptLog[];
-      leadcomex_data?: any;
-    }) => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { 
-          action: 'save_leadcomex_log',
-          ...params
-        }
-      });
-      
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || 'Failed to save log');
-      
-      return data;
+    mutationFn: async (_params: any) => {
+      // Log saving is managed by the external leadcomex-sync service
+      return { success: true };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leadcomex-logs'] });

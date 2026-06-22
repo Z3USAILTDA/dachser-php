@@ -53,3 +53,21 @@ export async function apiPost(path: string, body?: unknown, options: { signal?: 
   });
   return parseAndCheck(res);
 }
+
+export async function apiPatch(path: string, body?: unknown): Promise<any> {
+  const res = await fetch(apiUrl(path), {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+  return parseAndCheck(res);
+}
+
+export async function apiDelete(path: string, body?: unknown): Promise<any> {
+  const res = await fetch(apiUrl(path), {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  return parseAndCheck(res);
+}

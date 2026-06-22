@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { authResetPassword } from "@/services/authService";
 import logoZ3us from "@/assets/logo-z3us.png";
 import dachserBg from "@/assets/dachser-background.jpg";
 
@@ -61,20 +61,11 @@ const ResetPassword = () => {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "reset_password_by_email", email, password: newPassword },
-      });
+      const data = await authResetPassword(email, newPassword, username);
 
-      if (error) throw new Error(error.message);
-
-      if (data.error) {
-        throw new Error(data.error);
+      if (!data.success) {
+        throw new Error(data.error || "Erro ao alterar senha.");
       }
-
-      // Log the password reset action for metrics
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "log_usage", username, endpoint: "/reset-password", method: "POST" },
-      });
 
       toast({
         title: "Senha alterada com sucesso!",

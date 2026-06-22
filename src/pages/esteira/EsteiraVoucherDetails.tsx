@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/layout/PageLayout";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Voucher, STATUS_INTEGRACAO_RM_LABELS, StatusIntegracaoRM } from "@/types/voucher";
@@ -42,9 +41,8 @@ const EsteiraVoucherDetails = () => {
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "find_voucher_by_nd", numero_nd: base },
-        });
+        const resp = await fetch(`/api/fin/vouchers/by-nd?nd=${encodeURIComponent(base)}`);
+        const data = resp.ok ? await resp.json() : null;
         if (!cancelled && data?.vouchers) setSiblings(data.vouchers);
       } catch {
         /* silent */
@@ -68,13 +66,10 @@ const EsteiraVoucherDetails = () => {
     while (attempt < MAX_ATTEMPTS) {
       attempt++;
       try {
-        const { data: responseData, error: fnError } = await supabase.functions.invoke('mariadb-proxy', {
-          body: { action: 'get_voucher_by_id', voucher_id: id }
-        });
+        const fetchResp = await fetch(`/api/fin/vouchers/${encodeURIComponent(id)}`);
+        const responseData = await fetchResp.json();
 
-        if (fnError) throw fnError;
-
-        if (!responseData?.success || !responseData?.data) {
+        if (!fetchResp.ok || !responseData?.success || !responseData?.data) {
           throw new Error('Voucher/SPO não encontrado');
         }
 
@@ -190,11 +185,9 @@ const EsteiraVoucherDetails = () => {
   const refreshAnexos = async () => {
     if (!id) return;
     try {
-      const { data: responseData, error: fnError } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'get_voucher_by_id', voucher_id: id }
-      });
-      if (fnError) throw fnError;
-      if (!responseData?.success) return;
+      const refreshResp = await fetch(`/api/fin/vouchers/${encodeURIComponent(id)}`);
+      const responseData = await refreshResp.json();
+      if (!refreshResp.ok || !responseData?.success) return;
       const data = responseData.data || {};
       const anexos = (responseData.anexos || []).map((a: any) => ({
         id: a.id,

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(xargs grep -l \"sea\\\\|SEA\\\\|maritimo\\\\|Maritimo\")",
+      "Bash(awk '/SEA: Status Doc Exportação/,/Registro de rotas/' c:/Users/Larissa/dachser/server/index.js)",
+      "Bash(npx kill-port *)",
+      "Bash(node server/index.js)",
+      "Bash(curl -s http://localhost:3001/api/air/stats)",
+      "Bash(grep -v \"^.*//.*supabase\")",
+      "PowerShell(Stop-Process -Name \"node\" -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; Start-Process -FilePath \"node\" -ArgumentList \"server/index.js\" -WorkingDirectory \"c:\\\\Users\\\\Larissa\\\\dachser\" -NoNewWindow -PassThru | Out-Null; Start-Sleep -Seconds 3; try { $r = Invoke-WebRequest -Uri \"http://localhost:3001/api/fin/stats\" -UseBasicParsing -TimeoutSec 5; \"HTTP $\\($r.StatusCode\\): $\\($r.Content.Substring\\(0,[Math]::Min\\(200,$r.Content.Length\\)\\)\\)\" } catch { \"ERRO: $_\" })",
+      "Bash(xargs grep -l \"save.*tracking\\\\|tracking.*save\")",
+      "Bash(xargs grep -l \"draft-save-tracking\")",
+      "Bash(xargs grep -l \"t_consulta_armador.*INSERT\\\\|INSERT.*t_consulta_armador\")"
+    ]
+  }
+}

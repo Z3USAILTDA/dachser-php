@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/services/apiClient";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -26,16 +26,11 @@ const AWBList = () => {
   const { data, isLoading, error } = useQuery({
     queryKey: ['awbs', searchTerm, statusFilter],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'fetch_tracked_awbs', params: { search: searchTerm, status: statusFilter } }
-      });
-
-      if (error) {
-        console.error('Error fetching AWBs:', error);
-        return { success: false, data: [], error: error.message };
-      }
-
-      return data;
+      const qs = new URLSearchParams();
+      if (searchTerm) qs.set("search", searchTerm);
+      if (statusFilter) qs.set("status", statusFilter);
+      const query = qs.toString() ? `?${qs.toString()}` : "";
+      return apiGet(`/api/air/awb-list${query}`);
     },
     refetchInterval: () => (typeof document !== "undefined" && document.visibilityState === "visible" ? 30000 : false),
     refetchIntervalInBackground: false,

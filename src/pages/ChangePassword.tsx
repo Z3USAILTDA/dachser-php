@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { authChangePassword } from "@/services/authService";
 import logoZ3us from "@/assets/logo-z3us.png";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { Eye, EyeOff, Lock } from "lucide-react";
@@ -65,41 +65,34 @@ const ChangePassword = () => {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "change_password", userId: user.id, password: newPassword },
-      });
+      const data = await authChangePassword(user.id, newPassword);
 
-      if (error) throw new Error(error.message || "Erro ao conectar");
-
-      if (data.error) {
+      if (!data.success) {
         toast({
           title: "Erro",
-          description: data.error,
+          description: data.error || "Não foi possível alterar a senha.",
           variant: "destructive",
         });
         return;
       }
 
-      if (data.success) {
-        // Update local storage to remove must_change_password flag
-        const updatedUser = { ...user, must_change_password: 0 };
-        localStorage.setItem("user", JSON.stringify(updatedUser));
+      const updatedUser = { ...user, must_change_password: 0 };
+      localStorage.setItem("user", JSON.stringify(updatedUser));
 
-        toast({
-          title: "Senha alterada com sucesso!",
-          description: "Você será redirecionado...",
-        });
+      toast({
+        title: "Senha alterada com sucesso!",
+        description: "Você será redirecionado...",
+      });
 
-        setTimeout(() => {
-          if (user.olimpo_only === 1) {
-            navigate("/olimpo");
-          } else if (user.metrics_only === 1) {
-            navigate("/admin/metrics");
-          } else {
-            navigate("/dashboard");
-          }
-        }, 1500);
-      }
+      setTimeout(() => {
+        if (user.olimpo_only === 1) {
+          navigate("/olimpo");
+        } else if (user.metrics_only === 1) {
+          navigate("/admin/metrics");
+        } else {
+          navigate("/dashboard");
+        }
+      }, 1500);
     } catch (error) {
       console.error("Change password error:", error);
       toast({

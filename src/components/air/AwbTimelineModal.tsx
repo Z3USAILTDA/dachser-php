@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Clock, Plane, MapPin, AlertCircle, AlertTriangle, Loader2, X, RefreshCw, Package } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/services/apiClient";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -83,11 +83,8 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
     queryFn: async (): Promise<TimelineResponse> => {
       if (!awb) return { success: true, data: [], tracking_failed: false };
 
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_awb_tracking_events", awb },
-      });
+      const data = await apiGet(`/api/air/timeline/${encodeURIComponent(awb)}`);
 
-      if (error) throw error;
       if (!data?.success) return { success: true, data: [], tracking_failed: true };
 
       const rawEvents = (data.data || []).map((row: any, index: number) => ({

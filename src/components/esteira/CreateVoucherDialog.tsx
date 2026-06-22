@@ -40,7 +40,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // kept: Supabase Storage (public URLs for extract-boleto-barcode), extract-boleto-barcode, send-voucher-notification
 import { cn } from "@/lib/utils";
 import { CalendarIcon } from "lucide-react";
 import { 
@@ -214,11 +214,10 @@ export const CreateVoucherDialog = ({
 
     setIsSearchingRM(true);
     try {
-      const { data, error } = await supabase.functions.invoke("voucher-integrate-rm", {
-        body: { action: "fetch", numeroVoucherRM: numeroRM.trim() },
-      });
+      const rmResp = await fetch(`/api/fin/rm/fetch?nd=${encodeURIComponent(numeroRM.trim())}`);
+      const data = await rmResp.json();
 
-      if (error) throw error;
+      if (!rmResp.ok && rmResp.status !== 404) throw new Error(data?.error || `HTTP ${rmResp.status}`);
 
       if (!data.success) {
         if (data.alreadyProcessed) {
@@ -484,11 +483,12 @@ export const CreateVoucherDialog = ({
       const voucherId = crypto.randomUUID();
 
       // PRIMEIRO: Salvar voucher no MariaDB t_vouchers
-      const { data: mariaResult, error: mariaError } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "save_voucher_esteira",
+      const createResp = await fetch('/api/fin/vouchers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           id: voucherId,
-          id_rm: idRM, // Referência do RM (de t_dados_financeiro_voucher)
+          id_rm: idRM,
           numero_spo: voucherData.numero_spo,
           vencimento: values.vencimento?.toISOString(),
           cobranca_em_nome_de: values.cobrancaEmNomeDe,
@@ -514,62 +514,31 @@ export const CreateVoucherDialog = ({
           origem_processo: origemProcesso || null,
           chave_pix: values.formaPagamento === "PIX" ? (values.chavePix || null) : null,
           status_documento_fiscal: voucherData.status_documento_fiscal,
-        },
+        }),
       });
+      const mariaResult = await createResp.json().catch(() => ({}));
 
-      // Check for retryable transient errors (max_user_connections)
-      const isRetryable = mariaResult?.retryable === true || 
-        (mariaError?.message || "").includes("temporariamente");
-      
-      if ((mariaError || mariaResult?.error) && isRetryable && retryAttempt < 2) {
-        toast({
-          title: "Conexão ocupada",
-          description: "Tentando novamente em alguns segundos...",
-        });
+      // Check for retryable transient errors
+      const isRetryable = mariaResult?.retryable === true || (mariaResult?.error || '').includes('temporariamente');
+      if (!createResp.ok && isRetryable && retryAttempt < 2) {
+        toast({ title: "Conexão ocupada", description: "Tentando novamente em alguns segundos..." });
         await new Promise(resolve => setTimeout(resolve, 2500));
         return handleSubmitVoucher(values, isDraft, retryAttempt + 1);
       }
 
-      if (mariaError) {
-        // Try to extract structured payload from non-2xx responses (supabase.functions.invoke hides it)
-        let parsedBody: any = null;
-        try {
-          const resp = (mariaError as any)?.context?.response;
-          if (resp && typeof resp.json === "function") {
-            parsedBody = await resp.clone().json();
-          }
-        } catch { /* ignore */ }
-
-        const errorMessage = parsedBody?.error || mariaError.message || "";
-        const isDuplicate = parsedBody?.duplicate || parsedBody?.existingId ||
-          errorMessage.includes("já existe") || errorMessage.includes("409");
-
-        if (isDuplicate) {
-          const etapaLabel = parsedBody?.existingEtapa || "outra etapa";
-          toast({
-            title: "Voucher duplicado",
-            description: `Este voucher já existe na etapa "${etapaLabel}". Localize-o na lista principal usando o filtro de busca.`,
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          return;
-        }
-        throw new Error(`Erro ao salvar voucher no MariaDB: ${errorMessage || mariaError.message}`);
+      if (mariaResult?.duplicate || mariaResult?.existingId) {
+        const etapaLabel = mariaResult.existingEtapa || "outra etapa";
+        toast({
+          title: "Voucher duplicado",
+          description: `Este voucher já existe na etapa "${etapaLabel}". Localize-o na lista principal usando o filtro de busca.`,
+          variant: "destructive",
+        });
+        setIsSubmitting(false);
+        return;
       }
-      
-      // Check response data for duplicate error (409 returns existingId and existingEtapa)
-      if (mariaResult?.error) {
-        if (mariaResult.error.includes("já existe") || mariaResult.existingId) {
-          const etapaLabel = mariaResult.existingEtapa || "outra etapa";
-          toast({
-            title: "Voucher duplicado",
-            description: `Este voucher já existe na etapa "${etapaLabel}". Localize-o na lista principal usando o filtro de busca.`,
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          return;
-        }
-        throw new Error(mariaResult.error);
+
+      if (!createResp.ok) {
+        throw new Error(`Erro ao salvar voucher no MariaDB: ${mariaResult?.error || `HTTP ${createResp.status}`}`);
       }
 
       console.log("Voucher saved to MariaDB t_vouchers, ID:", voucherId);
@@ -592,16 +561,11 @@ export const CreateVoucherDialog = ({
           .from("voucher-anexos")
           .getPublicUrl(filePath);
 
-        // Salvar metadata no MariaDB (não no Supabase)
-        await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "save_voucher_anexo",
-            voucher_id: voucherId,
-            tipo: "FATURA",
-            file_name: file.name,
-            file_url: publicUrl.publicUrl,
-            file_size: file.size,
-          },
+        // Salvar metadata no MariaDB
+        await fetch(`/api/fin/vouchers/${voucherId}/anexos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipo: 'FATURA', file_name: file.name, file_url: publicUrl.publicUrl, file_size: file.size }),
         });
       }
 
@@ -625,16 +589,11 @@ export const CreateVoucherDialog = ({
           .from("voucher-anexos")
           .getPublicUrl(filePath);
 
-        // Salvar metadata no MariaDB (não no Supabase)
-        await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "save_voucher_anexo",
-            voucher_id: voucherId,
-            tipo: "BOLETO",
-            file_name: file.name,
-            file_url: publicUrl.publicUrl,
-            file_size: file.size,
-          },
+        // Salvar metadata no MariaDB
+        await fetch(`/api/fin/vouchers/${voucherId}/anexos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipo: 'BOLETO', file_name: file.name, file_url: publicUrl.publicUrl, file_size: file.size }),
         });
 
         // Extrair linha digitável automaticamente do primeiro boleto (apenas para BOLETO)
@@ -651,16 +610,13 @@ export const CreateVoucherDialog = ({
               console.error("Erro na extração de código de barras:", extractionError);
             } else if (extractionResult?.success && extractionResult?.linhaDigitavel) {
               // Salvar a linha digitável no MariaDB
-              const { error: saveError } = await supabase.functions.invoke("mariadb-proxy", {
-                body: {
-                  action: "save_linha_digitavel",
-                  voucher_id: voucherId,
-                  linha_digitavel: extractionResult.linhaDigitavel,
-                },
+              const ldResp = await fetch(`/api/fin/vouchers/${voucherId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ linha_digitavel: extractionResult.linhaDigitavel }),
               });
-
-              if (saveError) {
-                console.error("Erro ao salvar linha digitável:", saveError);
+              if (!ldResp.ok) {
+                console.error("Erro ao salvar linha digitável:", ldResp.status);
               } else {
                 console.log("Linha digitável extraída e salva:", extractionResult.linhaDigitavel);
                 linhaDigitavelExtraida = true;
@@ -676,15 +632,15 @@ export const CreateVoucherDialog = ({
       }
 
       // Log creation in MariaDB
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "save_voucher_log",
-          voucher_id: voucherId,
+      await fetch(`/api/fin/vouchers/${voucherId}/log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           user_id: userData.id?.toString() || null,
-          user_name: userData.username || "Sistema",
-          acao: "VOUCHER_CRIADO",
-          detalhe: `Voucher criado via ${entryMode === "rm" ? "RM" : "entrada manual"}${idRM ? ` (id_rm: ${idRM})` : ""}`,
-        },
+          user_name: userData.username || 'Sistema',
+          acao: 'VOUCHER_CRIADO',
+          detalhe: `Voucher criado via ${entryMode === 'rm' ? 'RM' : 'entrada manual'}${idRM ? ` (id_rm: ${idRM})` : ''}`,
+        }),
       });
 
       // Se o voucher entra direto no FINANCEIRO, inserir em t_dados_rm

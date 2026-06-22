@@ -1,5 +1,4 @@
 import * as XLSX from 'xlsx-js-style';
-import { supabase } from '@/integrations/supabase/client';
 
 // DACHSER colors
 const DACHSER_ORANGE = "F57C00";
@@ -23,17 +22,11 @@ interface SeaMblExportItem {
  */
 export async function exportSeaMblsToExcel(): Promise<{ success: boolean; filename?: string; error?: string; count?: number }> {
   try {
-    // Fetch data from MariaDB via edge function
-    const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-      body: {
-        action: 'get_sea_mbls_export'
-      }
-    });
-
-    if (error) {
-      console.error('[SeaMblExport] Error fetching data:', error);
-      return { success: false, error: error.message };
+    const response = await fetch('/api/sea/mbls-export');
+    if (!response.ok) {
+      return { success: false, error: `HTTP ${response.status}` };
     }
+    const data = await response.json();
 
     if (!data?.success || !data?.data?.length) {
       return { success: false, error: 'Nenhum dado encontrado para exportar' };

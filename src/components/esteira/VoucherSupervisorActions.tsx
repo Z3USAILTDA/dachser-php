@@ -6,7 +6,6 @@ import { Voucher } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
 import { trackEvent } from "@/hooks/useUsageLog";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, XCircle } from "lucide-react";
@@ -33,10 +32,17 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const { toast } = useToast();
 
-  // Get user data from localStorage (MariaDB auth)
   const getUserData = () => {
     const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
     return storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
+  };
+
+  const postLog = async (voucherId: string, body: object) => {
+    await fetch(`/api/fin/vouchers/${voucherId}/log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
   };
 
   const handleAprovar = async () => {
@@ -45,58 +51,40 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
       setLoading(true);
       const userData = getUserData();
 
-      // Respeita "Necessita Fiscal?": DACHSER (Sim) → FISCAL, CLIENTE (Não) → FINANCEIRO
       const proximaEtapa = voucher.cobrancaEmNomeDe === "DACHSER" ? "FISCAL" : "FINANCEIRO";
 
-      // Update voucher in MariaDB
-      const { error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "update_voucher_esteira",
-          voucher_id: voucher.id,
+      const resp = await fetch(`/api/fin/vouchers/${voucher.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           etapa_atual: proximaEtapa,
           status_financeiro: "APROVADO",
           aprovado_por_user_id: userData.id?.toString(),
           responsavel_supervisor_user_id: userData.id?.toString(),
-        },
+        }),
+      });
+      if (!resp.ok) { const d = await resp.json().catch(() => ({})); throw new Error(d.error || `HTTP ${resp.status}`); }
+
+      await postLog(voucher.id, {
+        user_id: userData.id?.toString(), user_name: userData.username,
+        acao: "APROVADO_SUPERVISOR",
+        detalhe: `Voucher/SPO urgente aprovado pelo Supervisor — encaminhado para ${proximaEtapa}`,
       });
 
-      if (error) throw error;
-
-      // Log the action
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "save_voucher_log",
-          voucher_id: voucher.id,
-          user_id: userData.id?.toString(),
-          user_name: userData.username,
-          acao: "APROVADO_SUPERVISOR",
-          detalhe: `Voucher/SPO urgente aprovado pelo Supervisor — encaminhado para ${proximaEtapa}`,
-        },
-      });
-
-      // Inserir na t_dados_rm apenas se for direto para FINANCEIRO
       if (proximaEtapa === "FINANCEIRO") {
         insertDadosRmOnFinanceiro(voucher);
       }
-
-      // Email notifications removed — monthly report only
 
       toast({
         title: "Voucher/SPO aprovado",
         description: `Voucher/SPO urgente aprovado e enviado para ${proximaEtapa === "FISCAL" ? "Fiscal" : "Financeiro"}`,
       });
-
       onUpdate();
     } catch (error: any) {
       const msg = error.message || "";
-      const friendlyMsg = msg.includes("WORKER_LIMIT") 
-        ? "O servidor está sobrecarregado. Tente novamente em alguns segundos."
-        : msg.includes("timeout") || msg.includes("Timeout")
-        ? "A operação demorou demais. Tente novamente."
-        : msg || "Erro desconhecido ao aprovar o voucher.";
       toast({
         title: "Erro ao aprovar voucher/SPO",
-        description: friendlyMsg,
+        description: msg.includes("WORKER_LIMIT") ? "O servidor está sobrecarregado." : msg.includes("timeout") ? "A operação demorou demais." : msg || "Erro desconhecido.",
         variant: "destructive",
       });
     } finally {
@@ -108,65 +96,36 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
   const handleRejeitar = async () => {
     trackEvent("vouchers.supervisor.reject");
     if (!comentarios.trim()) {
-      toast({
-        title: "Comentário obrigatório",
-        description: "Informe o motivo da rejeição",
-        variant: "destructive",
-      });
+      toast({ title: "Comentário obrigatório", description: "Informe o motivo da rejeição", variant: "destructive" });
       return;
     }
-
     try {
       setLoading(true);
       const userData = getUserData();
 
-      // Update voucher in MariaDB
-      const { error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "update_voucher_esteira",
-          voucher_id: voucher.id,
+      const resp = await fetch(`/api/fin/vouchers/${voucher.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           etapa_atual: "AJUSTE_OPERACAO",
           status_financeiro: "REJEITADO",
           ajuste_operacao: buildAjusteWithRequester("SUPERVISOR", `REJEITADO PELO SUPERVISOR: ${comentarios}`),
           responsavel_supervisor_user_id: userData.id?.toString(),
-        },
+        }),
+      });
+      if (!resp.ok) { const d = await resp.json().catch(() => ({})); throw new Error(d.error || `HTTP ${resp.status}`); }
+
+      await postLog(voucher.id, {
+        user_id: userData.id?.toString(), user_name: userData.username,
+        acao: "REJEITADO_SUPERVISOR", detalhe: `Voucher/SPO rejeitado: ${comentarios}`,
       });
 
-      if (error) throw error;
+      await sendVoucherReturnNotification({ voucher, fromStage: "SUPERVISOR", toStage: "AJUSTE_OPERACAO", reason: comentarios, senderName: userData.username });
 
-      // Log the action
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "save_voucher_log",
-          voucher_id: voucher.id,
-          user_id: userData.id?.toString(),
-          user_name: userData.username,
-          acao: "REJEITADO_SUPERVISOR",
-          detalhe: `Voucher/SPO rejeitado: ${comentarios}`,
-        },
-      });
-
-      // Notificar criador (responsável anterior) sobre a rejeição
-      await sendVoucherReturnNotification({
-        voucher,
-        fromStage: "SUPERVISOR",
-        toStage: "AJUSTE_OPERACAO",
-        reason: comentarios,
-        senderName: userData.username,
-      });
-
-      toast({
-        title: "Voucher/SPO rejeitado",
-        description: "Voucher/SPO rejeitado e devolvido para Operação",
-      });
-
+      toast({ title: "Voucher/SPO rejeitado", description: "Voucher/SPO rejeitado e devolvido para Operação" });
       onUpdate();
     } catch (error: any) {
-      toast({
-        title: "Erro ao rejeitar voucher/SPO",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao rejeitar voucher/SPO", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
       setShowRejectDialog(false);
@@ -183,43 +142,29 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
       </div>
 
       <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
-        <p className="text-sm font-medium text-amber-600 mb-1">
-          Voucher/SPO Urgente Real
-        </p>
+        <p className="text-sm font-medium text-amber-600 mb-1">Voucher/SPO Urgente Real</p>
         <p className="text-sm text-muted-foreground">
           Este voucher/SPO foi marcado como urgente e requer aprovação do supervisor antes de prosseguir para o financeiro.
         </p>
       </div>
 
       <div className="flex gap-3">
-        <Button
-          onClick={() => setShowApproveDialog(true)}
-          disabled={loading}
-          className="gap-2 bg-green-600 hover:bg-green-600/90"
-        >
+        <Button onClick={() => setShowApproveDialog(true)} disabled={loading} className="gap-2 bg-green-600 hover:bg-green-600/90">
           <CheckCircle2 className="h-4 w-4" />
           Aprovar e Enviar ao Financeiro
         </Button>
-
-        <Button
-          onClick={() => setShowRejectDialog(true)}
-          disabled={loading}
-          variant="outline"
-          className="gap-2 border-destructive text-destructive hover:bg-destructive/10"
-        >
+        <Button onClick={() => setShowRejectDialog(true)} disabled={loading} variant="outline" className="gap-2 border-destructive text-destructive hover:bg-destructive/10">
           <XCircle className="h-4 w-4" />
           Rejeitar
         </Button>
       </div>
 
-      {/* Dialog de Aprovação */}
       <AlertDialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar aprovação</AlertDialogTitle>
             <AlertDialogDescription>
-              Ao aprovar, o voucher/SPO será enviado para o Financeiro com prioridade urgente.
-              Esta ação não pode ser desfeita.
+              Ao aprovar, o voucher/SPO será enviado para o Financeiro com prioridade urgente. Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -231,7 +176,6 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Dialog de Rejeição */}
       <AlertDialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -241,9 +185,7 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-4">
-            <Label htmlFor="motivo-rejeicao">
-              Motivo da Rejeição <span className="text-destructive">*</span>
-            </Label>
+            <Label htmlFor="motivo-rejeicao">Motivo da Rejeição <span className="text-destructive">*</span></Label>
             <Textarea
               id="motivo-rejeicao"
               value={comentarios}

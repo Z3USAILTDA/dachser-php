@@ -33,7 +33,6 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { 
@@ -264,9 +263,12 @@ export const PagamentosTab = () => {
       // Batch fetch all master children in a single call
       const masterIds = masters.map(m => m.id);
       try {
-        const { data } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "get_voucher_filhos_batch", master_ids: masterIds },
+        const resp = await fetch('/api/fin/vouchers/filhos-batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ master_ids: masterIds }),
         });
+        const data = resp.ok ? await resp.json() : {};
         if (data?.data) {
           for (const [masterId, children] of Object.entries(data.data)) {
             const spos = (children as any[]).map((f: any) => f.numero_spo);
@@ -295,27 +297,23 @@ export const PagamentosTab = () => {
     const silent = opts?.silent === true;
     try {
       if (!silent) setLoading(true);
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { 
-          action: "list_pagamentos",
-          perPage: "all",
-          filterVencimento: filterVencimento === "todos" ? undefined : filterVencimento,
-          filterStatusPagamento: filterStatusPagamento === "all" ? undefined : filterStatusPagamento,
-          filterTipoExecucao: filterTipoExecucao === "all" ? undefined : filterTipoExecucao,
-          filterFormaPagamento: filterFormaPagamento === "all" ? undefined : filterFormaPagamento,
-          filterStatusIntegracaoRm: filterStatusIntegracaoRm === "all" ? undefined : filterStatusIntegracaoRm,
-          filterBusca: filterFornecedorDebounced.trim() || undefined,
-          filterFornecedor: filterFornecedorDebounced.trim() || undefined,
-          filterDataVencimentoInicio: filterDataInicio ? fnsFormat(filterDataInicio, "yyyy-MM-dd") : undefined,
-          filterDataVencimentoFim: filterDataFim ? fnsFormat(filterDataFim, "yyyy-MM-dd") : undefined
-        }
-      });
+      const qs = new URLSearchParams();
+      qs.set('perPage', 'all');
+      if (filterVencimento !== 'todos') qs.set('filterVencimento', filterVencimento);
+      if (filterStatusPagamento !== 'all') qs.set('filterStatusPagamento', filterStatusPagamento);
+      if (filterTipoExecucao !== 'all') qs.set('filterTipoExecucao', filterTipoExecucao);
+      if (filterFormaPagamento !== 'all') qs.set('filterFormaPagamento', filterFormaPagamento);
+      if (filterStatusIntegracaoRm !== 'all') qs.set('filterStatusIntegracaoRm', filterStatusIntegracaoRm);
+      if (filterFornecedorDebounced.trim()) { qs.set('filterBusca', filterFornecedorDebounced.trim()); }
+      if (filterDataInicio) qs.set('filterDataVencimentoInicio', fnsFormat(filterDataInicio, 'yyyy-MM-dd'));
+      if (filterDataFim) qs.set('filterDataVencimentoFim', fnsFormat(filterDataFim, 'yyyy-MM-dd'));
 
-
+      const resp = await fetch(`/api/fin/pagamentos?${qs.toString()}`);
+      const data = resp.ok ? await resp.json() : {};
 
       if (reqId !== loadReqIdRef.current) return;
 
-      if (error) throw error;
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
 
       const rawVouchers = data?.vouchers || [];
       const seen = new Set<string>();
@@ -348,20 +346,17 @@ export const PagamentosTab = () => {
 
     setLoadingDados(prev => ({ ...prev, [cnpj]: true }));
     try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { 
-          action: "get_dados_bancarios_fornecedor",
-          cnpj: cnpj.replace(/\D/g, "")
-        }
-      });
+      const cleanCnpj = cnpj.replace(/\D/g, '');
+      const dbResp = await fetch(`/api/fin/fornecedor/dados-bancarios?cnpj=${encodeURIComponent(cleanCnpj)}`);
+      const data = dbResp.ok ? await dbResp.json() : {};
 
-      if (error) {
+      if (!dbResp.ok) {
         if (retries > 0) {
           await new Promise(r => setTimeout(r, 1500));
           setLoadingDados(prev => ({ ...prev, [cnpj]: false }));
           return loadDadosBancarios(cnpj, retries - 1);
         }
-        throw error;
+        throw new Error(data?.error || `HTTP ${dbResp.status}`);
       }
 
       if (data?.data) {
@@ -448,10 +443,12 @@ export const PagamentosTab = () => {
   const handleSetTipoExecucao = async (id: string, tipo: TipoExecucaoPagamento) => {
     setProcessingAction(prev => ({ ...prev, [id]: true }));
     try {
-      const { error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "set_tipo_execucao_pagamento", id, tipo_execucao_pagamento: tipo }
+      const teResp = await fetch(`/api/fin/vouchers/${id}/tipo-execucao`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo_execucao_pagamento: tipo }),
       });
-      if (error) throw error;
+      if (!teResp.ok) { const d = await teResp.json().catch(() => ({})); throw new Error(d.error || `HTTP ${teResp.status}`); }
       toast({ title: "Tipo de execução atualizado" });
       // Local state update instead of full reload for performance
       setPagamentos(prev => prev.map(p => p.id === id ? { ...p, tipo_execucao_pagamento: tipo } : p));
@@ -473,14 +470,12 @@ export const PagamentosTab = () => {
     }
 
     try {
-      const { error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { 
-          action: "batch_set_tipo_execucao", 
-          voucher_ids: Array.from(selectedIds), 
-          tipo_execucao_pagamento: tipo 
-        }
+      const batchResp = await fetch('/api/fin/vouchers/batch-tipo-execucao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voucher_ids: Array.from(selectedIds), tipo_execucao_pagamento: tipo }),
       });
-      if (error) throw error;
+      if (!batchResp.ok) { const d = await batchResp.json().catch(() => ({})); throw new Error(d.error || `HTTP ${batchResp.status}`); }
       toast({ title: `Tipo de execução atualizado para ${selectedIds.size} vouchers` });
       setSelectedIds(new Set());
       loadPagamentos();
@@ -537,37 +532,35 @@ export const PagamentosTab = () => {
 
       // Rodar marcação + atualização do tipo_exec em PARALELO (era sequencial)
       // PAGO_ADF não envia para RM (não passa pelo robô)
-      const [readyRes, rmRes] = await Promise.all([
-        supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "set_ready_for_robo", id, is_pronto: isReady }
+      const [readyResp, rmResp] = await Promise.all([
+        fetch(`/api/fin/vouchers/${id}/pronto-robo`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_pronto: isReady }),
         }),
         isReady && pagamento && !isPagoAdf
-          ? supabase.functions.invoke("mariadb-proxy", {
-              body: {
-                action: "update_tipo_exec_dados_rm",
-                id_rm: pagamento.id_rm || null,
-                numero_spo: pagamento.numero_spo,
-                tipo_exec: tipoExecucao
-              }
+          ? fetch('/api/fin/dados-rm/tipo-exec', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id_rm: (pagamento as any).id_rm || null, numero_spo: pagamento.numero_spo, tipo_exec: tipoExecucao }),
             })
-          : Promise.resolve({ error: null } as any),
+          : Promise.resolve(null),
       ]);
 
-      // Detectar erro COMPROVANTE_OBRIGATORIO retornado pelo backend
-      const readyErrMsg = (readyRes as any)?.error?.message || (readyRes as any)?.data?.error;
-      if (readyRes.error || readyErrMsg === "COMPROVANTE_OBRIGATORIO") {
-        if (readyErrMsg === "COMPROVANTE_OBRIGATORIO") {
+      const readyData = readyResp.ok ? await readyResp.json() : await readyResp.json().catch(() => ({}));
+      if (!readyResp.ok) {
+        if (readyData?.error === 'COMPROVANTE_OBRIGATORIO') {
           throw new Error("Anexe o comprovante de pagamento antes de marcar como pronto.");
         }
-        throw readyRes.error;
+        throw new Error(readyData?.error || `HTTP ${readyResp.status}`);
       }
-      if (rmRes && (rmRes as any).error) {
-        console.error("Erro ao atualizar tipo_exec em t_dados_rm:", (rmRes as any).error);
+      if (rmResp && !rmResp.ok) {
+        console.error("Erro ao atualizar tipo_exec em t_dados_rm:", rmResp.status);
       }
 
       const isDebito = String((pagamento as any)?.forma_pagamento || "").toUpperCase() === "DEBITO";
-      const autoReason = (readyRes as any)?.data?.reason;
-      const autoConcluded = isReady && (isDebito || isPagoAdf || (readyRes as any)?.data?.auto_concluded);
+      const autoReason = readyData?.reason;
+      const autoConcluded = isReady && (isDebito || isPagoAdf || readyData?.auto_concluded);
       toast({ 
         title: autoConcluded
           ? (autoReason === "PAGO_ADF" || isPagoAdf
@@ -630,29 +623,23 @@ export const PagamentosTab = () => {
     console.log('[VoltarOperacional] Processando', validTargets.length, 'vouchers para', novaEtapa);
     for (const v of validTargets) {
       try {
-        const updatePayload: Record<string, unknown> = {
-          action: "update_voucher_esteira",
-          voucher_id: v.id,
-          etapa_atual: novaEtapa,
-        };
-        if (isFiscal) {
-          updatePayload.ajuste_fiscal = justificativaComMarcador;
-        } else {
-          updatePayload.ajuste_operacao = justificativaComMarcador;
-        }
-        const { data: updData, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: updatePayload,
+        const patchBody: Record<string, unknown> = { etapa_atual: novaEtapa };
+        if (isFiscal) { patchBody.ajuste_fiscal = justificativaComMarcador; }
+        else { patchBody.ajuste_operacao = justificativaComMarcador; }
+        const updResp = await fetch(`/api/fin/vouchers/${v.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patchBody),
         });
-        if (error) throw error;
-        if (updData && (updData as any).error) throw new Error(String((updData as any).error));
+        if (!updResp.ok) { const d = await updResp.json().catch(() => ({})); throw new Error(d.error || `HTTP ${updResp.status}`); }
 
-        await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "save_voucher_log",
-            voucher_id: v.id,
+        await fetch(`/api/fin/vouchers/${v.id}/log`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
             acao: logAcao,
-            detalhe: `Voucher retornado para ${logLabel} (solicitado por FINANCEIRO via tela de Pagamentos). Justificativa: ${voltarOperacionalJustificativa.trim()}`
-          }
+            detalhe: `Voucher retornado para ${logLabel} (solicitado por FINANCEIRO via tela de Pagamentos). Justificativa: ${voltarOperacionalJustificativa.trim()}`,
+          }),
         });
 
         try {
@@ -1356,11 +1343,10 @@ export const PagamentosTab = () => {
                             setLoadingAnexos(true);
                             const myReq = ++anexosReqIdRef.current;
                             try {
-                              const { data } = await supabase.functions.invoke("mariadb-proxy", {
-                                body: { action: "get_voucher_anexos", voucher_id: pag.id }
-                              });
+                              const anexResp = await fetch(`/api/fin/vouchers/${pag.id}/anexos`);
+                              const data = await anexResp.json().catch(() => ({}));
                               if (myReq !== anexosReqIdRef.current) return; // descarta resposta antiga
-                              if (data?.success === false) {
+                              if (!anexResp.ok || data?.success === false) {
                                 toast({
                                   title: "Falha ao carregar anexos",
                                   description: data?.error || "Tente novamente em instantes.",
@@ -1561,11 +1547,10 @@ export const PagamentosTab = () => {
                     onUploaded={async () => {
                       const myReq = ++anexosReqIdRef.current;
                       try {
-                        const { data } = await supabase.functions.invoke("mariadb-proxy", {
-                          body: { action: "get_voucher_anexos", voucher_id: selectedPagamento.id },
-                        });
+                        const reloadResp = await fetch(`/api/fin/vouchers/${selectedPagamento.id}/anexos`);
+                        const data = await reloadResp.json().catch(() => ({}));
                         if (myReq !== anexosReqIdRef.current) return;
-                        if (data?.success === false) {
+                        if (!reloadResp.ok || data?.success === false) {
                           toast({
                             title: "Falha ao recarregar anexos",
                             description: data?.error || "Tente reabrir o detalhe.",
